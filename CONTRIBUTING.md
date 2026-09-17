@@ -95,6 +95,10 @@ To prepare your dedicated GitHub repository:
 
 1. Open a new Pull Request to the main repository using your `trunk` branch
 
+## Package Documentation
+
+Some critical packages will contain a docs/ directory to document critical decisions / future direction. All these
+documents should follow the [`docs/packages/devdoc_template.md`](docs/packages/devdoc_template.md).
 
 ## Updating the AI Agent Skill
 

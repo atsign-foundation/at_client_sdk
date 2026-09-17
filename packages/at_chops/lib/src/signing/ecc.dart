@@ -39,7 +39,7 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
   final ECDomainParameters _domain = ECCurve_secp256r1();
 
   @override
-  String get name => SigningAlgoType.eccSecp256r1.name;
+  String get name => SigningAlgoType.ecc_secp256r1.name;
 
   EccSigningAlgo();
 

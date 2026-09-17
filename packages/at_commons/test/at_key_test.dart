@@ -1120,6 +1120,48 @@ void main() {
       expect(metadata.toJson(), roundTripped.toJson());
     });
 
+    test('an unset ttl/ttb/ttr survives the json round trip as null', () {
+      // toJson always writes the three, so an unset one goes out as
+      // `"ttl": null`. Reading that back as 0 made the round trip lossy and
+      // left a reader unable to tell "no ttl" from an explicit ttl of 0 —
+      // which are different requests: 0 clears a record's expiry, and a ttr
+      // of 0 means "do not cache".
+      Metadata metadata = Metadata();
+      expect(metadata.ttl, isNull);
+
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(roundTripped.ttl, isNull, reason: 'ttl must survive as unset');
+      expect(roundTripped.ttb, isNull, reason: 'ttb must survive as unset');
+      expect(roundTripped.ttr, isNull, reason: 'ttr must survive as unset');
+      expect(roundTripped.toJson(), metadata.toJson());
+    });
+
+    test('an explicit ttl/ttb/ttr of 0 still round trips as 0', () {
+      // The other half of the same distinction: a caller that really means
+      // 0 keeps it, so this is not "null and 0 are now the same thing".
+      Metadata metadata = Metadata()
+        ..ttl = 0
+        ..ttb = 0
+        ..ttr = 0;
+      Metadata roundTripped = Metadata.fromJson(metadata.toJson());
+      expect(roundTripped.ttl, 0);
+      expect(roundTripped.ttb, 0);
+      expect(roundTripped.ttr, 0);
+    });
+
+    test('a ttl/ttb/ttr arriving as a numeric string is still parsed', () {
+      // The wire/at-rest forms are not all typed — this branch predates the
+      // null handling and must keep working.
+      final json = Metadata().toJson()
+        ..['ttl'] = '100'
+        ..['ttb'] = '200'
+        ..['ttr'] = '300';
+      Metadata roundTripped = Metadata.fromJson(json);
+      expect(roundTripped.ttl, 100);
+      expect(roundTripped.ttb, 200);
+      expect(roundTripped.ttr, 300);
+    });
+
     test('throws FormatException for empty appMetadata providerId', () {
       expect(
         () => AppMetadata(providerId: ''),

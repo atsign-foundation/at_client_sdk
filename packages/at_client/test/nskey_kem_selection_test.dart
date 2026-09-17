@@ -1,0 +1,432 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
+
+/// The nskey conveyance path under both key-establishment algorithms.
+void main() {
+  const owner = '@alice';
+  const namespace = 'myapp';
+
+  late MockAtClient atClient;
+  late CryptoContext context;
+
+  setUpAll(() => registerFallbackValue(AtKey()));
+
+  setUp(() {
+    atClient = MockAtClient();
+    context = CryptoContext(atClient: atClient);
+  });
+
+  AtKey conveyanceKey() => AtKey()
+    ..key = 'ckkid.__ck'
+    ..namespace = namespace
+    ..sharedBy = owner;
+
+  /// Seeds a ring with a freshly minted [keyAlgo] generation and returns the
+  /// provider that conveys under it.
+  Future<(NskeyProvider, InMemoryNskeyKeyRing)> providerFor(
+      String keyAlgo) async {
+    final kem = SecretSharingAlgos.kemFor(keyAlgo)!;
+    final pair = await kem.keyPairFromSeed(kem.newSeed());
+    final ring = InMemoryNskeyKeyRing()
+      ..seedKeypair(owner, namespace,
+          publicKey: pair.publicKey,
+          privateKey: pair.secretKey,
+          keyAlgo: keyAlgo);
+    return (
+      NskeyProvider(keyRing: ring, cache: ContentKeyCache(), keyAlgo: keyAlgo),
+      ring
+    );
+  }
+
+  group('a conveyance is written under the KEM the destination advertises', () {
+    test('ML-KEM-1024 conveys under its own provider id at ver 0x03', () async {
+      final (provider, _) = await providerFor(SecretSharingAlgos.mlKem1024);
+      final ck =
+          ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+      final atKey = conveyanceKey();
+
+      final wire = await provider.encrypt(context, atKey, ck.toBase64());
+
+      expect(provider.id, mlKemNskeyCryptoProviderId);
+      expect(atKey.metadata.appMetadata?.providerId, mlKemNskeyCryptoProviderId,
+          reason: 'the record carries the id that routes it back to the '
+              'provider holding the right KEM');
+      expect(base64Decode(wire).first, 0x03);
+    });
+
+    test('the hybrid negotiates RFC 9180 with an owner that advertises it',
+        () async {
+      final (provider, _) = await providerFor(SecretSharingAlgos.xWing);
+      final ck =
+          ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+      final atKey = conveyanceKey();
+
+      final wire = await provider.encrypt(context, atKey, ck.toBase64());
+
+      expect(provider.id, nskeyCryptoProviderId);
+      expect(atKey.metadata.appMetadata?.providerId, nskeyCryptoProviderId);
+      expect(base64Decode(wire).first, 0x02);
+    });
+
+    test('and refuses an owner that only opens the retired construction',
+        () async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+            publicKey: pair.publicKey,
+            alg: SecretSharingAlgos.xWing,
+            suites: const ['x-wing-hpke-v1'],
+          ),
+          pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.xWing);
+      final ck = ContentKey(Uint8List(32));
+      final atKey = conveyanceKey();
+
+      await expectLater(provider.encrypt(context, atKey, ck.toBase64()),
+          throwsA(isA<AtEncryptionException>()));
+    });
+
+    /// UC-A4.5's central clause: *"Alice's configuration decides what `@alice`
+    /// is a **recipient** for and nothing about who she can send to."*
+    // NOTE: no apostrophe in this test name — `provenIn` matches the raw source
+    // with `source.contains("'$testName")`, so an escaped `\'` in the
+    // declaration never matches the runtime string a citation carries.
+    test(
+        'the RECIPIENT advertisement decides the conveyance provider, '
+        'not the sender configuration', () async {
+      const bob = '@bob';
+      const carol = '@carol';
+
+      final xWingKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final bobPair = await xWingKem.keyPairFromSeed(xWingKem.newSeed());
+      final carolPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+
+      final ring = InMemoryNskeyKeyRing()
+        ..seedPublicOnly(bob, namespace,
+            publicKey: bobPair.publicKey, keyAlgo: SecretSharingAlgos.xWing)
+        ..seedPublicOnly(carol, namespace,
+            publicKey: carolPair.publicKey,
+            keyAlgo: SecretSharingAlgos.mlKem1024);
+
+      final cache = ContentKeyCache();
+      final providers = {
+        for (final algo in SecretSharingAlgos.keyAlgos)
+          nskeyProviderIdFor(algo)!:
+              NskeyProvider(keyRing: ring, cache: cache, keyAlgo: algo)
+      };
+
+      final stamped = <String?>[];
+      // NOTE: the send posture goes in through the constructor —
+      // `getPreferences()` is a concrete override on this mock, so stubbing it
+      // silently does nothing.
+      final sender = MockAtClient(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      when(() => sender.getCurrentAtSign()).thenReturn(owner);
+      when(() => sender.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        if (key.key.startsWith('__ckcur')) return true;
+        final opts =
+            inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+        stamped.add(opts?.cryptoProviderId);
+        await providers[opts!.cryptoProviderId]!.encrypt(
+            CryptoContext(atClient: sender),
+            key,
+            inv.positionalArguments[1] as String);
+        return true;
+      });
+
+      final manager = CkManager(cache: cache, keyRing: ring);
+      final senderContext = CryptoContext(atClient: sender);
+      AtKey to(String recipient) => AtKey()
+        ..key = 'treaty'
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..sharedWith = recipient
+        ..metadata = Metadata();
+
+      await manager.ensureCurrent(senderContext, to(bob));
+      await manager.ensureCurrent(senderContext, to(carol));
+
+      expect(stamped, [nskeyCryptoProviderId, mlKemNskeyCryptoProviderId],
+          reason: 'the same sender, configured for ml-kem-1024 throughout, '
+              'must seal to @bob under X-Wing because that is what @bob '
+              'advertises, and to @carol under ML-KEM because that is what '
+              '@carol advertises. A sender that followed its own configuration '
+              'would stamp the ML-KEM id both times');
+    });
+
+    test('no shared construction is a refusal, not a guess', () async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+            publicKey: pair.publicKey,
+            alg: SecretSharingAlgos.xWing,
+            suites: const ['x-wing-hpke-v99'],
+          ),
+          pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.xWing);
+
+      await expectLater(
+          provider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
+          throwsA(isA<AtEncryptionException>()));
+    });
+
+    for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+      test('$keyAlgo round-trips the content key', () async {
+        final (provider, _) = await providerFor(keyAlgo);
+        final ck = ContentKey(
+            Uint8List.fromList(List<int>.generate(32, (i) => i * 3)));
+        final atKey = conveyanceKey();
+
+        final wire = await provider.encrypt(context, atKey, ck.toBase64());
+        expect(await provider.decrypt(context, atKey, wire), ck.toBase64());
+      });
+    }
+
+    test('a provider will not seal to the other KEM\'s advertisement',
+        () async {
+      final (_, mlKemRing) = await providerFor(SecretSharingAlgos.mlKem1024);
+      final wrongProvider = NskeyProvider(
+          keyRing: mlKemRing,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.xWing);
+
+      await expectLater(
+          wrongProvider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
+          throwsA(isA<AtEncryptionException>()));
+    });
+  });
+
+  group('a widened advertisement is addressable entry by entry', () {
+    /// An advertisement carrying BOTH algorithms, with the privates for each.
+    ///
+    /// Built by hand because a mint writes one key.
+    Future<_WidenedRing> widened() async {
+      final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final xPair = await xWing.keyPairFromSeed(xWing.newSeed());
+      final mPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final advertised = NskeyAdvertisement(
+        v: nskeyAdvertisementVersion,
+        createdAt: DateTime.now().toUtc(),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: mPair.publicKey),
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: xPair.publicKey),
+        ],
+      );
+      return _WidenedRing(advertised, {
+        advertised.keys[0].kid: mPair.secretKey,
+        advertised.keys[1].kid: xPair.secretKey,
+      });
+    }
+
+    test('either entry seals and opens, and each stamps its OWN kid', () async {
+      final ring = await widened();
+      final byAlgo = {
+        for (final k in ring.advertised.keys) k.alg: k,
+      };
+
+      for (final algo in SecretSharingAlgos.keyAlgos) {
+        final provider = NskeyProvider(
+            keyRing: ring, cache: ContentKeyCache(), keyAlgo: algo);
+        final ck = ContentKey(
+            Uint8List.fromList(List<int>.generate(32, (i) => i + 7)));
+        final atKey = conveyanceKey();
+
+        final wire = await provider.encrypt(context, atKey, ck.toBase64());
+
+        // NOTE: assert the kid before the round trip — a wrong kid fetches the
+        // wrong private, so the decrypt below would redden first and quote a
+        // decapsulation error instead.
+        expect(atKey.metadata.appMetadata?.additional?['nskeyKid'],
+            byAlgo[algo]!.kid,
+            reason: '$algo must stamp the kid of the entry it sealed to. The '
+                'advertisement\'s own nskeyKid names one of the two, so a '
+                'record stamped with it addresses the wrong generation and '
+                'the owner looks for a private it never conveyed');
+
+        expect(await provider.decrypt(context, atKey, wire), ck.toBase64(),
+            reason: '$algo must seal to the entry advertised under IT, or the '
+                'owner holds a private that does not open what arrived');
+      }
+
+      expect(ring.advertised.keys[0].kid, isNot(ring.advertised.keys[1].kid));
+    });
+
+    test('an algorithm the advertisement does not carry is still refused',
+        () async {
+      final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await xWing.keyPairFromSeed(xWing.newSeed());
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+              publicKey: pair.publicKey, alg: SecretSharingAlgos.xWing),
+          pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.mlKem1024);
+
+      await expectLater(
+          provider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
+          throwsA(isA<AtEncryptionException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains(SecretSharingAlgos.xWing),
+                  contains(SecretSharingAlgos.mlKem1024)))));
+    });
+  });
+
+  group('the provider id maps both ways', () {
+    test('every offered algorithm has a conveyance provider', () {
+      for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+        expect(nskeyProviderIdFor(keyAlgo), isNotNull,
+            reason: '$keyAlgo is offered but nothing can convey a CK to it');
+      }
+    });
+
+    test('the two ids are distinct, so reads route apart', () {
+      expect(nskeyProviderIdFor(SecretSharingAlgos.xWing),
+          isNot(nskeyProviderIdFor(SecretSharingAlgos.mlKem1024)));
+    });
+
+    test('an unimplemented algorithm has no id rather than a default', () {
+      expect(nskeyProviderIdFor('kyber-1024-v9'), isNull);
+    });
+
+    test('every algorithm with a KEM also states a key length', () {
+      for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+        expect(SecretSharingAlgos.kemFor(keyAlgo), isNotNull,
+            reason: '$keyAlgo is offered but has no KEM');
+        expect(SecretSharingAlgos.publicKeyLengthFor(keyAlgo), isNotNull,
+            reason: '$keyAlgo has a KEM but no key length, so a forged '
+                'advertisement naming it would pass the length check');
+      }
+    });
+
+    test('an unimplemented algorithm states no key length either', () {
+      expect(SecretSharingAlgos.publicKeyLengthFor('kyber-1024-v9'), isNull);
+    });
+  });
+
+  group('the crypto config registers a conveyance provider per KEM', () {
+    test('both ids resolve on every client', () {
+      final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+
+      expect(config.lookup(nskeyCryptoProviderId), isNotNull);
+      expect(config.lookup(mlKemNskeyCryptoProviderId), isNotNull);
+    });
+
+    test('both share one content-key cache', () {
+      // NOTE: two caches would let a conveyance cache a content key the data
+      // provider then cannot find.
+      final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+      final providers = config.providers.whereType<NskeyProvider>().toList();
+
+      expect(providers, hasLength(2));
+      expect(providers.first.cache, same(providers.last.cache));
+      expect(config.contentKeyCache, same(providers.first.cache));
+    });
+  });
+
+  group('the one suite negotiation', () {
+    test('the SENDER\'s order decides, not the recipient\'s', () {
+      const sender = ['x-wing-rfc9180-v1', 'x-wing-hpke-v1'];
+      const recipient = ['x-wing-hpke-v1', 'x-wing-rfc9180-v1'];
+
+      expect(SecretSharingAlgos.bestSuiteBetween(sender, recipient),
+          'x-wing-rfc9180-v1');
+      expect(SecretSharingAlgos.bestSuiteBetween(recipient, sender),
+          'x-wing-hpke-v1',
+          reason: 'swapping the arguments swaps the answer, which is what '
+              'proves the sender side is the preference order');
+    });
+
+    test('no shared suite is null, never a guess', () {
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(
+              ['x-wing-rfc9180-v1'], ['ml-kem-1024-rfc9180-v1']),
+          isNull,
+          reason: 'sealing under a construction the recipient never claimed '
+              'fails on their side, as an AEAD error naming neither party');
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(['x-wing-hpke-v1'], []), isNull);
+    });
+
+    test('a suite this build has never heard of is still negotiable', () {
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(
+              ['from-2032', 'x-wing-hpke-v1'], ['from-2032']),
+          'from-2032');
+    });
+  });
+}
+
+/// A ring serving one fixed advertisement, so a test can state exactly what an
+/// owner claims — including shapes `InMemoryNskeyKeyRing` derives rather than
+/// accepts.
+class _FixedRing implements NskeyKeyRing {
+  final NskeyAdvertisement _advertised;
+  final Uint8List _secretKey;
+
+  _FixedRing(this._advertised, this._secretKey);
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      _advertised;
+
+  @override
+  Future<NskeyDecapsulationKey?> privateHalf(
+          String owner, String namespace, String nskeyKid) async =>
+      nskeyKid == _advertised.nskeyKid
+          ? NskeyDecapsulationKey(_secretKey)
+          : null;
+}
+
+/// A ring serving one advertisement carrying MORE THAN ONE key, plus the
+/// private for each.
+class _WidenedRing implements NskeyKeyRing {
+  _WidenedRing(this.advertised, this._privates);
+
+  final NskeyAdvertisement advertised;
+  final Map<String, Uint8List> _privates;
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      advertised;
+
+  @override
+  Future<NskeyDecapsulationKey?> privateHalf(
+      String owner, String namespace, String nskeyKid) async {
+    final secret = _privates[nskeyKid];
+    return secret == null ? null : NskeyDecapsulationKey(secret);
+  }
+}

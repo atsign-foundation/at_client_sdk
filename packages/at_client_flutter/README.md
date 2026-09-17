@@ -7,8 +7,10 @@
 The **Flutter layer** on top of [`at_client`](../at_client). Adds
 pre-built onboarding / authentication dialogs, device-keychain storage
 for atKeys, and Flutter-specific extensions — so a new Flutter app can
-go from "user has an atSign" to "authenticated `AtClient` in hand" with
-a few widget calls.
+go from "user has an atSign" to "`AtClient` in hand" with a few widget
+calls. One import covers an app:
+`package:at_client_flutter/at_client_flutter.dart` re-exports
+`at_client`, and nothing here asks an app to import `at_auth`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -19,11 +21,12 @@ implementations today.
 
 | Capability                       | API                                                                                                    |
 |----------------------------------|--------------------------------------------------------------------------------------------------------|
-| Select atSign + root domain      | `AtSignSelectionDialog.show(context)`                                                                  |
-| Onboard a new atSign (CRAM)      | `RegistrarCramDialog.show(...)` then `CramDialog.show(...)`                                            |
-| Authenticate via `.atKeys` file  | `AtKeysFileDialog.show(...)` then `PkamDialog.show(...)`                                               |
-| Authenticate via device keychain | `KeychainStorage()` + `PkamDialog.show(...)`                                                           |
-| Enroll a new device via APKAM    | `ApkamActivationDialog.show(...)` (request side) / `ApkamDialog.show(...)` (approve side)              |
+| Select atSign + root domain      | `AtSignSelectionDialog.show(context)` → `AtsignSelection`                                              |
+| Onboard a new atSign (CRAM)      | `RegistrarCramDialog.show(...)` then `CramDialog.show(...)` → `AtClient`                               |
+| Authenticate via `.atKeys` file  | `AtKeysFileDialog.show(...)` then `PkamDialog.show(...)` → `AtClient`                                  |
+| Authenticate via device keychain | `PkamDialog.show(..., keys: KeychainAtKeysIo())` → `AtClient`                                          |
+| Enroll a new device via APKAM    | `ApkamActivationDialog.show(...)` → `AtClient` (request side) / `EnrollmentRequestList` (approve side) |
+| Manage enrollments               | `client.enrollments` — list, approve, deny, revoke, passcodes (from `at_client`)                       |
 | Keychain read / write / delete   | `KeychainStorage` ([`lib/src/keychain/keychain_storage.dart`](lib/src/keychain/keychain_storage.dart)) |
 | Flutter helpers on core types    | `import 'package:at_client_flutter/extensions.dart';`                                                  |
 
@@ -34,11 +37,12 @@ example app. Read these rather than copying snippets from here:
 
 - [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart) — all
   four authentication / onboarding flows (CRAM onboarding, atKeys-file
-  login, keychain login, APKAM enrollment) with the post-auth
-  `AtClient` initialization. If you only read one file, read this one.
+  login, keychain login, APKAM enrollment), each ending with the
+  `AtClient` in hand. If you only read one file, read this one.
 - [`example/lib/apkam_example.dart`](example/lib/apkam_example.dart) —
   the approve/deny side of APKAM (e.g. a "manager" device approving a
-  new phone's enrollment request).
+  new phone's enrollment request), with a simulated requester built on
+  `client.enrollments.otp()` and `Atsign.enroll`.
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 
@@ -103,78 +107,95 @@ workflow for cross-window chart development are in
 
 Registering a brand-new atSign and having its atServer **provisioned** are two
 separate steps — provisioning can lag registration by anything from seconds to a
-few minutes. The SDK handles that wait for you: `AuthService.onboard` polls for
-the atServer to come up for **5 minutes** by default
-(`AtNetworkTimeouts.defaultOnboardingTimeout`), retrying every `retryDelay` with
-each individual network probe capped at 60s. Returning-user sign-in
-(`authenticate`) instead **fails fast** at 30s, because an existing atSign is
-already provisioned and a dead network there should surface quickly.
+few minutes. `CramDialog` (at_client's `Atsign.activate` underneath) handles
+that wait for you: it polls for the atServer to come up for **5 minutes** by
+default, every 2 seconds. Opening an atSign that already has keys (`PkamDialog`,
+`Atsign.open` underneath) instead makes **one bounded connect attempt**, seconds
+long, and hands back the client with its `connection` state — online, offline or
+refused — because an existing atSign is already provisioned and a dead network
+there should surface quickly.
 
 What a Flutter app should do:
 
-1. **Call `onboard()` with no `timeout`.** The 5-minute provisioning poll is
-   built in — don't wrap your own retry loop around it (that just re-stacks the
-   retries this design removed).
+1. **Let `CramDialog` wait.** The 5-minute provisioning poll is built in — don't
+   wrap your own retry loop around it (that just re-stacks the retries this
+   design removed).
 
-2. **Show progress from `AuthService.progressStream`, not a blind spinner.** A
-   multi-minute wait behind an indeterminate spinner reads as "hung." Subscribe
-   *before* calling `onboard` — it's a broadcast stream and won't replay events
-   you missed:
+2. **Show progress, not a blind spinner.** A multi-minute wait behind an
+   indeterminate spinner reads as "hung." `CramDialog` shows each step of the
+   activation as it happens; pass `progressBuilder` when the default rendering
+   does not fit your design, and it takes over entirely.
 
-   ```dart
-   final sub = authService.progressStream.listen((e) {
-     setState(() => _status = e.msg); // e.type: info / success / warning / error
-   });
-   try {
-     await authService.onboard(request, cramSecret); // no timeout → full 5-min poll
-   } on AtTimeoutException {
-     // provisioning still not ready after 5 minutes — offer Retry (step 3)
-   } finally {
-     await sub.cancel();
-   }
-   ```
+3. **When the dialog reports a failure, offer *Retry* rather than a longer
+   wait.** In the rare case provisioning runs past 5 minutes, a "Still setting
+   up your atSign — tap to keep waiting" button that shows `CramDialog` again
+   (a fresh 5-minute poll) beats baking in a 15-minute single timeout that
+   makes every genuine failure feel broken.
 
-3. **On `AtTimeoutException`, offer *Retry* rather than a longer timeout.** In the
-   rare case provisioning runs past 5 minutes, a "Still setting up your atSign —
-   tap to keep waiting" button that re-calls `onboard()` (a fresh 5-minute poll)
-   beats baking in a 15-minute single timeout that makes every genuine failure
-   feel broken.
+4. **Returning users go through `PkamDialog`**, which comes back in seconds
+   either way. An offline client still serves what it holds locally and reports
+   on `client.connection.changes` when the atServer is reached; a refused one
+   (revoked, an unapproved enrollment) is the state an app asks the user about.
 
-4. **Override `timeout` only to *widen* the window, and only when you know the
-   provisioner is slow** — e.g. a self-hosted atServer or custom atDirectory.
-   Never pass a *short* `timeout` to `onboard()` for a new atSign; it truncates
-   the very wait you need.
+> **Note:** the activation has no cancellation token, so the 5-minute poll runs
+> to completion or timeout even if the user navigates away — a "Cancel" button
+> can only change the UI, not abort the in-flight poll. True cancellation is
+> tracked in [#2075](https://github.com/atsign-foundation/at_client_sdk/issues/2075).
 
-5. **Returning users go through `authenticate()`** and keep the 30s fail-fast —
-   don't borrow onboarding's patience for routine sign-in.
+## The client the dialogs hand back
 
-> **Note:** `onboard()` has no cancellation token, so the 5-minute poll runs to
-> completion or timeout even if the user navigates away — a "Cancel" button can
-> only change the UI, not abort the in-flight poll. True cancellation is tracked
-> in [#2075](https://github.com/atsign-foundation/at_client_sdk/issues/2075).
+Every dialog hands back the `AtClient` it opened, and the app owns it: it is the
+app's to use and, when it is done, to `stop()`. An app whose screens read
+`AtClientManager.getInstance().atClient` makes it current with
+`AtClientManager.getInstance().use(client)`; an app that passes the client around
+needs no `AtClientManager` at all, and `EnrollmentRequestList` takes an
+`atClient` for that case. The details (the chosen storage directory, the
+namespace) are all in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart)
+in the `_storage(...)` and `_adopt(...)` functions.
 
-## Post-authentication initialization
-
-Every auth flow ends the same way: create an `AtClientPreference`, then
-call `AtClientManager.setCurrentAtSign(...)` with the `atChops` and
-`atLookUp` from the returned `AuthResponse`. The details (chosen
-storage directory, namespace, enrollment id) are all in
-[`example/lib/walkthrough.dart`](example/lib/walkthrough.dart) in the
-`_setupAtClient(...)` function.
+The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
+the client opens on; with no storage a Hive store opens under
+`preference.hiveStoragePath`. They also take `lookUps:`, at_client's
+`AtLookUpFactory`, for an app that chooses its transport or reaches its
+atServers through a proxy: every connection the client they hand back opens
+comes from it. With none, TLS on TCP with the defaults. Together with
+`keys:` these are the three platform-supplied things a client is built from;
+[at_client's README](../at_client/README.md#in-code-one-import-four-verbs)
+shows the factory.
 
 ## Keychain storage
 
 `KeychainStorage` wraps the device keychain (iOS / Android / macOS /
-Windows via `biometric_storage`) and stores atKeys and enrollment data.
-The PKAM / APKAM dialogs accept a `KeychainAtKeysIo` instance as a
-backup target so successful logins automatically populate the keychain
-for next time.
+Windows via `biometric_storage`) and stores atKeys. `CramDialog` and
+`ApkamActivationDialog` file the keys they mint in the keychain unless given
+another `keys` store, and `PkamDialog` takes `backupKeys`, stores the keys are
+copied into once the client is open — so a login from a `.atKeys` file
+populates the keychain for next time.
+
+`KeychainAtKeysIo` is a full `WrittenAtKeysIo`: as well as `read` and
+`write` it implements `flush`, and inherits `update`. That matters because
+the post-quantum paths add key material to the store as they run — a
+namespace key's private half, the atSign's signing-root private — and on
+Flutter this is the *default* store. Use `update` for any addition, never a
+hand-rolled `read` → mutate → `flush`; see
+[at_auth's note on why](../at_auth/README.md#the-atkeys-file-format).
+
+`write` is create-only, like every other `WrittenAtKeysIo`: it throws
+`AtKeysFileOverwriteException` if the atSign already has an entry. To
+persist a change to keys that are already stored, use `flush` or `update`.
+`read` of an atSign the keychain does not hold throws
+`AtKeysSourceAbsentException`, as the file store does, which is how
+`Atsign.enroll` tells "no keys yet" from "keys this process cannot read".
+
+An enrollment awaiting approval lives in the keys store too, as pending key
+material: `ApkamActivationDialog` reads it back and resumes the wait rather
+than submitting a second request.
 
 Windows apps additionally need:
 
 ```yaml
 dependencies:
-  biometric_storage: ^4.1.3
+  biometric_storage: ^5.0.1
 ```
 
 Direct usage is rare, but when you need it:
@@ -184,7 +205,7 @@ final keychainStorage = KeychainStorage();
 
 AtKeys? alice = await keychainStorage.getAtsign('@alice');
 List<String> stored = await keychainStorage.getAllAtsigns();
-await keychainStorage.appendAtKeysToKeychain(atKeys);
+await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
 await keychainStorage.removeAtsignFromKeychain('@alice');
 ```
 
@@ -205,12 +226,203 @@ final atKeysIo = FileAtKeysIo(
 atKeysIo.write(atSign, atKeys);
 ```
 
+## Migrating from 1.x
+
+2.0 removes the two services that orchestrated at_auth for an app and stops
+re-exporting at_auth. The dialogs take the atSign, the keys store and the
+`AtClientPreference`, and hand back the `AtClient` they opened; an app with
+its own UI calls the `Atsign` verbs directly. Nothing an app reads after
+login changes.
+
+| 1.x                                                                                              | 2.0                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).activate(cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
+| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `Atsign(atSign).open(keys: ..., preference: ...)`                           |
+| `AtClientManager.getInstance().setCurrentAtSign(..., atChops: response.atChops, ...)` afterwards | `AtClientManager.getInstance().use(client)`; `setCurrentAtSign` is deprecated                                                                                                      |
+| `response.isSuccessful`, `response.atAuthKeys`, `response.atLookUp`                              | a null client means the dialog failed or was cancelled; the keys are in the store the client opened on; the connection is the client's (`client.connection.current`)               |
+| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).enroll(...)` then `pending.client(preference)` |
+| `FlutterEnrollmentService().approve(...)` / `.deny(...)` / `.revoke(...)`                        | `client.enrollments.approve(id)` / `.deny(id)` / `.revoke(id)`; `EnrollmentRequestList(atClient: client)` renders the roster and decides                                          |
+| `.getEnrollments(...)` / `.list(statuses, atLookUp)`                                             | `client.enrollments.requests` (a stream of new requests) / `.list(statuses: ...)` / `.pending()`                                                                                   |
+| `.generateOtp()` / `.setSpp(spp: ...)`, answering an `Otp`                                       | `client.enrollments.otp()` / `.spp(value, expiry: ...)`, answering a `Passcode`; `KeychainStorage().saveSpp(atSign, passcode)` keeps it                                             |
+| `.getActiveSpp()` / `.getAllSpps()`                                                              | `KeychainStorage().getActiveSpp(atSign)` / `.getAllSpps(atSign)`                                                                                                                   |
+| `.isManagerKey()`                                                                                | no direct equivalent: read `client.enrollments.list()` and look for an approved enrollment holding `__manage`, which is what it did                                                 |
+| `AtSignSelectionDialog.show(context)` → `AuthRequest`                                            | → `AtsignSelection` (`atSign`, `rootDomain`)                                                                                                                                       |
+| `RegistrarCramDialog.show(context, request, registrar: ...)`                                     | `RegistrarCramDialog.show(context, atSign, registrar: ...)`                                                                                                                        |
+| `ApkamActivationDialog.show(...)` → `AtEnrollmentResponse`, `atKeysIo:`                          | → `AtClient`; `keys:` is where the enrollment's keys are filed, the keychain by default, and a request already pending there is resumed rather than repeated                       |
+| `EnrollmentRequestList()` on the manager's current client                                        | unchanged; `EnrollmentRequestList(atClient: ...)` for an app that passes its client around                                                                                          |
+| `KeychainStorage.readEnrollmentData` / `writeEnrollmentData` / `deleteEnrollmentData` / `validateEnrollment`, `EnrollmentData`, `Otp` | gone: an enrollment awaiting approval lives in the keys store as pending key material                                                                              |
+| `import 'package:at_client_flutter/at_client_flutter.dart'` for `AtAuthRequest`, `AtEnrollmentRequest`, `AtEnrollmentResponse`, ... | gone with the services; `AtKeys`, `AtKeysIo`, `FileAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and `EnrollmentKeyExchangeMode` still come through, from at_client, and `RegistrarService` from at_auth |
+
+A returning user's login can now come back **offline**: `PkamDialog` hands
+back the client whatever the network did, and `client.connection.current`
+says whether it is online, offline or refused. A 1.x app treated every
+failure to reach the atServer as a failed login; a 2.0 app decides.
+
+### Before and after
+
+The things a 1.x app commonly did, each as it was and as it is now. The 2.0
+side shares two helpers:
+
+```dart
+// Where this app keeps the atSign's local store. closedByClient: the client
+// closes it when it stops, so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
+  final dir = await getApplicationSupportDirectory();
+  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
+}
+
+final preference = AtClientPreference()..namespace = 'my_app';
+```
+
+**Log in from the keychain, then set up the client**
+
+```dart
+// 1.x
+final response = await AuthService().authenticate(
+  AtAuthRequest(atSign, atKeysIo: KeychainAtKeysIo(), rootDomain: rootDomain),
+  backupKeys: [KeychainAtKeysIo()],
+);
+if (!response.isSuccessful) return;
+final acp = AtClientPreference()
+  ..rootDomain = rootDomain.rootDomain
+  ..rootPort = rootDomain.rootPort
+  ..namespace = 'my_app'
+  ..hiveStoragePath = dir.path
+  ..commitLogPath = dir.path;
+await AtClientManager.getInstance().setCurrentAtSign(
+  response.atSign, 'my_app', acp,
+  enrollmentId: response.enrollmentId,
+  atChops: response.atChops,
+  atLookUp: response.atLookUp,
+);
+
+// 2.0
+final client = await PkamDialog.show(context,
+  atSign: atSign,
+  rootDomain: rootDomain,
+  keys: KeychainAtKeysIo(),
+  preference: preference,
+  storage: await _storage(atSign),
+);
+if (client == null) return;                       // cancelled, or the dialog failed
+AtClientManager.getInstance().use(client);        // if screens read the manager
+```
+
+The same for a `.atKeys` file: `keys: atKeysIo` from `AtKeysFileDialog.show`,
+plus `backupKeys: [KeychainAtKeysIo()]` to copy the keys into the keychain.
+
+**Onboard a new atSign**
+
+```dart
+// 1.x
+final request = await AtSignSelectionDialog.show(context);           // AuthRequest
+final cramKey = await RegistrarCramDialog.show(context,
+    request as AtOnboardingRequest, registrar: registrar);
+final response = await CramDialog.show(context, request: request, cramKey: cramKey!);
+if (response == null || !response.isSuccessful) return;
+await AtClientManager.getInstance().setCurrentAtSign(/* as above */);
+
+// 2.0
+final selection = await AtSignSelectionDialog.show(context);         // AtsignSelection
+final cramKey = await RegistrarCramDialog.show(context, selection!.atSign, registrar: registrar);
+final client = await CramDialog.show(context,
+  atSign: selection.atSign,
+  rootDomain: selection.rootDomain,
+  cramKey: cramKey!,
+  preference: preference,
+  storage: await _storage(selection.atSign),
+);
+if (client == null) return;
+AtClientManager.getInstance().use(client);
+```
+
+**Enroll this device with an atSign another device holds**
+
+```dart
+// 1.x: three steps, and the enrollment checkpoint lived in the keychain
+final enrollment = await ApkamActivationDialog.show(context,
+  atSign: atSign, rootDomain: rootDomain, appName: 'my_app',
+  deviceName: 'default', namespaces: {'my_app': 'rw'});
+if (enrollment?.atAuthKeys == null) return;
+final response = await PkamDialog.show(context,
+  request: AtAuthRequest(atSign, atAuthKeys: enrollment!.atAuthKeys!, rootDomain: rootDomain),
+  backupKeys: [KeychainAtKeysIo()]);
+if (response == null || !response.isSuccessful) return;
+await AtClientManager.getInstance().setCurrentAtSign(/* as above */);
+
+// 2.0: one step; the dialog waits for the approval and hands back the client.
+// A request already pending in `keys` is resumed, not repeated.
+final client = await ApkamActivationDialog.show(context,
+  atSign: atSign, rootDomain: rootDomain, appName: 'my_app',
+  deviceName: 'default', namespaces: {'my_app': 'rw'},
+  preference: preference,
+  keys: KeychainAtKeysIo(),
+  storage: await _storage(atSign),
+);
+if (client == null) return;
+AtClientManager.getInstance().use(client);
+```
+
+**Approve, deny and revoke on the manager device; passcodes**
+
+```dart
+// 1.x
+final service = FlutterEnrollmentService();
+service.getEnrollments(statusFilters: [EnrollmentStatus.pending]).listen((r) => ...);
+await AtEnrollment.create().approve(
+  EnrollmentRequestDecision.approved(
+      enrollmentId: r.enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString(r.encryptedAPKAMSymmetricKey!),
+      atSign: atSign),
+  AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp,
+);
+final Otp otp = await service.generateOtp();
+final Otp spp = await service.setSpp(spp: value, sppExpiry: expiry);
+final active = await service.getActiveSpp();
+
+// 2.0: the client's own handle; passcodes the keychain keeps
+final enrollments = client.enrollments;
+enrollments.requests.listen((Enrollment r) => ...);      // new requests as they arrive
+final pending = await enrollments.pending();
+await enrollments.approve(r.enrollmentId!);              // or deny(id), revoke(id)
+final Passcode otp = await enrollments.otp();
+final Passcode spp = await enrollments.spp(value, expiry: expiry);
+await KeychainStorage().saveSpp(atSign, spp);
+final active = await KeychainStorage().getActiveSpp(atSign);
+```
+
+**Log out, and switch atSigns**
+
+```dart
+// 1.x: the manager owned the client
+await AtClientManager.getInstance().setCurrentAtSign(nextAtSign, 'my_app', acp, ...);
+
+// 2.0: the app owns it. Opening an atSign whose client is live is refused,
+// so every sign-in stops the previous client first.
+await client.stop();
+final next = await PkamDialog.show(context, atSign: nextAtSign, keys: KeychainAtKeysIo(),
+    preference: preference, storage: await _storage(nextAtSign));
+if (next != null) AtClientManager.getInstance().use(next);
+```
+
+**What a failed login looks like**
+
+```dart
+// 1.x: any failure to reach the atServer was a failed login
+if (!response.isSuccessful) showError(response.atClientException);
+
+// 2.0: the client comes back, and says what happened
+final state = client.connection.current;   // online | offline | refused, with a cause
+if (state.isRefused) askTheUser(state.cause);          // revoked, unauthenticated, ...
+client.connection.changes.listen((s) => setState(() => _state = s));
+```
+
 ## Where to go next
 
-- [`at_client`](../at_client) — the SDK whose `AtClient` you end up
-  with after authentication
-- [`at_auth`](../at_auth) — detailed writeup of the atSign
-  provisioning / onboarding / APKAM lifecycle, platform-neutral
+- [`at_client`](../at_client) — the SDK whose `AtClient` the dialogs hand
+  back, and whose `Atsign` verbs they run
+- [`at_auth`](../at_auth) — the `.atKeys` keyfile format and the registrar
+  client
 - [`at_commons`](../at_commons) — `AtKey`, `Metadata`, and friends
 
 ## Open source usage and contributions

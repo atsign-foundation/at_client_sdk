@@ -3,9 +3,8 @@ import 'dart:async';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
-import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -14,6 +13,19 @@ abstract class AtEnrollment {
   factory AtEnrollment.create() {
     return AtEnrollmentImpl();
   }
+
+  /// How long [waitForApproval] leaves between polls when a caller states no
+  /// interval of its own.
+  static const Duration defaultRetryInterval = Duration(seconds: 2);
+
+  /// How many consecutive failures to reach the atServer [waitForApproval]
+  /// rides out when a caller states no budget of its own. It has never
+  /// bounded the wait for a decision — see [waitForApproval].
+  static const int defaultMaxRetries = 15;
+
+  /// Whether [waitForApproval] narrates itself on [progressStream] when a
+  /// caller states no preference.
+  static const bool defaultLogProgress = true;
 
   Stream<ProgressEvent> get progressStream;
 
@@ -61,8 +73,10 @@ abstract class AtEnrollment {
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
-  ///     // atEnrollmentResponse.session -> AtClientManager.fromAuthSession(...)
+  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse,
+  ///         atLookup: atLookUp);
+  ///     // atEnrollmentResponse.session.atKeysIo now holds the keys; open a
+  ///     // client on it with at_client's Atsign.open.
   ///```
   ///
   /// The [atLookUp] parameter is used to perform lookups to secondary server to submit an enrollment request.
@@ -93,7 +107,12 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// // lookUps: the application's AtLookUpFactory, such as secureSocketLookUps()
+  /// final atLookup = lookUps(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision =
   ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
@@ -101,76 +120,44 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl);
+  ///       enrollmentRequestDecision, atLookupImpl, approverKeys: myKeys);
   /// ```
+  ///
+  /// [approverKeys] is what approval reads of the approving client's own
+  /// material, and all of it: the atSign's encryption private key, which
+  /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and its
+  /// self-encryption key, one of the two secrets sealed for the enrollee.
+  /// Neither is authentication, so the caller hands them over rather than the
+  /// implementation reaching through [atLookUp] for them.
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
+      {required ApproverKeyMaterial approverKeys});
 
-  /// Denies an enrollment request.
+  /// Polls for the approval or denial of an enrollment request, and on
+  /// approval collects and decrypts what the approval released.
   ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to deny an enrollment.
-  /// The [atLookUp] parameter is used to perform lookups during approval management.
+  /// **The wait for a decision is unbounded.** Somebody has to decide this
+  /// request, on their own schedule, so polling continues until the atServer
+  /// reports approval or denial — for as long as that takes. No parameter
+  /// here shortens it; a caller that needs to give up must race this against
+  /// its own timer.
   ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval/denial of an enrollment.
+  /// [maxRetries] is a budget for **consecutive failures to reach the
+  /// atServer**, and nothing else — the exit from an atServer that is
+  /// genuinely gone. An answer restores it, including a refusal, which is an
+  /// answer about the enrollment. Exhausting it propagates the underlying
+  /// connection failure.
   ///
-  /// ```dart
-  ///  To deny an enrollment request
+  /// [retryInterval] is the pause between polls, and [logProgress] narrates
+  /// the wait on [progressStream] (which costs a brief additional pause per
+  /// attempt). Their defaults, and [maxRetries]', are
+  /// [defaultRetryInterval], [defaultLogProgress] and [defaultMaxRetries].
   ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(enrollmentRequestDecision, atLookupImpl);
-  /// ```
-  Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
-
-  /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
-  ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to revoke an enrollment.
-  /// The [atLookUp] parameter is used to perform lookups during approval management.
-  ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the revoke of an enrollment.
-  ///
-  /// ```dart
-  ///  To revoke an enrollment request
-  ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(enrollmentRequestDecision, atLookupImpl);
-  /// ```
-  Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
-
-  /// Lists all enrollments.
-  ///
-  /// Accepts [EnrollmentStatus] inside the [statusFilters] parameter to filter enrollments with their current status.
-  ///
-  /// Returns a [Future] containing a [List<EnrollmentServerRequest>] representing all the enrollments.
-  Future<List<EnrollmentServerResponse>> list(
-      List<EnrollmentStatus>? statusFilters, AtLookUp atLookUp,
-      {String? arx, String? drx});
-
-  /// Generates a one-time passcode from the server.
-  ///
-  /// [expiry] defaults to 5 minutes.
-  Future<Otp> generateOtp(AtLookUp atLookUp,
-      {Duration expiry = const Duration(minutes: 5)});
-
-  /// Sets a semi-permanent passcode on the server.
-  ///
-  /// [spp] must be alphanumeric and exactly 6 characters.
-  /// [expiry] defaults to 5 minutes.
-  Future<Otp> setSpp(String spp, AtLookUp atLookUp,
-      {Duration expiry = const Duration(minutes: 5)});
-
-  ///Awaits for approval/deny of an enrollment request at regular intervals.
-  /// The polling continues until a final status is received or the maximum number of retries is reached.
-  ///The [logProgress] parameter, when set to true, enables logging of the progress during the polling process.
-  /// The [maxRetries] parameter specifies the maximum number of polling attempts before giving up.
-  /// The [retryInterval] parameter defines the duration to wait between each polling attempt.
+  /// Dart resolves a default in the method that runs, not from the type of
+  /// the reference a caller holds, so what an implementation declares here
+  /// is what its callers actually get and what is declared on this interface
+  /// is documentation. Naming the same constants on both is what keeps that
+  /// documentation true.
   ///
   /// ```dart
   /// AtEnrollment atEnrollment = AtEnrollment.create();
@@ -179,17 +166,20 @@ abstract class AtEnrollment {
   ///         await atEnrollmentBase?.submit(dummyEnrollmentRequest, atLookUp!);
   ///
   /// try{
-  ///   await atEnrollment.waitForApproval(
-  ///     enrollmentResponse: atEnrollmentResponse!,
-  ///   );
+  ///   await atEnrollment.waitForApproval(atEnrollmentResponse!,
+  ///       atLookup: atLookUp);
   /// }catch{
   ///   // Handle errors
   /// }
   /// ```
+  /// [atLookup] is the connection the approval handshake runs on — the PKAM
+  /// retries and the post-approval key fetches — and it is left open for the
+  /// caller to close.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
-    bool logProgress = false,
-    int maxRetries = 48,
-    Duration retryInterval = const Duration(minutes: 1),
+    bool logProgress = defaultLogProgress,
+    int maxRetries = defaultMaxRetries,
+    Duration retryInterval = defaultRetryInterval,
+    required AtLookupMuxable atLookup,
   });
 }

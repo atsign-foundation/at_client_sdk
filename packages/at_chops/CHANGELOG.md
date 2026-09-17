@@ -17,12 +17,309 @@
 - breaking: remove the misnamed `Ed25519Key` class (it was an AES symmetric key, not an Ed25519 key) — use `AESKey`
 - breaking: remove the deprecated stateful `secretKey` setter, `sign`, and `verify` on `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` — use `signBytes`/`verifyBytes` with explicit key material (or `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm`)
 - breaking: remove `AtKeysCrypto` (atKeys-file encrypt/decrypt) — it now lives in `at_auth`
+- breaking: `AesCtrFfiAlgo` (new in 3.6.0) follows `AesCtrEncryptionAlgo`: `fromLib(lib, aesKey)` becomes `fromLib(lib, keyLengthBytes)` with the raw key passed per `encrypt`/`decrypt` call, and `AtPqc.aesCtr(aesKey)` becomes `AtPqc.aesCtr(keyLengthBytes)`. `AtPqc.aesCtrStreamCipher` and `AesCtrFfiCipher.fromLib` take the raw key bytes in place of an `AESKey`
+- breaking: `AtKemAlgorithm` gains `newSeed()` and `keyPairFromSeed(seed)` (3.6.0), and `PkamMlDsa65SigningAlgo` is removed with the rest of the `AtChopsImpl` dispatch it was built for — call `MlDsa65PureDartAlgo.signBytesSync`/`verifyBytesSync` with explicit key material
+- feat: `MlDsa65PureDartAlgo.verifyBytesSync` throws `AtSigningVerificationException` rather than returning `false`, so the synchronous pair matches `verifyBytes`
 - breaking: add `AtAlgorithm`, the sealed supertype every algorithm interface now implements — `AtSignatureAlgorithm`, `SymmetricEncryptionAlgorithm`, `ASymmetricEncryptionAlgorithm`, `AtHashingAlgorithm`, `AtKemAlgorithm`, and `AtKeyAgreementAlgorithm`. It gives downstream code (at_server) one type that holds any at_chops algorithm, and because it is sealed a `switch` over those six families is exhaustive with no default arm. Sealing is not transitive, so all six stay freely implementable outside at_chops; only declaring a *seventh* family is closed off
 - breaking: `String get name` is declared once on `AtAlgorithm` rather than on each interface. External `implements` users must add it — including `AtKeyAgreementAlgorithm` implementers, which previously had no `name`; the two X25519 backends now report `'x25519'` from the new `KeyAgreementAlgoType` enum. Both backends of an algorithm report the same name (`MlDsa65FfiAlgo`/`MlDsa65PureDartAlgo` → `'mldsa65'`; `AesGcm256FfiAlgo`/`AesGcm256EncryptionAlgo` → `'aesgcm256'`; likewise ML-KEM-768 and X-Wing), so a downstream protocol keying on it sees one stable identifier regardless of backend
-- feat: add `EncryptionAlgoType` (`aesctr`, `aesgcm256`, `rsa`), `KemAlgoType` (`mlkem768`, `xwing`) and `KeyAgreementAlgoType` (`x25519`), and a `static fromString(String name)` on `SigningAlgoType`, `EncryptionAlgoType`, `KemAlgoType`, and `KeyAgreementAlgoType` alongside the existing `HashingAlgoType.fromString`. Constants are spelled all-lowercase so that `.name` *is* the identifier an algorithm reports — there is no second, camelCase vocabulary to translate between. `fromString` is case-insensitive and throws `AtException` on an unknown name
+- feat: add `EncryptionAlgoType` (`aesctr`, `aesgcm256`, `rsa`), `KemAlgoType` (`mlkem768`, `mlkem1024`, `xwing`) and `KeyAgreementAlgoType` (`x25519`), and a `static fromString(String name)` on `SigningAlgoType`, `EncryptionAlgoType`, `KemAlgoType`, and `KeyAgreementAlgoType` alongside the existing `HashingAlgoType.fromString`. Constants are spelled all-lowercase so that `.name` *is* the identifier an algorithm reports — there is no second, camelCase vocabulary to translate between. `fromString` is case-insensitive and throws `AtException` on an unknown name
 - chore: `package:at_chops/at_chops.dart` (the web-safe barrel) now compiles to WASM (dart2wasm), enforced by a CI smoke test. FFI-backed algorithms remain in `package:at_chops/at_chops_ffi.dart`, which is not WASM-compatible by design
 - chore: drop the unused `dart_periphery` dependency
-- chore: consolidate every classical primitive onto pointycastle and drop seven dependencies — `args` (never imported), `encrypt`, `crypton`, `crypto`, `ecdsa`, `elliptic`, and the abandoned `better_cryptography` fork. AES-CTR/GCM, RSA (PKCS#1 v1.5 encryption and signatures, plus the X.509 SPKI / PKCS#8 DER codec that `crypton` used to provide), ECDSA secp256r1, Argon2id, HMAC-SHA256 and the MD5/SHA digests are now pointycastle; `cryptography` remains for Ed25519 and X25519, and `pqcrypto` for ML-DSA-65/ML-KEM-768. Stays on `pointycastle ^3.9.1` — nothing here needs pointycastle 4, and `encrypt ^5.0.3` (still a direct dependency of at_client) pins `pointycastle ^3.x`. Every wire format is unchanged — `test/golden_vectors_test.dart` pins the AES-CTR ciphertexts (including the all-zeroes legacy IV), the RSA signatures/ciphertexts and DER encodings, and the Argon2id digests that at_auth's passphrase envelopes depend on, against known-answer vectors captured from 3.x
+- chore: consolidate every classical primitive onto pointycastle and drop six dependencies — `args` (never imported), `encrypt`, `crypton`, `ecdsa`, `elliptic`, and the abandoned `better_cryptography` fork. AES-CTR/GCM, RSA (PKCS#1 v1.5 encryption and signatures, plus the X.509 SPKI / PKCS#8 DER codec that `crypton` used to provide), ECDSA secp256r1, Argon2id and the MD5/SHA digests are now pointycastle; `crypto` stays for the HKDF core's HMAC-SHA256; `cryptography` remains for Ed25519 and X25519, and `pqcrypto` for ML-DSA-65/ML-KEM-768. Stays on `pointycastle ^3.9.1` — nothing here needs pointycastle 4, and `encrypt ^5.0.3` (still a direct dependency of at_client) pins `pointycastle ^3.x`. Every wire format is unchanged — `test/golden_vectors_test.dart` pins the AES-CTR ciphertexts (including the all-zeroes legacy IV), the RSA signatures/ciphertexts and DER encodings, and the Argon2id digests that at_auth's passphrase envelopes depend on, against known-answer vectors captured from 3.x
+
+## 3.7.0
+
+- feat: the barrel exports `MlDsa65Sizes`. A caller signing a PKAM challenge
+  with ML-DSA needs the FIPS 204 secret-key length to say what a wrong-sized
+  key most likely is, which is the difference between naming a mismatched
+  enrollment and reporting a byte count.
+- feat: `RsaSignatureAlgo.signBytesSync`, for callers that cannot await. The
+  PKCS#1 v1.5 computation is synchronous, and `signBytes` now delegates to it,
+  matching the pair `MlDsa65PureDartAlgo` already has. Envelope signing builds
+  a signed document in a synchronous path and had no way onto this class
+  without it.
+
+- feat: AES-CTR via OpenSSL when libcrypto is present, in one-shot (`AtPqc.aesCtr`)
+  and incremental (`AesCtrFfiCipher`, for streams) form. Ciphertext is unchanged;
+  hosts without libcrypto keep the pure-Dart path.
+- fix: `AesGcm256FfiAlgo` rejects a plaintext, ciphertext or AAD longer than the
+  C `int` its OpenSSL binding passes, rather than letting the length wrap. The
+  AES-CTR backends already carried this guard.
+- fix: prevent `TypeError` when a non-existent `keyName` is passed to `encryptString`, `decryptString`, `encryptBytes`, or `decryptBytes` by throwing an `AtEncryptionException`.
+- chore: move `dart_periphery` from `dependencies` to `dev_dependencies`. It is
+  imported only by `example/zariot/`, and as a direct dependency it put an
+  FFI-based package on the resolved graph of every at_chops consumer. No
+  library code, public API, or behaviour changes.
+
+## 3.6.1
+
+- chore: dart format, and a stale symbol name in one test comment
+
+- fix: an ML-DSA-65 PKAM key of the wrong length now says what is likely wrong
+  with it. `PkamMlDsa65SigningAlgo.sign` reported only
+  `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the
+  credential nor the likeliest cause — and the likeliest cause is not a corrupt
+  key. A PKAM key of about 1.2 kB is an RSA-2048 private key, and a caller ends
+  up holding one by naming one enrollment's algorithm while carrying another
+  enrollment's credentials: a retrofitted keyfile holds ML-DSA material for the
+  new enrollment and the original RSA keypair in the flat fields, and the two
+  are selected separately. The message now states the size, the expected size,
+  and — only for a key in the RSA-2048 range — that the algorithm and the
+  credentials most likely come from different enrollments.
+  - Message only. A correctly sized key signs exactly as before, which the
+    third case of `pkam_mldsa65_wrong_key_message_test.dart` pins, and the
+    RSA hint is conditional so a 7-byte key is not told it might be RSA.
+
+## 3.6.0
+
+Shipped as a minor despite the breaks below. Both are source-breaking only for
+a caller that omitted `pqSeal`/`pqOpen`'s `info`, or that implements
+`AtKemAlgorithm` outside this package — and no such consumer exists. Every
+`pqSeal`/`pqOpen` call site and every `AtKemAlgorithm` implementation is in
+this repository, and the call sites already passed `info`. They are still
+breaks; the judgement is that there is nothing to break.
+
+- fix: `pqSeal` refuses a KEM that is not the requested version's KEM. `kem`
+  and `version` are independent arguments and nothing compared them, so
+  ML-KEM-1024 could be sealed under `0x02` — whose suite is X-Wing — producing
+  a record that round-trips against a peer repeating the same pairing and
+  cannot be opened by anyone following the documented rule that the version
+  byte names the whole suite. Reachable without choosing a version at all,
+  since `pqSealDefaultVersion` supplies `0x02` to callers that name none.
+  `HpkeSuite` gains `nEnc`, RFC 9180's encapsulated-key length, and the seal
+  compares the KEM's actual output against it — the bytes rather than what a
+  KEM says about itself, so an unrecognised backend is covered too. That length
+  is also asserted to fit the envelope's 2-byte length field, so a suite whose
+  KEM would overflow it fails to compile rather than truncating at seal time.
+- **BREAKING**: `pqSeal` version `0x01` — the `atPQv1-base` construction,
+  X-Wing under a bespoke HKDF-SHA256 key schedule with AES-256-GCM — is
+  removed. `pqSealSupportedVersions` is now `{0x02, 0x03}` and
+  `pqSealDefaultVersion` is `0x02`. An envelope carrying `ver 0x01` opens as
+  `PqOpenFailure.versionMismatch`.
+
+  It shared its KEM with `0x02`, so it was duplication rather than algorithm
+  diversity; `0x02` and `0x03` are RFC 9180 Base mode verbatim and attested by
+  the IETF working group's own vectors, where `0x01` had only vectors this
+  project generated for itself. Its one distinctive feature was AES-256-GCM in
+  place of ChaCha20-Poly1305, and what these envelopes carry is a 32-byte
+  content key, at which size the KEM dominates the AEAD — while `0x03` keeps
+  AES-GCM in the suite set regardless.
+
+  `0x01` was the only user of the bespoke key schedule, so this removes the
+  last non-RFC-9180 construction from the package, along with
+  `pq_seal_conformance_test.dart` and its self-generated `pq_seal_v1.json`
+  vectors. Safe to remove rather than deprecate because no released build
+  contains the subsystem that writes durable records sealed this way.
+- feat: add `SigningAlgoType.strongestFirst` and `SigningAlgoType.strongestOf`
+  — the order a verifier uses to choose which of several signatures on one
+  envelope to check, and the lookup over it. Purely additive: two static
+  members on the existing enum, no member added, moved or renamed.
+
+  Separate from declaration order on purpose. The members are declared in the
+  order they were added and reordering them would be a wire change, so
+  preference is a second statement rather than a reading of the first. It lives
+  here rather than in a consumer because a signer and a verifier that disagreed
+  about "strongest" would negotiate against themselves.
+
+  `mldsa65` is first and the gap to second place is not a matter of degree: it
+  is the only member Shor's algorithm does not break, so no classical parameter
+  size promotes anything above it. The rest rank by classical security level —
+  RSA-4096, then the two 128-bit curves with `ed25519` above `ecc_secp256r1` on
+  the tiebreak of being deterministic and harder to misuse, then RSA-2048. This
+  is the project's preference order, not a universal ranking, and it is total on
+  purpose: a partial order leaves the choice undefined for exactly the pair
+  nobody thought about. A new member left out of it turns
+  `test/signing_strength_test.dart` red.
+- breaking: `pqSeal` and `pqOpen` take `info` as a **required** parameter. It
+  was optional, and an omitted `info` derived the same key schedule as an empty
+  one — so two protocols that each said nothing shared a binding, and either
+  could open the other's envelopes. Nothing in the type system distinguished
+  them and no test could see it. A caller that genuinely wants no binding now
+  passes `Uint8List(0)` and says so. Every in-tree caller already supplied one,
+  so no behaviour and no wire byte changes; what goes is a state reachable only
+  by omission. The key schedule is untouched, and `pqSealDeriveKeyAndNonce`
+  still accepts an absent `info`, so the conformance vectors are unaffected.
+- fix: `pqSeal` maps a wrong-length recipient public key to `PqSealException`
+  rather than letting the KEM's `ArgumentError` escape. `PqSealException`'s own
+  dartdoc gave that case as its example, and `pqOpen` already wrapped
+  `decapsulate` for the same reason — the seal direction was the odd one out,
+  so a caller catching the documented type got an uncaught error instead.
+- fix: the unknown-version and unknown-KDF diagnostics thrown by the HPKE
+  paths carry the offending value; an escaped `$` had left the
+  interpolation's source text in the message instead.
+- feat: `AtKemAlgorithm.newSeed` and `AtKemAlgorithm.keyPairFromSeed` — one way
+  to persist and recover a KEM key that means the same thing on every backend.
+  `generateKeyPair`'s `secretKey` does not: X-Wing's **is** its 32-byte seed,
+  ML-KEM's is the expanded decapsulation key (3168 bytes at ML-KEM-1024) that no
+  seeded call reproduces, and the FFI backends' is an opaque process-lifetime
+  handle. Nothing in the type system distinguishes them, so code written against
+  X-Wing persists recoverable bytes by accident and the identical code persists
+  unrecoverable ones for ML-KEM. Storing the seed and re-deriving through
+  `keyPairFromSeed` is correct everywhere, which is what lets a caller hold a
+  key for a KEM chosen by configuration rather than named in source.
+  The seed *length* stays off the interface deliberately — `newSeed` produces a
+  valid one and `keyPairFromSeed` rejects an invalid one, so a caller has no use
+  for it — while concrete classes keep their own `seedLength` for callers that
+  do name a backend. `MlKem768PureDartAlgo` and `MlKem768FfiAlgo` gain
+  `seedLength` to match the other three.
+  **Note for implementers:** these are abstract members on a public interface,
+  so any code outside this package that `implements AtKemAlgorithm` must add
+  them. That is what makes this a minor rather than a patch release. All six
+  implementations in this repository are `final class … implements` and were
+  caught at compile time.
+- feat: `KemSeedMixin` — the one implementation of that seed contract.
+  `newSeed` draws the backend's length from a secure random source and
+  `keyPairFromSeed` rejects any other length before the backend's
+  deterministic keygen runs. All five in-tree backends mix it in rather than
+  carrying five copies of the same two methods (one copy had already drifted
+  to validating against a hardcoded length). The length lives on the mixin as
+  a `@protected` member — still off the interface, still not caller-facing —
+  and the concrete classes keep their public `seedLength` constants.
+- feat: `pqSeal` version `0x03` — RFC 9180 Base mode at the **pure
+  ML-KEM-1024** suite (KEM `0x0042`, KDF `0x0002` HKDF-SHA384, AEAD `0x0002`
+  AES-256-GCM). The no-hybrid option, and the only published HPKE suite for that
+  KEM at a 256-bit AEAD, so it comes with a third-party end-to-end vector rather
+  than a self-generated one. It is also the combination CNSA 2.0 names.
+  A separate version rather than a suite field on the wire because the KEM is
+  already fixed by the recipient advertised key — nothing can seal ML-KEM-1024
+  to a hybrid encapsulation key or the reverse — so the version byte names the
+  whole suite and an opener needs no other input.
+- feat: `HkdfSha384` and `HmacSha384`. RFC 5869 publishes vectors for SHA-256
+  and SHA-1 only, so this is attested through the HPKE `0x0042` key-schedule
+  vector end to end, including its 48-byte exporter secret.
+- feat: `MlKem1024PureDartAlgo` — pure ML-KEM-1024 (FIPS 203), the no-hybrid
+  KEM option. It exists for its citation rather than its strength: used alone it
+  is the only public-key encryption path here whose specification chain contains
+  **no draft at all** (FIPS 203, SP 800-227 §4.3, SP 800-56C), where every
+  hybrid has its combiner specified only in an IETF draft. It is also CNSA
+  2.0's mandated parameter set, and CNSA 2.0 treats hybrids as non-compliant.
+  What it gives up is the classical hedge, which covers exactly one scenario —
+  ML-KEM falling to *classical* cryptanalysis before a quantum computer exists.
+  No new primitive was needed: pqcrypto's Kyber is parameterised, and
+  `KyberLevel.kem1024` is FIPS 203's k=4 set.
+- test: checked against the IETF HPKE working group's published vector for KEM
+  `0x0042` — the 64-byte d||z seed derives the published 1568-byte
+  encapsulation key, decapsulation reproduces the published shared secret, and
+  derandomised encapsulation reproduces the published ciphertext. Third-party
+  bytes, mirrored by Go's standard library.
+- feat: **RFC 9180 HPKE Base mode as `pqSeal` version `0x02`** — the real
+  thing, not a shape borrowed from it. Suite: KEM `0x647A` (X-Wing /
+  MLKEM768-X25519), KDF `0x0001` (HKDF-SHA256), AEAD `0x0003`
+  (ChaCha20-Poly1305). The key schedule is RFC 9180 section 5.1 verbatim, with
+  `LabeledExtract`/`LabeledExpand` and the `suite_id` inside every label, and
+  it reproduces the IETF HPKE working group's published `key`, `base_nonce` and
+  `exporter_secret` for that suite plus all 10 of its published encryptions —
+  bytes nobody here produced. It landed additively — `0x01` stayed the default
+  and no wire byte moved until a caller asked for `0x02` — and `0x02` became
+  the default later in this same release, when `0x01` was removed.
+- feat: `ChaCha20Poly1305Algo` (RFC 8439), keyed and nonced per call.
+  ChaCha20-Poly1305 rather than AES-256-GCM because it is the only AEAD the
+  HPKE working group publishes `0x647A` vectors for, so this suite has an exact
+  published KAT rather than an audit footnote.
+- feat: `HkdfSha256.extract` and `HkdfSha256.expand` as separate operations.
+  RFC 9180's key schedule derives several outputs from one PRK, and the fused
+  `deriveKey` would re-extract per output and produce unrelated keys.
+- feat: `HkdfSha384.deriveKey` — the fused form existed only at SHA-256. The
+  two hash variants now share one RFC 5869 implementation internally, so the
+  public surface is symmetric.
+- feat: `encapsulateDerand` (`@visibleForTesting`) on the pure-Dart ML-KEM
+  classes; the public `encapsulate` always draws fresh randomness. The
+  seal spec's contract is that there is no derandomised variant in the public
+  API — two seals sharing randomness share a shared secret — and the optional
+  seed parameter the classes carried contradicted it. `MlKem768PureDartAlgo`'s
+  published overload stays callable with the parameter deprecated.
+- feat: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
+  `pqSealSupportedVersions` are public. The emitted version was a private
+  constant, so there was no way to emit one construction to peers that had not
+  upgraded and another to peers that had — introducing a new construction meant
+  flipping a global and breaking every reader at once. The read side always
+  dispatched on the version byte; only the write side could not choose. A
+  version this build cannot open is refused rather than emitted, since such an
+  envelope carries a suite label that exists nowhere and nobody could read it.
+- feat: `pqSealDeriveKeyAndNonce` (package-internal, `@visibleForTesting`)
+  exposes the key schedule so a conformance suite can compare it directly. A
+  schedule mismatch otherwise surfaces only as an AEAD authentication failure,
+  which says nothing about which side is wrong. Not exported by the barrel.
+- test: **ML-DSA-65 conformance against NIST's ACVP vectors** (FIPS 204). Until
+  now `ml_dsa_65_algo_test.dart` asserted key and signature lengths and that a
+  signature round-trips, which two wrong implementations agreeing with each
+  other would also satisfy — and ML-DSA-65 authenticates every PQ enrollment.
+  70 published vectors now run: 25 keyGen (the seed reproduces the published
+  keypair byte-exactly), 15 deterministic sigGen (the signature bytes
+  themselves, since with the hedging value fixed at zero the signature is a
+  pure function of key, message and context), 15 hedged sigGen, and 15 sigVer
+  carrying **both arms** — NIST's own negative cases, each naming what was
+  corrupted. Filtered to ML-DSA-65 and the external/pure interface, which is
+  all this package implements; nothing was dropped for size, and the exclusions
+  are listed in the fixture's `_provenance` object.
+- test: three further tests pin that at_chops signs and verifies with an
+  **empty context string**, which is what RFC 9964 requires of the ML-DSA JOSE
+  algorithms. The context is the one FIPS 204 parameter at_chops fixes rather
+  than passes through, so getting it wrong would produce signatures no RFC 9964
+  verifier accepts while every round-trip test here stayed green.
+- test: **X25519 conformance against RFC 7748** — section 6.1's Diffie-Hellman
+  vector, including deriving each published public key from its private key
+  against the base point, and section 5.2's raw scalar-multiplication vectors,
+  which exercise clamping and the ladder independently of any key-pair
+  convention. The existing tests only checked that two generated key pairs
+  agreed with each other.
+- fix: `ArgonHashParams.salt` — Argon2id derivation takes a real salt.
+  `Argon2idHashingAlgo.hash` passed the password's own UTF-16 code units as the
+  Argon2id nonce, so derivation was deterministic in the passphrase and the
+  salt carried no entropy of its own. It still falls back to that when `salt`
+  is null, because key files already written derived their keys that way and
+  would otherwise become undecryptable — but the fallback is now documented as
+  a compatibility path rather than a design.
+- feat: `ArgonHashParams.owaspMinimum` carries OWASP's current Argon2id floor
+  (m=19456 KiB, t=2, p=1). The defaults on `ArgonHashParams` stay at
+  m=10000/t=2/p=2, which is below that floor, because they are pinned by every
+  file already written rather than chosen.
+- test: X-Wing now conforms to the **IETF HPKE working group's** published
+  vectors for IANA HPKE KEM id `0x647A`, not only to
+  `draft-connolly-cfrg-xwing-kem-10`'s Appendix C. Both published rows are
+  checked across all three operations — key generation from the seed,
+  derandomised encapsulation, and decapsulation — in both the pure-Dart and
+  OpenSSL FFI backends. The FFI backend keeps its own rows because interop
+  tests alone would pass with both backends wrong in the same way; the
+  published JSON is the independent oracle. (The combiner, seed expansion and
+  byte layouts the two backends once duplicated now live in one internal
+  `XWingCore` — independence comes from the vectors, not from maintaining the
+  same bytes twice.)
+  This matters because the draft is an Independent Submission CFRG never
+  adopted, it expires 2026-09-03, and its own Appendix C is marked TODO by its
+  authors, so it was the weakest citation available for the construction.
+  No production code changed.
+- docs: X-Wing is cited by its IANA HPKE KEM id `0x647A` rather than by the
+  expiring draft, with the naming caveat recorded: the registry row still reads
+  *X-Wing*, and the rename to `MLKEM768-X25519` requested by
+  `draft-ietf-hpke-pq` has not been effected. Also records the **Bouncy Castle
+  1.81 floor** for anyone implementing this in Java — 1.78 to 1.80 feed the
+  combiner label first rather than last and derive a different shared secret,
+  which surfaces as an opaque AEAD failure rather than a key error.
+- feat: `PkamMlDsa65SigningAlgo` — synchronous ML-DSA-65 PKAM signing and
+  verification, and `AtChopsImpl`'s pkam dispatch now honours
+  `signingAlgoType: mldsa65`. Until now the pkam branch signed RSA regardless
+  of the requested algorithm, so a client could never produce a genuine
+  ML-DSA PKAM signature; the key material rides the existing String-typed
+  `AtPkamKeyPair` slot as base64 of the raw keys. The mldsa65 *verification*
+  branch also switches to the synchronous class — it previously returned
+  `MlDsa65PureDartAlgo`, whose `Future<bool>` verify was stored unawaited in
+  the bool-typed result.
+- fix: `pqOpen` honours its documented contract when the KEM rejects the input.
+  A wrong-length recipient secret key or KEM ciphertext reaches `decapsulate`,
+  which raises an `ArgumentError` — that sat outside the guard, so a caller
+  told to catch `PqOpenException` got an uncaught error on nothing worse than
+  a malformed envelope. It now arrives as
+  `PqOpenException(PqOpenFailure.malformedEnvelope, ...)`.
+
+## 3.5.0
+- feat: add `RsaSignatureAlgo`, a stateless `AtSignatureAlgorithm` implementation for RSA-2048 and RSA-4096 signing, with key material passed per call. `verifyBytes` returns `false` for unparseable, wrong-sized, or malformed key and signature bytes rather than throwing — they arrive off the wire, so "did not verify" is the answer for every shape of bad input. `signBytes` still throws `AtSigningException` on bad secret key material, which is local to the caller
+- deprecate: `RsaSigningAlgo`, which implements the deprecated `AtSigningAlgorithm` interface — use `RsaSignatureAlgo` instead. The two produce byte-identical signatures, so the swap is transparent on the wire
+- deprecate: redirect the `DefaultSigningAlgo` and `PkamSigningAlgo` deprecation notices at `RsaSignatureAlgo`; they previously pointed at `RsaSigningAlgo`, which is now itself deprecated
+- breaking: `MlDsa65FfiAlgo.verifyBytes` throws `StateError` when the pinned libcrypto cannot perform ML-DSA-65. Signature mismatches still return `false`. Gate on `libCryptoSupportsMlDsa65`, or use `AtPqc.mlDsa65`, which already does.
+- fix: ML-KEM-768 and ML-DSA-65 (FFI and pure-Dart) validate key, ciphertext, and signature lengths themselves, throwing `ArgumentError` for a wrong-length argument and `StateError` for a wrong-length backend output. Both ML-DSA-65 backends also check the lengths of the key pair they generate, so a wrong-size public or secret key fails at the point it is minted rather than at first use.
+- fix: `MlDsa65KeyPair.create` throws `AtSigningException` for non-base64 `publicKey`/`privateKey`.
+- fix: `MlKem768FfiAlgo.encapsulate`/`decapsulate` throw `ArgumentError` for a wrong-length public key/ciphertext.
 
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.

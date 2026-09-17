@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 

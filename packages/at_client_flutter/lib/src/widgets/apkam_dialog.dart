@@ -1,64 +1,94 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 import 'package:flutter/services.dart';
 
-/// A dialog widget that facilitates APKAM activation via OTP verification.
+/// A dialog that enrols this device with an atSign by quoting a one-time
+/// passcode, waits for an enrolled client to approve, and hands back the
+/// client that opens on the approved keys; the app owns it.
 ///
-/// Use `ApkamActivationDialog.show` to display the dialog and handle the OTP verification process.
+/// Use `ApkamActivationDialog.show` to display the dialog and handle the OTP
+/// verification process.
 ///
 /// Required Parameters:
-/// - [request]: An `AtOnboardingRequest` containing details for the onboarding process.
-/// - [registrar]: An instance of `RegistrarService` to interact with the registrar.
-/// - [themeData]: ThemeData for styling the dialog. NOTE: Handled internally via show method.
+/// - [atSign], [rootDomain], [appName], [deviceName], [namespaces]: what the
+///   request asks for.
+/// - [preference]: the client's preference; [rootDomain] is stamped on it.
+///
+/// Optional Parameters:
+/// - [keys]: where this enrollment's keys are filed and read back from, the
+///   platform keychain by default. It is also the resume record: a request
+///   submitted earlier for the same app and device is waited on again rather
+///   than repeated, so the passcode is only asked for when nothing is pending.
+/// - [storage]: the client's local storage.
+/// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
+///   its symmetric key travels; with neither, the preference's posture
+///   decides.
 ///
 /// Returns:
-/// - A `String` representing the activation result upon successful OTP verification, or null if the process fails or is cancelled.
+/// - The `AtClient` opened on the approved keys, or null if the process fails
+///   or is cancelled.
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
+  final AtClientPreference preference;
+  final WrittenAtKeysIo? keys;
+  final AtClientStorage? storage;
+
+  /// Builds every connection the enrollment and the client open; see
+  /// `Atsign.enroll`.
+  final AtLookUpFactory? lookUps;
+  final SigningAlgoType? signingAlgo;
+  final EnrollmentKeyExchangeMode? keyExchangeMode;
 
   final ThemeData themeData;
 
-  /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
-  final FlutterEnrollmentService? enrollmentService;
+  /// Injection seam for tests; defaults to the real lifecycle verbs.
+  final AtsignFlows flows;
 
-  ApkamActivationDialog({
+  const ApkamActivationDialog({
     super.key,
     required this.atSign,
     required this.rootDomain,
     required this.appName,
     required this.deviceName,
     required this.namespaces,
+    required this.preference,
+    this.keys,
+    this.storage,
+    this.lookUps,
+    this.signingAlgo,
+    this.keyExchangeMode,
     required this.themeData,
-    this.enrollmentService,
+    this.flows = const AtsignFlows(),
   });
 
   @override
-  State<ApkamActivationDialog> createState() => _ApkamActivationDialogState(
-    atSign,
-    rootDomain,
-    appName,
-    deviceName,
-    namespaces,
-  );
+  State<ApkamActivationDialog> createState() => _ApkamActivationDialogState();
 
-  /// Show the ApkamActivationDialog and return the activation result.
-  static Future<AtEnrollmentResponse?> show(
+  /// Show the ApkamActivationDialog and return the client it opened.
+  static Future<AtClient?> show(
     BuildContext context, {
     required String atSign,
     required AtRootDomain rootDomain,
     required String appName,
     required String deviceName,
     required Map<String, String> namespaces,
+    required AtClientPreference preference,
+    WrittenAtKeysIo? keys,
+    AtClientStorage? storage,
+    AtLookUpFactory? lookUps,
+    SigningAlgoType? signingAlgo,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
   }) async {
-    return showDialog<AtEnrollmentResponse>(
+    return showDialog<AtClient>(
       context: context,
       builder: (context) => ApkamActivationDialog(
         atSign: atSign,
@@ -66,6 +96,12 @@ class ApkamActivationDialog extends StatefulWidget {
         appName: appName,
         deviceName: deviceName,
         namespaces: namespaces,
+        preference: preference,
+        keys: keys,
+        storage: storage,
+        lookUps: lookUps,
+        signingAlgo: signingAlgo,
+        keyExchangeMode: keyExchangeMode,
         themeData: Theme.of(context),
       ),
     );
@@ -77,41 +113,95 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final FocusNode _otpFocusNode = FocusNode();
   final ScrollController _pinScrollController = ScrollController();
   bool _isLoading = false;
-  late final FlutterEnrollmentService enrollmentService;
-  final String atSign;
-  final AtRootDomain rootDomain;
-  final String appName;
-  final String deviceName;
-  final Map<String, String> namespaces;
-
-  _ApkamActivationDialogState(
-    this.atSign,
-    this.rootDomain,
-    this.appName,
-    this.deviceName,
-    this.namespaces,
-  );
+  String _status = 'Waiting for approval..';
+  late final WrittenAtKeysIo _keys;
+  StreamSubscription<dynamic>? _progress;
 
   @override
   void initState() {
     super.initState();
-    enrollmentService = widget.enrollmentService ?? FlutterEnrollmentService();
+    _keys = widget.keys ?? KeychainAtKeysIo();
+    _resumeIfPending();
   }
 
-  Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {
-    AtEnrollmentRequest request = AtEnrollmentRequest(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      deviceName: deviceName,
-      appName: appName,
-      namespaces: namespaces,
-      otp: otp,
-    );
-    return await enrollmentService.enroll(request, waitForApproval: true);
+  /// A request already in the key store for this app and device is waited on
+  /// again rather than asking for a passcode it has already spent.
+  Future<void> _resumeIfPending() async {
+    final PendingEnrollment? pending;
+    try {
+      pending = await widget.flows.resumeEnrollment(
+        widget.atSign,
+        app: widget.appName,
+        device: widget.deviceName,
+        keys: _keys,
+        preference: under(widget.preference, widget.rootDomain),
+        lookUps: widget.lookUps,
+      );
+    } catch (e) {
+      // An unreadable store is reported when the request goes out.
+      return;
+    }
+    if (pending == null || !mounted) return;
+    setState(() {
+      _isLoading = true;
+      _status = 'Resuming enrollment ${pending!.enrollmentId}..';
+    });
+    await _awaitAndOpen(pending);
+  }
+
+  Future<PendingEnrollment> _sendEnrollment(String otp) => widget.flows.enroll(
+    widget.atSign,
+    otp: otp,
+    app: widget.appName,
+    device: widget.deviceName,
+    namespaces: widget.namespaces,
+    keys: _keys,
+    preference: under(widget.preference, widget.rootDomain),
+    signingAlgo: widget.signingAlgo,
+    keyExchangeMode: widget.keyExchangeMode,
+    lookUps: widget.lookUps,
+  );
+
+  Future<void> _awaitAndOpen(PendingEnrollment pending) async {
+    _progress = pending.progress.listen((event) {
+      if (mounted) setState(() => _status = event.msg);
+    });
+    try {
+      final client = await pending.client(
+        under(widget.preference, widget.rootDomain),
+        storage: widget.storage,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(client);
+    } catch (e) {
+      // The approval was refused, the atServer went away, or the request was
+      // wrong. Surface it instead of leaking an unhandled exception, and keep
+      // the dialog open so the user can retry (issue #1909).
+      if (!mounted) return;
+      final message = e is AtTimeoutException
+          ? 'Activation timed out — the atServer could not be reached. '
+                'Please check your connection and try again.'
+          : 'Activation failed. Please check the code and your connection, '
+                'then try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      await _progress?.cancel();
+      _progress = null;
+      // Guard against setState after the dialog was dismissed mid-await; a bare
+      // `return` here would instead swallow any in-flight exception.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _progress?.cancel();
     _otpController.dispose();
     _otpFocusNode.dispose();
     _pinScrollController.dispose();
@@ -124,16 +214,15 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
     setState(() {
       _isLoading = true;
+      _status = 'Waiting for approval..';
     });
 
+    final PendingEnrollment pending;
     try {
-      final response = await _sendEnrollment(otp);
-      if (!mounted) return;
-      Navigator.of(context).pop(response);
+      pending = await _sendEnrollment(otp);
     } catch (e) {
-      // Enrollment failed or timed out (e.g. wrong OTP or the atServer is
-      // unreachable). Surface it instead of leaking an unhandled exception, and
-      // keep the dialog open so the user can retry (issue #1909).
+      // The request itself was refused (a wrong passcode, most often) or the
+      // atServer could not be reached; keep the dialog open for a retry.
       if (!mounted) return;
       final message = e is AtTimeoutException
           ? 'Activation timed out — the atServer could not be reached. '
@@ -143,15 +232,12 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      // Guard against setState after the dialog was dismissed mid-await; a bare
-      // `return` here would instead swallow any in-flight exception.
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+      });
+      return;
     }
+    await _awaitAndOpen(pending);
   }
 
   @override
@@ -347,11 +433,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
             // Submit button
             _isLoading
-                ? const Center(
+                ? Center(
                     child: Column(
                       children: [
-                        CircularProgressIndicator(),
-                        Text("Waiting for approval.."),
+                        const CircularProgressIndicator(),
+                        Text(_status),
                       ],
                     ),
                   )

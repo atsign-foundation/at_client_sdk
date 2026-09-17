@@ -21,6 +21,7 @@ workspace:
   - tests/at_functional_test
   - tests/at_onboarding_cli_functional_tests
   - tests/at_onboarding_cli_functional_tests_proxy
+  - tools/wasm_shakedown
 
 dependencies:
   # meta and intl are pinned in flutter test, be diligent to ensure you
@@ -35,7 +36,7 @@ dependencies:
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
-  at_persistence_secondary_server: ^5.1.0
+  at_persistence_secondary_server: ^5.3.0
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1

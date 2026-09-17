@@ -17,7 +17,7 @@ The lifecycle of an atServer as it gets created and paired is as follows:
     - ```AtStatus.serverStatus = ServerStatus.unavailable```
     - The overall status from the status() method returns:
     - ```AtStatus.status() = AtSignStatus.notFound```
-    - Or, if you prefer an HttpStatus code, use the httpStatus() method:
+    - Or, if you prefer an HTTP status code, use the httpStatus() method:
     - ```AtStatus.httpStatus() = 404```
     
 1. The next step in the process is when "Activate" is selected for an atSign 
@@ -71,27 +71,27 @@ representing the overall status of an atSign.
     - ```enum RootStatus { found, notFound, stopped, unavailable, error }```
 1. ServerStatus enumerated values are:
     - ```enum ServerStatus { ready, teapot, activated, stopped, unavailable, error }```
-1. Const values from HttpStatus are:
+1. The int values `httpStatus()` returns are:
 ```
-static const int notFound = 404
+404
 // Not Found(404) atServer has no root location, is not running and is not activated
 
-static const int serviceUnavailable = 503
+503
 // Service Unavailable(503) atServer has root location, is not running and is not activated
 
-int 418
+418
 // I'm a teapot(418) atServer has root location, is running and but not activated
 
-static const int ok = 200
+200
 // OK (200) atServer has root location, is running and is activated
 
-static const int internalServerError = 500
+500
 // Internal Server Error(500) at_find_api internal error
 
-static const int badGateway = 502
+502
 // Bad Gateway(502) atRoot server is down
 
-static const int methodNotAllowed = 405
+405
 // Method Not Allowed(405) only GET and HEAD are allowed
 ```
 

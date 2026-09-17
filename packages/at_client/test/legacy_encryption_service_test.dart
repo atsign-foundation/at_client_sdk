@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
@@ -8,10 +7,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
-
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
 void main() {
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
@@ -23,26 +18,18 @@ void main() {
   AtClientManager mockAtClientManager = MockAtClientManager();
 
   registerFallbackValue(FakeLocalLookUpVerbBuilder());
-  AtChops mockAtChops = MockAtChops();
-  late AtSigningResult mockSigningResult;
 
   setUp(() {
-    when(() => mockAtClient.atChops).thenAnswer((_) => mockAtChops);
     when(() => mockAtClient.getLocalSecondary())
         .thenAnswer((_) => mockLocalSecondary);
     when(() => mockAtClient.getRemoteSecondary())
         .thenAnswer((_) => mockRemoteSecondary);
-    mockSigningResult = AtSigningResult()..result = 'mock_signing_result';
-    registerFallbackValue(FakeAtSigningInput());
-    when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
   });
 
   group('A group of test to validate self key encryption exceptions', () {
     test(
         'A test to verify SelfKeyNotFoundException is thrown when self key is not found',
         () {
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-      when(() => mockAtChops.atChopsKeys).thenReturn(atChopsKeys);
       when(() => mockLocalSecondary.getEncryptionSelfKey())
           .thenAnswer((_) => Future.value(''));
 
@@ -161,10 +148,6 @@ void main() {
 
       when(() => mockAtClient.getLocalSecondary())
           .thenAnswer((_) => mockLocalSecondary);
-      when(() => mockAtChops.decryptString(
-              encryptedSharedKey, EncryptionKeyType.rsa2048))
-          .thenAnswer(
-              (_) => (AtEncryptionResult()..result = originalSharedKey));
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
@@ -195,10 +178,6 @@ void main() {
           .thenAnswer((_) => mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenAnswer((_) => mockRemoteSecondary);
-      when(() => mockAtChops.decryptString(
-              encryptedSharedKey, EncryptionKeyType.rsa2048))
-          .thenAnswer(
-              (_) => (AtEncryptionResult()..result = originalSharedKey));
 
       when(() => mockLocalSecondary.executeVerb(
           any(that: LLookupEncryptedSharedKeyMatcher()))).thenAnswer((_) async {
@@ -307,11 +286,6 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      var encryptionKeyPair =
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-      var atChopsImpl = AtChopsImpl(atChopsKeys);
-      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       expect(atKey.metadata.sharedKeyEnc, isNotNull);
       expect(atKey.metadata.pubKeyCS, isNotNull);
@@ -343,11 +317,6 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      var encryptionKeyPair =
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-      var atChopsImpl = AtChopsImpl(atChopsKeys);
-      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
@@ -385,11 +354,6 @@ void main() {
           sync: false)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      var encryptionKeyPair =
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-      var atChopsImpl = AtChopsImpl(atChopsKeys);
-      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
@@ -429,11 +393,6 @@ void main() {
           sync: false)).thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      var encryptionKeyPair =
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-      var atChopsImpl = AtChopsImpl(atChopsKeys);
-      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
@@ -477,8 +436,6 @@ void main() {
               'unable to connect to remote secondary'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockAtChops.encryptString(any(), EncryptionKeyType.rsa2048))
-          .thenAnswer((_) => AtEncryptionResult()..result = 'random');
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();

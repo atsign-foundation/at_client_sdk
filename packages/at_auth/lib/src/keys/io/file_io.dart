@@ -1,12 +1,18 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final _logger = AtSignLogger('FileAtKeysIo');
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
@@ -22,7 +28,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future<AtKeys> read(String atsign) async {
     final file = File(filePath!(atsign));
     if (!file.existsSync()) {
-      throw AtException(
+      // Typed, so a caller can tell "no keyfile yet" from "a keyfile this
+      // process cannot read". Both used to arrive as a bare AtException and
+      // the only way to separate them was the message text.
+      throw AtKeysSourceAbsentException(
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
 
@@ -34,32 +43,113 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   @override
   Future write(String atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
-    if (file.existsSync()) {
-      throw AtKeysFileOverwriteException(
-          'Tried writing ${file.path}, but failed since it already exists');
-    }
+    await AtKeysFileLock(file.path).synchronized(() async {
+      if (file.existsSync()) {
+        throw AtKeysFileOverwriteException(
+            'Tried writing ${file.path}, but failed since it already exists');
+      }
 
-    await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+      await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+    });
   }
 
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
+    // The whole read-validate-write under one inter-process lock. The rename
+    // inside is already atomic and `validateMapUpdate` already DETECTS a
+    // candidate that drops material — but two processes that both read before
+    // either writes both pass validation, and the second rename silently
+    // discards the first's addition. Several CLI apps sharing one keyfile is
+    // the ordinary deployment, not an edge.
+    await AtKeysFileLock(file.path)
+        .synchronized(() => _writeValidated(file, atsign, atKeys));
+  }
+
+  /// Read, mutate and write inside **one** hold of the lock.
+  ///
+  /// [flush] alone cannot close the window this closes: a caller that reads
+  /// outside the lock and flushes inside it has already taken its snapshot by
+  /// the time the lock is acquired, so a sibling that flushed in between is
+  /// missing from its candidate and assurance refuses the write. Holding the
+  /// lock across the read is what makes the mutation see the state it is
+  /// about to replace. The lock is a lock file, so this serialises coroutines
+  /// within one process as well as separate processes — which is the case
+  /// that bites, since a client fires the namespace-key seeding and the
+  /// conveyed-key filing as sibling unawaited tasks.
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final file = File(filePath!(atsign));
+    await AtKeysFileLock(file.path).synchronized(() async {
+      final keys = await read(atsign.toString());
+      if (await mutate(keys) == false) return;
+      await _writeValidated(file, atsign, keys, requireExisting: true);
+    });
+  }
+
+  /// The flush body, without the lock — so [update] can hold the lock across
+  /// its own read as well. `AtKeysFileLock` is not reentrant: calling [flush]
+  /// from inside [update] would wait on a lock this call already holds.
+  /// [requireExisting] refuses instead of creating when the keyfile is gone.
+  /// [update] passes it and [flush] does not: `flush` means "persist these
+  /// keys", and creating the file is its first job, while `update` is a
+  /// read-modify-write of material that must already be there — its own
+  /// [read] throws when the file is absent at the start, so completing by
+  /// writing a file that is absent at the end contradicts the call it began.
+  ///
+  /// What that silently undid: the keyfile is the credential, and deleting it
+  /// is how a device is decommissioned. An update in flight when the owner
+  /// deletes it would put it back, and nothing said so.
+  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
+      {bool requireExisting = false}) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
     if (!file.existsSync()) {
+      if (requireExisting) {
+        throw AtKeysSourceAbsentException(
+            'Tried updating ${file.path}, but it was deleted while the update '
+            'was in flight; nothing was written');
+      }
       await _writeAtRestDocument(file, document);
       return;
     }
 
+    final existing = await _readAtRestDocument(file);
     assurance.validateMapUpdate(
-      existing: await _readAtRestDocument(file),
+      existing: existing,
       candidate: document,
     );
+    await _preserveLegacyShape(file, existing, document);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
     await file.copy('${file.path}.bak');
     await _writeAtRestDocument(file, document);
+  }
+
+  /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
+  static const legacyShapeBackupSuffix = '.pre-v1';
+
+  /// Copies the keyfile aside, once, at the moment its shape stops being the
+  /// flat one every published build can read.
+  ///
+  /// Keyed on that transition and never overwritten, unlike the rolling `.bak`
+  /// beside it, which the next write replaces.
+  Future<void> _preserveLegacyShape(
+    File file,
+    Map<String, dynamic> existing,
+    Map<String, dynamic> candidate,
+  ) async {
+    if (existing.containsKey('version')) return;
+    if (!candidate.containsKey('version')) return;
+    final backup = File('${file.path}$legacyShapeBackupSuffix');
+    if (backup.existsSync()) return;
+    await file.copy(backup.path);
+    _logger.shout(
+        'Upgrading ${file.path} to the typed keyfile format: it now carries '
+        'per-enrollment key material, which a build older than this one does '
+        'not read. The previous document has been copied to ${backup.path} '
+        'and will not be overwritten.');
   }
 
   Future<Map<String, dynamic>> _encodeAtRest(
@@ -115,25 +205,29 @@ Future<Map<String, dynamic>> _selfEncryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (atChops, value) async => (await atChops.encryptString(
-              value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-          .result);
+      (algorithm, value) async => base64.encode(await algorithm.encrypt(
+          Uint8List.fromList(utf8.encode(value)),
+          iv: InitialisationVector.legacy())));
 }
 
 Future<Map<String, dynamic>> _selfDecryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (atChops, value) async => (await atChops.decryptString(
-              value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-          .result);
+      (algorithm, value) async => utf8.decode(await algorithm
+          .decrypt(base64Decode(value), iv: InitialisationVector.legacy())));
 }
 
+/// Applies [transform] to whichever of the self-encrypted legacy fields the
+/// document holds, under the key it carries in the clear.
+///
+/// The all-zero initialisation vector both transforms pass makes this an
+/// at-rest format rather than a choice: every `.atKeys` file on disk was
+/// written that way, and `legacy_field_self_encryption_test.dart` pins the
+/// bytes against openssl.
 Future<Map<String, dynamic>> _applyToLegacyFields(
   Map<String, dynamic> document,
-  Future<String> Function(AtChops atChops, String value) transform,
+  Future<String> Function(AESEncryptionAlgo algorithm, String value) transform,
 ) async {
   final present = _selfEncryptedLegacyFields
       .where((field) => document[field] != null)
@@ -147,11 +241,10 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     throw AtException(
         'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
   }
-  final atChops =
-      AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey));
+  final algorithm = AESEncryptionAlgo(AESKey(selfEncryptionKey));
   final result = Map<String, dynamic>.from(document);
   for (final field in present) {
-    result[field] = await transform(atChops, document[field] as String);
+    result[field] = await transform(algorithm, document[field] as String);
   }
   return result;
 }

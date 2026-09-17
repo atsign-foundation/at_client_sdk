@@ -1,22 +1,22 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
+import 'package:at_auth/src/auth/at_authenticator.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
+import 'package:at_auth/src/auth/onboarding_mint.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -36,8 +36,10 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  @override
-  AtChops? atChops;
+  /// The signer a caller injected through [AtAuth.create], else the one
+  /// [authenticate] and [onboard] build from the keys they resolved.
+  // ignore: deprecated_member_use
+  AtChops? _chops;
 
   CramAuthenticator? cramAuthenticator;
 
@@ -45,120 +47,38 @@ class AtAuthImpl implements AtAuth {
 
   AtEnrollment atEnrollment;
 
-  @visibleForTesting
-  AtServerStatus? atServerStatus;
-
-  @visibleForTesting
-  SecondaryAddressFinder? secondaryAddressFinder;
-
-  @visibleForTesting
-  Future<void> Function(String host, int port)? probeSocket;
-
   @override
-  AtLookUp? atLookUp;
+  final AtLookupMuxable atLookUp;
 
   AtAuthImpl(
-      {this.atLookUp,
-      this.atChops,
+      {required this.atLookUp,
+      // ignore: deprecated_member_use
+      AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      this.atServerStatus,
       AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : _chops = atChops,
+        atEnrollment = atEnrollment ?? AtEnrollment.create();
 
-  @override
-
-  /// Authenticate using PKAM
-  /// The AtAuthRequest must contain either:
-  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
-  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
+  /// The keystore the authenticator should read, matching the precedence
+  /// [authenticate] itself uses.
   ///
-  /// If both are provided, atAuthRequest.atAuthKeys will be used.
-  ///
-  /// The AtAuthRequest may optionally contain:
-  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
-  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
-  /// - atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
-  ///    contains keys in encrypted format (LEGACY)
-  ///
-  /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await validateAtServer(atAuthRequest);
-    try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-    } on AtKeyException catch (e) {
-      _addProgress(
-        "authentication",
-        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
-      );
+  /// An explicitly supplied `atAuthKeys` wins over an `atKeysIo` - that is what
+  /// this class does two lines into [authenticate], and the authenticator must
+  /// read the same thing the rest of the method used rather than re-resolve
+  /// and possibly differ. A fixed key set is wrapped in an in-memory store: a
+  /// keystore that never changes, which is exactly right for a caller that
+  /// handed over frozen keys. Only when the request supplied a source and no
+  /// keys does the authenticator get the source itself, and with it the
+  /// re-reading that lets one closure answer CRAM then PKAM.
+  Future<AtKeysIo> _keysSourceFor(String atSign, AtKeys resolved,
+      {AtKeysIo? reReadable}) async {
+    if (reReadable != null) {
+      return reReadable;
     }
-
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
-    atLookUp ??= AtLookupImpl(
-      atAuthRequest.atSign,
-      atAuthRequest.rootDomain.rootDomain,
-      atAuthRequest.rootDomain.rootPort,
-    );
-    // ??= to support mocking
-    atChops ??= atAuthKeys.toAtChops();
-    atLookUp!.atChops = atChops;
-
-    _logger.finer('Authenticating using PKAM');
-    pkamAuthenticator ??= PkamAuthenticator();
-    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
-    try {
-      pkamResponse
-        ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
-            enrollmentId: atAuthRequest.enrollmentId))
-        ..atAuthKeys = atAuthKeys
-        ..atLookUp = atLookUp
-        ..atChops = atChops;
-
-      // Build the explicit hand-off session from the request's confirmed
-      // subset — only when the request supplied an AtKeysIo source. The legacy
-      // atAuthKeys-only path has no source to hand across, so it gets no
-      // session.
-      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
-        pkamResponse.session = AtAuthSession(
-          atSign: atAuthRequest.atSign,
-          rootDomain: atAuthRequest.rootDomain,
-          namespace: atAuthRequest.namespace,
-          atKeysIo: atAuthRequest.atKeysIo!,
-          enrollmentId: atAuthRequest.enrollmentId,
-          atLookUp: atLookUp,
-        );
-      }
-
-      if (!pkamResponse.isSuccessful) {
-        _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error,
-        );
-      } else {
-        _addProgress(
-          "authentication",
-          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.success,
-        );
-      }
-    } catch (e, s) {
-      _addProgress(
-        "authentication",
-        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: $e \n $s');
-    }
-
-    return pkamResponse;
+    final memory = InMemoryAtKeysIo();
+    await memory.write(atSign, resolved);
+    return memory;
   }
 
   /// Keep some state so callers can call [completeActivation] later
@@ -177,24 +97,20 @@ class AtAuthImpl implements AtAuth {
     String? publicKeyId,
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(
-      atOnboardingRequest.atSign,
-      atOnboardingRequest.rootDomain.rootDomain,
-      atOnboardingRequest.rootDomain.rootPort,
-    );
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    AtKeys? existingKeys;
     try {
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+      existingKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
-    } catch (e, _) {
+    } catch (e) {
       _logger.info(
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
       ); //swallow the error, we just want to know if keys exist or not
     }
 
-    if (atOnboardingRequest.atKeys != null) {
+    if (existingKeys != null) {
       throw AtAuthenticationException(
         'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
       );
@@ -206,7 +122,7 @@ class AtAuthImpl implements AtAuth {
     var cramAuthResult = await cramAuthenticator!.authenticate(
       atOnboardingRequest.atSign,
       cramSecret,
-      atLookUp!,
+      atLookUp,
     );
     if (!cramAuthResult) {
       _addProgress(
@@ -219,22 +135,60 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
-    //2. generate key pairs
-    if (atOnboardingRequest.atKeys != null) {
-      _atAuthKeys = atOnboardingRequest.atKeys!;
-    } else {
-      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
-      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
-      switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys = writtenKeys.generateKeyPairs();
-        default:
-          throw AtAuthenticationException(
-              'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
-      }
+    //2. generate key pairs. Onboarding mints key material and must persist
+    // it, so a writable store is required. There is no default: the core
+    // cannot assume a filesystem.
+    if (atOnboardingRequest.atKeysIo == null) {
+      throw AtAuthenticationException(
+          'onboarding needs somewhere to persist the key material it mints: '
+          'set AtOnboardingRequest.atKeysIo. On a platform with a '
+          'filesystem that is usually FileAtKeysIo() from '
+          'package:at_auth/at_auth_io.dart');
     }
-    atChops ??= _atAuthKeys.toAtChops();
-    atLookUp!.atChops = atChops;
+    if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
+      throw AtAuthenticationException(
+          'onboarding mints key material and must write it, but the AtKeysIo '
+          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
+          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
+    }
+    final OnboardingMint mint = await mintOnboardingKeys(
+        signingAlgo: atOnboardingRequest.signingAlgoType,
+        // Null resolves to the release default, not to false: legacy
+        // material is retained until the ecosystem is PQ, not until this
+        // atSign is.
+        mintLegacyMaterial: atOnboardingRequest.mintLegacyMaterial ?? true);
+    _atAuthKeys = mint.keys;
+
+    // A PQ-native activation authenticates with the keypair just minted, which
+    // is not in the flat fields `authenticationFor` reads for an enrollment
+    // naming no algorithm — and the enrollment it will be filed under does
+    // not exist yet, so there is nothing to resolve. Build the chops from the
+    // minted halves
+    // directly, and name the algorithm: at_lookup defaults to rsa2048 and
+    // would otherwise sign an ML-DSA key with the RSA routine.
+    if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
+      // ignore: deprecated_member_use
+      _chops ??= AtChopsImpl(AtChopsKeys.create(
+          null,
+          // ignore: deprecated_member_use
+          AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
+        ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
+            ? null
+            : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
+    } else {
+      _chops ??= _atAuthKeys.authenticationFor(null).chops;
+    }
+    // The algorithm is named rather than derived here. A PQ-native activation
+    // signs with the keypair minted a few lines above, which is in no keyfile,
+    // under an enrollment the atServer has not created yet - so there is
+    // nothing for the keystore to resolve, and the rsa2048 default would sign
+    // an ML-DSA key with the RSA routine.
+    atLookUp.authenticator = authenticatorFor(
+      await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+      atOnboardingRequest.atSign,
+      chops: _chops,
+      signingAlgo: atOnboardingRequest.signingAlgoType,
+    );
 
     //3. send onboarding enrollment
     String? enrollmentIdFromServer;
@@ -243,13 +197,32 @@ class AtAuthImpl implements AtAuth {
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
       atOnboardingRequest,
       _atAuthKeys,
-      atLookUp!,
+      atLookUp,
+      mint,
     );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
+    // Reinstall, now that the atServer has named the enrollment. The
+    // authenticator installed above closed over a null id because none
+    // existed yet, and `enrollmentId` is captured at install time rather than
+    // read per call - so without this the activation PKAM below goes out with
+    // no `enrollmentId:` segment however the id is passed to
+    // `pkamAuthenticate`. The atServer then authenticates that connection as
+    // `pkamLegacy` against the default PKAM public key, while at_lookup
+    // records it as authenticated for this enrollment: the two ends disagree
+    // about who is on the connection, and the enrollment-record-authoritative
+    // signing-algorithm check never runs.
+    atLookUp.authenticator = authenticatorFor(
+      await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+      atOnboardingRequest.atSign,
+      enrollmentId: enrollmentIdFromServer,
+      chops: _chops,
+      signingAlgo: atOnboardingRequest.signingAlgoType,
+    );
+
     //4. Close connection to server
     try {
-      await (atLookUp as AtLookupImpl).close();
+      await atLookUp.close();
     } on Exception catch (e) {
       _logger.severe('error while closing connection to server: $e');
     }
@@ -258,7 +231,7 @@ class AtAuthImpl implements AtAuth {
     pkamAuthenticator ??= PkamAuthenticator();
     try {
       var pkamResponse = await pkamAuthenticator!.authenticate(
-          atOnboardingRequest.atSign, atLookUp!,
+          atOnboardingRequest.atSign, atLookUp,
           enrollmentId: enrollmentIdFromServer);
       if (!pkamResponse) {
         _addProgress(
@@ -314,16 +287,10 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
-    atOnboardingResponse
-      ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = atChops;
+    atOnboardingResponse.isSuccessful = true;
 
-    // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
-    // authenticate() for parity.
+    // The session a freshly activated atSign's client opens from. atKeysIo
+    // is non-null here: onboarding refuses without one above.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -331,7 +298,6 @@ class AtAuthImpl implements AtAuth {
         namespace: atOnboardingRequest.namespace,
         atKeysIo: atOnboardingRequest.atKeysIo!,
         enrollmentId: enrollmentIdFromServer,
-        atLookUp: atLookUp,
       );
     }
 
@@ -345,41 +311,79 @@ class AtAuthImpl implements AtAuth {
   @override
   Future<void> completeActivation() async {
     final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
-    UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'publickey'
-        ..sharedBy = _atOnboardingRequest.atSign
-        ..metadata = (Metadata()
-          ..isPublic = true
-          ..ttr = -1))
-      ..value = encryptionPublicKey;
-    String? encryptKeyUpdateResult = await atLookUp!.executeVerb(updateBuilder);
-    _logger.info('Encryption public key update result $encryptKeyUpdateResult');
+    // Absent only when the caller opted out of legacy material. Publishing
+    // "null" would be worse than publishing nothing: a legacy peer would find
+    // a key, encrypt to it, and produce ciphertext nobody can ever read —
+    // whereas an absent publickey tells them plainly that this atSign has no
+    // legacy path.
+    if (encryptionPublicKey != null) {
+      UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'publickey'
+          ..sharedBy = _atOnboardingRequest.atSign
+          ..metadata = (Metadata()
+            ..isPublic = true
+            ..ttr = -1))
+        ..value = encryptionPublicKey;
+      String? encryptKeyUpdateResult =
+          await atLookUp.executeVerb(updateBuilder);
+      _logger
+          .info('Encryption public key update result $encryptKeyUpdateResult');
+    } else {
+      _logger.info(
+          'No encryption keypair was minted for ${_atOnboardingRequest.atSign}, '
+          'so public:publickey is not published: a legacy peer cannot send to '
+          'this atSign, which is what mintLegacyMaterial:false asks for');
+    }
 
+    // Unconditional: the CRAM secret is a one-shot activation credential and
+    // leaving it in the keystore is a live path back into the atSign,
+    // whichever material was minted.
     DeleteVerbBuilder deleteBuilder = DeleteVerbBuilder()
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
-    String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
+    String? deleteResponse = await atLookUp.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
   }
 
   Future<String> _sendOnboardingEnrollment(
       AtOnboardingRequest atOnboardingRequest,
       AtKeys atAuthKeys,
-      AtLookUp atLookup) async {
-    _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
+      AtLookUp atLookup,
+      OnboardingMint? mint) async {
+    final signingAlgo = atOnboardingRequest.signingAlgoType;
+    final apkamPublicKey =
+        mint?.apkamPublicKey ?? atAuthKeys.apkamPublicKey!.toString();
+    _logger.finer('apkamPublicKey: $apkamPublicKey');
+
+    // The builder signs with the APKAM keypair and files what it mints back
+    // into the keys it is handed. Those are construction keys, not
+    // _atAuthKeys: the flat APKAM fields have to be populated for the builder
+    // to read, and on a PQ-native activation they must NOT survive into the
+    // keyfile. What the builder adds is re-tagged onto _atAuthKeys below,
+    // once the enrollment id it belongs to exists.
+    final constructionKeys = mint == null
+        ? null
+        : (AtKeys()
+          ..apkamPublicKey = AtBytes.fromString(mint.apkamPublicKey)
+          ..apkamPrivateKey = AtBytes.fromString(mint.apkamPrivateKey)
+          ..defaultEncryptionPublicKey = atAuthKeys.defaultEncryptionPublicKey);
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
         atSign: atOnboardingRequest.atSign,
         appName: atOnboardingRequest.appName,
         deviceName: atOnboardingRequest.deviceName,
-        apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
+        apkamPublicKey: apkamPublicKey,
+        signingAlgo: signingAlgo,
+        advertisedSigningKey: atOnboardingRequest.advertisedSigningKey,
+        metadataBuilder: atOnboardingRequest.metadataBuilder,
+        atKeys: constructionKeys);
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
+          await atEnrollment.submit(firstEnrollmentRequest, atLookUp);
     } on AtEnrollmentException catch (e) {
-      throw AtAuthenticationException('Enrollment error:${e.toString}');
+      throw AtAuthenticationException('Enrollment error: $e');
     }
     _logger.finer('enrollment response: ${atEnrollmentResponse.toString()}');
     var enrollmentIdFromServer = atEnrollmentResponse.enrollmentId;
@@ -388,26 +392,58 @@ class AtAuthImpl implements AtAuth {
       throw AtAuthenticationException(
           'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
+
+    if (constructionKeys != null) {
+      _fileFirstEnrollmentMaterial(atAuthKeys, constructionKeys, mint!,
+          signingAlgo, enrollmentIdFromServer);
+    }
+    // Filed whether or not there were construction keys: the signing key is
+    // the caller's, not something the builder minted, and an enrollment whose
+    // `_apsk` names a key its keyfile does not hold signs with something else
+    // entirely.
+    final advertisedSigningKey = atOnboardingRequest.advertisedSigningKey;
+    if (advertisedSigningKey != null) {
+      atAuthKeys.fileSigningMaterial(
+          enrollmentId: enrollmentIdFromServer,
+          algorithm: CryptographicMaterialAlgorithm.of(
+              advertisedSigningKey.algorithm.name),
+          publicKey: advertisedSigningKey.publicKey,
+          privateKey: advertisedSigningKey.privateKey);
+    }
     return enrollmentIdFromServer;
   }
 
-  Future<void> _defaultProbeSocket(String host, int port) async {
-    final socket =
-        await SecureSocket.connect(host, port, timeout: Duration(seconds: 5));
-    socket.destroy();
+  /// Files the first enrollment's key material under the id the atServer just
+  /// assigned.
+  ///
+  /// A PQ-native activation's APKAM goes in as typed material — the flat
+  /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
+  /// through `signingAlgorithmForEnrollment` / `authenticationFor` and
+  /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
+  /// activation already wrote its APKAM to the flat fields and adds nothing
+  /// here, which is what keeps a legacy keyfile byte-identical.
+  ///
+  /// Whatever the metadataBuilder minted — the key package's two halves —
+  /// is re-tagged with the enrollment id either way. It is the only copy of
+  /// that private half in existence.
+  void _fileFirstEnrollmentMaterial(AtKeys atAuthKeys, AtKeys constructionKeys,
+      OnboardingMint mint, SigningAlgoType signingAlgo, String enrollmentId) {
+    if (signingAlgo != SigningAlgoType.rsa2048) {
+      atAuthKeys.fileApkamMaterial(
+          enrollmentId: enrollmentId,
+          algorithm: CryptographicMaterialAlgorithm.of(signingAlgo.name),
+          publicKey: mint.apkamPublicKey,
+          privateKey: mint.apkamPrivateKey);
+    }
+    atAuthKeys.adoptMaterials(constructionKeys.keys,
+        enrollmentId: enrollmentId);
   }
 
-  /// Validates the atSign server status depending on whether it's onboarding or authentication.
+  /// Waits, over [atLookUp], until the atDirectory knows the atSign and its
+  /// atServer answers.
   ///
-  /// For onboarding, it checks that the root server is found, the secondary server is running,
-  /// and the atSign is not already activated.
-  ///
-  /// For authentication, it checks that the root server is found, the secondary server is running,
-  /// and the atSign is already activated.
-  ///
-  /// Throws an [AtException] if any of the checks fail.
-  /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
-  /// This method is used internally before onboarding or authentication operations.
+  /// Retried until the request's overall deadline, then throws an
+  /// [AtTimeoutException] carrying the last failure.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
     // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
@@ -433,12 +469,6 @@ class AtAuthImpl implements AtAuth {
     bool validated = false;
     Object? lastError;
 
-    //support mocking
-    atServerStatus ??= AtStatusImpl(
-      rootUrl: atRequest.rootDomain.rootDomain,
-      rootPort: atRequest.rootDomain.rootPort,
-    );
-
     while (DateTime.now().isBefore(deadline)) {
       attempt++;
       try {
@@ -447,75 +477,23 @@ class AtAuthImpl implements AtAuth {
             '#[$attempt] : looking up ${atRequest.atSign} in atDirectory',
             ProgressEventType.info);
 
-        // Bound each network call by the budget remaining before the deadline,
-        // so no single call can overshoot the overall timeout.
-        Duration remaining =
-            AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        var atStatus =
-            await atServerStatus!.get(atRequest.atSign).timeout(remaining);
-
-        // 3 Checks for onboarding:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should not be activated already
-        if (atRequest is AtOnboardingRequest) {
-          if (atStatus.rootStatus != RootStatus.found) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.error ||
-              atStatus.atSignStatus == AtSignStatus.notFound) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. '
-                'Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.activated) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
-          }
+        final check = await checkAtSignServer(atLookUp, atRequest.atSign,
+            timeout: AtNetworkTimeouts.cap(deadline.difference(DateTime.now())));
+        switch (check.state) {
+          case AtSignServerState.notInDirectory:
+            throw AtException('atSign: ${atRequest.atSign} is not in the '
+                'atDirectory at ${atRequest.rootDomain.rootDomain}');
+          case AtSignServerState.directoryUnreachable:
+            throw AtException('Could not reach the atDirectory at '
+                '${atRequest.rootDomain.rootDomain}: ${check.cause}');
+          case AtSignServerState.atServerUnreachable:
+            throw _AtServerNotAnswering(check.cause);
+          // NOTE: a public key does not prove the CRAM secret is spent, so an
+          // atSign that looks activated is not refused onboarding here; the
+          // CRAM exchange refuses one that really is.
+          case AtSignServerState.activated:
+          case AtSignServerState.notActivated:
         }
-
-        // 3 Checks for authentication:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should be activated already
-        else if (atRequest is AtAuthRequest) {
-          if (atStatus.rootStatus == RootStatus.notFound ||
-              atStatus.rootStatus == RootStatus.error) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.stopped ||
-              atStatus.serverStatus == ServerStatus.error ||
-              atStatus.serverStatus == ServerStatus.unavailable) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.teapot ||
-              atStatus.serverStatus == ServerStatus.teapot) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
-          }
-        }
-
-        // AtServer availability probing
-        _addProgress(
-            'Connect',
-            '#[$attempt] : Connecting to ${atRequest.atSign} atServer',
-            ProgressEventType.info);
-
-        secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
-          atRequest.rootDomain.rootDomain,
-          atRequest.rootDomain.rootPort,
-        );
-        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        SecondaryAddress secondaryAddress = await secondaryAddressFinder!
-            .findSecondary(atRequest.atSign, timeout: remaining);
-
-        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        await (probeSocket ?? _defaultProbeSocket)(
-                secondaryAddress.host, secondaryAddress.port)
-            .timeout(remaining);
 
         _addProgress(
             'Connect',
@@ -525,13 +503,17 @@ class AtAuthImpl implements AtAuth {
         validated = true;
         break; // Exit loop if no exception occurs
       } catch (e) {
-        lastError = e;
-        if (e is SocketException) {
-          _logger.warning('Attempt #[$attempt] Probe socket failed: $e');
+        lastError = e is _AtServerNotAnswering ? e.cause : e;
+        if (e is _AtServerNotAnswering) {
+          // Expected while an atServer is still starting, so it is not an
+          // error until the retries run out.
+          _logger.warning(
+              'Attempt #[$attempt] atServer not answering: ${e.cause}');
         } else {
-          _logger.severe('Attempt #[$attempt] failed: $e');
+          _logger.severe('Attempt #[$attempt] failed: $lastError');
         }
-        _addProgress('Connect', '#[$attempt] : $e', ProgressEventType.error);
+        _addProgress(
+            'Connect', '#[$attempt] : $lastError', ProgressEventType.error);
         // Don't sleep past the overall deadline before the next attempt.
         if (!DateTime.now().add(retryDelay).isBefore(deadline)) {
           break;
@@ -548,4 +530,13 @@ class AtAuthImpl implements AtAuth {
           '${lastError == null ? '' : ' : $lastError'}');
     }
   }
+}
+
+/// An atServer that did not answer, so the retry loop can tell one that is
+/// not up yet - expected while one starts - from any other failure.
+class _AtServerNotAnswering implements Exception {
+  _AtServerNotAnswering(this.cause);
+  final Object? cause;
+  @override
+  String toString() => '$cause';
 }

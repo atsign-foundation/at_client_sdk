@@ -188,6 +188,27 @@ void main() {
         expect(utf8.decode(decrypted), 'pure→ffi');
       });
 
+      test('multi-block payload round-trips across both backends', () async {
+        final AesGcm256FfiAlgo ffiAlgo = makeAlgo();
+        final AesGcm256EncryptionAlgo pureAlgo = AesGcm256EncryptionAlgo();
+        final Uint8List key = pureAlgo.generateKey();
+        final InitialisationVector iv = InitialisationVector.random(12);
+        // 100 bytes spans 7 AES blocks (6 full + 1 partial).
+        final Uint8List plain =
+            Uint8List.fromList(List<int>.generate(100, (i) => i % 256));
+
+        final Uint8List ffiEncrypted = await ffiAlgo.encrypt(plain, key, iv: iv);
+        final Uint8List pureDecrypted =
+            await pureAlgo.decrypt(ffiEncrypted, key, iv: iv);
+        expect(pureDecrypted, plain);
+
+        final Uint8List pureEncrypted =
+            await pureAlgo.encrypt(plain, key, iv: iv);
+        final Uint8List ffiDecrypted =
+            await ffiAlgo.decrypt(pureEncrypted, key, iv: iv);
+        expect(ffiDecrypted, plain);
+      });
+
       test('NIST GCM vector: case 13 (zero key/nonce, empty plaintext)',
           () async {
         // Same vector used in the pure-Dart test.

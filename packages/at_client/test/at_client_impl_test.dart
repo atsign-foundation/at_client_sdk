@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -10,20 +11,120 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+/// Stops and drops every cached client for [atSign], including those filed
+/// under `atSign|enrollmentId`.
+///
+/// Dropping an entry releases nothing on its own, so each client is stopped
+/// before it goes.
+Future<void> _dropCachedClients(String atSign) async {
+  final keys = AtClientImpl.atClientInstanceMap.keys
+      .whereType<String>()
+      .where((key) => key == atSign || key.startsWith('$atSign|'))
+      .toList();
+  for (final key in keys) {
+    await (AtClientImpl.atClientInstanceMap[key] as AtClientImpl?)?.stop();
+    AtClientImpl.atClientInstanceMap.remove(key);
+  }
+}
 
 void main() {
+  tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
+  });
+
+  /// A self-retrofit changes the enrollment a client authenticates as while the
+  /// old id keeps existing, so a caller still holding it has to reach the
+  /// client that superseded it.
+  group('a superseded enrollment id', () {
+    const atSign = '@alice';
+    AtClientPreference pref() => AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/commit'
+      ..isLocalStoreRequired = true;
+
+    setUp(() async {
+      await _dropCachedClients(atSign);
+      AtClientImpl.supersededInstanceKeys.clear();
+    });
+    tearDown(() async {
+      await _dropCachedClients(atSign);
+      AtClientImpl.supersededInstanceKeys.clear();
+    });
+
+    test('resolves to the client that superseded it', () async {
+      final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-new');
+      AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
+          '$atSign|enroll-new';
+
+      final again = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old');
+
+      expect(identical(again, settled), isTrue,
+          reason: 'naming the id captured BEFORE a retrofit must reach the '
+              'client that retrofitted, not build a second one for the same '
+              'enrollment — a second connection, a second _init and a second '
+              'startup tail taking the same mint locks, filed over the first');
+      expect(
+          AtClientImpl.atClientInstanceMap.keys
+              .where((k) => k is String && k.startsWith('$atSign|')),
+          hasLength(1),
+          reason: 'and one enrollment must still be one cache entry');
+    });
+
+    test('with no supersession recorded, the two are different clients',
+        () async {
+      // NOTE: two clients live at the same moment need separate storage — one
+      // location holds one.
+      final first = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-new',
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
+      final other = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old',
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
+
+      expect(identical(other, first), isFalse,
+          reason: 'two enrollment ids with nothing linking them are two '
+              'principals, which is what the cache key exists to keep apart');
+    });
+
+    test('a supersession pointing at nothing leaves the caller where it was',
+        () async {
+      AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
+          '$atSign|evicted';
+
+      final built = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old');
+
+      expect((built as AtClientImpl).enrollmentId, 'enroll-old');
+      expect(AtClientImpl.atClientInstanceMap.containsKey('$atSign|enroll-old'),
+          isTrue,
+          reason: 'it built and filed under what was asked for, rather than '
+              'following a supersession whose target has been evicted');
+    });
+  });
+
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -65,12 +166,16 @@ void main() {
       ..commitLogPath = 'test/hive/path';
 
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -352,7 +457,7 @@ void main() {
       expect(atResponse.response, 'ok');
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await _dropCachedClients(atSign);
     });
   });
   group('A group of test to validate max length of a key', () {
@@ -380,37 +485,223 @@ void main() {
       () {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
-    MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
-    setUp(() {
-      AtClientImpl.atClientInstanceMap.remove('@alice');
-      var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
+    setUp(() async {
+      await _dropCachedClients('@alice');
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('yuh'));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('yuh'));
-      when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
     });
     test('defaults to the legacy crypto config when none is configured',
         () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
-      // No crypto config => the legacy default. The built-in legacy provider is
-      // the runtime's fallback (resolution itself is covered in
-      // crypto_runtime_test), so it is intentionally not in the config list.
-      final config = ac.getPreferences()?.crypto;
-      expect(config?.defaultProviderId, 'legacy');
-      expect(config?.lookup('legacy'), isNull);
-      expect(config?.lookup('bubblesort'), isNull);
+      // No crypto config => the legacy default. The built-in legacy provider
+      // is the runtime's fallback, so it is intentionally not in the config
+      // list.
+      final config = CryptoConfig.forClient(ac);
+      expect(config.defaultProviderId, 'legacy');
+      expect(config.lookup('legacy'), isNull);
+      expect(config.lookup('bubblesort'), isNull);
+
+      // NOTE: resolving into the preference would hand the next atSign built
+      // from the same preference object whatever this one resolved.
+      expect(ac.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
+          reason: 'the SDK resolves the default; it does not write it back — '
+              'the preference still holds the untouched marker');
+    });
+
+    test(
+        'the default posture keeps writes on the legacy provider in the adopted era set',
+        () async {
+      // NOTE: a bare preference is `PqPosture.pqReady`, not legacy — pqReady
+      // reads post-quantum records and legacy does not, so this arm covers the
+      // default posture and not the legacy one.
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atKeysIo: await typedKeyfile('@alice'),
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, legacyCryptoProviderId,
+          reason: 'the 3.x default writes with the legacy provider');
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
+          reason: 'the default posture registers no post-quantum provider, so '
+              'a record sent by a later peer does not open here');
+      final ready = await AtClientImpl.create(
+        '@ready',
+        'buzz',
+        AtClientPreference(posture: PqPosture.pqReady)
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atKeysIo: await typedKeyfile('@ready'),
+      );
+      expect(
+          CryptoConfig.eraDefaultFor(ready)!
+              .lookup(symmetricAesGcmCryptoProviderId),
+          isNotNull,
+          reason: 'the control: a stage that configures the providers still '
+              'resolves them, so the row above is about the DEFAULT and not '
+              'about a build that dropped them everywhere');
+    });
+
+    test('the legacy posture advertises no key package and asks for nothing',
+        () async {
+      // NOTE: advertising a key package this posture cannot use is the harmful
+      // half — a peer seals to it and the record comes back refused.
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.legacy)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
+          remoteSecondary: mockRemoteSecondary,
+          atKeysIo: await typedKeyfile('@alice'));
+
+      final gates = (ac as AtClientImpl).pqBootstrap!.gates;
+      // Every gate, listed rather than sampled: this client does nothing at
+      // all, and a sample would let a step back in unnoticed.
+      expect([
+        gates.hydrateHeldSecrets,
+        gates.collectConveyedKeys,
+        gates.startEnvelopeListener,
+        gates.mintInUseSigningKeys,
+        gates.reconcileKeyPackage,
+        gates.seedNamespaceKeys,
+        gates.requestRootPrivate,
+        gates.requestMissingPrivates,
+        gates.publishRootLink,
+        gates.publishChainLink,
+        gates.sweepUnanchoredEnrollments,
+        gates.reconcileEnrollmentSnapshot,
+        gates.askOnReadMiss,
+      ], everyElement(isFalse),
+          reason: 'a posture configuring no post-quantum providers is the arm '
+              'the rollout is debugged against; anything it does is something '
+              'a comparison against it cannot attribute');
+      expect(gates.collectConveyedKeys, isFalse,
+          reason: 'the collect step files conveyed material into the keyfile '
+              'and publishes _apsk through register(); this client can open '
+              'none of what it would file');
+      expect(gates.startEnvelopeListener, isFalse,
+          reason: 'a sweep timer, a sync listener and a notification '
+              'subscription, watching an address no peer can learn');
+      expect(gates.reconcileEnrollmentSnapshot, isFalse,
+          reason: 'not a wire write, but a write to the user\'s credential '
+              'file, which the ruling forbids just as squarely');
+    });
+
+    test('every gate on PqStartupGates is covered by the inert arm above', () {
+      final source =
+          File('lib/src/client/pq_client_bootstrap.dart').readAsStringSync();
+      final classBody = source.substring(source.indexOf('class PqStartupGates'),
+          source.indexOf('class PqClientBootstrap'));
+      // NOTE: the initialiser branch is not decoration — a gate declared
+      // `final bool foo = false;` is one no constructor can set, so `inert()`
+      // could not turn it off.
+      final fields =
+          RegExp(r'^  final bool (\w+)\s*(?:=[^;]*)?;', multiLine: true)
+              .allMatches(classBody)
+              .map((m) => m.group(1)!)
+              .toList();
+      expect(fields, isNotEmpty,
+          reason: 'if this finds nothing the count below proves nothing');
+      expect(fields, hasLength(13),
+          reason: 'PqStartupGates gained or lost a gate. Add it to the inert '
+              'arm above and to PqStartupGates.inert(), then move this number '
+              '— the gates are: ${fields.join(', ')}');
+    });
+
+    test('a configuring posture leaves both steps on', () async {
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.pqReady)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
+          remoteSecondary: mockRemoteSecondary,
+          atKeysIo: await typedKeyfile('@bob'));
+
+      final gates = (ac as AtClientImpl).pqBootstrap!.gates;
+      expect([
+        gates.hydrateHeldSecrets,
+        gates.collectConveyedKeys,
+        gates.startEnvelopeListener,
+        gates.mintInUseSigningKeys,
+        gates.reconcileKeyPackage,
+        gates.seedNamespaceKeys,
+        gates.requestRootPrivate,
+        gates.requestMissingPrivates,
+        gates.publishRootLink,
+        gates.publishChainLink,
+        gates.sweepUnanchoredEnrollments,
+        gates.reconcileEnrollmentSnapshot,
+        gates.askOnReadMiss,
+      ], everyElement(isTrue),
+          reason: 'without this the row above passes just as well for a build '
+              'that switched the startup off for every posture');
+    });
+
+    test('the legacy posture configures no post-quantum providers', () async {
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.legacy)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atKeysIo: await typedKeyfile('@alice'),
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, legacyCryptoProviderId);
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
+          reason: 'the axis that makes this stage a stand-in for a '
+              'pre-capability build rather than a conservatively configured '
+              'current one');
+      expect(config.lookup(nskeyCryptoProviderId), isNull,
+          reason: 'and the conveyance provider with it — half a set would let '
+              'a record resolve one hop and fail at the next');
+    });
+
+    test('the pqActive posture makes PQ writes the adopted era default',
+        () async {
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.pqActive)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atKeysIo: await typedKeyfile('@alice'),
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, symmetricAesGcmCryptoProviderId,
+          reason: 'the 4.0 posture: new data goes out under the nskey data '
+              'path, not the legacy provider');
+      expect(config.lookup(nskeyCryptoProviderId), isNotNull);
+      expect(ac.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
+          reason: 'the posture moves the era, not the app\'s preference — an '
+              'app-named crypto config would still win');
     });
 
     test('registers configured crypto providers during at_client creation',
@@ -423,17 +714,16 @@ void main() {
           defaultProviderId: 'test-provider',
           providers: [provider],
         );
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
-      expect(ac.getPreferences()?.crypto.lookup('test-provider'),
+      expect(CryptoConfig.forClient(ac).lookup('test-provider'),
           isA<CryptoProvider>());
     });
 
@@ -445,15 +735,15 @@ void main() {
         ..crypto = const CryptoConfig(
           defaultProviderId: 'missing-provider',
         );
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
+      final keysIo = await typedKeyfile('@alice');
       await expectLater(
         () => AtClientImpl.create(
           '@alice',
           'buzz',
           preferences,
           remoteSecondary: mockRemoteSecondary,
-          atChops: chops,
+          atKeysIo: keysIo,
         ),
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
@@ -462,8 +752,6 @@ void main() {
     test(
         'adopts the new crypto config when a cached AtClient is re-used with '
         'an updated preference', () async {
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
-
       // First creation registers only the legacy provider.
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
@@ -473,9 +761,9 @@ void main() {
           ..commitLogPath = 'test/hive/path'
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
-      expect(ac1.getPreferences()?.crypto.lookup('late-provider'), isNull);
+      expect(CryptoConfig.forClient(ac1).lookup('late-provider'), isNull);
 
       // Re-creating the same atSign re-uses the cached instance; the new
       // preference's crypto config is adopted onto it (no rebuild).
@@ -491,17 +779,16 @@ void main() {
             providers: [provider],
           ),
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       expect(identical(ac1, ac2), true);
-      expect(ac2.getPreferences()?.crypto.lookup('late-provider'),
+      expect(CryptoConfig.forClient(ac2).lookup('late-provider'),
           isA<CryptoProvider>());
     });
 
     test('stores the injected atKeysIo', () async {
-      final keysIo = StubAtKeysIo();
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      final keysIo = await typedKeyfile('@alice');
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -509,7 +796,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
         atKeysIo: keysIo,
       );
 
@@ -517,7 +803,9 @@ void main() {
     });
 
     test('has no default key source when none is injected', () async {
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      // Neither an atKeysIo nor an AtChops: the client falls back to reading
+      // key material out of the local secondary, which is the shape this test
+      // is about.
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -525,7 +813,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
       );
 
       expect(ac.atKeysIo, isNull);
@@ -534,8 +821,7 @@ void main() {
     test(
         'cached re-use retains the original atKeysIo (no adoption, unlike '
         'crypto config)', () async {
-      final firstKeysIo = StubAtKeysIo();
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      final firstKeysIo = await typedKeyfile('@alice');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -543,7 +829,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
         atKeysIo: firstKeysIo,
       );
 
@@ -554,8 +839,7 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
-        atKeysIo: StubAtKeysIo(),
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       expect(identical(ac1, ac2), true);

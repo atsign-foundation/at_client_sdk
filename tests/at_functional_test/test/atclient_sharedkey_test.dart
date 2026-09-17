@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('atclient_sharedkey_test');
   late AtClientManager atClientManager;
   late AtClient atClient;
   late String currentAtSign;
@@ -15,7 +16,8 @@ void main() {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+        posture: PqPosture.legacy);
     atClient = atClientManager.atClient;
   });
 

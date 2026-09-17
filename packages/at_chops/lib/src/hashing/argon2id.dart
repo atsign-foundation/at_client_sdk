@@ -44,14 +44,18 @@ class Argon2idHashingAlgo implements AtHashingAlgorithm<String, String> {
   @override
   Future<String> hash(String password, {ArgonHashParams? hashParams}) async {
     hashParams ??= ArgonHashParams();
-    // The salt is the password's UTF-16 code units while the secret is its
-    // UTF-8 encoding. Those two disagree above U+00FF, and every atKeys
-    // passphrase envelope in the field was derived with exactly that pairing,
-    // so it is load-bearing rather than an oversight to tidy up.
+    // With no salt supplied, the password's own UTF-16 code units stand in for
+    // one. That makes derivation deterministic — the same passphrase always
+    // yields the same key — so it defeats the point of salting entirely, and
+    // the code units are UTF-16 where the secret below is UTF-8, which diverges
+    // for any non-ASCII passphrase. Both behaviours are preserved only because
+    // key files already in the field were written with them and would
+    // otherwise become undecryptable. New callers must pass
+    // [ArgonHashParams.salt].
     final generator = Argon2BytesGenerator()
       ..init(Argon2Parameters(
         Argon2Parameters.ARGON2_id,
-        Uint8List.fromList(password.codeUnits),
+        Uint8List.fromList(hashParams.salt ?? password.codeUnits),
         desiredKeyLength: hashParams.hashLength,
         iterations: hashParams.iterations,
         memory: hashParams.memory,

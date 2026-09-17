@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -75,12 +76,12 @@ void main() {
         final files = tempDir.listSync().whereType<File>().toList();
         expect(
           files.map((file) => file.path).toSet(),
-          {path, '$path.bak'},
+          {path, '$path.bak', '$path${FileAtKeysIo.legacyShapeBackupSuffix}'},
         );
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);
-        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
       });
     }
   });

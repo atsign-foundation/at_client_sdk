@@ -6,21 +6,18 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:at_chops/at_chops.dart';
 import 'test_utils/mocks.dart';
 
 class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
 class MockSecondaryManager extends Mock implements SecondaryManager {}
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
 void main() {
   Atsign theseTestsMyAtsign = '@charlie'.toAtsign();
   Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
-  AtLookupImpl mockAtLookup = MockAtLookUpImpl();
+  AtLookupImpl mockAtLookup = MockAtLookupImpl();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtChops mockAtChops = MockAtChops();
+  final mockAtChops = MockAtChops();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   var atClientPreferenceWithAtChops = AtClientPreference();
   var lookupVerbBuilder = LookupVerbBuilder()
@@ -65,10 +62,6 @@ void main() {
 
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => atClientPreferenceWithAtChops);
-      final atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
-      when(() => mockAtClientImpl.atChops)
-          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
       var sharedKeyDecryption = SharedWithMeDecryption(mockAtClientImpl);
       var result = await sharedKeyDecryption.decrypt(atKey, encryptedValue);
       expect(result, 'hello');
@@ -103,8 +96,8 @@ void main() {
     });
 
     test(
-        'A test to verify exception is thrown when private encryption key is not found using at_chops',
-        () {
+        'A test to verify exception is thrown when no private encryption key '
+        'is found', () {
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@murali')
             ..sharedWith('@sitaram'))
           .build();
@@ -114,16 +107,15 @@ void main() {
 
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => atClientPreferenceWithAtChops);
-      var sharedKeyDecryptionWithAtChops =
-          SharedWithMeDecryption(mockAtClientImpl);
-      final atChopsKeys =
-          AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
-      when(() => mockAtClientImpl.atChops)
-          .thenAnswer((_) => AtChopsImpl(atChopsKeys));
-      expect(
-          () async =>
-              await sharedKeyDecryptionWithAtChops.decrypt(atKey, '123'),
-          throwsA(predicate((dynamic e) => e is Exception)));
+      // The client resolves its private key through the local secondary, so
+      // "not found" is that answering none. Stated here rather than left to
+      // the absence of a stub, because this mock is shared across the group
+      // and an earlier test's stub would otherwise supply one.
+      when(() => mockLocalSecondary.getEncryptionPrivateKey())
+          .thenAnswer((_) async => null);
+      var sharedKeyDecryption = SharedWithMeDecryption(mockAtClientImpl);
+      expect(() async => await sharedKeyDecryption.decrypt(atKey, '123'),
+          throwsA(isA<AtPrivateKeyNotFoundException>()));
     });
 
     // The AtLookup verb throws exception is stacked by the executeVerb in remote secondary

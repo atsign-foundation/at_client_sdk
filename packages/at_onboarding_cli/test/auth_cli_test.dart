@@ -1,17 +1,23 @@
 import 'dart:io';
 
+import 'package:args/args.dart' show ArgParserException;
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
 
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
+import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
 import 'package:test/test.dart';
-import 'at_onboarding_cli_test.dart';
+import 'keyfile_helpers.dart';
 
 void main() {
   final baseDirPath = 'test/keys';
+
+  postureArgumentTests();
 
   group('A group of tests to verify write permission of apkam file path', () {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
@@ -24,13 +30,14 @@ void main() {
       await directory.create(recursive: true);
       // Set permission to read only.
       await Process.run('chmod', ['444', baseDirPath]);
-      expect(() => AtFileUtil.ensureWritable(File(dirPath)), throwsA(isA<AtException>()));
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)),
+          throwsA(isA<AtException>()));
     });
 
     test(
         'ensureWritable doesnt throw if directory does not have a file already',
         () {
-          expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
     });
   });
 
@@ -47,9 +54,7 @@ void main() {
       testAtSign = '@alice_decrypt_test';
       passPhrase = 'test_passphrase_123';
 
-      // Generate test AtKeys
-      AtChopsKeys atChopsKeys = getRandomAtChopsKeys();
-      testAtKeys = _getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      testAtKeys = randomLegacyKeys();
 
       encryptedAtKeysFile =
           File('${tempDir.path}/${testAtSign}_encrypted.atKeys');
@@ -96,18 +101,18 @@ void main() {
       AtKeys decryptedKeys = await decryptedFileIo.read(testAtSign);
 
       // Verify all keys match
-      expect(decryptedKeys.apkamPublicKey.toString(),
-          equals(testAtKeys.apkamPublicKey.toString()));
-      expect(decryptedKeys.apkamPrivateKey.toString(),
-          equals(testAtKeys.apkamPrivateKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPublicKey.toString(),
-          equals(testAtKeys.defaultEncryptionPublicKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPrivateKey.toString(),
-          equals(testAtKeys.defaultEncryptionPrivateKey.toString()));
-      expect(decryptedKeys.defaultSelfEncryptionKey.toString(),
-          equals(testAtKeys.defaultSelfEncryptionKey.toString()));
-      expect(decryptedKeys.apkamSymmetricKey.toString(),
-          equals(testAtKeys.apkamSymmetricKey.toString()));
+      final decryptedApkam = decryptedKeys.authenticationKeyPairFor(null)!;
+      final testApkam = testAtKeys.authenticationKeyPairFor(null)!;
+      expect(decryptedApkam.publicKey, equals(testApkam.publicKey));
+      expect(decryptedApkam.privateKey, equals(testApkam.privateKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPublicKey.publicKey,
+          equals(testAtKeys.encryptionKeyPair!.atPublicKey.publicKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPrivateKey.privateKey,
+          equals(testAtKeys.encryptionKeyPair!.atPrivateKey.privateKey));
+      expect(decryptedKeys.selfEncryptionKey!.key,
+          equals(testAtKeys.selfEncryptionKey!.key));
+      expect(decryptedKeys.enrollmentSymmetricKey!.key,
+          equals(testAtKeys.enrollmentSymmetricKey!.key));
     });
 
     test('Decrypt command appends .atKeys extension if not present', () async {
@@ -214,34 +219,216 @@ void main() {
   });
 }
 
-// Helper function to create AtKeys from AtChopsKeys
-AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
-  AtKeys atAuthKeys = AtKeys();
+/// Tests that `--posture` is honoured on every command, not on activation
+/// alone.
+///
+/// A parser that accepts the argument is not a client that runs under it, so
+/// both halves are asserted.
+void postureArgumentTests() {
+  final args = AuthCliArgs();
 
-  if (atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.apkamPublicKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.apkamPrivateKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.selfEncryptionKey?.key != null) {
-    atAuthKeys.defaultSelfEncryptionKey =
-        AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
-  }
-  if (atChopsKeys.apkamSymmetricKey?.key != null) {
-    atAuthKeys.apkamSymmetricKey =
-        AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
-  }
+  group('the posture argument', () {
+    test('every command parser accepts it, not activation alone', () {
+      final parsers = {
+        'onboard': args.createOnboardCommandParser(),
+        'status': args.createStatusCommandParser(),
+        'enroll': args.createEnrollCommandParser(),
+        'approve': args.createApproveCommandParser(),
+        'deny': args.createDenyCommandParser(),
+      };
+      for (final entry in parsers.entries) {
+        expect(
+            entry.value.options.containsKey(AuthCliArgs.argNamePosture), isTrue,
+            reason: '${entry.key} does not accept --posture, so a user who '
+                'passes it there is silently ignored - the exact shape #2161 '
+                'was filed for');
+      }
+    });
 
-  return atAuthKeys;
+    test('a named posture reaches the preference with its axes', () {
+      final asked = AuthCliArgs.preferenceUnder(PqPosture.pqActive);
+      expect(asked.posture, same(PqPosture.pqActive));
+      expect(asked.authenticationKeyAlgorithm, SigningAlgoType.mldsa65,
+          reason: 'the axes have to come with it, or naming a posture buys '
+              'nothing');
+
+      // NOTE: latent while an unset posture and legacy are the same value —
+      // this cannot fail until the default moves, and the row below is what
+      // discriminates until then.
+      expect(AuthCliArgs.preferenceUnder(null).posture,
+          same(AtOnboardingPreference().posture));
+    });
+
+    test(
+        'a posture constant is named where the roles are decided, nowhere else',
+        () {
+      // NOTE: a `?? PqPosture.legacy` where a preference is built makes an
+      // unset --posture stop meaning "no opinion", so only the file that
+      // decides the role defaults may name a posture constant.
+      final byFile = <String, List<String>>{};
+      for (final path in const [
+        'lib/src/cli/auth_cli.dart',
+        'lib/src/cli/auth_cli_args.dart',
+        'lib/src/util/create_at_client_cli.dart',
+      ]) {
+        final lines = File(path).readAsLinesSync();
+        expect(lines, isNotEmpty,
+            reason: '$path did not read; a rail over an '
+                'empty file passes for the wrong reason');
+        for (final line in lines) {
+          final code = line.trim();
+          if (code.startsWith('//')) continue;
+          if (RegExp(r'PqPosture\.(legacy|pqReady|pqActive)').hasMatch(code)) {
+            (byFile[path] ??= <String>[]).add(code);
+          }
+        }
+      }
+      for (final path in const [
+        'lib/src/cli/auth_cli.dart',
+        'lib/src/util/create_at_client_cli.dart',
+      ]) {
+        expect(byFile[path] ?? const <String>[], isEmpty,
+            reason: 'a command and a client factory take the posture they are '
+                'handed; naming one here restates a default where nothing '
+                'reviews it:\n${(byFile[path] ?? const []).join('\n')}');
+      }
+      final args = byFile['lib/src/cli/auth_cli_args.dart'] ?? const <String>[];
+      expect(args, hasLength(3),
+          reason: 'expected the three postureNames entries and nothing else: '
+              'an unnamed posture is at_client\'s default, inherited through '
+              'AtOnboardingPreference(), so no line here decides one. '
+              'Anything else is a default in disguise:\n${args.join('\n')}');
+    });
+
+    test('every command that builds a client passes the posture to it', () {
+      // NOTE: read from source because driving each command needs an atServer
+      // per row.
+      final source = File('lib/src/cli/auth_cli.dart').readAsStringSync();
+      final calls =
+          RegExp(r'(?<![A-Za-z_])createAtClient\(').allMatches(source).toList();
+      expect(calls, isNotEmpty,
+          reason: 'if this finds nothing the rest of the row proves nothing');
+
+      final without = <int>[];
+      for (final call in calls) {
+        final end = source.indexOf(');', call.start);
+        if (!source.substring(call.start, end).contains('posture:')) {
+          without
+              .add('\n'.allMatches(source.substring(0, call.start)).length + 1);
+        }
+      }
+      expect(without, isEmpty,
+          reason: 'auth_cli.dart lines $without call createAtClient without a '
+              'posture, so those commands ignore --posture');
+    });
+
+    test('the retired argument is gone from every one of them', () {
+      for (final parser in [
+        args.createOnboardCommandParser(),
+        args.createStatusCommandParser(),
+        args.createEnrollCommandParser(),
+      ]) {
+        expect(parser.options.containsKey('signingAlgoType'), isFalse,
+            reason: 'it named the PKAM authentication key while reading like '
+                'the data signing key, and every activation it could express '
+                'is expressible as a posture');
+      }
+    });
+
+    test('each name resolves to its posture, as raw strings', () {
+      // NOTE: raw literals — these three strings are the CLI's published
+      // vocabulary, so reading them back off their own map would follow a
+      // rename silently.
+      expect(AuthCliArgs.postureNames.keys.toList(),
+          ['legacy', 'pqReady', 'pqActive']);
+      expect(AuthCliArgs.postureNames['legacy'], same(PqPosture.legacy));
+      expect(AuthCliArgs.postureNames['pqReady'], same(PqPosture.pqReady));
+      expect(AuthCliArgs.postureNames['pqActive'], same(PqPosture.pqActive));
+    });
+
+    test('an unnamed posture stays null rather than resolving to a stage', () {
+      // NOTE: `postureIn` keeps "the caller said nothing" distinct from any
+      // stage name, so the callers below can tell an inherited default from a
+      // named one and say so.
+      final parsed = args.createStatusCommandParser().parse([]);
+      expect(AuthCliArgs.postureIn(parsed), isNull);
+    });
+
+    test(
+        'an enroller with no --posture runs at at_client\'s default, and says so',
+        () {
+      final parsed = args.createEnrollCommandParser().parse([]);
+      final resolved = AuthCliArgs.postureForEnroller(parsed);
+      final inherited = AtOnboardingPreference().posture;
+      expect(resolved.posture, same(inherited),
+          reason: 'one default for the whole SDK: when at_client moves its '
+              'default, every command here moves with it');
+      expect(resolved.notice, isNotNull,
+          reason: 'a default this consequential is announced, or a caller who '
+              'wanted a post-quantum enrolment finds out when a peer cannot '
+              'read something');
+      expect(resolved.notice, contains(AuthCliArgs.nameOf(inherited)));
+    });
+
+    test('an enroller that names a posture gets it, with nothing announced',
+        () {
+      final parsed =
+          args.createEnrollCommandParser().parse(['--posture', 'pqActive']);
+      final resolved = AuthCliArgs.postureForEnroller(parsed);
+      expect(resolved.posture, same(PqPosture.pqActive));
+      expect(resolved.notice, isNull,
+          reason: 'nothing was defaulted, so there is nothing to tell anyone');
+    });
+
+    test('an approver with no --posture runs at at_client\'s default', () {
+      final parsed = args.createStatusCommandParser().parse([]);
+      expect(AuthCliArgs.postureForApprover(parsed),
+          same(AtOnboardingPreference().posture),
+          reason: 'the same default as an enroller: at_client decides, and a '
+              'post-quantum approval under a posture with no post-quantum '
+              'providers is refused by at_client when the request is read');
+    });
+
+    test('an approver may name legacy', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'legacy']);
+      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.legacy),
+          reason: 'listing, passcodes and a legacy approval all run there; '
+              'only a post-quantum approval is refused, by at_client');
+    });
+
+    test('a bare invocation is refused rather than treated as onboard',
+        () async {
+      // NOTE: `wrappedMain` reaches the refusal before any command is parsed,
+      // so this needs no atServer.
+      expect(await wrappedMain(['-a', '@alice']), 1);
+      // The positive control.
+      expect(await wrappedMain(['--version']), 0,
+          reason: 'a leading option that is not a command must still be '
+              'served, or the refusal has swallowed --version and --help too');
+    });
+
+    test('an approver may still name pqActive', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'pqActive']);
+      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.pqActive),
+          reason: 'a named posture wins over the inherited default');
+    });
+
+    test('a named posture is the one that comes back', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'pqActive']);
+      expect(AuthCliArgs.postureIn(parsed), same(PqPosture.pqActive));
+    });
+
+    test('an unknown posture is refused by the parser', () {
+      expect(
+          () =>
+              args.createStatusCommandParser().parse(['--posture', 'rollout2']),
+          throwsA(isA<ArgParserException>().having(
+              (e) => e.message, 'message', contains('not an allowed value'))),
+          reason: 'the old stage names are exactly what a user would try, and '
+              'a silently accepted one would run the default stage');
+    });
+  });
 }

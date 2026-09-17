@@ -150,6 +150,7 @@ class CLIBase {
     Set<String> hide = const {},
     bool addLegacyRootDomainArg = true,
     AtOnboardingPreference? preference,
+    AtLookUpFactory? lookUps,
   }) async {
     parser ??= createArgsParser(
       namespace: namespace,
@@ -192,7 +193,8 @@ class CLIBase {
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
         passPhrase: parsedArgs['pass-phrase'],
-        preference: preference);
+        preference: preference,
+        lookUps: lookUps);
 
     await cliBase.init();
 
@@ -212,6 +214,10 @@ class CLIBase {
   final int maxConnectAttempts;
 
   final AtOnboardingPreference? preference;
+
+  /// Builds every connection the client opens; with none, the preference's
+  /// (TLS on TCP, or the proxy convention when its root domain names one).
+  final AtLookUpFactory? lookUps;
 
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;
@@ -254,7 +260,8 @@ class CLIBase {
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase,
-      this.preference}) {
+      this.preference,
+      this.lookUps}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -319,20 +326,14 @@ class CLIBase {
     final AtOnboardingPreference atOnboardingConfig =
         preference ?? AtOnboardingPreference();
     atOnboardingConfig
-      ..hiveStoragePath = localStoragePathToUse
+      ..storagePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
-      ..commitLogPath = '$localStoragePathToUse/commitLog'
-          .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true
       ..atKeysFilePath = atKeysFilePathToUse
       ..passPhrase = passPhrase;
-
-    AtOnboardingService onboardingService = AtOnboardingServiceImpl(
-        atSign, atOnboardingConfig,
-        atServiceFactory: atServiceFactory);
 
     if (!File(atKeysFilePathToUse).existsSync()) {
       // no atKeys file
@@ -345,34 +346,40 @@ class CLIBase {
       throw ArgumentError(msg);
     }
 
-    bool authenticated = false;
-    Duration retryDuration = Duration(seconds: 3);
-    int attempts = 0;
-    while (!authenticated && attempts < maxConnectAttempts) {
-      try {
-        stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
-        attempts++;
-        await Future.delayed(Duration(
-            milliseconds:
-                1000)); // Pause just long enough for the retry to be visible
-        authenticated = await onboardingService.authenticate();
-      } catch (exception) {
-        stderr.write(chalk.brightRed(
-            '$exception. Will retry in ${retryDuration.inSeconds} seconds'));
-      }
-      if (!authenticated) {
-        await Future.delayed(retryDuration);
-      }
-    }
-    if (!authenticated) {
+    const retryDuration = Duration(seconds: 3);
+    stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
+    final AtClient client;
+    try {
+      client = await Atsign(atSign).open(
+          keys: FileAtKeysIo(
+              filePath: (_) => atKeysFilePathToUse, passPhrase: passPhrase),
+          preference: atOnboardingConfig,
+          namespace: nameSpace,
+          storage: atOnboardingConfig.storageFor(atSign),
+          lookUps: lookUps ?? atOnboardingConfig.lookUps,
+          serviceFactory: atServiceFactory);
+    } on AtOpenRefusedException catch (e) {
       stderr.writeln();
-      var msg = 'Failed to connect after $attempts attempts';
+      stderr.writeln(chalk.brightRed(e.message));
+      rethrow;
+    }
+    // NOTE: one client, asked again until it is online or the budget is
+    // spent; a refusal ends the wait at once, since waiting cannot change it.
+    final state = await client.connection.awaitOnline(
+        budget: retryDuration * maxConnectAttempts,
+        retryInterval: retryDuration);
+    if (!state.isOnline) {
+      await client.stop();
+      stderr.writeln();
+      final msg = 'Failed to connect within $maxConnectAttempts attempts: '
+          '${state.outcome.name}'
+          '${state.cause == null ? '' : ' (${state.cause!.name})'}';
       stderr.writeln(chalk.brightRed(msg));
       throw SecondaryServerConnectivityException(msg);
     }
     stderr.writeln(chalk.brightGreen('Connected'));
 
-    // Get the AtClient which the onboardingService just authenticated
-    atClient = AtClientManager.getInstance().atClient;
+    AtClientManager.getInstance().use(client);
+    atClient = client;
   }
 }

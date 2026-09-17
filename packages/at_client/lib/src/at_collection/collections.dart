@@ -1,4 +1,6 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/at_collection/at_collection_model.dart';
+import 'package:at_client/src/at_collection/at_json_collection_model.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
 @Deprecated("Use AtClient.collection for collection-style operations")

@@ -1,10 +1,8 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtLookUp extends Mock implements AtLookUp {}
+import 'test_utils/mocks.dart';
 
 void main() {
   group('A group of switch atsign tests', () {
@@ -15,6 +13,10 @@ void main() {
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
       final mockAtLookUp = MockAtLookUp();
+      // The real RemoteSecondary wraps this lookup, and closing the client
+      // closes the lookup - so an unstubbed close() answers null into the
+      // Future<void> the teardown awaits.
+      when(() => mockAtLookUp.close()).thenAnswer((_) async {});
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference,
           atLookUp: mockAtLookUp);
@@ -62,10 +64,16 @@ void main() {
       atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
-      expect(
+      // NOTE: by identity rather than by count — the SDK registers a listener
+      // of its own on every sync service, so a bare count says nothing about
+      // whose app listeners survived the switch.
+      final listeners =
           (atClientManager.atClient.syncService as SyncServiceImpl)
-              .syncProgressListenerSize(),
-          1);
+              .progressListeners();
+      expect(listeners.whereType<BobSyncProgressListener>(), hasLength(1));
+      expect(listeners.whereType<AliceSyncProgressListener>(), isEmpty,
+          reason: 'the previous atSign\'s listener must not carry over — it '
+              'would be handed the new atSign\'s sync events');
     });
   });
 }

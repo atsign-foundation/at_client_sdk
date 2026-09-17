@@ -1,0 +1,27 @@
+name: wasm_shakedown
+description: >-
+  Dev-only helper that walks a Dart package's import/export graph and reports
+  every file naming a platform library that will not work on the target
+  platform. Driven by `dart run wasm_shakedown` over
+  `.github/wasm_gates.yaml`, to keep the web-safe barrels web-safe.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  # lib/config.dart parses .github/wasm_gates.yaml. Structural, not regex,
+  # because a config error must name the line to fix — which YamlNode.span
+  # gives and a regex would have to count newlines for. Already locked at this
+  # constraint via the workspace root, so nothing new resolves.
+  yaml: ^3.1.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  # A dev dependency, not a real one: nothing in lib/ declares a test any more.
+  # It was real while lib/ratchet.dart supplied a shared test group to each
+  # package's test/wasm/dep_tree_test.dart; the gates are a CLI now, so the only
+  # tests here are this package's own.
+  test: ^1.25.0

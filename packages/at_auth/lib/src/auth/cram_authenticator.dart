@@ -15,7 +15,7 @@ class CramAuthenticator {
     int maxRetries = 10,
   }) async {
     try {
-      return await (atLookUp as AtLookupImpl).cramAuthenticate(cramSecret);
+      return await atLookUp.cramAuthenticate(cramSecret);
     } on UnAuthenticatedException catch (e) {
       throw UnAuthenticatedException(
           'cram auth failed for $atSign - ${e.toString()} with cramSecret $cramSecret');

@@ -4,6 +4,7 @@ import 'package:at_functional_test/src/config_util.dart';
 import 'test_utils.dart';
 
 void main() async {
+  TestUtils.isolateStorage('at_client_delete_test');
   late String currentAtSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';
@@ -13,7 +14,8 @@ void main() async {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+        posture: PqPosture.legacy);
     atClient = atClientManager.atClient;
   });
 

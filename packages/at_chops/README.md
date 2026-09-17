@@ -4,14 +4,15 @@ data signing, key agreement, and hashing that can be leveraged by client applica
 ## Features
 
 - Asymmetric encryption/decryption using RSA-2048 and RSA-4096
-- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes)
+- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes) — pure-Dart and OpenSSL FFI backends
 - Digest signing and verification for PKAM authentication (RSA, ECC secp256r1, Ed25519)
 - Data signing and verification for public data in the Atsign Protocol
 - Post-quantum digital signatures: ML-DSA-65 (FIPS 204) — pure-Dart and OpenSSL FFI backends
-- Post-quantum key encapsulation: ML-KEM-768 (FIPS 203) — pure-Dart and OpenSSL FFI backends
-- Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, draft-connolly-cfrg-xwing-kem-10)
+- Post-quantum key encapsulation: ML-KEM-768 (FIPS 203) — pure-Dart and OpenSSL FFI backends; ML-KEM-1024 (FIPS 203, IANA HPKE KEM id 0x0042) — pure-Dart
+- Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, IANA HPKE KEM id 0x647A)
 - Elliptic-curve key agreement: X25519 — pure-Dart and OpenSSL FFI backends
 - Key generation on every algorithm: `generateKey()` on the symmetric ones, `generateKeyPair()` on the asymmetric ones (both return raw bytes)
+- Seed-based KEM key persistence (`newSeed` / `keyPairFromSeed`) that means the same thing on every backend
 - Hashing: SHA-256, SHA-512, MD5, Argon2id
 - HKDF key derivation
 - One sealed supertype, `AtAlgorithm`, over every algorithm family — hold any algorithm in one variable, read its `name`, or switch over the families exhaustively
@@ -155,7 +156,9 @@ await mlDsa65.verifyBytes(message,
 ```dart
 final kem = MlKem768PureDartAlgo.instance;
 final kp = await kem.generateKeyPair();
-// kp.publicKey — 1184 bytes; kp.secretKey — 2400 bytes
+// kp.publicKey — 1184 bytes
+// kp.secretKey — 2400 bytes, the expanded decapsulation key. NOT a seed:
+// see "Persisting a KEM key" below before storing it.
 
 // Sender
 final (ciphertext: ct, sharedSecret: ss1) = await kem.encapsulate(kp.publicKey);
@@ -165,12 +168,30 @@ final ss2 = await kem.decapsulate(kp.secretKey, ct);
 // ss1 == ss2
 ```
 
+### ML-KEM-1024 (post-quantum KEM, pure-Dart)
+
+The no-hybrid option, for callers whose specification chain has to contain no
+draft — FIPS 203 for the KEM itself — and the parameter set CNSA 2.0 mandates.
+Same interface, larger sizes; its ciphertext is 448 bytes bigger than X-Wing's,
+which is the cost that shows up per sealed record.
+
+```dart
+final kem = MlKem1024PureDartAlgo.instance;
+final kp = await kem.generateKeyPair();
+// kp.publicKey — 1568 bytes; kp.secretKey — 3168 bytes (expanded, not a seed)
+
+final (ciphertext: ct, sharedSecret: ss1) = await kem.encapsulate(kp.publicKey);
+final ss2 = await kem.decapsulate(kp.secretKey, ct);
+// ss1 == ss2
+```
+
 ### X-Wing (hybrid PQ/classical KEM)
 
 ```dart
 final xwing = XWingPureDartAlgo.instance;
 final kp = await xwing.generateKeyPair();
-// kp.publicKey — 1216 bytes; kp.secretKey — 32 bytes (seed)
+// kp.publicKey — 1216 bytes; kp.secretKey — 32 bytes, which for THIS backend
+// happens to be the seed. Don't generalise that — see below.
 
 // Sender
 final (ciphertext: ct, sharedSecret: ss1) = await xwing.encapsulate(kp.publicKey);
@@ -179,6 +200,39 @@ final (ciphertext: ct, sharedSecret: ss1) = await xwing.encapsulate(kp.publicKey
 final ss2 = await xwing.decapsulate(kp.secretKey, ct);
 // ss1 == ss2
 ```
+
+### Persisting a KEM key
+
+`generateKeyPair`'s `secretKey` is what `decapsulate` takes, and it does **not**
+mean the same thing on every backend: X-Wing's *is* its 32-byte seed, ML-KEM's is
+the expanded decapsulation key that no seeded call reproduces, and the FFI
+backends' is an opaque handle that does not outlive the process. So code written
+against X-Wing persists recoverable bytes by accident, and the identical code
+persists unrecoverable ones for ML-KEM — with no compile error, and no failure
+until a restart.
+
+Store the **seed** and re-derive. That is correct on every backend, and it is the
+only form in which a caller can hold a key for a KEM it does not name in source.
+
+```dart
+// Any backend — the two calls mean the same thing on all of them.
+final AtKemAlgorithm kem = XWingPureDartAlgo.instance;
+
+// Minting: keep the seed, not the secret key.
+final seed = kem.newSeed();
+final kp = await kem.keyPairFromSeed(seed);
+
+// Recovering, after a restart — from the stored seed:
+final recovered = await kem.keyPairFromSeed(seed);
+// recovered.publicKey == kp.publicKey
+```
+
+Seed lengths are backend-specific (32 bytes for X-Wing, 64 for ML-KEM's
+`d || z`) and deliberately absent from the interface: `newSeed` makes a valid
+one and `keyPairFromSeed` rejects an invalid one. Concrete classes expose
+`seedLength` for callers that do name a backend. Store the algorithm alongside
+the seed — 32 and 64 bytes are both valid for *some* backend, so the bytes alone
+cannot say which.
 
 ### AtPqc (auto-resolved PQ backends)
 
@@ -232,6 +286,10 @@ ML-DSA-65, ML-KEM-768, and X25519 each have an OpenSSL FFI backend (`MlDsa65FfiA
 X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `libcrypto` is available.
 
 AES-256-GCM also has an OpenSSL FFI backend (`AesGcm256FfiAlgo`) alongside its pure-Dart counterpart (`AesGcm256EncryptionAlgo`); the two are fully interoperable. `AtPqc.aesGcm256` auto-selects FFI or pure-Dart when AAD is not needed. If you need AAD (e.g. for PQ-HPKE), construct `AesGcm256FfiAlgo.fromLib(lib)` or `AesGcm256EncryptionAlgo()` directly — both expose `encrypt`/`decrypt` with `{List<int> aad}`.
+
+AES-CTR has an OpenSSL FFI backend (`AesCtrFfiAlgo`) alongside its pure-Dart counterpart (`AesCtrEncryptionAlgo`). Both PKCS7-pad before encrypting, so their output is byte-identical at all three key lengths and either can read the other's records. `AtPqc.aesCtr(keyLengthBytes)` auto-selects between them; pass an IV of exactly 16 bytes, which is the only length on which the two agree — the pure-Dart path also right-pads a shorter IV, and the FFI path rejects it.
+
+For a byte stream whose chunk boundaries the caller does not control, `AtPqc.aesCtrStreamCipher(key, iv)` returns an `AesCtrFfiCipher` holding one OpenSSL cipher context across many `update()` calls, or `null` where libcrypto is unavailable. It is raw CTR — no padding, so it is *not* wire-compatible with `AtPqc.aesCtr` — and the caller owns the context and must `dispose()` it. CTR is unauthenticated in both shapes; add a MAC, or use GCM, where integrity matters.
 
 FFI backends are exported from `package:at_chops/at_chops_ffi.dart`, not the
 main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to

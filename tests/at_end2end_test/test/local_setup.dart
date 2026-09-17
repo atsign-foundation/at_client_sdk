@@ -10,7 +10,7 @@ library;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 
 /// The local virtualenv root hostname (mapped to 127.0.0.1 in /etc/hosts).
@@ -32,15 +32,13 @@ Future<void> main() async {
   atKeysDir.createSync(recursive: true);
 
   for (final atSign in atSigns) {
-    final atKeys = AtKeys()
-      ..apkamPublicKey = AtBytes.fromString(pkamPublicKeyMap[atSign]!)
-      ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKeyMap[atSign]!)
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(encryptionPublicKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKeyMap[atSign]!);
+    final atKeys = AtKeys.legacy(
+        apkamPublicKey: pkamPublicKeyMap[atSign]!,
+        apkamPrivateKey: pkamPrivateKeyMap[atSign]!,
+        encryptionPublicKey: encryptionPublicKeyMap[atSign]!,
+        encryptionPrivateKey: encryptionPrivateKeyMap[atSign]!,
+        selfEncryptionKey: aesKeyMap[atSign]!,
+        apkamSymmetricKey: apkamSymmetricKeyMap[atSign]!);
 
     final path = 'atKeys/${atSign}_key.atKeys';
     await FileAtKeysIo(filePath: (_) => path).write(atSign, atKeys);

@@ -191,14 +191,14 @@ class MyHomePage extends StatelessWidget {
 
                       const SizedBox(height: 48),
 
-                      // Login Button
+                      // Authenticate Button
                       ElevatedButton(
                         onPressed: () async {
                           _logger.info(
-                            '═══ Login with Keychain button pressed ═══',
+                            '═══ Authenticate with Keychain button pressed ═══',
                           );
                           try {
-                            await loginWithKeychain(context);
+                            await authenticateWithKeychain(context);
                           } catch (e, stack) {
                             _logger.info('CAUGHT in button handler: $e');
                             _logger.info('Stack: $stack');
@@ -213,18 +213,18 @@ class MyHomePage extends StatelessWidget {
                           backgroundColor: colorScheme.primary,
                           foregroundColor: colorScheme.onPrimary,
                         ),
-                        child: const Text('Login with Existing atSign'),
+                        child: const Text('Authenticate with Existing atSign'),
                       ),
                       const SizedBox(height: 16),
 
-                      // Login Button via enrollment
+                      // Authenticate Button via enrollment
                       ElevatedButton(
                         onPressed: () async {
                           _logger.info(
-                            '═══ Login with APKAM button pressed ═══',
+                            '═══ Authenticate with APKAM button pressed ═══',
                           );
                           try {
-                            await loginWithApkam(context);
+                            await authenticateWithApkam(context);
                           } catch (e, stack) {
                             _logger.info('CAUGHT in button handler: $e');
                             _logger.info('Stack: $stack');
@@ -295,10 +295,10 @@ class MyHomePage extends StatelessWidget {
                       OutlinedButton(
                         onPressed: () async {
                           _logger.info(
-                            '═══ Login with File button pressed ═══',
+                            '═══ Authenticate with File button pressed ═══',
                           );
                           try {
-                            await loginWithFile(context);
+                            await authenticateWithFile(context);
                           } catch (e, stack) {
                             _logger.info('CAUGHT in button handler: $e');
                             _logger.info('Stack: $stack');
@@ -466,7 +466,7 @@ class HomePage extends StatelessWidget {
               onPressed: () {
                 try {
                   AtClientManager.getInstance().reset();
-                  // Navigate back to login page
+                  // Navigate back to authentication page
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => const MyHomePage()),

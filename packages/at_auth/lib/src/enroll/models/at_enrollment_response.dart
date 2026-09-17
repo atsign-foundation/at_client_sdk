@@ -1,12 +1,13 @@
+import 'dart:async' show FutureOr;
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:meta/meta.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 
 /// Base class for enrollment-related data objects.
 ///
 /// Provides a unified interface for accessing [enrollmentId] and
-/// [enrollmentStatus] across both server-side enrollment details
-/// ([ServerEnrollmentRequest]) and enrollment operation results
+/// [enrollmentStatus] on enrollment operation results
 /// ([AtEnrollmentResponse]).
 abstract class AtEnrollmentRecord {
   String get enrollmentId;
@@ -15,105 +16,6 @@ abstract class AtEnrollmentRecord {
 
 /// Backward compatibility for [AtEnrollmentRecord]
 typedef EnrollmentBase = AtEnrollmentRecord;
-
-/// Holds details of an enrollment request received from the server.
-///
-/// The server notifies the approving app when a requesting app submits
-/// an enrollment, seeking approval or denial.
-@immutable
-class ServerEnrollmentRequest extends AtEnrollmentRecord {
-  @override
-  final String enrollmentId;
-  final String appName;
-  final String deviceName;
-  final EnrollmentStatus status;
-  final List<NamespacePermission> namespacePermissions;
-  final String? encryptedAPKAMSymmetricKey;
-
-  @override
-  EnrollmentStatus get enrollmentStatus => status;
-
-  /// Backwards-compatible alias for [namespacePermissions].
-  List<NamespacePermission> get namespace => namespacePermissions;
-
-  ServerEnrollmentRequest({
-    required this.enrollmentId,
-    required this.appName,
-    required this.deviceName,
-    required this.status,
-    required this.namespacePermissions,
-    this.encryptedAPKAMSymmetricKey,
-  });
-
-  factory ServerEnrollmentRequest.fromServer(MapEntry<String, dynamic> entry) {
-    // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
-    // Only interested in the first part.
-    final enrollmentId = entry.key.split('.').first;
-    return ServerEnrollmentRequest(
-      enrollmentId: enrollmentId,
-      appName: entry.value['appName'] as String,
-      deviceName: entry.value['deviceName'] as String,
-      // Status can be null when received from a notification
-      status: entry.value['status'] != null
-          ? getEnrollStatusFromString(entry.value['status'] as String)
-          : EnrollmentStatus.pending,
-      encryptedAPKAMSymmetricKey:
-          entry.value['encryptedAPKAMSymmetricKey'] as String?,
-      // Looks like: `namespace: {ns1: rw, ns2: r}`
-      namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
-          .cast<String, String>()
-          .entries
-          .map((e) => NamespacePermission(
-                namespace: e.key,
-                read: e.value.contains('r'),
-                write: e.value.contains('w'),
-              ))
-          .toList(),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-
-    return other is ServerEnrollmentRequest &&
-        other.enrollmentId == enrollmentId &&
-        other.appName == appName &&
-        other.deviceName == deviceName &&
-        other.status == status &&
-        other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
-        _listEquals(other.namespacePermissions, namespacePermissions);
-  }
-
-  @override
-  int get hashCode =>
-      enrollmentId.hashCode ^
-      appName.hashCode ^
-      deviceName.hashCode ^
-      status.hashCode ^
-      encryptedAPKAMSymmetricKey.hashCode ^
-      namespacePermissions.hashCode;
-
-  @override
-  String toString() {
-    return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, '
-        'appName: $appName, '
-        'deviceName: $deviceName, '
-        'status: $status, '
-        'namespacePermissions: $namespacePermissions)';
-  }
-}
-
-/// Backwards-compatible alias for [ServerEnrollmentRequest].
-typedef EnrollmentServerResponse = ServerEnrollmentRequest;
-
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
 
 /// Represents the response of an enrollment operation received
 /// from the secondary server.
@@ -137,16 +39,25 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   AtRootDomain? rootDomain;
 
   /// The authentication keys associated with the enrollment.
-  @Deprecated('Use `session` instead; the keys are sourced via `session.atKeysIo`.')
+  @Deprecated(
+      'Use `session` instead; the keys are sourced via `session.atKeysIo`.')
   AtKeys? atAuthKeys;
 
   /// The hand-off session for the newly enrolled app, populated on the
   /// requesting-app success path once the enrollment is approved.
   ///
-  /// Pass it straight into `AtClientManager.fromAuthSession(...)`; the client
-  /// derives its own keys via [AtAuthSession.atKeysIo] rather than adopting the
-  /// deprecated [atAuthKeys] material directly.
+  /// Its [AtAuthSession.atKeysIo] is the key source to open a client on; the
+  /// client derives its own keys from it rather than adopting the deprecated
+  /// [atAuthKeys] material directly.
   AtAuthSession? session;
+
+  /// Carried over from `AtEnrollmentRequest.apkamSymmetricKeyResolver` so
+  /// `waitForApproval` can collect the symmetric key the approver encapsulated
+  /// to this enrollment's key package. Non-null exactly when the request
+  /// advertised a key package, and therefore sent no RSA-wrapped key for the
+  /// approver to hand back.
+  FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+      apkamSymmetricKeyResolver;
 
   /// Creates an instance of [AtEnrollmentResponse].
   ///
@@ -154,7 +65,11 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// The [enrollStatus] represents the status of the enrollment operation.
   /// The [session] is the hand-off session for the newly enrolled app.
   AtEnrollmentResponse(this.enrollmentId, this.enrollStatus,
-      {this.atSign, this.rootDomain, this.atAuthKeys, this.session});
+      {this.atSign,
+      this.rootDomain,
+      this.atAuthKeys,
+      this.session,
+      this.apkamSymmetricKeyResolver});
 
   @override
   String toString() {

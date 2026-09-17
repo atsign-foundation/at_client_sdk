@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -19,10 +18,12 @@ void main() async {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        currentAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
   });
 
   test(
@@ -41,9 +42,8 @@ void main() async {
     // for each run.
     var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
-    currentAtClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace,
-            TestPreferences.getInstance().getPreference(currentAtSign));
+    currentAtClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -52,10 +52,8 @@ void main() async {
         NotificationStatusEnum.delivered);
 
     // Setting sharedWithAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');
@@ -82,9 +80,8 @@ void main() async {
     // for each run.
     var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
-    currentAtClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(currentAtSign, namespace,
-            TestPreferences.getInstance().getPreference(currentAtSign));
+    currentAtClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value),
@@ -94,10 +91,8 @@ void main() async {
         NotificationStatusEnum.delivered);
 
     // Setting sharedWithAtSign atClient instance to context.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');

@@ -1,0 +1,6 @@
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    - await_only_futures
+    - unawaited_futures

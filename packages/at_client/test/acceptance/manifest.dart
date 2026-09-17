@@ -1,0 +1,667 @@
+/// The acceptance ledger's own data, so its guards read a declaration rather
+/// than infer one from prose.
+///
+/// Which files hold burn-down rows, and which use cases the catalogue defines,
+/// are both declared here rather than inferred; [undeclaredTestFiles] fails
+/// when a file appears in this directory classified as neither.
+library;
+
+import 'dart:io';
+
+/// Files whose `test(...)` calls are burn-down rows, counted by the README.
+const scenarioFiles = <String>[
+  'a1_onboard_test.dart',
+  'a2_enrollment_test.dart',
+  'a3_self_data_test.dart',
+  'a4_shared_data_test.dart',
+  'a5_rotation_test.dart',
+  'b0_server_prereq_test.dart',
+  'b1_retrofit_test.dart',
+  'b2_retirement_test.dart',
+  'b3_mixed_intra_test.dart',
+  'b4_mixed_cross_test.dart',
+  'b5_edge_cases_test.dart',
+  'c1_rollout_test.dart',
+  'g1_keyfile_test.dart',
+  'g1_wire_test.dart',
+  'g1_enroll_update_test.dart',
+  'g1_rollout_matrix_test.dart',
+  'g3_data_signing_key_test.dart',
+  'g2_agility_test.dart',
+  'cross_cutting_test.dart',
+];
+
+/// Files holding guards ABOUT the ledger or the source tree rather than
+/// scenarios in it. Their tests are deliberately not rows: they would inflate
+/// the burn-down with checks the catalogue never asked for.
+const guardFiles = <String>[
+  'architecture_guard_test.dart',
+  'catalogue_test.dart',
+  'docs_structure_test.dart',
+  'knowledge_test.dart',
+];
+
+/// The packages whose tests drive a real atServer.
+///
+/// The trailing slash is part of the match: without it,
+/// `tests/at_functional_test` would also prefix-match a pack named
+/// `tests/at_functional_test_helpers`.
+const livePackPaths = <String>[
+  'tests/at_functional_test/',
+  'tests/at_end2end_test/',
+  'tests/at_onboarding_cli_functional_tests/',
+];
+
+/// Rows allowed to rest on an in-process proof, each with the reason.
+///
+/// An entry claims no live test could add anything — the shape that qualifies
+/// is "there is no atServer in the loop"; a row that merely owes one belongs
+/// in [liveProofOwed].
+const liveProofExempt = <String, String>{
+  'UC-G3.4':
+      'the mechanism is a client-side whole-string comparison — a record this client fetched, held against a field of a payload conveyed to it — so every party to the decision is in one process and a real atServer contributes nothing but the fetch. Who may WRITE _apsk is a different claim and IS live-proven, in tests/at_functional_test/test/apsk_server_side_test.dart. Unit by argument, not by omission',
+  'UC-G3.9':
+      'both rules are AtClientPreference constructor refusals that throw before any I/O, so there is no wire, no atServer and no second process in the mechanism. A live arm would spawn a CLI to watch an ArgumentError and would prove less than the unit test does, more slowly. Recorded as a decision (gkc, 2026-08-30) rather than an omission',
+  'UC-A5.6':
+      'every clause is a decision NOT to act, taken locally and before any I/O: the policy is not asked, or its yes is declined. A live arm would assert an absence against an atServer it never contacted, which is the shape of test that passes whether the mechanism is present or absent. The acts these skips guard are separately live-proven under UC-A5.1',
+};
+
+/// Clauses that CANNOT reach proven, whatever anyone builds, with the reason.
+///
+/// Keyed `<use case> c<n>`, the shape being a clause that asserts a mechanism
+/// **does not exist**: building it would falsify the clause, pinning the
+/// absence would count it proven for describing a hole, and the absence gets a
+/// guard cited without a `clauses:` list instead.
+const unprovableClauses = <String, String>{
+  'UC-A5.3 c2':
+      'every sentence of it is the atServer\'s: the transitive cascade, the roster it empties, and the three refusals (un-revoking behind an unapproved approver, a revoke that would remove the caller, one that would leave no permanent fully privileged enrollment). at_server pins each by name in BOTH its tiers — `the cascade is transitive, not one level deep` and `a revoke whose cascade would remove the caller is refused` carry the core, and its `apkam_self_enrollment_test.dart` holds the rest beside them. A pin here would build the subtree on this side and re-assert their behaviour through a fixture this side controls, which goes green for the wrong reason the day the cascade breaks in a shape that fixture does not construct (gkc, 2026-09-09). The client half of the old clause is now c3 and IS pinned',
+  'UC-A5.3 c4':
+      'the same, and with no client half at all: the successor is its predecessor\'s sibling, the cascade never follows the replacement edge, the predecessor\'s children move onto the successor at its first authentication, and an approved predecessor that is not fully privileged is revoked as superseded — all four are at_server\'s, pinned there as `revoking a predecessor does NOT revoke what replaced it`, `the successor is still in its APPROVER\'s cascade`, `a retrofit INHERITS its predecessor\'s approver` and the settle-at-first-auth group. Its closing sentence — that a compromised keyfile already replaced is answered by revoking the successor — is operator guidance rather than a behaviour anything can assert (gkc, 2026-09-09)',
+  'UC-G2.9 c3':
+      'it asserts that step 3\'s verifier-side accept lever DOES NOT EXIST. Building the lever falsifies the clause; pinning the absence counts it proven for describing a hole, which gkc declined for this row\'s c1 and c2 the same day. The absence IS guarded — architecture_guard_test.dart\'s "the verifier has no accept lever for signatures", cited from the row deliberately without a clauses: list — so nothing is unwatched; the clause simply has no route to proven. Kept as written (gkc, 2026-08-31) rather than withdrawn, with objective 1 restated around it',
+};
+
+/// How many THEN clauses some citation pins, and how many of those are pinned
+/// by a citation into a live pack.
+///
+/// An exact figure, not a floor: the guard fails in both directions, so the
+/// count and the thing it counts move in one diff. Re-derive rather than
+/// guessing:
+/// ```bash
+/// dart test test/acceptance/catalogue_test.dart --concurrency=1
+/// ```
+const provenClauseCount = 232;
+
+/// See [provenClauseCount].
+const serverProvenClauseCount = 94;
+
+/// Rows with no live proof yet, each pointing at what owes it.
+///
+/// Separate from [liveProofExempt] because the two decay in opposite
+/// directions: an exemption is meant to last, an entry here to be deleted.
+const liveProofOwed = <String, String>{
+  'UC-G2.1':
+      'feasible AND it would add something these citations cannot: they parse hand-built payloads, so nothing establishes that an atServer STORES and SERVES a key-package entry it has no code for, verbatim. That is the other half of reader-ships-first, and it is reachable by publishing such a package with enroll:update and reading it back',
+  'UC-G2.2':
+      'feasible and additive for the same reason: the advertisements here are composed and signed inside the test. A live arm would publish one carrying an unusable entry and prove the atServer returns it unchanged, which is what a sender actually reads',
+  'UC-G2.3':
+      'feasible and additive for the same reason: the _apsk values here are hand-built strings. A live arm would publish one carrying an unknown alg and prove the atServer serves it to a verifier verbatim',
+  'UC-G2.7':
+      'every citation is in-process and a live test is feasible; the retired-key arms all run over hand-built advertisements rather than one an atServer served',
+  'UC-G2.8':
+      'every citation is in-process and a live test is feasible; the multi-key _apsk is assembled in the test rather than published by a real rotation and fetched back',
+  'UC-G2.9':
+      'nothing proves this row, live or in-process, and nothing can: it asserts that a verifier CANNOT decline an algorithm it implements, and the lever that would let it does not exist. The citations here pin the multi-signature writer that decisions.md 120 retired, so they go red when it is removed rather than proving any clause above',
+  'UC-A3.1':
+      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
+  'UC-A3.5':
+      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
+  'UC-A4.5':
+      'a live test exists and this row names none — key_package_amendment_live_test.dart. Owed a citation, not a test',
+  'UC-A4.7':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-B3.1':
+      'a live test exists and this row names none — pq_posture_grid_test.dart. Owed a citation, not a test',
+  'UC-B5.2':
+      'a live test exists and this row names none — pq_advance_ladder_test.dart. Owed a citation, not a test',
+  'UC-B5.4':
+      'a live test exists and this row names none — pq_signing_root_mint_lock_test.dart. Owed a citation, not a test',
+  'UC-B5.5':
+      'a live test exists and this row names none — nskey_rotation_live_test.dart. Owed a citation, not a test',
+  'UC-B5.7':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-C1.4':
+      'a live test exists and this row names none — enrollment_pq_key_exchange_live_test.dart. Owed a citation, not a test',
+  'UC-C1.6':
+      'a live test exists and this row names none — pq_native_onboard_test.dart. Owed a citation, not a test',
+  'UC-C1.7':
+      'a live test exists and this row names none — pq_advance_ladder_test.dart. Owed a citation, not a test',
+  'UC-G1.1':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.2':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.3':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.4':
+      'a live test exists and this row names none — copied_keyfile_test.dart. Owed a citation, not a test',
+  'UC-G1.5':
+      'a live test exists and this row names none — apsk_server_side_test.dart. Owed a citation, not a test',
+  'UC-G1.6':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.7':
+      'a live test exists and this row names none — enroll_update_live_test.dart. Owed a citation, not a test',
+  'UC-G1.8':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.9':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.9a':
+      'a live test exists and this row names none — apsk_server_side_test.dart. Owed a citation, not a test',
+  'UC-G3.1':
+      'feasible and additive: filing is an end-to-end act whose evidence is the keyfile on disk AFTER a real enrolment, and the at_auth tests file against an in-memory AtKeys the test hands them. The CLI pack enrols for real, so a live arm would read the written .atKeys back and assert signingKeysFor(enrollmentId) is non-empty. It would also reach the ACTIVATION door, which no test in any pack currently drives — see the comment on the scenario',
+  'UC-G3.2':
+      'feasible and additive, and this is the row a live arm buys the most for: the unit arm counts publish calls against a mock, while the property that matters is that the _apsk record on a real atServer is BYTE-IDENTICAL after a first start to what the enrolment wrote. Enrol through the CLI pack, read the record, start again, read it again',
+  'UC-G3.5':
+      'feasible and additive: which link flavour an approver conveys is an act between two clients and an atServer, and the unit arm runs both sides in one process against a mock that accepts whatever it is handed. A live arm would approve from an approver in each of the four possession states and read what reached the enrollee',
+  'UC-G3.6':
+      'feasible and additive for the advertisement half: what a legacy enrollment PUBLISHES as its sole active entry is a wire fact a peer reads, and the unit arm asserts the composed string rather than the stored record. The in-memory-only half is local by construction and needs nothing live',
+  'UC-G3.8':
+      'feasible and additive, and the live arm is the one that found the defect: the unit test bounds a single signingKeys call at five seconds, while the failure was `at_activate approve` not exiting within two minutes because a startup step waited on a later one. Only a real CLI run exercises that ordering, and the CLI pack already spawns at_activate',
+  'UC-G3.10':
+      'feasible and additive: the row is about the STATE THE ATSERVER IS LEFT IN — the enrolment must still be pending and still approvable by someone else. A mock records that no approval command was sent; only a real atServer can be asked whether the record is still pending and then approved by a second client',
+  'UC-A5.4':
+      'feasible and additive: the unit arm counts conveyance writes against a fixture, and what a rotation actually has to leave behind is a fresh conveyance record ON THE ATSERVER beside the retained superseded one. content_key_rotation_live_test.dart already drives CK rotation live for UC-A5.1(a); an arm supplying a policy that says yes would prove the POLICY route reaches the same place',
+  'UC-A5.5':
+      'feasible and additive for the same reason, and more so: a namespace-key rotation publishes a successor advertisement and conveys to every authorised enrollment, which a single-process fixture cannot show. The live arm would set a policy that says yes, restart, and read the successor generation back off the atServer',
+};
+
+/// A use case as the catalogue defines it — by a heading, not by a mention.
+class UseCase {
+  const UseCase(this.id, this.title);
+
+  final String id;
+  final String title;
+
+  /// Whether the catalogue has withdrawn this row rather than owing it.
+  ///
+  /// A withdrawn row keeps its heading, so cross-references to it still
+  /// resolve, and it must not be counted as owing a scenario.
+  bool get isWithdrawn => title.startsWith('WITHDRAWN');
+
+  @override
+  String toString() => '$id — $title';
+}
+
+/// The shape of a use-case id, in ONE place — ⚠️ **widening the catalogue to a
+/// new cluster means widening this, and nothing else.**
+///
+/// The optional trailing letter marks a row inserted between two already
+/// numbered (`UC-G1.9a`), not the `(a)`/`(b)` suffix a scenario uses to split
+/// one row into two.
+const ucIdPattern = r'UC-[ABCG]\d+\.\d+[a-z]?';
+
+/// Every heading that DEFINES a use case; the number prefix is optional
+/// because the catalogue's first cluster has none.
+///
+/// ⚠️ **The letter class decides which clusters are enforced at all** — a
+/// cluster missing from it is invisible to every check here.
+final _definition =
+    RegExp('^#{2,4} +(?:[\\d.]+ +)?($ucIdPattern) +— +(.*)\$', multiLine: true);
+
+/// A use-case id anywhere at all, definitions and cross-references alike.
+final _mention = RegExp(ucIdPattern);
+
+/// The same id at the start of a `test('UC-…')` name — the quote is what keeps
+/// this to scenario names and out of the surrounding prose.
+final _scenarioName = RegExp("test\\(\\s*'($ucIdPattern)");
+
+/// Any `test(` at all, however its name is written.
+final _anyScenario = RegExp(r'\btest\(');
+
+/// A scenario skipped against a named blocker constant.
+final _skip = RegExp(r'skip: (\w+)\)');
+
+/// The path a `provenIn` citation names, wherever that path sits.
+///
+/// ⚠️ **Spans newlines deliberately.** `provenIn(` is routinely formatted with
+/// its path on the following line, so a line-anchored matcher would silently
+/// see a minority of the corpus and read as though it saw all of it.
+final _citationPath = RegExp("provenIn\\(\\s*'([^']+)'");
+
+/// A citation of either kind: `provenIn(` with its path, or `provenHere(`
+/// with none. One pattern rather than two passes, so a call's pins can never
+/// be read off the call that follows it.
+final _anyCitation = RegExp("proven(?:In\\(\\s*'([^']+)'|Here\\()");
+
+/// Walk up from the working directory until the catalogue is in reach, so
+/// everything here runs the same from the package root, the workspace root, or
+/// an IDE.
+Directory repoRoot() {
+  for (var dir = Directory.current;; dir = dir.parent) {
+    if (File('${dir.path}/docs/projects/pq/acceptance.md').existsSync()) {
+      return dir;
+    }
+    if (dir.path == dir.parent.path) {
+      throw StateError(
+          'could not locate the repo root from ${Directory.current}');
+    }
+  }
+}
+
+/// The directory holding the scenarios and the guards over them.
+Directory acceptanceDir() =>
+    Directory('${repoRoot().path}/packages/at_client/test/acceptance');
+
+/// The catalogue this ledger reads its use cases and clauses from.
+File catalogueFile() =>
+    File('${repoRoot().path}/docs/projects/pq/acceptance.md');
+
+String _read(String fileName) =>
+    File('${acceptanceDir().path}/$fileName').readAsStringSync();
+
+/// The use cases the catalogue DEFINES, in catalogue order.
+List<UseCase> catalogueUseCases() => _definition
+    .allMatches(catalogueFile().readAsStringSync())
+    .map((m) => UseCase(m[1]!, m[2]!.trim()))
+    .toList();
+
+/// Every use-case id the catalogue mentions, including cross-references.
+Set<String> catalogueMentions() => _mention
+    .allMatches(catalogueFile().readAsStringSync())
+    .map((m) => m[0]!)
+    .toSet();
+
+/// How many rows the burn-down has, read from the declared scenario files
+/// only.
+///
+/// Deliberately not a directory listing: a file has to be declared in
+/// [scenarioFiles] to be counted, so a guard added beside these cannot join
+/// the count by existing.
+int scenarioCount() => scenarioFiles
+    .map((f) => _anyScenario.allMatches(_read(f)).length)
+    .reduce((a, b) => a + b);
+
+/// How many of those rows are skipped.
+///
+/// "Skipped", not "blocked": a blocker's label (`blocked:` vs `owed:`) lives
+/// in `blockers.dart` and is not visible from a `skip:`, so this counts what it
+/// can see and leaves the split to prose.
+int skippedCount() => scenarioFiles
+    .map((f) => _skip.allMatches(_read(f)).length)
+    .reduce((a, b) => a + b);
+
+/// The use cases the scenarios claim, by name.
+Set<String> scenarioUseCaseIds() {
+  final ids = <String>{};
+  for (final file in scenarioFiles) {
+    ids.addAll(_scenarioName.allMatches(_read(file)).map((m) => m[1]!));
+  }
+  return ids;
+}
+
+/// Where each scenario's citations point, keyed by the use case that made
+/// them.
+///
+/// Read from the sources, so no guard over it depends on the ledger having
+/// been executed; a scenario with no use-case id contributes nothing, and one
+/// that cites nothing gets an entry holding an empty list.
+Map<String, List<String>> citationsByUseCase() {
+  final out = <String, List<String>>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      out
+          .putIfAbsent(named.group(1)!, () => <String>[])
+          .addAll(_citationPath.allMatches(chunk).map((m) => m.group(1)!));
+    }
+  }
+  return out;
+}
+
+/// Whether [path] names a test that runs against a real atServer.
+bool isLiveProof(String path) => livePackPaths.any(path.startsWith);
+
+/// One citation as the source states it: where the proof lives, and which
+/// clauses of the row it claims.
+class SourceCitation {
+  const SourceCitation(this.path, this.pins);
+
+  /// Repo-relative path of the test cited.
+  final String path;
+
+  /// The `clauses:` fragments, verbatim. Empty means the citation claims the
+  /// row as a whole rather than any clause of it.
+  final List<String> pins;
+
+  bool get isLive => isLiveProof(path);
+}
+
+/// Every citation each scenario makes, with its clause pins, keyed by use
+/// case.
+///
+/// Read from source: `provenIn` resolves its fragments while the scenario
+/// executes and test files run in separate isolates, so no single process ever
+/// sees every pin.
+Map<String, List<SourceCitation>> citationDetailsByUseCase() {
+  final out = <String, List<SourceCitation>>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      final list = out.putIfAbsent(named.group(1)!, () => <SourceCitation>[]);
+
+      final calls = _anyCitation.allMatches(chunk).toList();
+      for (var j = 0; j < calls.length; j++) {
+        final callEnd =
+            j + 1 < calls.length ? calls[j + 1].start : chunk.length;
+        // NOTE: a `provenHere` names no path, so it is recorded as this file —
+        // in-process by construction.
+        final path =
+            calls[j].group(1) ?? 'packages/at_client/test/acceptance/$file';
+        list.add(SourceCitation(
+            path, _pinsIn(chunk.substring(calls[j].start, callEnd))));
+      }
+    }
+  }
+  return out;
+}
+
+/// Every test file a `provenIn` citation names, repo-relative.
+///
+/// Deliberately NOT derived from [citationDetailsByUseCase], which keys each
+/// citation to a `UC-` id read off the enclosing scenario's name and so cannot
+/// see an unnumbered cross-cutting invariant's citations at all.
+Set<String> citedTestPaths() {
+  final out = <String>{};
+  for (final file in scenarioFiles) {
+    for (final match in _anyCitation.allMatches(_read(file))) {
+      final path = match.group(1);
+      if (path != null) out.add(path);
+    }
+  }
+  return out;
+}
+
+/// The `clauses:` fragments in one `provenIn(...)` call.
+///
+/// Scanned rather than split on commas, because a fragment is a sentence of
+/// the catalogue and may contain one; adjacent string literals are joined, as
+/// Dart concatenates them.
+List<String> _pinsIn(String call) {
+  final at = call.indexOf('clauses:');
+  if (at < 0) return const [];
+  final open = call.indexOf('[', at);
+  if (open < 0) return const [];
+
+  final fragments = <String>[];
+  final buf = StringBuffer();
+  var started = false;
+  var i = open + 1;
+  while (i < call.length) {
+    final ch = call[i];
+    if (ch == ']') break;
+    if (ch == "'") {
+      started = true;
+      i++;
+      while (i < call.length) {
+        if (call[i] == r'\' && i + 1 < call.length) {
+          buf.write(call[i + 1]);
+          i += 2;
+          continue;
+        }
+        if (call[i] == "'") {
+          i++;
+          break;
+        }
+        buf.write(call[i]);
+        i++;
+      }
+      continue;
+    }
+    if (ch == ',') {
+      if (started) {
+        fragments.add(buf.toString());
+        buf.clear();
+        started = false;
+      }
+    }
+    i++;
+  }
+  if (started) fragments.add(buf.toString());
+  return fragments;
+}
+
+/// Which clause indexes of [useCase] the fragment [pin] names.
+///
+/// Mirrors `provenIn`'s own rule: exactly one, or the pin is meaningless.
+List<int> resolvePin(String useCase, String pin) => clausesOf(useCase)
+    .where((c) => c.text.contains(pin))
+    .map((c) => c.index)
+    .toList();
+
+/// Clause indexes of [useCase] that some citation pins, and whether any of
+/// those citations is live.
+///
+/// The two numbers the burn-down is read from: a clause in [proven] is
+/// claimed by something, and a clause in [serverProven] is claimed by
+/// something that drove a real atServer.
+({Set<int> proven, Set<int> serverProven}) clauseCoverageOf(String useCase) {
+  final proven = <int>{};
+  final serverProven = <int>{};
+  for (final citation
+      in citationDetailsByUseCase()[useCase] ?? const <SourceCitation>[]) {
+    for (final pin in citation.pins) {
+      final hits = resolvePin(useCase, pin);
+      if (hits.length != 1) continue;
+      proven.add(hits.single);
+      if (citation.isLive) serverProven.add(hits.single);
+    }
+  }
+  return (proven: proven, serverProven: serverProven);
+}
+
+/// Use cases whose every citation runs in-process, plus those citing nothing
+/// at all — the rows with no live evidence behind them.
+///
+/// A withdrawn row is not one of these: it owes no scenario, so it owes no
+/// proof of any kind.
+Set<String> useCasesWithoutLiveProof() {
+  final cited = citationsByUseCase();
+  return catalogueUseCases()
+      .where((u) => !u.isWithdrawn)
+      .map((u) => u.id)
+      .where((id) => !(cited[id] ?? const <String>[]).any(isLiveProof))
+      .toSet();
+}
+
+/// Blocker constants `blockers.dart` declares, if the file exists.
+Set<String> declaredBlockers() {
+  final file = File('${acceptanceDir().path}/blockers.dart');
+  if (!file.existsSync()) return <String>{};
+  return RegExp(r'^const (\w+) =', multiLine: true)
+      .allMatches(file.readAsStringSync())
+      .map((m) => m[1]!)
+      .where((name) => !name.startsWith('_'))
+      .toSet();
+}
+
+/// Which use cases have a skipped scenario, and the blocker each is skipped
+/// against.
+///
+/// Attributed per scenario, not per file: a file holds both running and
+/// skipped scenarios, so a file-level answer would mark every use case in it
+/// blocked.
+Map<String, String> skippedUseCases() {
+  final out = <String, String>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    // NOTE: slice at each `test(` so a `skip:` belongs to the scenario it
+    // closes, not to whichever one sits nearest it in the file.
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      final skipped = _skip.firstMatch(chunk);
+      if (skipped != null) out[named.group(1)!] = skipped.group(1)!;
+    }
+  }
+  return out;
+}
+
+/// Blocker constants the scenarios actually skip against.
+Set<String> usedBlockers() {
+  final used = <String>{};
+  for (final file in scenarioFiles) {
+    used.addAll(_skip.allMatches(_read(file)).map((m) => m[1]!));
+  }
+  return used;
+}
+
+/// Every `*_test.dart` in this directory, whether declared or not.
+List<String> testFilesOnDisk() => acceptanceDir()
+    .listSync()
+    .whereType<File>()
+    .map((f) => f.uri.pathSegments.last)
+    .where((name) => name.endsWith('_test.dart'))
+    .toList()
+  ..sort();
+
+/// Files present but classified as neither a scenario file nor a guard.
+List<String> undeclaredTestFiles() => testFilesOnDisk()
+    .where((f) => !scenarioFiles.contains(f) && !guardFiles.contains(f))
+    .toList();
+
+/// Files declared but not present.
+List<String> missingDeclaredFiles() => [...scenarioFiles, ...guardFiles]
+    .where((f) => !testFilesOnDisk().contains(f))
+    .toList();
+
+/// One THEN clause of a catalogue row — the unit a scenario can claim.
+class Clause {
+  const Clause(this.useCase, this.index, this.text);
+
+  final String useCase;
+
+  /// Position within the row, from 1, in catalogue order.
+  ///
+  /// For reporting only: a citation names a clause by a distinctive fragment of
+  /// its text, never by this number.
+  final int index;
+
+  /// The clause as written, collapsed to one line.
+  final String text;
+
+  @override
+  String toString() => '$useCase clause $index: $text';
+}
+
+/// The two forms a THEN takes in this catalogue.
+///
+/// Most rows write `- **Then:**` bullets; the `UC-G1.x` cluster writes an
+/// indented `*Then*` / `*And*` italic instead, and a parser that knows only
+/// the bullet form reports those rows as having no clauses at all.
+final _thenBullet = RegExp(r'^- \*\*Then');
+final _thenItalic = RegExp(r'^\s*\*(?:Then|And)\*');
+final _subBullet = RegExp(r'^  - ');
+final _anyBullet = RegExp(r'^- \*\*');
+final _anyHeading = RegExp(r'^#{2,4} ');
+
+String _collapse(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+/// Every THEN clause the catalogue states, in catalogue order, keyed by row.
+///
+/// A `**Then:**` bullet carrying sub-bullets contributes its sub-bullets and
+/// not itself, one with no sub-bullets is a single clause whatever its prose
+/// asserts, and a withdrawn row yields none.
+Map<String, List<Clause>> catalogueClauses() {
+  final lines = catalogueFile().readAsStringSync().split('\n');
+  final defs = <int, UseCase>{};
+  for (var i = 0; i < lines.length; i++) {
+    final m = _definition.firstMatch(lines[i]);
+    if (m != null) defs[i] = UseCase(m[1]!, m[2]!.trim());
+  }
+  final starts = defs.keys.toList()..sort();
+  final out = <String, List<Clause>>{};
+  for (var n = 0; n < starts.length; n++) {
+    final useCase = defs[starts[n]]!;
+    final end = n + 1 < starts.length ? starts[n + 1] : lines.length;
+    final body = lines.sublist(starts[n], end);
+    final texts = <String>[];
+    var j = 0;
+    while (j < body.length) {
+      if (_thenBullet.hasMatch(body[j])) {
+        var k = j + 1;
+        final subs = <String>[];
+        while (k < body.length &&
+            !_anyBullet.hasMatch(body[k]) &&
+            !_anyHeading.hasMatch(body[k])) {
+          if (_subBullet.hasMatch(body[k])) {
+            final buffer = StringBuffer(body[k]);
+            var c = k + 1;
+            while (c < body.length &&
+                !_subBullet.hasMatch(body[c]) &&
+                !_anyBullet.hasMatch(body[c]) &&
+                !_anyHeading.hasMatch(body[c]) &&
+                body[c].trim().isNotEmpty) {
+              buffer.write(' ${body[c]}');
+              c++;
+            }
+            subs.add(_collapse(buffer.toString().substring(4)));
+          }
+          k++;
+        }
+        if (subs.isEmpty) {
+          final buffer = StringBuffer(body[j]);
+          var c = j + 1;
+          while (c < body.length &&
+              !_anyBullet.hasMatch(body[c]) &&
+              !_anyHeading.hasMatch(body[c]) &&
+              body[c].trim().isNotEmpty) {
+            buffer.write(' ${body[c]}');
+            c++;
+          }
+          texts.add(_collapse(buffer.toString().substring(2)));
+        } else {
+          texts.addAll(subs);
+        }
+        j = k;
+        continue;
+      }
+      if (_thenItalic.hasMatch(body[j])) {
+        final buffer = StringBuffer(body[j]);
+        var c = j + 1;
+        while (c < body.length &&
+            !_thenItalic.hasMatch(body[c]) &&
+            !_anyBullet.hasMatch(body[c]) &&
+            !_anyHeading.hasMatch(body[c]) &&
+            body[c].trim().isNotEmpty) {
+          buffer.write(' ${body[c]}');
+          c++;
+        }
+        texts.add(_collapse(buffer.toString()));
+        j = c;
+        continue;
+      }
+      j++;
+    }
+    out[useCase.id] = [
+      for (var i = 0; i < texts.length; i++)
+        Clause(useCase.id, i + 1, texts[i]),
+    ];
+  }
+  return out;
+}
+
+/// The clauses of one row, or an empty list if the catalogue has no such row.
+List<Clause> clausesOf(String useCase) =>
+    catalogueClauses()[useCase] ?? const [];

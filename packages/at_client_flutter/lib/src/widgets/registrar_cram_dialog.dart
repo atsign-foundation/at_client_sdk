@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth.dart' show RegistrarService;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
@@ -10,20 +10,20 @@ import 'package:pinput/pinput.dart';
 /// Use `RegistrarCramDialog.show` to display the dialog and handle the OTP verification process.
 ///
 /// Required Parameters:
-/// - [request]: An `AtOnboardingRequest` containing details for the onboarding process.
+/// - [atSign]: the atSign being activated, whose owner the registrar emails.
 /// - [registrar]: An instance of `RegistrarService` to interact with the registrar.
 /// - [themeData]: ThemeData for styling the dialog. NOTE: Handled internally via show method.
 ///
 /// Returns:
 /// - A `String` representing the CRAM key upon successful OTP verification, or null if the process fails or is cancelled.
 class RegistrarCramDialog extends StatefulWidget {
-  final AtOnboardingRequest request;
+  final String atSign;
   final RegistrarService registrar;
   final ThemeData themeData;
 
   const RegistrarCramDialog({
     super.key,
-    required this.request,
+    required this.atSign,
     required this.registrar,
     required this.themeData,
   });
@@ -34,16 +34,16 @@ class RegistrarCramDialog extends StatefulWidget {
   /// Show the RegistrarCramDialog and return the cram key.
   static Future<String?> show(
     BuildContext context,
-    AtOnboardingRequest request, {
+    String atSign, {
     required RegistrarService registrar,
   }) async {
-    if (!await registrar.sendActivationOtp(request.atSign)) {
+    if (!await registrar.sendActivationOtp(atSign)) {
       throw Exception('Failed to send activation OTP');
     }
     return showDialog<String>(
       context: context,
       builder: (context) => RegistrarCramDialog(
-        request: request,
+        atSign: atSign,
         themeData: Theme.of(context),
         registrar: registrar,
       ),
@@ -87,7 +87,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
 
   void _handleResendCode() {
     if (_canResend) {
-      widget.registrar.sendActivationOtp(widget.request.atSign);
+      widget.registrar.sendActivationOtp(widget.atSign);
       _startResendTimer(); // Restart the timer after resending
     }
   }
@@ -110,7 +110,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
         _isLoading = true;
       });
       var cram = await widget.registrar.verifyActivation(
-        atSign: widget.request.atSign,
+        atSign: widget.atSign,
         otp: otp,
       );
       if (!mounted) return;
@@ -208,7 +208,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                     ),
                   ),
                   TextSpan(
-                    text: widget.request.atSign,
+                    text: widget.atSign,
                     style: TextStyle(
                       fontSize: 14,
                       color: widget.themeData.colorScheme.secondary,

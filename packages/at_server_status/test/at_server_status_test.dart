@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:at_server_status/at_server_status.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -27,7 +25,7 @@ void main() {
     });
 
     test('httpStatus()', () {
-      expect(atStatus.httpStatus(), equals(HttpStatus.ok));
+      expect(atStatus.httpStatus(), equals(200));
     });
   });
 
@@ -53,7 +51,7 @@ void main() {
     });
 
     test('httpStatus()', () {
-      expect(atStatus.httpStatus(), equals(HttpStatus.notFound));
+      expect(atStatus.httpStatus(), equals(404));
     });
   });
 
@@ -107,7 +105,7 @@ void main() {
     });
 
     test('httpStatus', () {
-      expect(atStatus.httpStatus(), equals(HttpStatus.notFound));
+      expect(atStatus.httpStatus(), equals(404));
     });
   });
 }

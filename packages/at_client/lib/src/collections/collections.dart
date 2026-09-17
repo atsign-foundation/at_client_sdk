@@ -11,13 +11,18 @@ import 'dart:typed_data';
 // at_commons re-exports a `StringBuffer` class that would otherwise shadow
 // `dart:core`'s. Hide it so this file (and any consumer of the collections
 // API) can use `StringBuffer` with its standard Dart semantics.
-import 'package:at_client/at_client.dart' hide StringBuffer;
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData, AtMetaData;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 
 part 'collections_test_hooks.dart';
 
@@ -2417,7 +2422,9 @@ interface class AtCollection<T> {
               _decodeEnvelope(v.value!, atKeyForEnvelope),
             );
           } catch (e) {
-            _logger.warning(
+            logSwallowed(
+              _logger,
+              e,
               'handleSubObjEvent: envelope fetch for $atKeyForEnvelope '
               'failed: $e — emitting with null ancestor owners',
             );
@@ -3291,7 +3298,8 @@ interface class AtCollection<T> {
         // Bad envelope / unreadable — err on the side of keeping the
         // candidate (so `prevent` fires rather than silently stranding
         // a malformed descendant). Cascade will try to delete it.
-        _logger.warning('descendant envelope decode failed on ${k.key}: $e');
+        logSwallowed(
+            _logger, e, 'descendant envelope decode failed on ${k.key}: $e');
         keep.add(k);
       }
     }

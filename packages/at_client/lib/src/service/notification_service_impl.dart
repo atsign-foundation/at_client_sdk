@@ -2,23 +2,45 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart' hide StringBuffer;
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show
+        CryptoConfig,
+        FiledNskeyPrivate,
+        NskeyPrivateUnavailableException,
+        SignalsPrivateFiling;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
+    show NamespaceKeyUnavailableException;
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
+    show NskeyPrivateFiling;
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    show signingAlgoOf;
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_auth/at_auth.dart' show authenticatorForChops;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
-import 'package:uuid/uuid.dart' show Uuid;
+import 'package:at_client/src/util/swallowed_error.dart';
 
 class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
@@ -35,6 +57,13 @@ class NotificationServiceImpl extends NotificationService {
   late final AtSignLogger logger;
   DateTime? _lastReceipt;
 
+  /// When this service was created: the watermark a first monitor connect
+  /// resumes from when the store holds none.
+  final DateTime _createdAt = DateTime.now();
+
+  /// The epoch millis of the latest notification this service received.
+  int? _lastReceivedMillis;
+
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
@@ -46,16 +75,226 @@ class NotificationServiceImpl extends NotificationService {
 
   late SecondaryAddressFinder secondaryAddressFinder;
 
+  /// Notifications held back because the nskey private that opens them has not
+  /// been filed yet, keyed by the generation they are waiting for.
+  ///
+  /// A conveyed private is filed asynchronously, so a value sealed to it can
+  /// arrive first, and dropping it would be data loss: nothing re-delivers a
+  /// notification once discarded. In memory, so a restart loses the park and
+  /// re-drives from the watermark instead.
+  final Map<FiledNskeyPrivate, List<_ParkedNotification>> _parked = {};
+
+  /// The most notifications the park may hold; the oldest is dropped, at
+  /// `warning`, once it is full.
+  @visibleForTesting
+  static int maxParked = 64;
+
+  /// How long a notification may sit parked waiting for the key that opens
+  /// it.
+  ///
+  /// Must exceed [NskeyPrivateFiling.conveyanceWait]: below that, a
+  /// notification is dropped while the key it waits for is still legitimately
+  /// in flight, and the drop is attributed to the sender rather than to this
+  /// timer.
+  @visibleForTesting
+  static Duration parkTtl =
+      NskeyPrivateFiling.conveyanceWait + const Duration(minutes: 1);
+
+  StreamSubscription<FiledNskeyPrivate>? _filingSubscription;
+
+  /// Subscribes to the filing signal, if this client's key ring emits one.
+  ///
+  /// Idempotent, and re-attempted at park time because the bootstrap wires the
+  /// ring asynchronously. The ring comes from [CryptoConfig.forClient], not
+  /// from `getPreferences().crypto`, which carries none when the app names no
+  /// config and would leave this silently subscribed to nothing.
+  void _listenForFilings() {
+    if (_filingSubscription != null) return;
+    final ring = CryptoConfig.forClient(atClient).keyRing;
+    if (ring is! SignalsPrivateFiling) return;
+    _filingSubscription =
+        (ring as SignalsPrivateFiling).privatesFiled.listen(_reDriveParked);
+  }
+
+  /// How many notifications are held waiting for a key, right now.
+  @visibleForTesting
+  int get parkedCount =>
+      _parked.values.fold<int>(0, (sum, entries) => sum + entries.length);
+
+  /// How many notifications have been parked over this service's life.
+  ///
+  /// Cumulative, because [parkedCount] drops back to zero as soon as the
+  /// re-drive runs.
+  @visibleForTesting
+  int parkedTotal = 0;
+
+  final StreamController<int> _parkedController =
+      StreamController<int>.broadcast();
+
+  /// Emits the running [parkedTotal] each time a notification is parked.
+  ///
+  /// Broadcast, and it does not replay: a listener attached after a park sees
+  /// only later ones, so a caller waiting for a specific park subscribes
+  /// before whatever causes it.
+  @visibleForTesting
+  Stream<int> get parkedEvents => _parkedController.stream;
+
+  final StreamController<DroppedNotification> _droppedController =
+      StreamController<DroppedNotification>.broadcast();
+
+  /// Emits every notification this service gives up on without delivering
+  /// it, with the reason it logs.
+  ///
+  /// A dropped notification is otherwise indistinguishable to a subscriber
+  /// from one that was never sent. Broadcast, and it does not replay.
+  @visibleForTesting
+  Stream<DroppedNotification> get droppedEvents => _droppedController.stream;
+
+  /// Logs [reason] at `warning` and emits it on [droppedEvents] for [key].
+  void _drop(String key, String reason) {
+    logger.warning(reason);
+    if (!_droppedController.isClosed) {
+      _droppedController.add((key: key, reason: reason));
+    }
+  }
+
+  /// Delivers [n] to one subscriber if its regex matches, as that subscriber
+  /// asked for it.
+  ///
+  /// [transforms] holds this notification's transforms, keyed by whether they
+  /// decrypt, so every subscriber shares one decryption and gets its own copy
+  /// of the result. The regex is matched first wherever the key is not itself
+  /// ciphertext, so a subscriber that does not receive the notification
+  /// decrypts nothing.
+  Future<void> _deliver(
+      AtNotification n,
+      NotificationConfig config,
+      StreamController controller,
+      Map<bool, Future<AtNotification>> transforms) async {
+    bool matches(String key) =>
+        config.regex == emptyRegex || hasRegexMatch(key, config.regex);
+
+    final keyIsCiphertext = NotificationResponseTransformer.decryptsKey(n);
+    if (!keyIsCiphertext && !matches(n.key)) return;
+    final transformed = await transforms.putIfAbsent(
+        keyIsCiphertext || config.shouldDecrypt,
+        () => NotificationResponseTransformer(atClient).transform(Tuple()
+          ..one = n
+          ..two = config));
+    if (keyIsCiphertext && !matches(transformed.key)) return;
+    if (!controller.isClosed) {
+      controller.add(NotificationResponseTransformer.copyOf(transformed));
+    }
+  }
+
+  /// Holds [n] until the generation it needs is filed.
+  void _park(NskeyPrivateUnavailableException e, AtNotification n,
+      NotificationConfig config, StreamController controller) {
+    final key = (
+      owner: e.owner.toAtsign().toString(),
+      namespace: e.namespace,
+      nskeyKid: e.nskeyKid
+    );
+    // NOTE: the ring may only have been wired after this service was built,
+    // and a park with nothing listening for the filing is a notification held
+    // until its ttl and then dropped.
+    _listenForFilings();
+    final entries = _parked.putIfAbsent(key, () => []);
+    entries.add(_ParkedNotification(n, config, controller, DateTime.now()));
+    parkedTotal++;
+    logger.info('Parked notification ${n.key}: waiting for the nskey private '
+        'for ${key.owner}:${key.namespace} generation ${key.nskeyKid}');
+    _evictParkedOverBounds();
+    if (!_parkedController.isClosed) _parkedController.add(parkedTotal);
+  }
+
+  /// Enforces both park bounds, naming at `warning` whatever it drops — a
+  /// silently discarded notification is indistinguishable from one that was
+  /// never sent.
+  void _evictParkedOverBounds() {
+    final now = DateTime.now();
+    for (final entry in _parked.entries.toList()) {
+      entry.value.removeWhere((parked) {
+        if (now.difference(parked.parkedAt) < parkTtl) return false;
+        _drop(
+            parked.notification.key,
+            'Dropping parked notification ${parked.notification.key}'
+            ': the nskey private for ${entry.key.namespace} generation '
+            '${entry.key.nskeyKid} did not arrive within $parkTtl');
+        return true;
+      });
+      if (entry.value.isEmpty) _parked.remove(entry.key);
+    }
+
+    var total = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
+    while (total > maxParked) {
+      final oldestKey = _parked.entries
+          .reduce((a, b) =>
+              a.value.first.parkedAt.isBefore(b.value.first.parkedAt) ? a : b)
+          .key;
+      final dropped = _parked[oldestKey]!.removeAt(0);
+      _drop(
+          dropped.notification.key,
+          'Dropping parked notification ${dropped.notification.key}'
+          ': the park is full at $maxParked entries');
+      if (_parked[oldestKey]!.isEmpty) _parked.remove(oldestKey);
+      total--;
+    }
+  }
+
+  /// Re-drives everything waiting on the generation just filed.
+  Future<void> _reDriveParked(FiledNskeyPrivate filed) async {
+    final key = (
+      owner: filed.owner.toAtsign().toString(),
+      namespace: filed.namespace,
+      nskeyKid: filed.nskeyKid
+    );
+    final waiting = _parked.remove(key);
+    if (waiting == null || waiting.isEmpty) return;
+
+    logger.info('The nskey private for ${key.namespace} generation '
+        '${key.nskeyKid} was filed; re-driving ${waiting.length} parked '
+        'notification(s)');
+    // Every subscriber parked on one notification holds the same instance, so
+    // re-driving them shares one decryption too.
+    final transformsByNotification =
+        Map<AtNotification, Map<bool, Future<AtNotification>>>.identity();
+    for (final parked in waiting) {
+      try {
+        await _deliver(
+            parked.notification,
+            parked.config,
+            parked.controller,
+            transformsByNotification.putIfAbsent(
+                parked.notification, () => {}));
+      } catch (e) {
+        _drop(
+            parked.notification.key,
+            'Re-driving parked notification ${parked.notification.key} '
+            'failed, and nothing retries it again: $e');
+      }
+    }
+  }
+
   /// - [monitor] is providable for unit test purposes
+  /// - [connection] is the client's connection state, which the monitor this
+  ///   builds reports `online` into each time it reaches `listening`; the
+  ///   caller that built the client passes it, since this service holds the
+  ///   client as its interface and the interface's double has none.
+  /// - [lookUps] builds the monitor's connection; the caller passes the
+  ///   client's own factory for the same reason, and TLS on TCP is the
+  ///   default when none arrives.
   static Future<NotificationService> create(AtClient atClient,
-      {@Deprecated('will be removed in a future version')
-      AtClientManager? atClientManager,
-      Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) async {
+      {Monitor? monitor,
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection,
+      AtLookUpFactory? lookUps}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
-        secondaryAddressFinder: secondaryAddressFinder);
+        secondaryAddressFinder: secondaryAddressFinder,
+        connection: connection,
+        lookUps: lookUps);
   }
 
   final String myStatsNotifKey;
@@ -63,7 +302,9 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder})
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection,
+      AtLookUpFactory? lookUps})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
@@ -72,22 +313,85 @@ class NotificationServiceImpl extends NotificationService {
         CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
             atClient.getPreferences()!.rootPort);
 
+    final preference = atClient.getPreferences()!;
+    final chops = atClient.atChops;
+    lookUps ??= defaultLookUps(preference);
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
-          atClientPreference: atClient.getPreferences()!,
-          atChops: atClient.atChops,
-          enrollmentId: atClient.enrollmentId,
+          atClientPreference: preference,
+          // A FRESH lookup, so the connection count is unchanged. Passing
+          // `atClient.getRemoteSecondary()!.atLookUp` here instead would
+          // collapse the two sockets into one - a one-line change, and NOT
+          // safe yet: no atServer implements `monitor:multiplexed`, so
+          // nothing holds a notification back while a verb response is in
+          // flight.
+          lookUp: lookUps(
+            atSign: atSign,
+            rootDomain:
+                AtRootDomain(preference.rootDomain, preference.rootPort),
+            // Reproduces exactly what Monitor's own PKAM did: the same
+            // AtChops, the same signing and hashing algorithms, the same
+            // enrollment id. `null` when there is no signer, which fails the
+            // same way the old code did - it threw at connect time rather
+            // than authenticating with nothing.
+            authenticator: chops == null
+                ? null
+                : authenticatorForChops(
+                    atSign,
+                    chops,
+                    enrollmentId: atClient.enrollmentId,
+                    signingAlgo: signingAlgoOf(atClient),
+                    hashingAlgo: preference.hashingAlgoType,
+                  ),
+            secondaryAddressFinder: this.secondaryAddressFinder,
+          )
+            // The muxable heartbeats now, so the preference has to reach it or
+            // it is silently ignored - and at_lookup's own default is 30s
+            // against this preference's documented 59s, so leaving it unset
+            // would halve the interval for every caller that never touched it.
+            ..heartbeatInterval = preference.monitorHeartbeatInterval
+            ..heartbeatResponseTimeout =
+                preference.monitorHeartbeatResponseTimeout,
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
-          secondaryAddressFinder: this.secondaryAddressFinder,
+          connection: connection,
         );
 
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
+    // NOTE: here, not at the first park — the filing stream is broadcast and
+    // not replayed, so subscribing only once a notification has already failed
+    // to decrypt could miss the very filing that would release it.
+    _listenForFilings();
   }
+
+  /// How every write of the last-received-notification watermark is routed.
+  ///
+  /// The watermark is a `local:` record — never synced, and already encrypted
+  /// at rest by the keystore — so there is nothing for value-level encryption
+  /// to protect. Saying so explicitly keeps these writes off the shared-data
+  /// crypto path, where every post-quantum provider declines a local key and
+  /// the fallback from that decline is the legacy provider, which a client that
+  /// refuses it then refuses outright.
+  ///
+  /// A fresh instance per call: [PutRequestOptions] is mutable and the put
+  /// pipeline may rewrite the options it is handed.
+  static PutRequestOptions get _watermarkPutOptions =>
+      PutRequestOptions()..shouldEncrypt = false;
+
+  /// What gets persisted as the watermark: the notification minus its payload
+  /// and its metadata blob.
+  ///
+  /// Only `epochMillis` is ever read back — see [getLastNotificationTime]. The
+  /// payload is dropped because it is bounded only by
+  /// [AtClientPreference.maxDataSize], rewritten on every notification, and
+  /// held here without value-level encryption.
+  static String _watermarkValue(AtNotification n) => jsonEncode(n.toJson()
+    ..remove('value')
+    ..remove('metadata'));
 
   /// Migrate any legacy (non-`local:`) forms of the
   /// last-received-notification key to the canonical
@@ -162,7 +466,8 @@ class NotificationServiceImpl extends NotificationService {
         try {
           final v = await atClient.get(AtKey.fromString(legacyStr));
           if (v.value != null) {
-            await atClient.put(lastReceivedNotificationAtKey, v.value);
+            await atClient.put(lastReceivedNotificationAtKey, v.value,
+                putRequestOptions: _watermarkPutOptions);
             canonicalValue = v;
           }
         } on Exception catch (e) {
@@ -183,17 +488,21 @@ class NotificationServiceImpl extends NotificationService {
     return canonicalValue;
   }
 
-  /// Return the last received notification DateTime in epochMillis when
-  /// [AtClientPreference.fetchOfflineNotifications] is set true.
+  /// The epochMillis a monitor connect asks the atServer to deliver
+  /// notifications from.
   ///
-  /// Returns null when the key which holds the lastNotificationReceived
-  /// does not exist.
+  /// The last received notification's time when
+  /// [AtClientPreference.fetchOfflineNotifications] is true and the store holds
+  /// one, else the time this service was created, seeded into the store. When
+  /// it is false, the latest notification this service received, else its
+  /// creation time, and the store is neither read nor seeded.
+  /// Never null: a monitor started with no time is delivered nothing
+  /// sent before `monitor:` went out, and by then the app may already have
+  /// sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
     if (atClient.getPreferences()!.fetchOfflineNotifications == false) {
-      // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
-      // which will result in the server not sending any previously received notifications
-      return null;
+      return _lastReceivedMillis ?? _createdAt.millisecondsSinceEpoch;
     }
 
     // Migration runs first and returns the canonical key's value
@@ -207,26 +516,34 @@ class NotificationServiceImpl extends NotificationService {
     }
 
     // First-call branch: no last-received-notification record exists.
-    // Set the record to "now" so that subsequent calls (after a
-    // restart, say) will return a value, but return null for THIS
-    // call to keep first-run semantics ("don't replay history I never
-    // saw"). Without this seed, a short-lived first session followed
-    // by a longer second session would silently miss any notifications
-    // that arrived in between.
+    // Seeded with the creation time and answered with it, so a restart or a
+    // reconnect before any notification arrives resumes from the same point.
+    // Nothing sent before this service existed is replayed.
+    final createdAtMillis = _createdAt.millisecondsSinceEpoch;
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
       '@bob:notification.foo.bar.baz@alice',
       '@alice',
       '@bob',
-      DateTime.now().millisecondsSinceEpoch,
+      createdAtMillis,
       MessageTypeEnum.key.toString(),
       false,
       value: 'placeholder',
       metadata: Metadata(),
     );
-    await atClient.put(lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
+    // NOTE: best-effort. A failure escaping here reaches
+    // `Monitor.stayConnected`, which treats anything thrown during its connect
+    // sequence as a failed connection and retries forever; not seeding the
+    // watermark costs one replayed window.
+    try {
+      await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
+          putRequestOptions: _watermarkPutOptions);
+    } catch (e) {
+      logger.warning('Failed to seed the last-received-notification '
+          'watermark; the next monitor connect will seed it again: $e');
+    }
 
-    return null;
+    return createdAtMillis;
   }
 
   @visibleForTesting
@@ -249,12 +566,32 @@ class NotificationServiceImpl extends NotificationService {
       stopListening();
     }
 
+    unawaited(_filingSubscription?.cancel());
+    _filingSubscription = null;
+    final stranded = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
+    if (stranded > 0) {
+      logger.warning('Discarding $stranded parked notification(s) on shutdown: '
+          'the nskey privates they were waiting for never arrived');
+      for (final parked in _parked.values.expand((l) => l)) {
+        if (!_droppedController.isClosed) {
+          _droppedController.add((
+            key: parked.notification.key,
+            reason: 'Discarded on shutdown: the nskey private it was waiting '
+                'for never arrived'
+          ));
+        }
+      }
+    }
+    _parked.clear();
+
     _streamListeners.forEach((regex, streamController) {
       if (!streamController.isClosed) {
         streamController.close();
       }
     });
     _streamListeners.clear();
+    if (!_parkedController.isClosed) _parkedController.close();
+    if (!_droppedController.isClosed) _droppedController.close();
   }
 
   final notificationParser = NotificationResponseParser();
@@ -272,47 +609,99 @@ class NotificationServiceImpl extends NotificationService {
         if (n.key == myStatsNotifKey) {
           logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
         } else {
-          logger.info('Received ${n.key}');
+          logger.finer('Received ${n.key}');
         }
-        // Saves latest notification id to the keys if its not a stats notification.
+        // Records the latest notification's time, and saves it to the keys, if
+        // it is not a stats notification.
         if (n.id != '-1') {
+          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
+            _lastReceivedMillis = n.epochMillis;
+          }
+          // NOTE: stop() may have landed during the previous write and closed
+          // the store this one goes to.
+          if (isStopped) return;
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
+                lastReceivedNotificationAtKey, _watermarkValue(n),
+                putRequestOptions: _watermarkPutOptions);
           } catch (e) {
-            logger.warning('Failed to save last received notification ID: $e');
+            if (isStopped) {
+              logger.finer('Not saving the last received notification ID: '
+                  'the service was stopped during the write ($e)');
+            } else {
+              logSwallowed(logger, e,
+                  'Failed to save last received notification ID: $e');
+            }
           }
         }
-        _streamListeners.forEach((notificationConfig, streamController) async {
+        // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
+        // takes a void callback and discards the Future an `async` one
+        // returns, so every await below would run detached and delivery would
+        // not stay ordered. Order is what the values depend on: a content
+        // key is conveyed before the value citing it, and a subscriber that
+        // processes them out of order sees a value it cannot open. `.toList()`
+        // because a subscriber registering or cancelling mid-notification
+        // would otherwise throw ConcurrentModificationError.
+        final transforms = <bool, Future<AtNotification>>{};
+        for (final entry in _streamListeners.entries.toList()) {
+          final notificationConfig = entry.key;
+          final streamController = entry.value;
           try {
-            var transformedNotification =
-                await NotificationResponseTransformer(atClient)
-                    .transform(Tuple()
-                      ..one = n
-                      ..two = notificationConfig);
-
-            if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(n.key, notificationConfig.regex)) {
-                streamController.add(transformedNotification);
-              }
-            } else {
-              streamController.add(transformedNotification);
-            }
+            await _deliver(n, notificationConfig, streamController, transforms);
+          } on NskeyPrivateUnavailableException catch (e) {
+            _park(e, n, notificationConfig, streamController);
           } catch (e) {
-            logger.finer('Caught $e while dispatching to to subscribers');
+            // NOTE: `warning`, not `finer` — this notification is dropped here
+            // and never retried, and a silent drop is indistinguishable to the
+            // subscriber from one that was never sent.
+            _drop(
+                n.key,
+                'Dropping notification ${n.key} for subscriber '
+                '(regex "${notificationConfig.regex}"): $e');
           }
-        });
+        }
       }
     } catch (e) {
-      logger.severe('unexpected error:${e.toString()}'
-          ' while processing notificationJson: $notificationJSON');
+      final reason = 'unexpected error:${e.toString()}'
+          ' while processing notificationJson: $notificationJSON';
+      logger.severe(reason);
+      if (!_droppedController.isClosed) {
+        _droppedController.add((key: '', reason: reason));
+      }
     }
+  }
+
+  /// The record's name below the owner, from whichever parameter carried it.
+  ///
+  /// Throws [ArgumentError] unless exactly one parameter is supplied and the
+  /// name has an interior dot: a name with no namespace has nothing for the
+  /// notification to be encrypted under.
+  static String _requireOneName(String? idAndNamespace, String? namespace) {
+    final name = idAndNamespace ?? namespace;
+    if (idAndNamespace != null && namespace != null) {
+      throw ArgumentError(
+          'Supply idAndNamespace or namespace, not both — they name the same '
+          'value and namespace is the deprecated spelling.');
+    }
+    if (name == null || name.isEmpty) {
+      throw ArgumentError('You must supply idAndNamespace.');
+    }
+    final dot = name.indexOf('.');
+    if (dot <= 0 || dot == name.length - 1) {
+      throw ArgumentError(
+          'idAndNamespace must be an id and a namespace joined by a dot, with '
+          'both non-empty — for example "order42.orders.my_app". Got "$name". '
+          'The part after the first dot is the namespace, and it is what the '
+          'notification is encrypted under.');
+    }
+    return name;
   }
 
   @override
   Future<String> send({
     required Atsign to,
-    required String namespace,
+    String? idAndNamespace,
+    @Deprecated('Renamed to idAndNamespace') String? namespace,
     String body = '',
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
@@ -324,17 +713,42 @@ class NotificationServiceImpl extends NotificationService {
       throw ArgumentError(
           'You must supply recipientCacheExpiration when cacheAtRecipient is true');
     }
-    final String key = '$to:$namespace$atSign';
+    // ignore: deprecated_member_use_from_same_package
+    final String name = _requireOneName(idAndNamespace, namespace);
+    final String key = '$to:$name$atSign';
     final AtKey atKey = AtKey.fromString(key);
     atKey.metadata.namespaceAware = false;
+    // NOTE: the split has to be at the FIRST dot, because everything after it
+    // is the namespace and the namespace is what scopes the encryption key.
+    // `AtKey.fromString` cuts at the LAST dot instead, handing back `a.b` +
+    // `c` where the caller said `a` + `b.c`, and leaving a two-segment name
+    // with no namespace at all. Rewriting the two fields does not disturb the
+    // ciphertext binding, which is computed over them rejoined.
+    final int dot = name.indexOf('.');
+    atKey
+      ..key = name.substring(0, dot)
+      ..namespace = name.substring(dot + 1);
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      atKey.metadata.appMetadata ??= AppMetadata(
-        providerId: cryptoProviderId ??
-            atClient.getPreferences()?.crypto.defaultProviderId ??
-            CryptoRuntime.legacyProviderId,
-      );
+      String providerId;
+      try {
+        providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
+            requestedProviderId: cryptoProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
+          rethrow;
+        }
+        logger.warning('falling back to legacy encryption for the '
+            'notification of $name: ${e.message}');
+        providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
+            requestedProviderId: CryptoRuntime.legacyProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      }
+      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
       notifPayload =
           await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;
@@ -353,26 +767,23 @@ class NotificationServiceImpl extends NotificationService {
       atKey.metadata.ttl = ttl;
     }
 
-    final String id = Uuid().v4();
-    StringBuffer sb = StringBuffer();
-    sb.write('notify:id:$id');
-    sb.write(':ttln:${expiration.inMilliseconds}');
-    sb.write(atKey.metadata.toAtProtocolFragment());
-    sb.write(':$key');
-
-    if (notifPayload.isNotEmpty) {
-      sb.write(':$notifPayload');
-    }
-
-    sb.write('\n');
+    // NOTE: [NotifyVerbBuilder.useAtKeyToString] is required, not incidental.
+    // The field-by-field form writes only the key, and the name here is split
+    // across `key` and `namespace`, so the namespace would never reach the
+    // wire.
+    final builder = NotifyVerbBuilder()
+      ..atKey = atKey
+      ..ttln = expiration.inMilliseconds
+      ..value = notifPayload.isEmpty ? null : notifPayload
+      ..useAtKeyToString = true;
 
     logger.info('SENDING: $key');
 
     await atClient
         .getRemoteSecondary()
-        ?.executeCommand(sb.toString(), auth: true);
+        ?.executeCommand(builder.buildCommand(), auth: true);
 
-    return id;
+    return builder.id;
   }
 
   @override
@@ -467,13 +878,14 @@ class NotificationServiceImpl extends NotificationService {
       return notificationResult;
     } else {
       if (waitForFinalDeliveryStatus) {
-        await _waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError);
+        await _pollFinalStatus(
+            notificationParams, notificationResult, onSuccess, onError,
+            awaited: true);
         return notificationResult;
       } else {
-        // no wait? no await
-        unawaited(_waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError));
+        unawaited(_pollFinalStatus(
+            notificationParams, notificationResult, onSuccess, onError,
+            awaited: false));
         return notificationResult;
       }
     }
@@ -541,13 +953,65 @@ class NotificationServiceImpl extends NotificationService {
     }
   }
 
+  /// The poll for a notification's final status, in the two ways [notify]
+  /// runs it.
+  ///
+  /// A stop ending the poll is reported in the result and to [onError]
+  /// either way: the notification was sent, its final status is what the
+  /// caller will not learn, and a caller that stopped its own client is not
+  /// owed an exception for it. Any other failure is the caller's when
+  /// [awaited], and otherwise is handed to [onError] and logged, rather than
+  /// left to surface as an unhandled error in whatever zone sent the
+  /// notification.
+  Future<void> _pollFinalStatus(
+      NotificationParams notificationParams,
+      NotificationResult notificationResult,
+      Function? onSuccess,
+      Function? onError,
+      {required bool awaited}) async {
+    try {
+      await _waitForAndHandleFinalNotificationSendStatus(
+          notificationParams, notificationResult, onSuccess, onError);
+      return;
+    } catch (e) {
+      if (isStopped) {
+        logger.finer('Not learning the final status of notification '
+            '${notificationParams.id}: the service was stopped');
+        notificationResult.atClientException = AtClientException(
+            error_codes['AtClientException'],
+            'Stopped before notification ${notificationParams.id} reached '
+            'a final status');
+      } else if (awaited) {
+        rethrow;
+      } else {
+        logger.warning('Could not learn the final status of notification '
+            '${notificationParams.id}: $e');
+        notificationResult.atClientException = e is AtClientException
+            ? e
+            : AtClientException(error_codes['AtClientException'],
+                'Could not learn the final status of the notification: $e');
+      }
+    }
+    if (onError != null) {
+      onError(notificationResult);
+    }
+  }
+
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
+  ///
+  /// Throws once the service is stopped: the answer would never reach anyone.
   Future<String> _getFinalNotificationStatus(String notificationId) async {
     String status = '';
     bool firstCheck = true;
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
+      if (isStopped) {
+        throw AtClientException(
+            error_codes['AtClientException'],
+            'Stopped before notification $notificationId reached a final '
+            'status');
+      }
       if (firstCheck) {
         await Future.delayed(Duration(milliseconds: 500));
         firstCheck = false;
@@ -718,7 +1182,7 @@ class NotificationServiceImpl extends NotificationService {
       logger.info('startListening() called, but already targeting listening');
       return;
     }
-    logger.info('startListening(): starting notification listener');
+    logger.finer('startListening(): starting notification listener');
     monitor.start();
   }
 
@@ -750,4 +1214,24 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Stream<NotificationListenerState> get currentListenerStateStream =>
       monitor.currentStateStream;
+}
+
+/// One notification held back, with everything needed to deliver it later.
+///
+/// Holds the subscriber's [StreamController] rather than looking one up at
+/// re-drive time, so a value cannot be handed to a controller other than the
+/// one its subscriber registered.
+/// A notification [NotificationServiceImpl.droppedEvents] reports as given up
+/// on: its key, empty when the frame could not be parsed into one, and the
+/// reason logged for it.
+typedef DroppedNotification = ({String key, String reason});
+
+class _ParkedNotification {
+  final AtNotification notification;
+  final NotificationConfig config;
+  final StreamController controller;
+  final DateTime parkedAt;
+
+  _ParkedNotification(
+      this.notification, this.config, this.controller, this.parkedAt);
 }

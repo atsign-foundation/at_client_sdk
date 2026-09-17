@@ -1,0 +1,45 @@
+services:
+  at_virtualenv:
+    container_name: at_virtualenv
+    # Overridable, so a run can pick the atServer build it needs; CI sets
+    # VIRTUALENV_IMAGE. The default stays the published release so a bare
+    # `docker compose up` here behaves as it always has.
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
+    # The image's CMD ignores VIRTUALENV_BASE_PORT; entrypoint.sh does the shift.
+    entrypoint: ["/atsign/entrypoint.sh"]
+    # And the variable has to REACH the container for it to shift anything.
+    # Without this the atDirectory stays on 64 and the atServers on 25000+
+    # while the mappings below publish BASE..BASE+97, so every port answers on
+    # the host - docker-proxy accepts regardless of what is behind it - and
+    # refuses from inside the network. The proxy dials by name from its own
+    # container, so it is the first thing to notice.
+    environment:
+      - VIRTUALENV_BASE_PORT
+    ports:
+      # 443 and 9001 are deliberately not bound: unused here, and no base port
+      # shifts them.
+      - "127.0.0.1:${VE_REDIS_PORT:-6379}:${VE_REDIS_PORT:-6379}"
+      - "${VE_ROOT_PORT:-64}:${VE_ROOT_PORT:-64}"
+      - "${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}:${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}"
+    extra_hosts:
+      # For the atServers' own references to themselves, inside this container.
+      - 'vip.ve.atsign.zone:127.0.0.1'
+    # And for the PROXY's references to them, from its own container: Docker's
+    # embedded DNS answers this name with this container's address. Without it
+    # the proxy has no way to resolve the atDirectory it was told to bridge to.
+    hostname: vip.ve.atsign.zone
+  at_proxyserver:
+    container_name: at_proxyserver
+    # https://hub.docker.com/layers/atsigncompany/at_proxyserver/gha41/images/sha256-de7f513db35a3046ef25bd2195113f48b276800c9921c1eec81ced55a597cd0b
+    image: atsigncompany/at_proxyserver
+    command: "vip.ve.atsign.zone:${VE_PROXY_PORT:-443} vip.ve.atsign.zone:${VE_ROOT_PORT:-64} ${VE_PROXY_PORT:-1443}"
+    ports:
+      - '${VE_PROXY_PORT:-443}:${VE_PROXY_PORT:-1443}'
+    # NOTE: deliberately no extra_hosts. Mapping vip.ve.atsign.zone to
+    # 127.0.0.1 here points the proxy at ITSELF - /etc/hosts beats DNS - and
+    # every bridge attempt is refused on the atDirectory port. The readiness
+    # probe reports that as "the proxy is listening but ... Connection
+    # refused", with errno 111 rather than macOS's 61, which is the tell that
+    # the refusal is inside a container.
+    depends_on:
+      - at_virtualenv

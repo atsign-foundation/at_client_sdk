@@ -10,6 +10,10 @@ Future<void> main() async {
     print('libcrypto not found');
     return;
   }
+  if (!libCryptoSupportsMlDsa65(lib)) {
+    print('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
+    return;
+  }
   final MlDsa65FfiAlgo algo = MlDsa65FfiAlgo.fromLib(lib);
 
   // Alice generates a key pair. Unlike ML-KEM-768, ML-DSA-65 secret keys are

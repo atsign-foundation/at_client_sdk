@@ -25,15 +25,23 @@ void main() {
       expect(await io.read('@alice'), same(keys));
     });
 
-    test('write replaces any existing keys for the atsign', () async {
-      await io.write(
-          '@alice',
-          AtKeys(
-              atsign: '@alice'.toAtsign(), keysList: [symmetricKey('first')]));
+    test('write is create-only: a second write for the atsign throws',
+        () async {
+      final first = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [symmetricKey('first')]);
+      await io.write('@alice', first);
       final replacement = AtKeys(
           atsign: '@alice'.toAtsign(), keysList: [symmetricKey('second')]);
-      await io.write('@alice', replacement);
 
+      await expectLater(() => io.write('@alice', replacement),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+      expect(await io.read('@alice'), same(first),
+          reason: 'the double must refuse exactly where the file store '
+              'refuses, or code passes against memory and throws in '
+              'production; flush is the replace verb');
+
+      // flush, by contrast, replaces.
+      await io.flush('@alice'.toAtsign(), replacement);
       expect(await io.read('@alice'), same(replacement));
     });
 
@@ -45,7 +53,7 @@ void main() {
               keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.keysForKeyId('flushed'), isNotEmpty);
+      expect(keys.atSignKeysForKeyId('flushed'), isNotEmpty);
       expect(keys.atsign, '@alice'.toAtsign());
     });
 
@@ -61,8 +69,8 @@ void main() {
       await io.flush('@alice'.toAtsign(), keys);
 
       final reread = await io.read('@alice');
-      expect(reread.keysForKeyId('existing'), isNotEmpty);
-      expect(reread.keysForKeyId('appended'), isNotEmpty);
+      expect(reread.atSignKeysForKeyId('existing'), isNotEmpty);
+      expect(reread.atSignKeysForKeyId('appended'), isNotEmpty);
     });
 
     test('flush and read agree on the normalized atsign', () async {
@@ -75,7 +83,7 @@ void main() {
               keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.keysForKeyId('flushed'), isNotEmpty);
+      expect(keys.atSignKeysForKeyId('flushed'), isNotEmpty);
     });
   });
 }

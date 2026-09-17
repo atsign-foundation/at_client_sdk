@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
 
+import 'hpke_wg_kem_vectors.dart';
 import 'x_wing_test_vectors.dart';
 
 void main() {
@@ -26,17 +27,19 @@ void main() {
       }
     });
 
-    test(
-        'FFI key generation matches the pure-Dart public key for the same seed',
-        () async {
+    setUp(() {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
       if (!mlKemSupported) {
         fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
+    });
 
-      final ffi = XWingFfiAlgo.fromLib(lib);
+    test(
+        'FFI key generation matches the pure-Dart public key for the same seed',
+        () async {
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final ffiKp = await ffi.generateKeyPair(seed);
       final pureKp = await XWingPureDartAlgo.instance.generateKeyPair(seed);
       // Deterministic from the seed across both backends — proves the FFI
@@ -49,28 +52,36 @@ void main() {
 
     test('FFI decapsulates the draft vector ciphertext to the vector secret',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffi = XWingFfiAlgo.fromLib(lib);
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final ss = await ffi.decapsulate(seed, ct);
       expect(ss, equals(expectedSs));
     });
 
+    // The FFI backend carries its own copy of the combiner and the SHAKE-256
+    // seed expansion in Dart, so it needs its own conformance check against
+    // the published vectors. The interop tests below only prove the two
+    // backends agree with each other, which they would do while both wrong.
+    for (final (i, v) in hpkeWgKem0x647aVectors.indexed) {
+      test('FFI reproduces HPKE WG vector $i (kdf ${v.kdfId})', () async {
+        if (lib == null) {
+          fail('libcrypto not available on this host');
+        }
+        if (!mlKemSupported) {
+          fail(
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        }
+
+        final ffi = XWingFfiAlgo.fromLib(lib);
+        final kp = await ffi.generateKeyPair(v.skRm);
+        expect(toHex(kp.publicKey), toHex(v.pkRm));
+        final ss = await ffi.decapsulate(v.skRm, v.enc);
+        expect(toHex(ss), toHex(v.sharedSecret));
+      });
+    }
+
     test('FFI encapsulate/decapsulate round-trip agrees on the shared secret',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffi = XWingFfiAlgo.fromLib(lib);
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final kp = await ffi.generateKeyPair();
       final enc = await ffi.encapsulate(kp.publicKey);
       expect(enc.ciphertext.length, XWingFfiAlgo.ciphertextLength);
@@ -80,14 +91,7 @@ void main() {
     });
 
     test('interop: FFI encapsulates, pure-Dart decapsulates', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffi = XWingFfiAlgo.fromLib(lib);
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final kp = await ffi.generateKeyPair();
       final enc = await ffi.encapsulate(kp.publicKey);
       final ss = await XWingPureDartAlgo.instance
@@ -96,14 +100,7 @@ void main() {
     });
 
     test('interop: pure-Dart encapsulates, FFI decapsulates', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffi = XWingFfiAlgo.fromLib(lib);
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final kp = await ffi.generateKeyPair();
       final enc = await XWingPureDartAlgo.instance.encapsulate(kp.publicKey);
       final ss = await ffi.decapsulate(kp.secretKey, enc.ciphertext);
@@ -113,14 +110,7 @@ void main() {
     test(
         'a tampered ciphertext decapsulates to a different secret, not an error',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffi = XWingFfiAlgo.fromLib(lib);
+      final ffi = XWingFfiAlgo.fromLib(lib!);
       final kp = await ffi.generateKeyPair();
       final enc = await ffi.encapsulate(kp.publicKey);
       final tampered = Uint8List.fromList(enc.ciphertext);

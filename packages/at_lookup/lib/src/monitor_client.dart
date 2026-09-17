@@ -10,6 +10,17 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// Utility class to execute monitor verb.
+/// Deprecated with no replacement, because nothing uses it: a tree-wide
+/// search finds its own declaration and nothing else.
+///
+/// It also predates the connect timeouts - `_createNewConnection` builds its
+/// socket directly rather than through `SecureSocketUtil`, so it never got
+/// them. A caller wanting a notification stream should use
+/// [AtLookUp.withSecureSocket] and [AtLookupMuxable.notifications], which
+/// share one connection, one listener and one reconnect policy with the rest
+/// of at_lookup.
+@Deprecated('Use AtLookUp.withSecureSocket and AtLookupMuxable.notifications. '
+    'Removed in the next major release.')
 class MonitorClient {
   final _monitorVerbResponseQueue = Queue();
   late String response;

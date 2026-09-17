@@ -1,3 +1,143 @@
+## 5.18.0
+
+- feat: `Atsign(String)` constructs an atSign the same way `toAtsign()` does,
+  so `Atsign('@alice')` reads as it looks; the two routes cannot disagree.
+- feat: `EnrollmentConstants.primaryEnrollmentId` (`primary`) names the
+  enrollment an atSign's own credential authenticates as: the flat keyfile
+  material with no enrollment record of its own. `PkamVerbBuilder` keeps it off
+  the wire, emitting the bare `pkam:` a released atServer expects for that
+  credential, so a client can carry one name for every credential it holds.
+
+## 5.17.0
+
+- fix: `EnrollmentConstants.regexForPerEnrollmentNamespaces` anchors the
+  enrollment id at the start of a key or after a colon as well as after a dot.
+  Anchoring on a dot alone let a key whose name IS the reserved namespace slip
+  past — `abc.a.__e@alice`, the shared `@bob:abc.a.__e@alice` and the cached
+  `cached:@bob:x.r.__e@alice` all escaped it. The atServer matches on this
+  constant to refuse a write into another enrollment's reserved namespace, so
+  those spellings were unguarded. The named group `EnId` is unchanged, and
+  every key that matched before matches now with the same id.
+- docs: the four `__manage` constants say what they are. They describe records
+  that live only on the atServer and never reach a client, which is worth
+  saying because they read like a sync filter waiting to be wired.
+- feat: `enroll:infons:<namespace>` — "info about a namespace". A read verb
+  alongside `enroll:listns`, taking the same authorisation, returning a JSON
+  **map** of facts about the namespace rather than a list of its members. Its
+  first member is `lastRevokedAt`: the latest moment a revocation touched an
+  enrollment granted that namespace, or null. `enroll:listns` is unchanged.
+
+- fix: `Metadata.fromJson` preserves a null `ttl`/`ttb`/`ttr` instead of
+  reading it as 0, so the `toJson`/`fromJson` round trip is lossless.
+  `toJson` always writes the three, so an unset one goes out as
+  `"ttl": null` and used to come back as `0` — leaving a reader unable to
+  tell "this request said nothing about it" from an explicit 0, which is a
+  different request: `ttl:0` clears a record's expiry and `ttr:0` means do
+  not cache. An explicit 0 still round trips as 0, and a numeric string is
+  still parsed. The atServer's `update:json` handling is the caller this
+  affects; it now agrees with the metadata-fragment form of the same
+  request, which has always left an unmentioned relative null.
+
+## 5.16.0
+
+- feat: add `AtNetworkTimeouts.defaultResponseBudget` (90s) — the overall budget
+  for one complete response, as distinct from `defaultTimeout`, which bounds the
+  wait for the *next* bytes and restarts every time a chunk arrives. A large
+  response is many such waits in a row, and only this budget bounds their sum, so
+  a peer that trickles bytes indefinitely is caught by this and by nothing else.
+  Deliberately not passed through `cap`: it bounds an aggregate rather than a
+  single operation, and its own default already exceeds the 60s ceiling. Nothing
+  reads it yet.
+
+- docs: `signingAlgo` says plainly that it names the APKAM **authentication**
+  key's algorithm — the key that signs the `from:` challenge — and not the
+  algorithm an enrollment signs documents with. The name invites the second
+  reading and the two are deliberately different algorithms from rollout 1
+  onward. Stated on `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`,
+  which all declare the field and previously said this in two forms and none.
+
+- feat: add `EnrollVerbBuilder.apkamPublicKeySignature`, threading the existing
+  `EnrollParams.apkamPublicKeySignature` through to the built command. The field
+  had no route to the wire, so an `enroll:update` could not carry the proof of
+  possession the atServer requires before it installs a new `apkamPublicKey` —
+  which made the rotation the field exists for unsendable.
+- feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
+  metadata from one object to another stop hand-rolling the field list. A
+  hand-rolled copier silently drops any field added to `Metadata` later: the
+  value still round-trips and only the missing field is absent at the far end,
+  which is how `immutable` and `appMetadata` went astray on several paths in
+  `at_client`. A caller that must not carry a field clears it after copying, so
+  the exception is written where it applies rather than being the default.
+
+## 5.15.0
+
+- feat: add `EnrollVerbBuilder.apsk`, threading the existing
+  `EnrollParams.apsk` through to the built command. The field had no route to
+  the wire, so nothing could send the value the atServer publishes verbatim.
+- feat: add `EnrollParams.apskLegacy` and the matching `EnrollVerbBuilder`
+  field, carrying the **bare** RSA `_apsk` string an enrollment publishes
+  verbatim. Every deployed `_apsk` consumer base64-decodes the value as an RSA
+  key, so a plain-legacy enrollment must be able to publish that shape through
+  the same verb every other enrollment uses. A separate field rather than
+  widening `apsk` to two types, which would have been source-breaking on a
+  published field. The atServer writes it as-is — **not** JSON-encoded, since a
+  quoted string is not what a bare-RSA parser reads — and refuses a request
+  carrying both fields, which would disagree about one record with no basis for
+  choosing between them.
+- fix: `EnrollParams.apsk`'s entry `status` is `active` or **`retired`**, not
+  `verifyOnly` as 5.14.0 documented, and the entry carries a `kid` like every
+  other key entry in the protocol. `retired` is use-neutral — "retained, not
+  for new operations" — because `use` already names the operation a key serves:
+  a retired signing key still verifies old envelopes, and a retired
+  encapsulation key still opens records already sealed to it. Documentation
+  only; the atServer stores the value verbatim, so no record carries either
+  spelling.
+
+## 5.14.0
+
+- feat: add `EnrollParams.apsk` — the value a client composes for its own
+  `public:_apsk.<enrollmentId>.a.__e@<atSign>` signing key, carried on
+  `enroll:request` and stored verbatim on the enrollment record. A
+  `Map<String, dynamic>` like `metadata`, opaque to the atServer, capped there
+  at 20KB encoded.
+
+  It exists so the atServer can stop composing that value from
+  `(apkamPublicKey, signingAlgo)`. PKAM verification is record-authoritative
+  and reads the enrollment record, so `_apsk` is a client-side artefact the
+  server has no use for and no business knowing the format of — it was
+  publishing one only because the record's rightful writer, the enrollee, does
+  not exist yet at approval. Sending the value moves the format back to the
+  side that owns it, and a new signing-key shape stops needing a server
+  release. Absent means no `_apsk` is published at all.
+
+  The form the client composes is a versioned array of signing keys —
+  `{"v":1,"keys":[{"use","alg","pub","status"}]}` — spelled as `KeyPackage`'s
+  keys are, so one vocabulary covers every "list of keys with algorithms" in
+  the protocol. An entry whose `status` is `verifyOnly` has stopped signing but
+  is retained: envelopes are stored durably and re-verified later, so removing
+  a key would retroactively unverify everything ever signed with it.
+
+- feat: add `EnrollOperationEnum.update` and the matching `enroll:update`
+  alternation in the `enroll` grammar — an approved enrollment amending its own
+  record's `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Self-only:
+  the connection's enrollment id must equal the target's. It never reaches
+  `namespaces` or the approval state, because an operation an enrollment can
+  invoke on itself must not be able to widen its own grant.
+
+  This is what lets an enrollment replace its APKAM authentication keypair
+  while keeping its id, rather than the replacement being a new enrollment.
+
+- feat: add `EnrollParams.apkamPublicKeySignature` — base64 of a signature by
+  the **new** APKAM private key over
+  `<enrollmentId>|<apkamPublicKey>|<signingAlgo>`, required on an
+  `enroll:update` that changes `apkamPublicKey`.
+
+  The connection proves possession of the enrollment's *current* key and
+  nothing else proves possession of the new one, so without this a
+  compromised-but-authenticated client can install a public key whose private
+  half is held by someone else — locking out the legitimate holder while the
+  record still looks valid.
+
 ## 5.13.0
 
 - feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy:

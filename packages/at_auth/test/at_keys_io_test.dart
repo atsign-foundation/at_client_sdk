@@ -8,6 +8,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -80,7 +81,8 @@ void main() {
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atsign, atKeys);
 
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign));
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign),
+          atsign: atsign);
     });
 
     test('Test write() -> throws due to overwrite', () {
@@ -124,6 +126,7 @@ void main() {
       // encrypted file the decrypted keys are the same as the original keys
       // Note: the method call below tests the encrypted keys read path too
       await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign),
+          atsign: atsign,
           passPhrase: passPhrase);
     });
 
@@ -181,11 +184,102 @@ void main() {
         // The .bak preserves the pre-flush state byte-for-byte.
         expect(await File('$tempPath.bak').readAsString(), existingText);
         final reread = await fileAtKeysIo.read(atsign);
-        expect(reread.keysForKeyId('appended'), isNotEmpty);
-        expect(reread.keysForKeyId('another'), isNotEmpty);
+        expect(reread.atSignKeysForKeyId('appended'), isNotEmpty);
+        expect(reread.atSignKeysForKeyId('another'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
+    });
+
+    group('the flat-to-typed upgrade is preserved once', () {
+      /// A legacy-flat keyfile on disk, and the text it holds.
+      Future<({String path, String text, FileAtKeysIo io})> flatKeyfile(
+          Directory dir) async {
+        final path = '${dir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => path);
+        await io.write(atsign, legacyAtKeys(atsign: atsign.toAtsign()));
+        final text = await File(path).readAsString();
+        expect(jsonDecode(text) as Map<String, dynamic>,
+            isNot(contains('version')),
+            reason: 'the arm below is about a flat document becoming typed; a '
+                'fixture that started typed would prove nothing');
+        return (path: path, text: text, io: io);
+      }
+
+      test('a flush that makes the document typed copies the flat one aside',
+          () async {
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          final keys = await flat.io.read(atsign);
+          keys.addKey(symmetricKey('typed'));
+          await flat.io.flush(atsign.toAtsign(), keys);
+
+          final backup =
+              File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}');
+          expect(backup.existsSync(), isTrue,
+              reason: 'the rolling .bak is replaced by the next write, and a '
+                  'client makes several within seconds of this one');
+          expect(await backup.readAsString(), flat.text,
+              reason: 'byte-for-byte the document as it stood before the '
+                  'upgrade, which is the thing an older build can still read');
+          expect(
+              jsonDecode(await File(flat.path).readAsString())
+                  as Map<String, dynamic>,
+              contains('version'),
+              reason: 'the live file really did become typed, or the copy '
+                  'above was taken for no reason');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      test('a flush that leaves the document flat copies nothing aside',
+          () async {
+        // NOTE: the control for the arm above — it must differ from it only
+        // in whether typed material is added.
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          final keys = await flat.io.read(atsign);
+          await flat.io.flush(atsign.toAtsign(), keys);
+
+          expect(
+              File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}')
+                  .existsSync(),
+              isFalse,
+              reason: 'nothing changed shape, so there is no pre-upgrade '
+                  'document to keep and a copy would only be confusing');
+          expect(File('${flat.path}.bak').existsSync(), isTrue,
+              reason: 'the ordinary rolling backup still happens; this arm is '
+                  'about the other one');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      test('a second upgrade does not overwrite the first copy', () async {
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          final first = await flat.io.read(atsign);
+          first.addKey(symmetricKey('typed'));
+          await flat.io.flush(atsign.toAtsign(), first);
+
+          final second = await flat.io.read(atsign);
+          second.addKey(symmetricKey('later', value: 'bGF0ZXI='));
+          await flat.io.flush(atsign.toAtsign(), second);
+
+          expect(
+              await File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}')
+                  .readAsString(),
+              flat.text,
+              reason: 'a second copy would be a document that is already '
+                  'upgraded, which is not what anyone reaching for this wants');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
     });
 
     test('Test flush() creates the file (and parent dirs) when absent',
@@ -200,7 +294,7 @@ void main() {
         );
 
         final readKeys = await fileAtKeysIo.read(atsign);
-        expect(readKeys.keysForKeyId('fresh'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('fresh'), isNotEmpty);
         expect(
           File(tempPath).parent.listSync().whereType<File>().toList(),
           hasLength(1),
@@ -225,17 +319,17 @@ void main() {
         );
 
         final keys = await fileAtKeysIo.read(atsign);
-        keys.retireKey('rotated');
+        keys.retireAtSignKey('rotated');
         await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final reread = await fileAtKeysIo.read(atsign);
         expect(
-          reread.keysForKeyId('rotated').single.status,
-          KeyPartStatus.retired,
+          reread.atSignKeysForKeyId('rotated').single.status,
+          CryptographicMaterialStatus.retired,
         );
         expect(
-          reread.keysForKeyId('kept').single.status,
-          KeyPartStatus.active,
+          reread.atSignKeysForKeyId('kept').single.status,
+          CryptographicMaterialStatus.active,
         );
       } finally {
         await tempDir.delete(recursive: true);
@@ -294,19 +388,22 @@ void main() {
         final readKeys = await io.read(atsign);
         expect(
             readKeys
-                .getKey('sym', CryptographicKeyType.symmetricEncryption)
+                .getAtSignKey(
+                    'sym', CryptographicMaterialRole.symmetricEncryption)
                 ?.bytes
                 .toString(),
             'c2VjcmV0');
         expect(
             readKeys
-                .getKey('pair', CryptographicKeyType.publicEncryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.publicEncryption)
                 ?.bytes
                 .toString(),
             'cHVibGlj');
         expect(
             readKeys
-                .getKey('pair', CryptographicKeyType.privateDecryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.privateDecryption)
                 ?.bytes
                 .toString(),
             'cHJpdmF0ZQ==');
@@ -345,8 +442,8 @@ void main() {
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atsign);
-        expect(readKeys.keysForKeyId('existing'), isNotEmpty);
-        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('existing'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -372,14 +469,21 @@ void main() {
           final files = tempDir.listSync().whereType<File>().toList();
           expect(
             files.map((file) => file.path).toSet(),
-            {tempPath, '$tempPath.bak'},
+            // Three, not two: this flush turns the flat document typed, so the
+            // writer also keeps a copy of the flat one that the next write
+            // will not roll over.
+            {
+              tempPath,
+              '$tempPath.bak',
+              '$tempPath${FileAtKeysIo.legacyShapeBackupSuffix}',
+            },
           );
 
           // The rewritten file is a typed-keys document that reads back with the
           // legacy keys intact plus the appended material.
           final readKeys = await fileAtKeysIo.read(atsign);
           expectLegacyAtKeys(readKeys, legacyKeys);
-          expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+          expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
         } finally {
           await tempDir.delete(recursive: true);
         }
@@ -437,7 +541,7 @@ void main() {
 
         final readKeys = await io.read(atsign);
         expectLegacyAtKeys(readKeys, legacyAtKeys());
-        expect(readKeys.keysForKeyId('typed'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('typed'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -459,7 +563,7 @@ void main() {
         );
 
         final readKeys = await io.read(atsign);
-        expect(readKeys.keysForKeyId('only-typed'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('only-typed'), isNotEmpty);
         expect(readKeys.defaultSelfEncryptionKey, isNull);
       } finally {
         await tempDir.delete(recursive: true);
@@ -572,35 +676,19 @@ void main() {
   });
 }
 
+/// What [filePath] holds for [atsign], decoded through the store that wrote
+/// it, matched against [atKeys] field by field.
+///
+/// NOTE: the decoding is the store's own rather than hand-rolled here, so this
+/// asserts the round trip and not the at-rest form. The form itself is pinned
+/// independently in `legacy_field_self_encryption_test.dart`, against
+/// ciphertext openssl produced and against the committed legacy fixture.
 Future<void> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
-    {String? passPhrase}) async {
-  final fileAtKeysIo =
-      FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
+    {required String atsign, String? passPhrase}) async {
+  final written = await FileAtKeysIo(
+    filePath: (_) => filePath,
+    passPhrase: passPhrase,
+  ).read(atsign);
 
-  Map<String, dynamic> atKeysFromFile =
-      jsonDecode(File(filePath).readAsStringSync());
-
-  // decrypt if passPhrase available
-  if (passPhrase != null) {
-    atKeysFromFile =
-        await fileAtKeysIo.decodeAtKeys(atKeysFromFile, passPhrase: passPhrase);
-  }
-
-  // decrypt the atKeys read from file with self encryption key
-  AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      atKeysFromFile, PkamAuthMode.keysFile);
-
-  expect(decryptedAtKeys.apkamPrivateKey.toString(),
-      atKeys.apkamPrivateKey.toString());
-  expect(decryptedAtKeys.apkamPublicKey.toString(),
-      atKeys.apkamPublicKey.toString());
-  expect(decryptedAtKeys.apkamSymmetricKey.toString(),
-      atKeys.apkamSymmetricKey.toString());
-  expect(decryptedAtKeys.defaultEncryptionPrivateKey.toString(),
-      atKeys.defaultEncryptionPrivateKey.toString());
-  expect(decryptedAtKeys.defaultEncryptionPublicKey.toString(),
-      atKeys.defaultEncryptionPublicKey.toString());
-  expect(decryptedAtKeys.defaultSelfEncryptionKey.toString(),
-      atKeys.defaultSelfEncryptionKey.toString());
-  expect(decryptedAtKeys.enrollmentId, atKeys.enrollmentId);
+  expectLegacyAtKeys(written, atKeys);
 }

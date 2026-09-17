@@ -1,32 +1,22 @@
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_chops/at_chops.dart';
-import 'package:at_lookup/at_lookup.dart';
 
-@Deprecated('remove in v4 in favour of AtAuthSession')
+/// The result of activating an atSign.
+///
+/// [session] is the typed hand-off to the client, populated on success for a
+/// request that carried an `AtKeysIo`.
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
-  //todo: v4, please return a AtRootDomain, helps cleanup the sdk.
-  @Deprecated('remove in v4')
-  AtKeys? atAuthKeys;
-  @Deprecated('remove in v4')
-  AtLookUp? atLookUp;
-  @Deprecated('remove in v4')
-  AtChops? atChops;
 
   /// Explicit, typed hand-off to the client. Populated on success when the
-  /// request supplied an [AtKeysIo]. The forward-looking replacement for the
-  /// deprecated [atLookUp]/[atChops] fields.
+  /// request supplied an `AtKeysIo`.
   AtAuthSession? session;
 
-  // todo: only functional for old-style keys... needs rethinking.
-  String? get enrollmentId => atAuthKeys?.enrollmentId;
+  /// The enrollment this activated as, from [session].
+  String? get enrollmentId => session?.enrollmentId;
 
   AuthResponse(this.atSign);
 }
-
-@Deprecated('remove in v4 in favour of AtAuthSession')
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
@@ -37,16 +27,5 @@ class AtOnboardingResponse extends AuthResponse {
   @override
   String toString() {
     return 'AtOnboardingResponse{atSign: $atSign, enrollmentId: $enrollmentId, isSuccessful: $isSuccessful}';
-  }
-}
-
-@Deprecated('remove in v4 in favour of AtAuthSession')
-class AtAuthResponse extends AuthResponse {
-  /// Constructor that takes an @sign as a parameter
-  AtAuthResponse(super.atSign);
-
-  @override
-  String toString() {
-    return 'AtAuthResponse{atSign: $atSign, isSuccessful: $isSuccessful}';
   }
 }

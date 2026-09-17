@@ -1,3 +1,34 @@
+## 1.1.2-rc2
+
+- feat: `AtStatusImpl(lookUps: ...)` takes at_lookup's `AtLookUpFactory` for
+  the connections the probe opens; TLS on TCP with none.
+- chore: drop the `dart:io` import from `AtStatus` by replacing the five
+  `HttpStatus` constants it used (`ok`, `found`, `notFound`,
+  `serviceUnavailable`, `internalServerError`) with local `int` constants of
+  identical value. `httpStatus()` already returned a plain `int`, so no public
+  API or returned value changes — this removes `dart:io` from the package's
+  import graph, which is what kept it off a web build graph. Note that
+  at_server_status still cannot *run* on the web: `AtStatusImpl` reaches the
+  atDirectory and atServer through `AtLookupImpl`, which uses TLS sockets.
+
+## 1.1.2-rc1
+
+- refactor: builds its lookup with `AtLookUp.withSecureSocket`, passing
+  `authenticator: null` - every call it makes is `auth: false` and it holds no
+  key material at all.
+- refactor: drops `AtLookupImpl.findSecondary` for
+  `CacheableSecondaryAddressFinder`, which that deprecated static was a thin
+  wrapper over. The finder is constructed **inside** the future deliberately:
+  the wrapper did its own `rootDomain!`, so a null root domain surfaced as a
+  rejected future and became `RootStatus.unavailable`. Asserting at the call
+  site instead would throw before `catchError` is attached and turn an
+  unavailable root into an uncaught exception.
+- build: `at_lookup` `^3.0.49` -> `^3.7.0-rc1`, and `at_commons` becomes a direct
+  dependency. Both were needed by the change above and both were being
+  satisfied by workspace resolution, which hides the problem locally: a
+  consumer resolving the published package would have got an at_lookup with no
+  `withSecureSocket` in it.
+
 ## 1.1.1
 
 - fix: Make this work properly with atServer proxy services

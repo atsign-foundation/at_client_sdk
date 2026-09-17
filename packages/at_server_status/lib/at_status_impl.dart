@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 import 'at_server_status.dart';
 
@@ -22,7 +23,11 @@ class AtStatusImpl implements AtServerStatus {
     _rootPort = value;
   }
 
-  AtStatusImpl({String? rootUrl, int? rootPort}) {
+  /// Builds the connections the status probe opens; TLS on TCP with none.
+  final AtLookUpFactory lookUps;
+
+  AtStatusImpl({String? rootUrl, int? rootPort, AtLookUpFactory? lookUps})
+      : lookUps = lookUps ?? secureSocketLookUps() {
     rootUrl ??= 'root.atsign.org';
     _rootUrl = rootUrl;
     rootPort ??= 64;
@@ -68,11 +73,20 @@ class AtStatusImpl implements AtServerStatus {
     // ignore: omit_local_variable_types
     AtStatus atStatus = AtStatus();
     atStatus.atSign = atSign;
-    // ignore: deprecated_member_use
-    await AtLookupImpl.findSecondary(atSign, _rootUrl, _rootPort!)
+    // at_lookup's own `findSecondary` static was a thin wrapper over this finder, and
+    // both it and the class it lived on are now deprecated.
+    //
+    // The finder is built INSIDE the future deliberately: the wrapper did its
+    // own `rootDomain!`, so a null `_rootUrl` surfaced as a rejected future
+    // and landed in `catchError` below as RootStatus.unavailable. Asserting at
+    // the call site instead would throw before `catchError` is attached, and
+    // turn an unavailable root into an uncaught exception.
+    await Future(() => CacheableSecondaryAddressFinder(_rootUrl!, _rootPort!)
+            .findSecondary(atSign))
+        .then((address) => address.toString())
         .then((serverLocation) async {
       // enum RootStatus { running, stopped, unavailable, found, notFound }
-      if (serverLocation != null && serverLocation.isNotEmpty) {
+      if (serverLocation.isNotEmpty) {
         atStatus.rootStatus = RootStatus.found;
         atStatus.serverLocation = serverLocation;
       } else {
@@ -96,8 +110,14 @@ class AtStatusImpl implements AtServerStatus {
       atStatus.rootStatus = RootStatus.notFound;
     } else {
       // ignore: omit_local_variable_types
-      AtLookupImpl atLookupImpl =
-          AtLookupImpl(atSign!, _rootUrl!, _rootPort!);
+      // authenticator: null - every call below passes `auth: false`, and this
+      // class holds no key material at all. Stating it beats a connection that
+      // would fail at the first authenticated verb.
+      final atLookupImpl = lookUps(
+        atSign: atSign!,
+        rootDomain: AtRootDomain(_rootUrl!, _rootPort!),
+        authenticator: null,
+      );
       await atLookupImpl.executeCommand('from:$atSign\n');
       await atLookupImpl.scan(auth: false).then((keysList) async {
         if (keysList.isNotEmpty) {

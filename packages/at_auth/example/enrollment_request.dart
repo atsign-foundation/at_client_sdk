@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 /// Requests for an enrollment
 /// Enrollment request will be submitted to server and marked as pending
@@ -24,8 +26,10 @@ void main(List<String> args) async {
           mandatory: false,
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
-    AtLookUp atLookUp =
-        AtLookupImpl(argResults['atsign'], argResults['rootDomain'], 64);
+    AtLookupMuxable atLookUp = secureSocketLookUps()(
+        atSign: argResults['atsign'],
+        rootDomain: AtRootDomain(argResults['rootDomain'], 64),
+        authenticator: null);
 
     AtEnrollment atEnrollmentBase = AtEnrollment.create();
 
@@ -43,7 +47,8 @@ void main(List<String> args) async {
         appName: 'buzz',
         deviceName: 'pixel',
         namespaces: {'buzz': 'rw'},
-        otp: argResults['otp']);
+        otp: argResults['otp'],
+        signingAlgo: SigningAlgoType.rsa2048);
 
     // Contains the response from the server.
     final atEnrollmentResponse =
@@ -51,9 +56,10 @@ void main(List<String> args) async {
     print(atEnrollmentResponse);
 
     // Once approved, waitForApproval persists the keys into session.atKeysIo and
-    // populates atEnrollmentResponse.session — hand that straight to
-    // AtClientManager.fromAuthSession(...) instead of touching atAuthKeys.
-    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
+    // populates atEnrollmentResponse.session; open a client on that key source
+    // with at_client's Atsign.open instead of touching atAuthKeys.
+    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse,
+    //     atLookup: atLookUp);
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

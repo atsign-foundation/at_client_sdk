@@ -72,7 +72,27 @@ jobs:
 
       - name: run tests
         working-directory: packages/${{ matrix.package }}
-        run: dart test --concurrency=1 --exclude-tags ffi
+        run: dart test --concurrency=1 --exclude-tags ffi --file-reporter json:acceptance-report.json
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      #
+      # Emitted for EVERY package in the matrix rather than only the packages
+      # cited today, so a citation added to another package later is not
+      # silently uncovered — an uncovered row reads as missing coverage rather
+      # than as missing wiring, the failure this ledger exists to remove.
+      #
+      # NOTE: the artifact name must carry `matrix.package`, or the matrix legs
+      # overwrite one another.
+      - name: Upload ${{ matrix.package }} acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-lib-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/acceptance-report.json
+          if-no-files-found: warn
 
   wasm_smoke:
     # Proves at_chops's web-safe barrel (package:at_chops/at_chops.dart) compiles
@@ -167,8 +187,62 @@ jobs:
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
 
+  # The gate tooling's own tests. wasm_ratchet needs this, so a broken walk
+  # reports here once rather than as a failure in every gated package.
+  wasm_shakedown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart pub get
+
+      - name: Analyze wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart analyze
+
+      - name: Test wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart test --concurrency=1
+
+  # Every WASM gate the repo declares. The gated set lives in the config named
+  # below and nowhere else, so adding a package changes nothing here; see
+  # tools/wasm_shakedown/README.md for what a gate checks.
+  #
+  # A hard gate, not allowed-to-fail: everything in the config compiles today.
+  #
+  # No `dart test -p node -c dart2wasm` step, deliberately. It would turn
+  # "compiles" into "runs", but on this runner every suite fails to load before
+  # any test body executes — the CJS bootstrap calls `instantiate` from the ESM
+  # `.mjs` init file and gets `undefined`. It works on Dart 3.12 + Node 24
+  # locally, and neither is pinned here, so it waits for a pinned pair where a
+  # failure would mean something.
+  wasm_ratchet:
+    runs-on: ubuntu-latest
+    needs: wasm_shakedown
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - run: dart pub get
+
+      - name: WASM gates
+        run: dart run wasm_shakedown --config .github/wasm_gates.yaml
+
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
+    env:
+      # The TRUNK-TRACKING atServer build. at_onboarding_cli_functional_tests
+      # activates an atSign with a post-quantum keypair, which needs an
+      # atServer that verifies ML-DSA PKAM — that lands on trunk well before
+      # it is released, so the published `vip` cannot run it. The proxy leg
+      # does not need it, but runs the same build so the two legs are never
+      # testing against different servers.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     strategy:
       fail-fast: false
       matrix:
@@ -191,9 +265,39 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart pub get
 
+      # No sudo: it resets the environment, so VIRTUALENV_IMAGE above would not
+      # reach compose and compose would silently fall back to the published
+      # `vip` in docker-compose.yaml. The runner user is in the docker group,
+      # so plain compose works.
       - name: Start docker instance
         working-directory: tests/${{ matrix.package }}
-        run: sudo docker compose up -d
+        run: docker compose up -d
+
+      # A wrong image does not announce itself: the atServer simply fails to
+      # verify an ML-DSA PKAM signature and the test reports a server-side
+      # `AT0010 RangeError`, which reads as a client bug. Assert what is
+      # actually running rather than what the YAML asked for.
+      - name: Confirm the virtualenv image that is actually running
+        working-directory: tests/${{ matrix.package }}
+        run: |
+          # Every container in the project, not one named service: the two
+          # packages call the service different things (`virtualenv` and
+          # `at_virtualenv`), and the proxy package runs a second container
+          # besides. Asking whether ANY of them is the wanted image is the
+          # question that holds for both.
+          want="$VIRTUALENV_IMAGE"
+          found=0
+          for cid in $(docker compose ps -q); do
+            got=$(docker inspect --format '{{.Config.Image}}' "$cid")
+            echo "  running: $got"
+            if [ "$got" = "$want" ]; then found=1; fi
+          done
+          if [ "$found" != "1" ]; then
+            echo "No container is running $want - compose did not receive"
+            echo "VIRTUALENV_IMAGE and fell back to its default."
+            exit 1
+          fi
+          echo "confirmed: $want is running"
 
       - name: Check for docker container readiness
         working-directory: tests/${{ matrix.package }}
@@ -212,4 +316,4 @@ jobs:
 
       - name: kill docker image
         working-directory: tests/${{ matrix.package }}
-        run: sudo docker compose down
+        run: docker compose down

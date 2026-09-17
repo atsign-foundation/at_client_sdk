@@ -83,6 +83,10 @@ final class AesGcm256FfiAlgo implements SymmetricEncryptionAlgorithm {
       {required InitialisationVector iv, List<int> aad = const []}) async {
     final Uint8List keyBytes = _keyBytesForEncrypt(key);
     final List<int> nonce = _nonceBytesForEncrypt(iv);
+    checkInlLength(
+        aad.length, 'aad', 'EVP_EncryptUpdate', AtEncryptionException.new);
+    checkInlLength(plainData.length, 'plainData', 'EVP_EncryptUpdate',
+        AtEncryptionException.new);
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
@@ -203,6 +207,10 @@ final class AesGcm256FfiAlgo implements SymmetricEncryptionAlgorithm {
         encryptedData.sublist(0, encryptedData.length - tagLength);
     final Uint8List tag =
         encryptedData.sublist(encryptedData.length - tagLength);
+    checkInlLength(
+        aad.length, 'aad', 'EVP_DecryptUpdate', AtDecryptionException.new);
+    checkInlLength(cipherText.length, 'encryptedData', 'EVP_DecryptUpdate',
+        AtDecryptionException.new);
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');

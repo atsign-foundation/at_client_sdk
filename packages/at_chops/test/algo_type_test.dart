@@ -30,8 +30,8 @@ void main() {
 
   group('KemAlgoType', () {
     test('names are the wire identifiers', () {
-      expect(
-          KemAlgoType.values.map((a) => a.name), equals(['mlkem768', 'xwing']));
+      expect(KemAlgoType.values.map((a) => a.name),
+          equals(['mlkem768', 'mlkem1024', 'xwing']));
     });
 
     test('fromString round-trips every value', () {
@@ -41,7 +41,7 @@ void main() {
     });
 
     test('fromString throws on an unknown name', () {
-      expect(() => KemAlgoType.fromString('mlkem1024'),
+      expect(() => KemAlgoType.fromString('mlkem512'),
           throwsA(isA<AtException>()));
     });
   });
@@ -71,11 +71,11 @@ void main() {
       }
     });
 
-    test('fromString round-trips the one camelCase constant', () {
-      expect(SigningAlgoType.fromString('eccSecp256r1'),
-          equals(SigningAlgoType.eccSecp256r1),
-          reason: 'lowercasing only the argument, as HashingAlgoType did, '
-              'would never match eccSecp256r1');
+    test('fromString matches the wire literal case-insensitively', () {
+      expect(SigningAlgoType.fromString('ECC_SECP256R1'),
+          equals(SigningAlgoType.ecc_secp256r1),
+          reason: 'the member name IS the wire literal, and fromString '
+              'lowercases both sides');
     });
 
     test('fromString throws on an unknown name', () {

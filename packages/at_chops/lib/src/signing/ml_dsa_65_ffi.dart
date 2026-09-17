@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/spec/ml_dsa_65_spec.dart';
+import 'package:at_chops/src/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 import 'package:meta/meta.dart';
@@ -24,6 +26,11 @@ import '../ffi/openssl_loader.dart';
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
 /// (e.g. loaded via [tryLoadLibCrypto]).
+///
+/// [fromLib] probes the library with [libCryptoSupportsMlDsa65] and throws
+/// [AtSigningException] if it lacks ML-DSA-65 (OpenSSL < 3.5), so a pinned
+/// library that cannot do the work fails at construction rather than at the
+/// first [signBytes].
 final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
@@ -115,10 +122,13 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
         }
         final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
         try {
-          return (
-            publicKey: _extractRawPublicKey(pkey),
-            secretKey: _extractRawPrivateKey(pkey),
-          );
+          final Uint8List pk = _extractRawPublicKey(pkey);
+          final Uint8List sk = _extractRawPrivateKey(pkey);
+          checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'public key');
+          checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'secret key');
+          return (publicKey: pk, secretKey: sk);
         } finally {
           _pkeyFree(pkey);
         }
@@ -139,9 +149,13 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
+    MlDsa65Sizes.validateSecretKey(secretKey);
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
-      return _sign(pkey, message);
+      final Uint8List sig = _sign(pkey, message);
+      checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+          operation: 'EVP_DigestSign', label: 'signature');
+      return sig;
     } finally {
       _pkeyFree(pkey);
     }
@@ -149,10 +163,24 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
   ///
-  /// Throws [AtSigningVerificationException] if the signature does not verify.
+  /// Throws [AtSigningVerificationException] if the signature does not verify,
+  /// including for malformed or attacker-controlled input (wrong-length or
+  /// garbage key/signature) — a verification that could not be attempted and
+  /// one that failed are the same answer to the caller.
+  ///
+  /// Throws [StateError] when OpenSSL itself cannot perform the operation —
+  /// most commonly a libcrypto build without ML-DSA-65 (added to the default
+  /// provider in OpenSSL 3.5). That is a misconfiguration, not a forged
+  /// signature, and reporting it as a failed verification would make the two
+  /// indistinguishable. Gate on [libCryptoSupportsMlDsa65] before
+  /// [MlDsa65FfiAlgo.fromLib], or use [AtPqc.mlDsa65], which already does.
   @override
   Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
+    if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
+      throw AtSigningVerificationException(
+          '$name signature verification failed');
+    }
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
       _verify(pkey, message, signature);
@@ -288,11 +316,15 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
       try {
         final int result =
             _digestVerify(ctx, sigBuf, signature.length, dataBuf, data.length);
+        // 1 = valid, 0 = signature mismatch, < 0 = the operation itself
+        // failed. Only the middle case is a verification result; reporting the
+        // last one as a failed verification would make a backend failure
+        // indistinguishable from a forged signature.
+        if (result < 0) throw StateError('EVP_DigestVerify failed');
         if (result == 0) {
           throw AtSigningVerificationException(
               '$name signature verification failed');
         }
-        if (result < 0) throw StateError('EVP_DigestVerify failed');
       } finally {
         calloc.free(dataBuf);
         calloc.free(sigBuf);

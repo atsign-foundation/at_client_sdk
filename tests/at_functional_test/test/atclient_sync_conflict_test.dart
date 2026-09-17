@@ -10,13 +10,15 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() async {
+  TestUtils.isolateStorage('atclient_sync_conflict_test');
   late AtClientManager atClientManager;
   late String atSign;
   String namespace = 'wavi';
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
   });
 
   setUp(() async {

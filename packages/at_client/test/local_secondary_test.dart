@@ -4,11 +4,15 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:crypton/crypton.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
+
+import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
 class MockSecondaryKeyStore extends Mock
@@ -72,7 +76,22 @@ class MockSecondaryKeyStore extends Mock
       const Stream.empty();
 }
 
-class MockAtClientImpl extends Mock implements AtClientImpl {}
+class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
+  // non-nullable function type, and the services read it off the impl.
+  @override
+  final AtLookUpFactory lookUps = secureSocketLookUps();
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter answers null, which the runtime refuses for the
+  // non-nullable AtConnection; a Monitor built from this mock reads it.
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice',
+      attempt: (_) async =>
+          AtConnectionState.offline(AtConnectionCause.unattempted));
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+}
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';
@@ -85,6 +104,13 @@ void main() {
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       AtClientImpl.atClientInstanceMap.remove(atSign);
       await tearDownLocalStorage(storageDir);
     });
@@ -97,6 +123,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -113,6 +140,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -129,6 +157,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
@@ -147,6 +176,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -164,6 +194,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
@@ -175,7 +206,16 @@ void main() {
 
   group('A group of local secondary execute verb tests', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      await tearDownLocalStorage(storageDir);
+    });
 
     test('test update verb builder', () async {
       final atClientManager = AtClientManager(atSign);
@@ -185,6 +225,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -206,6 +247,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -232,6 +274,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -259,6 +302,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -285,6 +329,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -316,6 +361,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -342,7 +388,16 @@ void main() {
 
   group('writesInProgress tracker', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      await tearDownLocalStorage(storageDir);
+    });
 
     /// Builds a fresh LocalSecondary against the test Hive store. Each
     /// test gets its own AtClient instance (atClientInstanceMap is
@@ -356,6 +411,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       return LocalSecondary(atClient);
     }
 
@@ -879,6 +935,85 @@ void main() {
           true);
     });
   });
+
+  /// The enrollment record is fetched from the atServer on first use and
+  /// memoised; nothing caches it in local storage.
+  group('fetching the enrollment record', () {
+    late MockRemoteSecondary remote;
+
+    // NOTE: the instance map is keyed by atSign, so without this eviction
+    // `AtClientImpl.create` hands back an earlier group's client — with that
+    // group's remote secondary and its memoised enrollment, so every stub
+    // below would be measuring the wrong object.
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await setupLocalStorage(storageDir, atSign);
+    });
+    tearDown(() async {
+      // NOTE: a client keeps its storage location claimed until it is stopped,
+      // so dropping the map entry alone is not enough.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      await tearDownLocalStorage(storageDir);
+    });
+
+    Future<AtClient> client({String? enrollmentId}) async {
+      remote = MockRemoteSecondary();
+      final c = await AtClientImpl.create(
+          atSign,
+          'wavi',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: remote);
+      c.syncService = MockSyncService();
+      c.enrollmentId = enrollmentId;
+      return c;
+    }
+
+    test('a client with no enrollment id has no record to fetch', () async {
+      final c = await client();
+      expect(await c.getLocalSecondary()!.getEnrollmentDetails(), isNull);
+      verifyNever(() => remote.executeCommand(any(), auth: any(named: 'auth')));
+    });
+
+    test('the fetched record is parsed, and fetched only once', () async {
+      final c = await client(enrollmentId: 'e-1');
+      when(() =>
+          remote.executeCommand('enroll:fetch:{"enrollmentId":"e-1"}\n',
+              auth: true)).thenAnswer((_) async => 'data:${jsonEncode({
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': {'buzz': 'rw'},
+                'status': 'approved',
+              })}');
+
+      final first = await c.getLocalSecondary()!.getEnrollmentDetails();
+      expect(first!.appName, 'buzz');
+      expect(first.namespace, {'buzz': 'rw'});
+      expect(first.status, 'approved',
+          reason: 'the verb answers with it and this parse is hand-written, so '
+              'it drops whatever it is not told to keep');
+
+      await c.getLocalSecondary()!.getEnrollmentDetails();
+      verify(() => remote.executeCommand(any(), auth: true)).called(1);
+    });
+
+    test('a failed fetch names the enrollment and the cause', () async {
+      final c = await client(enrollmentId: 'e-2');
+      when(() => remote.executeCommand(any(), auth: true))
+          .thenThrow(AtLookUpException('AT0014', 'the atServer said no'));
+
+      await expectLater(
+          () => c.getLocalSecondary()!.getEnrollmentDetails(),
+          throwsA(isA<AtKeyNotFoundException>()
+              .having((e) => e.message, 'message', contains('e-2'))
+              .having((e) => e.message, 'message',
+                  contains('the atServer said no'))));
+    });
+  });
 }
 
 // The AtClient owns its commit-log-free persistence bundle (created
@@ -892,6 +1027,11 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
     // Close every Hive box BEFORE deleting storage (open file handles).
+    // Both registries: `Hive.close()` reaches only the package-global
+    // instance, while the keystore's boxes live on a per-path `HiveInstances`
+    // instance and would stay open over the deleted directory, so the next
+    // test would read this one's values back out of the cached box.
+    await HiveInstances.closeAll();
     await Hive.close();
 
     var isExists = await Directory(storageDir).exists();
