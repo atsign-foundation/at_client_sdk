@@ -1436,9 +1436,6 @@ class AtClientImpl implements AtClient {
       _availableTimer = null;
       await _availableSub?.cancel();
       _availableSub = null;
-      // Resource takedown: does not wait on subscribers (see
-      // closeWithoutWaiting). A paused subscriber to `dataEvents` would
-      // otherwise hold the stop open for as long as it stays paused.
       closeWithoutWaiting(_dataEventsCtrl);
     });
 

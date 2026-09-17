@@ -362,11 +362,9 @@ class Monitor {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    // Subscriber completion: end the loop and let its lifecycle settle.
     stop();
     await lookUp.close();
     await _lifecycle;
-    // Resource takedown: does not wait on subscribers (see closeWithoutWaiting).
     closeWithoutWaiting(currentStateStreamController);
   }
 

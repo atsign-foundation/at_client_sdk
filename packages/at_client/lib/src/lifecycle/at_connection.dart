@@ -218,12 +218,10 @@ class AtConnection {
   /// and [changes] is done.
   Future<void> close() async {
     if (_closed) return;
-    // Subscriber completion: emit the final state and let listeners drain it.
     final reported = report(_stoppedState);
     _closed = true;
     _closing.complete();
     await reported;
-    // Resource takedown: does not wait on subscribers (see closeWithoutWaiting).
     closeWithoutWaiting(_changes);
   }
 }
