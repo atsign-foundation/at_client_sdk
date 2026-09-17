@@ -3,6 +3,8 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
+import '../at_lookup_io.dart';
+
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
 ///
@@ -115,7 +117,12 @@ abstract interface class AtLookUp {
       rootDomain.rootPort,
       secureSocketConfig: transport.secureSocketConfig,
       clientConfig: clientConfig,
-      secondaryAddressFinder: secondaryAddressFinder,
+      secondaryAddressFinder: secondaryAddressFinder ??
+        CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain,
+          rootDomain.rootPort,
+          socketConfig: transport.secureSocketConfig,
+        ),
       secureSocketFactory: transport.socketFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
