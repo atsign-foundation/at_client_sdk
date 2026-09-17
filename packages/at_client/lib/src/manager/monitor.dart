@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -370,11 +371,7 @@ class Monitor {
     stop();
     await lookUp.close();
     await _lifecycle;
-    // NOTE: not awaited. `close()` on a broadcast controller completes only
-    // once every subscriber has taken the done event, and a PAUSED one never
-    // does - so awaiting it here would hang the stop this belongs to. The
-    // paused subscriber still gets `done`, when it resumes.
-    unawaited(currentStateStreamController.close());
+    closeWithoutWaiting(currentStateStreamController);
   }
 
   Future<void> _teardown() async {

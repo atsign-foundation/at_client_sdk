@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show SocketException, HandshakeException;
 
+import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_utils/at_logger.dart';
@@ -221,11 +222,7 @@ class AtConnection {
     _closed = true;
     _closing.complete();
     await reported;
-    // NOTE: not awaited. `close()` on a broadcast controller completes only
-    // once every subscriber has taken the done event, and a PAUSED one never
-    // does - so awaiting it here would hang the stop this belongs to. The
-    // paused subscriber still gets `done`, when it resumes.
-    unawaited(_changes.close());
+    closeWithoutWaiting(_changes);
   }
 }
 
