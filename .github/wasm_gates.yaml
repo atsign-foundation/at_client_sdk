@@ -37,18 +37,20 @@ at_auth:
   # the stores' interfaces and the auth flows; anything needing a filesystem, a
   # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
   #
-  # Three inherited blocked packages, none of them at_auth's own code:
-  # at_lookup (sockets), at_server_status, and chalkdart. at_utils came off with
-  # the 4.0.0 barrel split, which cleaned at_utils.dart and at_logger.dart --
-  # but not at_progress.dart, which still exports src/logging/progress.dart and
-  # its chalkdart import. That barrel is how chalkdart is still reachable here:
-  # at_auth/src/at_auth.dart and seven of its enrollment files import it.
-  # Porting at_progress.dart takes chalkdart off; at_lookup and at_server_status
-  # come off as each is ported.
+  # One inherited blocked package, not at_auth's own code: chalkdart, via
+  # at_progress.dart, which still exports src/logging/progress.dart and its
+  # chalkdart import -- at_auth/src/at_auth.dart and seven of its enrollment
+  # files import it. Porting at_progress.dart takes chalkdart off.
+  #
+  # at_lookup and at_server_status came off: activateAtSign and
+  # waitForApproval now require an injected AtLookupMuxable rather than
+  # building their own connection, so at_auth.dart reaches only at_lookup's
+  # neutral barrel (web-safe since the 4.0.0 transport split), and
+  # at_server_status is no longer a dependency at all.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 3 # was 4 -- at_utils cleared by the 4.0.0 split
+      max_blocked_packages: 1 # was 3 -- at_lookup and at_server_status cleared
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
@@ -56,19 +58,6 @@ at_auth:
     - barrel: package:at_auth/at_auth_io.dart
       reaches_file: lib/src/keys/io/file_io.dart
       because: the filesystem code it exists to quarantine
-
-    # Not an island — the conditional seam. probe_default.dart exports
-    # probe_default_web.dart, or probe_default_io.dart if (dart.library.io).
-    # The web half is the empty allowed_offenders above; this is the other half,
-    # the web barrel walked with io semantics, which must come out down the
-    # native branch. Without it the ratchet passes just as well when the
-    # conditional was skipped and neither branch was seen.
-    #
-    # File axis, not library: at_auth.dart under io resolution reaches dart:io
-    # through half a dozen files, so reaches_library would prove nothing here.
-    - barrel: package:at_auth/at_auth.dart
-      reaches_file: lib/src/auth/socket_probe_io.dart
-      because: the conditional export in probe_default.dart
 
 at_utils:
   # Gated by the 4.0.0 barrel split. at_utils.dart holds AtSignLogger, AtUtils and
