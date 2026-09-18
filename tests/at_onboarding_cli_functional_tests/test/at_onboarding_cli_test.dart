@@ -318,6 +318,9 @@ Future<void> generateAtKeysFile(String atSign, String filePath) async {
 }
 
 Future<void> tearDownFunc() async {
+  // NOTE: stopped before the directory goes, or a client still holding a store
+  // in it fails its own release when it is stopped later.
+  await evictCachedAtClients();
   bool isExists = await Directory('storage/').exists();
   if (isExists) {
     Directory('storage/').deleteSync(recursive: true);

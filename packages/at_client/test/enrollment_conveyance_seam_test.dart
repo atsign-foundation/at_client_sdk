@@ -17,6 +17,9 @@ import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
+  _RecordingAtEnrollment({this.onApprove});
+
+  final void Function(String)? onApprove;
   final List<EnrollmentRequestDecision> approvals = [];
 
   @override
@@ -24,6 +27,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
       {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
+    onApprove?.call('approved');
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
   }
@@ -33,17 +37,25 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
 /// answers with a fixed status, so these tests observe the seam rather than
 /// the sealing behind it.
 class _StatusConveyance implements EnrollmentConveyance {
-  _StatusConveyance(this.status, {this.sweepResult = 0});
+  _StatusConveyance(this.status, {this.sweepResult = 0, this.mintRefusal});
 
   final KeyPackageStatus status;
   final int sweepResult;
-  final List<({Enrollment enrollment, String? minted})> conveyed = [];
+  final AtEnrollmentException? mintRefusal;
+  final List<Enrollment> conveyed = [];
+  final List<String> minted = [];
   int sweeps = 0;
 
   @override
-  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
-      {String? mintedApkamSymmetricKey}) async {
-    conveyed.add((enrollment: enrollment, minted: mintedApkamSymmetricKey));
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey) async {
+    if (mintRefusal != null) throw mintRefusal!;
+    minted.add(apkamSymmetricKey);
+  }
+
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) async {
+    conveyed.add(enrollment);
     return status;
   }
 
@@ -54,6 +66,29 @@ class _StatusConveyance implements EnrollmentConveyance {
   }
 }
 
+/// An [EnrollmentConveyance] that records when each of its calls lands
+/// relative to the approval.
+class _OrderedConveyance implements EnrollmentConveyance {
+  _OrderedConveyance(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey) async {
+    events.add('minted');
+  }
+
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) async {
+    events.add('conveyed');
+    return KeyPackageStatus.present;
+  }
+
+  @override
+  Future<int> sweepUnanchoredEnrollments() async => 0;
+}
+
 /// An [EnrollmentConveyance] that refuses by throwing, the way the production
 /// preconditions do.
 class _ThrowingConveyance implements EnrollmentConveyance {
@@ -62,8 +97,11 @@ class _ThrowingConveyance implements EnrollmentConveyance {
   final AtEnrollmentException refusal;
 
   @override
-  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
-          {String? mintedApkamSymmetricKey}) =>
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey) async {}
+
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) =>
       throw refusal;
 
   @override
@@ -192,15 +230,15 @@ void main() {
 
   test('every post-approval conveyance refusal carries the response', () async {
     final throwing = _ThrowingConveyance(AtEnrollmentException(
-        'Enrollment $enrolleeId expects this approver to convey its '
-        'symmetric key, but this client has not registered a key package to '
-        'seal it from. Call register() on '
-        'AtClientSecretSharing.forClient(atClient) before approving.'));
+        'Enrollment $enrolleeId is authorised for no ordinary namespace, so '
+        'there is nowhere to put the envelope carrying its symmetric key that '
+        'it would be allowed to read.'));
 
     await expectLater(
         approveThrough(throwing),
         throwsA(isA<EnrollmentConveyanceException>()
-            .having((e) => e.message, 'message', contains('register()'))
+            .having(
+                (e) => e.message, 'message', contains('no ordinary namespace'))
             .having((e) => e.response.enrollmentId, 'response.enrollmentId',
                 enrolleeId)),
         reason: 'losing the response on these paths and carrying it on the '
@@ -214,7 +252,7 @@ void main() {
     final response = await approveThrough(conveyance);
 
     expect(response.enrollmentId, enrolleeId);
-    expect(conveyance.conveyed.single.enrollment.enrollmentId, enrolleeId,
+    expect(conveyance.conveyed.single.enrollmentId, enrolleeId,
         reason: 'the conveyance is consulted with the re-read enrollment '
             'even when it turns out to have nothing to seal to');
   });
@@ -232,16 +270,46 @@ void main() {
       () async {
     final minting = _StatusConveyance(KeyPackageStatus.present);
     await approveThrough(minting);
-    expect(minting.conveyed.single.minted, isNotNull,
+    expect(minting.minted, hasLength(1),
         reason: 'the enrollee sent no wrapped key, so the key the approver '
-            'minted is the one the conveyance must seal first');
+            'minted is the one the conveyance must seal');
 
     remoteData.clear();
     final wrapped = _StatusConveyance(KeyPackageStatus.present);
     await approveThrough(wrapped, record: wrappedRecord);
-    expect(wrapped.conveyed.single.minted, isNull,
+    expect(wrapped.minted, isEmpty,
         reason: 'this enrollee wrapped its own key; minting a second one '
             'would leave it unable to unwrap anything');
+  });
+
+  test('a minted key is conveyed before the approval that encrypts under it',
+      () async {
+    final events = <String>[];
+    final conveyance = _OrderedConveyance(events);
+    final enrollment = _RecordingAtEnrollment(onApprove: events.add);
+
+    await approveThrough(conveyance, enrollment: enrollment);
+
+    expect(events, ['minted', 'approved', 'conveyed'],
+        reason: 'the approval encrypts the enrollment\'s keys under the '
+            'minted key and cannot be repeated, so a stop between the two '
+            'must leave the key already with the enrollee');
+  });
+
+  test('a minted key that cannot be conveyed leaves the enrollment pending',
+      () async {
+    final enrollment = _RecordingAtEnrollment();
+
+    await expectLater(
+        approveThrough(
+            _StatusConveyance(KeyPackageStatus.present,
+                mintRefusal: AtEnrollmentException('no key package')),
+            enrollment: enrollment),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e, 'type', isNot(isA<EnrollmentConveyanceException>()))));
+    expect(enrollment.approvals, isEmpty,
+        reason: 'an approval with no conveyed key is one the enrollee can '
+            'never decrypt, and the atServer refuses to approve it again');
   });
 
   test('no conveyance when the re-read finds no enrollment', () async {

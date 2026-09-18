@@ -68,6 +68,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
         _populateModel(model, atValueJson, atKey);
         modelList.add(model);
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.severe('$e while getting value of $atKey');
       }
     }
@@ -104,6 +105,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
     } on AtKeyNotFoundException {
       rethrow;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       throw AtKeyNotFoundException('$e while getting $atKey');
     }
   }
@@ -204,6 +206,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
         model.sharedByAtSign = atKey.sharedBy!;
         modelList.add(model);
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.severe('$e while getting value of $atKey');
       }
     }

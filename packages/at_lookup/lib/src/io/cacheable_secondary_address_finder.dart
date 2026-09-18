@@ -6,6 +6,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 import '../cache/secondary_address_finder.dart';
+import '../util/abandonment.dart';
 import '../util/lookup_util.dart';
 import 'secure_socket_util.dart';
 
@@ -118,6 +119,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
     } on AtException {
       rethrow;
     } on Exception catch (e) {
+      if (Abandonment.current?.isAbandoned ?? false) rethrow;
       _logger.severe(
           '${getFailedToLookUpExceptionMessage(atSign)} - ${e.toString()}');
       throw AtException(e.toString());
@@ -186,6 +188,7 @@ class SecondaryUrlFinder {
         address = await _findSecondary(atSign, deadline);
         return address;
       } catch (e) {
+        if (_abandoned) rethrow;
         lastExceptionMsg = e.toString();
         if (i < retryDelaysMillis.length) {
           final delay = Duration(milliseconds: retryDelaysMillis[i]);
@@ -205,6 +208,10 @@ class SecondaryUrlFinder {
     }
     throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
   }
+
+  /// Whether the owner this lookup runs for has closed, which ends it
+  /// quietly rather than as a failure to retry or report.
+  static bool get _abandoned => Abandonment.current?.isAbandoned ?? false;
 
   Future<String?> _findSecondary(String atsign, DateTime deadline) async {
     String? response;
@@ -255,6 +262,10 @@ class SecondaryUrlFinder {
       // (previously a fixed 30-second busy-wait, ignoring any caller budget).
       while (DateTime.now().isBefore(deadline)) {
         await Future.delayed(Duration(milliseconds: 5));
+        if (_abandoned) {
+          throw SocketException(
+              'atDirectory lookup for $atsign abandoned: its owner has closed');
+        }
         if (ans) {
           response = secondary;
           socket.write('@exit\n');
@@ -270,6 +281,10 @@ class SecondaryUrlFinder {
       socket.destroy();
       throw AtTimeoutException('AtLookup.findAtServer timed out');
     } on Exception catch (exception) {
+      if (_abandoned) {
+        socket?.destroy();
+        rethrow;
+      }
       var msg = 'Connecting to $_rootDomain:$_rootPort : $exception';
       _logger.severe(msg);
       if (socket != null) {

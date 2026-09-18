@@ -30,6 +30,37 @@
 
 ## 3.7.0-rc2
 
+- fix: the listener reads the connection a line at a time, and each line is
+  one message from the atServer: the prompt that may precede it comes off,
+  and what it begins with says where it goes - `data:` and `error:` to the
+  reader waiting for a reply, `notification:` to whoever asked for
+  notifications. It used to look for a reply's terminating prompt instead, so
+  anything the atServer said first and did not terminate - an error line, a
+  banner, half a reply - sat in front of every notification after it and none
+  were recognised: the connection stayed up and the client went deaf with
+  nothing to see. A notification and a reply that arrive in one chunk now
+  both survive, where one of them used to be lost.
+- `AtLookupImpl.notificationReconnectDelays` is settable, so a test of what
+  happens across several outages does not spend a second on each.
+- chore: bump at_commons dependency to ^5.18.0.
+- fix: a TLS connect is bounded from the TCP connect to the end of the
+  handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
+  peer that accepted the connection and never answered the handshake left
+  the connect waiting for ever, and its socket held the process open.
+- feat: `AtLookUp.close()` ends the lookup. Work in flight fails with
+  `StoppedException` at once, without waiting for it, every socket still
+  being opened for the lookup is closed (the atDirectory lookup's included,
+  mid-handshake or not), notifications stop with their reconnect loop and
+  heartbeat, and every later call throws `StoppedException` without touching
+  the network.
+  `AtLookupMuxable.dropConnection()` closes only the current connection and
+  leaves the lookup usable, which is what `close()` did before; a caller that
+  closed a lookup and went on using it calls that instead.
+- fix: a stop that lands while `startNotifications` is opening its connection
+  leaves notifications stopped and that connection closed. It used to send
+  `monitor:` anyway and start a heartbeat that nothing cancelled. A heartbeat
+  or reconnect attempt that a stop cuts short now ends quietly, rather than
+  logging a failure and closing the connection.
 - feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is in
   the atDirectory, whether its atServer answers and whether it is activated,
   as an `AtSignServerState` with the cause of any failure. It asks over the

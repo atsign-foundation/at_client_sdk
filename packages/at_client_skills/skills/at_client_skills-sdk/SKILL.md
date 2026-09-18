@@ -442,6 +442,9 @@ await client.connection.attempt();                  // try again now
   closes storage built with `closedByClient: true`. It does **not** drain: a
   sync round in flight is abandoned and its work stays queued for the next
   client on that store. Wait for `isInSync()` first if the writes must land.
+- Work the stop cuts short, and any later call on the client, fails with
+  `StoppedException` (at_commons). It is not an `AtException`: catch it by
+  type to treat a stop as expected rather than as an error.
 - A stopped client is not restarted — open the atSign again.
 - `AtClientManager.getInstance().use(client)` makes a client current for code
   that reads `AtClientManager.getInstance().atClient`; `use` does **not** stop

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
+import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -28,6 +30,20 @@ class RecordingAtEnrollment extends Mock implements AtEnrollment {
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
   }
+}
+
+/// Conveys nothing, so a test observes the approval decision alone.
+class _NoConveyance implements EnrollmentConveyance {
+  @override
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey) async {}
+
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) async =>
+      KeyPackageStatus.absent;
+
+  @override
+  Future<int> sweepUnanchoredEnrollments() async => 0;
 }
 
 void main() {
@@ -240,10 +256,10 @@ void main() {
     /// Drives `approve` against a pending record and returns the decision that
     /// reached at_auth.
     ///
-    /// The two reads are stubbed with different records: the pending one on
-    /// the pre-approval read, and a metadata-less one afterwards, so
-    /// conveyance short-circuits and the assertion is about the minting
-    /// decision alone.
+    /// The two reads are stubbed with different records, the pending one on
+    /// the pre-approval read and a metadata-less one afterwards, and the
+    /// conveyance does nothing, so the assertion is about the minting decision
+    /// alone.
     Future<EnrollmentRequestDecision> decisionFor(
         String atSign, String pendingValue) async {
       final enrollKey =
@@ -282,8 +298,9 @@ void main() {
           AtData()..data = demo.aesKeyMap['@alice🛠']);
 
       final enrollment = RecordingAtEnrollment();
-      await EnrollmentServiceImpl(client, enrollment).approve(
-          EnrollmentRequestDecision.approved(
+      await EnrollmentServiceImpl(client, enrollment,
+              conveyance: _NoConveyance())
+          .approve(EnrollmentRequestDecision.approved(
               enrollmentId: 'abcdef01-1a2e-43e4-93bd-378f1d366ea7',
               apkamSymmetricKey: AtBytes.fromString(callerSuppliedKey),
               atSign: atSign));

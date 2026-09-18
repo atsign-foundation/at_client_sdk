@@ -309,6 +309,60 @@ void main() {
     });
   });
 
+  group('a pq enrollment collecting its conveyed symmetric key', () {
+    /// A pq enrollee's handshake: its keys hold no symmetric key, and
+    /// [candidates] is what its resolver offers, recording each one pulled.
+    Future<(AtEnrollmentResponse, MockAtLookUp, List<String>)> pqRig(
+        List<String> candidates) async {
+      final lookup = MockAtLookUp();
+      await stubLookUp(lookup, [Poll.approved]);
+      final pulled = <String>[];
+      Stream<String> offer(AtKeys keys, AtLookUp atLookUp) async* {
+        for (final candidate in candidates) {
+          pulled.add(candidate);
+          yield candidate;
+        }
+      }
+
+      final response = AtEnrollmentResponse('123', EnrollmentStatus.pending,
+          atSign: atSign,
+          rootDomain: AtRootDomain.atsignDomain,
+          atAuthKeys: rsaKeys()..apkamSymmetricKey = null,
+          apkamSymmetricKeyResolver: offer);
+      return (response, lookup, pulled);
+    }
+
+    test('keeps the key that decrypts, not the first conveyed', () async {
+      final leftOver = AESKey.generate(32).key;
+      final (response, lookup, pulled) =
+          await pqRig([leftOver, apkamSymmetricKey, AESKey.generate(32).key]);
+
+      await waitFor(response, lookup, 2);
+
+      expect(
+          response.atAuthKeys!.apkamSymmetricKey.toString(), apkamSymmetricKey,
+          reason: 'a retried or raced approval leaves a key conveyed ahead of '
+              'the one the approval encrypted under');
+      expect(response.atAuthKeys!.defaultEncryptionPrivateKey.toString(),
+          encryptionPrivateKeyMap[atSign]!);
+      expect(pulled, [leftOver, apkamSymmetricKey],
+          reason: 'the search stops at the key that decrypts');
+    });
+
+    test('keeps none when no conveyed key decrypts', () async {
+      final (response, lookup, _) =
+          await pqRig([AESKey.generate(32).key, AESKey.generate(32).key]);
+
+      await expectLater(
+          waitFor(response, lookup, 2),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('No conveyed apkamSymmetricKey decrypts'))));
+      expect(response.atAuthKeys!.apkamSymmetricKey, isNull,
+          reason: 'a key that decrypts nothing is never kept');
+      expect(response.atAuthKeys!.defaultEncryptionPrivateKey, isNull);
+    });
+  });
+
   group('the published polling regime', () {
     test('is these numbers', () {
       // Raw literals on purpose. These ARE the published defaults, so a

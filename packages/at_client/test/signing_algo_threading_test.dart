@@ -31,12 +31,13 @@ void main() {
     /// Asserted against the source: the forward is a plain pass-through with
     /// no branch or default to exercise live, and RemoteSecondary's own
     /// resolution of what it's handed is the 'RemoteSecondary' group above.
-    test('threads the client\'s enrollment id and algorithm into the '
+    test(
+        'threads the client\'s enrollment id and algorithm into the '
         'connection it builds', () {
       final source =
           File('lib/src/client/at_client_impl.dart').readAsStringSync();
-      final wiring =
-          source.substring(source.indexOf('RemoteSecondary buildRemoteSecondary('));
+      final wiring = source
+          .substring(source.indexOf('RemoteSecondary buildRemoteSecondary('));
 
       expect(wiring, contains('enrollmentId: enrollmentId'),
           reason: 'so the seam authenticates as this client\'s own '

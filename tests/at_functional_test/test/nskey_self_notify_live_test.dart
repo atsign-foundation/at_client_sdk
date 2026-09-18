@@ -284,7 +284,7 @@ void main() {
         reason: 'the monitor must be demonstrably up before it is dropped, or '
             '"it reconnected" and "it never connected" are the same green');
 
-    await notifications.monitor.lookUp.close();
+    await notifications.monitor.lookUp.dropConnection();
 
     final queuedKey = AtKey()
       ..key = 'queued$runId'

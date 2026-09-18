@@ -11,6 +11,7 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -250,6 +251,7 @@ class NskeyRotation {
         outcomes.add(await rotateNamespaceKey(namespace,
             excludeEnrollmentIds: {enrollmentId}));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.severe('Revoked $enrollmentId but could not rotate '
             '$namespace, so it still holds that namespace\'s live generation '
             'and can open data written under it. Rotate it explicitly, after '

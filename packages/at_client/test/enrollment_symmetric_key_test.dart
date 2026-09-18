@@ -138,7 +138,8 @@ void main() {
     // AtLookupImpl throws rather than returning null — uncaught, it escapes
     // the skip and takes the whole enrollment down.
     await expectLater(
-        resolve(withKeyPackage(), lookupWith(signer: 'revoked-enrollment')),
+        resolve(withKeyPackage(), lookupWith(signer: 'revoked-enrollment'))
+            .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('No conveyed apkamSymmetricKey arrived'))),
         reason: 'a revoked signer is precisely the case this path documents '
@@ -155,7 +156,8 @@ void main() {
         pollInterval: const Duration(milliseconds: 50));
 
     await expectLater(
-        resolve(withKeyPackage(), lookupWithJws(signer: 'revoked-enrollment')),
+        resolve(withKeyPackage(), lookupWithJws(signer: 'revoked-enrollment'))
+            .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('No conveyed apkamSymmetricKey arrived'))));
   });
@@ -169,7 +171,8 @@ void main() {
 
     await expectLater(
         resolve(withKeyPackage(),
-            lookupWith(signer: 'live-enrollment', apsk: 'not-a-real-key')),
+                lookupWith(signer: 'live-enrollment', apsk: 'not-a-real-key'))
+            .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('No conveyed apkamSymmetricKey arrived'))));
   });
@@ -178,7 +181,7 @@ void main() {
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign);
 
     await expectLater(
-        resolve(AtKeys(), lookupWith(signer: 'anyone')),
+        resolve(AtKeys(), lookupWith(signer: 'anyone')).toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('no key-establishment decapsulation private key'))),
         reason: 'nothing sealed to this enrollment could be opened, and '
@@ -200,7 +203,8 @@ void main() {
         pollInterval: Duration(milliseconds: 1));
 
     await expectLater(
-        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever'))
+            .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             allOf(contains(kpid), isNot(contains('co-tenant-kpid'))))),
         reason: 'the untagged package is this enrollment\'s; one tagged for '
@@ -218,7 +222,8 @@ void main() {
         pollInterval: Duration(milliseconds: 1));
 
     await expectLater(
-        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever'))
+            .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             allOf(contains('mine-kpid'), isNot(contains('untagged-kpid'))))),
         reason: 'a package filed against this enrollment is this '
@@ -239,7 +244,8 @@ void main() {
         pollInterval: Duration(milliseconds: 1));
 
     await expectLater(
-        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever'))
+            .toList(),
         throwsA(
             isA<StateError>().having((e) => '$e', 'message', contains(kpid))),
         reason: 'the untagged package is still this enrollment\'s when nothing '
@@ -262,7 +268,7 @@ void main() {
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign);
 
     await expectLater(
-        resolve(keys, lookupWith(signer: 'anyone')),
+        resolve(keys, lookupWith(signer: 'anyone')).toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('no key-establishment decapsulation private key'))));
   });

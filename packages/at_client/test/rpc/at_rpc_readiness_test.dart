@@ -52,7 +52,9 @@ void main() {
     });
   });
 
-  tearDown(() => states.close());
+  tearDown(() async {
+    if (!states.isClosed) await states.close();
+  });
 
   AtRpc rpcFor({required bool isClient}) => AtRpc(
       atClient: atClient,
@@ -109,6 +111,74 @@ void main() {
         .sendRequest(toAtSign: '@bob', request: AtRpcReq.create({'q': 3}))
         .timeout(Duration(seconds: 5));
     expect(notified, hasLength(1));
+  });
+
+  test('a listener that ends while waited for ends the wait as stopped',
+      () async {
+    when(() => notifications.currentListenerState)
+        .thenReturn(NotificationListenerState.notConnected);
+    final AtRpc rpc = rpcFor(isClient: true);
+
+    final ready = expectLater(rpc.ready(), throwsA(isA<StoppedException>()));
+    await Future<void>.delayed(Duration(milliseconds: 20));
+    await states.close();
+
+    await ready.timeout(Duration(seconds: 5),
+        onTimeout: () => fail('waited out the readiness timeout'));
+  });
+
+  test('a send on a stopped client is not retried', () async {
+    when(() => atClient.isStopped).thenReturn(true);
+    when(() => notifications.notify(any(),
+        checkForFinalDeliveryStatus: any(named: 'checkForFinalDeliveryStatus'),
+        waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+        onSuccess: any(named: 'onSuccess'),
+        onError: any(named: 'onError'),
+        onSentToSecondary:
+            any(named: 'onSentToSecondary'))).thenThrow(
+        StoppedException('the lookup for @alice has been closed'));
+    final AtRpc rpc = rpcFor(isClient: false);
+    final sent = Stopwatch()..start();
+
+    await expectLater(
+        rpc.sendRequest(toAtSign: '@bob', request: AtRpcReq.create({'q': 5})),
+        throwsA(isA<StoppedException>()));
+
+    expect(sent.elapsed, lessThan(Duration(milliseconds: 150)),
+        reason: 'the first retry would wait 200ms for a client that will '
+            'never send again');
+    verify(() => notifications.notify(any(),
+        checkForFinalDeliveryStatus: any(named: 'checkForFinalDeliveryStatus'),
+        waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+        onSuccess: any(named: 'onSuccess'),
+        onError: any(named: 'onError'),
+        onSentToSecondary: any(named: 'onSentToSecondary'))).called(1);
+  });
+
+  test('a call still waiting for its response fails when the client stops',
+      () async {
+    final responses = StreamController<AtNotification>.broadcast();
+    when(() => atClient.isStopped).thenReturn(false);
+    when(() => notifications.currentListenerState)
+        .thenReturn(NotificationListenerState.listening);
+    when(() => notifications.subscribe(
+            regex: any(named: 'regex'),
+            shouldDecrypt: any(named: 'shouldDecrypt')))
+        .thenAnswer((_) => responses.stream);
+    final client = AtRpcClient(
+        serverAtsign: '@bob',
+        atClient: atClient,
+        baseNameSpace: 'testing',
+        domainNameSpace: 'readiness');
+
+    final answered =
+        expectLater(client.call({'q': 6}), throwsA(isA<StoppedException>()));
+    await Future<void>.delayed(Duration(milliseconds: 20));
+    await responses.close();
+
+    await answered.timeout(Duration(seconds: 5),
+        onTimeout: () => fail('the call waited for a response that cannot '
+            'arrive'));
   });
 
   test('a listener that never comes up times out rather than hanging',

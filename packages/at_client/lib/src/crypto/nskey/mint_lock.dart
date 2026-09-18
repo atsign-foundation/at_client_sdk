@@ -1,7 +1,8 @@
 import 'dart:async' show Completer, unawaited;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_commons/at_commons.dart' show AtKey, EnrollmentConstants;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, EnrollmentConstants, StoppedException;
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -147,6 +148,7 @@ class MintLock {
         ..noCommit = true);
       return true;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       // NOTE: the refusal of a second write is the contention signal, and any
       // other failure to take the lock is equally a reason not to mint.
       _logger.finer('Could not take $lockKey: $e');
@@ -175,6 +177,7 @@ class MintLock {
           'loser');
       return true;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.finer('Could not read $lockKey to check ownership: $e');
       return false;
     }

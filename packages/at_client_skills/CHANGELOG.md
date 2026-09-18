@@ -2,6 +2,10 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Stopping a client: `stop()` ends the client's timers and waits and closes
+  every connection, work it cuts short fails with `StoppedException`, and a
+  push the atServer accepted just before the stop is pushed again by the next
+  client (`references/15-client-lifecycle.md` §7; `SKILL.md`).
 - The auth flows follow at_client_flutter 2.0: every dialog hands back the
   `AtClient` it opened, the app owns it, and nothing imports `at_auth`.
   `AtAuthRequest`, `AuthResponse`, `_setupAtClient` and

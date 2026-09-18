@@ -377,6 +377,9 @@ class RemoteSecondary implements Secondary {
     return Intent.fetchData;
   }
 
+  /// Closes the connection and ends this remote secondary for good. A
+  /// connection meant to be re-established uses
+  /// [AtLookupMuxable.dropConnection] instead.
   Future<void> closeConnection() async {
     await atLookUp.close();
   }

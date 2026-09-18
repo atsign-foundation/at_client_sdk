@@ -540,7 +540,7 @@ void main() {
       await atLookup.stopNotifications();
     });
 
-    test('close() fails a pending read even while delivery is paused',
+    test('dropConnection() fails a pending read even while delivery is paused',
         () async {
       // The case `_closeConnection`'s own dartdoc names: with delivery paused
       // the transport()'s done event is buffered, so the onDone route that fails a
@@ -562,7 +562,7 @@ void main() {
           );
       await Future.delayed(const Duration(milliseconds: 50));
 
-      await atLookup.close();
+      await atLookup.dropConnection();
       await pending.timeout(const Duration(seconds: 5),
           onTimeout: () => fail('the pending read was never failed, so it is '
               'sitting out its transient budget holding the request mutex - '
@@ -591,6 +591,7 @@ void main() {
               'to the server, and at_lookup used to log it as one twice');
 
       sub.resume();
+      await atLookup.close();
     });
 
     test('a connection built before the stream is read still reconnects',
