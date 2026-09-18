@@ -103,6 +103,12 @@ Future<bool> tryAcquire(String taskId) async {
 - If the coordination is specifically "N instances of one RPC responder", you
   don't need to write this yourself — `AtRpc.server(enableRequestMutex: true)`
   is this pattern, packaged (see [13-rpc.md](13-rpc.md)).
+- The mutex coordinates *work*, not *storage*. Each instance is still a
+  separate client and needs its **own** storage path — see
+  [One process, one storage path](#one-process-one-storage-path) above.
+- **Each instance must `await client.stop()` when it exits.** A store is held by
+  one live client; without the stop, the next process to claim that path is
+  refused.
 
 ### Pattern 2: stateless instances with no sync
 

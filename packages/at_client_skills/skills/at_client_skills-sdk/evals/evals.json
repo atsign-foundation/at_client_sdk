@@ -4,172 +4,389 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/).",
+      "expectations": [
+        "Recommends at_client_flutter as the single dependency and notes it re-exports at_client (does not ask for both packages)",
+        "Shows atClient.collection<Todo>() with a fromJson factory and typeTag",
+        "Creates the todo via collection.create with a sharedWith set",
+        "Does not recommend the deprecated AtCollectionModel"
+      ]
     },
     {
       "id": 2,
       "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
-      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern."
+      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern.",
+      "expectations": [
+        "Warns that AtCollectionModel is deprecated",
+        "Redirects to the modern AtCollection<T> API via atClient.collection()",
+        "Shows the correct modern pattern in code"
+      ]
     },
     {
       "id": 3,
       "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
-      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth.",
+      "expectations": [
+        "Shows AtKeysFileDialog.show(context) as the entry point, yielding a FileAtKeysIo",
+        "Follows with PkamDialog.show(...) passing keys, preference and storage, treating a null return as cancelled or failed",
+        "Adopts the returned client with AtClientManager.getInstance().use(client)",
+        "Does not use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does not import at_auth"
+      ]
     },
     {
       "id": 4,
       "prompt": "I want to query my todos reactively in a Flutter StreamBuilder — only show items where done=false, sorted by due date.",
-      "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative."
+      "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative.",
+      "expectations": [
+        "Filters with query().where on done == false",
+        "Sorts with orderBy on the due date",
+        "Uses watch() to produce the stream consumed by StreamBuilder",
+        "Does not create the watch() stream inside build() (holds it in State or warns against it)"
+      ]
     },
     {
       "id": 5,
       "prompt": "Should I use at_common_flutter in my new Flutter app? I saw it mentioned somewhere.",
-      "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead."
+      "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead.",
+      "expectations": [
+        "Says at_common_flutter is deprecated / should not be used",
+        "Recommends at_client_flutter instead"
+      ]
     },
     {
       "id": 6,
       "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atsign every 2 seconds. Should I use AtCollection or something else?",
-      "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern."
+      "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern.",
+      "expectations": [
+        "Recommends Notifications + SQLite (not AtCollection) for 2-second telemetry",
+        "Explains AtCollection is for discrete, addressable records rather than high-frequency streams"
+      ]
     },
     {
       "id": 7,
       "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
-      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them from package:at_client/at_client.dart (NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly)."
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them from package:at_client/at_client.dart (NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly).",
+      "expectations": [
+        "Recommends the collections_test_hooks helpers (collectionWithInjectedNotifications, handleNotificationForTest, clearFactoriesForTest)",
+        "Imports the hooks from package:at_client/at_client.dart",
+        "Does not import src/collections/collections_test_hooks.dart directly"
+      ]
     },
     {
       "id": 8,
       "prompt": "I have a posts collection with comments and each comment has replies. How do I reactively watch the full tree?",
-      "expected_output": "Recommends watchWithTree with SubSpec<Comment> and nested SubSpec<Reply>. Shows the TreeNode<Post> result shape with node.parent (CItem<Post>) and node.branches (Map keyed by subName)."
+      "expected_output": "Recommends watchWithTree with SubSpec<Comment> and nested SubSpec<Reply>. Shows the TreeNode<Post> result shape with node.parent (CItem<Post>) and node.branches (Map keyed by subName).",
+      "expectations": [
+        "Recommends watchWithTree for the nested tree",
+        "Uses SubSpec<Comment> with a nested SubSpec<Reply>",
+        "Describes the TreeNode result shape: node.parent and node.branches keyed by subName"
+      ]
     },
     {
       "id": 9,
       "prompt": "I get a CSubItemUpdated event when a comment is added. How do I fetch the actual comment data?",
-      "expected_output": "Shows getDescendant() with ancestry: event.ancestry, id: event.id, owner: event.owner. Notes that ancestry is root-first (ancestry.last is direct parent). Warns that getDescendant throws if CAncestor.owner is null."
+      "expected_output": "Shows getDescendant() with ancestry: event.ancestry, id: event.id, owner: event.owner. Notes that ancestry is root-first (ancestry.last is direct parent). Warns that getDescendant throws if CAncestor.owner is null.",
+      "expectations": [
+        "Shows getDescendant() with ancestry, id, and owner taken from the event",
+        "Notes ancestry is root-first (ancestry.last is the direct parent)",
+        "Warns getDescendant throws if an ancestor owner is null"
+      ]
     },
     {
       "id": 10,
       "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
-      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:, keys: KeychainAtKeysIo(), storage:) which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget."
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:, keys: KeychainAtKeysIo(), storage:) which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget.",
+      "expectations": [
+        "Shows AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(...)",
+        "Passes appName, deviceName, namespaces, preference, keys and storage to ApkamActivationDialog",
+        "States the dialog waits for the manager's approval and hands back the enrolled AtClient",
+        "Does not add a second PkamDialog or a _setupAtClient step",
+        "Mentions the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget"
+      ]
     },
     {
       "id": 11,
       "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
-      "expected_output": "Acknowledges that no migration guide exists yet and that a future skill release will add one — a specific version number is NOT required. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until a migration guide is available."
+      "expected_output": "Acknowledges that no migration guide exists yet and that a future skill release will add one — a specific version number is NOT required. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until a migration guide is available.",
+      "expectations": [
+        "Acknowledges no migration guide exists yet and that a future skill release will add one (no specific version number required)",
+        "Explains AtCollection and raw put/get share the same keystore but use different key naming conventions",
+        "Advises caution rather than prescribing a blind migration"
+      ]
     },
     {
       "id": 12,
       "prompt": "How do I send a notification to another atsign from my Dart app?",
-      "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging."
+      "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging.",
+      "expectations": [
+        "Uses atClient.notificationService.send(to:, namespace:, body:, ...) for messaging",
+        "Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:)",
+        "Does not use raw atClient.put/get for messaging"
+      ]
     },
     {
       "id": 13,
       "prompt": "what's the difference between at_client and at_client_flutter",
-      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client."
+      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService, AtClientManager, AtClientPreference). at_client_flutter adds the Flutter layer on top: auth dialogs (AtSignSelectionDialog, PkamDialog, CramDialog, AtKeysFileDialog, ApkamActivationDialog), KeychainStorage / KeychainAtKeysIo, and RegistrarService re-exported from at_auth. at_client_flutter re-exports at_client in full, so a Flutter app adds only the one package.",
+      "expectations": [
+        "Describes at_client as the core Dart SDK (AtCollection, Query, NotificationService)",
+        "Describes at_client_flutter as the Flutter layer (auth dialogs, KeychainStorage/KeychainAtKeysIo) and does NOT misattribute AtClientManager or AtClientPreference to it — both are core at_client",
+        "Notes at_client_flutter re-exports at_client"
+      ]
     },
     {
       "id": 14,
       "prompt": "My Flutter app throws PlatformException(ENTITLEMENT_NOT_FOUND) on macOS when the user picks their .atKeys file to log in. How do I fix it?",
-      "expected_output": "Explains AtKeysFileDialog/file_picker is sandboxed on macOS and needs a file-access entitlement. Add com.apple.security.files.user-selected.read-only (read-write also works) to BOTH macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements. Notes it is macOS-only — iOS (document picker) and Android (Storage Access Framework) need no entitlement or permission."
+      "expected_output": "Explains AtKeysFileDialog/file_picker is sandboxed on macOS and needs a file-access entitlement. Add com.apple.security.files.user-selected.read-only (read-write also works) to BOTH macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements. Notes it is macOS-only — iOS (document picker) and Android (Storage Access Framework) need no entitlement or permission.",
+      "expectations": [
+        "Identifies a missing macOS sandbox entitlement as the cause",
+        "Adds com.apple.security.files.user-selected.read-only (or read-write)",
+        "Applies the entitlement to BOTH DebugProfile.entitlements and Release.entitlements",
+        "Notes iOS and Android need no equivalent permission for the picker"
+      ]
     },
     {
       "id": 15,
       "prompt": "My Flutter app using AtCollection shares data with another atsign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
-      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
+      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:)).",
+      "expectations": [
+        "Diagnoses a wedged sync rather than assuming a single cause",
+        "Identifies unscoped sync (syncRegex unset covers the entire keystore) as the common cause",
+        "Recommends scoping AtClientPreference.syncRegex to the app namespace",
+        "Notes the always-synced key set (shared_key reserved keys, encryption public key, namespace-less public: keys)",
+        "Observes completion via SyncProgressListener, not the deprecated sync(onDone:)"
+      ]
     },
     {
       "id": 16,
       "prompt": "In my Flutter app a collaborator's change is received (the collection fires CItemUpdated) but my StreamBuilder UI doesn't refresh until I hot reload. Why?",
-      "expected_output": "Diagnoses that the watch() stream is being created inside build() (e.g. stream: collection.query().watch()), so every rebuild mints a new stream and tears down the live subscription, dropping live emissions. Fix: create the watch() stream once and hold it in State (a late final field or initState) and pass that held stream to StreamBuilder; never call watch() in build(). If the query has runtime inputs (e.g. a filter), recreate the held stream when those inputs change — in the setState that changes them — not on every build."
+      "expected_output": "Diagnoses that the watch() stream is being created inside build() (e.g. stream: collection.query().watch()), so every rebuild mints a new stream and tears down the live subscription, dropping live emissions. Fix: create the watch() stream once and hold it in State (a late final field or initState) and pass that held stream to StreamBuilder; never call watch() in build(). If the query has runtime inputs (e.g. a filter), recreate the held stream when those inputs change — in the setState that changes them — not on every build.",
+      "expectations": [
+        "Diagnoses watch() being created inside build() as the root cause",
+        "Fix: create the stream once and hold it in State (initState or late final field)",
+        "Recreates the held stream when query inputs change (in that setState), not on every build"
+      ]
     },
     {
       "id": 17,
       "prompt": "I want a user to edit an item that another atsign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
-      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
+      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass.",
+      "expectations": [
+        "Names all three enforcing methods - update, updateSharedWith, AND delete - as throwing ArgumentError for items owned by another atsign",
+        "States the check is on the item's owner versus the current atsign",
+        "Explains sharedWith grants a readable copy, not write access",
+        "Shows the additive pattern in current API terms: the contributing atsign calls create(obj:, sharedWith:) on its own collection",
+        "Does not route the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put()"
+      ]
     },
     {
       "id": 18,
       "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass."
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass.",
+      "expectations": [
+        "Explains the atDirectory is the atServer address registry and this atsign has no atServer registered in it",
+        "Notes the lookup fails before authentication is attempted",
+        "Distinguishes two causes with different fixes: never activated, or a mistyped atsign",
+        "States activation happens once and must precede the existing-keys, keychain, and APKAM login flows",
+        "For in-app activation uses AtSignSelectionDialog (at_client_flutter) plus RegistrarService (at_auth) with a registrar URL and API key, or defers to an onboarding app / the registrar",
+        "Does not recommend the discontinued at_onboarding_flutter package"
+      ]
     },
     {
       "id": 19,
       "prompt": "Process A writes a coordination value with atClient.put() and process B (a different atsign) immediately reads it with get() but sees nothing. How do I make the write and the read hit the atServer directly instead of waiting for sync?",
-      "expected_output": "Identifies the WRITE as the problem: with the default AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly, put lands on the local secondary and reaches the atServer later via background sync. Fix: put with putRequestOptions: PutRequestOptions()..useRemoteAtServer = true. Notes B's read of another atsign's (non-cached:) key is already a remote lookup by definition; if a stale cached: copy interferes, GetRequestOptions()..bypassCache = true forces a fresh read from the owner's atServer (and GetRequestOptions()..useRemoteAtServer = true covers same-atsign read-your-write). May mention the client-wide alternative remoteLocalPref = RemoteLocalPref.remoteOnly. Notes remote ops cost a round-trip / fail offline and are for coordination or read-your-write cases — AtCollection data stays on the default synced path (collections take no per-operation options; they follow the client-wide preference)."
+      "expected_output": "Identifies the WRITE as the problem: with the default AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly, put lands on the local secondary and reaches the atServer later via background sync. Fix: put with putRequestOptions: PutRequestOptions()..useRemoteAtServer = true. Notes B's read of another atsign's (non-cached:) key is already a remote lookup by definition; if a stale cached: copy interferes, GetRequestOptions()..bypassCache = true forces a fresh read from the owner's atServer (and GetRequestOptions()..useRemoteAtServer = true covers same-atsign read-your-write). May mention the client-wide alternative remoteLocalPref = RemoteLocalPref.remoteOnly. Notes remote ops cost a round-trip / fail offline and are for coordination or read-your-write cases — AtCollection data stays on the default synced path (collections take no per-operation options; they follow the client-wide preference).",
+      "expectations": [
+        "Identifies the WRITE as the problem: default remoteLocalPref = localOnly routes put local with background sync",
+        "Shows put with PutRequestOptions()..useRemoteAtServer = true",
+        "Notes the other-atsign (non-cached:) read is already a remote lookup; bypassCache = true forces past a stale cached copy",
+        "Notes remote ops cost a round-trip / fail offline and collection data stays on the synced path",
+        "Does not claim AtCollection exposes per-operation request options"
+      ]
     },
     {
       "id": 20,
       "prompt": "I'm generating the pubspec.yaml for a new atPlatform Flutter app. What version should I pin at_client and at_client_flutter to?",
-      "expected_output": "Advises NOT to hardcode a version constraint. Says to run `dart pub add at_client_flutter` (which re-exports at_client) and let pub resolve the latest compatible release. Explains pinned constraints go stale and cause resolution conflicts, and that stability comes from a fixed typeTag string literal, not a pinned SDK version."
+      "expected_output": "Advises NOT to hardcode a version constraint. Says to run `dart pub add at_client_flutter` (which re-exports at_client) and let pub resolve the latest compatible release. Explains pinned constraints go stale and cause resolution conflicts, and that stability comes from a fixed typeTag string literal, not a pinned SDK version.",
+      "expectations": [
+        "Advises NOT to hardcode a version constraint",
+        "Recommends dart pub add at_client_flutter (which re-exports at_client)",
+        "Explains pins go stale / cause resolution conflicts; stability comes from the fixed typeTag literal"
+      ]
     },
     {
       "id": 21,
       "prompt": "I have an agent running as @server and apps running as other atsigns that need to send it a request and get a computed answer back. What's the right way to build this request/response flow?",
-      "expected_output": "Recommends AtRpc/AtRpcClient (exported from at_client) rather than hand-rolled notification plumbing or raw put/get polling. Client side: AtRpcClient(serverAtsign:, atClient:, baseNameSpace:, domainNameSpace:) and await client.call(payload) which returns the success response payload. Server side: AtRpc.server(..., requestHandler:, allowList:, allowAll:, enableRequestMutex:) then rpc.start(). Mentions allowList filtering, that AtRpcResp has only ack/nack static helpers (success/error use the main constructor), and that durable results belong in an AtCollection."
+      "expected_output": "Recommends AtRpc/AtRpcClient (exported from at_client) rather than hand-rolled notification plumbing or raw put/get polling. Client side: AtRpcClient(serverAtsign:, atClient:, baseNameSpace:, domainNameSpace:) and await client.call(payload) which returns the success response payload. Server side: AtRpc.server(..., requestHandler:, allowList:, allowAll:, enableRequestMutex:) then rpc.start(). Mentions allowList filtering, that AtRpcResp has only ack/nack static helpers (success/error use the main constructor), and that durable results belong in an AtCollection.",
+      "expectations": [
+        "Recommends AtRpc/AtRpcClient rather than hand-rolled notification plumbing or put/get polling",
+        "Client side: AtRpcClient(serverAtsign:, atClient:, baseNameSpace:, domainNameSpace:) with await call(payload)",
+        "Server side: AtRpc.server(..., requestHandler:, allowList:, allowAll:, enableRequestMutex:) then rpc.start()",
+        "Mentions AtRpcResp has only ack/nack static helpers (success/error via the main constructor)"
+      ]
     },
     {
       "id": 22,
       "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
-      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process; hiveStoragePath/commitLogPath are deprecated) and stops its client when done."
+      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process) and stops its client when done.",
+      "expectations": [
+        "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true",
+        "States the losing put() THROWS rather than returning false, with no typed exception — contention is detected by checking the error text for 'immutable'",
+        "Mentions TTL auto-release and that AtRpc.server(enableRequestMutex: true) packages this for RPC responders",
+        "Attributes ServiceFactoryWithNoOpSyncService to at_cli_commons, not at_client",
+        "States each instance needs its own storage (a HiveAtClientStorage per process)",
+        "Notes each instance stops its client when done"
+      ]
     },
     {
       "id": 23,
       "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
-      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes."
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes.",
+      "expectations": [
+        "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons as the one-line setup",
+        "Adds at_client and at_cli_commons as the dependencies",
+        "Does not hand-roll AtOnboardingService/keyfile parsing and does not use Flutter dialog classes"
+      ]
     },
     {
       "id": 24,
       "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
-      "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work."
+      "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work.",
+      "expectations": [
+        "Says at_onboarding_flutter is discontinued and at_client_flutter is its named replacement",
+        "Directs the developer to the at_client_flutter auth dialogs (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog)",
+        "Notes at_client_flutter is the single dependency needed since it re-exports at_client",
+        "Does not present at_onboarding_flutter as usable and does not hedge that either package would work"
+      ]
     },
     {
       "id": 25,
       "prompt": "My Flutter app lets the user log out and sign in as a different atsign. How do I tear down the current AtClient and switch?",
-      "expected_output": "Says the app owns the client: await client.stop() stops the sync service, the notification service and its monitor, and the connection (which ends as offline with cause stopped), and closes storage built with closedByClient: true. Then run the sign-in flow for the next atsign and AtClientManager.getInstance().use(newClient). Notes that opening the same atsign and enrollment (or the same storage) while a client is live throws a StateError, so stop first; that use() does not stop the previous client; and that AtClientManager.reset() is a test hook, not a logout. Does NOT suggest setCurrentAtSign."
+      "expected_output": "Says the app owns the client: await client.stop() stops the sync service, the notification service and its monitor, and the connection (which ends as offline with cause stopped), and closes storage built with closedByClient: true. Then run the sign-in flow for the next atsign and AtClientManager.getInstance().use(newClient). Notes that opening the same atsign and enrollment (or the same storage) while a client is live throws a StateError, so stop first; that use() does not stop the previous client; and that AtClientManager.reset() is a test hook, not a logout. Does NOT suggest setCurrentAtSign.",
+      "expectations": [
+        "Uses await client.stop() and states it stops sync, notifications and the connection and closes storage built with closedByClient: true",
+        "Runs the sign-in flow for the next atsign and adopts it with AtClientManager.getInstance().use(newClient)",
+        "Warns that opening the same atsign/enrollment or the same storage while a client is live throws StateError, so stop first",
+        "Notes use() does not stop the previous client and reset() is a test hook, not a logout",
+        "Does not suggest setCurrentAtSign"
+      ]
     },
     {
       "id": 26,
       "prompt": "How do I know whether my AtClient is online, and what happens if the device has no network when the app starts?",
-      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login."
+      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login.",
+      "expectations": [
+        "Explains open (and PkamDialog) makes one bounded connect attempt and hands the client back either way",
+        "Names client.connection.current as online / offline / refused with a cause, and connection.changes as the stream",
+        "Mentions awaitOnline(budget:) and attempt()",
+        "Distinguishes offline (serves the local store, writes sync later) from refused (the atServer rejected the keys)",
+        "Mentions AtOpenRefusedException for the first open of these keys on a device",
+        "Does not describe an offline open as a failed login"
+      ]
     },
     {
       "id": 27,
       "prompt": "My app has user profiles. Some fields — display name and avatar URL — need to be readable by anyone, without the user having to share them with each viewer individually. Other fields like email and phone must stay private. How should I store the profile?",
-      "expected_output": "Splits the profile by visibility: email and phone stay on the normal encrypted path (AtCollection<T>, or a shared key), while display name and avatar URL go in a public key. Builds the public key with AtKey.public(key, namespace:, sharedBy:).build() rather than hand-setting metadata, then atClient.put. Explains AtCollection cannot carry the public fields because no collection method accepts Metadata, so this is a sanctioned drop to raw put/get for that key only — NOT a reason to abandon collections for the private fields. Warns the public value is SIGNED, not encrypted — readable by anyone and returned by an unauthenticated scan — which is why email and phone must not go in it. For reading another atsign's public profile, notes it is always a remote plookup regardless of remoteLocalPref, so bypassCache is the lever when a cached copy may be stale. May mention the builder's cache(ttr, ccd). Does NOT claim AtCollection has an isPublic or visibility option."
+      "expected_output": "Splits the profile by visibility: email and phone stay on the normal encrypted path (AtCollection<T>, or a shared key), while display name and avatar URL go in a public key. Builds the public key with AtKey.public(key, namespace:, sharedBy:).build() rather than hand-setting metadata, then atClient.put. Explains AtCollection cannot carry the public fields because no collection method accepts Metadata, so this is a sanctioned drop to raw put/get for that key only — NOT a reason to abandon collections for the private fields. Warns the public value is SIGNED, not encrypted — readable by anyone and returned by an unauthenticated scan — which is why email and phone must not go in it. For reading another atsign's public profile, notes it is always a remote plookup regardless of remoteLocalPref, so bypassCache is the lever when a cached copy may be stale. May mention the builder's cache(ttr, ccd). Does NOT claim AtCollection has an isPublic or visibility option.",
+      "expectations": [
+        "Splits the profile by visibility: email and phone stay encrypted, display name and avatar go in a public key",
+        "Builds the public key with AtKey.public(key, namespace:, sharedBy:).build() rather than hand-setting metadata",
+        "Explains AtCollection cannot carry the public fields because no collection method accepts Metadata",
+        "Warns the public value is signed, not encrypted, and readable by anyone",
+        "Notes reading another atsign's public key is always a remote plookup, with bypassCache as the lever",
+        "Does not claim AtCollection has an isPublic or visibility option"
+      ]
     },
     {
       "id": 28,
       "prompt": "I send a notification to another atsign telling it to start a job. Sometimes the job never runs and I have no way of knowing whether the other side ever received the message. My send() call always completes without throwing. How do I find out whether the notification actually got there?",
-      "expected_output": "Explains that send()'s future completing means only that the notification was accepted for delivery, not that it arrived, and that the id send() returns is the handle for confirmation. Uses notificationService.getStatus(id), and polls it until delivered or a caller-chosen deadline rather than treating a single reading as final — because NotificationStatusEnum has only delivered and undelivered, so undelivered covers still-in-flight as well as failed. Notes getStatus also returns undelivered with atClientException set when the status query itself failed, and that the two must be distinguished. For a finer diagnosis reaches for fetch(id), whose AtNotification exposes the server's richer vocabulary (queued vs errored vs expired) — warning that status is a String carrying a 'NotificationStatus.' prefix rather than an enum, so an equality check against a bare 'delivered' never matches, and that an expired or unknown id returns a near-empty AtNotification whose value must not be read. Points out the confirmation deadline must sit inside send()'s expiration (15 minutes by default), since an expired notification reports the same way as one that failed, so expiration should be set deliberately when confirming. Notes both calls are remote round trips that fail offline. Does NOT claim awaiting send() confirms delivery, does NOT treat one undelivered as a definitive failure, and does NOT confuse this fetch with AtCollection's deprecated fetch(). May note that if a guaranteed reply is needed rather than a delivery receipt, AtRpc is the right tool."
+      "expected_output": "Explains that send()'s future completing means only that the notification was accepted for delivery, not that it arrived, and that the id send() returns is the handle for confirmation. Uses notificationService.getStatus(id), and polls it until delivered or a caller-chosen deadline rather than treating a single reading as final — because NotificationStatusEnum has only delivered and undelivered, so undelivered covers still-in-flight as well as failed. Notes getStatus also returns undelivered with atClientException set when the status query itself failed, and that the two must be distinguished. For a finer diagnosis reaches for fetch(id), whose AtNotification exposes the server's richer vocabulary (queued vs errored vs expired) — warning that status is a String carrying a 'NotificationStatus.' prefix rather than an enum, so an equality check against a bare 'delivered' never matches, and that an expired or unknown id returns a near-empty AtNotification whose value must not be read. Points out the confirmation deadline must sit inside send()'s expiration (15 minutes by default), since an expired notification reports the same way as one that failed, so expiration should be set deliberately when confirming. Notes both calls are remote round trips that fail offline. Does NOT claim awaiting send() confirms delivery, does NOT treat one undelivered as a definitive failure, and does NOT confuse this fetch with AtCollection's deprecated fetch(). May note that if a guaranteed reply is needed rather than a delivery receipt, AtRpc is the right tool.",
+      "expectations": [
+        "States that send() completing means accepted for delivery, not arrival, and the returned id is the handle for confirmation",
+        "Uses notificationService.getStatus(id) and polls to a caller-chosen deadline rather than treating one reading as final",
+        "Explains NotificationStatusEnum has only delivered and undelivered, so undelivered covers still-in-flight as well as failed",
+        "Notes getStatus returns undelivered with atClientException set when the status query itself failed",
+        "Reaches for fetch(id) for finer diagnosis and warns its status is a String carrying a NotificationStatus. prefix",
+        "Points out the confirmation deadline must sit inside send()'s expiration",
+        "Does not claim awaiting send() confirms delivery"
+      ]
     },
     {
       "id": 29,
       "prompt": "I have a Dart daemon running on a headless Linux box that needs to act as my atsign. There's no screen, so I can't show any activation UI. My atsign is already activated on my phone. How does the daemon get its own keys, and can it just do that on its own at first boot?",
-      "expected_output": "Says no — nothing enrols itself: the request stays pending until it is approved by a client authenticating as an enrollment that holds __manage, so the headless side is only half the flow and the answer must cover who approves. For the daemon, uses Atsign('@alice').enroll(otp:, app:, device:, namespaces:, keys:, preference:), noting it returns a PendingEnrollment at once and that awaiting pending.client(preference) is what waits for the decision. Notes the keys store must hold nothing live for that atsign, and that after a restart resumeEnrollment finds the same request rather than filing a second one. Explains the otp cannot be minted locally and comes from the already-enrolled phone via client.enrollments.otp(), or client.enrollments.spp(...) — six to sixteen alphanumeric characters — for provisioning several devices, and that a Passcode carries an expiry. Scopes namespaces to least privilege with r versus rw. On the approving side uses client.enrollments.approve(id) (or deny / revoke). May mention that AtEnrollmentPendingException means resume rather than re-enrol, or that AtEnrollmentException from pending.client means the request was denied and a new enroll is a new request. Does NOT import at_auth or take a dependency on at_onboarding_cli, does NOT claim the daemon can self-approve or self-issue a passcode, does NOT send it to the Flutter ApkamActivationDialog, and does NOT tell it to copy the root .atKeys file across."
+      "expected_output": "Says no — nothing enrols itself: the request stays pending until it is approved by a client authenticating as an enrollment that holds __manage, so the headless side is only half the flow and the answer must cover who approves. For the daemon, uses Atsign('@alice').enroll(otp:, app:, device:, namespaces:, keys:, preference:), noting it returns a PendingEnrollment at once and that awaiting pending.client(preference) is what waits for the decision. Notes the keys store must hold nothing live for that atsign, and that after a restart resumeEnrollment finds the same request rather than filing a second one. Explains the otp cannot be minted locally and comes from the already-enrolled phone via client.enrollments.otp(), or client.enrollments.spp(...) — six to sixteen alphanumeric characters — for provisioning several devices, and that a Passcode carries an expiry. Scopes namespaces to least privilege with r versus rw. On the approving side uses client.enrollments.approve(id) (or deny / revoke). May mention that AtEnrollmentPendingException means resume rather than re-enrol, or that AtEnrollmentException from pending.client means the request was denied and a new enroll is a new request. Does NOT import at_auth or take a dependency on at_onboarding_cli, does NOT claim the daemon can self-approve or self-issue a passcode, does NOT send it to the Flutter ApkamActivationDialog, and does NOT tell it to copy the root .atKeys file across.",
+      "expectations": [
+        "Says nothing enrols itself: the request stays pending until approved by a client holding __manage",
+        "Uses Atsign(...).enroll(otp:, app:, device:, namespaces:, keys:, preference:) returning a PendingEnrollment",
+        "States that awaiting pending.client(preference) is what waits for the decision",
+        "Notes resumeEnrollment finds the same request after a restart rather than filing a second",
+        "Explains the otp comes from an already-enrolled device via client.enrollments.otp() (or spp for several devices)",
+        "Uses client.enrollments.approve(id) on the approving side",
+        "Does not import at_auth or depend on at_onboarding_cli, and does not copy the root .atKeys across"
+      ]
     },
     {
       "id": 30,
       "prompt": "I wrap every SDK call in try { ... } catch (e) { log(e.toString()); }. When something breaks in production the log just says one short line like \"Exception: Failed to fetch data\" and I have no idea what actually went wrong or where. I also can't tell which of these I should be catching at all versus letting crash. How should I be handling errors?",
-      "expected_output": "Identifies two separate problems. First, the log is thin because toString() returns only the innermost message, while AtException accumulates a chained trace that getTraceMessage() returns in full (rendered as the intent followed by each cause) — so the fix is logging e.getTraceMessage() instead of '$e' or e.toString(). Second, the blanket catch (e) is wrong because it swallows programming errors: ArgumentError and StateError signal misuse (namespace without a dot, create on an id that already exists, mutating an item you do not own) and should be fixed rather than caught, so the catch should be narrowed to on AtException, the root of what the protocol layer throws. Notes that CollectionOpException and TimeoutException from dart:async sit outside the AtException tree and will not be caught by on AtException — and that CollectionOpException matters most, because an AtCollection write fans out per recipient and those keys fail independently, so it carries a per-key breakdown (results / failures / firstFailure, each OpFailure exposing atKey, op and a reason that is usually the underlying AtException) and means the write was only partially applied. Recommends branching on e.exceptionScenario (and/or intent) rather than matching message text, and flags that both are nullable. May mention that the exception types need no extra dependency because at_client re-exports at_commons and does not export its own deprecated AtClientException/AtKeyException copies, what specific operations throw (put, get, notify), that AtPublicKeyChangeException is not retryable because the value can no longer be decrypted by anyone, or that AtExceptionManager converts KeyNotFoundException into AtKeyNotFoundException so a handler written for the former may never fire. Does NOT endorse keeping toString(), does NOT advise catching ArgumentError or StateError, and does NOT tell the developer to add at_commons as a direct dependency."
+      "expected_output": "Identifies two separate problems. First, the log is thin because toString() returns only the innermost message, while AtException accumulates a chained trace that getTraceMessage() returns in full (rendered as the intent followed by each cause) — so the fix is logging e.getTraceMessage() instead of '$e' or e.toString(). Second, the blanket catch (e) is wrong because it swallows programming errors: ArgumentError and StateError signal misuse (namespace without a dot, create on an id that already exists, mutating an item you do not own) and should be fixed rather than caught, so the catch should be narrowed to on AtException, the root of what the protocol layer throws. Notes that CollectionOpException and TimeoutException from dart:async sit outside the AtException tree and will not be caught by on AtException — and that CollectionOpException matters most, because an AtCollection write fans out per recipient and those keys fail independently, so it carries a per-key breakdown (results / failures / firstFailure, each OpFailure exposing atKey, op and a reason that is usually the underlying AtException) and means the write was only partially applied. Recommends branching on e.exceptionScenario (and/or intent) rather than matching message text, and flags that both are nullable. May mention that the exception types need no extra dependency because at_client re-exports at_commons and does not export its own deprecated AtClientException/AtKeyException copies, what specific operations throw (put, get, notify), that AtPublicKeyChangeException is not retryable because the value can no longer be decrypted by anyone, or that AtExceptionManager converts KeyNotFoundException into AtKeyNotFoundException so a handler written for the former may never fire. Does NOT endorse keeping toString(), does NOT advise catching ArgumentError or StateError, and does NOT tell the developer to add at_commons as a direct dependency.",
+      "expectations": [
+        "Identifies toString() as showing only the innermost message and directs to getTraceMessage() for the full chain",
+        "Narrows the blanket catch (e) to on AtException",
+        "Explains ArgumentError and StateError signal programming errors to fix rather than catch",
+        "Notes CollectionOpException and TimeoutException sit outside the AtException tree",
+        "Recommends branching on exceptionScenario rather than message text, and flags it as nullable",
+        "Does not endorse keeping toString() or advise catching ArgumentError/StateError"
+      ]
     },
     {
       "id": 31,
       "prompt": "My app writes an item and shares it, then a later step reads the data back, and sometimes the read doesn't see the write yet. I added a loop that keeps checking syncService.isSyncInProgress and only continues once it's false, but it still fails intermittently. What's the correct way to wait until sync has finished before continuing?",
-      "expected_output": "Explains that polling isSyncInProgress (or isInSync()) is a check-then-act race: both are point-in-time reads, so the answer can change between the check and the next line, and neither tells you when it becomes true. Directs the developer to await syncService.waitUntilCaughtUp(timeout: ...), noting it is an extension on SyncService so it works on any SyncService reference with no cast or opt-in, and that there is no need to call sync() first because it triggers an iteration itself. Stresses that timeout must be passed: it is nullable with no default, a SyncStatus.failure while waiting deliberately does not reject the future, so the timeout is the only bound and without one a stalled sync waits forever. Notes it throws TimeoutException from dart:async, which is not an AtException. Explains the snapshot semantics — it completes when localCommitId reaches the server commit id as it stood at the time of the call, so remote changes arriving afterwards do not extend the wait — and that completion also requires the local push queue to be drained (pendingPushCount), since commit-id equality alone would miss writes queued after the round started. May mention onProgress for progress UI (its exceptions are swallowed and logged), or contrast it with SyncProgressListener as the tool for observing sync over the life of the app. Does NOT recommend polling isSyncInProgress or isInSync, does NOT use the deprecated sync(onDone:) or setOnDone, and does NOT claim the wait covers remote changes made after the call."
+      "expected_output": "Explains that polling isSyncInProgress (or isInSync()) is a check-then-act race: both are point-in-time reads, so the answer can change between the check and the next line, and neither tells you when it becomes true. Directs the developer to await syncService.waitUntilCaughtUp(timeout: ...), noting it is an extension on SyncService so it works on any SyncService reference with no cast or opt-in, and that there is no need to call sync() first because it triggers an iteration itself. Stresses that timeout must be passed: it is nullable with no default, a SyncStatus.failure while waiting deliberately does not reject the future, so the timeout is the only bound and without one a stalled sync waits forever. Notes it throws TimeoutException from dart:async, which is not an AtException. Explains the snapshot semantics — it completes when localCommitId reaches the server commit id as it stood at the time of the call, so remote changes arriving afterwards do not extend the wait — and that completion also requires the local push queue to be drained (pendingPushCount), since commit-id equality alone would miss writes queued after the round started. May mention onProgress for progress UI (its exceptions are swallowed and logged), or contrast it with SyncProgressListener as the tool for observing sync over the life of the app. Does NOT recommend polling isSyncInProgress or isInSync, does NOT use the deprecated sync(onDone:) or setOnDone, and does NOT claim the wait covers remote changes made after the call.",
+      "expectations": [
+        "Explains polling isSyncInProgress or isInSync() is a check-then-act race",
+        "Directs to await syncService.waitUntilCaughtUp(timeout: ...)",
+        "Stresses timeout must be passed: it has no default and a sync failure does not reject the future",
+        "Notes it throws TimeoutException, which is not an AtException",
+        "Explains the snapshot semantics — it completes at the server commit id as it stood at the call",
+        "Does not recommend polling isSyncInProgress or the deprecated sync(onDone:)"
+      ]
     },
     {
       "id": 32,
       "prompt": "I inherited a Dart service that uses the atsign SDK. It calls atClient.notify(...) to tell the other side about changes, atClient.startMonitor(...) to listen, and atClient.uploadFile(...) to send attachments. It all compiles and my IDE autocompletes everything. Is any of this a problem?",
-      "expected_output": "Says yes — every one of those is annotated @Deprecated on AtClient, and compiling plus autocompleting is not evidence otherwise. Maps notify (and notifyAll / notifyChange) and startMonitor onto NotificationService: send(...) to publish and subscribe(...) to receive, since the whole group predates NotificationService. For uploadFile, explains there is NO drop-in SDK replacement — it and downloadFile / reuploadFiles / shareFiles are annotated as moved to the app layer and are slated for removal — so the app must encrypt the file itself, upload the ciphertext to storage of its choosing, and share the URL plus the decryption key as a normal encrypted item, leaving the platform with no plaintext. May also flag the stream / sendStreamAck pair as carrying the same removal notice, that startCompactionJob / stopCompactionJob are inert because commit-log compaction went with the commit-log-free keystore, that the atChops getter and setter are deprecated in favour of building the client from its keyfile, or that NotificationParams.forText is no longer supported. Does NOT present any of these as merely stylistic or safe to keep, and does NOT invent an SDK-side replacement for the file-transfer methods."
+      "expected_output": "Says yes — every one of those is annotated @Deprecated on AtClient, and compiling plus autocompleting is not evidence otherwise. Maps notify (and notifyAll / notifyChange) and startMonitor onto NotificationService: send(...) to publish and subscribe(...) to receive, since the whole group predates NotificationService. For uploadFile, explains there is NO drop-in SDK replacement — it and downloadFile / reuploadFiles / shareFiles are annotated as moved to the app layer and are slated for removal — so the app must encrypt the file itself, upload the ciphertext to storage of its choosing, and share the URL plus the decryption key as a normal encrypted item, leaving the platform with no plaintext. May also flag the stream / sendStreamAck pair as carrying the same removal notice, that startCompactionJob / stopCompactionJob are inert because commit-log compaction went with the commit-log-free keystore, that the atChops getter and setter are deprecated in favour of building the client from its keyfile, or that NotificationParams.forText is no longer supported. Does NOT present any of these as merely stylistic or safe to keep, and does NOT invent an SDK-side replacement for the file-transfer methods.",
+      "expectations": [
+        "Says notify, startMonitor and uploadFile are all @Deprecated despite compiling and autocompleting",
+        "Maps notify (and notifyAll/notifyChange) and startMonitor onto NotificationService send() and subscribe()",
+        "States there is no SDK replacement for uploadFile — the file methods moved to the app layer",
+        "Describes the app-layer approach: encrypt client-side, host the ciphertext, share the URL plus key as an encrypted item",
+        "Does not present these as stylistic, and does not invent an SDK file-transfer replacement"
+      ]
     },
     {
       "id": 33,
       "prompt": "I have two atsigns that need to send each other jobs — either side can start one, and both have to answer the other's. I set up an AtRpcClient on each so they could call each other, but as soon as a request arrives I get UnimplementedError. I also want a progress indicator while a long job runs. How should this be wired?",
-      "expected_output": "Explains the UnimplementedError is by design: AtRpcClient is one-way and its handleRequest throws, just as the adapter behind AtRpc.server throws from handleResponse — neither helper covers a peer that does both. Directs the developer to construct AtRpc directly with their own class implementing AtRpcCallbacks, passing callbacks: this, and notes isClient and isServer both default to true so one object serves and calls. Describes the interface as two methods, handleRequest(AtRpcReq, String fromAtSign) returning an AtRpcResp and handleResponse(AtRpcResp). For the progress indicator, explains that implementing the interface is what surfaces AtRpcRespType.ack — AtRpcClient.call() deliberately swallows ack, completing only on success and raising on nack or error — and warns that correlating responses back to requests becomes the caller's own job, since nothing is completing a future for them. May mention that sendRequest adds each recipient to allowList so replies are accepted, meaning a peer's allow list grows as it calls out and is not purely the inbound boundary configured, that with allowAll true checking fromAtSign in handleRequest is the application's responsibility, or that noports_core's NPA implements AtRpcCallbacks directly. Does NOT suggest running two AtRpcClients, and does NOT claim AtRpc.server alone can make outbound calls."
+      "expected_output": "Explains the UnimplementedError is by design: AtRpcClient is one-way and its handleRequest throws, just as the adapter behind AtRpc.server throws from handleResponse — neither helper covers a peer that does both. Directs the developer to construct AtRpc directly with their own class implementing AtRpcCallbacks, passing callbacks: this, and notes isClient and isServer both default to true so one object serves and calls. Describes the interface as two methods, handleRequest(AtRpcReq, String fromAtSign) returning an AtRpcResp and handleResponse(AtRpcResp). For the progress indicator, explains that implementing the interface is what surfaces AtRpcRespType.ack — AtRpcClient.call() deliberately swallows ack, completing only on success and raising on nack or error — and warns that correlating responses back to requests becomes the caller's own job, since nothing is completing a future for them. May mention that sendRequest adds each recipient to allowList so replies are accepted, meaning a peer's allow list grows as it calls out and is not purely the inbound boundary configured, that with allowAll true checking fromAtSign in handleRequest is the application's responsibility, or that noports_core's NPA implements AtRpcCallbacks directly. Does NOT suggest running two AtRpcClients, and does NOT claim AtRpc.server alone can make outbound calls.",
+      "expectations": [
+        "Explains the UnimplementedError is by design because AtRpcClient is one-way",
+        "Directs to constructing AtRpc directly with a class implementing AtRpcCallbacks, passing callbacks: this",
+        "Notes isClient and isServer both default to true so one object serves and calls",
+        "Describes the interface as handleRequest(AtRpcReq, String) and handleResponse(AtRpcResp)",
+        "Explains implementing the interface is what surfaces AtRpcRespType.ack, which call() swallows",
+        "Does not suggest running two AtRpcClients"
+      ]
     },
     {
       "id": 34,
       "prompt": "I'm using NoPorts to reach a machine at a customer site from my Dart app. I now need to restrict which atsigns are allowed to open a tunnel to that machine — right now anything with my daemon's address seems able to try. Where does that get configured?",
-      "expected_output": "Says this is NoPorts' own access control, configured on the device daemon rather than through anything in at_client — sharing, AtCollection permissions and enrollment namespaces do not govern it. Names the two mechanisms: a static allow list of client atsigns (--managers) and/or a --policy-manager atsign that is consulted per request, noting at least one must be supplied and that when both are given the policy manager decides for atsigns not on the list. May mention that if a static list is not enough the extension point is package:noports_core/npa.dart — implementing NPARequestHandler.doAuthCheck, which receives the daemon atsign, device name, device group and client atsign — and that NPAImpl runs it as an AtRpcCallbacks service, making a policy manager an ordinary AtRpc responder. Directs the developer to noports_core and the NoPorts documentation for the actual configuration. Does NOT invent a NoPorts API, flag names beyond these, or a code sample for wiring authorization, and does NOT claim at_client's sharing or enrollment controls who can open a tunnel."
+      "expected_output": "Says this is NoPorts' own access control, configured on the device daemon rather than through anything in at_client — sharing, AtCollection permissions and enrollment namespaces do not govern it. Names the two mechanisms: a static allow list of client atsigns (--managers) and/or a --policy-manager atsign that is consulted per request, noting at least one must be supplied and that when both are given the policy manager decides for atsigns not on the list. May mention that if a static list is not enough the extension point is package:noports_core/npa.dart — implementing NPARequestHandler.doAuthCheck, which receives the daemon atsign, device name, device group and client atsign — and that NPAImpl runs it as an AtRpcCallbacks service, making a policy manager an ordinary AtRpc responder. Directs the developer to noports_core and the NoPorts documentation for the actual configuration. Does NOT invent a NoPorts API, flag names beyond these, or a code sample for wiring authorization, and does NOT claim at_client's sharing or enrollment controls who can open a tunnel.",
+      "expectations": [
+        "Says NoPorts access control is configured on the device daemon, not through at_client",
+        "Names both --managers (static allow list) and --policy-manager, noting at least one is required",
+        "States the policy manager decides for atsigns not on the --managers list",
+        "Directs the developer to noports_core and the NoPorts documentation",
+        "Does not invent NoPorts APIs or flag names, and does not claim at_client sharing governs tunnel access"
+      ]
     }
   ]
 }
