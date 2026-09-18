@@ -9,6 +9,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
+import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -270,6 +271,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
       return 'data:$value';
+    } on StoppedException {
+      rethrow;
     } on Exception catch (e) {
       logger.severe(
           'Error while verify public data for key: $key sharedBy: $sharedBy exception:${e.toString()}');
@@ -331,10 +334,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// authenticated flag lands on a socket the atServer never saw a PKAM on.
   final Mutex _createConnectionMutex = Mutex();
 
-  Future<void> createConnection() async {
+  /// Opens a connection if there is no usable one.
+  ///
+  /// Throws [StoppedException] once [close] has been called, including when
+  /// the close lands while the connection is being opened.
+  Future<void> createConnection() => _whileOpen(_createConnection);
+
+  Future<void> _createConnection() async {
     var created = false;
     await _createConnectionMutex.acquire();
     try {
+      _throwIfClosed();
       if (!isConnectionAvailable()) {
         if (_connection != null) {
           // Clean up the connection before creating a new one
@@ -345,10 +355,20 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         //1. find secondary url for atsign from lookup library
         SecondaryAddress secondaryAddress =
             await secondaryAddressFinder.findSecondary(_currentAtSign);
+        _throwIfClosed();
         var host = secondaryAddress.host;
         var port = secondaryAddress.port;
         //2. create a connection to secondary server
         await createOutBoundConnection(host, port.toString(), _currentAtSign);
+        if (_closed) {
+          // NOTE: close() has already run and cannot see this socket, so it
+          // is destroyed here or not at all. Unset first: it has no listener,
+          // and a close arriving meanwhile would reach for one.
+          final orphan = _connection!;
+          _connection = null;
+          await orphan.close();
+          throw _stopped();
+        }
         //3. listen to server response
         messageListener = socketListenerFactory.createListener(_connection!);
         // Re-established on every connection, because createConnection builds
@@ -377,6 +397,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Catches any exception and throws [AtLookUpException]
   @override
   Future<String> executeVerb(VerbBuilder builder) async {
+    _throwIfClosed();
     String verbResult = '';
     try {
       if (builder is UpdateVerbBuilder) {
@@ -412,6 +433,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       } else if (builder is EnrollVerbBuilder) {
         verbResult = await _enroll(builder);
       }
+    } on StoppedException {
+      rethrow;
     } on ConnectionInvalidException catch (e) {
       // Already logged by the listener that failed the read; a connection
       // closed underneath a request is not an error in the verb.
@@ -556,18 +579,19 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   Future<String> readResponse(
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
-      messageListener.read(
+      _whileOpen(() => messageListener.read(
           maxWaitMilliSeconds: maxWaitMilliSeconds,
-          transientWaitTimeMillis: transientWaitTimeMillis);
+          transientWaitTimeMillis: transientWaitTimeMillis));
 
   @override
   Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    await _sendCommand(command);
-    return messageListener.read(
-        maxWaitMilliSeconds: maxWaitMilliSeconds,
-        transientWaitTimeMillis: transientWaitTimeMillis);
-  }
+          {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
+      _whileOpen(() async {
+        await _sendCommand(command);
+        return messageListener.read(
+            maxWaitMilliSeconds: maxWaitMilliSeconds,
+            transientWaitTimeMillis: transientWaitTimeMillis);
+      });
 
   /// Runs [authenticate] against this connection, under the same mutex the
   /// PKAM methods below take.
@@ -597,7 +621,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
   @Deprecated('Use method pkamAuthenticate')
-  Future<bool> authenticate(String? privateKey) async {
+  Future<bool> authenticate(String? privateKey) =>
+      _whileOpen(() => _authenticateWithPrivateKey(privateKey));
+
+  Future<bool> _authenticateWithPrivateKey(String? privateKey) async {
     if (privateKey == null) {
       throw UnAuthenticatedException('Private key not passed');
     }
@@ -650,7 +677,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   @override
-  Future<bool> pkamAuthenticate({String? enrollmentId}) async {
+  Future<bool> pkamAuthenticate({String? enrollmentId}) =>
+      _whileOpen(() => _pkamAuthenticate(enrollmentId: enrollmentId));
+
+  Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
     final authenticate = authenticator;
     if (authenticate == null) {
       throw UnAuthenticatedException('pkamAuthenticate requires an '
@@ -663,7 +693,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final Mutex _cramAuthenticationMutex = Mutex();
 
   @override
-  Future<bool> cramAuthenticate(String secret) async {
+  Future<bool> cramAuthenticate(String secret) =>
+      _whileOpen(() => _cramAuthenticate(secret));
+
+  Future<bool> _cramAuthenticate(String secret) async {
     await createConnection();
     try {
       await _cramAuthenticationMutex.acquire();
@@ -726,7 +759,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// request, or response wasn't received due to timeout or other exception
   Mutex requestResponseMutex = Mutex();
 
-  Future<String> _process(String command, {bool auth = false}) async {
+  Future<String> _process(String command, {bool auth = false}) =>
+      _whileOpen(() => _processCommand(command, auth: auth));
+
+  Future<String> _processCommand(String command, {bool auth = false}) async {
     try {
       await requestResponseMutex.acquire();
 
@@ -751,7 +787,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // Already logged by the listener that failed the read.
         rethrow;
       } on Exception catch (e) {
-        logger.severe('Exception in sending to server, ${e.toString()}');
+        if (!_closed) {
+          logger.severe('Exception in sending to server, ${e.toString()}');
+        }
         rethrow;
       }
     } finally {
@@ -789,9 +827,52 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return _connection!.isInValid();
   }
 
+  bool _closed = false;
+  Future<void>? _closing;
+
+  /// Abandoned by [close], ending the work in flight and every socket still
+  /// being opened for this lookup, the atDirectory's included.
+  final Abandonment _abandonment = Abandonment();
+
   @override
-  Future<void> close() async {
-    await _closeConnection();
+  Future<void> close() => _closing ??= _close();
+
+  Future<void> _close() async {
+    _closed = true;
+    _abandonment.abandon();
+    await stopNotifications();
+  }
+
+  @override
+  Future<void> dropConnection() => _closeConnection();
+
+  StoppedException _stopped() =>
+      StoppedException('the lookup for $_currentAtSign has been closed');
+
+  void _throwIfClosed() {
+    if (_closed) throw _stopped();
+  }
+
+  /// Runs [work] unless [close] has been called, and fails it with a
+  /// [StoppedException] as soon as [close] is called, without waiting for it.
+  ///
+  /// A failure that arrives after the close - a read it aborted, a write to
+  /// the socket it destroyed - is reported as the [StoppedException] it is.
+  Future<T> _whileOpen<T>(Future<T> Function() work) async {
+    _throwIfClosed();
+    final closed = Completer<T>();
+    final unregister =
+        _abandonment.onAbandon(() => closed.completeError(_stopped()));
+    final running = _abandonment.run(work);
+    try {
+      return await Future.any([running, closed.future]);
+    } on Exception catch (e) {
+      if (_closed && e is! StoppedException) throw _stopped();
+      rethrow;
+    } finally {
+      unregister();
+      running.ignore();
+    }
   }
 
   /// Closes the connection and fails whatever was waiting on it.
@@ -802,12 +883,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// its own, so it waits out its transient budget - and it is holding
   /// [requestResponseMutex] while it does, which stalls the NEXT request on
   /// this instance for the same 30 seconds.
-  ///
-  /// That is not hypothetical: it is what made an atSign switch stall the
-  /// request that followed it, because `AtClientImpl.stop()` destroys the
-  /// outgoing client's socket while its startup work is still in flight, and
-  /// the same AtLookupImpl is handed back when that atSign is switched to
-  /// again.
   ///
   /// The listener aborts on `onDone` as well, and in Dart a local
   /// `Socket.destroy()` does deliver one - measured - so the two routes
@@ -854,7 +929,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   // subsystem that is not it.
 
   /// Delays between reconnect attempts. The last is repeated indefinitely.
-  static const List<Duration> notificationReconnectDelays = [
+  ///
+  /// Settable for the same reason as [heartbeatInterval]: a test of what
+  /// happens over several outages would otherwise spend a second on the first
+  /// reconnect of each one, and minutes on one that keeps failing.
+  static List<Duration> notificationReconnectDelays = const [
     Duration(seconds: 1),
     Duration(seconds: 2),
     Duration(seconds: 3),
@@ -903,6 +982,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Stream<bool> get notificationConnectionUp {
+    if (_closed) return const Stream.empty();
     _connectionUpController ??= StreamController<bool>.broadcast();
     return _connectionUpController!.stream;
   }
@@ -948,13 +1028,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // just made.
         if (!_isNotifying || generation != _notifyGeneration) return;
         try {
-          await _openNotificationStream();
+          if (!await _openNotificationStream(generation)) return;
           logger.info('Notification connection re-established');
           _reconnectIx = 0;
           _startHeartbeat();
           _emitConnectionUp(true);
           return;
         } catch (e) {
+          if (generation != _notifyGeneration) return;
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
         }
       }
@@ -977,16 +1058,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Probe a quiet connection with `noop:0`.
   ///
-  /// ⚠️ This makes the notification connection carry verb traffic, which is
-  /// the arrangement [AtLookupMuxable] warns about: no atServer implements the
-  /// `multiplexed` interlock, so a notification written between this command
-  /// and its reply is absorbed into the reply rather than routed. The window
-  /// is one short round trip every [heartbeatInterval], and it is the same
-  /// exposure at_client's Monitor has had all along - this moves that
-  /// behaviour, it does not add it. It closes when an atServer implements the
-  /// flag.
+  /// This makes the notification connection carry verb traffic: a notification
+  /// arriving between this command and its reply is a message of its own and is
+  /// routed as one, and the reply still arrives.
   Future<void> _heartbeat() async {
     if (!_isNotifying) return;
+    final generation = _notifyGeneration;
     // A paused subscriber is not reading the socket, so nothing can fill the
     // read queue and the probe below could never be answered - it would time
     // out and destroy a healthy connection. Pausing is a documented feature of
@@ -1008,8 +1085,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       } finally {
         requestResponseMutex.release();
       }
+      // NOTE: a stop or a reconnect while the probe was out owns the
+      // heartbeat now; re-arming here would leave a timer nothing cancels.
+      if (generation != _notifyGeneration) return;
       _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
     } catch (e) {
+      if (generation != _notifyGeneration) return;
       // The same pause, landing after the probe went out rather than before
       // it: the failure is our own reader being starved, not the connection.
       // Tearing down here would destroy a healthy socket for doing exactly
@@ -1033,6 +1114,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Stream<String> get notifications {
+    if (_closed) return const Stream.empty();
     _notificationController ??= StreamController<String>(
       // Back-pressure that reaches the far end. A listener that stops reading
       // stops the socket, so bytes pile up in the kernel buffer and TCP closes
@@ -1087,6 +1169,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+  }) =>
+      _whileOpen(() => _startNotifications(
+          regex: regex,
+          getLastNotificationTime: getLastNotificationTime,
+          selfNotificationsEnabled: selfNotificationsEnabled));
+
+  Future<void> _startNotifications({
+    String? regex,
+    Future<int?> Function()? getLastNotificationTime,
+    bool selfNotificationsEnabled = true,
   }) async {
     if (_isNotifying) {
       logger.info('startNotifications: already notifying, nothing sent');
@@ -1110,7 +1202,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
 
-    await _openNotificationStream();
+    if (!await _openNotificationStream(_notifyGeneration)) return;
     _isNotifying = true;
     _reconnectIx = 0;
     _startHeartbeat();
@@ -1122,7 +1214,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Shared by [startNotifications] and the reconnect loop, so a reconnected
   /// connection is established exactly as the first one was. Anything else and
   /// the two paths drift, with the difference only visible after an outage.
-  Future<void> _openNotificationStream() async {
+  ///
+  /// Returns false, having closed the connection it opened, when a stop has
+  /// retired [generation] meanwhile; throws [StoppedException] when that stop
+  /// was [close].
+  Future<bool> _openNotificationStream(int generation) async {
     await requestResponseMutex.acquire();
     try {
       await createConnection();
@@ -1161,8 +1257,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
       // verb syntax and read by no atServer, so setting it would advertise a
       // safety property that does not exist. See [AtLookupMuxable].
+      // NOTE: under the mutex, so no later start can be using the connection
+      // this closes.
+      if (generation != _notifyGeneration) {
+        await _closeConnection();
+        _throwIfClosed();
+        return false;
+      }
       logger.finer('SENDING: ${command.trim()}');
       await _connection!.write(command);
+      return true;
     } finally {
       requestResponseMutex.release();
     }
@@ -1203,7 +1307,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     logger.finer('SENDING: $command');
     await _connection!.write(command);
   }
-
 }
 
 /// Builds the listener that reads an open connection.

@@ -171,7 +171,7 @@ void main() {
   Future<void> onboard(AtAuthImpl auth, AtLookupMuxable lookUp) {
     when(() => lookUp.cramAuthenticate(cramSecret)).thenAnswer((_) async => true);
     when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
-    when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     return auth.onboard(
         AtOnboardingRequest(atSign, signingAlgoType: SigningAlgoType.mldsa65)
           ..atKeysIo = InMemoryAtKeysIo()

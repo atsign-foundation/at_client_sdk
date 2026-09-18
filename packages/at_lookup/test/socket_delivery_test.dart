@@ -206,9 +206,9 @@ void main() {
   });
 
   group('the notification framing', () {
-    // A verb response ends `\n@<atSign>@`; a notification is not a reply to
-    // anything, so no prompt follows it and it ends at a bare `\n`. One
-    // listener has to know both.
+    // Every message ends at a newline and may carry the next prompt at its
+    // start, so the listener tells the kinds apart by what each line begins
+    // with once that prompt is off.
     test('a notification goes to onNotification, not to the verb queue',
         () async {
       final rig = FakeAtServerRig();
@@ -228,30 +228,28 @@ void main() {
           reason: 'a verb response must not be delivered as a notification');
     });
 
-    test('a data value containing newlines is not mistaken for one', () async {
+    test('a value carrying an @ is not mistaken for a prompt', () async {
       final rig = FakeAtServerRig();
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.transport
-          .serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+      await rig.transport.serverSends('data:@bob:phone@alice\n@alice@');
 
       // Asserted before the read, so a listener that routes this away fails
       // here with the reason - not thirty seconds later on a starved read.
       expect(seen, isEmpty,
-          reason: 'the test is on the buffer prefix, so a multi-line value '
-              'still reads as data: and is never routed');
+          reason: 'a data: line is a response, not a notification');
       expect(
           await rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
-          'data:the_key_is\n@bob:phone@alice');
+          'data:@bob:phone@alice',
+          reason: 'only a prompt at the START of the message comes off, so '
+              'the @ signs inside the value are the value');
     });
 
     test('two notifications in one packet are two, not one', () async {
-      // The atServer has no reason to put one notification per TCP segment.
-      // messageHandler's fast path appends everything up to the LAST newline
-      // in bulk, so an intermediate newline never reaches the framing check
-      // and both lines arrive fused into one string.
+      // TCP is free to coalesce two writes, so the listener cannot take a
+      // packet for a message.
       final rig = FakeAtServerRig();
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
@@ -277,25 +275,18 @@ void main() {
       expect(seen, ['notification: {"id":"split"}']);
     });
 
-    test('with nothing installed, a notification poisons the next response',
-        () async {
-      // The behaviour the seam exists to fix, pinned so its absence is
-      // visible: with no callback the notification bytes stay in the buffer
-      // and prefix whatever the atServer says next, which then fails
-      // _isValidResponse. This is why Monitor was given a listener of its own.
+    test('with nothing installed, only the notification is lost', () async {
       final rig = FakeAtServerRig();
 
       await rig.transport.serverSends('notification: {"id":"abc"}\n');
       await rig.transport.serverSends('data:after@alice\n@alice@');
 
       expect(
-          () => rig.listener
+          await rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
-          throwsA(predicate((dynamic e) =>
-              e is AtLookUpException &&
-              e.errorMessage == 'Unexpected response found')),
-          reason: 'the unrouted notification is still in the buffer and is '
-              'returned joined to the response that followed it');
+          'data:after@alice',
+          reason: 'a notification with nowhere to go is dropped as the line '
+              'it is, so it cannot reach the response that follows it');
     });
   });
 

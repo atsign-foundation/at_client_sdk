@@ -1,5 +1,3 @@
-import 'dart:async' show FutureOr;
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
@@ -56,7 +54,7 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// to this enrollment's key package. Non-null exactly when the request
   /// advertised a key package, and therefore sent no RSA-wrapped key for the
   /// approver to hand back.
-  FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+  Stream<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
   /// Creates an instance of [AtEnrollmentResponse].

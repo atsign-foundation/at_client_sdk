@@ -806,6 +806,46 @@ void main() {
               'survive');
     });
 
+    test('a stop while an ancestor is probed sweeps nothing', () async {
+      final c = buildParent();
+      final commentKey =
+          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final re = RegExp(inv.namedArguments[const Symbol('regex')] as String);
+        return [commentKey].where((k) => re.hasMatch(k.toString())).toList();
+      });
+      when(() => c.atClient.get(any())).thenAnswer((inv) async {
+        final ks = (inv.positionalArguments.first as AtKey).toString();
+        if (ks == commentKey.toString()) {
+          return AtValue()
+            ..value = jsonEncode({
+              'type': 'n/a',
+              'obj': "my comment on bob's post",
+              'parents': [
+                {'owner': bobStr},
+              ],
+            })
+            ..metadata = (Metadata()
+              ..createdAt = DateTime.now().toUtc()
+              ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+        }
+        throw StoppedException('the client has stopped');
+      });
+      final deleted = <String>[];
+      when(() => c.atClient.delete(any())).thenAnswer((inv) async {
+        deleted.add((inv.positionalArguments.first as AtKey).toString());
+        return true;
+      });
+
+      await expectLater(
+          c.parent.cleanupOrphans(), throwsA(isA<StoppedException>()));
+
+      expect(deleted, isEmpty,
+          reason: 'an ancestor that cannot be read is taken as gone, so a stop '
+              'read that way deletes a live comment');
+    });
+
     test('legacy depth-2 descendant whose middleman is gone is swept',
         () async {
       // Setup: a depth-2 reply r1 under comment c1 under post p1.

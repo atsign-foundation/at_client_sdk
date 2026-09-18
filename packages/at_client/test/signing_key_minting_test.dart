@@ -182,16 +182,18 @@ void main() {
       expect(keys.single.privateKey, isNotEmpty);
     });
 
-    test('publishes BEFORE filing', () async {
+    test('files BEFORE publishing', () async {
       await mint();
 
-      expect(heldWhenPublished, [<String>[]],
-          reason: 'the keyfile held no signing key at the moment the '
-              'advertisement went out. Filing first would have the client '
-              'signing under a key its _apsk does not name, and every envelope '
-              'written before the publish landed is unverifiable for good');
-      expect(await heldKeyIds(), ['mldsa65'],
-          reason: 'and it is filed by the time the call returns');
+      expect(
+          heldWhenPublished,
+          [
+            ['mldsa65']
+          ],
+          reason: 'the keyfile already held the key when the advertisement '
+              'went out. Publishing first lets a stop between the two leave a '
+              'key advertised that nothing holds, where filing first leaves '
+              'one the next start republishes from the keyfile');
     });
 
     test('the advertisement names the minted key and drops the auth key',
@@ -408,12 +410,11 @@ void main() {
       inUse({SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
 
-      expect(heldWhenPublished.last, ['rsa2048'],
+      expect(heldWhenPublished.last, unorderedEquals(['mldsa65', 'rsa2048']),
           reason: 'the keyfile still held the outgoing key as active when the '
-              'advertisement went out, and the new one was not filed yet. The '
-              'other order leaves a moment with no active signing key, where '
-              'the client falls back to signing with its APKAM authentication '
-              'key — which this advertisement has already stopped naming');
+              'advertisement went out. Filing the withdrawal first would leave '
+              'the outgoing key retired in the keyfile while the advertisement '
+              'still offers it, and a stop there keeps it that way');
     });
 
     test('retires even when there is nothing left to mint', () async {
@@ -703,17 +704,27 @@ void main() {
   });
 
   group('what a caller sees when publishing fails', () {
-    test('the key is not filed, so the next start mints a fresh one', () async {
+    test(
+        'the key stays filed, and the next start advertises it rather than '
+        'minting another', () async {
       when(() => enrollment.update(any(), any()))
           .thenThrow(StateError('the atServer refused'));
 
       await expectLater(
           minter().reconcileSigningKeys(), throwsA(isA<StateError>()));
-      expect(await heldKeyIds(), isEmpty,
-          reason: 'nothing is filed, so the client goes on signing with the '
-              'key it already advertises and the next start retries. The '
-              'advertised-but-unheld key the failed attempt may have left '
-              'costs a verifier one candidate that does not match');
+
+      expect(await heldKeyIds(), ['mldsa65'],
+          reason: 'filed before the publish was attempted');
+      expect(await mint(), isEmpty,
+          reason: 'a key already held is not minted again');
+      expect(
+          await minter().publicSigningKeyValue,
+          contains((await keysIo.read(atSign))
+              .signingKeysFor(enrollmentId)
+              .single
+              .publicKey),
+          reason: 'what a start republishes to _apsk is composed from the '
+              'keyfile, so it names the key the failed publish did not');
     });
   });
 }

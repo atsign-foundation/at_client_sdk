@@ -99,11 +99,28 @@ class FunctionalStorage {
   /// Closes every bundle this file opened. Nothing else does: these bundles
   /// are borrowed, so a client detaches from them on `stop()` without
   /// closing them.
+  ///
+  /// Throws once they are all closed if a client still held one: that client
+  /// was never stopped, and goes on writing into the closed store until the
+  /// isolate exits.
   Future<void> closeAll() async {
-    for (final storage in [..._byAtSign.values, ..._byPrincipal.values]) {
+    final bundles = [..._byAtSign.values, ..._byPrincipal.values];
+    final held = [
+      for (final storage in bundles)
+        if (storage is AtClientStorageBase && storage.isAttached)
+          storage.location
+    ];
+    for (final storage in bundles) {
       await storage.close();
     }
     _byAtSign.clear();
     _byPrincipal.clear();
+    if (held.isNotEmpty) {
+      throw StateError('closed storage that ${held.length} running client(s) '
+          'still held (${held.join(', ')}): a client removed from '
+          'AtClientImpl.atClientInstanceMap is not stopped by this file\'s '
+          'teardown, so stop it, or register its stop with addTearDown, '
+          'before removing it');
+    }
   }
 }

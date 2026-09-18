@@ -103,6 +103,11 @@ class FakeAtServerTransportFactory implements AtTransportFactory {
   /// Applied to each transport before it is handed out.
   void Function(FakeAtServerTransport transport)? onCreate;
 
+  /// While set, [connect] does not return until it completes — the transport
+  /// is still created and recorded in [created] immediately, so a test can
+  /// observe a connect in flight before it settles.
+  Completer<void>? connectGate;
+
   FakeAtServerTransport get last => created.last;
 
   @override
@@ -112,6 +117,7 @@ class FakeAtServerTransportFactory implements AtTransportFactory {
     final transport = FakeAtServerTransport(description: '$host:$port');
     onCreate?.call(transport);
     created.add(transport);
+    await connectGate?.future;
     return transport;
   }
 }
