@@ -99,7 +99,8 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   void deliver(String notification) => _notifications.add(notification);
 
   /// The connection drops under us - the muxable reports it and reconnects.
-  void dropConnection() => _up.add(false);
+  @override
+  Future<void> dropConnection() async => _up.add(false);
 
   void reconnected() => _up.add(true);
 
@@ -180,7 +181,7 @@ void main() {
     test('is not told offline when the connection drops', () async {
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
-      muxable.dropConnection();
+      await muxable.dropConnection();
       await Future.delayed(const Duration(milliseconds: 20));
 
       expect(monitor.currentState, NotificationListenerState.notConnected);
@@ -434,7 +435,7 @@ void main() {
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
 
-      muxable.dropConnection();
+      await muxable.dropConnection();
       await Future.delayed(const Duration(milliseconds: 20));
       expect(monitor.currentState, NotificationListenerState.notConnected);
 

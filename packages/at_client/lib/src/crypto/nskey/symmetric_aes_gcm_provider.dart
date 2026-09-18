@@ -247,6 +247,7 @@ class SymmetricAesGcmProvider
         // would send the caller to wait for a sync that has already happened.
         rethrow;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         // NOTE: an unexpected failure lands here as well and is reported to
         // the caller as "no such record", so the log is its only trace.
         logSwallowed(

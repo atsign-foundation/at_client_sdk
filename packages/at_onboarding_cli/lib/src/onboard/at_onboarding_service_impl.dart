@@ -26,7 +26,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// [enrollmentId] names the enrollment whose local storage the client uses
   /// when the preference names no storage path. [atLookUp] is a connection
-  /// to open the client over instead of one built from the preference.
+  /// to open the client over instead of one built from the preference; the
+  /// client closes it when it stops, so it serves one [authenticate].
   AtOnboardingServiceImpl(
     String atsign,
     this.atOnboardingPreference, {

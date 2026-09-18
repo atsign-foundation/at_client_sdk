@@ -24,7 +24,8 @@ library;
 
 export 'package:at_client/src/secret_sharing/algo_ids.dart';
 export 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
-export 'package:at_client/src/secret_sharing/enrollment_directory.dart';
+export 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    hide readAdvertisedKeyPackage;
 export 'package:at_client/src/secret_sharing/enrollment_key_package.dart';
 export 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart';
 export 'package:at_client/src/secret_sharing/key_package.dart';

@@ -74,7 +74,7 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
         .thenAnswer((_) async => 'data:2');
-    when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+    when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
     when(() => mockPkam.authenticate(any(), any(),
             enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) async => true);

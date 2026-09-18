@@ -7,8 +7,8 @@ import 'package:at_client/src/response/at_notification.dart'
     show AtNotification;
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
-// ignore: unused_shown_name
-import 'package:at_commons/at_commons.dart' show AtException, AtKey, AtValue;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtValue, StoppedException;
 import 'package:at_utils/at_logger.dart';
 
 import 'package:meta/meta.dart';
@@ -80,6 +80,8 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   @visibleForTesting
   bool disposeOnAtsignChange = true;
 
+  bool _stopReported = false;
+
   KeyStreamMixin({
     required this.convert,
     this.regex,
@@ -92,7 +94,16 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     _logger.finer('init Keystream: $this');
 
     this.onError = onError ??
-        (Object e, [StackTrace? s]) => _logger.warning('Error in', e, s);
+        (Object e, [StackTrace? s]) {
+          if (e is StoppedException) {
+            if (!_stopReported) {
+              _stopReported = true;
+              _logger.warning('Key stream abandoned: the client stopped');
+            }
+            return;
+          }
+          _logger.warning('Error in', e, s);
+        };
 
     _atClientManager = atClientManager ?? AtClientManager.getInstance();
     if (shouldGetKeys) getKeys();

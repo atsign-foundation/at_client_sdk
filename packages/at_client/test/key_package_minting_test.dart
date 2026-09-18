@@ -426,15 +426,30 @@ void main() {
     });
   });
 
-  group('a published package that no longer verifies', () {
+  group('a published package that does not match the keyfile', () {
     late _Directory directory;
 
     KeyPackageMinting checking() =>
         KeyPackageMinting(atClient, updater: enrollment, directory: directory);
 
-    NamespaceMember member(String id, KeyPackageStatus status) =>
+    NamespaceMember member(String id, KeyPackageStatus status,
+            {KeyPackage? keyPackage}) =>
         NamespaceMember(
-            enrollmentId: id, access: 'rw', keyPackageStatus: status);
+            enrollmentId: id,
+            access: 'rw',
+            keyPackage: keyPackage,
+            keyPackageStatus: status);
+
+    /// The package the atServer serves for this enrollment, naming exactly
+    /// what the keyfile holds, or [keys] in its place.
+    Future<KeyPackage> served({List<PackageKey>? keys}) async => KeyPackage(
+          enrollmentId: enrollmentId,
+          createdAt: DateTime.utc(2026),
+          keys: keys ??
+              KeyPackageMinting.advertisedKeysIn(
+                      await keysIo.read(atSign), enrollmentId)
+                  .keys,
+        );
 
     setUp(() {
       directory = _Directory();
@@ -464,14 +479,81 @@ void main() {
       expect(reconciled.retired, isEmpty);
     });
 
-    test('control: a package that verifies is left alone', () async {
+    test('control: a package naming what the keyfile holds is left alone',
+        () async {
       await fileHeldKey(SecretSharingAlgos.xWing);
-      directory.members = [member(enrollmentId, KeyPackageStatus.present)];
+      directory.members = [
+        member(enrollmentId, KeyPackageStatus.present,
+            keyPackage: await served())
+      ];
 
       await checking().reconcileKeyPackage();
 
       expect(directory.asked, ['buzz']);
       expect(updates, isEmpty);
+    });
+
+    test('a key filed but never published is published', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      final advertisedBefore = await served();
+      final added = await fileHeldKey(SecretSharingAlgos.mlKem1024);
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          keyEstablishmentAlgorithms: const [
+            SecretSharingAlgos.xWing,
+            SecretSharingAlgos.mlKem1024
+          ])
+        ..namespace = 'buzz');
+      directory.members = [
+        member(enrollmentId, KeyPackageStatus.present,
+            keyPackage: advertisedBefore)
+      ];
+
+      final reconciled = await checking().reconcileKeyPackage();
+
+      expect(reconciled.minted, isEmpty,
+          reason: 'the keyfile already holds the key, so nothing is minted');
+      expect(updates, hasLength(1),
+          reason: 'a stop between filing and publishing left the '
+              'advertisement behind the keyfile, and peers never seal to the '
+              'key it is missing');
+      expect((await advertised()).keys.map((k) => k.kid), contains(added));
+    });
+
+    test(
+        'a package naming a status the keyfile has moved on from is '
+        'published', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      final kpid = await fileHeldKey(SecretSharingAlgos.mlKem1024,
+          status: CryptographicMaterialStatus.retired);
+      final servedKeys = [
+        for (final key in (await served()).keys)
+          key.kid == kpid
+              ? PackageKey(
+                  kid: key.kid,
+                  use: key.use,
+                  alg: key.alg,
+                  pub: key.pub,
+                  status: KeyEntryStatus.active)
+              : key
+      ];
+      directory.members = [
+        member(enrollmentId, KeyPackageStatus.present,
+            keyPackage: await served(keys: servedKeys))
+      ];
+
+      await checking().reconcileKeyPackage();
+
+      expect(updates, hasLength(1),
+          reason: 'peers still seal to a key the keyfile has retired');
+    });
+
+    test('an enrollment publishing no package is given one', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [member(enrollmentId, KeyPackageStatus.absent)];
+
+      await checking().reconcileKeyPackage();
+
+      expect(updates, hasLength(1));
     });
 
     test('a package that could not be checked is left alone', () async {
@@ -490,7 +572,8 @@ void main() {
       await fileHeldKey(SecretSharingAlgos.xWing);
       directory.members = [
         member('someone-else', KeyPackageStatus.rejected),
-        member(enrollmentId, KeyPackageStatus.present),
+        member(enrollmentId, KeyPackageStatus.present,
+            keyPackage: await served()),
       ];
 
       await checking().reconcileKeyPackage();

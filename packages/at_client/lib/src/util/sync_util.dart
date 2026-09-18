@@ -35,6 +35,8 @@ class SyncUtil {
       logger
           .severe('Exception occurred in processing stats verb ${e.toString}');
       rethrow;
+    } on StoppedException {
+      rethrow;
     } on Exception catch (e) {
       logger.severe(
           'Exception while getting latest server commit id: ${e.toString()}');

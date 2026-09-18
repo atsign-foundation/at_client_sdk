@@ -64,6 +64,9 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 
 class FakeMonitor extends Fake implements Monitor {
   @override
+  Future<void> close() async {}
+
+  @override
   NotificationListenerState currentState =
       NotificationListenerState.notConnected;
 
@@ -1753,6 +1756,34 @@ void main() {
               'watermark write would land on a store the stop has closed');
     });
 
+    test('is written only after the notification reaches its subscriber',
+        () async {
+      final events = <String>[];
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async {
+        // NOTE: a subscriber's stream delivers on a later microtask, so this
+        // yields a turn first: what it then records is whether the
+        // notification had been handed to the subscriber before this write.
+        await Future.delayed(Duration.zero);
+        events.add('watermark');
+        return true;
+      });
+      final live = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+      live.subscribe(regex: '.*').listen((n) => events.add('delivered'));
+
+      await live.handleNotificationReceipt('notification: '
+          '{"id":"n1","from":"@alice","to":"@alice","key":"n1.wavi@alice",'
+          '"value":null,"operation":"update","epochMillis":1,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+      await Future.delayed(Duration.zero);
+
+      expect(events, ['delivered', 'watermark'],
+          reason: 'a watermark saved first moves past a notification a stop '
+              'can then keep from every subscriber, and nothing replays it');
+    });
+
     test('is written unencrypted, without the payload or the metadata',
         () async {
       when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))
@@ -1953,6 +1984,29 @@ void main() {
       expect(putCalls.single.value, '{"epochMillis":111}');
       // Both legacy forms are deleted regardless of which one seeded.
       expect(deleteCalls, containsAll([intermediateStr, legacyV2Str]));
+    });
+
+    test('a stop while seeding keeps the legacy form it could not copy',
+        () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        presentKeys: {intermediateStr},
+        values: {intermediateStr: '{"epochMillis":111}'},
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(StoppedException('the client has stopped'));
+
+      await expectLater(
+          service.migrateLegacyLastReceivedNotificationKeysForTest(),
+          throwsA(isA<StoppedException>()),
+          reason: 'a seed that failed falls through to deleting the legacy '
+              'form, so a stop taken for a failed seed deletes the only copy '
+              'of the watermark');
+      expect(deleteCalls, isEmpty);
     });
 
     test('seeds canonical from _latestNotificationIdv2 when bare absent',

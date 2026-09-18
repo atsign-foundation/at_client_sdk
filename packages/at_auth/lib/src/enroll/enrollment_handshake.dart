@@ -94,22 +94,6 @@ class EnrollmentHandshake {
       maxRetries: maxRetries,
     );
 
-    // post approval:
-    // after pkam authentication is accepted
-
-    // Collect the symmetric key the approver encapsulated to this enrollment's
-    // key package. PKAM has just succeeded, which is the earliest point the
-    // enrollment can read anything, and the key package's private half — the
-    // only thing that opens that envelope — was minted before the request was
-    // sent and has never left this device.
-    final resolver = enrollmentResponse.apkamSymmetricKeyResolver;
-    if (resolver != null) {
-      final String apkamSymmetricKey =
-          await resolver(enrollmentResponse.atAuthKeys!, atLookup);
-      enrollmentResponse.atAuthKeys!.apkamSymmetricKey =
-          AtBytes.fromString(apkamSymmetricKey);
-    }
-
     // fetch the following keys from the atServer
     Map<String, dynamic> encPrivKeyResponse =
         await _getDefaultEncryptionPrivateKey(
@@ -124,37 +108,30 @@ class EnrollmentHandshake {
       enrollmentResponse.enrollmentId,
     );
 
-    // decrypting the following after fetching
-    // selfEncryptionKey (encrypted via apkamSymmetricKey from the enrollment)
-    // defaultEncryptionPrivateKey (encrypted via apkamSymmetricKey from the enrollment)
-
-    final aesEncryption = StringAESEncryptor(
-        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString()));
-
-    // A record written by a legacy approver carries no `iv` field — those
-    // values were encrypted under the zero IV — so its absence selects the
-    // legacy IV rather than crashing. The record's vintage is the writing
-    // approver's, not this client's.
-    InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
-        keyResponse['iv'] == null
-            ? InitialisationVector.legacy()
-            : InitialisationVector.fromBase64(keyResponse['iv']);
-
-    String decryptedSelfEncryptionKey = aesEncryption.decrypt(
-      selfEncKeyResponse['value'],
-      iv: ivOf(selfEncKeyResponse),
-    );
-
-    String decryptedDefaultEncryptionPrivateKey = aesEncryption.decrypt(
-      encPrivKeyResponse['value'],
-      iv: ivOf(encPrivKeyResponse),
-    );
+    // Both are encrypted under this enrollment's apkamSymmetricKey. A pq
+    // request collects that key now, from what the approver conveyed to its
+    // key package; a legacy one generated it and already holds it.
+    final keys = enrollmentResponse.atAuthKeys!;
+    final resolver = enrollmentResponse.apkamSymmetricKeyResolver;
+    final ({String selfEncryptionKey, String encryptionPrivateKey}) decrypted;
+    if (resolver == null) {
+      decrypted = _decryptUnder(keys.apkamSymmetricKey!.toString(),
+          selfEncKeyResponse: selfEncKeyResponse,
+          encPrivKeyResponse: encPrivKeyResponse);
+    } else {
+      final (key, opened) = await _firstConveyedKeyThatDecrypts(
+          resolver(keys, atLookup),
+          selfEncKeyResponse: selfEncKeyResponse,
+          encPrivKeyResponse: encPrivKeyResponse);
+      keys.apkamSymmetricKey = AtBytes.fromString(key);
+      decrypted = opened;
+    }
 
     // set the fetched & decrypted keys in the reference
-    enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
-        AtBytes.fromString(decryptedSelfEncryptionKey);
-    enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
-        AtBytes.fromString(decryptedDefaultEncryptionPrivateKey);
+    keys.defaultSelfEncryptionKey =
+        AtBytes.fromString(decrypted.selfEncryptionKey);
+    keys.defaultEncryptionPrivateKey =
+        AtBytes.fromString(decrypted.encryptionPrivateKey);
 
     // If the requesting app supplied a session with a writable key destination,
     // persist the completed keyset there and hand back a ready-to-use session.
@@ -173,6 +150,61 @@ class EnrollmentHandshake {
     } else {
       enrollmentResponse.session = null;
     }
+  }
+
+  /// The first of [candidates] under which both fetched keys decrypt, with
+  /// what they decrypt to.
+  ///
+  /// A candidate that fails is one an approval that never landed conveyed, so
+  /// the next is tried; none is kept until it has decrypted both.
+  Future<(String, ({String selfEncryptionKey, String encryptionPrivateKey}))>
+      _firstConveyedKeyThatDecrypts(
+    Stream<String> candidates, {
+    required Map<String, dynamic> selfEncKeyResponse,
+    required Map<String, dynamic> encPrivKeyResponse,
+  }) async {
+    await for (final candidate in candidates) {
+      try {
+        final decrypted = _decryptUnder(candidate,
+            selfEncKeyResponse: selfEncKeyResponse,
+            encPrivKeyResponse: encPrivKeyResponse);
+        // NOTE: a wrong key fails AES padding or UTF-8 decoding almost always,
+        // not always; a self encryption key that is not base64 is the rest.
+        base64Decode(decrypted.selfEncryptionKey);
+        return (candidate, decrypted);
+      } catch (e) {
+        _logger.info('A conveyed apkamSymmetricKey does not decrypt the keys '
+            'this enrollment was approved with, so an approval that did not '
+            'land conveyed it; trying the next: $e');
+      }
+    }
+    throw AtEnrollmentException('No conveyed apkamSymmetricKey decrypts the '
+        'keys this enrollment was approved with');
+  }
+
+  /// Decrypts both fetched keys under [apkamSymmetricKey].
+  ({String selfEncryptionKey, String encryptionPrivateKey}) _decryptUnder(
+    String apkamSymmetricKey, {
+    required Map<String, dynamic> selfEncKeyResponse,
+    required Map<String, dynamic> encPrivKeyResponse,
+  }) {
+    final aesEncryption = StringAESEncryptor(AESKey(apkamSymmetricKey));
+
+    // A record written by a legacy approver carries no `iv` field — those
+    // values were encrypted under the zero IV — so its absence selects the
+    // legacy IV rather than crashing. The record's vintage is the writing
+    // approver's, not this client's.
+    InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
+        keyResponse['iv'] == null
+            ? InitialisationVector.legacy()
+            : InitialisationVector.fromBase64(keyResponse['iv']);
+
+    return (
+      selfEncryptionKey: aesEncryption.decrypt(selfEncKeyResponse['value'],
+          iv: ivOf(selfEncKeyResponse)),
+      encryptionPrivateKey: aesEncryption.decrypt(encPrivKeyResponse['value'],
+          iv: ivOf(encPrivKeyResponse)),
+    );
   }
 
   Future<Map<String, dynamic>> _getDefaultEncryptionPrivateKey(
