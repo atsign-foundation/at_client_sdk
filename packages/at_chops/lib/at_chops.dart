@@ -1,66 +1,32 @@
 library;
 
-export 'src/algorithm/algo_type.dart';
-export 'src/algorithm/at_algorithm.dart';
-export 'src/algorithm/at_iv.dart';
-export 'src/algorithm/default_hashing_algo.dart';
-export 'src/algorithm/default_signing_algo.dart';
-export 'src/algorithm/encryption/aes.dart';
-export 'src/algorithm/encryption/aes_gcm.dart';
-export 'src/algorithm/encryption/chacha20_poly1305.dart';
-export 'src/algorithm/encryption/ml_kem_1024_pure_dart.dart';
-export 'src/algorithm/encryption/ml_kem_768_pure_dart.dart';
+export 'src/algo_type.dart';
+export 'src/at_algorithm.dart';
+export 'src/at_iv.dart';
+export 'src/encryption/aes_ctr.dart';
+export 'src/encryption/aes_gcm.dart';
+export 'src/encryption/chacha20_poly1305.dart';
+export 'src/encryption/ml_kem_768_pure_dart.dart';
+export 'src/encryption/ml_kem_1024_pure_dart.dart';
+export 'src/encryption/rsa.dart';
+export 'src/encryption/x25519_pure_dart_algo.dart';
+export 'src/encryption/x_wing_pure_dart.dart';
+export 'src/hashing/hkdf.dart';
+export 'src/hashing/sha.dart';
+export 'src/hashing/argon2id.dart';
+export 'src/hashing/md5.dart';
+export 'src/signing/ecc.dart';
+export 'src/signing/ed25519.dart';
+export 'src/signing/ml_dsa_65_pure_dart.dart';
+export 'src/signing/rsa.dart';
 // The seal surface only. The RFC 9180 key-schedule internals
 // (rfc9180_hpke.dart) and the schedule probe [pqSealDeriveKeyAndNonce] are
 // deliberately not exported: nothing outside this package consumes them, and
-// an exported name is frozen API the moment 3.6.0 publishes.
-export 'src/algorithm/encryption/pq_hpke.dart' hide pqSealDeriveKeyAndNonce;
-export 'src/algorithm/encryption/rsa.dart';
-export 'src/algorithm/encryption/x25519_pure_dart_algo.dart';
-export 'src/algorithm/encryption/x_wing_pure_dart.dart';
-export 'src/algorithm/hashing/hkdf.dart';
-export 'src/algorithm/hashing/sha.dart';
-export 'src/algorithm/hashing/argon2id.dart';
-export 'src/algorithm/hashing/md5.dart';
-export 'src/algorithm/pkam_mldsa65_signing_algo.dart';
-export 'src/algorithm/pkam_signing_algo.dart';
-export 'src/algorithm/signing/ecc.dart';
-export 'src/algorithm/signing/ed25519.dart';
-export 'src/algorithm/signing/ml_dsa_65_pure_dart.dart';
-export 'src/algorithm/signing/rsa.dart';
+// an exported name is frozen API the moment this publishes.
+export 'src/encryption/pq_hpke.dart' hide pqSealDeriveKeyAndNonce;
 // FIPS 204 fixed sizes and validators: a caller signing a PKAM challenge
 // with ML-DSA needs them to say what a wrong-sized key most likely is.
-export 'src/algorithm/spec/ml_dsa_65_spec.dart';
-export 'src/at_chops_base.dart';
-export 'src/at_chops_impl.dart';
-
-// Class to encrypt/decrypt atKeys file based on the password specified.
-export 'src/at_keys_crypto.dart';
-export 'src/key/impl/aes_key.dart';
-export 'src/key/impl/at_chops_keys.dart';
-export 'src/key/impl/at_encryption_key_pair.dart';
-export 'src/key/impl/at_ml_dsa_65_key_pair.dart';
-export 'src/key/impl/at_ml_kem_768_key_pair.dart';
-export 'src/key/impl/at_pkam_key_pair.dart';
-export 'src/key/impl/at_signing_key_pair.dart';
-export 'src/key/impl/at_x25519_key_pair.dart';
-export 'src/key/impl/at_x_wing_key_pair.dart';
-export 'src/key/impl/ml_dsa_65_key_pair.dart';
-export 'src/key/impl/ml_kem_768_key_pair.dart';
-export 'src/key/impl/rsa_key_pair.dart';
-export 'src/key/impl/x25519_key_pair.dart';
-export 'src/key/impl/x_wing_key_pair.dart';
-export 'src/key/key_type.dart';
-export 'src/key/keys.dart';
-export 'src/metadata/at_signing_input.dart';
-export 'src/metadata/encryption_metadata.dart';
-export 'src/metadata/encryption_result.dart';
-export 'src/metadata/signing_metadata.dart';
-export 'src/metadata/signing_result.dart';
-
-// A model class which represents the encrypted AtKeys with a passphrase.
-export 'src/model/at_encrypted.dart';
+export 'src/spec/ml_dsa_65_spec.dart';
 
 // Class representing the hashing parameters to pass to an hashing algorithm.
-export 'src/algorithm/hashing/types.dart';
-export 'src/util/at_chops_util.dart';
+export 'src/hashing/types.dart';
