@@ -23,6 +23,8 @@ dependency_overrides:
     path: ../../at_lookup
   at_onboarding_cli:
     path: ../../at_onboarding_cli
+  at_utils:
+    path: ../../at_utils
 
 dependencies:
   at_policy:

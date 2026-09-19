@@ -152,6 +152,8 @@
 - fix: `collection` is a declared dependency. The library imports it, and
   only the tests declared it, so a consumer resolved it transitively.
 - fix: with `fetchOfflineNotifications` off, a monitor reconnect no longer re-delivers every notification received since the notification service was created.
+- `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to
+  `StdErrLoggingHandler` from `at_utils_io.dart` to keep them off stdout.
 - `Atsign.activate`, `enroll` and `resumeEnrollment`, `PendingEnrollment` and
   `pqNativeOnboard` type a supplied `atLookUp` as `AtLookupMuxable`, the
   interface `lookUps:` builds: at_auth installs its authenticator on the
