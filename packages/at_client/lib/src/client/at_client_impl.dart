@@ -716,6 +716,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
+    AtTransportFactory? transportFactory,
     String? enrollmentId,
     AtClientStorage? storage,
 
@@ -792,6 +793,7 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         lookUps: lookUps,
+        transportFactory: transportFactory,
         enrollmentId: enrollmentId,
         storage: storage,
       );
@@ -831,6 +833,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
+    AtTransportFactory? transportFactory,
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
@@ -839,6 +842,7 @@ class AtClientImpl implements AtClient {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     this.lookUps = lookUps ?? defaultLookUps(preference);
+    this.transportFactory = transportFactory ?? defaultTransportFactory(preference);
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -1538,6 +1542,7 @@ class AtClientImpl implements AtClient {
   /// monitor's. The application's, when it supplied one to the verb that
   /// built the client; otherwise TLS on TCP from the preference.
   late final AtLookUpFactory lookUps;
+  late final AtTransportFactory transportFactory;
 
   /// [atLookUp] injects an already-built lookup; passing none lets
   /// [RemoteSecondary] open its own connection through [lookUps], separate
@@ -2506,6 +2511,7 @@ class AtClientImpl implements AtClient {
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
+    handler.transportFactory = transportFactory;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()
       ..streamId = streamId

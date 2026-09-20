@@ -1,9 +1,29 @@
 # `at_lookup` 4.0.0-rc1
 
-Second package in the v4 publish chain. Depends on `at_utils` 4.0.0 — this branch
-stacks on `st/at_utils-v4`'s tip before any code commit lands (`resolution: workspace`
-makes this non-optional, not just tidy). Scope here is cut to **T1–T5**; T6–T8 stay
-open (see Exit below).
+Second package in the v4 publish chain. Scope here is cut to **T1–T5, all done on
+`st/at_lookup-v4`**; T7–T8 stay open by choice, and T6's `at_client` half is now
+done too (see Exit below).
+
+**Status (2026-09-20): T1–T5 complete.** `Socket getSocket()` and the `dart:io` import
+are gone from `AtConnection`; the three `AtLookupTransport` factories are retyped off
+`SecureSocket`; `secure_socket_util.dart` and `tls_connect.dart` are absorbed into
+`at_lookup_io.dart`; the credential-ladder deprecations listed below are removed;
+`.github/wasm_gates.yaml`'s `at_lookup:` stanza (`:81-115`) is live and green. The
+Context and Scope sections below are kept as originally written (they're still an
+accurate account of the *reasoning*), with status corrections inline where the prose
+described work as pending that has since landed.
+
+**The `at_utils: ^4.0.0` floor below is not yet takeable.** Tried it directly
+(`packages/at_lookup/pubspec.yaml:13` → `^4.0.0`, then `dart pub get` from the
+workspace root): version solving fails — `packages/at_utils` in this workspace is
+still at `3.4.1` (`resolution: workspace` pins every member to the local checkout's
+version, not pub.dev), and every other package in the tree still floors at
+`at_utils: ^3.x`. Reverted to `^3.0.19`. This isn't a documentation gap, it's a real
+sequencing dependency: the floor bump is a `st/at_utils-v4` publish-ladder step, not
+an at_lookup one, and it can't land here before that branch's work is actually merged
+to trunk. Same logic likely applies to the `at_commons`/`at_chops` floors listed
+below — not verified here since they weren't this session's finding, but check before
+bumping either.
 
 ## Context
 
@@ -88,10 +108,13 @@ removal at this major and gated by the same file this release already touches
   `authenticate()`. Fix the comment or add a real (ignored-at-call-site) annotation so
   callers actually see it.
 
-**Out of scope, explicitly** (T6–T8 — see Exit for why):
+**Out of scope, explicitly** (T7–T8 — see Exit for why; T6's `at_client` half is done):
 
 - T6 — routing `monitor_client.dart`'s and `at_client`'s `stream_notification_handler.dart`'s
-  direct `SecureSocket.connect` calls through the transport.
+  direct `SecureSocket.connect` calls through the transport. **`stream_notification_handler.dart`'s
+  half done 2026-09-20** — step 10 of `plans/wasm/at_lookup-4.0.0-transport-split.md`,
+  routed through a second injected `AtTransportFactory` param. `monitor_client.dart`'s
+  half not re-verified this pass — see flag below.
 - T7 — a web `SecondaryAddressFinder`; `cache/cacheable_secondary_address_finder.dart`
   imports `dart:io` directly (`:3`) and its `SecondaryUrlFinder` helper, while it already
   creates sockets through the injectable `AtLookupSecureSocketFactory` (so T4's retype
@@ -126,18 +149,43 @@ removal at this major and gated by the same file this release already touches
    `at_libraries.git@websocket_uptake` via a git override, but that branch is dead (see
    item 1) — there is no active alternative checkout to defer to. T1–T5 land here.
 
-## Exit — no `wasm_gates.yaml` stanza this window
+## Exit — `wasm_gates.yaml` stanza live, T7–T8 still open by choice
 
 - `grep -n "dart:io" packages/at_lookup/lib/src/connection/at_connection.dart` →
-  nothing.
+  nothing. Confirmed clean at HEAD.
+- `.github/wasm_gates.yaml:81-115` carries the `at_lookup:` stanza: ratchet on
+  `at_lookup.dart` at `max_blocked_packages: 0`, `min_files_walked: 570`; controls
+  assert `at_lookup_io.dart` still reaches `secure_socket_util.dart` (the TLS socket
+  construction) and `cacheable_secondary_address_finder.dart` (the raw-TLS atDirectory
+  lookup, "which has no browser equivalent"). This is CI-enforced, not just prose — a
+  regression that leaks either back onto the neutral barrel breaks the ratchet.
+  `tls_connect.dart` (the hand-rolled TLS-handshake-timeout wrapper `secure_socket_util.dart`
+  uses) is reachable only through that same `_io` path — already correctly quarantined,
+  just not previously named in this doc's file inventory.
 - `packages/at_lookup/test/` green, including `connection_management_test.dart`
   retyped for the new factory signatures.
 - `tests/at_functional_test` green.
-- T5 moves `secure_socket_util.dart` behind `at_lookup_io.dart`, but **T6–T8 are not in
-  scope**: `monitor_client.dart`'s raw `SecureSocket.connect` and
-  `cacheable_secondary_address_finder.dart`'s direct `dart:io` import still reach native
-  code from the default barrel after this release. That's a known, named follow-on, not
-  a surprise discovered later.
+- **T7–T8 stay open, deliberately, for this release**:
+  `cacheable_secondary_address_finder.dart`'s direct `dart:io` import still reaches
+  native code from the default barrel after this release. That's a known, named
+  follow-on fenced by the wasm-gate controls above, not a surprise discovered later.
+  Ship 4.0.0 on T1–T5 as scoped; T7 resumes once OQ-7 (a production browser-reachable
+  atDirectory endpoint) has an owner. **T6 update, 2026-09-20:** `stream_notification_handler.dart`'s
+  raw `SecureSocket.connect` (the `at_client` half) is now routed through
+  `AtTransportFactory` — step 10 of `plans/wasm/at_lookup-4.0.0-transport-split.md`.
+  `monitor_client.dart`'s half was not re-checked this pass.
+- **OQ-8, partially closed 2026-09-20.** T3 shipped without the external-implementor
+  enumeration T1 called for "before writing anything." Swept the three repos checked out
+  locally that declare a direct `at_lookup` dependency —
+  `at_login/{server,desktop_app}`, `at_services/packages/at_secondary_proxy`,
+  `at_tools/packages/at_cli` — for `implements AtConnection`, `extends BaseConnection` and
+  `.getSocket()`. **None found.** (`at_server`'s own `AtConnectionFactory` /
+  `AtConnectionMetaData` / `getSocket()` hits are its unrelated server-side inbound
+  connection types — no `package:at_lookup` import — and are not counted.) This covers
+  every locally-checked-out repo with a direct dependency; it does not cover the rest of
+  atsign-foundation's org or any private downstream consumer, so OQ-8 stays formally open
+  until someone can attest to that broader sweep, but the local check is real, negative
+  evidence, not just deferred work.
 
 ## Changelog
 
