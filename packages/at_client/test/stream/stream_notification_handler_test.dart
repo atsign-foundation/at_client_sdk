@@ -11,7 +11,8 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 class FakeAtServerTransport implements AtTransport {
-  late final StreamController<List<int>> _inbound = StreamController<List<int>>();
+  late final StreamController<List<int>> _inbound =
+      StreamController<List<int>>();
 
   @override
   final String description;
@@ -61,7 +62,8 @@ class FakeAtServerTransportFactory implements AtTransportFactory {
   final List<FakeAtServerTransport> created = <FakeAtServerTransport>[];
 
   @override
-  Future<AtTransport> connect(String host, String port, {Duration? timeout}) async {
+  Future<AtTransport> connect(String host, String port,
+      {Duration? timeout}) async {
     final transport = FakeAtServerTransport(description: '$host:$port');
     created.add(transport);
     return transport;
@@ -72,7 +74,8 @@ class MockSecondaryAddressFinder implements SecondaryAddressFinder {
   SecondaryAddress? address;
 
   @override
-  Future<SecondaryAddress> findSecondary(String atSign, {Duration? timeout}) async {
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
     return address ?? SecondaryAddress('127.0.0.1', 6464);
   }
 }
@@ -84,7 +87,8 @@ class MockEncryptionService implements EncryptionService {
   }
 
   @override
-  List<int> decryptStream(List<int> encryptedData, String sharedKey, {String? ivBase64}) {
+  List<int> decryptStream(List<int> encryptedData, String sharedKey,
+      {String? ivBase64}) {
     return encryptedData;
   }
 
@@ -104,7 +108,8 @@ void main() {
       preference = AtClientPreference()..downloadPath = tempDir.path;
       transportFactory = FakeAtServerTransportFactory();
 
-      AtClientManager.getInstance().secondaryAddressFinder = MockSecondaryAddressFinder();
+      AtClientManager.getInstance().secondaryAddressFinder =
+          MockSecondaryAddressFinder();
 
       handler = StreamNotificationHandler()
         ..preference = preference
@@ -132,7 +137,8 @@ void main() {
 
       void receiveCallback(int bytes) {}
 
-      var ackFuture = handler.streamAck(notification, completionCallback, receiveCallback);
+      var ackFuture =
+          handler.streamAck(notification, completionCallback, receiveCallback);
 
       // wait for connect and 'stream:receive' write
       await Future.delayed(Duration(milliseconds: 50));
@@ -154,13 +160,14 @@ void main() {
 
       expect(transport.written.last, 'stream:done test-stream-123\n');
       expect(transport.flushCount, greaterThanOrEqualTo(2));
-      
+
       await transport.serverCloses();
 
       expect(transport.destroyed, true);
       expect(completionFired, true);
 
-      var downloadedFile = File('${tempDir.path}${Platform.pathSeparator}test.txt');
+      var downloadedFile =
+          File('${tempDir.path}${Platform.pathSeparator}test.txt');
       expect(downloadedFile.existsSync(), true);
       expect(downloadedFile.readAsStringSync(), 'hello');
     });
