@@ -32,7 +32,9 @@ class StreamNotificationHandler {
         .findSecondary(streamNotification.senderAtSign);
     var host = secondaryAddress.host;
     var port = secondaryAddress.port.toString();
-    var transport = await (transportFactory ?? defaultTransportFactory(preference)).connect(host, port);
+    var transport =
+        await (transportFactory ?? defaultTransportFactory(preference))
+            .connect(host, port);
     // ignore: prefer_interpolation_to_compose_strings
     var f = File('${preference!.downloadPath ?? ''}'
         '${Platform.pathSeparator}'
