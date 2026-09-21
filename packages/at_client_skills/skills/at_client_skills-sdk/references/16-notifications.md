@@ -160,3 +160,48 @@ local-only mode and neither is served from the local keystore, so **both fail
 offline** regardless of `AtClientPreference` — see
 [12-remote-atserver.md](12-remote-atserver.md). Budget a round trip per poll,
 which is the other reason to keep poll intervals sane rather than tight.
+
+---
+
+## A stop throws — it never reports `undelivered`
+
+Everything above assumes a running client. When `client.stop()` lands while a
+notification call is in flight, that call fails with `StoppedException`; it
+does **not** come back as an `undelivered` result:
+
+- `send()` has no handler of its own, and `notify()` catches only
+  `AtException` — which `StoppedException` deliberately is not — so in both
+  cases it propagates to the caller.
+- `subscribe`, `subscribeFiltered` and `startListening` throw it as their
+  first act once the service has stopped, and a subscription first listened
+  to after the stop receives it as an error on the stream instead.
+- `getStatus` and `fetch` are remote calls, so they fail with it too once the
+  connection the stop closed is gone.
+
+This matters because the polling advice above rests on `undelivered` being
+non-terminal. A stop never produces `undelivered` at all, so no poll loop can
+observe one, and retrying achieves nothing — the throw is the whole signal.
+Catch `StoppedException` by name and let the work end; see
+[17-error-handling.md](17-error-handling.md).
+
+---
+
+## Receiving: a stop can replay a notification
+
+Delivery to your subscribers is **at least once, not exactly once.** The
+client records how far it has read — the watermark — only *after* handing a
+notification to your handlers. That ordering is deliberate: a stop landing
+between the two leaves the watermark behind a notification nobody saw, and
+the next connection delivers it again rather than skipping past it.
+
+The price of never losing one is occasionally seeing one twice. **Write
+handlers that can run twice on the same notification without doing the work
+twice** — key the effect off `notification.id`, or make it idempotent: an
+upsert rather than an insert, a state assignment rather than an increment.
+This is the same discipline a multi-instance deployment needs for a different
+reason — see [14-multi-agent.md](14-multi-agent.md).
+
+Parked notifications are the exception, and they fail the other way. A
+notification whose key material has not been filed yet is held in memory
+while the watermark has already moved past it, so a stop or restart loses
+what is parked; the stop logs how many at `warning`.
