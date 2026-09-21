@@ -2,6 +2,14 @@
 
 ## 1.4.0 — unreleased
 
+- Catching a stop: `StoppedException` joins the family of things thrown from
+  outside the `AtException` tree, with what raises it, why it is deliberately
+  not an `AtException`, and the catch order that keeps a shutdown out of the
+  error log. Records that `subscribe`, `subscribeFiltered` and
+  `startListening` throw it outright, that `notify` lets it propagate rather
+  than reporting `undelivered`, and that `waitUntilCaughtUp` ends with it when
+  the sync service stops first (`references/17-error-handling.md`;
+  `SKILL.md` §18).
 - Stopping a client: `stop()` ends the client's timers and waits and closes
   every connection, work it cuts short fails with `StoppedException`, and a
   push the atServer accepted just before the stop is pushed again by the next

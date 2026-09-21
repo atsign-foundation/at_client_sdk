@@ -8,7 +8,7 @@ bad error handling here comes from catching the wrong one.
 | ------ | -------- | ----- | -- |
 | Dart core errors | `ArgumentError`, `StateError`, `LateInitializationError` | **Your bug** — the call was invalid | Fix the call; don't catch |
 | `AtException` + subtypes | `AtKeyException`, `AtConnectException`, `AtDecryptionException` | Runtime or environmental | Catch and handle |
-| Outside the `AtException` tree | `CollectionOpException`, `TimeoutException` (`dart:async`) | Real runtime failures that `on AtException` will **not** catch | Catch explicitly |
+| Outside the `AtException` tree | `CollectionOpException`, `StoppedException`, `TimeoutException` (`dart:async`) | Real runtime conditions that `on AtException` will **not** catch | Catch explicitly |
 
 `AtException` is the root of everything the protocol layer throws, so it is the
 catch-all worth writing — but it is not sufficient on its own. `ArgumentError`
@@ -76,6 +76,42 @@ try {
 `e.firstFailure` is the shortcut when one example is enough. The important
 consequence is that some recipients may now hold an older copy than others —
 decide explicitly whether to retry the failed keys or roll the change back.
+
+---
+
+## `StoppedException` — the shutdown case
+
+`StoppedException` is the odd one in this family: it is not a failure at all.
+It means the client that owned the work was deliberately stopped, so the work
+could not finish. You see it in two situations:
+
+- work that was in flight when `client.stop()` landed, and any later call on
+  that client — a read or write of local storage throws it, and reading one of
+  the services that is now gone throws `StateError` instead;
+- any call on an `at_lookup` connection whose owner has closed it.
+
+It `implements Exception` and, like `CollectionOpException`, is deliberately
+**not** an `AtException`. That is the point of it: a handler that picks a
+fallback or retries on an ordinary failure would otherwise treat an
+intentional shutdown as one more thing that went wrong. Catch it by name and
+let the work end quietly:
+
+```dart
+try {
+  await doBackgroundWork(client);
+} on StoppedException {
+  return;                      // expected — the app is shutting down
+} on AtException catch (e) {
+  _log.warning(e.getTraceMessage());   // a real failure
+}
+```
+
+Order matters: `on StoppedException` has to come before any broader `catch`,
+or the broader one wins and the shutdown is logged as an error.
+
+It needs no extra dependency — `at_commons` exports it and `at_client`
+re-exports `at_commons`, so it can be named in an `on` clause straight from
+`import 'package:at_client/at_client.dart'`.
 
 ---
 
@@ -165,6 +201,13 @@ a bug, not a runtime condition. `fetch(id)` throws `AtClientException` when the
 atServer is unreachable or times out — see
 [16-notifications.md](16-notifications.md).
 
+**A stopped notification service** — `subscribe`, `subscribeFiltered` and
+`startListening` throw `StoppedException` as their first act. `notify` does
+not check up front, but its own handler only catches `AtException`, so a stop
+that cuts a send short propagates out as `StoppedException` rather than
+arriving as an `undelivered` result. A `NotificationResult` is therefore never
+how you learn that the client was stopped.
+
 **Opening and enrolling a client** — `AtOpenRefusedException` when the
 atServer refuses the keys on their first open, `AtEnrollmentPendingException`
 when the keys hold only a request still awaiting approval (resume it rather
@@ -173,8 +216,16 @@ All three extend `AtException`. A `StateError` "already live" means a client
 for that atSign is open in this process — `stop()` it first. See
 [15-client-lifecycle.md](15-client-lifecycle.md).
 
-**Sync catch-up** — `TimeoutException` from `dart:async`, which is **not** an
-`AtException`, so `on AtException` will not catch it.
+**Waiting for sync to catch up** — `waitUntilCaughtUp` can end in two ways
+that are not success, and neither one is an `AtException`, so `on AtException`
+catches neither:
+
+- `TimeoutException` (`dart:async`) — the `timeout` you passed elapsed while
+  sync was still behind. Sync carries on; only the wait gave up.
+- `StoppedException` — the sync service stopped while you were waiting, so
+  catch-up is never going to happen and waiting again would not help.
+
+See [11-sync.md](11-sync.md).
 
 ---
 

@@ -19,7 +19,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Wed, 16 Sep 2026"
+  last_modified: "Mon, 21 Sep 2026"
 ---
 
 # atsign-dart-sdk Skill
@@ -664,11 +664,13 @@ Three families get thrown, and they are not handled the same way:
   call; do not catch.
 - **`AtException` and its subtypes** — everything the protocol layer throws.
   This is the one catch-all worth writing.
-- **`CollectionOpException` and `TimeoutException` (`dart:async`)** — outside
-  the `AtException` tree, so `on AtException` will not catch them.
-  `CollectionOpException` is the one that bites: an `AtCollection` write fans
-  out per recipient and those keys fail independently, so it carries a per-key
-  breakdown and means the write was *partially* applied.
+- **`CollectionOpException`, `StoppedException` and `TimeoutException`
+  (`dart:async`)** — outside the `AtException` tree, so `on AtException` will
+  not catch them. `CollectionOpException` is the one that bites: an
+  `AtCollection` write fans out per recipient and those keys fail
+  independently, so it carries a per-key breakdown and means the write was
+  *partially* applied. `StoppedException` is not a failure at all — the client
+  was stopped, so catch it by name and end the work quietly.
 
 ```dart
 try {
