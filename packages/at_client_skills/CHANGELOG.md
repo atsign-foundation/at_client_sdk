@@ -2,6 +2,12 @@
 
 ## 1.4.0 — unreleased
 
+- Sync and a stopped service: `SyncProgress.stopped` marks the last event a
+  stopping sync service sends, and distinguishes it from the failure it
+  otherwise looks like, so a progress listener stops reporting a shutdown as
+  an error. `waitUntilCaughtUp` ends with `StoppedException` as well as
+  `TimeoutException`, and the two call for different responses
+  (`references/11-sync.md` §3–4; `SKILL.md` §11).
 - Catching a stop: `StoppedException` joins the family of things thrown from
   outside the `AtException` tree, with what raises it, why it is deliberately
   not an `AtException`, and the catch order that keeps a shutdown out of the

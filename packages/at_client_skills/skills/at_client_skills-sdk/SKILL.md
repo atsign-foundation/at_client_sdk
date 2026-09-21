@@ -430,7 +430,8 @@ To hold an operation until sync has settled, `await`
 `SyncService`, so it needs no cast or opt-in. Polling `isSyncInProgress` or
 `isInSync()` instead is a check-then-act race. Always pass `timeout`: it has no
 default, transient sync failures do not reject the future, and without one a
-stalled sync waits forever. It throws `TimeoutException`, which is **not** an
+stalled sync waits forever. It throws `TimeoutException` when the wait runs
+out and `StoppedException` when the sync service stops first — neither is an
 `AtException` (§18).
 
 **Own it, then stop it:**

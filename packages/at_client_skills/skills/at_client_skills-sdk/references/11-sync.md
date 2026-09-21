@@ -70,6 +70,7 @@ class _SyncedListener implements SyncProgressListener {
   _SyncedListener(this.onSynced);
   @override
   void onSyncProgressEvent(SyncProgress p) {
+    if (p.stopped) return;   // shutdown, not a failure — see below
     if (p.syncStatus == SyncStatus.success) onSynced();
   }
 }
@@ -83,7 +84,17 @@ sync.removeProgressListener(listener);
 
 `SyncProgress` carries `syncStatus` (`SyncStatus`:
 `started` / `notStarted` / `inProgress` / `success` / `failure`),
-`localCommitId`, `serverCommitId`, `pendingPushCount`, and `atClientException`.
+`localCommitId`, `serverCommitId`, `pendingPushCount`, `atClientException`,
+and `stopped`.
+
+**Check `stopped` before treating an event as a failure.** A sync service that
+is stopping sends every listener one final event with `stopped` true, and
+nothing follows it. That event is built with `syncStatus` set to
+`SyncStatus.failure` and an `atClientException` reading "SyncService has been
+stopped" — so a listener that branches on `syncStatus` alone reports a
+deliberate shutdown as an error, and one waiting for `SyncStatus.success`
+waits for an event that is never coming. `stopped` is what tells the two
+apart, which is why the listener above returns on it first.
 
 ---
 
@@ -127,10 +138,17 @@ forever:
 try {
   await sync.waitUntilCaughtUp(timeout: const Duration(seconds: 30));
 } on TimeoutException {
-  // dart:async, NOT an AtException — `on AtException` will not catch it.
-  // See references/17-error-handling.md.
+  // dart:async — the wait gave up; sync itself carries on.
+} on StoppedException {
+  // at_commons — the sync service stopped, so catch-up is not coming.
 }
 ```
+
+Neither is an `AtException`, so `on AtException` catches neither — see
+[17-error-handling.md](17-error-handling.md). They also call for different
+responses: after a `TimeoutException` the work is still in progress and
+waiting longer may be reasonable, while after a `StoppedException` there is
+nothing left to wait for.
 
 For progress UI, `onProgress` fires on every `SyncProgress` event observed
 while waiting, including the per-batch `inProgress` events, and runs before the
