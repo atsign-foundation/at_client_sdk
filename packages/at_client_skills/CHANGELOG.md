@@ -2,6 +2,9 @@
 
 ## 1.4.0 — unreleased
 
+- New eval 36: a daemon whose logs fill with errors at every shutdown, which
+  exercises `StoppedException` across the error-handling, sync and
+  notification references at once.
 - Notifications and a stop: delivery to subscribers is at-least-once — the
   read watermark is saved after handlers run, so a stop in between replays
   that notification and handlers have to tolerate running twice. Parked

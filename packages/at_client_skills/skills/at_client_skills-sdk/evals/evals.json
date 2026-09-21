@@ -399,6 +399,19 @@
         "Recommends an idempotent handler — deduplicating on the notification id, or an upsert/assignment rather than an insert/increment",
         "Does not invent a setting, flag or mode that would give exactly-once delivery"
       ]
+    },
+    {
+      "id": 36,
+      "prompt": "Every time my Dart daemon shuts down, the logs fill with errors — sync failures, notification failures, a couple of stack traces. Nothing actually seems broken and the next start is clean. Is my shutdown wrong, or is this just noise I should filter out of the logs?",
+      "expected_output": "Says this is neither a broken shutdown nor noise to filter: the app is reporting a deliberate stop as a failure, and the fix is in how it catches and branches, not in the log configuration. Explains that work a stop cuts short — and any later call on that client — fails with StoppedException, which is deliberately NOT an AtException precisely so that a fallback or retry written for an ordinary failure does not treat an intentional shutdown as one, and that a blanket catch (e) therefore sweeps it up and logs it as an error. Tells the developer to catch StoppedException by name and end the work quietly, placing that clause before any broader catch, since a broader one placed first wins. Explains the sync case specifically: a stopping sync service sends progress listeners one final event with stopped set true and nothing after it, and that event is built with syncStatus of SyncStatus.failure and an exception reading that the service has been stopped, so a listener branching on syncStatus alone reports the shutdown as a failure — check stopped first. Explains the notification case: subscribe, subscribeFiltered and startListening throw StoppedException on a stopped service, and send/notify let it propagate rather than returning an undelivered result, so a stop is not a delivery failure and retrying it achieves nothing. May mention that the client's own background work reports a stop once at warning with no stack trace, so the severe lines and stack traces are coming from the app's own handlers. Does NOT advise suppressing or filtering the log lines by message text or log level, does NOT describe this as an SDK defect or something to report, and does NOT suggest on AtException will catch it.",
+      "expectations": [
+        "Identifies StoppedException as what a stop raises, and that it is deliberately not an AtException so on AtException will not catch it",
+        "Tells the developer to catch StoppedException by name and end quietly, ahead of any broader catch clause",
+        "Explains a stopping sync service sends a final event with stopped set, which otherwise looks like a failure, so a listener must branch on stopped rather than syncStatus alone",
+        "States notification calls throw StoppedException rather than reporting undelivered, so a stop is not a delivery failure to retry",
+        "Treats the logging as a symptom of mis-catching rather than advising the logs be filtered or suppressed",
+        "Does not call this an SDK defect and does not claim on AtException catches it"
+      ]
     }
   ]
 }
