@@ -2,6 +2,12 @@
 
 ## 1.4.0 — unreleased
 
+- Notifications and a stop: delivery to subscribers is at-least-once — the
+  read watermark is saved after handlers run, so a stop in between replays
+  that notification and handlers have to tolerate running twice. Parked
+  notifications are lost instead. A stop never reports `undelivered`; every
+  notification call throws `StoppedException` (`references/16-notifications.md`;
+  `SKILL.md` §13). New eval 35.
 - Sync and a stopped service: `SyncProgress.stopped` marks the last event a
   stopping sync service sends, and distinguishes it from the failure it
   otherwise looks like, so a progress listener stops reporting a shutdown as

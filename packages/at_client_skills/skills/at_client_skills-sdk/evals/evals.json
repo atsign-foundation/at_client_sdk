@@ -387,6 +387,18 @@
         "Directs the developer to noports_core and the NoPorts documentation",
         "Does not invent NoPorts APIs or flag names, and does not claim at_client sharing governs tunnel access"
       ]
+    },
+    {
+      "id": 35,
+      "prompt": "I have a Dart daemon that picks up jobs sent to it as notifications and writes each one into a billing table. Every so often, after I redeploy it, a customer ends up charged twice for the same job. The team sending the jobs insists each one was sent once. What's going on, and what should I do about it?",
+      "expected_output": "Identifies that delivery to subscribers is at-least-once, not exactly-once, so a duplicate is expected behaviour rather than a sender bug or a defect to report. Explains the cause: the client saves its read watermark only after a notification has been handed to the handlers, so a stop landing between the two leaves the watermark behind a notification and the next connection delivers it again — deliberate, because the alternative is silently skipping one nobody saw. Connects the redeploy to that stop. Recommends making the handler tolerate running twice on the same notification: deduplicate on the notification id, or make the effect idempotent (an upsert or a state assignment rather than an insert or an increment), rather than trying to prevent the replay. Does NOT blame the sender, does NOT invent a setting, flag or delivery mode that would make delivery exactly-once, and does NOT suggest that awaiting send() or polling delivery status on the sending side would prevent the duplicate.",
+      "expectations": [
+        "Identifies delivery to subscribers as at-least-once rather than exactly-once, so a duplicate is expected rather than a bug",
+        "Explains that the read watermark is saved after the handlers run, so a stop in between causes the next connection to deliver the notification again",
+        "Attributes the duplicate to the redeploy stopping the client, not to the sender sending twice",
+        "Recommends an idempotent handler — deduplicating on the notification id, or an upsert/assignment rather than an insert/increment",
+        "Does not invent a setting, flag or mode that would give exactly-once delivery"
+      ]
     }
   ]
 }

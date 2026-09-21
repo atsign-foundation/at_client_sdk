@@ -520,7 +520,15 @@ never that it arrived. When a notification carries an action that must not be
 silently lost, use the returned `id` with `getStatus(id)` — but note its status
 enum is only `delivered`/`undelivered`, so one `undelivered` reading is not a
 failure, and the poll deadline must sit inside the notification's `expiration`
-(15 minutes by default). `fetch(id)` gives the finer diagnosis.
+(15 minutes by default). `fetch(id)` gives the finer diagnosis. A stop is the
+one thing that never reports `undelivered` — it throws `StoppedException`
+instead (§18).
+
+**Receiving is at-least-once.** The client saves its read watermark *after*
+handing a notification to your handlers, so a stop in between replays that
+notification on the next connection rather than skipping it. Write handlers
+that can run twice on the same notification without doing the work twice —
+key the effect off `n.id`, or make it idempotent.
 
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
 for the full decision guide and the dockerstats Notifications+SQLite example,
