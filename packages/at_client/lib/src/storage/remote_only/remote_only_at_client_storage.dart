@@ -1,8 +1,8 @@
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/remote_write_through_keystore.dart';
+import 'package:at_client/src/storage/remote_only/remote_write_through_keystore.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
-import 'package:at_client/src/sync/sync_queue_store.dart';
+import 'package:at_client/src/storage/remote_only/noop_sync_queue_store.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
 /// The Mode E `AtClientStorage`: no local database, every read/write a round
@@ -44,8 +44,8 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   @override
   Future<void> openBackend() async {
     if (_keyStore != null) return;
-    final keyStore =
-        RemoteWriteThroughKeyStore(remoteSecondary, maxAttempts: keyStoreMaxAttempts);
+    final keyStore = RemoteWriteThroughKeyStore(remoteSecondary,
+        maxAttempts: keyStoreMaxAttempts);
     await keyStore.initialize();
     final queue = AtSyncQueue(atSign: atSign);
     await queue.open(store: const NoopSyncQueueStore());
