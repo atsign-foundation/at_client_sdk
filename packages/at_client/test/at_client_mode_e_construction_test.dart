@@ -106,8 +106,7 @@ void main() {
         atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys(atSign)),
         lookUps: _recording) as AtClientImpl;
 
-    expect(
-        client.atChops?.atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey,
+    expect(client.atChops?.atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey,
         demo.pkamPublicKeyMap['@alice🛠'],
         reason: 'the keystore behind `storage` was never written to, so this '
             'can only have come from AtKeysIo');
@@ -140,8 +139,7 @@ void main() {
         storage: storage,
         lookUps: _recording) as AtClientImpl;
 
-    expect(
-        client.atChops?.atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey,
+    expect(client.atChops?.atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey,
         demo.pkamPublicKeyMap['@alice🛠'],
         reason: 'proves the `?.`-fixed _createAtChops reads through a '
             'non-Hive keystore rather than degrading to the empty-keypair '
