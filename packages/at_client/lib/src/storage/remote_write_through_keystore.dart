@@ -9,7 +9,13 @@ class RemoteWriteThroughKeyStore
   final RemoteSecondary remoteSecondary;
   final int maxAttempts;
 
+  final Map<String, AtData> _local = {};
+
   RemoteWriteThroughKeyStore(this.remoteSecondary, {this.maxAttempts = 3});
+
+  bool _isLocal(String key) {
+    return key.toLowerCase().startsWith('local:');
+  }
 
   Future<T> _withRetry<T>(Future<T> Function() attempt) async {
     Object? lastError;
@@ -32,6 +38,10 @@ class RemoteWriteThroughKeyStore
   Future<int?> put(String key, AtData value,
       {bool skipCommit = false,
       AtAssertedTimestamps? assertedTimestamps}) async {
+    if (_isLocal(key)) {
+      _local[key] = value;
+      return null;
+    }
     await _withRetry(() => remoteSecondary
         .executeCommand('update:$key ${value.data}', auth: true));
     return null;
@@ -41,6 +51,10 @@ class RemoteWriteThroughKeyStore
   Future<int?> putMeta(String key, AtMetaData? metadata,
       {bool skipCommit = false,
       AtAssertedTimestamps? assertedTimestamps}) async {
+    if (_isLocal(key)) {
+      _local[key]?.metaData = metadata;
+      return null;
+    }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
     await _withRetry(() => remoteSecondary
         .executeCommand('update:meta:$key$fragment', auth: true));
@@ -49,6 +63,10 @@ class RemoteWriteThroughKeyStore
 
   @override
   Future<int?> putAll(String key, AtData value, AtMetaData? metadata) async {
+    if (_isLocal(key)) {
+      _local[key] = value..metaData = metadata;
+      return null;
+    }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
     await _withRetry(() => remoteSecondary
         .executeCommand('update$fragment:$key ${value.data}', auth: true));
@@ -58,6 +76,10 @@ class RemoteWriteThroughKeyStore
   @override
   Future<int?> remove(String key,
       {bool skipCommit = false, DateTime? deletedAt}) async {
+    if (_isLocal(key)) {
+      _local.remove(key);
+      return null;
+    }
     await _withRetry(
         () => remoteSecondary.executeCommand('delete:$key', auth: true));
     return null;
@@ -65,6 +87,10 @@ class RemoteWriteThroughKeyStore
 
   @override
   Future<AtData?> get(String key) async {
+    if (_isLocal(key)) {
+      return _local[key] ??
+          (throw KeyNotFoundException('$key does not exist in keystore'));
+    }
     final builder = LLookupVerbBuilder()
       ..atKey = AtKey.fromString(key)
       ..operation = 'all';
@@ -90,7 +116,10 @@ class RemoteWriteThroughKeyStore
         await _withRetry(() => remoteSecondary.executeVerb(builder));
     final cleanResponse = response.replaceFirst(RegExp('^data:'), '');
     final list = jsonDecode(cleanResponse) as List<dynamic>;
-    return Stream.fromIterable(list.cast<String>());
+    final pattern = regex == null ? null : RegExp(regex);
+    final localKeys =
+        _local.keys.where((k) => pattern == null || pattern.hasMatch(k));
+    return Stream.fromIterable([...list.cast<String>(), ...localKeys]);
   }
 
   // Dead but must answer
