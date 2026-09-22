@@ -67,15 +67,15 @@ void main() {
       'attaches with no local database, and reads/writes flow through the '
       'injected RemoteSecondary (X-R1, X-R2 composition wiring)', () async {
     const atSign = '@remoteonly1';
-    final storage =
-        RemoteOnlyAtClientStorage(atSign: atSign, remoteSecondary: remoteSecondary);
+    final storage = RemoteOnlyAtClientStorage(
+        atSign: atSign, remoteSecondary: remoteSecondary);
     final owner = _FakeClient(atSign);
 
     when(() => remoteSecondary.executeCommand(any(), auth: true))
         .thenAnswer((_) async => 'data:1');
-    when(() => remoteSecondary.executeVerb(any())).thenAnswer(
-        (_) async => 'data:{"data":"v","metaData":{"createdAt":'
-            '"${DateTime.now().toUtc()}","updatedAt":"${DateTime.now().toUtc()}"}}');
+    when(() => remoteSecondary.executeVerb(any())).thenAnswer((_) async =>
+        'data:{"data":"v","metaData":{"createdAt":'
+        '"${DateTime.now().toUtc()}","updatedAt":"${DateTime.now().toUtc()}"}}');
 
     await storage.attach(owner);
     await storage.keyStore.put('k$atSign', AtData()..data = 'v');
@@ -93,8 +93,8 @@ void main() {
 
   test('syncQueue is a NoopSyncQueueStore-backed AtSyncQueue', () async {
     const atSign = '@remoteonly2';
-    final storage =
-        RemoteOnlyAtClientStorage(atSign: atSign, remoteSecondary: remoteSecondary);
+    final storage = RemoteOnlyAtClientStorage(
+        atSign: atSign, remoteSecondary: remoteSecondary);
     final owner = _FakeClient(atSign);
 
     await storage.attach(owner);
@@ -133,11 +133,12 @@ void main() {
     await b.close();
   });
 
-  test('clearData throws UnsupportedError — clearing a live atServer is out '
+  test(
+      'clearData throws UnsupportedError — clearing a live atServer is out '
       'of scope for this slice', () async {
     const atSign = '@remoteonly4';
-    final storage =
-        RemoteOnlyAtClientStorage(atSign: atSign, remoteSecondary: remoteSecondary);
+    final storage = RemoteOnlyAtClientStorage(
+        atSign: atSign, remoteSecondary: remoteSecondary);
     final owner = _FakeClient(atSign);
     await storage.attach(owner);
 
@@ -147,11 +148,12 @@ void main() {
     await storage.close();
   });
 
-  test('closeBackend does not close the injected RemoteSecondary — the '
+  test(
+      'closeBackend does not close the injected RemoteSecondary — the '
       'storage borrows it, it does not own it', () async {
     const atSign = '@remoteonly5';
-    final storage =
-        RemoteOnlyAtClientStorage(atSign: atSign, remoteSecondary: remoteSecondary);
+    final storage = RemoteOnlyAtClientStorage(
+        atSign: atSign, remoteSecondary: remoteSecondary);
     final owner = _FakeClient(atSign);
 
     await storage.attach(owner);
