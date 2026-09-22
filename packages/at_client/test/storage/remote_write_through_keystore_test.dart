@@ -139,6 +139,36 @@ void main() {
 
       expect(meta?.isBinary, true);
     });
+
+    test(
+        'AtKey.fromString round-trips the PKAM private key back to the '
+        'exact wire string', () async {
+      when(() => remoteSecondary.executeVerb(any()))
+          .thenAnswer((_) async => llookupAllResponse());
+
+      await store.get('privatekey:at_pkam_privatekey');
+
+      final captured =
+          verify(() => remoteSecondary.executeVerb(captureAny()))
+              .captured
+              .single as LLookupVerbBuilder;
+      expect(captured.atKey.toString(), 'privatekey:at_pkam_privatekey');
+    });
+
+    test(
+        'AtKey.fromString round-trips a public key back to the exact wire '
+        'string', () async {
+      when(() => remoteSecondary.executeVerb(any()))
+          .thenAnswer((_) async => llookupAllResponse());
+
+      await store.get('public:publickey@alice');
+
+      final captured =
+          verify(() => remoteSecondary.executeVerb(captureAny()))
+              .captured
+              .single as LLookupVerbBuilder;
+      expect(captured.atKey.toString(), 'public:publickey@alice');
+    });
   });
 
   group('getKeys', () {
