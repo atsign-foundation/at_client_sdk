@@ -2357,6 +2357,11 @@ class AtClientImpl implements AtClient {
       // records nothing when its own read throws.
       return keys.authenticationFor(enrollmentId).chops;
     }
+    if (_storage?.holdsKeyMaterial == false) {
+      throw StateError('$atSign\'s storage holds no key material, so this '
+          'client has no keys to authenticate or decrypt with. Pass atKeysIo: '
+          '(or atChops:) when creating it.');
+    }
     // ignore: deprecated_member_use
     AtEncryptionKeyPair? atEncryptionKeyPair;
     // ignore: deprecated_member_use
