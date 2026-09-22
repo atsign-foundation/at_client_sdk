@@ -2,86 +2,42 @@
 
 ## 1.4.0 — unreleased
 
-- New eval 36: a daemon whose logs fill with errors at every shutdown, which
-  exercises `StoppedException` across the error-handling, sync and
-  notification references at once.
-- Notifications and a stop: delivery to subscribers is at-least-once — the
-  read watermark is saved after handlers run, so a stop in between replays
-  that notification and handlers have to tolerate running twice. Parked
-  notifications are lost instead. A stop never reports `undelivered`; every
-  notification call throws `StoppedException` (`references/16-notifications.md`;
-  `SKILL.md` §13). New eval 35.
-- Sync and a stopped service: `SyncProgress.stopped` marks the last event a
-  stopping sync service sends, and distinguishes it from the failure it
-  otherwise looks like, so a progress listener stops reporting a shutdown as
-  an error. `waitUntilCaughtUp` ends with `StoppedException` as well as
-  `TimeoutException`, and the two call for different responses
-  (`references/11-sync.md` §3–4; `SKILL.md` §11).
-- Catching a stop: `StoppedException` joins the family of things thrown from
-  outside the `AtException` tree, with what raises it, why it is deliberately
-  not an `AtException`, and the catch order that keeps a shutdown out of the
-  error log. Records that `subscribe`, `subscribeFiltered` and
-  `startListening` throw it outright, that `notify` lets it propagate rather
-  than reporting `undelivered`, and that `waitUntilCaughtUp` ends with it when
-  the sync service stops first (`references/17-error-handling.md`;
-  `SKILL.md` §18).
-- Stopping a client: `stop()` ends the client's timers and waits and closes
-  every connection, work it cuts short fails with `StoppedException`, and a
-  push the atServer accepted just before the stop is pushed again by the next
-  client (`references/15-client-lifecycle.md` §7; `SKILL.md`).
-- The auth flows follow at_client_flutter 2.0: every dialog hands back the
-  `AtClient` it opened, the app owns it, and nothing imports `at_auth`.
-  `AtAuthRequest`, `AuthResponse`, `_setupAtClient` and
-  `AtClientManager.setCurrentAtSign` are gone from the skill (rewritten
-  `references/05-flutter-auth.md`; `SKILL.md` §10).
-- New: AtClient lifecycle — the `Atsign` verbs (`open`, `activate`, `enroll`,
-  `resumeEnrollment`), the platform bundle a client is built from (`keys:`,
-  `storage:` and `lookUps:`, the `AtLookUpFactory` that builds every
-  connection the client opens), the connection state (`client.connection`:
-  online / offline / refused, the causes, `awaitOnline`), the sync and
-  notification services' start and stop, `AtClientManager.use`, and what
-  `stop()` does and does not do (new `references/15-client-lifecycle.md`;
-  `SKILL.md` §11; later sections renumbered).
-- The package map, the headless-agent and sync references and the
-  deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
-  `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage
-  object.
+- Document at-least-once notification delivery — replay on a stop, and
+  handlers that must tolerate running twice.
+- Document a stopped sync service — `SyncProgress.stopped`, and
+  `waitUntilCaughtUp` ending with `StoppedException` too.
+- Document `StoppedException` — why it is not an `AtException`, and catch
+  order.
+- Document stopping a client — what `stop()` ends, that it does not drain, and
+  the re-push a stop can leave behind.
+- Follow at_client_flutter 2.0 in the auth flows — dialogs hand back the
+  `AtClient`, the app owns it, and nothing imports `at_auth`.
+- Document the AtClient lifecycle — the `Atsign` verbs, the platform bundle a
+  client is built from, connection state, and `AtClientManager.use`.
+- Drop `at_auth` and `setCurrentAtSign` across the package map, headless-agent
+  and sync material, and name `hiveStoragePath` / `commitLogPath` as
+  deprecated.
 - Document public keys — `AtKey.public`, signed-not-encrypted values, and the
-  always-remote `plookup` read path (`references/12-remote-atserver.md`).
-- Document notification delivery confirmation — `send()` → `getStatus(id)` /
-  `fetch(id)`, the two-value status enum, and the expiration window
-  (new `references/16-notifications.md`).
-- Document headless enrolment — where the passcode comes from
-  (`client.enrollments.otp` / `.spp`), that only a `__manage` holder can
-  approve, and least-privilege namespaces
-  (`references/15-client-lifecycle.md`).
-- Document error handling — the three exception families, `getTraceMessage()`
-  over `toString()`, `CollectionOpException` partial failures, and what each
-  operation throws (new `references/17-error-handling.md`).
+  always-remote `plookup` read path.
+- Document notification delivery confirmation — `getStatus` / `fetch`, the
+  two-value status enum, and the expiration window.
+- Document headless enrolment — where the passcode comes from, who may
+  approve, and least-privilege namespaces.
+- Document error handling — the exception families, `getTraceMessage()` over
+  `toString()`, and `CollectionOpException` partial failures.
 - Document waiting for sync to settle — `waitUntilCaughtUp`, its snapshot
-  semantics, the mandatory `timeout`, and why polling `isSyncInProgress` is a
-  check-then-act race (`references/11-sync.md`).
+  semantics, and the mandatory `timeout`.
 - Document the deprecated `AtClient` methods — the `notify*` / `startMonitor`
-  family, the file-transfer and stream methods that moved to the app layer,
-  the compaction jobs, `atChops`, and the deprecated `AtClientPreference`
-  fields (`references/01-deprecation-guide.md`; `SKILL.md` §19).
+  family, the moved file-transfer and stream methods, and the deprecated
+  `AtClientPreference` fields.
 - Document `AtRpcCallbacks` — the route for a peer that both answers and makes
-  requests, the `ack` responses `call()` hides, and that `sendRequest` widens
-  the allow list (`references/13-rpc.md`).
-- Note that NoPorts carries its own access control (`--managers` and/or a
-  `--policy-manager` atsign running an `NPA`) — a pointer to `noports_core`
-  and its docs, not a description of its internals
-  (`references/06-package-map.md`).
-- Bring the skill within the Agent Skills spec. The `description` exceeded the
-  1024-character limit; it is rewritten around what a developer asks rather
-  than the API names they would only know after the answer. Sync setup and
-  `waitUntilCaughtUp` move out of §10 Flutter Auth into §11, where they apply
-  to any client — a headless daemon needs them just as much — and the
-  duplicated Flow 3 snippet drops in favour of `references/05-flutter-auth.md`.
-- Evals: the two auth evals follow the new flows; new evals cover logout /
-  switching, the connection state, public keys, notification confirmation,
-  headless enrolment, error handling, waiting for sync, the deprecated
-  `AtClient` methods and `AtRpcCallbacks`.
+  requests, and that `sendRequest` widens the allow list.
+- Note that NoPorts carries its own access control, with a pointer to
+  `noports_core` rather than a description of its internals.
+- Bring the skill within the Agent Skills spec — the `description` was over
+  the 1024-character limit, and sync setup moves out of Flutter Auth to where
+  it applies to any client.
+- Extend the evals to cover the new material.
 
 ## 1.3.0 — 2026-07-31
 
