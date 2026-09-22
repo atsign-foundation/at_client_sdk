@@ -68,12 +68,13 @@ Future<AtClient> buildAtClient({
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
   }
-  if (storage != null && !preference.isLocalStoreRequired) {
+  if (storage is HiveAtClientStorage && !preference.isLocalStoreRequired) {
     throw ArgumentError.value(
         storage,
         'storage',
         'preference.isLocalStoreRequired is false for $atSign, so this '
-            'storage would never be opened');
+            'Hive-backed storage would sit on disk with nothing to read it '
+            'back');
   }
   final location = _locationOf(atSign, preference, storage);
   final holder = location == null ? null : AtClientImpl.liveClientOn(location);
