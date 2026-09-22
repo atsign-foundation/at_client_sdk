@@ -4,14 +4,14 @@ import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/at_telemetry_exporter.dart';
 import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
 
-final class AtTelemetryExporterOtlpHttp implements AtTelemetryExporter {
+final class AtTelemetryExporterOtelHttp implements AtTelemetryExporter {
   final OTelLogger _logger;
 
-  AtTelemetryExporterOtlpHttp._({
+  AtTelemetryExporterOtelHttp._({
     required OTelLogger logger,
   }) : _logger = logger;
 
-  static Future<AtTelemetryExporterOtlpHttp> create({
+  static Future<AtTelemetryExporterOtelHttp> create({
     required Uri endpoint,
     required String serviceName,
   }) async {
@@ -22,14 +22,15 @@ final class AtTelemetryExporterOtlpHttp implements AtTelemetryExporter {
       enableLogs: true,
     );
 
-    return AtTelemetryExporterOtlpHttp._(
+    return AtTelemetryExporterOtelHttp._(
       logger: OTel.logger('at_telemetry'),
     );
   }
 
   @override
   Future<void> export(AtTelemetryEvent event) async {
-    Map<String, Object> nonNullValueAttributes = {};
+    // 1. Remove null value entries
+    final Map<String, Object> nonNullValueAttributes = {};
 
     for(final MapEntry<String, Object?> entry in event.attributes.entries) {
       if(entry.value != null) {
@@ -37,6 +38,8 @@ final class AtTelemetryExporterOtlpHttp implements AtTelemetryExporter {
       }
     }
 
+    // send the event to the logger provider
+    // note: call flush() to immediately send
     _logger.emit(
       timeStamp: event.timestamp,
       severityNumber: Severity.INFO,
@@ -44,7 +47,15 @@ final class AtTelemetryExporterOtlpHttp implements AtTelemetryExporter {
       eventName: event.name,
       attributes: OTel.attributesFromMap(nonNullValueAttributes),
     );
+  }
 
-    await OTel.loggerProvider().forceFlush();
+  @override
+  Future<void> flush() {
+    return OTel.loggerProvider().forceFlush();
+  }
+
+  @override
+  Future<void> shutdown() {
+    return OTel.shutdown();
   }
 }
