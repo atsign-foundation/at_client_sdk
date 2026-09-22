@@ -6,7 +6,7 @@
 // functional test, not this suite). See plans/wasm/spike/pb3-stage2c-plan.md.
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/storage/remote_only_at_client_storage.dart';
+import 'package:at_client/remote_only.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
@@ -182,7 +182,7 @@ void main() {
       'a RemoteOnlyAtClientStorage constructs via buildAtClient, matching '
       'InMemoryAtClientStorage\'s Mode E construction shape', () async {
     const atSign = '@remoteonly6';
-    when(() => remoteSecondary.executeCommand(any(), auth: true))
+    when(() => remoteSecondary.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:1');
 
     final client = await buildAtClient(
