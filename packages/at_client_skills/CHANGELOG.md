@@ -2,6 +2,8 @@
 
 ## 1.4.0 — unreleased
 
+- Warn that an RPC `call()` has no timeout of its own and waits forever on a
+  peer that never answers, and bound every call in the samples.
 - Use `send(idAndNamespace:)`, not the deprecated `namespace:`, and say what
   the value is — an id and a namespace joined by a dot, split at the first one.
 - Document at-least-once notification delivery — replay on a stop, and

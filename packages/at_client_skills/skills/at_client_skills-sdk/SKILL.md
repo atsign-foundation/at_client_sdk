@@ -574,7 +574,10 @@ data), use `AtRpc`/`AtRpcClient` from `at_client`:
 // Requester — call() sends, awaits the success response, returns its payload
 final client = AtRpcClient(serverAtsign: '@server', atClient: atClient,
     baseNameSpace: 'my_app', domainNameSpace: 'route_planning');
-final answer = await client.call({'from': 'A', 'to': 'B'});
+// call() has NO timeout of its own — an unanswered request waits forever
+final answer = await client
+    .call({'from': 'A', 'to': 'B'})
+    .timeout(const Duration(seconds: 20));
 
 // Responder — handler's return value is sent back; thrown errors become nacks
 final rpc = AtRpc.server(atClient: atClient, baseNameSpace: 'my_app',

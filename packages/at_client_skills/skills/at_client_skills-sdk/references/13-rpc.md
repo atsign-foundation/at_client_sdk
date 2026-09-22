@@ -44,6 +44,33 @@ final Map<String, dynamic> answer =
   completes the future with an error — wrap in try-catch.
 - `ack` responses are informational ("received, working on it"); `call()` keeps
   waiting for the final result.
+- If the client has already been stopped, `call()` throws `StoppedException`
+  rather than sending — see
+  [17-error-handling.md](17-error-handling.md).
+
+> **Gotcha: `call()` has no timeout of its own.** If the responder is offline,
+> has no handler for the request, or simply never replies, the future waits
+> **forever** — bound every call yourself.
+
+Nothing else ever completes it except your own client stopping, which errors it
+with `StoppedException`. The retry and expiry settings below are not a safety
+net here: they cover *delivering the request*, not getting an answer to it, so a
+request that arrives and is then ignored has consumed neither.
+
+```dart
+try {
+  final answer = await client
+      .call({'from': 'A', 'to': 'B'})
+      .timeout(const Duration(seconds: 20));
+} on TimeoutException {
+  // dart:async — no answer in time. Decide: retry, degrade, or give up.
+} on StoppedException {
+  // at_commons — our own client stopped; the answer is not coming.
+}
+```
+
+Pick the duration from how long the responder legitimately needs, not from the
+request expiry — they measure different things.
 
 > **Gotcha:** `AtRpcClient` is one-way — its `handleRequest` throws
 > `UnimplementedError`. One process cannot use the same `AtRpcClient` to serve
