@@ -156,8 +156,7 @@ void main() {
 
       final Uint8List badSig = Uint8List(MlDsa65Sizes.signatureBytes + 1);
       await expectLater(
-          algo.verifyBytes(message,
-              signature: badSig, publicKey: kp.publicKey),
+          algo.verifyBytes(message, signature: badSig, publicKey: kp.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
     });
 

@@ -15,8 +15,8 @@ import 'package:pointycastle/stream/ctr.dart';
 ///
 /// The key length is fixed at construction — 16 bytes for AES-128, 24 for
 /// AES-192, 32 for AES-256 — and every key passed to [encrypt]/[decrypt] must
-/// match it. Keys are raw bytes; if you hold an `AESKey` (which carries its
-/// material base64-encoded), pass `base64Decode(aesKey.key)`.
+/// match it. Keys are raw bytes; where a key is held base64-encoded — as the
+/// atKeys file and the wire carry it — `base64Decode` it first.
 ///
 /// CTR output is NOT authenticated: tampering with the ciphertext or IV yields
 /// garbage plaintext rather than an error. Prefer `AesGcm256EncryptionAlgo` for

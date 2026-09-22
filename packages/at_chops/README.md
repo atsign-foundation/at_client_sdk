@@ -129,6 +129,11 @@ tampered message or a forged signature throws `AtSigningVerificationException`
 rather than returning `false` — a failed verification is an error, and a
 boolean is too easy to drop on the floor.
 
+`RsaSigningAlgo`'s `keySize` must be 2048 or 4096 — the two `SigningAlgoType` spells — and
+`signBytes`/`verifyBytes` reject a key whose modulus is not that size. `name` is the wire
+identifier and `SigningAlgoType.strongestFirst` ranks on it, so a key of another size would
+both mislabel the signature and move it in the order a verifier chooses by.
+
 ```dart
 final signing = RsaSigningAlgo(); // SHA-256, 2048-bit by default
 final kp = await signing.generateKeyPair();
@@ -287,7 +292,7 @@ X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `
 
 AES-256-GCM also has an OpenSSL FFI backend (`AesGcm256FfiAlgo`) alongside its pure-Dart counterpart (`AesGcm256EncryptionAlgo`); the two are fully interoperable. `AtPqc.aesGcm256` auto-selects FFI or pure-Dart when AAD is not needed. If you need AAD (e.g. for PQ-HPKE), construct `AesGcm256FfiAlgo.fromLib(lib)` or `AesGcm256EncryptionAlgo()` directly — both expose `encrypt`/`decrypt` with `{List<int> aad}`.
 
-AES-CTR has an OpenSSL FFI backend (`AesCtrFfiAlgo`) alongside its pure-Dart counterpart (`AesCtrEncryptionAlgo`). Both PKCS7-pad before encrypting, so their output is byte-identical at all three key lengths and either can read the other's records. `AtPqc.aesCtr(keyLengthBytes)` auto-selects between them; pass an IV of exactly 16 bytes, which is the only length on which the two agree — the pure-Dart path also right-pads a shorter IV, and the FFI path rejects it.
+AES-CTR has an OpenSSL FFI backend (`AesCtrFfiAlgo`) alongside its pure-Dart counterpart (`AesCtrEncryptionAlgo`). Both PKCS7-pad before encrypting, so their output is byte-identical at all three key lengths and either can read the other's records. `AtPqc.aesCtr(keyLengthBytes)` auto-selects between them; the IV must be exactly 16 bytes and both backends reject any other length — `AtEncryptionException` on encrypt, `AtDecryptionException` on decrypt. 3.x rejected a short IV only on the FFI path, which made a caller holding an IV it did not choose — one parsed from a record, or from an older writer — fail or not depending on whether the host had libcrypto.
 
 For a byte stream whose chunk boundaries the caller does not control, `AtPqc.aesCtrStreamCipher(key, iv)` returns an `AesCtrFfiCipher` holding one OpenSSL cipher context across many `update()` calls, or `null` where libcrypto is unavailable. It is raw CTR — no padding, so it is *not* wire-compatible with `AtPqc.aesCtr` — and the caller owns the context and must `dispose()` it. CTR is unauthenticated in both shapes; add a MAC, or use GCM, where integrity matters.
 

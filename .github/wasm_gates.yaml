@@ -9,6 +9,21 @@
 # honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
 
 at_chops:
+  # NOT resolvable from the workspace. at_chops 4.0.0 is detached from the root
+  # `workspace:` list until at_client migrates off the 3.x facade, so
+  # `package:at_chops/...` resolves out of the pub cache there and a plain run
+  # would walk the PUBLISHED 3.x. Run this gate against the package's own
+  # `dart pub get`, which is what the `wasm_ratchet` job does:
+  #
+  #   dart pub get -C packages/at_chops
+  #   dart run wasm_shakedown -c .github/wasm_gates.yaml \
+  #     --resolve-from at_chops=packages/at_chops
+  #
+  # Without the flag the baselines below fail rather than pass — 3.x owns 2
+  # blocked packages and puts the bindings at a different path — so forgetting
+  # it is red, not a false green. Drop this note when at_chops rejoins
+  # `workspace:`.
+
   # Web-safe first: every OpenSSL and FFI algorithm lives behind
   # at_chops_ffi.dart, so at_chops.dart is pure Dart.
   #
@@ -19,8 +34,15 @@ at_chops:
   ratchets:
     - barrel: package:at_chops/at_chops.dart
       allowed_offenders: []
-      max_blocked_packages: 2 # at_utils + chalkdart, via the logger
-      min_files_walked: 500
+      # Nothing under this barrel reaches a blocked package. It was 2 —
+      # at_utils + chalkdart, via the logger — which 3.x reached through
+      # at_chops_impl.dart alone; 4.0.0 removes that facade and imports no
+      # logger anywhere in lib/.
+      max_blocked_packages: 0
+      # The walk is 433 files. Smaller than 3.x's 583 because 4.0.0 drops six
+      # dependencies onto pointycastle; the floor sits under it with room for
+      # a dependency to shed a file without turning the gate red.
+      min_files_walked: 380
   probe:
     # at_chops_ffi.dart is absent on purpose: it is the FFI island and does not
     # compile to wasm. The control below asserts it still holds what it isolates.
@@ -28,7 +50,7 @@ at_chops:
     - package:at_chops/types.dart
   controls:
     - barrel: package:at_chops/at_chops_ffi.dart
-      reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
+      reaches_file: lib/src/ffi/openssl_ffi_bindings.dart
       reaches_library: dart:ffi
       because: the FFI algorithms it exists to quarantine
 

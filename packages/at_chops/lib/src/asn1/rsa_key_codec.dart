@@ -5,8 +5,8 @@ import 'package:pointycastle/asymmetric/api.dart';
 
 /// DER codec for the RSA key encodings the Atsign Protocol puts on the wire:
 /// X.509 `SubjectPublicKeyInfo` for public keys and PKCS#8 `PrivateKeyInfo`
-/// (wrapping a PKCS#1 `RSAPrivateKey`) for private keys — base64-encoded into
-/// `AtPublicKey`/`AtPrivateKey` by callers.
+/// (wrapping a PKCS#1 `RSAPrivateKey`) for private keys — base64-encoded by
+/// callers for the atKeys file and the wire.
 ///
 /// Internal: the shape is fixed by data already in the field, so this is a
 /// deliberately literal codec rather than a general ASN.1 layer.

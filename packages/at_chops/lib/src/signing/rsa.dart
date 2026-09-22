@@ -44,14 +44,20 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
   @override
   String get name => _name;
 
+  /// Throws [AtSigningException] if [keySize] is neither 2048 nor 4096 — those
+  /// are the only two [SigningAlgoType] spells, so any other size would have to
+  /// report one of them and label its signatures with a size they do not have.
   RsaSigningAlgo(
       {HashingAlgoType hashingAlgoType = HashingAlgoType.sha256,
       int keySize = 2048})
       : _hashingAlgoType = hashingAlgoType,
         _keySize = keySize,
-        _name = keySize == 2048
-            ? SigningAlgoType.rsa2048.name
-            : SigningAlgoType.rsa4096.name;
+        _name = switch (keySize) {
+          2048 => SigningAlgoType.rsa2048.name,
+          4096 => SigningAlgoType.rsa4096.name,
+          _ => throw AtSigningException(
+              'RSA keySize must be 2048 or 4096, got $keySize'),
+        };
 
   /// Generate a fresh RSA key pair of [keySize] bits.
   @override
@@ -70,34 +76,56 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
   }
 
   /// Sign [message] with the DER-encoded [secretKey].
+  ///
+  /// Throws [AtSigningException] if [secretKey]'s modulus is not [_keySize]
+  /// bits: the signature would go on the wire labelled [name], which describes
+  /// a size the key does not have.
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
+    final key = RsaKeyCodec.decodePrivateKey(secretKey);
+    _requireModulus(
+        key.modulus!.bitLength,
+        () => AtSigningException('Cannot sign with a '
+            '${key.modulus!.bitLength}-bit key using $name — the signature '
+            'would go on the wire labelled $name. Construct the RsaSigningAlgo '
+            'whose keySize matches the key you hold.'));
     final signer = _signer(() => AtSigningException(
         'Hashing algo $_hashingAlgoType is invalid/not supported'))
-      ..init(
-          true,
-          PrivateKeyParameter<RSAPrivateKey>(
-              RsaKeyCodec.decodePrivateKey(secretKey)));
+      ..init(true, PrivateKeyParameter<RSAPrivateKey>(key));
     return signer.generateSignature(message).bytes;
   }
 
   /// Verify [signature] over [message] against the DER-encoded [publicKey].
   ///
-  /// Throws [AtSigningVerificationException] if the signature does not verify.
+  /// Throws [AtSigningVerificationException] if the signature does not verify,
+  /// or if [publicKey]'s modulus is not [_keySize] bits — a key of another size
+  /// did not come from the algorithm this instance calls itself, so no
+  /// signature under it is one this instance should call valid.
   @override
   Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
+    final key = RsaKeyCodec.decodePublicKey(publicKey);
+    _requireModulus(
+        key.modulus!.bitLength,
+        () => AtSigningVerificationException(
+            'Cannot verify a ${key.modulus!.bitLength}-bit key using $name. '
+            'Construct the RsaSigningAlgo whose keySize matches the key you '
+            'hold.'));
     final signer = _signer(() => AtSigningVerificationException(
         'Invalid hashing algo $_hashingAlgoType provided'))
-      ..init(
-          false,
-          PublicKeyParameter<RSAPublicKey>(
-              RsaKeyCodec.decodePublicKey(publicKey)));
+      ..init(false, PublicKeyParameter<RSAPublicKey>(key));
     if (!signer.verifySignature(message, RSASignature(signature))) {
       throw AtSigningVerificationException(
           '$name signature verification failed');
     }
+  }
+
+  /// [name] is the wire identifier and [SigningAlgoType.strongestFirst] ranks
+  /// on it, so a key of the wrong size does not just mislabel a signature — it
+  /// moves it in the preference order a verifier chooses by.
+  void _requireModulus(int bits, Exception Function() mismatched) {
+    if (bits != _keySize) throw mismatched();
   }
 
   /// A signer for [_hashingAlgoType], which must be SHA-256 or SHA-512 — the

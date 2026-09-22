@@ -95,4 +95,50 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
   });
+
+  group('A group of tests for rsa key size and its wire name', () {
+    // One 4096-bit generation for the whole group: pure-Dart RSA-4096 key
+    // generation is seconds, and every test here needs the same pair.
+    late final ({Uint8List publicKey, Uint8List secretKey}) rsa4096;
+    setUpAll(() async {
+      rsa4096 = await RsaSigningAlgo(keySize: 4096).generateKeyPair();
+    });
+
+    test('name is the SigningAlgoType spelling of the configured size', () {
+      expect(RsaSigningAlgo().name, SigningAlgoType.rsa2048.name);
+      expect(RsaSigningAlgo(keySize: 2048).name, SigningAlgoType.rsa2048.name);
+      expect(RsaSigningAlgo(keySize: 4096).name, SigningAlgoType.rsa4096.name);
+    });
+
+    test('an unsupported key size is rejected rather than mislabelled', () {
+      // 3072 is a real RSA size and used to construct fine, announcing
+      // rsa4096 — which put it above ed25519 in strongestFirst.
+      expect(
+          () => RsaSigningAlgo(keySize: 3072),
+          throwsA(predicate((e) =>
+              e is AtSigningException &&
+              e.toString().contains('keySize must be 2048 or 4096'))));
+    });
+
+    test('signing with a key of another size throws', () async {
+      await expectLater(
+          RsaSigningAlgo().signBytes(message, secretKey: rsa4096.secretKey),
+          throwsA(predicate((e) =>
+              e is AtSigningException &&
+              e.toString().contains('Cannot sign with a 4096-bit key'))));
+    });
+
+    test('verifying against a key of another size throws', () async {
+      final signature = await RsaSigningAlgo(keySize: 4096)
+          .signBytes(message, secretKey: rsa4096.secretKey);
+      // Verifies fine on its own terms; what fails is the claim that a
+      // signature this instance calls valid is an rsa2048 one.
+      await expectLater(
+          RsaSigningAlgo().verifyBytes(message,
+              signature: signature, publicKey: rsa4096.publicKey),
+          throwsA(predicate((e) =>
+              e is AtSigningVerificationException &&
+              e.toString().contains('Cannot verify a 4096-bit key'))));
+    });
+  });
 }

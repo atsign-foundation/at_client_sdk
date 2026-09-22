@@ -13,8 +13,8 @@ import 'package:pointycastle/asymmetric/rsa.dart';
 ///
 /// Stateless: the public key is passed to [encrypt] and the private key to
 /// [decrypt], as raw DER bytes — exactly what `RsaSigningAlgo.generateKeyPair()`
-/// returns. If you hold an `AtPublicKey`/`AtPrivateKey` (base64-encoded DER),
-/// pass `base64Decode(atPublicKey.publicKey)`.
+/// returns. Where a key is held base64-encoded — as the atKeys file and the
+/// wire carry it — `base64Decode` it first.
 ///
 /// The padding is PKCS#1 v1.5, not OAEP: it is what every ciphertext already
 /// written by the Atsign Protocol uses.
