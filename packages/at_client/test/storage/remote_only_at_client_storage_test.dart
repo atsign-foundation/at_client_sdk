@@ -6,7 +6,7 @@
 // functional test, not this suite). See plans/wasm/spike/pb3-stage2c-plan.md.
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/storage/remote_only_at_client_storage.dart';
+import 'package:at_client/remote_only.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -165,7 +165,7 @@ void main() {
       'a RemoteOnlyAtClientStorage constructs via buildAtClient, matching '
       'InMemoryAtClientStorage\'s Mode E construction shape', () async {
     const atSign = '@remoteonly6';
-    when(() => remoteSecondary.executeCommand(any(), auth: true))
+    when(() => remoteSecondary.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:1');
     // No key material on a fresh atServer — the real llookup-miss shape
     // _createAtChops's degrade-gracefully path is built to catch.
