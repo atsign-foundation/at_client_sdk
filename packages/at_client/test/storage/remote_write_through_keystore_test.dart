@@ -54,16 +54,18 @@ void main() {
       final result =
           await store.put('@alice:phone@bob', AtData()..data = '12345');
 
-      expect(result, isNull, reason: 'no commit log — every write returns null');
-      final captured = verify(() => remoteSecondary.executeCommand(
-              captureAny(), auth: true))
-          .captured
-          .single as String;
+      expect(result, isNull,
+          reason: 'no commit log — every write returns null');
+      final captured =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
       expect(captured, 'update:@alice:phone@bob 12345');
     });
   });
 
-  group('putMeta / putAll — metadata fragment is not hand-mapped and dropped', () {
+  group('putMeta / putAll — metadata fragment is not hand-mapped and dropped',
+      () {
     test('putMeta appends the fragment after the key', () async {
       when(() => remoteSecondary.executeCommand(any(), auth: true))
           .thenAnswer((_) async => 'data:1');
@@ -73,10 +75,10 @@ void main() {
         ..isBinary = true;
       await store.putMeta('@alice:phone@bob', meta);
 
-      final captured = verify(() => remoteSecondary.executeCommand(
-              captureAny(), auth: true))
-          .captured
-          .single as String;
+      final captured =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
       expect(captured, startsWith('update:meta:@alice:phone@bob'));
       expect(captured, contains(':ttl:60000'));
       expect(captured, contains(':isBinary:true'));
@@ -87,13 +89,12 @@ void main() {
           .thenAnswer((_) async => 'data:1');
 
       final meta = AtMetaData()..ttl = 60000;
-      await store.putAll(
-          '@alice:phone@bob', AtData()..data = '12345', meta);
+      await store.putAll('@alice:phone@bob', AtData()..data = '12345', meta);
 
-      final captured = verify(() => remoteSecondary.executeCommand(
-              captureAny(), auth: true))
-          .captured
-          .single as String;
+      final captured =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
       expect(captured, startsWith('update:ttl:60000'));
       expect(captured, contains(':@alice:phone@bob 12345'));
     });
@@ -106,8 +107,8 @@ void main() {
 
       await store.remove('@alice:phone@bob');
 
-      verify(() => remoteSecondary.executeCommand(
-          'delete:@alice:phone@bob', auth: true)).called(1);
+      verify(() => remoteSecondary.executeCommand('delete:@alice:phone@bob',
+          auth: true)).called(1);
     });
   });
 
@@ -122,10 +123,9 @@ void main() {
       expect(result?.data, 'phone-value');
       expect(result?.metaData?.ttl, 60000);
 
-      final captured =
-          verify(() => remoteSecondary.executeVerb(captureAny()))
-              .captured
-              .single as LLookupVerbBuilder;
+      final captured = verify(() => remoteSecondary.executeVerb(captureAny()))
+          .captured
+          .single as LLookupVerbBuilder;
       expect(captured.operation, 'all');
       expect(captured.atKey.toString(), '@alice:phone@bob');
     });
@@ -148,10 +148,9 @@ void main() {
 
       await store.get('privatekey:at_pkam_privatekey');
 
-      final captured =
-          verify(() => remoteSecondary.executeVerb(captureAny()))
-              .captured
-              .single as LLookupVerbBuilder;
+      final captured = verify(() => remoteSecondary.executeVerb(captureAny()))
+          .captured
+          .single as LLookupVerbBuilder;
       expect(captured.atKey.toString(), 'privatekey:at_pkam_privatekey');
     });
 
@@ -163,10 +162,9 @@ void main() {
 
       await store.get('public:publickey@alice');
 
-      final captured =
-          verify(() => remoteSecondary.executeVerb(captureAny()))
-              .captured
-              .single as LLookupVerbBuilder;
+      final captured = verify(() => remoteSecondary.executeVerb(captureAny()))
+          .captured
+          .single as LLookupVerbBuilder;
       expect(captured.atKey.toString(), 'public:publickey@alice');
     });
   });
@@ -180,10 +178,9 @@ void main() {
       final keys = await (await store.getKeys(regex: '.*')).toList();
 
       expect(keys, ['@alice:k1@bob', '@alice:k2@bob']);
-      final captured =
-          verify(() => remoteSecondary.executeVerb(captureAny()))
-              .captured
-              .single as ScanVerbBuilder;
+      final captured = verify(() => remoteSecondary.executeVerb(captureAny()))
+          .captured
+          .single as ScanVerbBuilder;
       expect(captured.regex, '.*');
       expect(captured.auth, isTrue);
     });
@@ -244,19 +241,20 @@ void main() {
       expect(() => store.scanKeys(KeyPattern()), throwsUnsupportedError);
       expect(
           () => store.queryByPath(
-              keyPattern: KeyPattern(), predicate: const PathEquals(['data'], null)),
+              keyPattern: KeyPattern(),
+              predicate: const PathEquals(['data'], null)),
           throwsUnsupportedError);
       expect(() => store.snapshot(), throwsUnsupportedError);
       expect(() => store.exists('k'), throwsUnsupportedError);
       expect(() => store.getMany(['k']), throwsUnsupportedError);
       expect(() => store.removeMany(['k']), throwsUnsupportedError);
-      expect(() => store.transaction((txn) async => null), throwsUnsupportedError);
+      expect(
+          () => store.transaction((txn) async => null), throwsUnsupportedError);
       expect(() => store.stats(), throwsUnsupportedError);
       expect(() => store.getExpiredKeys(), throwsUnsupportedError);
       expect(() => store.deleteExpiredKeys(), throwsUnsupportedError);
       expect(() => store.peekExpired(), throwsUnsupportedError);
-      expect(
-          () => store.peekNewlyAvailable(since: DateTime(0)),
+      expect(() => store.peekNewlyAvailable(since: DateTime(0)),
           throwsUnsupportedError);
       expect(() => store.compact(true), throwsUnsupportedError);
     });
@@ -287,6 +285,69 @@ void main() {
       expect(store.commitLog, isNull);
       store.commitLog = null;
       expect(store.commitLog, isNull);
+    });
+  });
+
+  group('local: keys stay in the session and never reach the atServer', () {
+    const localKey = 'local:lastreceivednotification@alice';
+
+    tearDown(() {
+      verifyNever(() =>
+          remoteSecondary.executeCommand(any(), auth: any(named: 'auth')));
+    });
+
+    test('put then get round-trips without a remote call', () async {
+      await store.put(localKey, AtData()..data = 'n-42');
+
+      expect((await store.get(localKey))!.data, 'n-42');
+      verifyNever(() => remoteSecondary.executeVerb(any()));
+    });
+
+    test('putAll then getMeta returns the stored metadata', () async {
+      final meta = AtMetaData()..ttl = 1000;
+      await store.putAll(localKey, AtData()..data = 'n-42', meta);
+
+      expect((await store.getMeta(localKey))!.ttl, 1000);
+    });
+
+    test('putMeta replaces the metadata of an existing local value', () async {
+      await store.put(localKey, AtData()..data = 'n-42');
+      await store.putMeta(localKey, AtMetaData()..ttl = 7);
+
+      final data = (await store.get(localKey))!;
+      expect(data.data, 'n-42');
+      expect(data.metaData!.ttl, 7);
+    });
+
+    test('get of an absent local key throws KeyNotFoundException', () async {
+      expect(() => store.get(localKey), throwsA(isA<KeyNotFoundException>()));
+      verifyNever(() => remoteSecondary.executeVerb(any()));
+    });
+
+    test('remove drops the value', () async {
+      await store.put(localKey, AtData()..data = 'n-42');
+      await store.remove(localKey);
+
+      expect(() => store.get(localKey), throwsA(isA<KeyNotFoundException>()));
+    });
+
+    test('the local: prefix is matched case-insensitively', () async {
+      await store.put('LOCAL:Mixed@alice', AtData()..data = 'x');
+
+      expect((await store.get('LOCAL:Mixed@alice'))!.data, 'x');
+    });
+
+    test('getKeys merges regex-matching local keys into the remote scan',
+        () async {
+      when(() => remoteSecondary.executeVerb(any()))
+          .thenAnswer((_) async => 'data:["@alice:k1@bob"]');
+      await store.put(localKey, AtData()..data = 'n-42');
+      await store.put('local:other@alice', AtData()..data = 'x');
+
+      final keys =
+          await (await store.getKeys(regex: 'lastreceived|k1')).toList();
+
+      expect(keys, unorderedEquals(['@alice:k1@bob', localKey]));
     });
   });
 }
