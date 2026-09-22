@@ -1,6 +1,6 @@
 # pb3-stage1.md — unblocking Mode E construction in `at_client`
 
-**Status:** implemented — `st/wasm/stage1` (off `st/at_lookup-v4`), [PR #2257](https://github.com/atsign-foundation/at_client_sdk/pull/2257), 2026-09-22.
+**Status:** implemented — `st/wasm/stage1` (rebased onto `trunk`), [PR #2257](https://github.com/atsign-foundation/at_client_sdk/pull/2257), 2026-09-22.
 **Purpose:** close the construction-time gap D-17/D-18 flagged as still open — a client
 built on a non-Hive `AtClientStorage` bundle with `preference.isLocalStoreRequired: false`
 could not be constructed at all, and where it could (no storage injected), chops/crypto
