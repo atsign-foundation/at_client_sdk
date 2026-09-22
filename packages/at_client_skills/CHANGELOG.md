@@ -2,6 +2,8 @@
 
 ## 1.4.0 — unreleased
 
+- Use `send(idAndNamespace:)`, not the deprecated `namespace:`, and say what
+  the value is — an id and a namespace joined by a dot, split at the first one.
 - Document at-least-once notification delivery — replay on a stop, and
   handlers that must tolerate running twice.
 - Document a stopped sync service — `SyncProgress.stopped`, and

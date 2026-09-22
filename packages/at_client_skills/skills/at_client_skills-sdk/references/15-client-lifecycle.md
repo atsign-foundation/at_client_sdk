@@ -197,7 +197,7 @@ final sub = client.notificationService
   `currentListenerStateStream` to emit `NotificationListenerState.listening`.
 - The monitor reconnects on its own after a network loss until
   `stopListening()`; `currentListenerState` says where it is.
-- `send(to:, namespace:, body:, expiration:)` for fire-and-forget; `notify(...)`
+- `send(to:, idAndNamespace:, body:, expiration:)` for fire-and-forget; `notify(...)`
   for the full `NotificationParams`. A `notify` that does not wait for the
   final status (`waitForFinalDeliveryStatus: false`) reports a failure through
   `onError`; either way, a stop ends the status poll and the result says so.

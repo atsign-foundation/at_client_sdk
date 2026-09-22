@@ -121,6 +121,10 @@ group predates `NotificationService`; send with `send(...)` and receive with
 `NotificationParams`, `forText` is *"No longer supported"* and `messageType`
 is superseded by `MessageType.key`.
 
+**`send(namespace:)` is now `send(idAndNamespace:)`.** Same value, same wire
+format — only the parameter name changed. Supply exactly one of the two;
+both or neither throws `ArgumentError`.
+
 **File transfer has no SDK replacement.** All four methods are annotated
 *"Method will be removed from SDK since method is moved to app layer"*, and
 the stream pair carries its own removal notice. There is no drop-in: encrypt

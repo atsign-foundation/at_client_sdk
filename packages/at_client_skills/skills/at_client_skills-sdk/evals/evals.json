@@ -117,9 +117,9 @@
     {
       "id": 12,
       "prompt": "How do I send a notification to another atsign from my Dart app?",
-      "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging.",
+      "expected_output": "Shows atClient.notificationService.send(to:, idAndNamespace:, body:, expiration:) — NOT the deprecated namespace: parameter; body is typically JSON-encoded and send returns the notification id. May note that the value is an id and a namespace joined by a dot. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging.",
       "expectations": [
-        "Uses atClient.notificationService.send(to:, namespace:, body:, ...) for messaging",
+        "Uses atClient.notificationService.send(to:, idAndNamespace:, body:, ...) for messaging, not the deprecated namespace: parameter",
         "Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:)",
         "Does not use raw atClient.put/get for messaging"
       ]

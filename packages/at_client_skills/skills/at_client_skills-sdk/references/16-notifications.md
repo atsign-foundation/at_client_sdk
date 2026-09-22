@@ -6,6 +6,12 @@ recipient has it. Awaiting `send()` therefore proves nothing about arrival. That
 id is the handle for the two confirmation calls, both on `NotificationService`
 and both exported from `package:at_client/at_client.dart`.
 
+**Name the notification with `idAndNamespace:`.** The value is an id and a
+namespace joined by a dot, split at the **first** dot — `'jobs.my_app'` is the
+id `jobs` in the namespace `my_app`. Give it a dot: the namespace is what
+scopes the encryption key, so a dot-free value has nothing to encrypt under.
+The older `namespace:` parameter takes the same value and is deprecated.
+
 **Which call answers which question:**
 
 | You need to know…                    | Call             | Returns              |
@@ -134,7 +140,7 @@ keystore entirely. `send()` defaults to
 ```dart
 final id = await atClient.notificationService.send(
   to: '@bob'.toAtsign(),
-  namespace: 'jobs.my_app',
+  idAndNamespace: 'jobs.my_app',
   body: jsonEncode(command),
   expiration: const Duration(minutes: 30), // must outlast your poll deadline
 );

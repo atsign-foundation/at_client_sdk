@@ -504,7 +504,7 @@ These patterns are complementary and can coexist in the same app.
 // Send — returns the notification id; body is usually JSON
 final id = await atClient.notificationService.send(
   to: '@bob'.toAtsign(),
-  namespace: 'sample.my_app',
+  idAndNamespace: 'sample.my_app',          // id, then '.', then the namespace
   body: jsonEncode(payload),
   expiration: const Duration(minutes: 5),   // short TTL for telemetry
 );
