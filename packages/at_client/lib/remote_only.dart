@@ -3,4 +3,4 @@
 /// `package:at_client/at_client.dart` carries no Hive/SQLite dependency.
 library;
 
-export 'package:at_client/src/storage/remote_only_at_client_storage.dart';
+export 'package:at_client/src/storage/remote_only/remote_only_at_client_storage.dart';
