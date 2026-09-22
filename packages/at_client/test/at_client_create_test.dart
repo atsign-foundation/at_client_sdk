@@ -265,8 +265,8 @@ void main() {
             namespace: 'wavi',
             preference: pref()..isLocalStoreRequired = false,
             storage: storage),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('Hive-backed'))),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('Hive-backed'))),
         reason: 'a caller that named a Hive-backed store must not be told it '
             'took effect when the client opens no local store at all - Hive '
             'is disk-backed, and nothing would ever read it back');
