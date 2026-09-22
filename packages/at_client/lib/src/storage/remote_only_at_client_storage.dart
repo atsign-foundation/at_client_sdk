@@ -44,8 +44,8 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   @override
   Future<void> openBackend() async {
     if (_keyStore != null) return;
-    final keyStore =
-        RemoteWriteThroughKeyStore(remoteSecondary, maxAttempts: keyStoreMaxAttempts);
+    final keyStore = RemoteWriteThroughKeyStore(remoteSecondary,
+        maxAttempts: keyStoreMaxAttempts);
     await keyStore.initialize();
     final queue = AtSyncQueue(atSign: atSign);
     await queue.open(store: const NoopSyncQueueStore());
