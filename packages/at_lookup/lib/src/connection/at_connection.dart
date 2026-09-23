@@ -1,13 +1,30 @@
-import 'dart:io';
-
+/// A live conversation with an atServer, over whatever [AtTransport] opened it.
+///
+/// Nothing here names a socket. Bytes go out through [write] or [add] and
+/// arrive on [inbound]; what carries them is the transport's business.
 abstract class AtConnection {
-  /// Write a data to the underlying socket of the connection
-  /// @param - data - Data to write to the socket
+  /// Write [data] to the far end and wait for it to leave.
+  ///
+  /// Was declared `void` while every implementation returned a `Future` - a
+  /// caller reading the interface had no reason to await, and an unawaited
+  /// failure surfaces as an unhandled async error rather than as the
+  /// [ConnectionInvalidException] the implementation throws.
+  ///
   /// @throws [AtIOException] for any exception during the operation
-  void write(String data);
+  Future<void> write(String data);
 
-  /// Retrieves the socket of underlying connection
-  Socket getSocket();
+  /// Write raw bytes, without waiting for them to leave.
+  ///
+  /// For a caller streaming a payload it has already encoded. Deliberately
+  /// does **not** touch [AtConnectionMetaData.lastAccessed], matching what
+  /// writing straight to the socket has always done.
+  void add(List<int> bytes);
+
+  /// The bytes arriving from the far end.
+  ///
+  /// Single-subscription, and the transport's own stream rather than a
+  /// re-broadcast of it, so pausing this subscription reaches the far end.
+  Stream<List<int>> get inbound;
 
   /// closes the underlying connection
   Future<void> close();
@@ -25,19 +42,6 @@ abstract class AtConnectionMetaData {
   DateTime? created;
   bool isClosed = false;
   bool isStale = false;
-
-  /// The enrollment id this connection authenticated as, or null where the
-  /// authentication carried none — a CRAM authentication, or a PKAM
-  /// authentication made without one.
-  ///
-  /// This is what the connection *holds*, not what the next authentication
-  /// will ask for. `AtLookUp.enrollmentId` is the latter: setting it does not
-  /// move a socket that is already up, so a client whose enrollment changes
-  /// must re-authenticate each connection and read this field back to know it
-  /// happened.
   String? authenticatedAsEnrollmentId;
-
-  /// When this connection last completed authentication, in UTC. Null until it
-  /// authenticates; set on the same paths as [isAuthenticated].
   DateTime? authenticatedAt;
 }

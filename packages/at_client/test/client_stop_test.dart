@@ -393,9 +393,6 @@ void main() {
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
       when(() => lookUp.close()).thenAnswer((_) async {});
       when(() => lookUp.stopNotifications()).thenAnswer((_) async {});
-      // the bridge reads the enrollment id off the lookup until the ladder goes
-      // ignore: deprecated_member_use
-      when(() => lookUp.enrollmentId).thenReturn(null);
       when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
           .thenAnswer((_) async => 'data:null');
       built.add(lookUp);

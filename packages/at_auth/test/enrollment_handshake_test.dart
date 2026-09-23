@@ -256,9 +256,6 @@ void main() {
       // The setter call, not the stored value: a mock does not keep what is
       // assigned to it.
       verify(() => lookup.authenticator = any(that: isNotNull)).called(1);
-      verifyNever(() => lookup.atChops = any());
-      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.rsa2048);
-      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
     });
 
     test('and that authenticator signs the PKAM with the enrollment keypair',

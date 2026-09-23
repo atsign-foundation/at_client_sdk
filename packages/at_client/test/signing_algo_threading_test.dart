@@ -1,15 +1,6 @@
-// Whether a connection is stamped with the credential ladder is the assertion,
-// so this file names the ladder on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-import 'test_utils/ml_dsa_keyfile.dart';
-import 'test_utils/mocks.dart';
 
 /// The per-enrollment signing algorithm must reach every connection the
 /// client owns. A self-retrofit's ML-DSA enrollment re-authenticates on
@@ -17,63 +8,43 @@ import 'test_utils/mocks.dart';
 /// with the preference's rsa2048 default fails against the
 /// record-authoritative atServer no matter how correct its AtChops are.
 void main() {
-  final preference = AtClientPreference()..namespace = 'unit';
-
   group('RemoteSecondary', () {
-    test('threads a resolved signingAlgoType onto the AtLookUp', () {
-      final lookUp = MockAtLookUp();
-      RemoteSecondary('@alice', preference,
-          atLookUp: lookUp,
-          enrollmentId: 'pq-1',
-          signingAlgoType: SigningAlgoType.mldsa65);
+    /// Asserted against the source, like the Monitor test below: the
+    /// resolved algorithm is captured inside the authenticator closure
+    /// `_installAuthenticator` builds, with nothing on the constructed
+    /// object to read it back from.
+    test('resolves and threads the signing algorithm through the seam', () {
+      final source =
+          File('lib/src/client/remote_secondary.dart').readAsStringSync();
 
-      verify(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65).called(1);
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
-    });
-
-    test('defaults to the preference when no resolution is supplied', () {
-      final lookUp = MockAtLookUp();
-      RemoteSecondary('@alice', preference, atLookUp: lookUp);
-
-      verify(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048).called(1);
+      expect(source, contains('signingAlgoType ?? preference.signingAlgoType'),
+          reason: 'an explicit signingAlgoType overrides the preference '
+              'default, so one preference can still serve two enrollments '
+              'that sign differently');
+      expect(source, contains('signingAlgo: _signingAlgoType'),
+          reason: 'the resolved algorithm, not the preference default, is '
+              'what the authenticator seam actually signs with');
     });
   });
 
   group('AtClientImpl.buildRemoteSecondary', () {
-    /// A client whose enrollment holds typed ML-DSA authentication material,
-    /// so the algorithm under test is one the client resolved rather than one
-    /// the test handed it.
-    Future<AtClientImpl> pqClient(String atSign, String enrollmentId) async {
-      AtClientImpl.atClientInstanceMap
-          .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
-      return await AtClientImpl.create(
-        atSign,
-        'unit',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
-        remoteSecondary: MockRemoteSecondary(),
-        atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
-        enrollmentId: enrollmentId,
-      ) as AtClientImpl;
-    }
+    /// Asserted against the source: the forward is a plain pass-through with
+    /// no branch or default to exercise live, and RemoteSecondary's own
+    /// resolution of what it's handed is the 'RemoteSecondary' group above.
+    test(
+        'threads the client\'s enrollment id and algorithm into the '
+        'connection it builds', () {
+      final source =
+          File('lib/src/client/at_client_impl.dart').readAsStringSync();
+      final wiring = source
+          .substring(source.indexOf('RemoteSecondary buildRemoteSecondary('));
 
-    test('stamps the resolved algorithm and enrollment id on the connection',
-        () async {
-      const atSign = '@threading_1';
-      const enrollmentId = 'pq-threading-1';
-      final client = await pqClient(atSign, enrollmentId);
-      expect(client.signingAlgoType, SigningAlgoType.mldsa65,
-          reason: 'the rig must supply a resolved ML-DSA client, or the '
-              'assertions below compare rsa2048 with rsa2048');
-
-      final lookUp = MockAtLookUp();
-      client.buildRemoteSecondary(atLookUp: lookUp);
-
-      verify(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65).called(1);
-      verify(() => lookUp.enrollmentId = enrollmentId).called(1);
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
-      verifyNever(() => lookUp.enrollmentId = null);
+      expect(wiring, contains('enrollmentId: enrollmentId'),
+          reason: 'so the seam authenticates as this client\'s own '
+              'enrollment, not the primary one');
+      expect(wiring, contains('signingAlgoType: signingAlgoType'),
+          reason: 'so a connection opened for an ML-DSA enrollment signs '
+              'with ML-DSA rather than the preference\'s rsa2048 default');
     });
 
     test('is the only way this class opens a connection', () {

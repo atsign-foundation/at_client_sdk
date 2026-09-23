@@ -1,6 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:at_utils/at_utils.dart';
+import 'package:at_utils/at_utils_io.dart';
 import 'package:yaml/yaml.dart';
 
 class ConfigUtil {

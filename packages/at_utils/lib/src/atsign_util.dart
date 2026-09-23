@@ -73,16 +73,6 @@ class AtUtils {
     return atSign;
   }
 
-  /// Return AtSign by appending '@' at the beginning if not present
-  @Deprecated('Use fixAtSign()')
-  static String? formatAtSign(String? atSign) {
-    // verify whether atSign started with '@' or not
-    if ((atSign != null && atSign.isNotEmpty) && !atSign.startsWith('@')) {
-      atSign = '@$atSign';
-    }
-    return atSign;
-  }
-
   static String getShaForAtSign(String atsign) {
     // encode the given atsign
     var bytes = utf8.encode(atsign);
