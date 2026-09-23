@@ -7,7 +7,8 @@
   `sendStreamAck`, `ConnectivityListener` and `RemoteSecondary.isAvailable` are removed.
 - BREAKING: `HiveAtClientStorage.bundle` is `persistenceBundle`, a member of
   `AtClientStorage`; storages extending `AtClientStorageBase` inherit it.
-- feat: on the web, a client built without `storage:` throws a `StateError` naming it.
+- feat: on the web, a client built without `storage:`, `lookUps:` or a
+  `secondaryAddressFinder` throws a `StateError` naming it.
 - build: requires `at_lookup` ^4.0.0-rc1; `RemoteSecondary` authenticates only
   through the lookup's `AtAuthenticator`.
 
