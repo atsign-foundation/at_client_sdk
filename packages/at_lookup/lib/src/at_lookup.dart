@@ -1,6 +1,7 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/connection/at_connection.dart';
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -75,8 +76,8 @@ abstract interface class AtLookUp {
   /// returns null into a non-nullable type **at runtime only**, with
   /// `dart analyze` clean.
   ///
-  /// Named for its transport, so a differently-transported factory can join it
-  /// later rather than this one growing a mode flag.
+  /// [withTransport] is the same factory under a transport-neutral name, for a
+  /// [transport] that is not a socket.
   ///
   /// [authenticator] is required and nullable, which is not an oversight: null
   /// means *this connection never authenticates*, and that is a real mode —
@@ -103,6 +104,27 @@ abstract interface class AtLookUp {
   /// and before anything else is sent on it: a proxy that needs `from:` first
   /// to learn which atServer the connection is for is the case it exists for.
   static AtLookupMuxable withSecureSocket({
+    required String atSign,
+    required AtRootDomain rootDomain,
+    required AtAuthenticator? authenticator,
+    required AtLookupTransportFactories transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
+    Map<String, dynamic> clientConfig = const {},
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
+  }) =>
+      withTransport(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        authenticator: authenticator,
+        transport: transport,
+        secondaryAddressFinder: secondaryAddressFinder,
+        clientConfig: clientConfig,
+        onConnect: onConnect,
+      );
+
+  /// Build a lookup over [transport]; every parameter means what it means on
+  /// [withSecureSocket].
+  static AtLookupMuxable withTransport({
     required String atSign,
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
@@ -168,7 +190,7 @@ abstract interface class AtLookUp {
   /// again. Calling this again waits for the first close.
   Future<void> close();
 
-  OutboundConnection? get connection;
+  AtConnection? get connection;
 
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 

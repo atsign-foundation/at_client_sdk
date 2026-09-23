@@ -82,7 +82,8 @@ at_lookup:
   # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the
   # AtConnection/AtTransport byte-channel seam and the address-finder interface;
   # the TLS socket, the atDirectory lookup and the SecureSocketTransport that
-  # implements the seam moved to at_lookup_io.dart.
+  # implements the seam moved to at_lookup_io.dart. at_lookup_web.dart holds
+  # the WebSocket transport.
   #
   # Zero blocked packages on the first run. The neutral barrel reaches at_chops,
   # at_commons, at_utils, meta and mutex, and the first two splits had already
@@ -95,12 +96,17 @@ at_lookup:
       allowed_offenders: []
       max_blocked_packages: 0
       min_files_walked: 570
+    - barrel: package:at_lookup/at_lookup_web.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 800
   probe:
     # at_lookup_io.dart is absent on purpose. dart compile wasm accepts dart:io
     # and stubs it, so probing the io barrel would pass and prove nothing; the
     # ratchet is what holds that line. The controls below assert the io barrel
     # still holds what it isolates.
     - package:at_lookup/at_lookup.dart
+    - package:at_lookup/at_lookup_web.dart
   controls:
     - barrel: package:at_lookup/at_lookup_io.dart
       reaches_file: lib/src/io/secure_socket_util.dart
