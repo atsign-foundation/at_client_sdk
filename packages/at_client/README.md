@@ -156,7 +156,7 @@ Flutter keychain, memory); **`storage:`**, the client's local store
 your own); and **`lookUps:`**, how
 the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
-monitor's - so a transport or a proxy convention is chosen once:
+monitor's - so a transport or a proxy convention is chosen once. (For `dart:io` apps, `FileAtKeysIo` and `secureSocketLookUps` are in `package:at_client/at_client_io.dart`):
 
 ```dart
 final client = await Atsign('@alice').open(

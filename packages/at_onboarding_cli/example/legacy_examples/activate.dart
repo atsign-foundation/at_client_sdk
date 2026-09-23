@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 /// Activates an atSign from its CRAM secret and reads back what the new

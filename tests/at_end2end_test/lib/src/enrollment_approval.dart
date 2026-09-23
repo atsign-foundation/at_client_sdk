@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart' show AtEnrollment, AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 
 /// Waits for [response]'s enrollment to be approved, over a connection to
 /// [atSign]'s atServer opened for the wait and closed when it ends.
