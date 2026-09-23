@@ -1,6 +1,6 @@
 # Changelog — at_client_skills
 
-## 1.4.0 — unreleased
+## 1.4.0
 
 - Fix the install instructions: a fresh project needs `skills get --ide`,
   since auto-detection only finds an agent directory that already exists.
@@ -54,7 +54,7 @@
   it applies to any client.
 - Extend the evals to cover the new material.
 
-## 1.3.0 — 2026-07-31
+## 1.3.0
 
 - Document RPC between atsigns — `AtRpc` / `AtRpcClient` request/response
   (new `references/13-rpc.md`).
@@ -76,7 +76,7 @@
 - Document the `skills` CLI prerequisite and the full install steps in the
   README.
 
-## 1.2.0 — 2026-07-07
+## 1.2.0
 
 - Document sync scoping (`syncRegex`) and the sync lifecycle
   (new `references/11-sync.md`).
@@ -85,7 +85,7 @@
 - Document the owner-writes-only collaboration/ownership model.
 - Document the atSign activation / atDirectory prerequisite.
 
-## 1.1.0 — 2026-06-23
+## 1.1.0
 
 - Add `user-invocable: true` so the skill registers as a slash command.
 - Document the required macOS entitlements in `references/05-flutter-auth.md`:
@@ -95,7 +95,7 @@
   `src/collections/...` `part of` file (`SKILL.md`, `references/09`).
 - Add an eval covering the macOS entitlement fix.
 
-## 1.0.0 — 2026-06-08
+## 1.0.0
 
 Initial release.
 
