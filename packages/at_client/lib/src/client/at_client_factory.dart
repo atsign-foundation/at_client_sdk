@@ -11,7 +11,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 
@@ -68,7 +68,9 @@ Future<AtClient> buildAtClient({
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
   }
-  if (storage is HiveAtClientStorage && !preference.isLocalStoreRequired) {
+  if (storage != null &&
+      isDefaultStorage(storage) &&
+      !preference.isLocalStoreRequired) {
     throw ArgumentError.value(
         storage,
         'storage',
@@ -145,7 +147,6 @@ String? _locationOf(
   if (!preference.isLocalStoreRequired) return null;
   final path = preference.hiveStoragePath;
   if (path == null) return null;
-  return HiveAtClientStorage(
-          atSign: AtUtils.fixAtSign(atSign), storagePath: path)
-      .location;
+  return defaultStorageLocation(
+      atSign: AtUtils.fixAtSign(atSign), storagePath: path);
 }

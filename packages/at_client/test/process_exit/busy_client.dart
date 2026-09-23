@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_utils/at_logger.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';

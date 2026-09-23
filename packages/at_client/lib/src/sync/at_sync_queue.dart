@@ -1,10 +1,9 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/sync/sync_queue_store.dart';
-import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:hive/hive.dart';
 import 'package:meta/meta.dart';
 
 /// On-the-wire op carried in the sync queue's persisted record. The
@@ -136,20 +135,11 @@ class AtSyncQueue {
   /// the package-global `Hive`: the box name derives from the atSign alone and
   /// Hive resolves open boxes by name within an instance, so opening on the
   /// global meant two clients of one atSign shared one queue however different
-  /// their paths. A [store] from a storage bundle is used as is; an
-  /// [injectedBox] (test seam) is wrapped.
-  Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
+  /// their paths. A [store] from a storage bundle is used as is.
+  Future<void> open({SyncQueueStore? store}) async {
     if (_opened) return;
-    if (store != null) {
-      _store = store;
-    } else if (injectedBox != null) {
-      _store = HiveBoxSyncQueueStore(injectedBox);
-    } else {
-      final path = _storagePath;
-      final hive = path == null ? Hive : HiveInstances.forPath(path);
-      _store = HiveBoxSyncQueueStore(
-          await hive.openBox<String>(boxNameForAtSign(_atSign)));
-    }
+    _store = store ??
+        await defaultSyncQueueStore(atSign: _atSign, storagePath: _storagePath);
     _replayIntoMemory();
     _opened = true;
     _logger

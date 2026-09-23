@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
