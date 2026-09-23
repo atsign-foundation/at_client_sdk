@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -15,7 +16,7 @@ import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -126,8 +127,7 @@ class AtClientManager {
 
     _logger.finer("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
-    secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
-        preference.rootDomain, preference.rootPort);
+    secondaryAddressFinder ??= defaultSecondaryAddressFinder(preference);
 
     // Idempotency: if the caller is asking for the SAME atSign that's
     // already current (with no caller-supplied override for atChops /
