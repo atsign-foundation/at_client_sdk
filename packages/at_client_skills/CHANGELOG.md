@@ -2,6 +2,10 @@
 
 ## 1.4.0 — unreleased
 
+- Document the `CItem<T>` fields — which are mutable, that the payload cannot
+  be reassigned, and that the shared-with set is never null.
+- Say that sharing does not cascade the way deleting does, so adding a
+  collaborator leaves existing children invisible to them.
 - Warn that an RPC `call()` has no timeout of its own and waits forever on a
   peer that never answers, and bound every call in the samples.
 - Use `send(idAndNamespace:)`, not the deprecated `namespace:`, and say what

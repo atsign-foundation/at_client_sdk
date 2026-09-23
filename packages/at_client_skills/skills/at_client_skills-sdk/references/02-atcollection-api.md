@@ -66,6 +66,38 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 
 ---
 
+## `CItem<T>` Fields
+
+What every read hands back, and what you may change before calling `update`.
+The mutability column is the part that bites: three of these are meant to be
+edited in place, and two cannot be reassigned at all.
+
+| Field           | Type                 | Mutable? | Notes                                                         |
+| --------------- | -------------------- | -------- | ------------------------------------------------------------- |
+| `id`            | `String`             | no       | Unique within the collection; prefixed to the namespace       |
+| `owner`         | `Atsign`             | no       | Who created it — **your ownership test** for writes           |
+| `obj`           | `T`                  | no       | `late final` — mutate its fields, never reassign `obj` itself |
+| `type`          | `String`             | no       | `late final`; the type-tag that drives rehydration            |
+| `sharedWith`    | `Set<Atsign>`        | **yes**  | Non-nullable, never null. Edit the set, then `update`         |
+| `createdAt`     | `DateTime`           | **yes**  | Set on draft; read from server metadata on rehydrate          |
+| `expiresAt`     | `DateTime`           | **yes**  | Change it, then `update`, to re-schedule the item's expiry    |
+| `availableAt`   | `DateTime?`          | **yes**  | `null` = visible immediately; set it to delay recipient copies |
+| `parentOwners`  | `List<Atsign>`       | no       | Root-to-parent owner chain; empty in a root collection        |
+| `collection`    | `AtCollection<T>`    | no       | The collection that minted it                                 |
+| `self`          | `Atsign`             | no       | The atsign you are acting as — compare against `owner`        |
+
+`sharedWith` is a `final` **reference** to a mutable set: `item.sharedWith.add(...)`
+then `update(item)` works, `item.sharedWith = {...}` does not compile. The same
+distinction applies to `obj` — change `item.obj.done = true`, don't try to swap
+the object.
+
+Read receipts hang off the item too: `readBy` (a `Future`, queries recipients),
+`readBySnapshot` (what is already known locally, no I/O), `wasMarkedReadByMe()`
+and `markReadByMe()`. They are eventually consistent — see
+[11-sync.md](11-sync.md).
+
+---
+
 ## Drafting (No I/O)
 
 ### `CItem<T> draft({required T obj, String? id, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
@@ -131,6 +163,19 @@ atsign. Collaboration is additive: each atsign owns what it creates, and
 `sharedWith` grants recipients a readable copy, not write access. For a peer to
 contribute, they create their own item and share it back — you never mutate
 theirs in place. (`self` / `atSign` is the ownership test.)
+
+**Sharing does not cascade, though deleting does.** `delete` takes
+`cascade: true` and removes self-owned descendants at any depth;
+`updateSharedWith` has no equivalent and changes that one item only. So adding
+a collaborator to a parent does **not** make its existing children visible to
+them — walk the subtree and update each item yourself.
+
+Two consequences worth planning for before you model a hierarchy this way.
+Recipients on a child are set when the child is created, so a late-joining
+collaborator sees nothing already there unless you re-share it explicitly. And
+because the walk can only touch items you own, a subtree whose children were
+created by different atsigns cannot be re-shared by any single participant —
+each owner has to update their own.
 
 ---
 

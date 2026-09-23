@@ -424,6 +424,29 @@
         "Notes the caller's client stopping is the only other way the wait ends, via StoppedException",
         "Does not claim an existing SDK setting, retry count or expiry already prevents the hang"
       ]
+    },
+    {
+      "id": 38,
+      "prompt": "In my Flutter app a user can add someone to a project later on, after the project already has a bunch of items under it. When I add them, they can see the project itself but none of the items that were already there — only things created afterwards show up for them. What's happening and how do I fix it?",
+      "expected_output": "Explains that changing an item's recipient set affects that one item only: there is no cascading or recursive re-share, in contrast to delete, which does take a cascade option for self-owned descendants. Recipients on a child are fixed when the child is created, so pre-existing items never widen retroactively. States the fix is to walk the subtree and update the recipient set on each item explicitly, using updateSharedWith (which changes recipients without rewriting the item) rather than rewriting each item's value. Flags the important limitation: the walk can only touch items the caller owns, because updating an item owned by another atsign throws ArgumentError, so a subtree whose children were created by several participants cannot be re-shared by any one of them — each owner must update their own. Does NOT invent a recursive or cascading share API, flag or parameter, and does NOT claim adding a collaborator to a parent propagates to children automatically.",
+      "expectations": [
+        "States that changing an item's recipients affects only that item and does not cascade to children",
+        "Contrasts it with delete, which does take a cascade option for self-owned descendants",
+        "Tells the developer to walk the subtree and update each item's recipients explicitly, via updateSharedWith",
+        "Notes the walk only covers items the caller owns, since updating another atsign's item throws ArgumentError",
+        "Does not invent a recursive or cascading share API, flag or parameter"
+      ]
+    },
+    {
+      "id": 39,
+      "prompt": "I fetch a record from my collection, change a couple of fields on it and save it, and that works. But when I tried to swap the whole payload object for a freshly built one it wouldn't compile, and separately I wrote a null check around the list of people it's shared with and the analyzer told me the null-aware operator was unnecessary and the branch was dead code. What are the actual rules here?",
+      "expected_output": "Explains the two are the same underlying point: the item wrapper's fields have specific mutability and nullability that differ from what a caller might assume. The payload object is late final, so it cannot be reassigned — mutate its fields in place and then call update; that is why swapping in a freshly built object does not compile. The shared-with set is a non-nullable Set, never null and empty rather than absent when nothing is shared, which is why a null check is dead code; it is a final reference to a mutable set, so adding or removing members in place and then calling update is the supported way to change it. May add that the expiry and availability fields are likewise meant to be mutated in place before update, that the id and owner are not mutable, and that owner is the field to compare against self before attempting any write. Does NOT suggest reassigning the payload, does NOT suggest null-checking the shared-with set, and does NOT recommend deleting and recreating the item to replace its payload.",
+      "expectations": [
+        "States the payload object is late final — mutate its fields in place, never reassign it",
+        "States the shared-with set is non-nullable and empty rather than null, so a null check is dead code",
+        "Explains it is a final reference to a mutable set, so edit in place then call update",
+        "Does not recommend deleting and recreating the item in order to replace its payload"
+      ]
     }
   ]
 }
