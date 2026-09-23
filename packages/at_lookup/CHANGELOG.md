@@ -1,4 +1,8 @@
 ## 4.0.0-rc1
+- feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer over a
+  browser WebSocket: `webSocketLookUps(host:, port:)`, `webSocketTransport()`.
+- feat: `AtLookUp.withTransport` builds a lookup over any transport.
+- breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder` and `SecureSocketUtil` now come
   from `at_lookup_io.dart`, not `at_lookup.dart`.
 - feat: `ProxySecondaryAddressFinder` resolves every atSign to one fixed
