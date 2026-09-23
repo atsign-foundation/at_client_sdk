@@ -40,6 +40,7 @@ metadata:
 ```dart
 // ✅ CORRECT — modern API
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 final todos = await atClient.collection<Todo>(
   'todos.my_app',
   const Duration(days: 7),
@@ -523,7 +524,8 @@ send/subscribe walkthrough.
 ## 14. Testing Without a Live atServer
 
 ```dart
-import 'package:at_client/at_client.dart'; // test hooks are re-exported here
+import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart'; // test hooks are re-exported here
 
 final ctrl = StreamController<AtNotification>.broadcast();
 final coll = collectionWithInjectedNotifications<Todo>(

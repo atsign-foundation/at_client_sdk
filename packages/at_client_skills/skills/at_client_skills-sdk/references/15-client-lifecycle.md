@@ -13,6 +13,7 @@ opened.
 
 ```dart
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
