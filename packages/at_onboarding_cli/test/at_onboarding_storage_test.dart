@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
