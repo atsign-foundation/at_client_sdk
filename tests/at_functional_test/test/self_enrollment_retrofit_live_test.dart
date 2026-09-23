@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';

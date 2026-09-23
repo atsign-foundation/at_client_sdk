@@ -4,6 +4,7 @@
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_functional_test/src/enrollment_approval.dart';

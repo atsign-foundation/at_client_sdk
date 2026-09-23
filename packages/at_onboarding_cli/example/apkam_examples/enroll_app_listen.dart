@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 
 import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
