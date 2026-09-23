@@ -22,6 +22,7 @@ void main() {
         await AtTelemetryExporterOtelHttp.create(
       endpoint: endpoint,
       serviceName: 'atserver',
+      apiKey: 'server-a-secret',
     );
 
     addTearDown(() async {
@@ -61,6 +62,10 @@ void main() {
       request.headers.contentType?.mimeType,
       'application/x-protobuf',
     );
+    expect(
+      request.headers.value(HttpHeaders.authorizationHeader),
+      'Bearer server-a-secret',
+    );
 
     final collector.ExportLogsServiceRequest exportRequest =
         collector.ExportLogsServiceRequest.fromBuffer(payload);
@@ -92,5 +97,21 @@ void main() {
       (common.KeyValue attribute) => attribute.key == 'service.name',
     );
     expect(serviceName.value.stringValue, 'atserver');
+
+    final List<AtTelemetryEvent> decodedEvents =
+        const AtTelemetryOtelLogsCodec().decodeExportRequest(payload);
+    expect(decodedEvents, hasLength(1));
+    expect(decodedEvents.single.name, heartbeat.name);
+    expect(decodedEvents.single.timestamp, timestamp);
+    expect(decodedEvents.single.attributes['service.name'], 'atserver');
+    expect(
+        decodedEvents.single.attributes['atsign.server.id'], 'secondary-123');
+  });
+
+  test('rejects an OTLP request without log records', () {
+    expect(
+      () => const AtTelemetryOtelLogsCodec().decodeExportRequest(<int>[]),
+      throwsFormatException,
+    );
   });
 }
