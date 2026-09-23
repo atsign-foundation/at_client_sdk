@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
@@ -45,27 +44,20 @@ import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
-import 'package:at_client/src/stream/at_stream_notification.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
-import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/stream/stream_notification_handler.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
-import 'package:at_client/src/util/constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
-import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
 /// A defect met while stopping a client, paired with the stack of where it was
@@ -2450,294 +2442,6 @@ class AtClientImpl implements AtClient {
         'Default crypto provider "$id" is not registered. '
         'Add it to AtClientPreference.crypto.providers.',
       );
-    }
-  }
-
-  @override
-  @Deprecated("Obsolete, will be removed in v4")
-  Future<AtStreamResponse> stream(
-    String sharedWith,
-    String filePath, {
-    String? namespace,
-  }) async {
-    var streamResponse = AtStreamResponse();
-    var streamId = Uuid().v4();
-    var file = File(filePath);
-    var data = file.readAsBytesSync();
-    var fileName = basename(filePath);
-    fileName = base64.encode(utf8.encode(fileName));
-    var encryptedData = await _encryptionService!.encryptStream(
-      data,
-      sharedWith,
-    );
-    var command =
-        'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
-    _logger.finer('sending stream init:$command');
-    // NOTE: its own connection, because it hands the socket raw bytes and then
-    // closes it; built the same way as the client's, so it authenticates as
-    // the same enrollment with the same routine.
-    var remoteSecondary = buildRemoteSecondary();
-    var result = await remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer('ack message:$result');
-    if (result != null && result.startsWith('stream:ack')) {
-      result = result.replaceAll('stream:ack ', '');
-      result = result.trim();
-      _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      // `readResponse` rather than reaching through to the listener: this
-      // path has already written the bytes to the socket itself, so it needs
-      // the read half alone. The listener is not in at_lookup's barrel.
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
-          .readResponse(
-              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult.startsWith('stream:done')) {
-        await remoteSecondary.atLookUp.connection!.close();
-        streamResponse.status = AtStreamStatus.complete;
-      }
-    } else if (result != null && result.startsWith('error:')) {
-      result = result.replaceFirst(RegExp('^error:'), '');
-      streamResponse.errorCode = result.split('-')[0];
-      streamResponse.errorMessage = result.split('-')[1];
-      streamResponse.status = AtStreamStatus.error;
-    } else {
-      streamResponse.status = AtStreamStatus.noAck;
-    }
-    return streamResponse;
-  }
-
-  @override
-  @Deprecated("Obsolete, will be removed in v4")
-  Future<void> sendStreamAck(
-    String streamId,
-    String fileName,
-    int fileLength,
-    String senderAtSign,
-    Function streamCompletionCallBack,
-    Function streamReceiveCallBack,
-  ) async {
-    var handler = StreamNotificationHandler();
-    handler.remoteSecondary = getRemoteSecondary();
-    handler.localSecondary = getLocalSecondary();
-    handler.preference = _preference;
-    handler.encryptionService = _encryptionService;
-    var notification = AtStreamNotification()
-      ..streamId = streamId
-      ..fileName = fileName
-      ..currentAtSign = _atSign
-      ..senderAtSign = senderAtSign
-      ..fileLength = fileLength;
-    await handler.streamAck(
-      notification,
-      streamCompletionCallBack,
-      streamReceiveCallBack,
-    );
-  }
-
-  @override
-  Future<Map<String, FileTransferObject>> uploadFile(
-    List<File> files,
-    List<String> sharedWithAtSigns,
-  ) async {
-    var encryptionKey = _encryptionService!.generateFileEncryptionKey();
-    var key = TextConstants.fileTransferKey + Uuid().v4();
-    var fileStatus = await _uploadFiles(key, files, encryptionKey);
-    // ignore: prefer_interpolation_to_compose_strings
-    var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
-
-    return shareFiles(
-      sharedWithAtSigns,
-      key,
-      fileUrl,
-      encryptionKey,
-      fileStatus,
-    );
-  }
-
-  @override
-  Future<Map<String, FileTransferObject>> shareFiles(
-    List<String> sharedWithAtSigns,
-    String key,
-    String fileUrl,
-    String encryptionKey,
-    List<FileStatus> fileStatus, {
-    DateTime? date,
-  }) async {
-    var result = <String, FileTransferObject>{};
-    for (var sharedWithAtSign in sharedWithAtSigns) {
-      var fileTransferObject = FileTransferObject(
-        key,
-        encryptionKey,
-        fileUrl,
-        sharedWithAtSign,
-        fileStatus,
-        date: date,
-      );
-      try {
-        var atKey = AtKey()
-          ..key = key
-          ..sharedWith = sharedWithAtSign
-          ..metadata = Metadata()
-          ..metadata.ttr = -1
-          // file transfer key will be deleted after 30 days
-          ..metadata.ttl = 2592000000
-          ..sharedBy = _atSign;
-
-        var notificationResult = await notificationService.notify(
-          NotificationParams.forUpdate(
-            atKey,
-            value: jsonEncode(fileTransferObject.toJson()),
-          ),
-        );
-
-        if (notificationResult.notificationStatusEnum ==
-            NotificationStatusEnum.delivered) {
-          fileTransferObject.sharedStatus = true;
-        } else {
-          fileTransferObject.sharedStatus = false;
-        }
-      } on StoppedException {
-        rethrow;
-      } on Exception catch (e) {
-        fileTransferObject.sharedStatus = false;
-        fileTransferObject.error = e.toString();
-      }
-      result[sharedWithAtSign] = fileTransferObject;
-    }
-    return result;
-  }
-
-  Future<List<FileStatus>> _uploadFiles(
-    String transferId,
-    List<File> files,
-    String encryptionKey,
-  ) async {
-    var fileStatuses = <FileStatus>[];
-    for (var file in files) {
-      var fileStatus = FileStatus(
-        fileName: file.path.split(Platform.pathSeparator).last,
-        isUploaded: false,
-        size: await file.length(),
-      );
-      try {
-        final encryptedFile = await _encryptionService!.encryptFileInChunks(
-          file,
-          encryptionKey,
-          _preference!.fileEncryptionChunkSize,
-        );
-        var response =
-            await FileTransferService().uploadToFileBinWithStreamedRequest(
-          encryptedFile,
-          transferId,
-          fileStatus.fileName!,
-        );
-        encryptedFile.deleteSync();
-        if (response != null && response.statusCode == 201) {
-          final responseStr = await response.stream.bytesToString();
-          var responseMap = jsonDecode(responseStr);
-          fileStatus.fileName = responseMap['file']['filename'];
-          fileStatus.isUploaded = true;
-        }
-
-        // storing sent files in a a directory.
-        if (preference?.downloadPath != null) {
-          var sentFilesDirectory = await Directory(
-            '${preference!.downloadPath!}${Platform.pathSeparator}sent-files',
-          ).create();
-          await File(file.path).copy(
-            sentFilesDirectory.path +
-                Platform.pathSeparator +
-                (fileStatus.fileName ?? ''),
-          );
-        }
-      } on Exception catch (e) {
-        fileStatus.error = e.toString();
-      }
-      fileStatuses.add(fileStatus);
-    }
-    return fileStatuses;
-  }
-
-  @override
-  Future<List<FileStatus>> reuploadFiles(
-    List<File> files,
-    FileTransferObject fileTransferObject,
-  ) async {
-    var response = await _uploadFiles(
-      fileTransferObject.transferId,
-      files,
-      fileTransferObject.fileEncryptionKey,
-    );
-    return response;
-  }
-
-  @override
-  Future<List<File>> downloadFile(
-    String transferId,
-    String sharedByAtSign, {
-    String? downloadPath,
-  }) async {
-    downloadPath ??= preference!.downloadPath;
-    if (downloadPath == null) {
-      throw Exception('downloadPath not found');
-    }
-    var atKey = AtKey()
-      ..key = transferId
-      ..sharedBy = sharedByAtSign;
-    var result = await get(atKey);
-    FileTransferObject fileTransferObject;
-    try {
-      if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
-        _logger.severe("FileTransferObject is null");
-        throw AtClientException(
-          error_codes['AtClientException'],
-          'FileTransferObject is null',
-        );
-      }
-      fileTransferObject = FileTransferObject.fromJson(
-        jsonDecode(result.value),
-      )!;
-    } on Exception catch (e) {
-      throw Exception('json decode exception in download file ${e.toString()}');
-    }
-    var downloadedFiles = <File>[];
-    var fileDownloadResponse = await FileTransferService().downloadFromFileBin(
-      fileTransferObject,
-      downloadPath,
-    );
-    if (fileDownloadResponse.isError) {
-      throw Exception('download fail');
-    }
-    var encryptedFileList = Directory(
-      fileDownloadResponse.filePath!,
-    ).listSync();
-    try {
-      for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = await _encryptionService!.decryptFileInChunks(
-          File(encryptedFile.path),
-          fileTransferObject.fileEncryptionKey,
-          _preference!.fileEncryptionChunkSize,
-          ivBase64: fileTransferObject.ivBase64,
-        );
-        decryptedFile.copySync(
-          downloadPath +
-              Platform.pathSeparator +
-              encryptedFile.path.split(Platform.pathSeparator).last,
-        );
-        downloadedFiles.add(
-          File(
-            downloadPath +
-                Platform.pathSeparator +
-                encryptedFile.path.split(Platform.pathSeparator).last,
-          ),
-        );
-        decryptedFile.deleteSync();
-      }
-      // deleting temp directory
-      Directory(fileDownloadResponse.filePath!).deleteSync(recursive: true);
-      return downloadedFiles;
-    } catch (e) {
-      print('error in downloadFile: $e');
-      return [];
     }
   }
 

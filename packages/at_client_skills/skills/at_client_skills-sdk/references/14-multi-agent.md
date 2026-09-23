@@ -18,6 +18,7 @@ dart pub add at_client at_cli_commons
 ```dart
 import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 void main(List<String> args) async {

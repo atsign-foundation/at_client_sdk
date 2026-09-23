@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io' show SocketException, HandshakeException;
 
+import 'package:at_client/src/lifecycle/transport_error.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
@@ -300,8 +300,7 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtConnectException ||
       error is SecondaryConnectException ||
       error is AtTimeoutException ||
-      error is SocketException ||
-      error is HandshakeException ||
+      isTransportError(error) ||
       error is TimeoutException) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
         error: error);
