@@ -2,7 +2,7 @@
 #
 # Adding a package is one stanza — nothing in the package, nothing in CI. Gate a
 # package only once it is web-safe, so a gate holds a line rather than recording
-# a backlog: at_utils, at_lookup and at_client own 3, 6 and 7 offenders today,
+# a backlog: at_utils and at_lookup own 3 and 6 offenders today,
 # which is why they are not here.
 #
 # `ratchets` walk the import graph, `probe` compiles, `controls` keep the walk
@@ -53,3 +53,22 @@ at_auth:
     - barrel: package:at_auth/at_auth_io.dart
       reaches_file: lib/src/keys/io/file_io.dart
       because: the filesystem code it exists to quarantine
+
+at_client:
+  # Gated since PB-3 stage5; at_client.dart holds no dart:io. The three
+  # blocked packages are inherited: at_lookup via lib/src/lifecycle/lookups.dart
+  # (defaultLookUps, until PB-2), at_utils and chalkdart via the logger. Hive
+  # and SQLite sit behind hive.dart / sqlite.dart and a conditional default.
+  ratchets:
+    - barrel: package:at_client/at_client.dart
+      allowed_offenders: []
+      max_blocked_packages: 3
+      min_files_walked: 1100
+  probe:
+    - package:at_client/at_client.dart
+  controls:
+    - barrel: package:at_client/at_client.dart
+      environment: io
+      reaches_file: lib/src/lifecycle/transport_error_io.dart
+      reaches_library: dart:io
+      because: the socket-error classification the web branch stubs
