@@ -14,7 +14,7 @@ void main() {
 
     setUpAll(() async {
       channel = spawnHybridUri('ws_fake_server.dart');
-      port = await channel.stream.first;
+      port = (await channel.stream.first as num).toInt();
     });
 
     tearDownAll(() {
