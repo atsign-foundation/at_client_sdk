@@ -30,12 +30,19 @@ dart pub add --dev at_client_skills skills
 **2. Install the skill** into your agent's skills directory:
 
 ```sh
-dart run skills get
+dart run skills get --ide claude    # or cursor, cline, copilot, opencode, generic
 ```
 
 The CLI runs `pub get` if needed, scans your dependencies for `skills/`
 directories, and installs what it finds — so this picks up every
 skill-providing package in your project, not just this one.
+
+`--ide` is only needed the first time. Without it the CLI auto-detects by
+looking for an agent directory that already exists (`.claude/`, `.cursor/`,
+`.cline/`, `.opencode/`, `.agent/`), so in a brand-new project there is nothing
+to find and it stops with *"Could not auto-detect IDE"*. Once the directory
+exists, plain `dart run skills get` works. Copilot is never auto-detected —
+its `.github/` marker is too common — so it always needs `--ide copilot`.
 
 **3. Verify** the install:
 
@@ -56,7 +63,7 @@ If you would rather not add `skills` to every project:
 ```sh
 dart pub global activate skills      # once per machine
 dart pub add --dev at_client_skills  # still needed — it carries the content
-skills get                           # note: no `dart run` prefix
+skills get --ide claude              # note: no `dart run` prefix
 ```
 
 This requires `~/.pub-cache/bin` on your `PATH`.

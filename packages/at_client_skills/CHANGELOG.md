@@ -2,6 +2,8 @@
 
 ## 1.4.0 — unreleased
 
+- Fix the install instructions: a fresh project needs `skills get --ide`,
+  since auto-detection only finds an agent directory that already exists.
 - Show what a pending enrolment carries beyond its id — the app, the device
   and the access being requested — so an approval screen can say what it is
   approving.

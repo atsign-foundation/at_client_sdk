@@ -59,8 +59,12 @@ dev_dependencies:
 # 4. Resolve deps, then install the skill into the IDE skills dir
 #    (.claude/skills, .cursor/skills, …)
 dart pub get
-dart run skills get
+dart run skills get --ide claude    # or cursor, cline, copilot, opencode, generic
 ```
+
+`--ide` is required here: a freshly created project has no agent directory yet,
+and the CLI auto-detects only by finding one that already exists, so a bare
+`dart run skills get` stops with *"Could not auto-detect IDE"*.
 
 After step 4, confirm the skill installed (it must — the dir name
 `at_client_skills-sdk` matches the `at_client_skills-` prefix the CLI requires):
@@ -109,17 +113,50 @@ session** (no extra atSign context, no hints) and paste the prompt in §2.
 >    and reconciles when back online.
 > 9. **Tests.** Write unit tests for the data layer that run in CI without any
 >    live backend/server.
+> 10. **Public profile.** Each user publishes a small profile — display name and
+>    initials — that **anyone** can read from their account identifier alone,
+>    without that user having shared anything with them first. Use it to show
+>    collaborator names on Cards, including for someone who has not yet
+>    accepted a share.
+> 11. **Assignment receipts.** Assigning a Card to a collaborator alerts them.
+>    The assigner's UI must show whether that alert actually reached the other
+>    account, and must distinguish "hasn't got there yet" from "this failed and
+>    never will". Give up after a sensible interval rather than waiting forever.
+> 12. **A second device.** A user already signed in on one device can add a
+>    second device to the **same** account, authorising it from the first
+>    device. The second device gets access only to this app's data, not to
+>    everything on the account. Handle the case where the user closes the app
+>    while an authorisation is still awaiting approval and reopens it later.
+> 13. **Ask the owner directly.** A "refresh from owner" action on a shared
+>    Board asks the owner's device for its current view of the Board and waits
+>    for the answer, rather than sending a message and hoping. It must behave
+>    sensibly when the owner's device is offline.
+> 14. **Clean shutdown.** Signing out, switching account and quitting the app
+>    must all finish promptly and leave nothing half-done: no writes silently
+>    lost, and the process actually exits. A deliberate shutdown must not
+>    produce error-level log entries — quitting the app is not a failure.
+> 15. **No double-processing.** Restarting the app must not re-apply an
+>    assignment alert it already handled. Assume the alert delivery can repeat
+>    and make the handling safe under that assumption.
+> 16. **Diagnostics.** When something does fail, the log must carry the full
+>    causal chain of the failure, not just the outermost one-line message.
 >
 > Build it end-to-end, then **actually run it on macOS desktop** and walk
-> through: create account → create a Board/List/Card → share it → un-share it →
-> filter → sign out and back in. Fix any build or runtime errors you hit so it
-> runs cleanly start to finish.
+> through: create account → create a Board/List/Card → share it → see the
+> collaborator's public name → assign a Card and watch the receipt resolve →
+> refresh from owner → un-share it → filter → add a second device and approve
+> it from the first → sign out and back in → quit the app. Fix any build or
+> runtime errors you hit so it runs cleanly start to finish.
 
 After everything is built, paste this follow-up prompt:
 
 > Create a report summarizing your findings. If any bug was due to the
 > `at_client_skills-sdk` skill not documenting the correct way to do something,
-> identify the gap in the skill that should be fixed.
+> identify the gap in the skill that should be fixed. Separately, list every
+> SDK API you used that the skill marks as deprecated, and say what you used
+> it for — if the skill steered you to a deprecated API, that is itself a gap.
+> Finally, paste the log from the clean-shutdown walkthrough and say whether
+> anything a deliberate shutdown caused was logged at error level.
 
 ---
 
@@ -138,6 +175,19 @@ After everything is built, paste this follow-up prompt:
 | Offline + reconcile                         | local store + sync behavior                                                |
 | Tests without live server                   | unit-testing-without-atServer guidance (`collections_test_hooks.dart`)     |
 | "run on macOS desktop"                      | guarantees the desktop entitlement path is exercised                       |
+| Public profile readable by anyone           | public keys — `AtKey.public`, signed-not-encrypted values, `plookup`      |
+| Assignment receipt, delivered vs failed     | `send()` id → `getStatus` / `fetch`, the two-value enum, expiration window |
+| Second device authorised from the first     | APKAM enrolment — the passcode, approving, least-privilege namespaces, resuming a pending enrolment |
+| "Ask the owner directly" and wait           | RPC — `AtRpcClient` / `AtRpc.server`, callbacks, offline responder        |
+| Clean shutdown, nothing half-done           | `stop()` semantics, waiting for sync to settle before it, process exit    |
+| Shutdown not logged as an error             | `StoppedException` and catching it by type rather than as a failure       |
+| Restart does not re-apply an alert          | at-least-once notification delivery, idempotent handlers                  |
+| Full causal chain in failure logs           | `getTraceMessage()` and the exception families                            |
+
+**Deliberately not covered:** NoPorts access control. The skill holds only a
+pointer to `noports_core` for it, and a Flutter task board has no tunnel to
+authorise — a TeamBoard run cannot exercise it either way. Check that section
+by review, not by this test.
 
 ---
 
