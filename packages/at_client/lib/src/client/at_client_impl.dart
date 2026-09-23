@@ -54,7 +54,7 @@ import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -904,8 +904,8 @@ class AtClientImpl implements AtClient {
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
           inner: () =>
               processSecondaryAddressFinder() ??
-              (_defaultAddressFinder ??= CacheableSecondaryAddressFinder(
-                  _preference!.rootDomain, _preference!.rootPort)),
+              (_defaultAddressFinder ??=
+                  defaultSecondaryAddressFinder(_preference!)),
           read: () async {
             final store = localSecondary?.keyStore;
             if (store == null) return null;

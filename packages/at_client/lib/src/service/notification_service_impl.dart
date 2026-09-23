@@ -35,7 +35,7 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_auth/at_auth.dart' show authenticatorForChops;
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -312,8 +312,7 @@ class NotificationServiceImpl extends NotificationService {
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
     this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
-            atClient.getPreferences()!.rootPort);
+        defaultSecondaryAddressFinder(atClient.getPreferences()!);
 
     final preference = atClient.getPreferences()!;
     final chops = atClient.atChops;
