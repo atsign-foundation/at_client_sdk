@@ -1,8 +1,8 @@
-import 'package:test/test.dart';
 import 'package:at_telemetry/at_telemetry.dart';
+import 'package:test/test.dart';
 
 void main() {
-  test('create an event with producer-suppleid data', () {
+  test('creates an event with producer-supplied data', () {
     final DateTime timestamp = DateTime.utc(2026, 2, 23, 12);
     final Map<String, Object?> attributes = <String, Object?>{
       'verb': 'lookup',
