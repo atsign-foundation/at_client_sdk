@@ -1,0 +1,23 @@
+name: at_telemetry_service
+description: Authenticated telemetry ingestion service for Atsign telemetry
+version: 0.1.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_telemetry_service
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  args: ^2.6.0
+  at_cli_commons: ^3.1.2
+  at_client: ^3.15.0-rc1
+  at_commons: ^5.18.0
+  at_telemetry: ^0.1.0
+  at_telemetry_persistence: ^0.1.0
+  crypto: ^3.0.5
+
+dev_dependencies:
+  dartastic_opentelemetry: ^0.11.0
+  fixnum: ^1.1.1
+  lints: ^6.0.0
+  test: ^1.25.6
