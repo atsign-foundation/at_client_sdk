@@ -18,6 +18,7 @@ workspace:
   - packages/at_policy
   - packages/at_server_status
   - packages/at_telemetry
+  - packages/at_telemetry_persistence
   - packages/at_utils
   - tests/at_end2end_test
   - tests/at_functional_test
