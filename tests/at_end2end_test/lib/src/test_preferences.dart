@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 

@@ -48,6 +48,10 @@ abstract class AtClientStorage {
   /// private keys: such a client takes its keys from an `AtKeysIo` or an
   /// injected `AtChops`, never from the store.
   bool get holdsKeyMaterial;
+
+  /// The Hive persistence bundle behind [keyStore], or null for a backend
+  /// that has none, or before the first [attach].
+  AtPersistenceBundle? get persistenceBundle;
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies
@@ -79,6 +83,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
 
   @override
   bool get holdsKeyMaterial => true;
+
+  @override
+  AtPersistenceBundle? get persistenceBundle => null;
 
   @override
   bool isHeldBy(AtClient client) => identical(_owner, client);

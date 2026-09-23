@@ -152,7 +152,8 @@ AtClientManager.getInstance().use(client);
 Three things are the platform's to supply, and every verb takes them the
 same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
 Flutter keychain, memory); **`storage:`**, the client's local store
-(`HiveAtClientStorage`, or a bundle of your own); and **`lookUps:`**, how
+(`HiveAtClientStorage` from `package:at_client/hive.dart`, or a bundle of
+your own); and **`lookUps:`**, how
 the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
 monitor's - so a transport or a proxy convention is chosen once:

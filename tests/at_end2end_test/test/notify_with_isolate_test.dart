@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/config/config_util.dart';
