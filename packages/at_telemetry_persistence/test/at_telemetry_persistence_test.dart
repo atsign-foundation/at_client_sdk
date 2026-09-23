@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_telemetry/at_telemetry.dart';
@@ -234,6 +235,74 @@ void main() {
         throwsRangeError,
       );
     });
+
+    test('round-trips through query parameters without the tenant', () {
+      final AtTelemetryQuery query = AtTelemetryQuery(
+        tenantId: 'tenant-a',
+        name: 'atsign.server.heartbeat',
+        startTime: DateTime.utc(2026, 2, 23),
+        endTime: DateTime.utc(2026, 2, 24),
+        limit: 25,
+        offset: 50,
+        order: AtTelemetryOrder.oldestFirst,
+      );
+
+      final Map<String, String> parameters = query.toQueryParameters();
+      expect(parameters, isNot(contains('tenantId')));
+
+      final AtTelemetryQuery decoded = AtTelemetryQuery.fromQueryParameters(
+        tenantId: 'tenant-b',
+        parameters: parameters,
+      );
+      expect(decoded.tenantId, 'tenant-b');
+      expect(decoded.name, query.name);
+      expect(decoded.startTime, query.startTime);
+      expect(decoded.endTime, query.endTime);
+      expect(decoded.limit, query.limit);
+      expect(decoded.offset, query.offset);
+      expect(decoded.order, query.order);
+    });
+
+    test('rejects unknown and malformed query parameters', () {
+      for (final Map<String, String> parameters in <Map<String, String>>[
+        <String, String>{'tenantId': 'tenant-b'},
+        <String, String>{'limit': 'ten'},
+        <String, String>{'start': 'yesterday'},
+        <String, String>{'order': 'sideways'},
+      ]) {
+        expect(
+          () => AtTelemetryQuery.fromQueryParameters(
+            tenantId: 'tenant-a',
+            parameters: parameters,
+          ),
+          throwsFormatException,
+          reason: '$parameters',
+        );
+      }
+    });
+  });
+
+  test('round-trips a record through JSON', () {
+    final AtTelemetryRecord record = AtTelemetryRecord(
+      id: 7,
+      tenantId: 'tenant-a',
+      event: AtTelemetryEvent(
+        name: 'atsign.server.heartbeat',
+        timestamp: DateTime.utc(2026, 2, 24, 12),
+        attributes: const <String, Object?>{'healthy': true},
+      ),
+      receivedAt: DateTime.utc(2026, 2, 24, 12, 0, 1),
+    );
+
+    final AtTelemetryRecord decoded = AtTelemetryRecord.fromJson(
+      jsonDecode(jsonEncode(record.toJson())) as Map<String, Object?>,
+    );
+    expect(decoded.id, record.id);
+    expect(decoded.tenantId, record.tenantId);
+    expect(decoded.event.name, record.event.name);
+    expect(decoded.event.timestamp, record.event.timestamp);
+    expect(decoded.event.attributes, record.event.attributes);
+    expect(decoded.receivedAt, record.receivedAt);
   });
 
   test('persists events across file database reopen', () async {
