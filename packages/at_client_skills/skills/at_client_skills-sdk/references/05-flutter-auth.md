@@ -63,6 +63,19 @@ void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 storage object above is where the store lives, and it is what the dialogs and
 the `Atsign` verbs take as `storage`.
 
+**`rootDomain` is an `AtRootDomain`, not a `String`.** Every dialog below takes
+the typed value, so passing `'root.atsign.org'` is a compile error. The flows
+read it off the selection dialog, but you do not need a dialog to get one:
+
+```dart
+AtRootDomain.atsignDomain                    // the standard root — root.atsign.org:64
+const AtRootDomain('root.atsign.org', 64)    // the same thing, written out
+AtRootDomain.parse('my.root.example:6400')   // host:port; bare host defaults to 64
+```
+
+Reach for `atsignDomain` unless your app talks to a non-standard root — then
+`parse` is what turns a configured string into the type.
+
 ---
 
 ## Flow 1: New atsign — CRAM Activation (first-time only)
@@ -81,6 +94,7 @@ Future<void> activateNewAtSign(BuildContext context) async {
   // Step 1: the user picks / types an atSign and a root domain
   final selection = await AtSignSelectionDialog.show(context);   // AtsignSelection?
   if (selection == null || !context.mounted) return;
+  // selection.rootDomain is an AtRootDomain, not a String — see below.
 
   // Step 2: the registrar emails an OTP; the dialog exchanges it for the CRAM key
   final cramKey = await RegistrarCramDialog.show(context, selection.atSign,

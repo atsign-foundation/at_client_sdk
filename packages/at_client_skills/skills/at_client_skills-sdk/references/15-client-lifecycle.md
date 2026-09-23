@@ -288,9 +288,27 @@ they receive the passcode:
 
 ```dart
 for (final e in await client.enrollments.pending()) {
+  // Show the approver what is asking before they decide.
+  print('${e.appName} on ${e.deviceName} wants ${e.namespace}');
   await client.enrollments.approve(e.enrollmentId!);   // or deny(id)
 }
 ```
+
+**Show the request before approving it.** Each `Enrollment` carries more than
+its id, and an approval screen that does not display the rest is asking someone
+to consent to nothing in particular:
+
+| Field        | Type                   | What it tells the approver              |
+| ------------ | ---------------------- | ---------------------------------------- |
+| `enrollmentId` | `String?`            | The handle for `approve` / `deny`        |
+| `appName`    | `String?`              | Which app is asking                      |
+| `deviceName` | `String?`              | Which device it is running on            |
+| `namespace`  | `Map<String, dynamic>?` | The access requested, `{namespace: 'rw'}` — despite the singular name |
+| `status`     | `String?`              | The approval state the atServer holds    |
+
+`namespace` is the one to read closely: it is what the device will be able to
+reach, and it is the whole point of the decision. An enrolment asking for
+`__manage` is asking to approve *other* enrolments.
 
 `revoke(id)` retires an approved enrollment (`force: true` to insist),
 `unrevoke(id)` puts it back, `delete(id)` removes the record, and `fetch(id)`

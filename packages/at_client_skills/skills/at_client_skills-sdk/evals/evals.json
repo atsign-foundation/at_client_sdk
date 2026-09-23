@@ -447,6 +447,29 @@
         "Explains it is a final reference to a mutable set, so edit in place then call update",
         "Does not recommend deleting and recreating the item in order to replace its payload"
       ]
+    },
+    {
+      "id": 40,
+      "prompt": "I'm adding a fast re-login button to my Flutter app for atsigns already on the device. I have the atsign as a string and I know the root server address, but when I pass that address straight to the login dialog it won't compile — it says a String can't be assigned to that parameter. Do I have to make the user pick from a dialog every time just to get past this?",
+      "expected_output": "Explains that the root domain is its own type, not a String, which is why passing the address as a string does not compile — and that no, a selection dialog is not required to obtain one. Gives the direct routes: the constant for the standard root (AtRootDomain.atsignDomain, root.atsign.org on port 64), the const constructor taking host and port, and the parse factory for turning a configured 'host:port' string into the type, where a bare host defaults to port 64. Recommends the constant for an app on the standard root and parse when the root is configurable, so the re-login button can go straight to the login dialog with the atsign it already has. Does NOT tell the developer to re-show the atsign selection dialog purely to obtain a root domain, and does NOT suggest changing the parameter type or casting the string.",
+      "expectations": [
+        "Identifies the root domain as a dedicated type rather than a String, explaining the compile error",
+        "Names AtRootDomain.atsignDomain (or the const constructor) as the way to get the standard root directly",
+        "Mentions AtRootDomain.parse for turning a configured host or host:port string into the type",
+        "States a selection dialog is not required just to obtain a root domain"
+      ]
+    },
+    {
+      "id": 41,
+      "prompt": "I'm building the approval screen on the phone side of our device-pairing flow. The list of waiting requests comes back fine and I can approve them, but all I seem to have for each one is an identifier, so the screen just says 'approve request 4f2a?' — which is not something I'd tap yes on. How do I show the user what they're actually approving?",
+      "expected_output": "Says each pending enrollment record carries considerably more than its id, and names the fields that matter for an approval screen: the app name and the device name identify what is asking and where it is running, and the requested access — a map of namespace to access level such as rw or r, held on a field whose name is singular despite being a map — is what the approver is actually consenting to. May also mention the status field. Stresses that the requested access is the important one to display, since it is what the device will be able to reach, and that a request asking for the __manage namespace is asking for the ability to approve further enrollments, which deserves particular scrutiny. Does NOT claim the id is all that is available, and does NOT suggest fetching the app or device name from somewhere else such as a separate lookup or the app's own records.",
+      "expectations": [
+        "States the pending enrollment record carries more than the id",
+        "Names the app name and device name as the fields identifying what is requesting approval",
+        "Names the requested namespace-to-access map as what the approver is actually consenting to",
+        "Flags that a request for the __manage namespace confers the ability to approve other enrollments",
+        "Does not suggest looking the app or device name up from a separate source"
+      ]
     }
   ]
 }

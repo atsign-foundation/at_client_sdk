@@ -2,6 +2,11 @@
 
 ## 1.4.0 — unreleased
 
+- Show what a pending enrolment carries beyond its id — the app, the device
+  and the access being requested — so an approval screen can say what it is
+  approving.
+- Say that a root domain is a type, not a string, and how to build one without
+  going through a selection dialog.
 - Document the `CItem<T>` fields — which are mutable, that the payload cannot
   be reassigned, and that the shared-with set is never null.
 - Say that sharing does not cascade the way deleting does, so adding a
