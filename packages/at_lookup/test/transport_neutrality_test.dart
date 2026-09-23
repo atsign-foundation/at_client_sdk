@@ -29,6 +29,8 @@ void main() {
         .where((file) =>
             file.path.endsWith('.dart') &&
             !file.path.contains('${Platform.pathSeparator}io'
+                '${Platform.pathSeparator}') &&
+            !file.path.contains('${Platform.pathSeparator}web'
                 '${Platform.pathSeparator}'))
         .toList();
 
