@@ -12,20 +12,28 @@ at_chops:
   # Web-safe first: every OpenSSL and FFI algorithm lives behind
   # at_chops_ffi.dart, so at_chops.dart is pure Dart.
   #
-  # `cryptography` is absent from the blocked count because under web
-  # resolution its configurable imports select the pure-Dart implementation,
-  # not the dart:html Web Crypto path. Structural only — not evidence it
+  # `cryptography` is absent from the blocked count because its configurable
+  # imports select on `dart.library.js_interop` (lib/cryptography.dart,
+  # cryptography 2.9.0), which dart2js and dart2wasm both define: both get
+  # BrowserCryptography, over `dart:js_interop` rather than `dart:html`. It
+  # calls WebCrypto when `isWebCryptoAvailable` (crypto.subtle defined and a
+  # secure context) and pure Dart otherwise. Structural only — not evidence it
   # computes the right answers under WasmGC.
   ratchets:
     - barrel: package:at_chops/at_chops.dart
       allowed_offenders: []
       max_blocked_packages: 2 # at_utils + chalkdart, via the logger
       min_files_walked: 500
+    - barrel: package:at_chops/at_chops_web.dart
+      allowed_offenders: []
+      max_blocked_packages: 2 # at_utils + chalkdart, via the logger
+      min_files_walked: 750
   probe:
     # at_chops_ffi.dart is absent on purpose: it is the FFI island and does not
     # compile to wasm. The control below asserts it still holds what it isolates.
     - package:at_chops/at_chops.dart
     - package:at_chops/types.dart
+    - package:at_chops/at_chops_web.dart
   controls:
     - barrel: package:at_chops/at_chops_ffi.dart
       reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
