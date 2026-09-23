@@ -643,7 +643,7 @@ an operation must see or produce server-side truth immediately.
 | `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
 | `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
 | `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
-| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
+| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage(atSign:, storagePath:)` (`package:at_client/hive.dart`) passed as `storage` |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old `AtCollectionModel` patterns to
