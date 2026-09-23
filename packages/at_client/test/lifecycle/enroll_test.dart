@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/remote_only.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:mocktail/mocktail.dart';
@@ -284,6 +285,42 @@ void main() {
     expect(client.enrollmentId, enrollmentId);
     expect(client.connection.current.isOnline, isTrue);
     await client.stop();
+  });
+
+  test(
+      'a fresh ephemeral session enrolls and opens on remote-only storage: '
+      'its keys come from the enrollment\'s in-memory store, never the '
+      'atServer', () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer(decide: (_) async => true);
+    final pending = await submit(store, server);
+    final remote = MockRemoteSecondary();
+    final storage =
+        RemoteOnlyAtClientStorage(atSign: atSign, remoteSecondary: remote);
+
+    final client = await pending.client(
+        (await preference())
+          ..isLocalStoreRequired = false
+          ..monitorAutoStart = false,
+        storage: storage,
+        retryInterval: const Duration(milliseconds: 10));
+
+    final stored = await store.read(atSign);
+    expect(
+        client
+            .atChops?.atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey,
+        encryptionPrivateKey,
+        reason: 'the secret the approver sealed, held only in memory');
+    // ignore: deprecated_member_use
+    expect(
+        client.atChops?.atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey,
+        // ignore: deprecated_member_use
+        stored.apkamPrivateKey?.toString(),
+        reason: 'the APKAM keypair minted at submission');
+    expect(client.enrollmentId, enrollmentId);
+    verifyZeroInteractions(remote);
+    await client.stop();
+    await storage.close();
   });
 
   test(
