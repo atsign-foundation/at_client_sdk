@@ -15,6 +15,7 @@ import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtKeysIo, authenticatorFor;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/service/notification_service_impl.dart';
