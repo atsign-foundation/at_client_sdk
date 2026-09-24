@@ -1,10 +1,11 @@
 # OQ-P1 results
 
-Status: open — 1 row in (Chrome/macOS platform: `prf` ✓); fill one row per browser × authenticator.
+Status: open — 2 rows in (Chrome + Safari macOS platform: `prf` ✓); fill one row per browser × authenticator.
 
 | UA | secure | caps `extension:prf` | create `prf.enabled` | create `results.first` bytes | get `results.first` bytes | `largeBlob.supported` | unlocked after reload | error | authenticator (fill by hand) |
 |---|---|---|---|---|---|---|---|---|---|
 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 | true | true | true | 32 | 32 | false | true |  | macOS platform — provider TBD |
+| Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15 | true | true | true | 32 | 32 | null | true |  | iCloud Keychain (Safari platform) |
 
 ## Targets
 
