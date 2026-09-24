@@ -1,6 +1,6 @@
 # OQ-P1 results
 
-Status: open — 4 rows in (Brave + Safari + Chrome macOS, Brave Android: `prf` ✓). Brave reports a Chrome UA. Fill one row per browser × authenticator.
+Status: decided — `prf` (see `docs/projects/trusted-devices/prf-results.md`); iOS row open. Brave reports a Chrome UA.
 
 | UA | secure | caps `extension:prf` | create `prf.enabled` | create `results.first` bytes | get `results.first` bytes | `largeBlob.supported` | unlocked after reload | error | authenticator (fill by hand) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -20,4 +20,5 @@ Status: open — 4 rows in (Brave + Safari + Chrome macOS, Brave Android: `prf` 
 
 ## Decision
 
-_Pending the table._
+`prf` is the passkey unlock kind; no `largeBlob` kind. Rationale and consequences:
+`docs/projects/trusted-devices/prf-results.md`.
