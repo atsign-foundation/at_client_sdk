@@ -3,6 +3,7 @@
 ///     dart run wasm_shakedown
 ///     dart run wasm_shakedown --package at_auth
 ///     dart run wasm_shakedown --config path/to/gates.yaml
+///     dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
 ///
 /// Named for the package, so it is the default entry point and needs no
 /// `:suffix`. The gated set comes from `.github/wasm_gates.yaml` unless
@@ -29,11 +30,20 @@ Runs the WASM gates declared in a gate config.
   dart run wasm_shakedown --package NAME  just this one (repeatable)
   dart run wasm_shakedown --config PATH   a config other than the default
 
+  dart run wasm_shakedown --resolve-from PACKAGE=DIR   (repeatable)
+      Walk and compile PACKAGE's gate against DIR's own package config rather
+      than the workspace's. For a package outside the root `workspace:` list,
+      whose name resolves to the published copy in the pub cache — so its gate
+      would measure a different package than this tree. DIR is relative to the
+      workspace root and needs its own `dart pub get`. Every other gate is
+      unaffected, so this stays one flag rather than a separate run.
+
 Default config: $gateConfigPath, relative to the pub workspace root.
 ''';
 
 Future<void> main(List<String> args) async {
   final only = <String>[];
+  final resolveFrom = <String, String>{};
   String? configPath;
   for (var i = 0; i < args.length; i++) {
     final arg = args[i];
@@ -48,6 +58,13 @@ Future<void> main(List<String> args) async {
     } else if (arg == '--config' || arg == '-c') {
       final (value, next) = _optionValue(args, i, '--config', 'a path');
       configPath = value;
+      i = next;
+    } else if (arg == '--resolve-from') {
+      final (value, next) =
+          _optionValue(args, i, '--resolve-from', 'PACKAGE=DIR');
+      final eq = value.indexOf('=');
+      if (eq < 1) _die('--resolve-from takes PACKAGE=DIR, got "$value"');
+      resolveFrom[value.substring(0, eq)] = value.substring(eq + 1);
       i = next;
     } else {
       _die('unrecognised argument "$arg"\n\n$_usage');
@@ -67,30 +84,52 @@ Future<void> main(List<String> args) async {
     _die(e.message);
   }
 
-  for (final name in only) {
+  for (final name in [...only, ...resolveFrom.keys]) {
     if (config[name] == null) {
       _die('"$name" is not gated. ${config.path} lists: '
           '${config.gates.map((g) => g.package).join(', ')}');
     }
   }
 
+  // Each --resolve-from package's own checkout directory, verified to hold a
+  // package config. Never fall back to the workspace's: that is the copy the
+  // flag exists to avoid, and a gate that quietly measured it would pass.
+  final resolveRoots = <String, Directory>{};
+  for (final MapEntry(key: package, value: path) in resolveFrom.entries) {
+    final dir = Directory('${workspaceRoot().path}/$path');
+    if (!File('${dir.path}/.dart_tool/package_config.json').existsSync()) {
+      _die('no .dart_tool/package_config.json in $path, which $package\'s gate '
+          'resolves from — run `dart pub get` there first.');
+    }
+    resolveRoots[package] = dir;
+  }
+
   final gates = only.isEmpty
       ? config.gates
       : config.gates.where((g) => only.contains(g.package)).toList();
 
+  // A union, not a replacement: a --resolve-from directory resolves its own
+  // package (and wins, being spread last) while the workspace still resolves
+  // every other gate in the same config.
+  final roots = {
+    ...resolvePackageRoots(),
+    for (final dir in resolveRoots.values) ...resolvePackageRoots(from: dir),
+  };
+
   final scopedConfig = GateConfig(gates, config.path);
-  final unresolvable = scopedConfig.unresolvableBarrels(resolvePackageRoots());
+  final unresolvable = scopedConfig.unresolvableBarrels(roots);
   if (unresolvable.isNotEmpty) {
     _die('${config.path} names barrels that do not exist. A renamed barrel '
         'makes a gate walk less and still pass, so this is an error:\n'
         '${unresolvable.entries.map((e) => '  ${e.key} — ${e.value}').join('\n')}');
   }
 
-  final runner = GateRunner();
   final results = <GateResult>[];
   for (final gate in gates) {
     stdout.writeln(gate.package);
-    final result = await runner.run(gate);
+    // Per gate: a package outside the root `workspace:` list walks and compiles
+    // against its own `dart pub get`, every other one against the workspace's.
+    final result = await GateRunner(root: resolveRoots[gate.package]).run(gate);
     results.add(result);
 
     for (final ratchet in result.ratchets) {

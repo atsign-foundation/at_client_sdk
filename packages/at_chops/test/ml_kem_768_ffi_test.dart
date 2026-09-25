@@ -1,12 +1,11 @@
 @Tags(['ffi'])
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
+import 'package:at_chops/src/spec/ml_kem_768_spec.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -48,16 +47,14 @@ void main() {
 
     test('FFI sender can encapsulate against a pure-Dart-generated public key',
         () async {
-      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
+      final kp = await MlKem768PureDartAlgo.instance.generateKeyPair();
 
       final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
-      final enc = await ffiAlgo.encapsulate(pub);
+      final enc = await ffiAlgo.encapsulate(kp.publicKey);
 
       // Recipient must use pure-Dart impl — FFI handles are non-serializable.
-      final Uint8List recovered =
-          await MlKem768PureDartAlgo.instance.decapsulate(priv, enc.ciphertext);
+      final Uint8List recovered = await MlKem768PureDartAlgo.instance
+          .decapsulate(kp.secretKey, enc.ciphertext);
       expect(recovered, equals(enc.sharedSecret));
     });
 

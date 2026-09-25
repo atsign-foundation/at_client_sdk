@@ -1,4 +1,4 @@
-import 'package:at_chops/src/algorithm/spec/output_length.dart';
+import 'package:at_chops/src/spec/output_length.dart';
 import 'package:test/test.dart';
 
 void main() {

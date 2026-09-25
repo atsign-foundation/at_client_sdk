@@ -213,8 +213,19 @@ jobs:
 
       - run: dart pub get
 
+      # at_chops is not a workspace member while 4.0.0 is detached, so the root
+      # resolution above points package:at_chops at the pub cache. --resolve-from
+      # below points its gate at this resolution instead; without it the gate
+      # walks the published 3.x, which fails these baselines rather than passing.
+      # Drop both when at_chops rejoins the root `workspace:` list.
+      - name: Install dependencies in at_chops
+        working-directory: packages/at_chops
+        run: dart pub get
+
       - name: WASM gates
-        run: dart run wasm_shakedown --config .github/wasm_gates.yaml
+        run: >-
+          dart run wasm_shakedown --config .github/wasm_gates.yaml
+          --resolve-from at_chops=packages/at_chops
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
