@@ -61,9 +61,6 @@ MockAtClient buildRemoteBackedMockClient({
   final atLookUp = MockAtLookupImpl();
   when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-  // the bridge reads the enrollment id off the lookup until the ladder goes
-  // ignore: deprecated_member_use
-  when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
   final localValues = localData ?? remoteData;
   final localMeta = localData == null ? remoteMetadata : localMetadata;

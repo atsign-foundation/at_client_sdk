@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
 class StreamNotificationHandler {
@@ -17,6 +20,8 @@ class StreamNotificationHandler {
 
   EncryptionService? encryptionService;
 
+  AtTransportFactory? transportFactory;
+
   var logger = AtSignLogger('StreamNotificationHandler');
 
   Future<void> streamAck(AtStreamNotification streamNotification,
@@ -26,20 +31,23 @@ class StreamNotificationHandler {
         .secondaryAddressFinder!
         .findSecondary(streamNotification.senderAtSign);
     var host = secondaryAddress.host;
-    var port = secondaryAddress.port;
-    var socket = await SecureSocket.connect(host, port);
+    var port = secondaryAddress.port.toString();
+    var transport =
+        await (transportFactory ?? defaultTransportFactory(preference))
+            .connect(host, port);
     // ignore: prefer_interpolation_to_compose_strings
     var f = File('${preference!.downloadPath ?? ''}'
         '${Platform.pathSeparator}'
         'encrypted_${streamNotification.fileName}');
     logger.info('sending stream receive for : $streamId');
     var command = 'stream:receive $streamId\n';
-    socket.write(command);
+    transport.add(utf8.encode(command));
+    await transport.flush();
     var bytesReceived = 0;
     var firstByteSkipped = false;
     var sharedKey = await encryptionService!
         .getSharedKeyForDecryption(streamNotification.senderAtSign);
-    socket.listen((onData) async {
+    transport.inbound.listen((onData) async {
       if (onData.length == 1 && onData.first == 64) {
         //skip @ prompt
         logger.finer('skipping prompt');
@@ -66,12 +74,13 @@ class StreamNotificationHandler {
         logger.info(
             'Decrypting stream data completed in ${endTime.difference(startTime).inMilliseconds} milliseconds');
         logger.info('Stream transfer complete:$streamId');
-        socket.write('stream:done $streamId\n');
+        transport.add(utf8.encode('stream:done $streamId\n'));
+        await transport.flush();
         streamCompletionCallBack(streamId);
         return;
       }
     }, onDone: () {
-      socket.destroy();
+      transport.destroy();
     });
   }
 }
