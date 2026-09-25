@@ -36,7 +36,8 @@ third-party providers (1Password, Bitwarden, Samsung Pass).
 | 3 | A generated passphrase stays the recovery unlock | Covers a provider without PRF and the loss of every passkey |
 | 4 | Seal at registration when `create` returns `prf.results.first`; otherwise `get` once | `create` returned the output on all four rows — one ceremony instead of two |
 | 5 | Detect with `getClientCapabilities()['extension:prf']`, then trust the ceremony's result | The capability was true everywhere, but a provider chosen in the dialog can still lack PRF |
-| 6 | Layer C stores the credential ID and PRF eval salt beside the envelope, unsecret | `get` needs both to reproduce the output; neither reveals it |
+| 6 | The PRF eval input is derived, `SHA-256("at_client_wasm/prf-eval/v1\|" + atSign)`; the credential ID stays in local storage only, and a new device finds the passkey as a discoverable credential | The server copy is world-readable, so it carries ciphertext and KDF salts only; a synced passkey reproduces the eval input from the atSign |
+| 7 | The portal seals the `passphrase` unlock only; the app adds a `prf` unlock after the first open and writes the envelope back to the server | The portal is a different RP ID, so it cannot produce the app's PRF output |
 
 ## Consequences for trusted devices
 
