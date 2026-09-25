@@ -222,8 +222,13 @@ void main() {
         'AgiQ9FRbngV7RJ08rTk=');
     final privateKey =
         base64Decode('q4DTIUgWngNtY0pKGgh59HtCnTyyRYKcj3oUQOzHJ9o=');
-    const signature = 'uTN3n1UXBN9T3jLsprzVScwXW47SG4bgXRej92uWug8g7/gfzVd85K2Q'
-        'pLAMMNgGM4okXqZBPsHwMw980E5MZA==';
+    // Produced by at_chops 3.7.0's EccSigningAlgo.sign() over `plainText` with
+    // the key above: `ecdsa.Signature.toCompactHex().codeUnits` — 128 bytes
+    // of ASCII hex, not the 64-byte raw compact form.
+    const signature =
+        'MjdhYzlhOTI2OTU1YjViYTcwNzc0ODIzOTIzODQzM2M4OWFhMzU0MmFlOTRmNjQ2N2Q3'
+        'MTRiNTViOGY1Njk3ODdmZjY5NmM3MzY1NmM4YzA1ZTU1M2NmMDNjZTcwNDFhMTNkMmI4'
+        'ODNiMTNmMzBiNzNlMzMxZmJmMDQ2OWJiNGM=';
 
     test('a signature written by 3.x still verifies', () async {
       await expectLater(
@@ -232,9 +237,21 @@ void main() {
           completes);
     });
 
+    test('a signature in the raw 64-byte compact form also verifies', () async {
+      // verifyBytes accepts both encodings signBytes has written across
+      // at_chops' history, keyed on signature length.
+      final hex = utf8.decode(base64Decode(signature));
+      final compact = Uint8List.fromList(List<int>.generate(hex.length ~/ 2,
+          (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
+      await expectLater(
+          EccSigningAlgo()
+              .verifyBytes(plainText, signature: compact, publicKey: publicKey),
+          completes);
+    });
+
     test('a freshly written signature verifies against the pinned public key',
         () async {
-      // Signature bytes deliberately aren't pinned: the 3.x backend picks a
+      // Signature bytes deliberately aren't pinned: pointycastle picks a
       // random nonce, so only the (key encoding, signature encoding, curve,
       // digest) tuple is a compatibility surface — and that is what verifying
       // across the two exercises.
@@ -244,14 +261,14 @@ void main() {
           EccSigningAlgo()
               .verifyBytes(plainText, signature: fresh, publicKey: publicKey),
           completes);
-      expect(fresh, hasLength(64));
+      expect(fresh, hasLength(128)); // ASCII hex of the 64-byte compact form
     });
 
     test('key and signature encodings keep their fixed widths', () {
       expect(publicKey, hasLength(65)); // uncompressed SEC1: 0x04 || X || Y
       expect(publicKey.first, 0x04);
       expect(privateKey, hasLength(32)); // big-endian scalar
-      expect(base64Decode(signature), hasLength(64)); // compact R || S
+      expect(base64Decode(signature), hasLength(128)); // hex(compact R || S)
     });
   });
 
