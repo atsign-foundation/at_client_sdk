@@ -29,3 +29,11 @@ class EnvelopeUnlockFailedException implements Exception {
   @override
   String toString() => 'EnvelopeUnlockFailedException: $message';
 }
+
+class EnvelopeContentKeyMismatchException implements Exception {
+  final String message;
+  EnvelopeContentKeyMismatchException(this.message);
+
+  @override
+  String toString() => 'EnvelopeContentKeyMismatchException: $message';
+}
