@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -238,6 +239,153 @@ void main() {
     test('not JSON', () async {
       await expectLater(codecArgon.open('@alice', utf8.encode('not json'), prf),
           throwsA(isA<UnsupportedEnvelopeException>()));
+    });
+  });
+
+  group('withUnlock', () {
+    test('adds unlock and preserves plaintext', () async {
+      final envelope = await codecArgon.seal('@alice', plaintext, [passphrase]);
+      final opened = await codecArgon.open('@alice', envelope, passphrase);
+
+      final modifiedEnvelope = await opened.withUnlock(prf);
+
+      final openedPrf = await codecArgon.open('@alice', modifiedEnvelope, prf);
+      final openedPassphrase =
+          await codecArgon.open('@alice', modifiedEnvelope, passphrase);
+
+      expect(openedPrf.plaintext, plaintext);
+      expect(openedPassphrase.plaintext, plaintext);
+
+      final modifiedJson = jsonDecode(utf8.decode(modifiedEnvelope));
+      expect((modifiedJson['unlocks'] as List).length, 2);
+
+      final originalJson = jsonDecode(utf8.decode(envelope));
+      expect(modifiedJson['unlocks'][0], originalJson['unlocks'][0]);
+    });
+
+    test('carries the codec params', () async {
+      final envelope = await codecArgon.seal('@alice', plaintext, [prf]);
+      final opened = await codecArgon.open('@alice', envelope, prf);
+
+      final modifiedEnvelope = await opened.withUnlock(passphrase);
+
+      final openedPassphrase =
+          await codecArgon.open('@alice', modifiedEnvelope, passphrase);
+      expect(openedPassphrase.plaintext, plaintext);
+
+      final modifiedJson = jsonDecode(utf8.decode(modifiedEnvelope));
+      final passphraseUnlock = (modifiedJson['unlocks'] as List)
+          .firstWhere((u) => u['kind'] == 'passphrase');
+      expect(passphraseUnlock['kdf']['params'], isNotNull);
+    });
+  });
+
+  group('mergeUnlocksFrom', () {
+    test('merges unlocks successfully keeping content identical', () async {
+      final serverEnvelope =
+          await codecArgon.seal('@alice', plaintext, [passphrase]);
+
+      final openedServer =
+          await codecArgon.open('@alice', serverEnvelope, passphrase);
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codecArgon.open('@alice', localEnvelope, prf);
+
+      final mergedEnvelope = await openedLocal.mergeUnlocksFrom(serverEnvelope);
+
+      final mergedJson = jsonDecode(utf8.decode(mergedEnvelope));
+      final serverJson = jsonDecode(utf8.decode(serverEnvelope));
+
+      expect(mergedJson['content']['iv'], serverJson['content']['iv']);
+      expect(mergedJson['content']['ct'], serverJson['content']['ct']);
+
+      expect((await codecArgon.open('@alice', mergedEnvelope, prf)).plaintext,
+          plaintext);
+      expect(
+          (await codecArgon.open('@alice', mergedEnvelope, passphrase))
+              .plaintext,
+          plaintext);
+    });
+
+    test('survives server reseal', () async {
+      final serverEnvelope =
+          await codecArgon.seal('@alice', plaintext, [passphrase]);
+      final openedServer =
+          await codecArgon.open('@alice', serverEnvelope, passphrase);
+
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codecArgon.open('@alice', localEnvelope, prf);
+
+      final replacement = {'new': 'data'};
+      final resealedServer = await openedServer.reseal(replacement);
+
+      final mergedEnvelope = await openedLocal.mergeUnlocksFrom(resealedServer);
+
+      expect((await codecArgon.open('@alice', mergedEnvelope, prf)).plaintext,
+          replacement);
+    });
+
+    test('idempotent merge yields no duplicates', () async {
+      final serverEnvelope =
+          await codecArgon.seal('@alice', plaintext, [passphrase]);
+      final openedServer =
+          await codecArgon.open('@alice', serverEnvelope, passphrase);
+
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codecArgon.open('@alice', localEnvelope, prf);
+
+      final merged1 = await openedLocal.mergeUnlocksFrom(serverEnvelope);
+      final openedMerged = await codecArgon.open('@alice', merged1, prf);
+      final merged2 = await openedMerged.mergeUnlocksFrom(serverEnvelope);
+
+      final merged2Json = jsonDecode(utf8.decode(merged2));
+      expect((merged2Json['unlocks'] as List).length, 2);
+    });
+
+    test('different content key throws EnvelopeContentKeyMismatchException',
+        () async {
+      final serverEnvelope =
+          await codecArgon.seal('@alice', plaintext, [passphrase]);
+      final otherEnvelope = await codecArgon.seal('@alice', plaintext, [prf]);
+
+      final openedOther = await codecArgon.open('@alice', otherEnvelope, prf);
+
+      await expectLater(openedOther.mergeUnlocksFrom(serverEnvelope),
+          throwsA(isA<EnvelopeContentKeyMismatchException>()));
+    });
+
+    test('different atSign throws EnvelopeAtSignMismatchException', () async {
+      final serverEnvelope =
+          await codecArgon.seal('@bob', plaintext, [passphrase]);
+      final localEnvelope = await codecArgon.seal('@alice', plaintext, [prf]);
+
+      final openedLocal = await codecArgon.open('@alice', localEnvelope, prf);
+
+      await expectLater(openedLocal.mergeUnlocksFrom(serverEnvelope),
+          throwsA(isA<EnvelopeAtSignMismatchException>()));
+    });
+  });
+
+  group('golden', () {
+    test('read test/fixtures/envelope_v1_golden.json', () async {
+      final file = File('test/fixtures/envelope_v1_golden.json');
+      final goldenBytes = await file.readAsBytes();
+
+      final goldenPrf =
+          PrfSecret(Uint8List.fromList(List.generate(32, (i) => i)));
+      final goldenPassphrase = PassphraseSecret('golden-passphrase-not-secret');
+
+      final openedPrf =
+          await codecArgon.open('@golden', goldenBytes, goldenPrf);
+      final openedPassphrase =
+          await codecArgon.open('@golden', goldenBytes, goldenPassphrase);
+
+      final expectedPlaintext = {
+        "atSign": "@golden",
+        "note": "at_client_wasm envelope v1 golden"
+      };
+
+      expect(openedPrf.plaintext, expectedPlaintext);
+      expect(openedPassphrase.plaintext, expectedPlaintext);
     });
   });
 }
