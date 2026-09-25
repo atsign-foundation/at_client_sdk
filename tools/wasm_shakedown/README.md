@@ -15,10 +15,10 @@ The default config is `.github/wasm_gates.yaml`, resolved against the pub worksp
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,
 so the workflow names the file rather than leaning on that default.
 
-at_chops and at_auth are gated today — both already web-safe, at_chops behind
-`at_chops_ffi.dart` and at_auth behind `at_auth_io.dart`, so each gate holds a line
-rather than recording a backlog. at_utils, at_lookup and at_client own 3, 6 and 7
-offenders respectively and join as each is ported.
+at_chops, at_auth and at_utils are gated today — all three already web-safe, at_chops
+behind `at_chops_ffi.dart`, at_auth behind `at_auth_io.dart` and at_utils behind
+`at_utils_io.dart`, so each gate holds a line rather than recording a backlog.
+at_lookup and at_client own 6 and 7 offenders respectively and join as each is ported.
 
 ## Why this exists
 
@@ -107,13 +107,13 @@ live walk. There is deliberately no way to write a baseline back from a run — 
 generator existed once and was removed, because the failure output already carries
 what it would have printed.
 
-Both gated packages have an empty allow list. at_chops' ceiling of 2 is `at_utils` and
-`chalkdart` via the logger; at_auth's 3 adds `at_lookup`.
+Every gated package has an empty allow list. at_chops' and at_utils' ceilings are 0;
+at_auth's 2 is `at_lookup` and `chalkdart`, the latter through `at_progress.dart`.
 
 Every run prints its figures whether or not it fails:
 
 ```
-package:at_chops/at_chops.dart — 582 files walked, 0/0 offenders, 2/2 blocked
+package:at_auth/at_auth.dart — 951 files walked, 0/0 offenders, 2/2 blocked
 ```
 
 `min_files_walked` guards the rest — every other check is about what the walk did
@@ -133,7 +133,7 @@ Controls need no such floor: their checks are positive.
 The split is what makes the gates testable: `verdict.dart` judges a walk it is handed,
 so `test/verdict_test.dart` writes down the walks it wants instead of arranging a
 filesystem that produces them. That is the only way to cover the baseline logic —
-both gated packages baseline an empty allow list over a package owning no offender, so
+every gated package baselines an empty allow list over a package owning no offender, so
 the live figures cannot tell a correct subtraction from a reversed one.
 
 ```bash

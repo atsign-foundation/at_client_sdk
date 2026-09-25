@@ -1,3 +1,7 @@
+## 1.2.1-rc1
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 1.2.0
 
 - chore(deps): at_cli_commons: ^3.0.0

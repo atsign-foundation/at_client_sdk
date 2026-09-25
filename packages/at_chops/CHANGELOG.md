@@ -1,4 +1,4 @@
-## 3.7.0
+## 3.7.0-rc1
 
 - feat: the barrel exports `MlDsa65Sizes`. A caller signing a PKAM challenge
   with ML-DSA needs the FIPS 204 secret-key length to say what a wrong-sized
@@ -21,6 +21,7 @@
   imported only by `example/zariot/`, and as a direct dependency it put an
   FFI-based package on the resolved graph of every at_chops consumer. No
   library code, public API, or behaviour changes.
+- chore(deps): at_utils ^4.0.0-rc1
 
 ## 3.6.1
 

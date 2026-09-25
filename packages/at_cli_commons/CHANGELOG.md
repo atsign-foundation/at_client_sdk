@@ -1,4 +1,4 @@
-## 3.1.2
+## 3.1.2-rc1
 
 - feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
   `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
@@ -19,6 +19,7 @@
   nowhere, so the value had no effect. No behaviour changes.
 - build: require `at_onboarding_cli` ^1.17.0-rc1, the first version carrying
   `AtOnboardingPreference.storagePath`.
+- chore(deps): at_utils ^4.0.0-rc1
 
 ## 3.1.1
 
