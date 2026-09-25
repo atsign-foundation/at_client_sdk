@@ -1,3 +1,10 @@
+## 3.8.0
+
+- feat: `PassphraseKdf` (`Argon2idKdf`, `Pbkdf2Sha256Kdf`, `kdfFor`) with
+  JSON-serialisable `KdfParams`.
+- feat: `package:at_chops/at_chops_web.dart` adds `WebCryptoAesCtr`, which
+  matches the VM's AES-CTR output byte for byte, and `WebCryptoPbkdf2Sha256Kdf`.
+
 ## 3.7.0
 
 - feat: the barrel exports `MlDsa65Sizes`. A caller signing a PKAM challenge
