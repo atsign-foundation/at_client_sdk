@@ -11,6 +11,7 @@ dependencies:
   at_auth: ^4.0.0-rc2
   at_commons: ^5.18.0
   cryptography: ^2.7.0
+  web: ^1.1.0
 
 dev_dependencies:
   lints: ^6.0.0
