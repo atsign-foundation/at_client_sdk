@@ -68,18 +68,18 @@ class KeyEnvelopeCodec {
         contentKey,
         unlocks);
   }
+}
 
-  Future<_Unlock> _wrap(
-      String atSign, UnlockSecret secret, Uint8List contentKey) async {
-    final kind = _kindOf(secret);
-    final salt = _randomBytes(16);
-    final kek = await _kek(secret, salt);
-    return (
-      kind: kind,
-      salt: salt,
-      wrap: await _gcmSeal(kek, contentKey, _wrapAad(atSign, kind, salt)),
-    );
-  }
+Future<_Unlock> _wrap(
+    String atSign, UnlockSecret secret, Uint8List contentKey) async {
+  final kind = _kindOf(secret);
+  final salt = _randomBytes(16);
+  final kek = await _kek(secret, salt);
+  return (
+    kind: kind,
+    salt: salt,
+    wrap: await _gcmSeal(kek, contentKey, _wrapAad(atSign, kind, salt)),
+  );
 }
 
 /// An envelope opened with one of its secrets.
@@ -99,7 +99,38 @@ final class OpenedEnvelope {
   /// fresh content nonce.
   Future<Uint8List> reseal(Map<String, dynamic> replacement) =>
       _encode(atSign, replacement, _contentKey, _unlocks);
+
+  /// Seals [plaintext] under the same content key with every existing unlock
+  /// plus a new one for [secret].
+  Future<Uint8List> withUnlock(UnlockSecret secret) async {
+    final newUnlock = await _wrap(atSign, secret, _contentKey);
+    return _encode(atSign, plaintext, _contentKey, [..._unlocks, newUnlock]);
+  }
+
+  /// The server copy [other] with this envelope's unlocks added to its own.
+  ///
+  /// Keeps [other]'s content unchanged and appends each unlock of this
+  /// envelope whose kind and salt [other] does not already hold.
+  ///
+  /// Throws [EnvelopeContentKeyMismatchException] when [other]'s content does
+  /// not open under this envelope's content key.
+  Future<Uint8List> mergeUnlocksFrom(Uint8List other) async {
+    final (otherContent, otherUnlocks) = _parse(atSign, other);
+    if (await _gcmOpen(_contentKey, otherContent, _contentAad(atSign)) ==
+        null) {
+      throw EnvelopeContentKeyMismatchException(
+          'the other envelope is not sealed under this content key');
+    }
+    final held = otherUnlocks.map(_identity).toSet();
+    return _encodeSealed(atSign, otherContent, [
+      ...otherUnlocks,
+      ..._unlocks.where((u) => !held.contains(_identity(u))),
+    ]);
+  }
 }
+
+String _identity(_Unlock unlock) =>
+    '${unlock.kind}|${base64Encode(unlock.salt)}';
 
 Future<Uint8List> _unwrapContentKey(
     String atSign, List<_Unlock> unlocks, UnlockSecret secret) async {
@@ -178,6 +209,10 @@ Future<Uint8List> _encode(String atSign, Map<String, dynamic> plaintext,
     Uint8List contentKey, List<_Unlock> unlocks) async {
   final content = await _gcmSeal(
       contentKey, utf8.encode(jsonEncode(plaintext)), _contentAad(atSign));
+  return _encodeSealed(atSign, content, unlocks);
+}
+
+Uint8List _encodeSealed(String atSign, _Sealed content, List<_Unlock> unlocks) {
   return utf8.encode(jsonEncode({
     'v': 1,
     'atSign': atSign,

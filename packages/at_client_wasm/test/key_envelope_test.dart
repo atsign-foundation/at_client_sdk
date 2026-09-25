@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client_wasm/src/keys/envelope_exceptions.dart';
@@ -189,6 +190,116 @@ void main() {
     test('not JSON', () async {
       await expectLater(codec.open('@alice', utf8.encode('not json'), prf),
           throwsA(isA<UnsupportedEnvelopeException>()));
+    });
+  });
+
+  group('withUnlock', () {
+    test('adds unlock and preserves plaintext', () async {
+      final envelope = await codec.seal('@alice', plaintext, [prfOther]);
+      final opened = await codec.open('@alice', envelope, prfOther);
+
+      final modifiedEnvelope = await opened.withUnlock(prf);
+
+      expect((await codec.open('@alice', modifiedEnvelope, prf)).plaintext,
+          plaintext);
+      expect((await codec.open('@alice', modifiedEnvelope, prfOther)).plaintext,
+          plaintext);
+
+      final modifiedJson = jsonDecode(utf8.decode(modifiedEnvelope));
+      expect((modifiedJson['unlocks'] as List).length, 2);
+
+      final originalJson = jsonDecode(utf8.decode(envelope));
+      expect(modifiedJson['unlocks'][0], originalJson['unlocks'][0]);
+    });
+  });
+
+  group('mergeUnlocksFrom', () {
+    test('merges unlocks successfully keeping content identical', () async {
+      final serverEnvelope = await codec.seal('@alice', plaintext, [prfOther]);
+
+      final openedServer = await codec.open('@alice', serverEnvelope, prfOther);
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codec.open('@alice', localEnvelope, prf);
+
+      final mergedEnvelope = await openedLocal.mergeUnlocksFrom(serverEnvelope);
+
+      final mergedJson = jsonDecode(utf8.decode(mergedEnvelope));
+      final serverJson = jsonDecode(utf8.decode(serverEnvelope));
+
+      expect(mergedJson['content']['iv'], serverJson['content']['iv']);
+      expect(mergedJson['content']['ct'], serverJson['content']['ct']);
+
+      expect((await codec.open('@alice', mergedEnvelope, prf)).plaintext,
+          plaintext);
+      expect((await codec.open('@alice', mergedEnvelope, prfOther)).plaintext,
+          plaintext);
+    });
+
+    test('survives server reseal', () async {
+      final serverEnvelope = await codec.seal('@alice', plaintext, [prfOther]);
+      final openedServer = await codec.open('@alice', serverEnvelope, prfOther);
+
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codec.open('@alice', localEnvelope, prf);
+
+      final replacement = {'new': 'data'};
+      final resealedServer = await openedServer.reseal(replacement);
+
+      final mergedEnvelope = await openedLocal.mergeUnlocksFrom(resealedServer);
+
+      expect((await codec.open('@alice', mergedEnvelope, prf)).plaintext,
+          replacement);
+    });
+
+    test('idempotent merge yields no duplicates', () async {
+      final serverEnvelope = await codec.seal('@alice', plaintext, [prfOther]);
+      final openedServer = await codec.open('@alice', serverEnvelope, prfOther);
+
+      final localEnvelope = await openedServer.withUnlock(prf);
+      final openedLocal = await codec.open('@alice', localEnvelope, prf);
+
+      final merged1 = await openedLocal.mergeUnlocksFrom(serverEnvelope);
+      final openedMerged = await codec.open('@alice', merged1, prf);
+      final merged2 = await openedMerged.mergeUnlocksFrom(serverEnvelope);
+
+      final merged2Json = jsonDecode(utf8.decode(merged2));
+      expect((merged2Json['unlocks'] as List).length, 2);
+    });
+
+    test('different content key throws EnvelopeContentKeyMismatchException',
+        () async {
+      final serverEnvelope = await codec.seal('@alice', plaintext, [prfOther]);
+      final otherEnvelope = await codec.seal('@alice', plaintext, [prf]);
+
+      final openedOther = await codec.open('@alice', otherEnvelope, prf);
+
+      await expectLater(openedOther.mergeUnlocksFrom(serverEnvelope),
+          throwsA(isA<EnvelopeContentKeyMismatchException>()));
+    });
+
+    test('different atSign throws EnvelopeAtSignMismatchException', () async {
+      final serverEnvelope = await codec.seal('@bob', plaintext, [prfOther]);
+      final localEnvelope = await codec.seal('@alice', plaintext, [prf]);
+
+      final openedLocal = await codec.open('@alice', localEnvelope, prf);
+
+      await expectLater(openedLocal.mergeUnlocksFrom(serverEnvelope),
+          throwsA(isA<EnvelopeAtSignMismatchException>()));
+    });
+  });
+
+  group('golden', () {
+    test('read test/fixtures/envelope_v1_golden.json', () async {
+      final file = File('test/fixtures/envelope_v1_golden.json');
+      final goldenBytes = await file.readAsBytes();
+
+      final goldenPrf =
+          PrfSecret(Uint8List.fromList(List.generate(32, (i) => i)));
+
+      final openedPrf = await codec.open('@golden', goldenBytes, goldenPrf);
+
+      expect(openedPrf.plaintext,
+          {"atSign": "@golden", "note": "at_client_wasm envelope v1 golden"});
     });
   });
 }
