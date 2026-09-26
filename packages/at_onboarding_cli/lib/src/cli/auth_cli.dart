@@ -773,10 +773,20 @@ Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
 /// All commands available same as the CLI as a whole, except for
 /// 'onboard' and 'enroll'
 Future<void> interactive(ArgResults argResults, AtClient atClient) async {
+  const String exitHint =
+      'Type "exit" or "quit" to end the interactive session.';
+  stderr.writeln(exitHint);
   // TODO Factor out code which is shared between here and main()
   while (true) {
     stderr.write(r'$ ');
-    List<String> arguments = stdin.readLineSync()!.split(RegExp(r'\s'));
+    final String? line = stdin.readLineSync()?.trim();
+    if (line == null || line == 'exit' || line == 'quit') {
+      return;
+    }
+    if (line.isEmpty) {
+      continue;
+    }
+    final List<String> arguments = line.split(RegExp(r'\s+'));
 
     final AuthCliCommand cliCommand;
     try {
@@ -823,6 +833,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
       switch (cliCommand) {
         case AuthCliCommand.help:
           aca.parser.printAllCommandsUsage(showSubCommandParams: true);
+          stderr.writeln(exitHint);
 
         case AuthCliCommand.onboard:
         case AuthCliCommand.interactive:
