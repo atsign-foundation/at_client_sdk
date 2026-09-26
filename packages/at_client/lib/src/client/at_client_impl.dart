@@ -961,7 +961,7 @@ class AtClientImpl implements AtClient {
     // client whose AtChops was injected never builds one, and it must not
     // sign the preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
-    if (_preference!.isLocalStoreRequired) {
+    if (_injectedStorage != null || _preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
         final injected = _injectedStorage;
@@ -987,9 +987,12 @@ class AtClientImpl implements AtClient {
         syncQueue: syncQueue,
         onEvent: emitDataEvent,
       );
-      _atChops ??= await _createAtChops(_atSign);
-      _validateDefaultCryptoProvider();
+    }
 
+    _atChops ??= await _createAtChops(_atSign);
+    _validateDefaultCryptoProvider();
+
+    if (_preference!.isLocalStoreRequired) {
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
       // cache state (no-op when nothing has TTL).
@@ -1193,6 +1196,14 @@ class AtClientImpl implements AtClient {
   /// Runs [_armAvailableTimer], as a keystore mutation would.
   @visibleForTesting
   Future<void> armAvailableTimerForTest() => _armAvailableTimer();
+
+  /// Whether the expiry timer is currently armed.
+  @visibleForTesting
+  bool get expiryTimerArmedForTest => _expiryTimer != null;
+
+  /// Whether the availability timer is currently armed.
+  @visibleForTesting
+  bool get availableTimerArmedForTest => _availableTimer != null;
 
   /// Runs [_onExpiryFire], as a sweep that the timer started would.
   @visibleForTesting
@@ -2351,11 +2362,11 @@ class AtClientImpl implements AtClient {
     // ignore: deprecated_member_use
     AtPkamKeyPair? atPkamKeyPair;
     try {
-      var encryptionPublicKey = await localSecondary!.getEncryptionPublicKey(
+      var encryptionPublicKey = await localSecondary?.getEncryptionPublicKey(
         atSign,
       );
       var encryptionPrivateKey =
-          await localSecondary!.getEncryptionPrivateKey();
+          await localSecondary?.getEncryptionPrivateKey();
       if (encryptionPublicKey != null && encryptionPrivateKey != null) {
         // ignore: deprecated_member_use
         atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -2367,8 +2378,8 @@ class AtClientImpl implements AtClient {
       _logger.finer('No encryption key pair in $atSign\'s local store: $e');
     }
     try {
-      var pkamPublicKey = await localSecondary!.getPkamPublicKey();
-      var pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
+      var pkamPublicKey = await localSecondary?.getPkamPublicKey();
+      var pkamPrivateKey = await localSecondary?.getPkamPrivateKey();
 
       if (pkamPublicKey != null && pkamPrivateKey != null) {
         // ignore: deprecated_member_use
