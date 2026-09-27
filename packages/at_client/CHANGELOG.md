@@ -209,6 +209,10 @@
   since a client may file the atSign's signing root into it.
 - fix: `get` on a `RemoteOnlyAtClientStorage` client returns the value instead of
   throwing a `TypeError`.
+- breaking: `AtClientStorage.replicatesServer` is a new member; storages extending
+  `AtClientStorageBase` inherit `true`.
+- fix: a client on `RemoteOnlyAtClientStorage` no longer runs sync, and stops logging
+  "Unexpected exception in sync".
 
 ## 3.15.0-rc8
 
