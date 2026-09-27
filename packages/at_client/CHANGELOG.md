@@ -207,6 +207,8 @@
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.
+- fix: `get` on a `RemoteOnlyAtClientStorage` client returns the value instead of
+  throwing a `TypeError`.
 
 ## 3.15.0-rc8
 
