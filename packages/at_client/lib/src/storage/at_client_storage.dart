@@ -59,6 +59,11 @@ abstract class AtClientStorage {
   /// private keys: such a client takes its keys from its `AtKeysIo`, never
   /// from the store.
   bool get holdsKeyMaterial;
+
+  /// Whether [keyStore] is a local replica of the atServer that a sync
+  /// service reconciles. False for a backend that writes straight through to
+  /// the atServer, which leaves nothing to sync.
+  bool get replicatesServer;
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies
@@ -93,6 +98,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
 
   @override
   bool get holdsKeyMaterial => true;
+
+  @override
+  bool get replicatesServer => true;
 
   @override
   bool isHeldBy(AtClient client) => identical(_owner, client);
