@@ -140,6 +140,17 @@ void main() {
       expect(meta?.isBinary, true);
     });
 
+    test('get stamps the AtData with the key it was read under', () async {
+      when(() => remoteSecondary.executeVerb(any()))
+          .thenAnswer((_) async => llookupAllResponse());
+
+      final result = await store.get('@alice:phone@bob');
+
+      expect(result?.key, '@alice:phone@bob',
+          reason: "LocalSecondary's llookup:all reply is AtData.toJson(), and "
+              'GetResponseTransformer reads its key');
+    });
+
     test(
         'AtKey.fromString round-trips the PKAM private key back to the '
         'exact wire string', () async {
