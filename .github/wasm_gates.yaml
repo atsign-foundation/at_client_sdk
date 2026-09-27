@@ -146,11 +146,17 @@ at_client:
       max_blocked_packages: 0
       # The walk is 1074 files.
       min_files_walked: 950
+    - barrel: package:at_client/remote_only.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1075 files.
+      min_files_walked: 950
   probe:
     # at_client_io.dart is absent for the reason at_lookup_io.dart is: dart2wasm
     # stubs dart:io, so its probe would pass and prove nothing.
     - package:at_client/at_client.dart
     - package:at_client/memory.dart
+    - package:at_client/remote_only.dart
   controls:
     # at_client_io.dart reaches dart:io only through at_auth and at_lookup,
     # whose own controls hold those seams; a control here sees at_client's
