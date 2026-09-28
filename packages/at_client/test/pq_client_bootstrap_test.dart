@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
     show
@@ -7,7 +8,8 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart' show RsaKeyPair;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65PureDartAlgo, RsaKeyPair, XWingKeyPair;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -22,8 +24,10 @@ import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -70,6 +74,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(AtKey());
     registerFallbackValue(NotificationParams.forUpdate(AtKey()));
+    registerFallbackValue(UpdateVerbBuilder());
   });
 
   setUp(() {
@@ -303,6 +308,113 @@ void main() {
           isEmpty,
           reason: 'and it is no longer only an info line, which is what let '
               'it sit unread beside every other startup line');
+    });
+
+    test('a step a stop cuts short is reported as abandoned, not as failed',
+        () async {
+      final logs = RecordedLogs();
+      final previousHandler = AtSignLogger.defaultLoggingHandler;
+      final previousLevel = AtSignLogger.root_level;
+      AtSignLogger.defaultLoggingHandler = logs;
+      AtSignLogger.root_level = 'info';
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = previousHandler;
+        AtSignLogger.root_level = previousLevel;
+      });
+      final bootstrap = build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        mintInUseSigningKeys: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        publishRootLink: false,
+        publishChainLink: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+        askOnReadMiss: false,
+      ));
+      // NOTE: the sharing stops on its own, so the step meets the stop while
+      // the bootstrap has not yet heard of it.
+      bootstrap.sharing.stop();
+
+      await bootstrap.startup();
+
+      final warnings = logs.at('WARNING').toList();
+      expect(warnings.where((m) => m.contains('was stopped with')).single,
+          contains('startEnvelopeListener'),
+          reason: 'the step the stop cut short is among what did not happen');
+      expect(warnings.where((m) => m.contains('Could not start the envelope')),
+          isEmpty,
+          reason: 'a stop is not the step failing');
+    });
+
+    test('a privileged start publishes a root a stop kept from publishing',
+        () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      await PqSigningRoot(client, keysIo: keysIo)
+          .store('@bootstrap🛠', pair.secretKey, public: pair.publicKey);
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      final written = <String>[];
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0];
+        if (builder is UpdateVerbBuilder) written.add(builder.atKey.key);
+        return 'data:1';
+      });
+
+      await PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        gates: const PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestMissingPrivates: false,
+          publishRootLink: false,
+          publishChainLink: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      ).startup();
+
+      expect(written, contains(PqSigningRoot.recordName),
+          reason: 'the pair this enrollment filed is the root, and nothing '
+              'else on a start would ever publish it');
+    });
+
+    test('a secret an envelope delivers is filed into the keyfile', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+      );
+      final pair = await XWingKeyPair.generate();
+
+      await bootstrap.sharing.fileReceivedSecret!(Secret(
+          namespace: 'wavi',
+          name: '${NskeyPrivateFiling.secretNamePrefix}kid-1',
+          value: base64Encode(pair.privateKeyBytes)));
+
+      expect(await bootstrap.filing!.read('wavi', 'kid-1'), isNotNull,
+          reason: 'a sweep deletes the envelope once handled, so what it '
+              'carried has to be on disk by then');
     });
 
     test('a signer answers while a startup step is still parked', () async {

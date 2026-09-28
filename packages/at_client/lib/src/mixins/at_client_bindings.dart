@@ -41,8 +41,13 @@ mixin AtClientBindings {
           logger.info('ERROR:$notification');
         },
       );
-    } while (result.atClientException != null && attempts < maxTries);
-    if (result.atClientException != null) {
+    } while (result.atClientException != null &&
+        attempts < maxTries &&
+        !atClient.isStopped);
+    if (result.atClientException != null && atClient.isStopped) {
+      logger.warning('Stopped sending ${atKey.toString()} notification: the '
+          'client stopped');
+    } else if (result.atClientException != null) {
       logger.warning(
           'Failed to send ${atKey.toString()} notification within $maxTries attempts.');
     }

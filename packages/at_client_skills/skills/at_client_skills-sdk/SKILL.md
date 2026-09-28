@@ -442,6 +442,9 @@ await client.connection.attempt();                  // try again now
   closes storage built with `closedByClient: true`. It does **not** drain: a
   sync round in flight is abandoned and its work stays queued for the next
   client on that store. Wait for `isInSync()` first if the writes must land.
+- Work the stop cuts short, and any later call on the client, fails with
+  `StoppedException` (at_commons). It is not an `AtException`: catch it by
+  type to treat a stop as expected rather than as an error.
 - A stopped client is not restarted — open the atSign again.
 - `AtClientManager.getInstance().use(client)` makes a client current for code
   that reads `AtClientManager.getInstance().atClient`; `use` does **not** stop
@@ -656,8 +659,8 @@ for the full migration table from old `AtCollectionModel` patterns to
   todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
 - `packages/at_client/example/bin/notifications.dart` — minimal
   `NotificationService` send/subscribe
-- `packages/at_client_flutter/examples/todos/` — canonical Flutter reference app
-- `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
+- `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
+- `packages/at_client_flutter/example/dockerstats/` — notifications + SQLite
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
 `AtCollection<T>`:** Both APIs share the same underlying atServer keystore but

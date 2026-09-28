@@ -36,6 +36,9 @@ class SyncServiceImpl implements SyncService {
   static int queueSize = 10;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
+
+  /// Whether [create] built [_remoteSecondary], and so [close] closes it.
+  final bool _ownsRemoteSecondary;
   StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
   /// utility method to reduce code verbosity in this file
@@ -163,8 +166,10 @@ class SyncServiceImpl implements SyncService {
       AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       bool warmStartSync = true}) async {
+    final ownsRemoteSecondary = remoteSecondary == null;
     remoteSecondary ??= remoteSecondaryFor(atClient);
-    final syncService = SyncServiceImpl._(atClient, remoteSecondary);
+    final syncService = SyncServiceImpl._(atClient, remoteSecondary,
+        ownsRemoteSecondary: ownsRemoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
     if (warmStartSync) {
@@ -205,7 +210,9 @@ class SyncServiceImpl implements SyncService {
               atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
           lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
 
-  SyncServiceImpl._(this._atClient, this._remoteSecondary) {
+  SyncServiceImpl._(this._atClient, this._remoteSecondary,
+      {required bool ownsRemoteSecondary})
+      : _ownsRemoteSecondary = ownsRemoteSecondary {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
@@ -271,6 +278,11 @@ class SyncServiceImpl implements SyncService {
   @override
   void addProgressListener(SyncProgressListener listener) {
     _syncProgressListeners.add(listener);
+    if (_closed) {
+      scheduleMicrotask(() {
+        listener.onSyncProgressEvent(_buildStoppedProgress());
+      });
+    }
   }
 
   @override
@@ -389,6 +401,15 @@ class SyncServiceImpl implements SyncService {
       _syncError(syncRequest);
       _syncInProgress = false;
     } catch (e) {
+      if (e is StoppedException || isStopped) {
+        _logger
+            .finer('sync ${syncRequest.id} abandoned: the service was stopped');
+        syncRequest.result!.atClientException = AtClientException(
+            error_codes['AtClientException'], 'SyncService has been stopped');
+        _syncError(syncRequest);
+        _syncInProgress = false;
+        return;
+      }
       // Catch-all: with on-demand triggering, an unhandled exception
       // from the sync path would become an unhandled async error and
       // fail tests / propagate noise. Surface it as a failure
@@ -455,14 +476,22 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  /// Fetches the first app request from the queue. If there are no app requests, the first element of the
-  /// queue is returned.
+  /// Dequeues the request this round answers: an app's request that carries
+  /// its own callback, else the oldest.
+  ///
+  /// Removed, whichever it is. A failed round answers only the request it
+  /// dequeued, so one left in the queue would be run again on the next
+  /// microtask, and again on the one after, for as long as the failure
+  /// lasted.
   SyncRequest _getSyncRequest() {
-    return syncRequests.firstWhere(
-        (syncRequest) =>
-            syncRequest.requestSource == SyncRequestSource.app &&
-            syncRequest.onDone != null,
-        orElse: () => syncRequests.removeFirst());
+    for (final syncRequest in syncRequests) {
+      if (syncRequest.requestSource == SyncRequestSource.app &&
+          syncRequest.onDone != null) {
+        syncRequests.remove(syncRequest);
+        return syncRequest;
+      }
+    }
+    return syncRequests.removeFirst();
   }
 
   void _syncError(SyncRequest syncRequest) {
@@ -792,6 +821,7 @@ class SyncServiceImpl implements SyncService {
       } on _SyncAbandoned {
         rethrow;
       } on Exception catch (e) {
+        if (e is StoppedException || isStopped) throw const _SyncAbandoned();
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
         final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
@@ -844,7 +874,10 @@ class SyncServiceImpl implements SyncService {
             SyncDirection.localToRemote,
             _syncQueueOpToCommitOp(source.op),
           ));
+        } on _SyncAbandoned {
+          rethrow;
         } on Exception catch (e) {
+          if (e is StoppedException || isStopped) throw const _SyncAbandoned();
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception processing batch response entry $entry: $cause');
@@ -1107,6 +1140,8 @@ class SyncServiceImpl implements SyncService {
       await _atClient.put(_lastReceivedServerCommitIdAtKey,
           lastReceivedServerCommitId.toString(),
           putRequestOptions: _watermarkPutOptions);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.warning('Failed to persist the pull cursor at '
           '$lastReceivedServerCommitId; the next sync re-reads from the '
@@ -1129,7 +1164,7 @@ class SyncServiceImpl implements SyncService {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
-      if (isStopped) {
+      if (e is StoppedException || isStopped) {
         _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
             'the service was stopped ($e)');
         throw const _SyncAbandoned();
@@ -1189,6 +1224,8 @@ class SyncServiceImpl implements SyncService {
         await _atClient.put(
             _skipDeletesUntilCommitId, serverCommitId.toString(),
             putRequestOptions: _watermarkPutOptions);
+      } on StoppedException {
+        rethrow;
       } catch (e) {
         _logger.warning('Failed to persist skipDeletesUntil at '
             '$serverCommitId; this sync still skips deletes, but if it is '
@@ -1267,6 +1304,8 @@ class SyncServiceImpl implements SyncService {
         }
       }
       return conflictInfo;
+    } on StoppedException {
+      rethrow;
     } catch (e, st) {
       conflictInfo.errorOrExceptionMessage =
           'Exception occurred when setting conflict info for $clientAtKey | $e';
@@ -1308,6 +1347,8 @@ class SyncServiceImpl implements SyncService {
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
           lastReceivedServerCommitId == serverCommitId;
+    } on StoppedException {
+      rethrow;
     } on Exception catch (e) {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');
@@ -1640,7 +1681,12 @@ class SyncServiceImpl implements SyncService {
   /// [addProgressListener]. The sync queue starts empty after restart
   /// (it was drained on [stop]). Idempotent — calling [restart] when
   /// not stopped is a no-op.
+  ///
+  /// Throws [StoppedException] after [close].
   Future<void> start() async {
+    if (_closed) {
+      throw StoppedException('the sync service for $currentAtSign is closed');
+    }
     if (!isStopped) {
       _logger.finer('restart() called, but service is not stopped. Ignoring.');
       return;
@@ -1654,10 +1700,30 @@ class SyncServiceImpl implements SyncService {
     sync();
   }
 
+  bool _closed = false;
+
+  /// Stops this service for good, and closes the connection it opened for
+  /// itself before returning.
+  Future<void> close() async {
+    _closed = true;
+    await stop();
+    if (_ownsRemoteSecondary) await _remoteSecondary.closeConnection();
+  }
+
+  SyncProgress _buildStoppedProgress() {
+    return SyncProgress()
+      ..atSign = currentAtSign
+      ..syncStatus = SyncStatus.failure
+      ..atClientException = AtClientException(
+          error_codes['AtClientException'], 'SyncService has been stopped')
+      ..message = 'SyncService stopped'
+      ..stopped = true;
+  }
+
   void _drainSyncQueue() {
     // 1. Drain the sync request queue with errors
-    final exception = AtClientException(
-        error_codes['AtClientException'], 'SyncService has been stopped');
+    final progress = _buildStoppedProgress();
+    final exception = progress.atClientException;
 
     while (syncRequests.isNotEmpty) {
       final request = syncRequests.removeFirst();
@@ -1669,12 +1735,6 @@ class SyncServiceImpl implements SyncService {
     }
 
     // 2. Notify progress listeners of the failure
-    var progress = SyncProgress()
-      ..atSign = currentAtSign
-      ..syncStatus = SyncStatus.failure
-      ..atClientException = exception
-      ..message = 'SyncService stopped';
-
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(progress);

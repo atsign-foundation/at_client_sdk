@@ -11,6 +11,9 @@ import 'test_utils/recorded_logs.dart';
 
 class _FakeMonitor extends Fake implements Monitor {
   @override
+  Future<void> close() async {}
+
+  @override
   NotificationListenerState currentState =
       NotificationListenerState.notConnected;
 

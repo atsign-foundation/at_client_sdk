@@ -5,10 +5,11 @@ import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
 import 'package:at_commons/at_commons.dart' show AtEnrollmentException;
 import 'package:meta/meta.dart' show experimental;
 
-/// Conveys to an approved enrollment the secrets its approval entitles it
-/// to: its symmetric key when the approver minted one, an approval-chain
-/// link, the signing root when it is fully privileged, the nskey privates
-/// for its namespaces, and the existing app secrets they authorise.
+/// Conveys to an enrollment the secrets its approval entitles it to: its
+/// symmetric key when the approver minted one, before the approval, and
+/// after it an approval-chain link, the signing root when it is fully
+/// privileged, the nskey privates for its namespaces, and the existing app
+/// secrets they authorise.
 ///
 /// Whether a conveyance outcome fails the approval is the *caller's* policy,
 /// so implementations report the advertised key package's [KeyPackageStatus]
@@ -29,12 +30,22 @@ abstract interface class EnrollmentConveyance {
   /// just-approved device that will be unable to decrypt anything means for
   /// the approval it has already performed.
   ///
-  /// [mintedApkamSymmetricKey] is the key the approver minted on the
-  /// enrollment's behalf, when the request carried none of its own; it is
-  /// conveyed first, because the enrollee is blocked polling for exactly
-  /// that envelope.
-  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
-      {String? mintedApkamSymmetricKey});
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment);
+
+  /// Seals [apkamSymmetricKey], minted on [pending]'s behalf, to the key
+  /// package its request advertised, before the approval that encrypts under
+  /// it.
+  ///
+  /// The package is not checked against `_apsk`, which the atServer publishes
+  /// only at approval and which that same atServer would serve. Conveys
+  /// nothing when the package is one a newer client wrote and this version
+  /// cannot read, and throws [AtEnrollmentException] when this client has no
+  /// key package to seal from, or when what the enrollment advertised is not
+  /// a key package at all — the approval is spent once it lands, so a device
+  /// that could never receive the key is refused while it is still
+  /// repairable.
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey);
 
   /// Signs and conveys **root** links for approved enrollments that are not
   /// yet root-anchored.

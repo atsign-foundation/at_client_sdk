@@ -1,5 +1,8 @@
 ## 5.18.0
 
+- feat: `StoppedException`, thrown by the work of a stopped `AtClient` and by
+  a call on a closed at_lookup connection. It is not an `AtException`, so a
+  catch that falls back on an ordinary failure does not take a stop for one.
 - feat: `Atsign(String)` constructs an atSign the same way `toAtsign()` does,
   so `Atsign('@alice')` reads as it looks; the two routes cannot disagree.
 - feat: `EnrollmentConstants.primaryEnrollmentId` (`primary`) names the

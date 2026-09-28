@@ -20,6 +20,7 @@ MockAtLookupImpl lookUpAnswering(Future<bool> Function() onPkam) {
   when(() => lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
       .thenAnswer((_) => onPkam());
   when(() => lookUp.close()).thenAnswer((_) async {});
+  when(() => lookUp.dropConnection()).thenAnswer((_) async {});
   when(() => lookUp.isConnectionAvailable()).thenReturn(false);
   return lookUp;
 }

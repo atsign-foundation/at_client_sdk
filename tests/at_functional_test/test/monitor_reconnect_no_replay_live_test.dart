@@ -86,7 +86,7 @@ void main() {
     await notifyAndAwait('first');
 
     logger.info('closing the notification connection');
-    await monitor.lookUp.close();
+    await monitor.lookUp.dropConnection();
 
     // Arrives only once the connection has come back.
     await notifyAndAwait('second');

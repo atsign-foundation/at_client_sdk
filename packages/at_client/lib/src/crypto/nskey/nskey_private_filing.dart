@@ -21,12 +21,21 @@ import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
-import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 final _logger = AtSignLogger('NskeyPrivateFiling');
+
+/// One private filed for a namespace: the generation it opens, its seed, the
+/// algorithm it was filed under, and when it was filed.
+typedef FiledNskeySeed = ({
+  String nskeyKid,
+  NskeySeed seed,
+  String keyAlgo,
+  DateTime createdAt,
+});
 
 /// Moves an arriving nskey private out of the secret-sharing transit buffer
 /// and into [AtKeys], where key material that must survive a restart belongs.
@@ -187,6 +196,8 @@ class NskeyPrivateFiling {
     if (lookup == null) return null;
     try {
       return await lookup(namespace, nskeyKid);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.info('Could not fetch the published nskey for '
           '$namespace:$nskeyKid: $e');
@@ -317,6 +328,29 @@ class NskeyPrivateFiling {
       _logger.finer('No nskey private for $namespace:$nskeyKid ($e)');
       return null;
     }
+  }
+
+  /// Every private filed for [namespace], with the algorithm it was filed
+  /// under and when; an entry under an algorithm this build cannot expand is
+  /// left out.
+  Future<List<FiledNskeySeed>> filedFor(String namespace) async {
+    final keys = await _readSourceOrNull('every private for $namespace');
+    if (keys == null) return const [];
+    final prefix = '$nskeyKeyfileIdPrefix$namespace.';
+    return [
+      for (final material in keys.atSignKeys)
+        if (material.role == CryptographicMaterialRole.privateDecapsulation &&
+            material.keyId.startsWith(prefix) &&
+            !material.keyId.substring(prefix.length).contains('.'))
+          if (SecretSharingAlgos.keyAlgoForMaterial(material.algorithm)
+              case final keyAlgo?)
+            (
+              nskeyKid: material.keyId.substring(prefix.length),
+              seed: NskeySeed(Uint8List.fromList(material.bytes.bytes)),
+              keyAlgo: keyAlgo,
+              createdAt: material.createdAt,
+            )
+    ];
   }
 
   /// Every private this keyfile holds, grouped by namespace: `{namespace:

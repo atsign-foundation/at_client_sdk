@@ -477,6 +477,99 @@ void main() {
       await sub.cancel();
     });
 
+    test('a received secret is filed before its envelope is deleted', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final envelopesWhenFiled = <int>[];
+      sharerB.fileReceivedSecret = (secret) async => envelopesWhenFiled
+          .add(remoteData.keys.where((k) => k.contains('.__ssenv.')).length);
+
+      expect(await sharerB.sweepOnce(), 1);
+
+      expect(envelopesWhenFiled, [1],
+          reason: 'filed while the envelope still exists, so it is never the '
+              'only copy of the secret that is lost');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+
+    test('a secret that cannot be filed keeps its envelope', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      expect(
+          remoteData.keys.where((k) => k.contains('.__ssenv.')), hasLength(1),
+          reason: 'deleting it would leave the secret only in memory, gone at '
+              'the next stop');
+    });
+
+    test('a secret that cannot be filed still reaches whoever waits for it',
+        () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final received = <ReceivedSecret>[];
+      final sub = sharerB.receivedSecrets.listen(received.add);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+
+      expect(await sharerB.sweepOnce(), 0);
+      await Future.delayed(Duration.zero); // let the stream deliver
+
+      expect(received.map((r) => r.secret.value), ['v1'],
+          reason: 'the store holds it by now, so a waiter is owed it whether '
+              'the filing worked or not - it hangs out its timeout otherwise');
+      await sub.cancel();
+    });
+
+    test('the retry a kept envelope buys reaches the filing', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+      expect(await sharerB.sweepOnce(), 0);
+
+      // The next start: a fresh client, the envelope still there, and a store
+      // that kept what the attempt that failed had already committed to it.
+      final restarted = buildSharer('enroll-b', seedB);
+      await restarted.register();
+      await restarted.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      final filed = <String>[];
+      restarted.fileReceivedSecret = (secret) async => filed.add(secret.value);
+
+      expect(await restarted.sweepOnce(), 1);
+
+      expect(filed, ['v1'],
+          reason: 'the envelope is kept for a retry, so the retry has to get '
+              'past the store already holding what it carries');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and the envelope goes once the filing has worked');
+    });
+
+    test('a stale copy of a secret we hold is not filed', () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: 'token', value: 'new', version: 2));
+      await sharerA.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: 'token', value: 'old', version: 1));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final filed = <String>[];
+      sharerB.fileReceivedSecret = (secret) async => filed.add(secret.value);
+
+      expect(await sharerB.sweepOnce(), 1);
+
+      expect(filed, isEmpty,
+          reason: 'filing an older secret would put stale key material in the '
+              'keyfile, and the store has already refused it');
+      expect(sharerB.secretStore.getSecret('myapp', 'token')!.value, 'new');
+    });
+
     test('a dotted application namespace survives the round trip intact',
         () async {
       // regression: AtKey.namespace is only the LAST dot segment, so the
@@ -889,6 +982,16 @@ void main() {
       expect(secret.value, 'v1');
     });
 
+    test('a stop after a wait answered from the store raises nothing',
+        () async {
+      await sharerB.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerB.waitForSecret('myapp', 'token');
+
+      sharerB.stop();
+      await Future.delayed(Duration(milliseconds: 20));
+    });
+
     test('completes when the secret arrives after the wait starts', () async {
       final wait = sharerB.waitForSecret('myapp', '__rk.current',
           timeout: Duration(seconds: 5));
@@ -913,6 +1016,24 @@ void main() {
           sharerB.waitForSecret('myapp', 'never',
               timeout: Duration(milliseconds: 100)),
           throwsA(isA<TimeoutException>()));
+    });
+
+    test('a stop ends a long wait at once', () async {
+      final waited = Stopwatch()..start();
+      final wait = expectLater(
+          sharerB.waitForSecret('myapp', 'never',
+              timeout: Duration(minutes: 5)),
+          throwsA(isA<StoppedException>()),
+          reason: 'a stopped client has nothing left to wait with, and a '
+              'five-minute timer would keep its process alive');
+      await Future.delayed(Duration(milliseconds: 20));
+
+      sharerB.stop();
+      await wait;
+
+      expect(waited.elapsed, lessThan(Duration(seconds: 2)));
+      await expectLater(sharerB.waitForSecret('myapp', 'never'),
+          throwsA(isA<StoppedException>()));
     });
   });
 
@@ -1055,6 +1176,28 @@ void main() {
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
           'KEYBYTES');
+    });
+
+    test('a holder stopped during its answer jitter does not answer', () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.jitter', value: 'KEYBYTES'),
+          allowReservedName: true);
+      sharerB.requestAnswerJitter = Duration(seconds: 5);
+      await sharerA
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.jitter']);
+      final waited = Stopwatch()..start();
+      final sweeping = sharerB.sweepOnce();
+      await Future.delayed(Duration(milliseconds: 50));
+
+      sharerB.stop();
+      await sweeping.timeout(Duration(seconds: 2),
+          onTimeout: () => fail('the jitter was not cut short by the stop'));
+
+      expect(waited.elapsed, lessThan(Duration(seconds: 2)));
+      expect(
+          remoteData.keys.where((k) => k.contains('.${sharerA.kpid}.__ssenv.')),
+          isEmpty,
+          reason: 'a stopped client answers nothing');
     });
 
     test('a second holder stays quiet once another has answered', () async {

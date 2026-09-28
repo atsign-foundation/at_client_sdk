@@ -71,13 +71,12 @@ void main() {
     );
   }
 
-  /// The key package the atServer is serving for [client], verified against
-  /// the enrollment's own advertised signing key the way a peer verifies it.
+  /// The metadata the atServer serves for [client]'s enrollment.
   ///
   /// NOTE: read through `enroll:listns`, not `enroll:fetch` — `enroll:fetch`
   /// returns five fields and `metadata` is not among them, and `listns` is the
   /// verb a peer discovers a key package through.
-  Future<KeyPackage> servedPackage(EnrolledClient client) async {
+  Future<Map<String, dynamic>> servedMetadata(EnrolledClient client) async {
     final raw = await lookupOf(client)
         .executeCommand('enroll:listns:$namespace\n', auth: true);
     final decoded =
@@ -91,8 +90,31 @@ void main() {
     expect(metadata, isA<Map>(),
         reason: 'the enrollment advertises no metadata at all, so there is no '
             'key package to have amended');
-    final envelope = SignedEnvelope.fromJson((metadata as Map)
-        .cast<String, dynamic>()['keyPackage'] as Map<String, dynamic>);
+    return (metadata as Map).cast<String, dynamic>();
+  }
+
+  /// Puts back the key package [client] advertises now, once the test ends.
+  ///
+  /// For a test that amends the package with an unsigned stand-in: left
+  /// approved, the enrollment is refused by every peer that seals on this
+  /// atSign for the rest of the run, and each refusal logs at severe.
+  /// [client]'s PQ startup is awaited first, so what is put back is not a
+  /// package its startup has since replaced.
+  Future<void> restoreKeyPackageAfterTest(EnrolledClient client) async {
+    await (client.client as AtClientImpl).pqBootstrap!.startupComplete;
+    final advertised = (await servedMetadata(client))['keyPackage'];
+    addTearDown(() => EnrollmentUpdater().update(
+        EnrollmentUpdateRequest(
+            enrollmentId: client.enrollmentId,
+            metadata: {'keyPackage': advertised}),
+        lookupOf(client)));
+  }
+
+  /// The key package the atServer is serving for [client], verified against
+  /// the enrollment's own advertised signing key the way a peer verifies it.
+  Future<KeyPackage> servedPackage(EnrolledClient client) async {
+    final envelope = SignedEnvelope.fromJson(
+        (await servedMetadata(client))['keyPackage'] as Map<String, dynamic>);
     // NOTE: against the `_apsk` the atServer is SERVING, not a key this test
     // holds. A peer has only the record, and a locally remembered key would
     // still pass if the amendment published an advertisement that disagreed
@@ -159,6 +181,7 @@ void main() {
   test('UC-A2.6 · only the enrollment itself may amend its metadata', () async {
     final mine = await enrol('a26-mine', const [SecretSharingAlgos.xWing]);
     final other = await enrol('a26-other', const [SecretSharingAlgos.xWing]);
+    await restoreKeyPackageAfterTest(mine);
 
     // A well-formed metadata amendment, so that every refusal below is about
     // WHO asked rather than about the request being malformed.
@@ -227,7 +250,7 @@ void main() {
     // sends one named key either way, so a client-side test could not tell a
     // merge from a replace.
     final client = await enrol('a25-merge', const [SecretSharingAlgos.xWing]);
-    await (client.client as AtClientImpl).pqBootstrap!.startupComplete;
+    await restoreKeyPackageAfterTest(client);
 
     // A field this build has no opinion about, standing in for one a later
     // build adds.
@@ -252,14 +275,7 @@ void main() {
         }),
         lookupOf(client));
 
-    final raw = await lookupOf(client)
-        .executeCommand('enroll:listns:$namespace\n', auth: true);
-    final decoded =
-        jsonDecode(raw!.replaceFirst(RegExp(r'^data:'), '')) as List;
-    final mine = decoded
-        .cast<Map<String, dynamic>>()
-        .firstWhere((e) => e['enrollmentId'] == client.enrollmentId);
-    final metadata = (mine['metadata'] as Map).cast<String, dynamic>();
+    final metadata = await servedMetadata(client);
 
     expect(metadata['somethingLaterBuildsAdded'], 'keep me',
         reason: 'a write naming keyPackage must not withdraw a sibling key it '
@@ -276,11 +292,13 @@ void main() {
   ///
   /// NOTE: the client cache is evicted first. `AtClientImpl` files clients
   /// by `(atSign, enrollmentId)`, and `open` refuses a second client for an
-  /// enrollment that is still filed as live.
+  /// enrollment that is still filed as live. The evicted client keeps running
+  /// until the test ends, since the caller may still read through it.
   Future<AtClient> reopen(
       String device, String enrollmentId, List<String> algorithms) async {
-    AtClientImpl.atClientInstanceMap
+    final evicted = AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
+    if (evicted != null) addTearDown(evicted.stop);
     final keysIo = keyfiles[device]!;
     expect(
         await Atsign(atSign).authenticatesAs(
@@ -421,8 +439,7 @@ void main() {
       await (client.client as AtClientImpl).pqBootstrap!.startupComplete;
       // A second client for this enrollment, differing only in the sender
       // order. Evicted first, as any second construction must be.
-      AtClientImpl.atClientInstanceMap
-          .remove(AtClientImpl.instanceKey(atSign, client.enrollmentId));
+      await client.client.stop();
       final preference = TestUtils.getPreference(atSign,
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
           sealsToKeyAlgorithms: order,

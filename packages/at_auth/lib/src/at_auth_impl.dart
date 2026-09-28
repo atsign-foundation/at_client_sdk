@@ -220,11 +220,11 @@ class AtAuthImpl implements AtAuth {
       signingAlgo: atOnboardingRequest.signingAlgoType,
     );
 
-    //4. Close connection to server
+    //4. Drop the CRAM-authenticated connection; the PKAM below opens another
     try {
-      await atLookUp.close();
+      await atLookUp.dropConnection();
     } on Exception catch (e) {
-      _logger.severe('error while closing connection to server: $e');
+      _logger.severe('error while dropping the connection to server: $e');
     }
 
     //6. Do pkam auth

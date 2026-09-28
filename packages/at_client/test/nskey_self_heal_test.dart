@@ -141,6 +141,59 @@ void main() {
           names: any(named: 'names')));
     });
 
+    test('asks for every advertised generation it lacks, not only the pick',
+        () async {
+      final atClient = client();
+      final held = await filing();
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final mlKemPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final advertisement = NskeyAdvertisement(
+        v: nskeyAdvertisementVersion,
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: pair.publicKeyBytes),
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: mlKemPair.publicKey),
+        ],
+      );
+      // NOTE: held is the entry a sender with no preference picks, so asking
+      // only for that one asks for nothing.
+      final picked = advertisement.nskeyKid;
+      final other = advertisement.keys.firstWhere((k) => k.kid != picked).kid;
+      await held.store(
+          namespace: namespace,
+          nskeyKid: picked,
+          seed: NskeySeed(picked == nskeyKidOf(pair.publicKeyBytes)
+              ? pair.privateKeyBytes
+              : mlKemPair.secretKey));
+      final ring = PublishedNskeyKeyRing(atClient, privateFiling: held);
+      ring.rememberOwn(atSign, namespace, advertisement);
+
+      final sharing = MockPairwiseSecretSharing();
+      when(() => sharing.requestSecretsFromNamespace(any(),
+          names: any(named: 'names'))).thenAnswer((_) async => 1);
+      when(() => sharing.waitForSecret(any(), any(),
+              timeout: any(named: 'timeout')))
+          .thenAnswer((_) => Completer<Secret>().future);
+
+      expect(
+          await NskeySeeding(
+                  atClient: atClient, ring: ring, privateFiling: held)
+              .requestMissingPrivates(sharing),
+          {namespace});
+      final captured = verify(() => sharing.requestSecretsFromNamespace(
+          namespace,
+          names: captureAny(named: 'names'))).captured.single as List<String>;
+      expect(captured, ['${NskeyPrivateFiling.secretNamePrefix}$other'],
+          reason: 'a key added under a second algorithm opens values sealed '
+              'to it, and nothing else asks for its private');
+    });
+
     test('does not ask on cold start — minting\'s business, not pulling\'s',
         () async {
       final atClient = client();

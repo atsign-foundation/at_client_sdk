@@ -281,7 +281,7 @@ dart run bin/dockerstats_publish.dart \
 
 ```sh
 # Terminal 2 — Flutter dashboard.
-cd packages/at_client_flutter/examples/dockerstats
+cd packages/at_client_flutter/example/dockerstats
 flutter pub get
 flutter run -d macos    # or linux / windows / android / ios
 ```
@@ -298,7 +298,7 @@ all the window selectors without waiting for a real publisher to
 emit samples for hours / days / months, use the seed-DB tool:
 
 ```sh
-cd packages/at_client_flutter/examples/dockerstats
+cd packages/at_client_flutter/example/dockerstats
 
 # 1. Bootstrap the DB by launching the app once.
 flutter run -d macos -t lib/main_smoke.dart \

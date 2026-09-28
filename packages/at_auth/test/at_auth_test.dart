@@ -149,7 +149,7 @@ void main() {
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
 
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
 
@@ -167,7 +167,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenThrow(
           AtEnrollmentException('server refused: enrollment quota exceeded'));
 
@@ -199,7 +199,7 @@ void main() {
               any(that: startsWith('enroll:request')))).thenAnswer((_) =>
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
@@ -235,7 +235,7 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
@@ -280,6 +280,31 @@ void main() {
           reason: 'the reinstall is the fix; one install means it was dropped');
     });
 
+    test('the activation PKAM goes over the same lookup, so it is not closed',
+        () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async {});
+      when(() => mockAtLookUp.close()).thenAnswer((_) async {});
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
+          Future.value(
+              AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
+
+      await atAuth.onboard(
+          AtOnboardingRequest('@alice🛠',
+              signingAlgoType: SigningAlgoType.rsa2048)
+            ..atKeysIo = InMemoryAtKeysIo(),
+          testCramSecret);
+
+      // NOTE: a closed lookup refuses every later call, the PKAM included.
+      verifyNever(() => mockAtLookUp.close());
+      verify(() => mockAtLookUp.dropConnection()).called(1);
+    });
+
     test('Test onboard with default appName and deviceName', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(true));
@@ -290,7 +315,7 @@ void main() {
               any(that: startsWith('enroll:request')))).thenAnswer((_) =>
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
-      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =

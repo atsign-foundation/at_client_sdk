@@ -8,9 +8,13 @@ library;
 import 'dart:convert' show base64Decode;
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/enrollment_approval.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -35,9 +39,15 @@ void main() {
   });
 
   /// Submits a real `enroll:request` in pq mode and returns what the enrolling
-  /// side keeps: its enrollment id, the kpid it advertised, and the `AtKeys`
-  /// holding the key package's private half.
-  Future<({String enrollmentId, String kpid, AtKeys keys})> enrolAsPq() async {
+  /// side keeps: its enrollment id, the kpid it advertised, the `AtKeys`
+  /// holding the key package's private half, and the response to wait on.
+  Future<
+      ({
+        String enrollmentId,
+        String kpid,
+        AtKeys keys,
+        AtEnrollmentResponse response
+      })> enrolAsPq() async {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
@@ -73,6 +83,7 @@ void main() {
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
       keys: enrolleeKeys!,
+      response: response,
     );
   }
 
@@ -125,7 +136,7 @@ void main() {
 
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: Duration(seconds: 20));
-    final symmetricKey = await resolve(enrolled.keys, enrolleeLookup);
+    final symmetricKey = await resolve(enrolled.keys, enrolleeLookup).first;
 
     expect(symmetricKey, isNotEmpty,
         reason: 'without this the enrollment authenticates and then cannot '
@@ -133,5 +144,45 @@ void main() {
     expect(base64Decode(symmetricKey).length, 32,
         reason: 'an AES-256 key, which is what the encryption private key and '
             'the self-encryption key were wrapped under');
+  });
+
+  test(
+      'a key conveyed by an approval that did not land leaves the enrollee '
+      'able to complete', () async {
+    final sharing = AtClientSecretSharing.forClient(atClient);
+    await sharing.register();
+    final enrolled = await enrolAsPq();
+
+    // NOTE: what a stop between conveying the minted key and approving leaves
+    // behind: a key conveyed to the package that no approval encrypted under.
+    final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
+        .firstWhere((e) => e.enrollmentId == enrolled.enrollmentId);
+    final leftOver = AESKey.generate(32).key;
+    await sharing.shareSecretWith(
+        KeyPackage.fromPayload(
+            SignedEnvelope.fromJson(record.metadata!['keyPackage'] as Map)
+                .payload,
+            enrollmentId: enrolled.enrollmentId),
+        Secret(
+            namespace: namespace,
+            name: enrollmentApkamSymmetricKeySecretName,
+            value: leftOver),
+        inReplyTo: EnvelopeAddressing.unsolicited);
+
+    await atClient.enrollmentService!
+        .approve(EnrollmentRequestDecision.approved(
+      atSign: atSign,
+      enrollmentId: enrolled.enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString(''),
+    ));
+    await awaitEnrollmentApproval(enrolled.response,
+        atSign: atSign, rootDomain: TestUtils.rootDomain);
+
+    final keys = await enrolled.response.session!.atKeysIo.read(atSign);
+    expect(keys.enrollmentSymmetricKey?.key, isNot(leftOver),
+        reason: 'the left-over key decrypts nothing the approval encrypted');
+    expect(keys.encryptionKeyPair, isNotNull,
+        reason: 'the enrollee kept the key the approval encrypted under, '
+            'whichever order the two envelopes were found in');
   });
 }

@@ -51,6 +51,7 @@ class AtCollectionMethodImpl {
       atOperationItemStatus.complete = res;
       yield atOperationItemStatus;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       atOperationItemStatus.complete = false;
       atOperationItemStatus.exception = Exception(e.toString());
       yield atOperationItemStatus;
@@ -94,6 +95,7 @@ class AtCollectionMethodImpl {
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         atOperationItemStatus.exception = Exception(e.toString());
         yield atOperationItemStatus;
       }
@@ -147,6 +149,7 @@ class AtCollectionMethodImpl {
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         atOperationItemStatus.exception = Exception(e.toString());
         yield atOperationItemStatus;
         _logger.severe("Error in sharing $atSign $e");
@@ -206,6 +209,7 @@ class AtCollectionMethodImpl {
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         atOperationItemStatus.exception = Exception(e.toString());
         yield atOperationItemStatus;
         _logger.severe("Error in deleting $sharedKey $e");

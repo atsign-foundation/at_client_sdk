@@ -81,10 +81,11 @@ mixin ApkamSigning {
   /// no id of its own to send an `enroll:update` for, so it writes the record
   /// directly.
   ///
-  /// [value] overrides what is published, for the one caller that must
-  /// advertise a key before filing it: [publicSigningKeyValue] is composed from
-  /// what the keyfile holds, and a minter publishes first so that no envelope
-  /// is ever signed under a key the advertisement does not name.
+  /// [value] overrides what is published, for the one caller that advertises
+  /// a key as retired while the keyfile still holds it active:
+  /// [publicSigningKeyValue] is composed from what the keyfile holds, and a
+  /// minter withdraws a key from the advertisement before it files the
+  /// withdrawal.
   ///
   /// Serialised against every other `_apsk` write this process makes for this
   /// client — see [serialiseApskWrite]. The composition happens inside the
@@ -154,11 +155,10 @@ mixin ApkamSigning {
   /// source at all. [apskEntries] advertises that key on exactly the same
   /// condition, so what signs and what is advertised cannot drift apart.
   ///
-  /// ⚠️ A mint publishes its new key before it files it, so between those two
-  /// writes the keyfile does not yet hold what the advertisement names. On an
-  /// enrollment holding no signing key, a read here then takes the
-  /// authentication fallback at the moment the advertisement stops naming it,
-  /// and the envelope verifies against nothing.
+  /// ⚠️ A mint files its new key before it publishes it, so between those two
+  /// writes this answers a key the advertisement does not name yet. An
+  /// envelope signed then verifies once the publish lands, or, if a stop
+  /// lands first, once the next start's republish does.
   Future<List<ApkamSigningKeys>> get signingKeys async {
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;

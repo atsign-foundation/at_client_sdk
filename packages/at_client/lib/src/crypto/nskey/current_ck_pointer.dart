@@ -3,7 +3,7 @@ import 'dart:convert' show jsonDecode, jsonEncode;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
-import 'package:at_commons/at_commons.dart' show AtKey;
+import 'package:at_commons/at_commons.dart' show AtKey, StoppedException;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -47,6 +47,8 @@ class CurrentCkPointer {
       final nskeyKid = decoded['nskeyKid'];
       if (ckKid is! String || nskeyKid is! String) return null;
       return (ckKid: ckKid, nskeyKid: nskeyKid);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.finer('No current-CK pointer for $owner:$ckNs ($e)');
       return null;
@@ -63,6 +65,8 @@ class CurrentCkPointer {
     try {
       await atClient.put(keyFor(atClient, owner, ckNs),
           jsonEncode({'ckKid': ckKid, 'nskeyKid': nskeyKid}));
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.warning('Could not record the current CK for $owner:$ckNs, so a '
           'restart will cut a fresh one: $e');

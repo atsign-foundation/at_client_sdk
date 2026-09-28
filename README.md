@@ -80,7 +80,7 @@ published on
 > they'll be replaced by example application code rather than
 > reusable widget packages. The recommended path for new Flutter
 > work is to read the example app at
-> [`packages/at_client_flutter/examples/todos`](./packages/at_client_flutter/examples/todos)
+> [`packages/at_client_flutter/example/todos`](./packages/at_client_flutter/example/todos)
 > and adapt it directly. The packages will continue to publish
 > until that migration completes.
 

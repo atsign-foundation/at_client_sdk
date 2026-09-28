@@ -88,6 +88,7 @@ void main() {
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) async => true);
     when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
   }

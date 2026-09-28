@@ -15,7 +15,7 @@ import 'package:at_demo_data/at_demo_data.dart';
 
 /// Stands in for a real conveyance resolver where a request advertises a key
 /// package but the test stops before `waitForApproval` would collect one.
-Future<String> _unusedResolver(AtKeys keys, AtLookUp atLookUp) =>
+Stream<String> _unusedResolver(AtKeys keys, AtLookUp atLookUp) =>
     throw StateError('the resolver should not run in this test');
 
 class MockAtLookUp extends Mock implements AtLookupImpl {}
