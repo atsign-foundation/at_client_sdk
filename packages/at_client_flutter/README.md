@@ -60,7 +60,7 @@ to make a fundamental SDK trade-off visible:
 
 ### todos — the idiomatic `AtCollection<T>` Flutter app
 
-[`examples/todos/`](examples/todos/README.md) is the **first
+[`example/todos/`](example/todos/README.md) is the **first
 place to look** when building a real Flutter application on the
 Atsign Protocol that needs a typed shared **dataset**. It drives
 every common collection-shaped pattern through the mobile /
@@ -73,11 +73,11 @@ via `availableAt`. Wire-compatible with the
 so the same data flows live between TUI and Flutter instances.
 
 Full design, source tour, and multi-device demo in
-[`examples/todos/README.md`](examples/todos/README.md).
+[`example/todos/README.md`](example/todos/README.md).
 
 ### dockerstats — live container telemetry
 
-[`examples/dockerstats/`](examples/dockerstats/README.md) is the
+[`example/dockerstats/`](example/dockerstats/README.md) is the
 canonical worked example of an SDK pattern the API doesn't
 impose: **deliver via short-lived notifications, store in a
 relational database**. The publisher (a [Dart CLI](../at_client/example/README.md#dockerstats--notification-based-live-telemetry))
@@ -101,7 +101,7 @@ would be wrong. `AtCollection<T>` is for typed shared *datasets*
 
 Full design, query-time aggregation semantics, and the seed-DB
 workflow for cross-window chart development are in
-[`examples/dockerstats/README.md`](examples/dockerstats/README.md).
+[`example/dockerstats/README.md`](example/dockerstats/README.md).
 
 ## Onboarding, provisioning & timeouts
 

@@ -116,7 +116,7 @@ SQLite pattern:
   Uses `atClient.notificationService.send()` in a polling loop.  
   Short `expiration` (5 min) — stale samples are silently dropped.
 
-- **Flutter subscriber**: `packages/at_client_flutter/examples/dockerstats/`  
+- **Flutter subscriber**: `packages/at_client_flutter/example/dockerstats/`  
   Receives notifications, appends to SQLite, renders charts.
 
 ---
