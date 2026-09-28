@@ -2,18 +2,17 @@
 
 ## 2.0.0-rc1
 
-- feat: `PkamDialog`, `CramDialog` and `ApkamActivationDialog` take
-  `lookUps:`, at_client's `AtLookUpFactory`, and hand it to the verb they
-  run, so every connection the client they hand back opens travels the way
-  the app chose; `AtsignFlows` carries it. The third leg of the platform
-  bundle, after `keys:` and `storage:`.
-
 The dialogs and the keychain build on at_client's lifecycle verbs
 (`Atsign.open`, `activate`, `enroll` and `resumeEnrollment`, and
 `client.enrollments` on the approving side) and hand back the `AtClient` they
 open. An app imports `package:at_client_flutter/at_client_flutter.dart` and
 nothing from at_auth.
 
+- feat: `PkamDialog`, `CramDialog` and `ApkamActivationDialog` take
+  `lookUps:`, at_client's `AtLookUpFactory`, and hand it to the verb they
+  run, so every connection the client they hand back opens travels the way
+  the app chose; `AtsignFlows` carries it. The third leg of the platform
+  bundle, after `keys:` and `storage:`.
 - BREAKING: `AuthService` and `FlutterEnrollmentService` are gone; what they
   orchestrated is at_client's. `authenticate`, `onboard` and `enroll` are
   `PkamDialog`, `CramDialog` and `ApkamActivationDialog`, or `Atsign.open`,
@@ -41,19 +40,15 @@ nothing from at_auth.
   over `client.enrollments`; with none it uses `AtClientManager`'s current
   client, as it always has. Its cards render at_client's `Enrollment`, whose
   `namespacePermissions` and `enrollmentStatus` are what they read.
-- BREAKING: the keychain holds keys and passcodes only. `EnrollmentData`,
-  `Otp` and `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
+- BREAKING: the keychain holds keys and passcodes only. `EnrollmentData` and
+  `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
   `deleteEnrollmentData` and `validateEnrollment` are gone: an enrollment
   awaiting approval lives in the keys store as pending key material, which
   is how it is resumed. `saveSpp` takes the `Passcode` `client.enrollments.spp`
-  answers.
-- BREAKING: at_auth is no longer re-exported. `AtAuthRequest`, `AuthResponse`
-  and the other request and response types an app reached through this
-  barrel are gone, along with `AtEnrollmentRequest` and `AtEnrollmentResponse`;
-  the dialogs take the atSign, the keys store and the preference and hand back
-  a client. `RegistrarService` is re-exported, so an app driving
-  `RegistrarCramDialog` imports nothing from at_auth; `FileAtKeysIo`,
-  `AtKeysIo`, `WrittenAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and
+  answers, in place of at_auth's `Otp`.
+- feat: an app no longer needs to depend on at_auth. `RegistrarService` is
+  re-exported for `RegistrarCramDialog`, and `FileAtKeysIo`, `AtKeysIo`,
+  `WrittenAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and
   `EnrollmentKeyExchangeMode` come through at_client.
 - fix: the enrollment request list can approve a pq-mode request, whose
   enrollee expects the approver to mint its key and so wraps none; the old
@@ -94,12 +89,12 @@ nothing from at_auth.
   by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
   one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
   kept it.
-- The examples (`example/`, `examples/todos`, `examples/dockerstats`) build
+- docs: the examples (`example/`, `examples/todos`, `examples/dockerstats`) build
   their flows on the dialogs and hand the client to `AtClientManager.use`;
   the APKAM example's simulated requester runs on `client.enrollments.otp()`
   and `Atsign.enroll`.
 - build: requires `at_client` ^3.15.0-rc1, the first version carrying the
-  lifecycle verbs.
+  lifecycle verbs, `at_auth` ^4.0.0-rc2 and `at_lookup` ^3.7.0-rc2.
 - fix: `KeychainAtKeysIo.read` throws `AtKeysSourceAbsentException` for an
   atSign the keychain does not hold, as the file store does, so `Atsign.enroll`
   and `resumeEnrollment` start on a fresh keychain rather than refusing it as
