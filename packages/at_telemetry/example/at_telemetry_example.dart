@@ -1,0 +1,58 @@
+import 'dart:convert';
+
+import 'package:at_telemetry/at_telemetry.dart';
+import 'package:at_telemetry/at_telemetry_otel.dart';
+
+// Run with: dart run example/at_telemetry_example.dart
+Future<void> main() async {
+  final AtTelemetryEvent event = AtTelemetryEvent(
+    name: 'atsign.app.started',
+    timestamp: DateTime.now().toUtc(),
+    attributes: const <String, Object?>{
+      'app.version': '1.2.3',
+      'app.debug': false,
+      'app.retries': 2,
+      'app.tags': <Object?>['cli', 'demo'],
+      'app.device': <String, Object?>{'os': 'linux'},
+    },
+  );
+
+  // Any exporter can be used behind the AtTelemetryExporter interface
+  final AtTelemetryExporter exporter = ConsoleExporter();
+  await exporter.export(event);
+  await exporter.flush();
+  await exporter.shutdown();
+
+  // Events round-trip through JSON
+  final String json = jsonEncode(event.toJson());
+  final AtTelemetryEvent fromJson = AtTelemetryEvent.fromJson(
+    jsonDecode(json) as Map<String, Object?>,
+  );
+  print('JSON round trip: ${fromJson.name} at ${fromJson.timestamp}');
+
+  // Events can be packed into a base64 OTLP payload, for example to send
+  // them as the value of an Atsign notification
+  const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
+  final String payload = codec.encode(
+    <AtTelemetryEvent>[event],
+    serviceName: 'my_app',
+  );
+  final List<AtTelemetryEvent> decoded = codec.decode(payload);
+  print(
+    'Notification round trip (${AtTelemetryNotificationCodec.idAndNamespace}): '
+    '${decoded.single.name} ${decoded.single.attributes}',
+  );
+}
+
+final class ConsoleExporter implements AtTelemetryExporter {
+  @override
+  Future<void> export(AtTelemetryEvent event) async {
+    print('Exported: ${jsonEncode(event.toJson())}');
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> shutdown() async {}
+}
