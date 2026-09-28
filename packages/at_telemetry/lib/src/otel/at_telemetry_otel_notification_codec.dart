@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
 
-final class AtTelemetryNotificationCodec {
+final class AtTelemetryOtelNotificationCodec {
   static const String namespace = 'at_telemetry';
   static const String idAndNamespace = 'logs.$namespace';
 
   final AtTelemetryOtelLogsCodec _logsCodec;
 
-  const AtTelemetryNotificationCodec({
+  const AtTelemetryOtelNotificationCodec({
     AtTelemetryOtelLogsCodec logsCodec = const AtTelemetryOtelLogsCodec(),
   }) : _logsCodec = logsCodec;
 

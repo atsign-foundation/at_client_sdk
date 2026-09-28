@@ -2,16 +2,16 @@ import 'dart:async';
 
 import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/at_telemetry_exporter.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_http_signature.dart';
+import 'package:at_telemetry/src/otel/at_telemetry_otel_http_signature.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
 import 'package:http/http.dart' as http;
 
-final class AtTelemetrySignedHttpExporter implements AtTelemetryExporter {
+final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
   final Uri _endpoint;
   final String _serviceName;
   final String _keyId;
   final String _audience;
-  final AtTelemetryRsaSigner _signer;
+  final AtTelemetryOtelRsaSigner _signer;
   final String? _apiKey;
   final http.Client _client;
   final bool _ownsClient;
@@ -19,12 +19,12 @@ final class AtTelemetrySignedHttpExporter implements AtTelemetryExporter {
   Future<void> _pending = Future<void>.value();
   bool _closed = false;
 
-  AtTelemetrySignedHttpExporter({
+  AtTelemetryOtelSignedHttpExporter({
     required Uri endpoint,
     required String serviceName,
     required String keyId,
     required String audience,
-    required AtTelemetryRsaSigner signer,
+    required AtTelemetryOtelRsaSigner signer,
     String? apiKey,
     http.Client? client,
     void Function(Object)? onError,
@@ -68,8 +68,8 @@ final class AtTelemetrySignedHttpExporter implements AtTelemetryExporter {
         <AtTelemetryEvent>[event],
         serviceName: _serviceName);
     for (int attempt = 0; attempt < 3; attempt++) {
-      final AtTelemetryHttpSignature signed =
-          await AtTelemetryHttpSignature.sign(
+      final AtTelemetryOtelHttpSignature signed =
+          await AtTelemetryOtelHttpSignature.sign(
         body: body,
         path: _endpoint.path,
         keyId: _keyId,
@@ -77,11 +77,11 @@ final class AtTelemetrySignedHttpExporter implements AtTelemetryExporter {
         signer: _signer,
       );
       final Map<String, String> headers = <String, String>{
-        'content-type': AtTelemetryHttpSignature.contentType,
-        AtTelemetryHttpSignature.digestHeader: signed.digest,
-        AtTelemetryHttpSignature.audienceHeader: signed.audience,
-        AtTelemetryHttpSignature.inputHeader: signed.input,
-        AtTelemetryHttpSignature.signatureHeader: signed.signature,
+        'content-type': AtTelemetryOtelHttpSignature.contentType,
+        AtTelemetryOtelHttpSignature.digestHeader: signed.digest,
+        AtTelemetryOtelHttpSignature.audienceHeader: signed.audience,
+        AtTelemetryOtelHttpSignature.inputHeader: signed.input,
+        AtTelemetryOtelHttpSignature.signatureHeader: signed.signature,
         if (_apiKey != null) 'authorization': 'Bearer $_apiKey',
       };
       try {

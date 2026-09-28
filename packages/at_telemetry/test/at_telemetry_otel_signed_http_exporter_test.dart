@@ -9,17 +9,18 @@ void main() {
   test('sends exact OTLP bytes with a verifiable signature', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     int requests = 0;
-    final AtTelemetrySignedHttpExporter exporter =
-        AtTelemetrySignedHttpExporter(
+    final AtTelemetryOtelSignedHttpExporter exporter =
+        AtTelemetryOtelSignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
       audience: '@telemetry1',
-      signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+      signer: AtTelemetryOtelRsaSigner.fromBase64(keys.privateKey.toString()),
       client: MockClient((http.Request request) async {
         requests++;
         expect(request.url.path, '/v1/logs');
-        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
+        final AtTelemetryOtelHttpSignature signed =
+            AtTelemetryOtelHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,

@@ -6,7 +6,7 @@ import 'package:at_telemetry/at_telemetry_otel.dart';
 // Run with: dart run example/otel_http_exporter_example.dart
 //
 // Starts a local HTTP server that stands in for an OpenTelemetry collector,
-// then exports one event to it with AtTelemetryExporterOtelHttp.
+// then exports one event to it with AtTelemetryOtelHttpExporter.
 Future<void> main() async {
   final HttpServer collector = await HttpServer.bind(
     InternetAddress.loopbackIPv4,
@@ -15,8 +15,8 @@ Future<void> main() async {
   collector.listen(_handle);
 
   final Uri endpoint = Uri.parse('http://127.0.0.1:${collector.port}');
-  final AtTelemetryExporterOtelHttp exporter =
-      await AtTelemetryExporterOtelHttp.create(
+  final AtTelemetryOtelHttpExporter exporter =
+      await AtTelemetryOtelHttpExporter.create(
     endpoint: endpoint,
     serviceName: 'my_app',
     apiKey: 'example-api-key',

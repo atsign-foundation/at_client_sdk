@@ -4,7 +4,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:at_telemetry/at_telemetry_otel.dart';
 
-// Run with: dart run example/signed_http_exporter_example.dart
+// Run with: dart run example/otel_signed_http_exporter_example.dart
 //
 // A producer (@producer) signs each OTLP request with its RSA private key.
 // A local collector (@collector) verifies the signature against the
@@ -29,12 +29,13 @@ Future<void> main() async {
     (HttpRequest request) => _handle(request, publicKeys, seenNonces),
   );
 
-  final AtTelemetrySignedHttpExporter exporter = AtTelemetrySignedHttpExporter(
+  final AtTelemetryOtelSignedHttpExporter exporter =
+      AtTelemetryOtelSignedHttpExporter(
     endpoint: Uri.parse('http://127.0.0.1:${server.port}'),
     serviceName: 'my_app',
     keyId: producer,
     audience: collector,
-    signer: AtTelemetryRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
+    signer: AtTelemetryOtelRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
     // Send failures are only reported here, export() does not throw them
     onError: (Object error) => print('Telemetry failed: $error'),
   );
@@ -43,7 +44,7 @@ Future<void> main() async {
     name: 'atsign.server.heartbeat',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
-      AtTelemetryHttpSignature.serverIdAttribute: producer,
+      AtTelemetryOtelHttpSignature.serverIdAttribute: producer,
     },
   ));
   await exporter.shutdown();
@@ -60,16 +61,20 @@ Future<void> _handle(
     (List<int> bytes, List<int> chunk) => bytes..addAll(chunk),
   );
 
-  final AtTelemetryHttpSignature signature;
+  final AtTelemetryOtelHttpSignature signature;
   try {
-    signature = AtTelemetryHttpSignature.parse(
-      input: request.headers.value(AtTelemetryHttpSignature.inputHeader) ?? '',
+    signature = AtTelemetryOtelHttpSignature.parse(
+      input:
+          request.headers.value(AtTelemetryOtelHttpSignature.inputHeader) ?? '',
       signature:
-          request.headers.value(AtTelemetryHttpSignature.signatureHeader) ?? '',
+          request.headers.value(AtTelemetryOtelHttpSignature.signatureHeader) ??
+              '',
       digest:
-          request.headers.value(AtTelemetryHttpSignature.digestHeader) ?? '',
+          request.headers.value(AtTelemetryOtelHttpSignature.digestHeader) ??
+              '',
       audience:
-          request.headers.value(AtTelemetryHttpSignature.audienceHeader) ?? '',
+          request.headers.value(AtTelemetryOtelHttpSignature.audienceHeader) ??
+              '',
     );
   } on FormatException {
     return _reply(request, HttpStatus.badRequest);
@@ -79,7 +84,8 @@ Future<void> _handle(
 
   final String? publicKey = publicKeys[signature.keyId];
   final bool accepted = request.method == 'POST' &&
-      signature.audience == AtTelemetryHttpSignature.encodeAtsign(collector) &&
+      signature.audience ==
+          AtTelemetryOtelHttpSignature.encodeAtsign(collector) &&
       signature.isFresh(DateTime.now()) &&
       signature.matchesBody(body) &&
       publicKey != null &&

@@ -5,10 +5,10 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:crypto/crypto.dart';
 
-final class AtTelemetryRsaSigner {
+final class AtTelemetryOtelRsaSigner {
   final Uint8List _secretKey;
 
-  AtTelemetryRsaSigner.fromBase64(String privateKey)
+  AtTelemetryOtelRsaSigner.fromBase64(String privateKey)
       : _secretKey = base64Decode(privateKey);
 
   Future<Uint8List> sign(List<int> message) =>
@@ -18,7 +18,7 @@ final class AtTelemetryRsaSigner {
       );
 }
 
-final class AtTelemetryHttpSignature {
+final class AtTelemetryOtelHttpSignature {
   static const String digestHeader = 'content-digest';
   static const String audienceHeader = 'at-telemetry-audience';
   static const String inputHeader = 'signature-input';
@@ -47,7 +47,7 @@ final class AtTelemetryHttpSignature {
   final String digest;
   final String signature;
 
-  const AtTelemetryHttpSignature._({
+  const AtTelemetryOtelHttpSignature._({
     required this.keyId,
     required this.created,
     required this.expires,
@@ -89,12 +89,12 @@ final class AtTelemetryHttpSignature {
         '"@signature-params": ${input.substring(3)}';
   }
 
-  static Future<AtTelemetryHttpSignature> sign({
+  static Future<AtTelemetryOtelHttpSignature> sign({
     required List<int> body,
     required String path,
     required String keyId,
     required String audience,
-    required AtTelemetryRsaSigner signer,
+    required AtTelemetryOtelRsaSigner signer,
     DateTime Function()? now,
     Random? random,
   }) async {
@@ -118,7 +118,7 @@ final class AtTelemetryHttpSignature {
       input: input,
     );
     final Uint8List bytes = await signer.sign(utf8.encode(base));
-    return AtTelemetryHttpSignature._(
+    return AtTelemetryOtelHttpSignature._(
       keyId: keyId,
       created: created,
       expires: expires,
@@ -130,7 +130,7 @@ final class AtTelemetryHttpSignature {
     );
   }
 
-  static AtTelemetryHttpSignature parse({
+  static AtTelemetryOtelHttpSignature parse({
     required String input,
     required String signature,
     required String digest,
@@ -155,7 +155,7 @@ final class AtTelemetryHttpSignature {
         base64Decode(signed[1]!).length != 256) {
       throw const FormatException('Invalid telemetry signature size');
     }
-    return AtTelemetryHttpSignature._(
+    return AtTelemetryOtelHttpSignature._(
       keyId: keyId,
       created: created,
       expires: expires,

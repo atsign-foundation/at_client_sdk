@@ -4,14 +4,14 @@ import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/at_telemetry_exporter.dart';
 import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
 
-final class AtTelemetryExporterOtelHttp implements AtTelemetryExporter {
+final class AtTelemetryOtelHttpExporter implements AtTelemetryExporter {
   final OTelLogger _logger;
 
-  AtTelemetryExporterOtelHttp._({
+  AtTelemetryOtelHttpExporter._({
     required OTelLogger logger,
   }) : _logger = logger;
 
-  static Future<AtTelemetryExporterOtelHttp> create({
+  static Future<AtTelemetryOtelHttpExporter> create({
     required Uri endpoint,
     required String serviceName,
     String? apiKey,
@@ -45,7 +45,7 @@ final class AtTelemetryExporterOtelHttp implements AtTelemetryExporter {
       detectPlatformResources: detectPlatformResources,
     );
 
-    return AtTelemetryExporterOtelHttp._(
+    return AtTelemetryOtelHttpExporter._(
       logger: OTel.logger('at_telemetry'),
     );
   }

@@ -69,15 +69,15 @@ you are finished with the exporter.
 
 ### Plain OTLP/HTTP exporter
 
-`AtTelemetryExporterOtelHttp` sends events to any OTLP/HTTP collector using
+`AtTelemetryOtelHttpExporter` sends events to any OTLP/HTTP collector using
 Protobuf, with an optional Bearer token. Events are batched by OpenTelemetry,
 so call `flush()` when you need them sent straight away.
 
 ```dart
 import 'package:at_telemetry/at_telemetry_otel.dart';
 
-final AtTelemetryExporterOtelHttp exporter =
-    await AtTelemetryExporterOtelHttp.create(
+final AtTelemetryOtelHttpExporter exporter =
+    await AtTelemetryOtelHttpExporter.create(
   endpoint: Uri.parse('https://collector.example.com'),
   serviceName: 'my_app',
   apiKey: 'my-api-key',
@@ -94,8 +94,8 @@ and `process.command_line`. Pass `detectPlatformResources: false` to leave
 them out:
 
 ```dart
-final AtTelemetryExporterOtelHttp exporter =
-    await AtTelemetryExporterOtelHttp.create(
+final AtTelemetryOtelHttpExporter exporter =
+    await AtTelemetryOtelHttpExporter.create(
   endpoint: Uri.parse('https://collector.example.com'),
   serviceName: 'my_app',
   detectPlatformResources: false,
@@ -104,19 +104,19 @@ final AtTelemetryExporterOtelHttp exporter =
 
 ### Signed OTLP/HTTP exporter
 
-`AtTelemetrySignedHttpExporter` signs every request with the producer's RSA
+`AtTelemetryOtelSignedHttpExporter` signs every request with the producer's RSA
 private key, so the collector can check which atSign sent the events and
 that nobody changed them on the way.
 
 ```dart
 import 'package:at_telemetry/at_telemetry_otel.dart';
 
-final AtTelemetrySignedHttpExporter exporter = AtTelemetrySignedHttpExporter(
+final AtTelemetryOtelSignedHttpExporter exporter = AtTelemetryOtelSignedHttpExporter(
   endpoint: Uri.parse('https://collector.example.com'),
   serviceName: 'my_app',
   keyId: '@producer',
   audience: '@collector',
-  signer: AtTelemetryRsaSigner.fromBase64(privateKey),
+  signer: AtTelemetryOtelRsaSigner.fromBase64(privateKey),
   onError: (Object error) => print('Telemetry failed: $error'),
 );
 
@@ -149,7 +149,7 @@ A signature is valid for at most 5 minutes. A collector should accept a
 request only when all of these checks pass:
 
 ```dart
-final AtTelemetryHttpSignature signature = AtTelemetryHttpSignature.parse(
+final AtTelemetryOtelHttpSignature signature = AtTelemetryOtelHttpSignature.parse(
   input: headers['signature-input']!,
   signature: headers['signature']!,
   digest: headers['content-digest']!,
@@ -157,7 +157,7 @@ final AtTelemetryHttpSignature signature = AtTelemetryHttpSignature.parse(
 );
 
 final bool accepted =
-    signature.audience == AtTelemetryHttpSignature.encodeAtsign('@collector') &&
+    signature.audience == AtTelemetryOtelHttpSignature.encodeAtsign('@collector') &&
         signature.isFresh(DateTime.now()) &&
         signature.matchesBody(body) &&
         await signature.verify(path: path, publicKey: producerPublicKey) &&
@@ -178,12 +178,12 @@ Once the request is accepted, decode the body with
 
 - `AtTelemetryOtelLogsCodec` converts events to and from an OTLP
   `ExportLogsServiceRequest` in Protobuf bytes.
-- `AtTelemetryNotificationCodec` wraps the same bytes in base64 so events can
+- `AtTelemetryOtelNotificationCodec` wraps the same bytes in base64 so events can
   travel as the value of an Atsign notification. Its
-  `AtTelemetryNotificationCodec.idAndNamespace` is `logs.at_telemetry`.
+  `AtTelemetryOtelNotificationCodec.idAndNamespace` is `logs.at_telemetry`.
 
 ```dart
-const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
+const AtTelemetryOtelNotificationCodec codec = AtTelemetryOtelNotificationCodec();
 final String payload = codec.encode(<AtTelemetryEvent>[event]);
 final List<AtTelemetryEvent> events = codec.decode(payload);
 ```
@@ -200,7 +200,7 @@ collector:
 | --- | --- |
 | [at_telemetry_example.dart](example/at_telemetry_example.dart) | Events, a custom exporter, JSON and the notification codec |
 | [otel_http_exporter_example.dart](example/otel_http_exporter_example.dart) | Exporting to an OTLP/HTTP collector with a Bearer token |
-| [signed_http_exporter_example.dart](example/signed_http_exporter_example.dart) | Signing requests as a producer and verifying them as a collector |
+| [otel_signed_http_exporter_example.dart](example/otel_signed_http_exporter_example.dart) | Signing requests as a producer and verifying them as a collector |
 
 ```sh
 dart run example/at_telemetry_example.dart
@@ -208,7 +208,7 @@ dart run example/at_telemetry_example.dart
 
 ## Things to know
 
-- `AtTelemetryExporterOtelHttp` sends machine details with every event unless
+- `AtTelemetryOtelHttpExporter` sends machine details with every event unless
   it is created with `detectPlatformResources: false`. `process.command_line`
   can contain file paths and arguments, so check that this is acceptable
   before sending telemetry to a collector you do not control.
@@ -218,19 +218,19 @@ dart run example/at_telemetry_example.dart
 
 These are known bugs in the current release:
 
-- **The endpoint path prefix is dropped.** `AtTelemetrySignedHttpExporter`
+- **The endpoint path prefix is dropped.** `AtTelemetryOtelSignedHttpExporter`
   accepts an endpoint such as `https://host/otel/v1/logs` but sends requests
   to `https://host/v1/logs`.
 - **Send failures are silent without `onError`.** `export()` completes
   normally even when the collector rejects the request.
-- **Only one `AtTelemetryExporterOtelHttp` per process.** Creating a second
+- **Only one `AtTelemetryOtelHttpExporter` per process.** Creating a second
   one throws a `StateError`, because OpenTelemetry can only be initialized
   once. Calling `shutdown()` also shuts down OpenTelemetry for the whole
   process.
-- **`AtTelemetryHttpSignature.parse` can throw `ArgumentError`.** A header
+- **`AtTelemetryOtelHttpSignature.parse` can throw `ArgumentError`.** A header
   with an invalid percent encoding, such as `keyid="%zz"`, throws
   `ArgumentError` instead of `FormatException`. Catch both.
-- **Inconsistent error types.** `AtTelemetrySignedHttpExporter.export` throws
+- **Inconsistent error types.** `AtTelemetryOtelSignedHttpExporter.export` throws
   a `StateError` synchronously after `shutdown()` instead of returning a
   failed `Future`. `AtTelemetryOtelLogsCodec` throws `FormatException` rather
   than `ArgumentError` when asked to encode a `NaN` or infinite `double`.

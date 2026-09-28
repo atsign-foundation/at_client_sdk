@@ -73,7 +73,8 @@ void main() {
   });
 
   test('round-trips events through the notification codec', () {
-    const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
+    const AtTelemetryOtelNotificationCodec codec =
+        AtTelemetryOtelNotificationCodec();
     final List<AtTelemetryEvent> decoded = codec.decode(
       codec.encode(<AtTelemetryEvent>[event]),
     );
@@ -84,7 +85,7 @@ void main() {
 
   test('rejects a notification payload that is not base64', () {
     expect(
-      () => const AtTelemetryNotificationCodec().decode('not base64!'),
+      () => const AtTelemetryOtelNotificationCodec().decode('not base64!'),
       throwsFormatException,
     );
   });

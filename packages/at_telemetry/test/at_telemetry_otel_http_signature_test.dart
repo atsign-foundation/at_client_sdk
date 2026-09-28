@@ -9,18 +9,20 @@ void main() {
   final DateTime now = DateTime.utc(2026, 9, 25, 12);
   final List<int> body = utf8.encode('hello telemetry');
 
-  Future<AtTelemetryHttpSignature> sign() => AtTelemetryHttpSignature.sign(
+  Future<AtTelemetryOtelHttpSignature> sign() =>
+      AtTelemetryOtelHttpSignature.sign(
         body: body,
         path: '/v1/logs',
         keyId: '@Producer1',
         audience: '@telemetry1',
-        signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+        signer: AtTelemetryOtelRsaSigner.fromBase64(keys.privateKey.toString()),
         now: () => now,
       );
 
   test('signs and verifies an exact OTLP request', () async {
-    final AtTelemetryHttpSignature signed = await sign();
-    final AtTelemetryHttpSignature parsed = AtTelemetryHttpSignature.parse(
+    final AtTelemetryOtelHttpSignature signed = await sign();
+    final AtTelemetryOtelHttpSignature parsed =
+        AtTelemetryOtelHttpSignature.parse(
       input: signed.input,
       signature: signed.signature,
       digest: signed.digest,
@@ -42,7 +44,7 @@ void main() {
         ),
         isFalse);
     expect(
-        AtTelemetryHttpSignature.signatureBase(
+        AtTelemetryOtelHttpSignature.signatureBase(
           path: '/v1/logs',
           digest: signed.digest,
           audience: signed.audience,
@@ -53,9 +55,9 @@ void main() {
   });
 
   test('rejects malformed inputs and accepts encoded Atsigns', () async {
-    final AtTelemetryHttpSignature signed = await sign();
+    final AtTelemetryOtelHttpSignature signed = await sign();
     expect(
-        () => AtTelemetryHttpSignature.parse(
+        () => AtTelemetryOtelHttpSignature.parse(
               input: signed.input.replaceFirst('at-telemetry-v1', 'pol1'),
               signature: signed.signature,
               digest: signed.digest,
@@ -63,8 +65,8 @@ void main() {
             ),
         throwsFormatException);
     expect(
-        AtTelemetryHttpSignature.decodeAtsign(
-          AtTelemetryHttpSignature.encodeAtsign('@🦊'),
+        AtTelemetryOtelHttpSignature.decodeAtsign(
+          AtTelemetryOtelHttpSignature.encodeAtsign('@🦊'),
         ),
         '@🦊');
   });

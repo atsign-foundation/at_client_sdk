@@ -18,8 +18,8 @@ void main() {
     final Uri endpoint = Uri.parse(
       'http://${server.address.address}:${server.port}',
     );
-    final AtTelemetryExporterOtelHttp exporter =
-        await AtTelemetryExporterOtelHttp.create(
+    final AtTelemetryOtelHttpExporter exporter =
+        await AtTelemetryOtelHttpExporter.create(
       endpoint: endpoint,
       serviceName: 'atserver',
       apiKey: 'server-a-secret',
