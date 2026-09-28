@@ -16,7 +16,6 @@
 /// — it does not mean there is no leak.
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
@@ -34,8 +33,8 @@ void main(List<String> args) {
     exit(0);
   }
 
-  final AESKey key = AESKey(
-      base64Encode(List<int>.generate(32, (int i) => i * 7 & 0xff)));
+  final Uint8List key =
+      Uint8List.fromList(List<int>.generate(32, (int i) => i * 7 & 0xff));
   final InitialisationVector iv = InitialisationVector(
       Uint8List.fromList(List<int>.generate(16, (int i) => i * 11 & 0xff)));
   final Uint8List chunk = Uint8List(4096);
