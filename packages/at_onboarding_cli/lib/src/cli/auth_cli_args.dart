@@ -388,19 +388,15 @@ class AuthCliArgs {
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
         hide: hide);
-    // NOTE: no defaultsTo, because the two roles resolve an unset value
-    // differently and a parser-level default could only state one of them.
-    // See postureForEnroller and postureForApprover.
+    // NOTE: no defaultsTo. An unset value must stay distinguishable so that
+    // postureForEnroller can announce at_client's default when it takes it.
     p.addOption(argNamePosture,
         help: 'How far into the post-quantum rollout to run. legacy drives no '
             'upgrade and configures no post-quantum providers, so it cannot '
-            'read post-quantum data; pqReady moves the credentials and keeps '
-            'writes on the legacy provider; '
-            'pqActive makes post-quantum writes the default. onboard and '
-            'enroll default to legacy, so the keys they write stay usable by a '
-            'legacy app; every other command defaults to pqReady and refuses '
-            'legacy, because approving a post-quantum enrolment needs the '
-            'post-quantum providers',
+            'read post-quantum data or approve a post-quantum enrolment; '
+            'pqReady moves the credentials and keeps writes on the legacy '
+            'provider; pqActive makes post-quantum writes the default. Unset, '
+            'every command runs at at_client\'s default posture',
         mandatory: false,
         allowed: postureNames.keys,
         hide: hide);
