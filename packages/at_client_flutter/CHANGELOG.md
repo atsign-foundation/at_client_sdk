@@ -94,7 +94,7 @@ nothing from at_auth.
   by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
   one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
   kept it.
-- The examples (`example/`, `example/todos`, `example/dockerstats`) build
+- The examples (`example/`, `examples/todos`, `examples/dockerstats`) build
   their flows on the dialogs and hand the client to `AtClientManager.use`;
   the APKAM example's simulated requester runs on `client.enrollments.otp()`
   and `Atsign.enroll`.
