@@ -118,140 +118,141 @@ void main() {
     });
   });
 
-  group('getFreeAtSign', () {
-    test('returns atsign string on success', () async {
+  group('registerAtSign', () {
+    test('returns atSign and message on lookup success', () async {
       final service = _makeService(_mockResponse({
-        'success': true,
-        'data': {'atsign': '@bob'},
+        'status': 'success',
+        'message': 'atSign is available',
+        'atSign': 'ash12_3_102',
       }));
-      expect(await service.getFreeAtSign(), equals('@bob'));
+      final result =
+          await service.registerAtSign(atSign: 'ash12_3_102', operation: 'lookup');
+      expect(result['atSign'], equals('ash12_3_102'));
+      expect(result['message'], equals('atSign is available'));
+      expect(result['cramkey'], isNull);
     });
 
-    test('throws on non-200 status', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Server Error'}, status: 503));
-      expect(() => service.getFreeAtSign(), throwsException);
-    });
-
-    test('throws when data is null', () async {
-      final service =
-          _makeService(_mockResponse({'success': true, 'data': null}));
-      expect(() => service.getFreeAtSign(), throwsException);
-    });
-  });
-
-  group('getFreeAtSignByCategory', () {
-    test('returns atsign string on success', () async {
-      final service = _makeService(_mockResponse({
-        'Status': 'success',
-        'data': {'atsign': '@zodiac'},
-      }));
-      expect(
-        await service.getFreeAtSignByCategory(['zodiac']),
-        equals('@zodiac'),
-      );
-    });
-
-    test('throws on non-200 status', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Bad Request'}, status: 400));
-      expect(
-        () => service.getFreeAtSignByCategory(['invalid']),
-        throwsException,
-      );
-    });
-
-    test('throws when data is null', () async {
-      final service =
-          _makeService(_mockResponse({'Status': 'success', 'data': null}));
-      expect(
-        () => service.getFreeAtSignByCategory(['zodiac']),
-        throwsException,
-      );
-    });
-  });
-
-  group('registerPerson', () {
-    test('completes without throwing on success', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Sent Successfully'}));
-      await expectLater(
-        service.registerPerson(atSign: '@alice', email: 'alice@example.com'),
-        completes,
-      );
-    });
-
-    test('throws on non-200 status', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Not Found'}, status: 404));
-      expect(
-        () => service.registerPerson(
-            atSign: '@alice', email: 'alice@example.com'),
-        throwsException,
-      );
-    });
-
-    test('throws when message is not "Sent Successfully"', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Email already registered'}));
-      expect(
-        () => service.registerPerson(
-            atSign: '@alice', email: 'alice@example.com'),
-        throwsException,
-      );
-    });
-  });
-
-  group('validatePerson', () {
-    test('returns cramkey map for new user', () async {
+    test('returns stripped cramkey on register success', () async {
       final service = _makeService(
-          _mockResponse({'success': true, 'cramkey': 'prefix:NEWUSERCRAMKEY'}));
-      final result = await service.validatePerson(
-        atSign: '@alice',
-        email: 'alice@example.com',
-        otp: '4321',
-      );
-      expect(result['success'], isTrue);
-      expect(result['cramkey'], equals('NEWUSERCRAMKEY'));
-    });
-
-    test('returns atsigns list for existing user', () async {
-      final service = _makeService(_mockResponse({
-        'data': {
-          'atsigns': ['@existing1', '@existing2'],
-          'newAtsign': '@new',
-        }
-      }));
-      final result = await service.validatePerson(
-        atSign: '@alice',
-        email: 'alice@example.com',
-        otp: '4321',
-      );
-      expect(result['atsigns'], equals(['@existing1', '@existing2']));
-      expect(result['newAtsign'], equals('@new'));
+          _mockResponse({'status': 'success', 'cramkey': 'prefix:REGCRAMKEY'}));
+      final result = await service.registerAtSign(operation: 'register');
+      expect(result['cramkey'], equals('REGCRAMKEY'));
     });
 
     test('throws on non-200 status', () async {
       final service =
-          _makeService(_mockResponse({'message': 'Unauthorized'}, status: 401));
+          _makeService(_mockResponse({'message': 'Server Error'}, status: 500));
       expect(
-        () => service.validatePerson(
-          atSign: '@alice',
-          email: 'alice@example.com',
-          otp: '0000',
-        ),
+        () => service.registerAtSign(operation: 'register'),
         throwsException,
       );
     });
 
-    test('throws when neither success nor data is present', () async {
-      final service = _makeService(_mockResponse({'message': 'Invalid OTP'}));
+    test('throws when status is not "success"', () async {
+      final service = _makeService(
+          _mockResponse({'status': 'error', 'message': 'atSign not available'}));
       expect(
-        () => service.validatePerson(
-          atSign: '@alice',
-          email: 'alice@example.com',
-          otp: '1111',
-        ),
+        () => service.registerAtSign(atSign: 'taken', operation: 'register'),
+        throwsException,
+      );
+    });
+  });
+
+  group('generateAtSignDeleteToken', () {
+    test('returns token and atSigns when all are valid', () async {
+      final service = _makeService(_mockResponse({
+        'status': 'success',
+        'message': 'Delete token created successfully.',
+        'data': {
+          'token': 'the-token',
+          'atSigns': ['@one', '@two'],
+          'skippedatSigns': [],
+        },
+      }));
+      final result =
+          await service.generateAtSignDeleteToken(['@one', '@two']);
+      expect(result['token'], equals('the-token'));
+      expect(result['atSigns'], equals(['@one', '@two']));
+      expect(result['skippedAtSigns'], equals([]));
+    });
+
+    test('returns skippedAtSigns alongside token when some are invalid',
+        () async {
+      final service = _makeService(_mockResponse({
+        'status': 'success',
+        'data': {
+          'token': 'the-token',
+          'atSigns': ['@one'],
+          'skippedatSigns': ['@bogus'],
+        },
+      }));
+      final result = await service.generateAtSignDeleteToken(['@one', '@bogus']);
+      expect(result['skippedAtSigns'], equals(['@bogus']));
+    });
+
+    test('throws when all atSigns are invalid', () async {
+      final service = _makeService(_mockResponse({
+        'status': 'error',
+        'message': 'One or more Atsigns mentioned are not associated with this account.',
+        'data': {
+          'skippedatSigns': ['@bogus'],
+        },
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@bogus']),
+        throwsException,
+      );
+    });
+
+    test('throws on non-200 status', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Server Error'}, status: 500));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsException,
+      );
+    });
+  });
+
+  group('deleteAtSigns', () {
+    test('returns deleted and failed lists on success', () async {
+      final service = _makeService(_mockResponse({
+        'status': 'success',
+        'message': 'Atsigns deleted successfully.',
+        'data': {
+          'deleted': [
+            {'atSign': '@one'},
+          ],
+          'failed': [],
+        },
+      }));
+      final result = await service.deleteAtSigns(
+        token: 'the-token',
+        atSigns: ['@one'],
+      );
+      expect(result['deleted'], equals([{'atSign': '@one'}]));
+      expect(result['failed'], equals([]));
+    });
+
+    test('throws when status is not "success"', () async {
+      final service = _makeService(_mockResponse({
+        'status': 'error',
+        'message': 'One or more Atsigns mentioned are not associated with this account.',
+        'data': {
+          'skippedatSigns': ['@one'],
+        },
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'bad-token', atSigns: ['@one']),
+        throwsException,
+      );
+    });
+
+    test('throws on non-200 status', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Server Error'}, status: 500));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
         throwsException,
       );
     });

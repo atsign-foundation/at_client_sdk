@@ -3,17 +3,15 @@ import 'package:http/http.dart';
 enum HttpMethod { get, post }
 
 enum RegistrarApiEndpoint {
-  // Free atSign generation (Public)
-  getFreeAtsign('/get-free-atsign/', HttpMethod.get),
-  getFreeAtsignByCategory('/get-free-atsign/', HttpMethod.post),
-
-  // Person registration (Email-based with OTP)
-  registerPerson('/register-person/', HttpMethod.post),
-  validatePerson('/validate-person/', HttpMethod.post),
-
   // Atsign authentication
   requestOtp('/authenticate/atsign', HttpMethod.post),
-  validateOtp('/authenticate/atsign/activate', HttpMethod.post);
+  validateOtp('/authenticate/atsign/activate', HttpMethod.post),
+
+  // Check availability and/or activate an atSign in one call
+  registerAtsign('/register-atsign/', HttpMethod.post),
+
+  // AtSign deletion (Super API key)
+  manageAtsigns('/manage-atsigns', HttpMethod.post);
 
   final String path;
   final HttpMethod method;
@@ -31,7 +29,7 @@ abstract interface class Registrar {
   /// [requiresAuth] - Whether to include the Authorization header (default: true)
   Future<Response> registrarApiRequest(
     RegistrarApiEndpoint endpoint,
-    Map<String, String?> data, {
+    Map<String, dynamic> data, {
     bool requiresAuth = true,
   });
 
@@ -49,51 +47,40 @@ abstract interface class Registrar {
   });
 
   // ===========================================================================
-  // Free AtSign Generation Methods
+  // AtSign Registration/Activation Methods (v4, hybrid/custom atSigns)
   // ===========================================================================
 
-  /// Generates a random free atSign
+  /// Checks availability and/or activates an atSign in one call.
   ///
-  /// Returns the generated atSign or null if generation failed
-  Future<String?> getFreeAtSign();
-
-  /// Generates a free atSign from specified categories
+  /// [atSign] - Optional. If omitted, the server generates one.
+  /// [operation] - 'lookup' (check availability only) or 'register' (check +
+  /// activate, returning a cramkey).
+  /// [startAtServer] - Optional; pass 'false' to skip secondary creation on
+  /// registration (no cramkey will be returned in that case).
   ///
-  /// [categories] - List of categories (zodiac, foods, colors, animals, sports, movies, music, hobbies)
-  /// Returns the generated atSign or null if generation failed
-  Future<String?> getFreeAtSignByCategory(List<String> categories);
-
-  // ===========================================================================
-  // Person Registration Methods (Email-based with OTP)
-  // ===========================================================================
-
-  /// Registers an atSign to an email address and sends OTP
-  ///
-  /// [atSign] - The atSign to register
-  /// [email] - Email address to associate with the atSign
-  /// [oldEmail] - Optional previous email address if changing email
-  /// Throws an exception if registration fails (e.g., atSign already registered, email already in use)
-  Future<void> registerPerson({
-    required String atSign,
-    required String email,
-    String? oldEmail,
+  /// Returns a map that may contain 'cramkey' (register), or 'atSign' +
+  /// 'message' (lookup / availability confirmation).
+  Future<Map<String, dynamic>> registerAtSign({
+    String? atSign,
+    required String operation,
+    String? startAtServer,
   });
 
-  /// Validates the person registration using the OTP
+  // ===========================================================================
+  // AtSign Deletion Methods (Super API key)
+  // ===========================================================================
+
+  /// Generates a one-time delete token for [atSigns].
   ///
-  /// [atSign] - The atSign being validated
-  /// [email] - Email address used for registration
-  /// [otp] - 4-character OTP sent to email
-  /// [confirmation] - Set to true if validating previously validated atSign
-  /// note: if you have existing atsigns, you need to resend the same request with confirmation set to true
+  /// Returns { 'token': String, 'atSigns': List, 'skippedAtSigns': List }
+  Future<Map<String, dynamic>> generateAtSignDeleteToken(
+      List<String> atSigns);
+
+  /// Deletes [atSigns] using a previously generated delete [token].
   ///
-  /// Returns a map with validation results:
-  /// - If new user: { 'success': true, 'cramkey': '...' }
-  /// - If existing user: { 'atsigns': [...], 'newAtsign': '...' }
-  Future<Map<String, dynamic>> validatePerson({
-    required String atSign,
-    required String email,
-    required String otp,
-    bool confirmation = false,
+  /// Returns { 'deleted': List, 'failed': List }
+  Future<Map<String, dynamic>> deleteAtSigns({
+    required String token,
+    required List<String> atSigns,
   });
 }
