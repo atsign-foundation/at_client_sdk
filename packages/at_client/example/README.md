@@ -52,7 +52,7 @@ dart run bin/collections_binary.dart -R receiver -O @sender
 ### Collections — todos app
 Interactive terminal-based shared todo list, built on the `nocterm`
 widget framework. There is an equivalent Flutter app at
-[`packages/at_client_flutter/examples/todos/`](../../at_client_flutter/examples/todos/README.md)
+[`packages/at_client_flutter/example/todos/`](../../at_client_flutter/example/todos/README.md)
 — the two apps have been deliberately given a similar UX so you
 can A/B the same scenarios across keyboard-driven and mouse-driven
 front-ends, and their wire formats are byte-compatible so logging
@@ -117,7 +117,7 @@ examples above. It demonstrates **picking the right tool for the
 job**: high-frequency observations don't belong in a typed shared
 dataset — they belong on a transient delivery channel
 (notifications) feeding a database designed for time series. The
-companion [Flutter dashboard](../../at_client_flutter/examples/dockerstats/README.md)
+companion [Flutter dashboard](../../at_client_flutter/example/dockerstats/README.md)
 shows the full pipeline: subscribe, persist every sample to
 SQLite (no roll-up, no compaction at rest), and render charts off
 the local store with one SQL `GROUP BY` aggregation per
@@ -148,7 +148,7 @@ prints one line per arriving sample, useful for verifying
 publisher↔receiver round-trip without launching the dashboard. The
 full app design, query-time aggregation semantics, and seed-DB
 workflow are in the
-[Flutter dashboard's README](../../at_client_flutter/examples/dockerstats/README.md).
+[Flutter dashboard's README](../../at_client_flutter/example/dockerstats/README.md).
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.
