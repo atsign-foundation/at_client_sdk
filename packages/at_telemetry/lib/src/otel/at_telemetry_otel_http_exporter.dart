@@ -15,6 +15,7 @@ final class AtTelemetryExporterOtelHttp implements AtTelemetryExporter {
     required Uri endpoint,
     required String serviceName,
     String? apiKey,
+    bool detectPlatformResources = true,
   }) async {
     if (apiKey != null && (apiKey.isEmpty || apiKey.contains(RegExp(r'\s')))) {
       throw ArgumentError.value(
@@ -41,6 +42,7 @@ final class AtTelemetryExporterOtelHttp implements AtTelemetryExporter {
       enableMetrics: false,
       enableLogs: true,
       logRecordExporter: logRecordExporter,
+      detectPlatformResources: detectPlatformResources,
     );
 
     return AtTelemetryExporterOtelHttp._(
