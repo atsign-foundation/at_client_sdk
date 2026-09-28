@@ -4,64 +4,64 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
-import 'package:at_client/src/enroll/at_sign_credential.dart';
-import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
-import 'package:at_client/src/enroll/first_enrollment.dart'
-    show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
-import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
-import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
+import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/first_enrollment.dart'
+    show firstEnrollmentAppName, firstEnrollmentDeviceName;
+import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/service/enrollment_service.dart';
-import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
-import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/encryption_util.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_client/src/collections/collections.dart';
-import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/client/pq_client_bootstrap.dart';
-import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
-import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/sync/at_sync_queue.dart';
-import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
+import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive_at_client_storage.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
+import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
+import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_client/src/util/constants.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -716,6 +716,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
+    AtTransportFactory? transportFactory,
     String? enrollmentId,
     AtClientStorage? storage,
 
@@ -792,6 +793,7 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         lookUps: lookUps,
+        transportFactory: transportFactory,
         enrollmentId: enrollmentId,
         storage: storage,
       );
@@ -831,6 +833,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
+    AtTransportFactory? transportFactory,
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
@@ -839,6 +842,8 @@ class AtClientImpl implements AtClient {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     this.lookUps = lookUps ?? defaultLookUps(preference);
+    this.transportFactory =
+        transportFactory ?? defaultTransportFactory(preference);
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -1538,6 +1543,7 @@ class AtClientImpl implements AtClient {
   /// monitor's. The application's, when it supplied one to the verb that
   /// built the client; otherwise TLS on TCP from the preference.
   late final AtLookUpFactory lookUps;
+  late final AtTransportFactory transportFactory;
 
   /// [atLookUp] injects an already-built lookup; passing none lets
   /// [RemoteSecondary] open its own connection through [lookUps], separate
@@ -2470,7 +2476,7 @@ class AtClientImpl implements AtClient {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+      remoteSecondary.atLookUp.connection!.add(encryptedData);
       // `readResponse` rather than reaching through to the listener: this
       // path has already written the bytes to the socket itself, so it needs
       // the read half alone. The listener is not in at_lookup's barrel.
@@ -2506,6 +2512,7 @@ class AtClientImpl implements AtClient {
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
+    handler.transportFactory = transportFactory;
     handler.encryptionService = _encryptionService;
     var notification = AtStreamNotification()
       ..streamId = streamId

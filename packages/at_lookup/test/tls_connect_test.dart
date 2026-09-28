@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_lookup/src/util/tls_connect.dart';
+import 'package:at_lookup/src/io/tls_connect.dart';
 import 'package:test/test.dart';
 
 /// [connectTls] against real sockets: a TLS server that answers, and a server

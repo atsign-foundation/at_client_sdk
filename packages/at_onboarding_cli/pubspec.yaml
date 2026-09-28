@@ -27,7 +27,7 @@ dependencies:
   # accept a prerelease.
   at_client: ^3.15.0-rc1
   at_commons: ^5.6.0
-  at_lookup: ^3.7.0-rc2
+  at_lookup: ^4.0.0-rc1
   at_utils: ^3.2.0
   duration: ^4.0.3
   chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0

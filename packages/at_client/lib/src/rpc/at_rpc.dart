@@ -25,8 +25,7 @@ typedef RpcRequestHandler = Future<AtRpcResp> Function(
 );
 
 class AtRpcClient implements AtRpcCallbacks {
-  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ',
-      loggingHandler: AtSignLogger.stdErrLoggingHandler);
+  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ');
 
   late final String serverAtsign;
   late final AtRpc rpc;

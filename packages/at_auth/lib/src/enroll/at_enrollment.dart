@@ -107,10 +107,13 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// // lookUps: the application's AtLookUpFactory, such as secureSocketLookUps()
-  /// final atLookup = lookUps(
+  /// const root = AtRootDomain.atsignDomain;
+  /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   rootDomain: root,
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   secondaryAddressFinder:
+  ///       CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///

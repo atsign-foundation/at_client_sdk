@@ -6,13 +6,9 @@ import 'dart:typed_data';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-/// A [SecureSocket] the [FakeAtServer] drives, over a real single-subscription
+/// An [AtTransport] the [FakeAtServer] drives, over a real single-subscription
 /// [StreamController] so pause, resume, done and error are real events.
-///
-/// Anything not implemented throws [UnimplementedError] naming the member, so
-/// an unsupported call fails loudly rather than answering null into a
-/// non-nullable type.
-class FakeAtServerSocket implements SecureSocket {
+class FakeAtServerSocket implements AtTransport {
   FakeAtServerSocket(this._onWrite);
 
   final void Function(FakeAtServerSocket socket, String command) _onWrite;
@@ -28,12 +24,6 @@ class FakeAtServerSocket implements SecureSocket {
   int pauseCount = 0;
   int resumeCount = 0;
   bool destroyed = false;
-
-  StreamSubscription<Uint8List>? _subscription;
-
-  /// True while the listener's subscription is paused, which is how
-  /// back-pressure reaches this end.
-  bool get isPaused => _subscription?.isPaused ?? false;
 
   /// Pushes bytes at the client as the atServer would, then lets the event
   /// loop deliver them.
@@ -64,25 +54,14 @@ class FakeAtServerSocket implements SecureSocket {
   }
 
   @override
-  StreamSubscription<Uint8List> listen(void Function(Uint8List event)? onData,
-      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return _subscription = _inbound.stream.listen(onData,
-        onError: onError, onDone: onDone, cancelOnError: cancelOnError);
-  }
+  Stream<List<int>> get inbound => _inbound.stream;
 
   @override
-  void write(Object? object) => _record('$object');
-
-  @override
-  void writeln([Object? object = '']) => _record('$object\n');
-
-  @override
-  void add(List<int> data) => _record(utf8.decode(data));
-
-  void _record(String command) {
+  void add(List<int> data) {
     if (destroyed) {
-      throw SocketException('write to a socket this client destroyed');
+      throw AtIOException('write to a socket this client destroyed');
     }
+    final command = utf8.decode(data);
     written.add(command);
     _onWrite(this, command);
   }
@@ -97,27 +76,7 @@ class FakeAtServerSocket implements SecureSocket {
   }
 
   @override
-  Future<void> close() async => destroy();
-
-  @override
-  bool setOption(SocketOption option, bool enabled) => true;
-
-  @override
-  InternetAddress get remoteAddress => InternetAddress('127.0.0.66');
-
-  @override
-  int get remotePort => 6464;
-
-  @override
-  InternetAddress get address => InternetAddress('127.0.0.1');
-
-  @override
-  int get port => 0;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
-      'FakeAtServerSocket does not implement ${invocation.memberName}. '
-      'Add it here rather than working around it.');
+  String get description => '127.0.0.66:6464';
 }
 
 /// An atServer a test can make misbehave: refuse connections, refuse
@@ -185,9 +144,8 @@ class FakeAtServer {
             // caller's would ask the real atDirectory.
             secondaryAddressFinder: addressFinder,
             clientConfig: clientConfig,
-            transport: AtLookupTransport(
-                secureSocketConfig: SecureSocketConfig(),
-                socketFactory: _FakeSocketFactory(this)),
+            transport: AtLookupTransportFactories(
+                transportFactory: _FakeTransportFactory(this)),
           );
 
   Future<bool> _authenticate(AtCommandExecutor _) async {
@@ -203,7 +161,7 @@ class FakeAtServer {
   FakeAtServerSocket _connect() {
     if (refuseConnects > 0) {
       refuseConnects--;
-      throw SocketException('the atServer is not reachable');
+      throw SecondaryConnectException('the atServer is not reachable');
     }
     connectCount++;
     final socket = FakeAtServerSocket(_onWrite);
@@ -269,14 +227,13 @@ class FakeAtServer {
   }
 }
 
-class _FakeSocketFactory extends AtLookupSecureSocketFactory {
-  _FakeSocketFactory(this._server);
+class _FakeTransportFactory implements AtTransportFactory {
+  _FakeTransportFactory(this._server);
 
   final FakeAtServer _server;
 
   @override
-  Future<SecureSocket> createSocket(
-          String host, String port, SecureSocketConfig socketConfig,
+  Future<AtTransport> connect(String host, String port,
           {Duration? timeout}) async =>
       _server._connect();
 }
