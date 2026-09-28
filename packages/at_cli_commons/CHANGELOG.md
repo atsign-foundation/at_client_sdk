@@ -1,4 +1,4 @@
-## 3.1.2
+## 3.1.2-rc1
 
 - feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
   `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
