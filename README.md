@@ -167,13 +167,13 @@ take a major are the ones that used to hand at_auth's types to an app:
 
 - **at_client_flutter 1.x → 2.0**: `AuthService` and
   `FlutterEnrollmentService` are gone; the dialogs take the atSign, the
-  keys store and the preference, and hand back the `AtClient`. Nothing
-  from at_auth is re-exported. The table is in the
+  keys store and the preference, and hand back the `AtClient`. An app no
+  longer imports at_auth. The table is in the
   [at_client_flutter README](./packages/at_client_flutter/README.md#migrating-from-1x).
 - **at_onboarding_cli 1.x → 2.0**: `at_activate` names its command
-  (`at_activate onboard -a @alice`), `--posture` replaces
-  `--signingAlgoType`, and `AtOnboardingService` keeps `authenticate()`
-  and `atClient` while `onboard`, `enroll` and `close` become
+  (`at_activate onboard -a @alice`), `--posture` sets how far into the
+  post-quantum rollout every command runs, and `AtOnboardingService` keeps
+  `authenticate()` and `atClient` while `onboard`, `enroll` and `close` become
   `Atsign.activate`, `Atsign.enroll` and `atClient.stop()`. The table is in
   the [at_onboarding_cli README](./packages/at_onboarding_cli/README.md#migrating-from-1x).
 - **at_auth 3.x → 4.0**: `AtAuth` and its request and response objects
