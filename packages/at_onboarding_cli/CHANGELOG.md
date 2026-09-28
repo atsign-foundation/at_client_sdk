@@ -34,7 +34,10 @@
   written by at_auth's `FileAtKeysIo`, and a passphrase now uses at_auth's
   version 1 envelope, whose AES key comes from a random per-file salt. at_auth
   reads both versions, but older tooling cannot read version 1.
-  `AtOnboardingPreference.hashingAlgoType` no longer affects the file.
+  `AtOnboardingPreference.hashingAlgoType` no longer affects the file, and
+  `--hashingAlgoType` is ignored and hidden from help: it had been setting the
+  PKAM hash of the client `onboard` and `enroll` build, which an RSA-2048 key
+  refuses for argon2id.
 - fix: `--version` reports the package's actual version, and the enrollment
   commands say what was done rather than echoing the atServer's response.
 - build: requires `at_client` ^3.15.0-rc1, `at_auth` ^4.0.0-rc2 and

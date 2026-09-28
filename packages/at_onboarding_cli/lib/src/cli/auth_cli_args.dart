@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart'
     show EnrollmentKeyExchangeMode, PqPosture;
 import 'package:at_commons/at_commons.dart';
@@ -384,10 +383,10 @@ class AuthCliArgs {
         mandatory: false,
         hide: hide);
     p.addOption(argNameHashingAlgoType,
-        help: 'Hashing algorithm type. Defaults to argon2id',
+        help: 'Ignored: a passphrase-protected atKeys file is always '
+            'Argon2id. Accepted so existing scripts still run',
         mandatory: false,
-        defaultsTo: HashingAlgoType.argon2id.name,
-        hide: hide);
+        hide: true);
     // NOTE: no defaultsTo. An unset value must stay distinguishable so that
     // postureForEnroller can announce at_client's default when it takes it.
     p.addOption(argNamePosture,
