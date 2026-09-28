@@ -1,5 +1,12 @@
 ## 3.15.0-rc1
 
+- feat (experimental): post-quantum cryptography, selected by
+  `AtClientPreference.posture` (`PqPosture.legacy`, the default, `pqReady` or
+  `pqActive`): ML-DSA-65 authentication and data signing, ML-KEM and X-Wing key
+  establishment, per-namespace keys, a signing root and approval chain, secret
+  conveyance at enrollment approval, `selfRetrofit`, and content-key and
+  namespace-key rotation. The default posture runs none of it. These surfaces,
+  including the 3.14.0 secret-sharing substrate, changed shape in this release.
 - build: requires `at_auth` ^4.0.0-rc2, `at_lookup` ^3.7.0-rc2,
   `at_commons` ^5.18.0, `at_chops` ^3.6.0 and
   `at_persistence_secondary_server` ^5.3.0.
@@ -24,13 +31,6 @@
   change; `attempt()` and `awaitOnline()` retry.
   `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
   notification connection that has gone quiet.
-- feat (experimental): post-quantum cryptography, selected by
-  `AtClientPreference.posture` (`PqPosture.legacy`, the default, `pqReady` or
-  `pqActive`): ML-DSA-65 authentication and data signing, ML-KEM and X-Wing key
-  establishment, per-namespace keys, a signing root and approval chain, secret
-  conveyance at enrollment approval, `selfRetrofit`, and content-key and
-  namespace-key rotation. The default posture runs none of it. These surfaces,
-  including the 3.14.0 secret-sharing substrate, changed shape in this release.
 - fix: `NotificationService.send()` splits its name at the first dot, so it
   encrypts under the namespace the caller named, and throws `ArgumentError`
   when there is no dot; `namespace` is deprecated in favour of
