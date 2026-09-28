@@ -697,7 +697,9 @@
   client borrows storage it was given by default: `stop()` detaches without
   closing, so one store can be handed to a later client. A bundle built with
   `closedByClient: true` is closed by the client instead, and storage the
-  client built itself is always closed on release.
+  client built itself is always closed on release. `AtClientImpl.create`
+  refuses a `storage` that the client already built for that atSign does not
+  hold, rather than returning that client and leaving the storage unattached.
 
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
