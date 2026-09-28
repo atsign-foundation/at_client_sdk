@@ -1,6 +1,6 @@
 ## 3.15.0-rc1
 
-- **BREAKING:** requires `at_auth` ^4.0.0-rc2, `at_lookup` ^3.7.0-rc2,
+- build: requires `at_auth` ^4.0.0-rc2, `at_lookup` ^3.7.0-rc2,
   `at_commons` ^5.18.0, `at_chops` ^3.6.0 and
   `at_persistence_secondary_server` ^5.3.0.
 - feat: `Atsign('@alice')` is the entry point for a client's lifecycle —
@@ -16,10 +16,10 @@
   and sync queue, with `HiveAtClientStorage` as the default and
   `SqliteAtClientStorage` / `InMemoryAtClientStorage` in
   `package:at_client/sqlite.dart`. One client holds a storage at a time.
-- **BREAKING (behaviour):** `AtClient.stop()` ends everything the client
-  started (connections, monitor, sync, timers, `AtCollection` streams),
-  releases its storage and removes it from the instance cache. A stopped client
-  cannot be restarted, and the process can exit once `stop()` returns.
+- fix: `AtClient.stop()` ends everything the client started (connections,
+  monitor, sync, timers, `AtCollection` streams), releases its storage and
+  removes it from the instance cache, so the process can exit once `stop()`
+  returns. A stopped client cannot be restarted; build a new one.
 - feat: `client.connection` reports `online`, `offline` or `refused` and every
   change; `attempt()` and `awaitOnline()` retry.
   `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
@@ -31,12 +31,10 @@
   conveyance at enrollment approval, `selfRetrofit`, and content-key and
   namespace-key rotation. The default posture runs none of it. These surfaces,
   including the 3.14.0 secret-sharing substrate, changed shape in this release.
-- **BREAKING:** `NotificationService.send()` splits its name at the first dot,
-  throws `ArgumentError` when there is none, and sends `:notifier:SYSTEM`;
-  `namespace` is deprecated in favour of `idAndNamespace`.
-  `AtClientManager.fromAuthSession` loses `reuse`, `AtClientPreference` refuses
-  incoherent posture and crypto combinations, and `SyncIsolateManager` is
-  removed.
+- fix: `NotificationService.send()` splits its name at the first dot, so it
+  encrypts under the namespace the caller named, and throws `ArgumentError`
+  when there is no dot; `namespace` is deprecated in favour of
+  `idAndNamespace`.
 - fix: sync and notification reliability. A local write racing a sync push is
   no longer lost, a monitor reconnect neither loses nor re-delivers
   notifications, the sync push keeps `appMetadata` and `immutable`, expired
