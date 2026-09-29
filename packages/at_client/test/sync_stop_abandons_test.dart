@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_client/src/sync/hive_box_sync_queue_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     hide AtNotification;
@@ -305,7 +306,7 @@ void main() {
     final box =
         await Hive.openBox<String>('snapshot_probe', bytes: Uint8List(0));
     final queue = AtSyncQueue(atSign: '@snapshot');
-    await queue.open(injectedBox: box);
+    await queue.open(store: HiveBoxSyncQueueStore(box));
     final ls = LocalSecondary(atClient, keyStore: null, syncQueue: queue);
     expect(ls.syncQueueSyncSnapshot, 0);
     await queue.close();

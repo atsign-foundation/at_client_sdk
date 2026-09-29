@@ -118,7 +118,7 @@ await collection.delete(item);
 | `AuthService().onboard(AtOnboardingRequest(...), cramKey)`              | `CramDialog.show(...)` → `AtClient`, or `Atsign(a).activate(...)`                             |
 | `FlutterEnrollmentService().enroll(...)` then a `PkamDialog`            | `ApkamActivationDialog.show(...)` → `AtClient`, or `Atsign(a).enroll(...)` then `pending.client(...)` |
 | `AtClientManager.getInstance().setCurrentAtSign(...)` after auth        | `AtClientManager.getInstance().use(client)`                                                   |
-| `AtClientPreference.hiveStoragePath` / `.commitLogPath`                 | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage`                              |
+| `AtClientPreference.hiveStoragePath` / `.commitLogPath`                 | `HiveAtClientStorage(atSign:, storagePath:)` (`package:at_client/hive.dart`) passed as `storage`                              |
 | `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing; `RegistrarService` comes through `at_client_flutter`                                 |
 
 See [05-flutter-auth.md](05-flutter-auth.md) and
