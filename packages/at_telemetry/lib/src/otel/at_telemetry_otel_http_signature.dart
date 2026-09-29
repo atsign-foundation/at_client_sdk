@@ -13,7 +13,7 @@ final class AtTelemetryOtelHttpSignature {
   static const String inputHeader = 'signature-input';
   static const String signatureHeader = 'signature';
   static const String contentType = 'application/x-protobuf';
-  static const String serverIdAttribute = 'atsign.server.id';
+  static const String serverIdAttribute = 'atsign.atserver.id';
   static const String _components =
       '("@method" "@path" "content-type" "content-digest" '
       '"at-telemetry-audience")';

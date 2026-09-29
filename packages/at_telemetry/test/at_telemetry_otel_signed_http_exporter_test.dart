@@ -45,10 +45,60 @@ void main() {
     await exporter.export(AtTelemetryEvent(
       name: 'atsign.server.heartbeat',
       timestamp: DateTime.now().toUtc(),
-      attributes: <String, Object?>{'atsign.server.id': '@producer1'},
+      attributes: <String, Object?>{'atsign.atserver.id': '@producer1'},
     ));
     await exporter.shutdown();
     expect(requests, 2);
+  });
+
+  test('sends a signed OTLP gauge to /v1/metrics', () async {
+    final RSAKeypair keys = RSAKeypair.fromRandom();
+    final AtTelemetryOtelSignedHttpExporter exporter =
+        AtTelemetryOtelSignedHttpExporter(
+      endpoint: Uri.parse('http://localhost:4318'),
+      serviceName: 'at_secondary_server',
+      keyId: '@producer1',
+      audience: 'localhost',
+      signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+      client: MockClient((http.Request request) async {
+        expect(request.url.path, '/v1/metrics');
+        final AtTelemetryOtelHttpSignature signed =
+            AtTelemetryOtelHttpSignature.parse(
+          input: request.headers['signature-input']!,
+          signature: request.headers['signature']!,
+          digest: request.headers['content-digest']!,
+          audience: request.headers['at-telemetry-audience']!,
+        );
+        expect(signed.matchesBody(request.bodyBytes), isTrue);
+        expect(
+          await signed.verify(
+            path: request.url.path,
+            publicKey: keys.publicKey.toString(),
+          ),
+          isTrue,
+        );
+        final AtTelemetryGauge gauge = const AtTelemetryOtelMetricsCodec()
+            .decodeExportRequest(request.bodyBytes)
+            .single;
+        expect(gauge.name, 'atsign.atserver.uptime');
+        expect(gauge.unit, 's');
+        expect(gauge.value, 42);
+        return http.Response('', 200);
+      }),
+    );
+
+    await exporter.exportGauges(<AtTelemetryGauge>[
+      AtTelemetryGauge(
+        name: 'atsign.atserver.uptime',
+        value: 42,
+        unit: 's',
+        timestamp: DateTime.now().toUtc(),
+        attributes: const <String, Object?>{
+          'atsign.atserver.id': '@producer1',
+        },
+      ),
+    ]);
+    await exporter.shutdown();
   });
 
   test('best-effort export reports rejection through onError', () async {

@@ -1,6 +1,5 @@
-import 'dart:convert';
-
 import 'package:at_telemetry/src/at_telemetry_event.dart';
+import 'package:at_telemetry/src/otel/at_telemetry_otel_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -12,6 +11,8 @@ import 'package:fixnum/fixnum.dart';
 
 final class AtTelemetryOtelLogsCodec {
   static const String scopeName = 'at_telemetry';
+  static const AtTelemetryOtelAttributesCodec _attributes =
+      AtTelemetryOtelAttributesCodec();
 
   const AtTelemetryOtelLogsCodec();
 
@@ -61,12 +62,12 @@ final class AtTelemetryOtelLogsCodec {
     final List<AtTelemetryEvent> events = <AtTelemetryEvent>[];
     for (final logs.ResourceLogs resourceLogs in request.resourceLogs) {
       final Map<String, Object?> resourceAttributes = resourceLogs.hasResource()
-          ? _decodeAttributes(resourceLogs.resource.attributes)
+          ? _attributes.decode(resourceLogs.resource.attributes)
           : const <String, Object?>{};
 
       for (final logs.ScopeLogs scopeLogs in resourceLogs.scopeLogs) {
         final Map<String, Object?> scopeAttributes = scopeLogs.hasScope()
-            ? _decodeAttributes(scopeLogs.scope.attributes)
+            ? _attributes.decode(scopeLogs.scope.attributes)
             : const <String, Object?>{};
 
         for (final logs.LogRecord logRecord in scopeLogs.logRecords) {
@@ -102,41 +103,8 @@ final class AtTelemetryOtelLogsCodec {
       timeUnixNano: Int64(event.timestamp.microsecondsSinceEpoch) * 1000,
       severityNumber: logs.SeverityNumber.SEVERITY_NUMBER_INFO,
       body: common.AnyValue(stringValue: event.name),
-      attributes: _encodeAttributes(event.attributes),
+      attributes: _attributes.encode(event.attributes),
     );
-  }
-
-  List<common.KeyValue> _encodeAttributes(Map<String, Object?> attributes) {
-    return <common.KeyValue>[
-      for (final MapEntry<String, Object?> entry in attributes.entries)
-        if (entry.value != null)
-          common.KeyValue(
-            key: entry.key,
-            value: _encodeValue(entry.value),
-          ),
-    ];
-  }
-
-  common.AnyValue _encodeValue(Object? value) {
-    return switch (value) {
-      final String value => common.AnyValue(stringValue: value),
-      final bool value => common.AnyValue(boolValue: value),
-      final int value => common.AnyValue(intValue: Int64(value)),
-      final double value => common.AnyValue(doubleValue: _decodeDouble(value)),
-      final List<Object?> values => common.AnyValue(
-          arrayValue: common.ArrayValue(
-            values: values.map<common.AnyValue>(_encodeValue),
-          ),
-        ),
-      final Map<String, Object?> values => common.AnyValue(
-          kvlistValue: common.KeyValueList(values: _encodeAttributes(values)),
-        ),
-      _ => throw ArgumentError.value(
-          value,
-          'attributes',
-          'values must be String, bool, int, double, List, or Map',
-        ),
-    };
   }
 
   AtTelemetryEvent _decodeLogRecord(
@@ -176,49 +144,12 @@ final class AtTelemetryOtelLogsCodec {
     final Map<String, Object?> attributes = <String, Object?>{
       ...resourceAttributes,
       ...scopeAttributes,
-      ..._decodeAttributes(logRecord.attributes),
+      ..._attributes.decode(logRecord.attributes),
     };
     return AtTelemetryEvent(
       name: logRecord.body.stringValue,
       timestamp: timestamp,
       attributes: Map<String, Object?>.unmodifiable(attributes),
     );
-  }
-
-  Map<String, Object?> _decodeAttributes(
-    Iterable<common.KeyValue> attributes,
-  ) {
-    return <String, Object?>{
-      for (final common.KeyValue attribute in attributes)
-        attribute.key: _decodeValue(attribute.value),
-    };
-  }
-
-  Object? _decodeValue(common.AnyValue value) {
-    return switch (value.whichValue()) {
-      common.AnyValue_Value.stringValue => value.stringValue,
-      common.AnyValue_Value.boolValue => value.boolValue,
-      common.AnyValue_Value.intValue => value.intValue.toInt(),
-      common.AnyValue_Value.doubleValue => _decodeDouble(value.doubleValue),
-      common.AnyValue_Value.arrayValue => List<Object?>.unmodifiable(
-          value.arrayValue.values.map<Object?>(_decodeValue),
-        ),
-      common.AnyValue_Value.kvlistValue => Map<String, Object?>.unmodifiable(
-          _decodeAttributes(value.kvlistValue.values),
-        ),
-      common.AnyValue_Value.bytesValue => base64Encode(value.bytesValue),
-      common.AnyValue_Value.notSet => throw const FormatException(
-          'OTLP attribute value must be set',
-        ),
-    };
-  }
-
-  double _decodeDouble(double value) {
-    if (!value.isFinite) {
-      throw const FormatException(
-        'OTLP double attributes must be finite',
-      );
-    }
-    return value;
   }
 }

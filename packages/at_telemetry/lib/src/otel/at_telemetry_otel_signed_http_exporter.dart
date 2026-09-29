@@ -2,13 +2,21 @@ import 'dart:async';
 
 import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/at_telemetry_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_gauge.dart';
+import 'package:at_telemetry/src/at_telemetry_gauge_exporter.dart';
 import 'package:at_telemetry/src/at_telemetry_signer.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_http_signature.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
+import 'package:at_telemetry/src/otel/at_telemetry_otel_metrics_codec.dart';
 import 'package:http/http.dart' as http;
 
-final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
-  final Uri _endpoint;
+final class AtTelemetryOtelSignedHttpExporter
+    implements AtTelemetryExporter, AtTelemetryGaugeExporter {
+  static const String logsPath = '/v1/logs';
+  static const String metricsPath = '/v1/metrics';
+
+  final Uri _logsEndpoint;
+  final Uri _metricsEndpoint;
   final String _serviceName;
   final String _keyId;
   final String _audience;
@@ -29,7 +37,8 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
     String? apiKey,
     http.Client? client,
     void Function(Object)? onError,
-  })  : _endpoint = _logsEndpoint(endpoint),
+  })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
+        _metricsEndpoint = _signalEndpoint(endpoint, metricsPath),
         _serviceName = serviceName,
         _keyId = keyId,
         _audience = audience,
@@ -39,17 +48,17 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
         _ownsClient = client == null,
         _onError = onError;
 
-  static Uri _logsEndpoint(Uri endpoint) {
+  static Uri _signalEndpoint(Uri endpoint, String path) {
     if (!endpoint.hasAuthority ||
         (endpoint.scheme != 'http' && endpoint.scheme != 'https') ||
         endpoint.hasQuery ||
         endpoint.hasFragment ||
         (endpoint.path.isNotEmpty &&
             endpoint.path != '/' &&
-            !endpoint.path.endsWith('/v1/logs'))) {
+            !endpoint.path.endsWith(logsPath))) {
       throw ArgumentError.value(endpoint, 'endpoint', 'invalid OTLP endpoint');
     }
-    return endpoint.replace(path: '/v1/logs');
+    return endpoint.replace(path: path);
   }
 
   @override
@@ -62,10 +71,27 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
     if (_closed) {
       throw StateError('Exporter is closed');
     }
-    return _enqueue(() => const AtTelemetryOtelLogsCodec().encodeExportRequest(
-          <AtTelemetryEvent>[event],
-          serviceName: _serviceName,
-        ));
+    return _enqueue(
+        _logsEndpoint,
+        () => const AtTelemetryOtelLogsCodec().encodeExportRequest(
+              <AtTelemetryEvent>[event],
+              serviceName: _serviceName,
+            ));
+  }
+
+  @override
+  Future<void> exportGauges(Iterable<AtTelemetryGauge> gauges) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final List<AtTelemetryGauge> snapshot = List<AtTelemetryGauge>.of(gauges);
+    _enqueue(
+        _metricsEndpoint,
+        () => const AtTelemetryOtelMetricsCodec().encodeExportRequest(
+              snapshot,
+              serviceName: _serviceName,
+            ));
+    return _pending;
   }
 
   Future<void> sendEncodedLogs(List<int> body) {
@@ -73,7 +99,7 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
       throw StateError('Exporter is closed');
     }
     final List<int> payload = List<int>.unmodifiable(body);
-    return _enqueue(() => payload);
+    return _enqueue(_logsEndpoint, () => payload);
   }
 
   @override
@@ -86,25 +112,25 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
     if (_ownsClient) _client.close();
   }
 
-  Future<void> _enqueue(List<int> Function() encode) {
-    final Future<void> sent = _pending.then((_) => _send(encode()));
+  Future<void> _enqueue(Uri endpoint, List<int> Function() encode) {
+    final Future<void> sent = _pending.then((_) => _send(endpoint, encode()));
     _pending = sent.catchError((Object error) {
       _onError?.call(error);
     });
     return sent;
   }
 
-  Future<void> _send(List<int> body) async {
+  Future<void> _send(Uri endpoint, List<int> body) async {
     for (int attempt = 0; attempt < 3; attempt++) {
       final AtTelemetryOtelHttpSignature signed =
           await AtTelemetryOtelHttpSignature.sign(
         body: body,
-        path: _endpoint.path,
+        path: endpoint.path,
         keyId: _keyId,
         audience: _audience,
         signer: _signer,
       );
-      final http.Request request = http.Request('POST', _endpoint)
+      final http.Request request = http.Request('POST', endpoint)
         ..followRedirects = false
         ..headers.addAll(<String, String>{
           'content-type': AtTelemetryOtelHttpSignature.contentType,

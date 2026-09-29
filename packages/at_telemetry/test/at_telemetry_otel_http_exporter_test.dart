@@ -36,7 +36,7 @@ void main() {
       name: 'atsign.server.heartbeat',
       timestamp: timestamp,
       attributes: <String, Object?>{
-        'atsign.server.id': 'secondary-123',
+        'atsign.atserver.id': 'secondary-123',
         'atsign.server.healthy': true,
         'atsign.server.optional': null,
       },
@@ -88,7 +88,7 @@ void main() {
       for (final common.KeyValue attribute in logRecord.attributes)
         attribute.key: attribute.value,
     };
-    expect(attributes['atsign.server.id']?.stringValue, 'secondary-123');
+    expect(attributes['atsign.atserver.id']?.stringValue, 'secondary-123');
     expect(attributes['atsign.server.healthy']?.boolValue, isTrue);
     expect(attributes, isNot(contains('atsign.server.optional')));
 
@@ -105,7 +105,7 @@ void main() {
     expect(decodedEvents.single.timestamp, timestamp);
     expect(decodedEvents.single.attributes['service.name'], 'atserver');
     expect(
-        decodedEvents.single.attributes['atsign.server.id'], 'secondary-123');
+        decodedEvents.single.attributes['atsign.atserver.id'], 'secondary-123');
   });
 
   test('rejects an OTLP request without log records', () {
