@@ -73,8 +73,7 @@ void main() {
   });
 
   test('round-trips events through the notification codec', () {
-    const AtTelemetryNotificationCodec codec =
-        AtTelemetryNotificationCodec();
+    const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
     final List<AtTelemetryLogRecord> decoded = codec.decode(
       codec.encode(<AtTelemetryLogRecord>[event]),
     );

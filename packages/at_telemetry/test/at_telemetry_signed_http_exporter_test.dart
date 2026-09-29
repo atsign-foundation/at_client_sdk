@@ -18,8 +18,7 @@ void main() {
       client: MockClient((http.Request request) async {
         requests++;
         expect(request.url.path, '/v1/logs');
-        final AtTelemetryHttpSignature signed =
-            AtTelemetryHttpSignature.parse(
+        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -61,8 +60,7 @@ void main() {
       signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
       client: MockClient((http.Request request) async {
         expect(request.url.path, '/v1/metrics');
-        final AtTelemetryHttpSignature signed =
-            AtTelemetryHttpSignature.parse(
+        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -120,11 +118,9 @@ void main() {
         final AtTelemetryHttpSignature signature =
             AtTelemetryHttpSignature.parse(
           input: request.headers[AtTelemetryHttpSignature.inputHeader]!,
-          signature:
-              request.headers[AtTelemetryHttpSignature.signatureHeader]!,
+          signature: request.headers[AtTelemetryHttpSignature.signatureHeader]!,
           digest: request.headers[AtTelemetryHttpSignature.digestHeader]!,
-          audience:
-              request.headers[AtTelemetryHttpSignature.audienceHeader]!,
+          audience: request.headers[AtTelemetryHttpSignature.audienceHeader]!,
         );
         expect(signature.matchesBody(request.bodyBytes), isTrue);
         expect(
@@ -328,8 +324,7 @@ void main() {
       onError: errors.add,
       client: MockClient((http.Request request) async {
         requests++;
-        final AtTelemetryHttpSignature signed =
-            AtTelemetryHttpSignature.parse(
+        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -364,8 +359,8 @@ void main() {
 
   test('sends stored bytes and reports failure before a later retry', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
-    final List<int> payload = const AtTelemetryLogsCodec()
-        .encodeExportRequest(<AtTelemetryLogRecord>[
+    final List<int> payload =
+        const AtTelemetryLogsCodec().encodeExportRequest(<AtTelemetryLogRecord>[
       AtTelemetryLogRecord(
         name: 'atsign.atserver.heartbeat',
         timestamp: DateTime.now().toUtc(),
@@ -388,8 +383,7 @@ void main() {
         expect(request.followRedirects, isFalse);
         expect(request.url.path, '/v1/logs');
         expect(request.bodyBytes, payload);
-        final AtTelemetryHttpSignature signed =
-            AtTelemetryHttpSignature.parse(
+        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,

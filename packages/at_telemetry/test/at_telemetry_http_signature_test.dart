@@ -9,8 +9,7 @@ void main() {
   final DateTime now = DateTime.utc(2026, 9, 25, 12);
   final List<int> body = utf8.encode('hello telemetry');
 
-  Future<AtTelemetryHttpSignature> sign() =>
-      AtTelemetryHttpSignature.sign(
+  Future<AtTelemetryHttpSignature> sign() => AtTelemetryHttpSignature.sign(
         body: body,
         path: '/v1/logs',
         keyId: '@Producer1',
@@ -21,8 +20,7 @@ void main() {
 
   test('signs and verifies an exact OTLP request', () async {
     final AtTelemetryHttpSignature signed = await sign();
-    final AtTelemetryHttpSignature parsed =
-        AtTelemetryHttpSignature.parse(
+    final AtTelemetryHttpSignature parsed = AtTelemetryHttpSignature.parse(
       input: signed.input,
       signature: signed.signature,
       digest: signed.digest,

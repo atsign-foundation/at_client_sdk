@@ -28,8 +28,7 @@ Future<void> main() async {
     (HttpRequest request) => _handle(request, publicKeys, seenNonces),
   );
 
-  final AtTelemetrySignedHttpExporter exporter =
-      AtTelemetrySignedHttpExporter(
+  final AtTelemetrySignedHttpExporter exporter = AtTelemetrySignedHttpExporter(
     endpoint: Uri.parse('http://127.0.0.1:${server.port}'),
     serviceName: 'my_app',
     keyId: producer,
@@ -63,17 +62,13 @@ Future<void> _handle(
   final AtTelemetryHttpSignature signature;
   try {
     signature = AtTelemetryHttpSignature.parse(
-      input:
-          request.headers.value(AtTelemetryHttpSignature.inputHeader) ?? '',
+      input: request.headers.value(AtTelemetryHttpSignature.inputHeader) ?? '',
       signature:
-          request.headers.value(AtTelemetryHttpSignature.signatureHeader) ??
-              '',
+          request.headers.value(AtTelemetryHttpSignature.signatureHeader) ?? '',
       digest:
-          request.headers.value(AtTelemetryHttpSignature.digestHeader) ??
-              '',
+          request.headers.value(AtTelemetryHttpSignature.digestHeader) ?? '',
       audience:
-          request.headers.value(AtTelemetryHttpSignature.audienceHeader) ??
-              '',
+          request.headers.value(AtTelemetryHttpSignature.audienceHeader) ?? '',
     );
   } on FormatException {
     return _reply(request, HttpStatus.badRequest);
@@ -83,8 +78,7 @@ Future<void> _handle(
 
   final String? publicKey = publicKeys[signature.keyId];
   final bool accepted = request.method == 'POST' &&
-      signature.audience ==
-          AtTelemetryHttpSignature.encodeAtsign(collector) &&
+      signature.audience == AtTelemetryHttpSignature.encodeAtsign(collector) &&
       signature.isFresh(DateTime.now()) &&
       signature.matchesBody(body) &&
       publicKey != null &&

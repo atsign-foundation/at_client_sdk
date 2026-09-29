@@ -31,8 +31,7 @@ Future<void> main() async {
 
   // Events can be packed into a base64 OTLP payload, for example to send
   // them as the value of an Atsign notification
-  const AtTelemetryNotificationCodec codec =
-      AtTelemetryNotificationCodec();
+  const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
   final String payload = codec.encode(
     <AtTelemetryLogRecord>[event],
     serviceName: 'my_app',
