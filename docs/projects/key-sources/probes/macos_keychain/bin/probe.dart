@@ -46,6 +46,48 @@ final secDelete = sec.lookupFunction<Int32 Function(Pointer<Void>),
 final secSetUi = sec.lookupFunction<Int32 Function(Uint8), int Function(int)>(
     'SecKeychainSetUserInteractionAllowed');
 
+
+final secAccessCreate = sec.lookupFunction<
+    Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>),
+    int Function(Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>)>(
+  'SecAccessCreate');
+final secAccessMatchingAcls = sec.lookupFunction<
+    Pointer<Void> Function(Pointer<Void>, Pointer<Void>),
+    Pointer<Void> Function(Pointer<Void>, Pointer<Void>)>(
+  'SecAccessCopyMatchingACLList');
+final secAclCopy = sec.lookupFunction<
+    Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>, Pointer<Pointer<Void>>,
+        Pointer<Uint16>),
+    int Function(Pointer<Void>, Pointer<Pointer<Void>>, Pointer<Pointer<Void>>,
+        Pointer<Uint16>)>('SecACLCopyContents');
+final secAclSet = sec.lookupFunction<
+    Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Uint16),
+    int Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, int)>(
+  'SecACLSetContents');
+final cfArrayCount = cf.lookupFunction<Long Function(Pointer<Void>),
+    int Function(Pointer<Void>)>('CFArrayGetCount');
+final cfArrayAt = cf.lookupFunction<Pointer<Void> Function(Pointer<Void>, Long),
+    Pointer<Void> Function(Pointer<Void>, int)>('CFArrayGetValueAtIndex');
+
+/// A SecAccess whose decrypt ACL entries list no applications: any app.
+(Pointer<Void>, String) anyAppAccess() {
+  final out = calloc<Pointer<Void>>();
+  final rc = secAccessCreate(s('atsign-kc-probe'), nullptr, out);
+  final acls = secAccessMatchingAcls(
+      out.value, sym(sec, 'kSecACLAuthorizationDecrypt'));
+  final n = acls == nullptr ? -1 : cfArrayCount(acls);
+  var setRc = <int>[];
+  for (var i = 0; i < n; i++) {
+    final acl = cfArrayAt(acls, i);
+    final apps = calloc<Pointer<Void>>();
+    final desc = calloc<Pointer<Void>>();
+    final prompt = calloc<Uint16>();
+    secAclCopy(acl, apps, desc, prompt);
+    setRc.add(secAclSet(acl, nullptr, desc.value, prompt.value));
+  }
+  return (out.value, 'accessCreate=$rc decryptAcls=$n aclSet=$setRc');
+}
+
 Pointer<Void> s(String v) => cfStr(nullptr, v.toNativeUtf8(), 0x08000100);
 
 Pointer<Void> dict(Map<Pointer<Void>, Pointer<Void>> m) {
@@ -83,6 +125,15 @@ void main(List<String> args) {
     final m = base(service)..[sym(sec, 'kSecValueData')] = cfDataCreate(nullptr, buf, data.length);
     final rc = secAdd(dict(m), nullptr);
     print('PROBE build=$buildTag exe=$exe mode=add bytes=${data.length} status=$rc setUi=$uiRc ms=${sw.elapsedMilliseconds}');
+  } else if (mode == 'addany') {
+    final data = payload(int.parse(args[2]));
+    final buf = calloc<Uint8>(data.length)..asTypedList(data.length).setAll(0, data);
+    final (access, how) = anyAppAccess();
+    final m = base(service)
+      ..[sym(sec, 'kSecValueData')] = cfDataCreate(nullptr, buf, data.length)
+      ..[sym(sec, 'kSecAttrAccess')] = access;
+    final rc = secAdd(dict(m), nullptr);
+    print('PROBE build=$buildTag exe=$exe mode=addany bytes=${data.length} status=$rc $how');
   } else if (mode == 'read') {
     final m = base(service)
       ..[sym(sec, 'kSecReturnData')] = sym(cf, 'kCFBooleanTrue')
