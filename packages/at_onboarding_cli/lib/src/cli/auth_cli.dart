@@ -120,6 +120,32 @@ Future<int> main(List<String> arguments) async {
   }
 }
 
+/// [arguments] as the command line to run, with `onboard` inserted when they
+/// name no command, and the deprecation warning to print when it was.
+///
+/// A command line that starts with an option other than `-h`, `--help` or
+/// `--version` names no command. The warning never repeats the arguments,
+/// since they can carry a CRAM secret.
+({List<String> arguments, String? warning}) withImplicitOnboard(
+    List<String> arguments) {
+  if (arguments.isEmpty) {
+    return (arguments: arguments, warning: null);
+  }
+  final first = arguments.first;
+  if (!first.startsWith('-') ||
+      first == '-h' ||
+      first == '--help' ||
+      first == '--version') {
+    return (arguments: arguments, warning: null);
+  }
+  return (
+    arguments: ['onboard', ...arguments],
+    warning: 'Deprecated: no command was given, so this runs "onboard". '
+        'Name the command, as in "at_activate onboard -a <atSign>", because '
+        'at_activate 3.0 will refuse an invocation with no command.',
+  );
+}
+
 Future<int> wrappedMain(List<String> arguments) async {
   if (arguments.isEmpty) {
     stderr.writeln('Version: $packageVersion');
@@ -131,20 +157,11 @@ Future<int> wrappedMain(List<String> arguments) async {
     return 1;
   }
 
-  final first = arguments.first;
-  if (first.startsWith('-') &&
-      first != '-h' &&
-      first != '--help' &&
-      first != '--version') {
-    stderr.writeln('Version: $packageVersion');
-    stderr.writeln('No command was given. "$first" is an option, not a '
-        'command — an invocation with no command used to be treated as '
-        '"onboard", and no longer is. Name the command you want:');
-    aca.parser.printAllCommandsUsage(showSubCommandParams: false);
-    stderr.writeln('\nFor an activation that is "onboard": '
-        'auth onboard -a <atSign> -c <cram secret>\n');
-    return 1;
+  final implicit = withImplicitOnboard(arguments);
+  if (implicit.warning != null) {
+    stderr.writeln(implicit.warning);
   }
+  arguments = implicit.arguments;
 
   final ArgResults topLevelResults;
   try {

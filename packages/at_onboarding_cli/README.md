@@ -37,8 +37,9 @@ atSign once you paste the code back. The generated `.atKeys` file lands in
 
 ### `at_activate` — the atSign's lifecycle from the terminal
 
-Every invocation names a command; `at_activate` with none prints the list
-and exits 1.
+Every invocation should name a command. With none, `at_activate` still runs
+`onboard`, as 1.x did, but prints a deprecation warning, because 3.0 will
+refuse it.
 
 ```sh
 # Activate a newly registered atSign with the CRAM secret the registrar sent
@@ -179,24 +180,24 @@ through at_client.
 `at_activate` name its command. The `.atKeys` file a 1.x tool wrote is read
 unchanged.
 
-| 1.x                                                                                        | 2.0                                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `at_activate -a @alice -c <secret>` (no command)                                           | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command prints the list and exits 1                                                                             |
-| (no signing-algorithm flag)                                                                | `--posture legacy\|pqReady\|pqActive`, honoured on every command and defaulting to at_client's posture; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels        |
-| `AtOnboardingServiceImpl(atSign, pref).onboard()`                                          | `Atsign(atSign).activate(cramSecret: ..., keys: ..., preference: pref, storage: pref.storageFor(atSign))`                                                                            |
-| `.authenticate()`                                                                          | unchanged: opens the client through `Atsign.open`, makes it current, and answers true only when its connection is online; an offline client is still held, `atClient.connection` says why |
-| `.authenticate(enrollmentId: ...)`                                                         | removed: the keyfile decides which enrollment authenticates                                                                                                                          |
+| 1.x                                                                                        | 2.0                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `at_activate -a @alice -c <secret>` (no command)                                           | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command still runs `onboard`, with a deprecation warning                                                                  |
+| (no signing-algorithm flag)                                                                | `--posture legacy\|pqReady\|pqActive`, honoured on every command and defaulting to at_client's posture; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels                |
+| `AtOnboardingServiceImpl(atSign, pref).onboard()`                                          | `Atsign(atSign).activate(cramSecret: ..., keys: ..., preference: pref, storage: pref.storageFor(atSign))`                                                                                      |
+| `.authenticate()`                                                                          | unchanged: opens the client through `Atsign.open`, makes it current, and answers true only when its connection is online; an offline client is still held, `atClient.connection` says why      |
+| `.authenticate(enrollmentId: ...)`                                                         | removed: the keyfile decides which enrollment authenticates                                                                                                                                    |
 | `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)` | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; the keyfile named on `enroll` is the resume record, and `Atsign.resumeEnrollment` picks a pending request up after a restart |
-| the `*.enrollment.checkpoint` file                                                         | gone; the keyfile holds the pending keys                                                                                                                                             |
-| `.close()`                                                                                 | `atClient.stop()`                                                                                                                                                                    |
-| `.isOnboarded()`                                                                           | `at_activate status`, or at_lookup's `checkAtSignServer` over a lookup the app builds                                                                                                |
-| `.atLookUp`, `.atChops`, `.atAuth`, `.completeActivation()`                                | none; the client's own connection does what they exposed                                                                                                                             |
-| `.getAtClient()`                                                                           | `.atClient`; the deprecated getter is gone                                                                                                                                           |
-| `AtOnboardingPreference.hiveStoragePath`, `.commitLogPath`                                 | `.storagePath`, or `.storage` for a bundle of your own; `commitLogPath` was never read                                                                                               |
-| `AtOnboardingPreference()..signingAlgoType = ...`                                          | `AtOnboardingPreference(posture: ..., authenticationKeyAlgorithm: ..., dataSigningKeyAlgorithms: ...)`, fixed at construction                                                       |
-| `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                             | removed; run the `at_activate` binary                                                                                                                                                |
-| `authenticate()` copying the keyfile's keys into the client's local storage                | the client reads them from its key source                                                                                                                                            |
-| the keyfile `onboard` writes                                                               | at_auth's own document: the self-encryption key is no longer duplicated under the atSign, and a passphrase-protected file uses a salted envelope that 1.x tooling cannot read      |
+| the `*.enrollment.checkpoint` file                                                         | gone; the keyfile holds the pending keys                                                                                                                                                       |
+| `.close()`                                                                                 | `atClient.stop()`                                                                                                                                                                              |
+| `.isOnboarded()`                                                                           | `at_activate status`, or at_lookup's `checkAtSignServer` over a lookup the app builds                                                                                                          |
+| `.atLookUp`, `.atChops`, `.atAuth`, `.completeActivation()`                                | none; the client's own connection does what they exposed                                                                                                                                       |
+| `.getAtClient()`                                                                           | `.atClient`; the deprecated getter is gone                                                                                                                                                     |
+| `AtOnboardingPreference.hiveStoragePath`, `.commitLogPath`                                 | `.storagePath`, or `.storage` for a bundle of your own; `commitLogPath` was never read                                                                                                         |
+| `AtOnboardingPreference()..signingAlgoType = ...`                                          | `AtOnboardingPreference(posture: ..., authenticationKeyAlgorithm: ..., dataSigningKeyAlgorithms: ...)`, fixed at construction                                                                  |
+| `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                             | removed; run the `at_activate` binary                                                                                                                                                          |
+| `authenticate()` copying the keyfile's keys into the client's local storage                | the client reads them from its key source                                                                                                                                                      |
+| the keyfile `onboard` writes                                                               | at_auth's own document: the self-encryption key is no longer duplicated under the atSign, and a passphrase-protected file uses a salted envelope that 1.x tooling cannot read                  |
 
 ### Before and after
 
