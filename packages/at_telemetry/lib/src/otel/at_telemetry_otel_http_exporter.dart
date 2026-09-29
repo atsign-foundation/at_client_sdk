@@ -14,25 +14,14 @@ final class AtTelemetryOtelHttpExporter implements AtTelemetryExporter {
   static Future<AtTelemetryOtelHttpExporter> create({
     required Uri endpoint,
     required String serviceName,
-    String? apiKey,
     bool detectPlatformResources = true,
   }) async {
-    if (apiKey != null && (apiKey.isEmpty || apiKey.contains(RegExp(r'\s')))) {
-      throw ArgumentError.value(
-        apiKey.isEmpty ? apiKey : '<redacted>',
-        'apiKey',
-        'must be non-empty and contain no whitespace',
-      );
-    }
-
     final OtlpHttpLogRecordExporter logRecordExporter =
         OtlpHttpLogRecordExporter(
       OtlpHttpLogRecordExporterConfig(
         endpoint: endpoint.toString(),
         protocol: OtlpHttpProtocol.httpProtobuf,
-        headers: apiKey == null
-            ? const <String, String>{}
-            : <String, String>{'authorization': 'Bearer $apiKey'},
+        headers: const <String, String>{},
       ),
     );
 

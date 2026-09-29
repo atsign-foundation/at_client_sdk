@@ -21,7 +21,6 @@ final class AtTelemetryOtelSignedHttpExporter
   final String _keyId;
   final String _audience;
   final AtTelemetryRsaSigner _signer;
-  final String? _apiKey;
   final http.Client _client;
   final bool _ownsClient;
   final void Function(Object)? _onError;
@@ -34,7 +33,6 @@ final class AtTelemetryOtelSignedHttpExporter
     required String keyId,
     required String audience,
     required AtTelemetryRsaSigner signer,
-    String? apiKey,
     http.Client? client,
     void Function(Object)? onError,
   })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
@@ -43,7 +41,6 @@ final class AtTelemetryOtelSignedHttpExporter
         _keyId = keyId,
         _audience = audience,
         _signer = signer,
-        _apiKey = apiKey,
         _client = client ?? http.Client(),
         _ownsClient = client == null,
         _onError = onError;
@@ -138,7 +135,6 @@ final class AtTelemetryOtelSignedHttpExporter
           AtTelemetryOtelHttpSignature.audienceHeader: signed.audience,
           AtTelemetryOtelHttpSignature.inputHeader: signed.input,
           AtTelemetryOtelHttpSignature.signatureHeader: signed.signature,
-          if (_apiKey != null) 'authorization': 'Bearer $_apiKey',
         })
         ..bodyBytes = body;
       try {

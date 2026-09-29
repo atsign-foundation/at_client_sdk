@@ -22,7 +22,6 @@ void main() {
         await AtTelemetryOtelHttpExporter.create(
       endpoint: endpoint,
       serviceName: 'atserver',
-      apiKey: 'server-a-secret',
     );
 
     addTearDown(() async {
@@ -64,7 +63,7 @@ void main() {
     );
     expect(
       request.headers.value(HttpHeaders.authorizationHeader),
-      'Bearer server-a-secret',
+      isNull,
     );
 
     final collector.ExportLogsServiceRequest exportRequest =

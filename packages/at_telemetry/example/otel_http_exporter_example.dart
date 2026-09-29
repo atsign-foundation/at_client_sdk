@@ -19,7 +19,6 @@ Future<void> main() async {
       await AtTelemetryOtelHttpExporter.create(
     endpoint: endpoint,
     serviceName: 'my_app',
-    apiKey: 'example-api-key',
   );
 
   await exporter.export(AtTelemetryEvent(
@@ -43,7 +42,6 @@ Future<void> _handle(HttpRequest request) async {
   final List<AtTelemetryEvent> events = codec.decodeExportRequest(body);
 
   print('Collector received ${request.method} ${request.uri.path}');
-  print('Authorization: ${request.headers.value('authorization')}');
   for (final AtTelemetryEvent event in events) {
     print('Event: ${event.name} ${event.attributes}');
   }
