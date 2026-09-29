@@ -68,8 +68,9 @@ class _HomeState extends State<Home> {
       await _invitations.processAcceptances();
       final connected = await _invitations.processConnections();
       final me = _invitations.me;
-      final received = await (await _invitations.receivedInvitations)
-          .getItems(owner: me);
+      final received = await (await _invitations.receivedInvitations).getItems(
+        owner: me,
+      );
       final sent = await (await _invitations.sentInvitations).getItems(
         owner: me,
       );
@@ -94,9 +95,9 @@ class _HomeState extends State<Home> {
     final link = Incoming.instance.value;
     if (link == null || !mounted) return;
     Incoming.instance.clear();
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ReceivedScreen(link: link)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ReceivedScreen(link: link)));
     await _pass();
   }
 

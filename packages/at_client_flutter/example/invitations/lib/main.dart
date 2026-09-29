@@ -43,9 +43,7 @@ class _LaunchScreen extends StatelessWidget {
       ).push(MaterialPageRoute(builder: (_) => const Home()));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 

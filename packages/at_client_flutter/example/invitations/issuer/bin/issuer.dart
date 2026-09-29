@@ -45,8 +45,7 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> _handle(Issuer issuer, HttpRequest request) async {
-  final response = request.response
-    ..headers.contentType = ContentType.json;
+  final response = request.response..headers.contentType = ContentType.json;
   try {
     switch ((request.method, request.uri.path)) {
       case ('POST', '/atsigns'):
@@ -80,10 +79,13 @@ class Issuer {
   final String rootDomain;
   final List<String> issued;
 
-  Issuer({required this.cramKeys, required this.state, required this.rootDomain})
-    : issued = state.existsSync()
-          ? List<String>.from(jsonDecode(state.readAsStringSync()))
-          : [];
+  Issuer({
+    required this.cramKeys,
+    required this.state,
+    required this.rootDomain,
+  }) : issued = state.existsSync()
+           ? List<String>.from(jsonDecode(state.readAsStringSync()))
+           : [];
 
   int get total => cramKeys.length;
 
@@ -104,8 +106,13 @@ class Issuer {
     final next = cramKeys.keys.where((a) => !issued.contains(a)).firstOrNull;
     if (next == null) return null;
     issued.add(next);
-    final temp = File('${state.path}.tmp')..writeAsStringSync(jsonEncode(issued));
+    final temp = File('${state.path}.tmp')
+      ..writeAsStringSync(jsonEncode(issued));
     temp.renameSync(state.path);
-    return {'atSign': next, 'cramKey': cramKeys[next]!, 'rootDomain': rootDomain};
+    return {
+      'atSign': next,
+      'cramKey': cramKeys[next]!,
+      'rootDomain': rootDomain,
+    };
   }
 }

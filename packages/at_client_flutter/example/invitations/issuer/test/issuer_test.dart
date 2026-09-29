@@ -41,7 +41,10 @@ void main() {
     final restarted = issuer();
 
     expect(restarted.issued, ['@alpha']);
-    expect(restarted.issueNext()?['atSign'], '@bravo',
-        reason: 'the first issuer\'s state file says @alpha is taken');
+    expect(
+      restarted.issueNext()?['atSign'],
+      '@bravo',
+      reason: 'the first issuer\'s state file says @alpha is taken',
+    );
   });
 }

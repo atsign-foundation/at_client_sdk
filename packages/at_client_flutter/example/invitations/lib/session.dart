@@ -56,7 +56,10 @@ class Session extends ChangeNotifier {
 
   /// Signs in as an atSign held in the keychain. With [atSign], and a root
   /// domain remembered for it, no atSign dialog is shown.
-  Future<bool> signInFromKeychain(BuildContext context, {String? atSign}) async {
+  Future<bool> signInFromKeychain(
+    BuildContext context, {
+    String? atSign,
+  }) async {
     var rootDomain = atSign == null ? null : _rootDomainOf[atSign];
     if (atSign == null || rootDomain == null) {
       final existing = atSign == null ? await knownAtSigns() : [atSign];

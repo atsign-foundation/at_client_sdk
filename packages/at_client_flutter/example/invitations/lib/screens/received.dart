@@ -137,9 +137,7 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                 if (_atSigns.length > 1)
                   DropdownButtonFormField<String>(
                     initialValue: _me,
-                    decoration: const InputDecoration(
-                      labelText: 'Accept as',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Accept as'),
                     items: [
                       for (final a in _atSigns)
                         DropdownMenuItem(value: a, child: Text(a)),
@@ -159,8 +157,7 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                   TextField(
                     controller: _separateContent,
                     decoration: const InputDecoration(
-                      labelText:
-                          'Encrypted content sent separately (optional)',
+                      labelText: 'Encrypted content sent separately (optional)',
                     ),
                   ),
                 const SizedBox(height: 24),
