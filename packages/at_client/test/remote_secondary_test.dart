@@ -1,9 +1,25 @@
+import 'dart:convert';
+
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
+
+/// Records every command an authenticator sends, answering each with an empty
+/// response so the authenticator stops after `from:`.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return '';
+  }
+}
 
 void main() {
   AtLookupImpl mockAtLookUp = MockAtLookupImpl();
@@ -94,6 +110,51 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookUp;
       String result = await remoteSecondary.executeAndParse(lookupVerbBuilder);
       expect(result, 'lookup data stub');
+    });
+  });
+
+  group('the installed authenticator announces this client', () {
+    const atSign = '@clientconfigtest';
+    AtClientPreference preference() => AtClientPreference()
+      ..atClientParticulars.appName = 'rs_test_app'
+      ..atClientParticulars.platform = 'rs_test_platform';
+
+    final shapes = <String, RemoteSecondary Function()>{
+      'atKeysIo': () => RemoteSecondary(atSign, preference(),
+          atKeysIo: InMemoryAtKeysIo.holding(atSign, AtKeys())),
+      'atChops': () => RemoteSecondary(atSign, preference(),
+          // ignore: deprecated_member_use
+          atChops: AtChopsImpl(AtChopsKeys.create(null, null))),
+      'privateKey': () =>
+          RemoteSecondary(atSign, preference()..privateKey = 'unused'),
+      'cramSecret': () =>
+          RemoteSecondary(atSign, preference()..cramSecret = 'unused'),
+    };
+
+    shapes.forEach((shape, build) {
+      test('a $shape client sends clientConfig in from:', () async {
+        final authenticator =
+            (build().atLookUp as AtLookupMuxable).authenticator;
+        expect(authenticator, isNotNull,
+            reason: 'a $shape client must install an authenticator');
+
+        final executor = _RecordingExecutor();
+        await authenticator!(executor);
+
+        // The atServer reads client version, id, appName and platform from
+        // this segment of from:, so its wire shape is pinned as a literal.
+        const prefix = 'from:$atSign:clientConfig:';
+        expect(executor.sent.first, startsWith(prefix),
+            reason: 'the $shape authenticator sent from: without the '
+                'clientConfig segment');
+        final config =
+            jsonDecode(executor.sent.first.substring(prefix.length).trim())
+                as Map<String, dynamic>;
+        expect(config['appName'], 'rs_test_app');
+        expect(config['platform'], 'rs_test_platform');
+        expect(config['clientId'], isNotEmpty);
+        expect(config['version'], isNotEmpty);
+      });
     });
   });
 }

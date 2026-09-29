@@ -5,46 +5,36 @@
 
 ## 2.0.0-rc1
 
-- **BREAKING:** `AtOnboardingService` keeps `AtOnboardingServiceImpl(atSign,
-  preference)`, `authenticate()` and `atClient`; what else it orchestrated is
-  at_client's. `onboard` is `Atsign.activate`; `enroll`, `sendEnrollRequest`,
+- **BREAKING:** `AtOnboardingService` keeps only
+  `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
+  `atClient`. `onboard` is `Atsign.activate`; `enroll`, `sendEnrollRequest`,
   `awaitApproval` and `createAtKeysFile` are `Atsign.enroll`,
-  `Atsign.resumeEnrollment` and `PendingEnrollment.client`; `close` is
-  `atClient.stop()`. `completeActivation`, `getAtClient`, `isOnboarded`,
-  `getAtLookup`, `atLookUp`, `atChops` and `atAuth` are removed.
-- **BREAKING:** `authenticate()` takes no `enrollmentId`: it authenticates as
-  the keyfile's own enrollment. It opens the client through `Atsign.open`,
-  stopping any client already live for the atSign, and answers true only when
-  the connection is online; an offline client is still held and its
-  `connection` says why. It no longer copies the keyfile's keys into local
-  storage.
-- **BREAKING:** `at_activate` needs a command. `at_activate -a @alice -c
-  <secret>` is no longer treated as `onboard`; it prints the command list and
-  exits 1. The deprecated `lib/src/activate_cli/activate_cli.dart` is removed;
-  the `at_activate` binary is unaffected.
-- **BREAKING:** the `*.enrollment.checkpoint` file is gone. The keyfile named
-  on `enroll` holds the pending keys, and running `at_activate enroll` again
-  for the same app and device resumes the wait for approval.
-- feat: `--posture legacy|pqReady|pqActive` on every command; unset, each runs
-  at at_client's default posture, which `onboard` and `enroll` announce.
-  `enroll --key-exchange legacy|pq` chooses how the enrollment's key travels.
-- feat: `AtOnboardingPreference(posture: ..., authenticationKeyAlgorithm: ...,
-  dataSigningKeyAlgorithms: ...)`. `storage`, `storagePath` and
-  `storageFor(atSign)` choose the client's local storage, replacing
-  `hiveStoragePath`; `lookUps` and `proxyLookUps()` choose its transport.
-- feat: `createAtClient` opens the client through `Atsign.open`, waits for it
-  to come online for up to `maxConnectAttempts` tries three seconds apart, and
-  with `waitForPqStartup` (default true) waits for its post-quantum startup.
-- **Compatibility, passphrase-protected keyfiles only:** the `.atKeys` file is
-  written by at_auth's `FileAtKeysIo`, and a passphrase now uses at_auth's
-  version 1 envelope, whose AES key comes from a random per-file salt. at_auth
-  reads both versions, but older tooling cannot read version 1.
-  `AtOnboardingPreference.hashingAlgoType` no longer affects the file, and
-  `--hashingAlgoType` is ignored and hidden from help: it had been setting the
-  PKAM hash of the client `onboard` and `enroll` build, which an RSA-2048 key
-  refuses for argon2id.
-- fix: `--version` reports the package's actual version, and the enrollment
-  commands say what was done rather than echoing the atServer's response.
+  `resumeEnrollment` and `PendingEnrollment.client`; `close` is
+  `atClient.stop()`. The other members are removed.
+- **BREAKING:** `authenticate()` takes no `enrollmentId`, since the keyfile
+  decides. It opens the client with `Atsign.open`, stopping any client already
+  live for the atSign, returns true only when online, and no longer copies the
+  keys into local storage.
+- **BREAKING:** `at_activate` needs a command: a bare `at_activate -a @alice -c
+  <secret>` prints the commands and exits 1. The deprecated
+  `lib/src/activate_cli/activate_cli.dart` is removed.
+- **BREAKING:** the `*.enrollment.checkpoint` file is gone. The keyfile holds
+  the pending keys, and running `at_activate enroll` again resumes the wait.
+- feat: `--posture legacy|pqReady|pqActive` on every command, defaulting to
+  at_client's posture, and `enroll --key-exchange legacy|pq`.
+- feat: `AtOnboardingPreference` takes `posture`,
+  `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms`; `storage`,
+  `storagePath` and `storageFor(atSign)` choose local storage, and `lookUps`
+  and `proxyLookUps()` the transport.
+- feat: `createAtClient` opens the client with `Atsign.open`, tries up to
+  `maxConnectAttempts` times three seconds apart, and by default waits for its
+  post-quantum startup.
+- **Compatibility:** a passphrase-protected `.atKeys` file now uses at_auth's
+  version 1 envelope, with a random per-file salt, which older tooling cannot
+  read. `--hashingAlgoType` is ignored and hidden: it had set the PKAM hash,
+  which an RSA-2048 key refuses for argon2id.
+- fix: `--version` reports the real version, and the enrollment commands say
+  what they did.
 - build: requires `at_client` ^3.15.0-rc1, `at_auth` ^4.0.0-rc2 and
   `at_lookup` ^3.7.0-rc2. `at_server_status` is no longer a dependency.
 
