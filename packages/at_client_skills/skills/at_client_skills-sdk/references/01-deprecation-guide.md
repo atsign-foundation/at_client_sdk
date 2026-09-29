@@ -186,4 +186,4 @@ dependencies.
 
 - `packages/at_client/example/bin/collections_primitives.dart`
 - `packages/at_client/example/bin/collections_domain_objects.dart`
-- `packages/at_client_flutter/examples/todos/lib/services/todos_service.dart`
+- `packages/at_client_flutter/example/todos/lib/services/todos_service.dart`

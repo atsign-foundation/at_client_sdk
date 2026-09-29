@@ -82,7 +82,7 @@ records round-trip cleanly between them.
 ### First run
 
 ```bash
-cd packages/at_client_flutter/examples/todos
+cd packages/at_client_flutter/example/todos
 flutter pub get
 flutter run            # picks the connected device / first available platform
 ```

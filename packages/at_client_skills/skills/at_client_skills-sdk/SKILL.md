@@ -659,8 +659,8 @@ for the full migration table from old `AtCollectionModel` patterns to
   todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
 - `packages/at_client/example/bin/notifications.dart` — minimal
   `NotificationService` send/subscribe
-- `packages/at_client_flutter/examples/todos/` — canonical Flutter reference app
-- `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
+- `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
+- `packages/at_client_flutter/example/dockerstats/` — notifications + SQLite
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
 `AtCollection<T>`:** Both APIs share the same underlying atServer keystore but

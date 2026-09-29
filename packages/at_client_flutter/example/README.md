@@ -8,4 +8,4 @@ Copy/paste snippets live in `lib/snippets`, including
 `at_invitation_flutter` package.
 
 For a more complete reference app, see the todos example at
-[`packages/at_client_flutter/examples/todos`](../examples/todos).
+[`packages/at_client_flutter/example/todos`](todos).
