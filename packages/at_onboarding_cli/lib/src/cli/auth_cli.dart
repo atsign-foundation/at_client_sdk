@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -1230,9 +1229,7 @@ AtOnboardingPreference onboardingPreferenceFrom(ArgResults ar) {
     ..atKeysFilePath =
         ar[AuthCliArgs.argNameAtKeys] ?? HomeDirectoryUtil.getAtKeysPath(atSign)
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
-    ..storagePath = HomeDirectoryUtil.getHiveStoragePath(atSign)
-    ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+    ..storagePath = HomeDirectoryUtil.getHiveStoragePath(atSign);
 }
 
 String _lastProgressGroup = '';

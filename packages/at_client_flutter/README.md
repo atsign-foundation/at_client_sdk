@@ -228,8 +228,8 @@ atKeysIo.write(atSign, atKeys);
 
 ## Migrating from 1.x
 
-2.0 removes the two services that orchestrated at_auth for an app and stops
-re-exporting at_auth. The dialogs take the atSign, the keys store and the
+2.0 removes the two services that orchestrated at_auth for an app, and an app
+no longer imports at_auth. The dialogs take the atSign, the keys store and the
 `AtClientPreference`, and hand back the `AtClient` they opened; an app with
 its own UI calls the `Atsign` verbs directly. Nothing an app reads after
 login changes.
