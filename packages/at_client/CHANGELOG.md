@@ -8,6 +8,8 @@
 - BREAKING: `HiveAtClientStorage.bundle` is `persistenceBundle`, a member of
   `AtClientStorage`; storages extending `AtClientStorageBase` inherit it.
 - feat: on the web, a client built without `storage:` throws a `StateError` naming it.
+- fix: `get` on a `RemoteOnlyAtClientStorage` client returns the value instead of
+  throwing a `TypeError`.
 
 ## 3.15.0-rc1
 
