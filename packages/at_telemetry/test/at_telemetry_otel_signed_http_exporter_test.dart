@@ -42,7 +42,7 @@ void main() {
         return http.Response('', requests == 1 ? 503 : 200);
       }),
     );
-    await exporter.export(AtTelemetryEvent(
+    await exporter.export(AtTelemetryLogRecord(
       name: 'atsign.server.heartbeat',
       timestamp: DateTime.now().toUtc(),
       attributes: <String, Object?>{'atsign.atserver.id': '@producer1'},
@@ -79,7 +79,7 @@ void main() {
         );
         final AtTelemetryGauge gauge = const AtTelemetryOtelMetricsCodec()
             .decodeExportRequest(request.bodyBytes)
-            .single;
+            .single as AtTelemetryGauge;
         expect(gauge.name, 'atsign.atserver.uptime');
         expect(gauge.unit, 's');
         expect(gauge.value, 42);
@@ -87,7 +87,7 @@ void main() {
       }),
     );
 
-    await exporter.exportGauges(<AtTelemetryGauge>[
+    await exporter.exportMetrics(<AtTelemetryGauge>[
       AtTelemetryGauge(
         name: 'atsign.atserver.uptime',
         value: 42,
@@ -116,7 +116,7 @@ void main() {
           MockClient((http.Request request) async => http.Response('', 401)),
     );
 
-    await exporter.export(AtTelemetryEvent(
+    await exporter.export(AtTelemetryLogRecord(
       name: 'atsign.atserver.heartbeat',
       timestamp: DateTime.now().toUtc(),
     ));
@@ -127,7 +127,7 @@ void main() {
 
   test('confirms event delivery only after HTTP 200', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
-    final AtTelemetryEvent event = AtTelemetryEvent(
+    final AtTelemetryLogRecord event = AtTelemetryLogRecord(
       name: 'atsign.atserver.heartbeat',
       timestamp: DateTime.now().toUtc(),
       attributes: <String, Object?>{'atsign.atserver.id': '@producer1'},
@@ -158,7 +158,7 @@ void main() {
               publicKey: keys.publicKey.toString(),
             ),
             isTrue);
-        final AtTelemetryEvent received = const AtTelemetryOtelLogsCodec()
+        final AtTelemetryLogRecord received = const AtTelemetryOtelLogsCodec()
             .decodeExportRequest(request.bodyBytes)
             .single;
         expect(received.name, event.name);
@@ -181,8 +181,8 @@ void main() {
   test('sends stored bytes and reports failure before a later retry', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final List<int> payload =
-        const AtTelemetryOtelLogsCodec().encodeExportRequest(<AtTelemetryEvent>[
-      AtTelemetryEvent(
+        const AtTelemetryOtelLogsCodec().encodeExportRequest(<AtTelemetryLogRecord>[
+      AtTelemetryLogRecord(
         name: 'atsign.atserver.heartbeat',
         timestamp: DateTime.now().toUtc(),
         attributes: <String, Object?>{'atsign.atserver.id': '@producer1'},

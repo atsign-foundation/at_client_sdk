@@ -31,7 +31,7 @@ void main() {
 
     final Future<HttpRequest> requestFuture = server.first;
     final DateTime timestamp = DateTime.utc(2026, 2, 23, 12);
-    final AtTelemetryEvent heartbeat = AtTelemetryEvent(
+    final AtTelemetryLogRecord heartbeat = AtTelemetryLogRecord(
       name: 'atsign.server.heartbeat',
       timestamp: timestamp,
       attributes: <String, Object?>{
@@ -97,7 +97,7 @@ void main() {
     );
     expect(serviceName.value.stringValue, 'atserver');
 
-    final List<AtTelemetryEvent> decodedEvents =
+    final List<AtTelemetryLogRecord> decodedEvents =
         const AtTelemetryOtelLogsCodec().decodeExportRequest(payload);
     expect(decodedEvents, hasLength(1));
     expect(decodedEvents.single.name, heartbeat.name);

@@ -9,7 +9,7 @@ void main() {
       'success': true,
     };
 
-    final AtTelemetryEvent event = AtTelemetryEvent(
+    final AtTelemetryLogRecord event = AtTelemetryLogRecord(
       name: 'at_server.request',
       timestamp: timestamp,
       attributes: attributes,

@@ -5,7 +5,7 @@ import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:test/test.dart';
 
 void main() {
-  final AtTelemetryEvent event = AtTelemetryEvent(
+  final AtTelemetryLogRecord event = AtTelemetryLogRecord(
     name: 'atsign.app.started',
     timestamp: DateTime.utc(2026, 2, 25, 9, 30, 0, 0, 123),
     attributes: const <String, Object?>{
@@ -20,7 +20,7 @@ void main() {
   );
 
   test('round-trips an event through JSON', () {
-    final AtTelemetryEvent decoded = AtTelemetryEvent.fromJson(
+    final AtTelemetryLogRecord decoded = AtTelemetryLogRecord.fromJson(
       jsonDecode(jsonEncode(event.toJson())) as Map<String, Object?>,
     );
 
@@ -31,7 +31,7 @@ void main() {
 
   test('rejects JSON without an event name', () {
     expect(
-      () => AtTelemetryEvent.fromJson(<String, Object?>{
+      () => AtTelemetryLogRecord.fromJson(<String, Object?>{
         'timestamp': '2026-02-25T09:30:00.000Z',
       }),
       throwsFormatException,
@@ -40,8 +40,8 @@ void main() {
 
   test('round-trips events through OTLP encoding', () {
     const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
-    final List<AtTelemetryEvent> decoded = codec.decodeExportRequest(
-      codec.encodeExportRequest(<AtTelemetryEvent>[event], serviceName: 'app'),
+    final List<AtTelemetryLogRecord> decoded = codec.decodeExportRequest(
+      codec.encodeExportRequest(<AtTelemetryLogRecord>[event], serviceName: 'app'),
     );
 
     expect(decoded, hasLength(1));
@@ -60,8 +60,8 @@ void main() {
   test('refuses to encode unsupported attribute values', () {
     expect(
       () => const AtTelemetryOtelLogsCodec().encodeExportRequest(
-        <AtTelemetryEvent>[
-          AtTelemetryEvent(
+        <AtTelemetryLogRecord>[
+          AtTelemetryLogRecord(
             name: 'atsign.app.started',
             timestamp: DateTime.utc(2026),
             attributes: <String, Object?>{'when': DateTime.utc(2026)},
@@ -75,8 +75,8 @@ void main() {
   test('round-trips events through the notification codec', () {
     const AtTelemetryOtelNotificationCodec codec =
         AtTelemetryOtelNotificationCodec();
-    final List<AtTelemetryEvent> decoded = codec.decode(
-      codec.encode(<AtTelemetryEvent>[event]),
+    final List<AtTelemetryLogRecord> decoded = codec.decode(
+      codec.encode(<AtTelemetryLogRecord>[event]),
     );
 
     expect(decoded.single.name, event.name);

@@ -1,0 +1,4 @@
+enum AtTelemetryAggregationTemporality {
+  delta,
+  cumulative,
+}

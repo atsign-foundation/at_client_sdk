@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:at_telemetry/src/at_telemetry_event.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_otel_logs_codec.dart';
 
 final class AtTelemetryOtelNotificationCodec {
   static const String namespace = 'at_telemetry';
@@ -14,7 +14,7 @@ final class AtTelemetryOtelNotificationCodec {
   }) : _logsCodec = logsCodec;
 
   String encode(
-    Iterable<AtTelemetryEvent> events, {
+    Iterable<AtTelemetryLogRecord> events, {
     String? serviceName,
   }) {
     return base64Encode(
@@ -22,7 +22,7 @@ final class AtTelemetryOtelNotificationCodec {
     );
   }
 
-  List<AtTelemetryEvent> decode(String payload) {
+  List<AtTelemetryLogRecord> decode(String payload) {
     final List<int> bytes;
     try {
       bytes = base64Decode(payload);

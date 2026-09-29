@@ -1,22 +1,30 @@
 import 'dart:async';
 
-import 'package:at_telemetry/src/at_telemetry_event.dart';
-import 'package:at_telemetry/src/at_telemetry_exporter.dart';
-import 'package:at_telemetry/src/at_telemetry_gauge.dart';
-import 'package:at_telemetry/src/at_telemetry_gauge_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_metric.dart';
+import 'package:at_telemetry/src/at_telemetry_metric_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_span.dart';
+import 'package:at_telemetry/src/at_telemetry_span_exporter.dart';
 import 'package:at_telemetry/src/at_telemetry_signer.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_http_signature.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_otel_metrics_codec.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_otel_logs_codec.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_otel_metrics_codec.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_otel_traces_codec.dart';
 import 'package:http/http.dart' as http;
 
 final class AtTelemetryOtelSignedHttpExporter
-    implements AtTelemetryExporter, AtTelemetryGaugeExporter {
+    implements
+        AtTelemetryLogRecordExporter,
+        AtTelemetryMetricExporter,
+        AtTelemetrySpanExporter {
   static const String logsPath = '/v1/logs';
   static const String metricsPath = '/v1/metrics';
+  static const String tracesPath = '/v1/traces';
 
   final Uri _logsEndpoint;
   final Uri _metricsEndpoint;
+  final Uri _tracesEndpoint;
   final String _serviceName;
   final String _keyId;
   final String _audience;
@@ -37,6 +45,7 @@ final class AtTelemetryOtelSignedHttpExporter
     void Function(Object)? onError,
   })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
         _metricsEndpoint = _signalEndpoint(endpoint, metricsPath),
+        _tracesEndpoint = _signalEndpoint(endpoint, tracesPath),
         _serviceName = serviceName,
         _keyId = keyId,
         _audience = audience,
@@ -59,32 +68,47 @@ final class AtTelemetryOtelSignedHttpExporter
   }
 
   @override
-  Future<void> export(AtTelemetryEvent event) {
+  Future<void> export(AtTelemetryLogRecord event) {
     sendConfirmed(event);
     return _pending;
   }
 
-  Future<void> sendConfirmed(AtTelemetryEvent event) {
+  Future<void> sendConfirmed(AtTelemetryLogRecord event) {
     if (_closed) {
       throw StateError('Exporter is closed');
     }
     return _enqueue(
         _logsEndpoint,
         () => const AtTelemetryOtelLogsCodec().encodeExportRequest(
-              <AtTelemetryEvent>[event],
+              <AtTelemetryLogRecord>[event],
               serviceName: _serviceName,
             ));
   }
 
   @override
-  Future<void> exportGauges(Iterable<AtTelemetryGauge> gauges) {
+  Future<void> exportMetrics(Iterable<AtTelemetryMetric> measurements) {
     if (_closed) {
       throw StateError('Exporter is closed');
     }
-    final List<AtTelemetryGauge> snapshot = List<AtTelemetryGauge>.of(gauges);
+    final List<AtTelemetryMetric> snapshot = List<AtTelemetryMetric>.of(measurements);
     _enqueue(
         _metricsEndpoint,
         () => const AtTelemetryOtelMetricsCodec().encodeExportRequest(
+              snapshot,
+              serviceName: _serviceName,
+            ));
+    return _pending;
+  }
+
+  @override
+  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final List<AtTelemetrySpan> snapshot = List<AtTelemetrySpan>.of(spans);
+    _enqueue(
+        _tracesEndpoint,
+        () => const AtTelemetryOtelTracesCodec().encodeExportRequest(
               snapshot,
               serviceName: _serviceName,
             ));

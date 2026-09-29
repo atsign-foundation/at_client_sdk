@@ -5,7 +5,7 @@ import 'package:at_telemetry/at_telemetry_otel.dart';
 
 // Run with: dart run example/at_telemetry_example.dart
 Future<void> main() async {
-  final AtTelemetryEvent event = AtTelemetryEvent(
+  final AtTelemetryLogRecord event = AtTelemetryLogRecord(
     name: 'atsign.app.started',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
@@ -18,14 +18,14 @@ Future<void> main() async {
   );
 
   // Any exporter can be used behind the AtTelemetryExporter interface
-  final AtTelemetryExporter exporter = ConsoleExporter();
+  final AtTelemetryLogRecordExporter exporter = ConsoleExporter();
   await exporter.export(event);
   await exporter.flush();
   await exporter.shutdown();
 
   // Events round-trip through JSON
   final String json = jsonEncode(event.toJson());
-  final AtTelemetryEvent fromJson = AtTelemetryEvent.fromJson(
+  final AtTelemetryLogRecord fromJson = AtTelemetryLogRecord.fromJson(
     jsonDecode(json) as Map<String, Object?>,
   );
   print('JSON round trip: ${fromJson.name} at ${fromJson.timestamp}');
@@ -35,19 +35,19 @@ Future<void> main() async {
   const AtTelemetryOtelNotificationCodec codec =
       AtTelemetryOtelNotificationCodec();
   final String payload = codec.encode(
-    <AtTelemetryEvent>[event],
+    <AtTelemetryLogRecord>[event],
     serviceName: 'my_app',
   );
-  final List<AtTelemetryEvent> decoded = codec.decode(payload);
+  final List<AtTelemetryLogRecord> decoded = codec.decode(payload);
   print(
     'Notification round trip (${AtTelemetryOtelNotificationCodec.idAndNamespace}): '
     '${decoded.single.name} ${decoded.single.attributes}',
   );
 }
 
-final class ConsoleExporter implements AtTelemetryExporter {
+final class ConsoleExporter implements AtTelemetryLogRecordExporter {
   @override
-  Future<void> export(AtTelemetryEvent event) async {
+  Future<void> export(AtTelemetryLogRecord event) async {
     print('Exported: ${jsonEncode(event.toJson())}');
   }
 

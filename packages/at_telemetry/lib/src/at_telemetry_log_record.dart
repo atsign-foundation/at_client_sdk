@@ -1,15 +1,15 @@
-final class AtTelemetryEvent {
+final class AtTelemetryLogRecord {
   final String name;
   final DateTime timestamp;
   final Map<String, Object?> attributes;
 
-  const AtTelemetryEvent({
+  const AtTelemetryLogRecord({
     required this.name,
     required this.timestamp,
     this.attributes = const <String, Object?>{},
   });
 
-  factory AtTelemetryEvent.fromJson(Map<String, Object?> json) {
+  factory AtTelemetryLogRecord.fromJson(Map<String, Object?> json) {
     final Object? name = json['name'];
     final Object? timestamp = json['timestamp'];
     final Object attributes = json['attributes'] ?? const <String, Object?>{};
@@ -23,7 +23,7 @@ final class AtTelemetryEvent {
       throw const FormatException('Event attributes must be a JSON object');
     }
 
-    return AtTelemetryEvent(
+    return AtTelemetryLogRecord(
       name: name,
       timestamp: DateTime.parse(timestamp).toUtc(),
       attributes: Map<String, Object?>.unmodifiable(attributes),

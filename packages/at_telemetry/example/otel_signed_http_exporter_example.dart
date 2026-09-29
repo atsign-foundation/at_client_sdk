@@ -40,7 +40,7 @@ Future<void> main() async {
     onError: (Object error) => print('Telemetry failed: $error'),
   );
 
-  await exporter.export(AtTelemetryEvent(
+  await exporter.export(AtTelemetryLogRecord(
     name: 'atsign.server.heartbeat',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
@@ -96,7 +96,7 @@ Future<void> _handle(
   }
 
   const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
-  for (final AtTelemetryEvent event in codec.decodeExportRequest(body)) {
+  for (final AtTelemetryLogRecord event in codec.decodeExportRequest(body)) {
     print('Verified event from ${signature.keyId}: '
         '${event.name} ${event.attributes}');
   }

@@ -1,10 +1,11 @@
 // ignore_for_file: prefer_initializing_formals
 
-import 'package:at_telemetry/src/at_telemetry_event.dart';
-import 'package:at_telemetry/src/at_telemetry_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record_exporter.dart';
 import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
 
-final class AtTelemetryOtelHttpExporter implements AtTelemetryExporter {
+final class AtTelemetryOtelHttpExporter
+    implements AtTelemetryLogRecordExporter {
   final OTelLogger _logger;
 
   AtTelemetryOtelHttpExporter._({
@@ -40,7 +41,7 @@ final class AtTelemetryOtelHttpExporter implements AtTelemetryExporter {
   }
 
   @override
-  Future<void> export(AtTelemetryEvent event) {
+  Future<void> export(AtTelemetryLogRecord event) {
     final Map<String, Object> attributes = <String, Object>{};
 
     for (final MapEntry<String, Object?> entry in event.attributes.entries) {

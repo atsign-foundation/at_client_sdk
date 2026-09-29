@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 void main() {
   test('exports, flushes, and shuts down', () async {
     final _TestExporter exporter = _TestExporter();
-    final AtTelemetryEvent event = AtTelemetryEvent(
+    final AtTelemetryLogRecord event = AtTelemetryLogRecord(
       name: 'at_server.request',
       timestamp: DateTime.utc(2026, 2, 23, 12),
     );
@@ -13,19 +13,19 @@ void main() {
     await exporter.flush();
     await exporter.shutdown();
 
-    expect(exporter.events, <AtTelemetryEvent>[event]);
+    expect(exporter.events, <AtTelemetryLogRecord>[event]);
     expect(exporter.isFlushed, isTrue);
     expect(exporter.isShutdown, isTrue);
   });
 }
 
-final class _TestExporter implements AtTelemetryExporter {
-  final List<AtTelemetryEvent> events = <AtTelemetryEvent>[];
+final class _TestExporter implements AtTelemetryLogRecordExporter {
+  final List<AtTelemetryLogRecord> events = <AtTelemetryLogRecord>[];
   bool isFlushed = false;
   bool isShutdown = false;
 
   @override
-  Future<void> export(AtTelemetryEvent event) async {
+  Future<void> export(AtTelemetryLogRecord event) async {
     events.add(event);
   }
 

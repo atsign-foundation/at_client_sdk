@@ -1,5 +1,5 @@
-import 'package:at_telemetry/src/at_telemetry_event.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_otel_attributes_codec.dart';
+import 'package:at_telemetry/src/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_otel_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -17,11 +17,11 @@ final class AtTelemetryOtelLogsCodec {
   const AtTelemetryOtelLogsCodec();
 
   List<int> encodeExportRequest(
-    Iterable<AtTelemetryEvent> events, {
+    Iterable<AtTelemetryLogRecord> events, {
     String? serviceName,
   }) {
     final List<logs.LogRecord> logRecords = <logs.LogRecord>[
-      for (final AtTelemetryEvent event in events) _encodeLogRecord(event),
+      for (final AtTelemetryLogRecord event in events) _encodeLogRecord(event),
     ];
     if (logRecords.isEmpty) {
       throw ArgumentError.value(events, 'events', 'must not be empty');
@@ -51,7 +51,7 @@ final class AtTelemetryOtelLogsCodec {
     ).writeToBuffer();
   }
 
-  List<AtTelemetryEvent> decodeExportRequest(List<int> payload) {
+  List<AtTelemetryLogRecord> decodeExportRequest(List<int> payload) {
     final collector.ExportLogsServiceRequest request;
     try {
       request = collector.ExportLogsServiceRequest.fromBuffer(payload);
@@ -59,7 +59,7 @@ final class AtTelemetryOtelLogsCodec {
       throw FormatException('Invalid OTLP logs Protobuf payload', error);
     }
 
-    final List<AtTelemetryEvent> events = <AtTelemetryEvent>[];
+    final List<AtTelemetryLogRecord> events = <AtTelemetryLogRecord>[];
     for (final logs.ResourceLogs resourceLogs in request.resourceLogs) {
       final Map<String, Object?> resourceAttributes = resourceLogs.hasResource()
           ? _attributes.decode(resourceLogs.resource.attributes)
@@ -87,14 +87,14 @@ final class AtTelemetryOtelLogsCodec {
         'OTLP logs request must contain at least one log record',
       );
     }
-    return List<AtTelemetryEvent>.unmodifiable(events);
+    return List<AtTelemetryLogRecord>.unmodifiable(events);
   }
 
   List<int> encodeExportResponse() {
     return collector.ExportLogsServiceResponse().writeToBuffer();
   }
 
-  logs.LogRecord _encodeLogRecord(AtTelemetryEvent event) {
+  logs.LogRecord _encodeLogRecord(AtTelemetryLogRecord event) {
     if (event.name.trim().isEmpty) {
       throw ArgumentError.value(event.name, 'event.name', 'must not be empty');
     }
@@ -107,7 +107,7 @@ final class AtTelemetryOtelLogsCodec {
     );
   }
 
-  AtTelemetryEvent _decodeLogRecord(
+  AtTelemetryLogRecord _decodeLogRecord(
     logs.LogRecord logRecord, {
     required Map<String, Object?> resourceAttributes,
     required Map<String, Object?> scopeAttributes,
@@ -146,7 +146,7 @@ final class AtTelemetryOtelLogsCodec {
       ...scopeAttributes,
       ..._attributes.decode(logRecord.attributes),
     };
-    return AtTelemetryEvent(
+    return AtTelemetryLogRecord(
       name: logRecord.body.stringValue,
       timestamp: timestamp,
       attributes: Map<String, Object?>.unmodifiable(attributes),

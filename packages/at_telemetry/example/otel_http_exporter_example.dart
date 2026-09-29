@@ -21,7 +21,7 @@ Future<void> main() async {
     serviceName: 'my_app',
   );
 
-  await exporter.export(AtTelemetryEvent(
+  await exporter.export(AtTelemetryLogRecord(
     name: 'atsign.app.started',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{'app.version': '1.2.3'},
@@ -39,10 +39,10 @@ Future<void> _handle(HttpRequest request) async {
     (List<int> bytes, List<int> chunk) => bytes..addAll(chunk),
   );
   const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
-  final List<AtTelemetryEvent> events = codec.decodeExportRequest(body);
+  final List<AtTelemetryLogRecord> events = codec.decodeExportRequest(body);
 
   print('Collector received ${request.method} ${request.uri.path}');
-  for (final AtTelemetryEvent event in events) {
+  for (final AtTelemetryLogRecord event in events) {
     print('Event: ${event.name} ${event.attributes}');
   }
 
