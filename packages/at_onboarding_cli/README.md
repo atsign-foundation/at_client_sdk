@@ -182,10 +182,10 @@ unchanged.
 | 1.x                                                                                        | 2.0                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_activate -a @alice -c <secret>` (no command)                                           | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command prints the list and exits 1                                                                             |
-| `--signingAlgoType mldsa65` on `onboard`                                                   | `--posture legacy\|pqReady\|pqActive`, honoured on every command and defaulting to at_client's posture; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels        |
+| (no signing-algorithm flag)                                                                | `--posture legacy\|pqReady\|pqActive`, honoured on every command and defaulting to at_client's posture; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels        |
 | `AtOnboardingServiceImpl(atSign, pref).onboard()`                                          | `Atsign(atSign).activate(cramSecret: ..., keys: ..., preference: pref, storage: pref.storageFor(atSign))`                                                                            |
 | `.authenticate()`                                                                          | unchanged: opens the client through `Atsign.open`, makes it current, and answers true only when its connection is online; an offline client is still held, `atClient.connection` says why |
-| `.authenticate(enrollmentId: ...)`                                                         | the keyfile decides which enrollment authenticates; a value that disagrees is logged and ignored                                                                                     |
+| `.authenticate(enrollmentId: ...)`                                                         | removed: the keyfile decides which enrollment authenticates                                                                                                                          |
 | `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)` | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; the keyfile named on `enroll` is the resume record, and `Atsign.resumeEnrollment` picks a pending request up after a restart |
 | the `*.enrollment.checkpoint` file                                                         | gone; the keyfile holds the pending keys                                                                                                                                             |
 | `.close()`                                                                                 | `atClient.stop()`                                                                                                                                                                    |
@@ -296,7 +296,6 @@ await client.stop();
 ```sh
 # 1.x
 at_activate -a @alice -c <cram_secret>
-at_activate -a @alice -c <cram_secret> --signingAlgoType mldsa65
 
 # 2.0: the command is named; the posture is one flag on every command
 at_activate onboard -a @alice -c <cram_secret>

@@ -25,7 +25,7 @@ at_cli_commons 3.1.2, against pub.dev's published 1.16.1-rc1 and 3.1.1.
 | Package             | In tree     | Newest on pub.dev | Ships                                                                                                                                                                                                                                         |
 | ------------------- | ----------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `at_onboarding_cli` | 2.0.0-rc1   | 1.16.1-rc1        | Binaries `at_activate` (15 commands: help, status, onboard, enroll, otp, spp, list, fetch, approve, auto, deny, revoke, unrevoke, delete, interactive) and `at_register`; the `AtOnboardingService` adapter; `AtOnboardingPreference`; registrar HTTP (`OnboardingUtil`, `Register`); `createAtClient`; `AuthCliArgs`; `HomeDirectoryUtil` (unexported); a `ServiceFactoryWithNoOpSyncService` (unexported) |
-| `at_cli_commons`    | 3.1.2       | 3.1.1             | `CLIBase` (the standard flags → an open `AtClient`); `getHomeDirectory`, `standardAtClientStoragePath` and the other path helpers; `MySyncProgressListener`; a second `ServiceFactoryWithNoOpSyncService` (exported). Depends on at_onboarding_cli for `AtOnboardingPreference`. |
+| `at_cli_commons`    | 3.1.2-rc1   | 3.1.1             | `CLIBase` (the standard flags → an open `AtClient`); `getHomeDirectory`, `standardAtClientStoragePath` and the other path helpers; `MySyncProgressListener`; a second `ServiceFactoryWithNoOpSyncService` (exported). Depends on at_onboarding_cli for `AtOnboardingPreference`. |
 
 The two overlap: both build a client from a keyfile and the standard flags
 (`CLIBase.fromCommandLineArgs` and `createAtClient`), both carry a no-op sync
@@ -145,7 +145,7 @@ holds the bulk (the commands) and `at_cli_commons` holds the entry point apps
 call, and neither is the natural survivor.
 
 The timing question is what the unpublished majors are for. `at_onboarding_cli`
-2.0.0-rc1 and `at_cli_commons` 3.1.2 are on this branch and unpublished, and
+2.0.0-rc1 and `at_cli_commons` 3.1.2-rc1 are on this branch and unpublished, and
 the lifecycle work already breaks `at_onboarding_cli`'s API. Two orders:
 
 1. **Publish the lifecycle majors first, then do this.** `at_onboarding_cli`

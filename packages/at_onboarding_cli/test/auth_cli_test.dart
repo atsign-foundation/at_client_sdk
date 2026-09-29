@@ -227,6 +227,24 @@ void main() {
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
+  group('the hashingAlgoType argument', () {
+    test('is accepted and hidden, and never reaches the PKAM hash', () {
+      final parser = args.createOnboardCommandParser();
+      expect(parser.options[AuthCliArgs.argNameHashingAlgoType]!.hide, isTrue);
+
+      final preference = onboardingPreferenceFrom(parser.parse([
+        '-a',
+        '@alice',
+        '--${AuthCliArgs.argNameHashingAlgoType}',
+        'argon2id',
+      ]));
+      expect(
+          preference.hashingAlgoType, AtOnboardingPreference().hashingAlgoType,
+          reason: 'AtClientPreference.hashingAlgoType is the PKAM hash, and an '
+              'RSA-2048 PKAM refuses argon2id at signing');
+    });
+  });
+
   group('the posture argument', () {
     test('every command parser accepts it, not activation alone', () {
       final parsers = {

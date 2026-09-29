@@ -1,4 +1,4 @@
-## 3.1.2
+## 3.1.2-rc1
 
 - feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
   `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
@@ -7,18 +7,18 @@
 - feat: `CLIBase` opens its client through at_client's `Atsign.open` and
   waits for the connection to come online with a budget of
   `maxConnectAttempts` tries, three seconds apart, instead of
-  re-authenticating in a loop. A refusal by the atServer is thrown as
-  `AtOpenRefusedException` at once; a connection still offline when the
-  budget is spent is `SecondaryServerConnectivityException`, as before.
-- build: require `at_onboarding_cli` ^2.0.0-rc1 and `at_auth` ^4.0.0-rc2.
+  re-authenticating in a loop. A refusal on a device that has never held the
+  atSign online is thrown as `AtOpenRefusedException`; otherwise a connection
+  that is not online when the budget is spent, or is refused, is
+  `SecondaryServerConnectivityException`, as before.
+- build: require `at_onboarding_cli` ^2.0.0-rc1, `at_client` ^3.15.0-rc1 and
+  `at_auth` ^4.0.0-rc2.
 - chore: set `AtOnboardingPreference.storagePath` rather than the now-deprecated
   `AtClientPreference.hiveStoragePath`. The store lands in the same place; the
   bundle is built by at_onboarding_cli and closed by the client, so `CLIBase`
   still has nothing to tear down.
 - chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
   nowhere, so the value had no effect. No behaviour changes.
-- build: require `at_onboarding_cli` ^1.17.0-rc1, the first version carrying
-  `AtOnboardingPreference.storagePath`.
 
 ## 3.1.1
 
