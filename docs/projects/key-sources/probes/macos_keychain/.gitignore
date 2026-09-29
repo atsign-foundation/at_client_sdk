@@ -2,3 +2,5 @@ out/
 .dart_tool/
 pubspec.lock
 bin/probe_other.dart
+bin/probe_writer.dart
+bin/probe_unsigned.dart

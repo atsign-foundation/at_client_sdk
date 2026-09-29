@@ -88,8 +88,14 @@ answer to that, and they are outside this design's scope.
 
 Taken on macOS 26.5.2, arm64, with Dart 3.13.3. The probe is a Dart FFI program
 that calls Security.framework with user interaction disabled, so that a read
-which would raise an access dialog returns an error instead. Reproduce with
-[`probes/macos_keychain/run.sh`](probes/macos_keychain/run.sh).
+which would raise an access dialog returns an error instead. How a binary is
+signed decides the outcome, so there are two sets of arms.
+
+#### Unsigned builds
+
+`dart compile exe` produces ad-hoc signed binaries with no team identity,
+which is what a local build or `dart pub global activate` gives you.
+Reproduce with [`probes/macos_keychain/run.sh`](probes/macos_keychain/run.sh).
 
 | Arm                                                                                      | Result                                                     |
 | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
@@ -102,16 +108,45 @@ which would raise an access dialog returns an error instead. Reproduce with
 | `/usr/bin/security` writes the value as an argument and reads it back                    | identical                                                  |
 | Our binary reads the item `/usr/bin/security` created                                    | `-25293`                                                   |
 
-`dart compile exe` produces ad-hoc signed binaries with no team identity, so
-macOS treats every build as a new program. Direct Security.framework access
-therefore doesn't survive an upgrade, and doesn't cross from one CLI to
-another. The refusal of the any-app item shows the per-app access list isn't
-the only gate. The likeliest second gate is the keychain's partition list,
-which records the signer that created an item, and the login keychain here
-does carry `partition_id` records, but I haven't confirmed that mechanism for
-these items. Routing every read and write through `/usr/bin/security` does
-work across binaries, at the cost of putting the value on the command line or
-feeding it through stdin in lines of under about 4 KB.
+macOS treats every ad-hoc build as a new program, so direct Security.framework
+access doesn't survive an upgrade and doesn't cross from one CLI to another.
+Routing every read and write through `/usr/bin/security` does work across
+binaries, at the cost of putting the value on the command line or feeding it
+through stdin in lines of under about 4 KB, and it lets any process running as
+the user read the item.
+
+#### Team-signed builds
+
+NoPorts' macOS release binaries are signed with Atsign's Developer ID, with the
+hardened runtime and `com.atsign.` identifiers (`.github/workflows/multibuild.yaml`
+in the noports repository). These arms used an Apple Development certificate
+instead, from team `5XUSS6C2DF`, with the same options and NoPorts'
+entitlements. Reproduce with
+[`probes/macos_keychain/run_signed.sh`](probes/macos_keychain/run_signed.sh),
+which needs a code-signing identity.
+
+| Arm                                                                                                                  | Result                   |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Read before the item exists (negative control)                                                                       | `-25300`, item not found |
+| A signed binary stores 16,384 bytes with the default access list and reads its own item                              | `0`, content identical   |
+| A second signed binary, same team, different identifier, reads that item                                             | `-25293`                 |
+| The first binary stores 16,384 bytes with an all-applications access list                                            | `0`                      |
+| The second signed binary reads the all-applications item                                                             | `0`, content identical   |
+| An unsigned binary reads the all-applications item                                                                   | `-25293`                 |
+| The first binary, rebuilt with a new code hash and re-signed with the same identifier, reads its default-access item | `0`, content identical   |
+
+So the experience we want is available to signed binaries. An item created
+with an all-applications access list can be read without a prompt by any
+binary the same team signs, and keeps working across upgrades, while an
+unsigned binary is refused. The team does the gating rather than the access
+list, which fits the keychain's partition list recording the creator's team,
+though I haven't inspected the partition list directly. The trust boundary is
+therefore everything Atsign signs, not only the NoPorts CLIs.
+
+Two things aren't covered. The arms used an Apple Development certificate
+rather than Atsign's Developer ID. And I expect an unattended Mac running
+`sshnpd` as a boot-time LaunchDaemon not to reach the login keychain, which
+stays locked until someone logs in, but I haven't measured that.
 
 ### Linux Secret Service
 
@@ -233,7 +268,7 @@ for a daemon that has nowhere better to keep a key (see
 | Linux daemon            | a 32-byte key sealed with `systemd-creds` (TPM where there is one, the host key where not), delivered by `LoadCredentialEncrypted=` and read from `$CREDENTIALS_DIRECTORY` | yes, see [section 3](#3-measurements)                                                                          |
 | Container or Kubernetes | a key in an environment variable or a mounted secret; read-only injection suits a key, and not the writable document                                                       | no                                                                                                             |
 | Cloud VM                | a cloud KMS (AWS, GCP or Azure) wraps and unwraps, and the instance's cloud identity is the first secret                                                                   | no; a daemon would then need the KMS reachable to start                                                        |
-| macOS desktop           | a 32-byte key in the login keychain, written and read through `/usr/bin/security`                                                                                          | yes: works across binaries, and a 64-character value is far below the line limit that truncated the 16 KB test |
+| macOS desktop           | a 32-byte key in the login keychain, created by a team-signed binary with an all-applications access list; an unsigned build uses the file, or `/usr/bin/security`         | yes: every binary the team signs reads it without a prompt, across upgrades, and unsigned binaries are refused |
 | Windows                 | DPAPI (`CryptProtectData`), scoped to the user or the machine                                                                                                              | no                                                                                                             |
 | Browser                 | a passkey's PRF output, or a non-extractable WebCrypto key; see [section 8](#8-the-browser)                                                                                | no                                                                                                             |
 
@@ -341,13 +376,14 @@ atSign-wide encryption keys.
 
 ## 10. Open questions and probes still to run
 
-| Question                                                                                                               | How to settle it                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Is the partition list what refuses the macOS reads?                                                                    | Inspect a probe item's partition list without a dialog, or sign the probe with a stable Developer ID and repeat the arms |
-| Does a stable Developer ID signature let direct Security.framework access survive rebuilds?                            | The macOS arms with a signed binary                                                                                      |
-| Does DPAPI behave as expected for a service account?                                                                   | A Windows probe, which hasn't been run                                                                                   |
-| Does a real TPM bind the seal to the boot state?                                                                       | `systemd-creds` on hardware with a TPM, with a PCR policy                                                                |
-| Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice                                             |
-| Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                                                             |
-| Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Read the atServer and at_client sync paths                                                                               |
-| Can the atServer update a record conditionally?                                                                        | Read the update verbs on every atServer implementation                                                                   |
+| Question                                                                                                               | How to settle it                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Is the partition list what gates the macOS reads?                                                                      | Inspect a probe item's partition list without raising a dialog                            |
+| Does Atsign's Developer ID behave as the Apple Development certificate did?                                            | `run_signed.sh` with Atsign's Developer ID identity                                       |
+| Can a Mac daemon started before anyone logs in read the login keychain?                                                | An `sshnpd` LaunchDaemon with its key in the login keychain, booted with no one logged in |
+| Does DPAPI behave as expected for a service account?                                                                   | A Windows probe, which hasn't been run                                                    |
+| Does a real TPM bind the seal to the boot state?                                                                       | `systemd-creds` on hardware with a TPM, with a PCR policy                                 |
+| Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice              |
+| Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                              |
+| Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Read the atServer and at_client sync paths                                                |
+| Can the atServer update a record conditionally?                                                                        | Read the update verbs on every atServer implementation                                    |
