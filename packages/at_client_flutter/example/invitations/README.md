@@ -18,7 +18,6 @@ standing in for a registrar.
 ## Running it
 
 ```sh
-ee/build_ee.sh          # once: build the EE image from at_server trunk
 ee/up.sh                # a fresh EE, and the issuer on localhost:35100
 flutter build macos --debug
 open -n build/macos/Build/Products/Debug/invitations.app    # Alice
@@ -63,9 +62,13 @@ to ask for permission.
 - Docker, Dart and Flutter.
 - `127.0.0.1 vip.ve.atsign.zone` in `/etc/hosts`. The EE carries real
   certificates for that name.
-- An `at_server` checkout beside this repo, for `ee/build_ee.sh`. The
-  published `atsigncompany/ephemeral` image cannot verify the ML-DSA keys the
-  `pqActive` posture authenticates with.
+
+`ee/up.sh` runs `atsigncompany/ephemeral:dev_env`, which at_server publishes
+from trunk. `atsigncompany/ephemeral:latest` is built from the latest
+production release, which cannot verify the ML-DSA keys the `pqActive`
+posture authenticates with. To run against an at_server branch that is not on
+trunk yet, build an image from it with `ee/build_ee.sh <checkout> <ref>`, then
+`INV_EE_IMAGE=at_ephemeral:invitations ee/up.sh`.
 
 ## How it works
 

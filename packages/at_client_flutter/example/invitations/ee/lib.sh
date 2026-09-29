@@ -8,7 +8,7 @@ LOGS="$STATE/logs"
 
 BASE="${INV_EE_BASE:-35000}"
 ISSUER_PORT="${INV_ISSUER_PORT:-35100}"
-IMAGE="${INV_EE_IMAGE:-at_ephemeral:invitations}"
+IMAGE="${INV_EE_IMAGE:-atsigncompany/ephemeral:dev_env}"
 CONTAINER="invitations-ee"
 ROOT_HOST="vip.ve.atsign.zone"
 ROOT="$ROOT_HOST:$BASE"
