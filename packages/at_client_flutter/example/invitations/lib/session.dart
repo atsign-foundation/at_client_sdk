@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
@@ -68,7 +70,7 @@ class Session extends ChangeNotifier {
       atSign = selection.atSign;
       rootDomain = selection.rootDomain;
     }
-    final storage = await _storage(atSign);
+    final storage = await _storage(atSign, rootDomain);
     if (!context.mounted) return false;
     final client = await PkamDialog.show(
       context,
@@ -85,7 +87,11 @@ class Session extends ChangeNotifier {
   /// just got an atSign from a registrar does.
   Future<bool> getNewAtSign(BuildContext context) async {
     final issued = await issueAtSign();
-    final storage = await _storage(issued.atSign);
+    final storage = await _storage(
+      issued.atSign,
+      issued.rootDomain,
+      fresh: true,
+    );
     if (!context.mounted) return false;
     final client = await CramDialog.show(
       context,
@@ -145,8 +151,25 @@ class Session extends ChangeNotifier {
       AtClientPreference(posture: PqPosture.pqActive)
         ..namespace = invitationsNamespace;
 
-  Future<HiveAtClientStorage> _storage(String atSign) async {
-    final dir = await getApplicationSupportDirectory();
+  /// Where [atSign]'s local store lives: one directory per atSign and root
+  /// domain, since the same name under two root domains is two identities.
+  ///
+  /// With [fresh], anything already there is deleted first. Activation mints
+  /// an atSign's keys from scratch, so a store left from an earlier life of
+  /// the same atSign, such as a recreated Ephemeral Environment, holds
+  /// records sealed under keys that no longer exist.
+  Future<HiveAtClientStorage> _storage(
+    String atSign,
+    AtRootDomain rootDomain, {
+    bool fresh = false,
+  }) async {
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory(
+      '${support.path}/storage/'
+      '${rootDomain.rootDomain}_${rootDomain.rootPort}/$atSign',
+    );
+    if (fresh && dir.existsSync()) dir.deleteSync(recursive: true);
+    dir.createSync(recursive: true);
     return HiveAtClientStorage(
       atSign: atSign,
       storagePath: dir.path,
