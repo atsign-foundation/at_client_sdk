@@ -1,9 +1,9 @@
-import 'package:at_telemetry/src/at_telemetry_span.dart';
-import 'package:at_telemetry/src/at_telemetry_span_event.dart';
-import 'package:at_telemetry/src/at_telemetry_span_kind.dart';
-import 'package:at_telemetry/src/at_telemetry_span_link.dart';
-import 'package:at_telemetry/src/at_telemetry_span_status.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_attributes_codec.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span_event.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span_kind.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span_link.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span_status.dart';
+import 'package:at_telemetry/src/internal/opentelemetry/dartastic_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/trace/v1/trace_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -13,13 +13,13 @@ import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
 import 'package:dartastic_opentelemetry/proto/trace/v1/trace.pb.dart' as traces;
 import 'package:fixnum/fixnum.dart';
 
-final class AtTelemetryOtelTracesCodec {
+final class DartasticTracesCodec {
   static const String scopeName = 'at_telemetry';
-  static const AtTelemetryOtelAttributesCodec _attributes =
-      AtTelemetryOtelAttributesCodec();
+  static const DartasticAttributesCodec _attributes =
+      DartasticAttributesCodec();
   static final RegExp _hex = RegExp(r'^[0-9a-fA-F]+$');
 
-  const AtTelemetryOtelTracesCodec();
+  const DartasticTracesCodec();
 
   List<int> encodeExportRequest(
     Iterable<AtTelemetrySpan> spans, {

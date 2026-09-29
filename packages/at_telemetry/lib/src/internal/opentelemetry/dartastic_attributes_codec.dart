@@ -4,8 +4,8 @@ import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
     as common;
 import 'package:fixnum/fixnum.dart';
 
-final class AtTelemetryOtelAttributesCodec {
-  const AtTelemetryOtelAttributesCodec();
+final class DartasticAttributesCodec {
+  const DartasticAttributesCodec();
 
   List<common.KeyValue> encode(Map<String, Object?> attributes) {
     return <common.KeyValue>[

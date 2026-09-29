@@ -1,18 +1,18 @@
 // ignore_for_file: prefer_initializing_formals
 
-import 'package:at_telemetry/src/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/at_telemetry_log_record_exporter.dart';
+import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/exporters/at_telemetry_log_record_exporter.dart';
 import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
 
-final class AtTelemetryOtelHttpExporter
+final class DartasticLogRecordExporter
     implements AtTelemetryLogRecordExporter {
   final OTelLogger _logger;
 
-  AtTelemetryOtelHttpExporter._({
+  DartasticLogRecordExporter._({
     required OTelLogger logger,
   }) : _logger = logger;
 
-  static Future<AtTelemetryOtelHttpExporter> create({
+  static Future<DartasticLogRecordExporter> create({
     required Uri endpoint,
     required String serviceName,
     bool detectPlatformResources = true,
@@ -35,7 +35,7 @@ final class AtTelemetryOtelHttpExporter
       detectPlatformResources: detectPlatformResources,
     );
 
-    return AtTelemetryOtelHttpExporter._(
+    return DartasticLogRecordExporter._(
       logger: OTel.logger('at_telemetry'),
     );
   }

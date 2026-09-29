@@ -1,16 +1,16 @@
 import 'dart:convert';
 
-import 'package:at_telemetry/src/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_logs_codec.dart';
+import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
 
-final class AtTelemetryOtelNotificationCodec {
+final class AtTelemetryNotificationCodec {
   static const String namespace = 'at_telemetry';
   static const String idAndNamespace = 'logs.$namespace';
 
-  final AtTelemetryOtelLogsCodec _logsCodec;
+  final AtTelemetryLogsCodec _logsCodec;
 
-  const AtTelemetryOtelNotificationCodec({
-    AtTelemetryOtelLogsCodec logsCodec = const AtTelemetryOtelLogsCodec(),
+  const AtTelemetryNotificationCodec({
+    AtTelemetryLogsCodec logsCodec = const AtTelemetryLogsCodec(),
   }) : _logsCodec = logsCodec;
 
   String encode(

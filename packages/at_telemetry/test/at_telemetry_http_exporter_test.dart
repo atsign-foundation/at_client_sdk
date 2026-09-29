@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -18,8 +17,8 @@ void main() {
     final Uri endpoint = Uri.parse(
       'http://${server.address.address}:${server.port}',
     );
-    final AtTelemetryOtelHttpExporter exporter =
-        await AtTelemetryOtelHttpExporter.create(
+    final AtTelemetryHttpExporter exporter =
+        await AtTelemetryHttpExporter.create(
       endpoint: endpoint,
       serviceName: 'atserver',
     );
@@ -98,7 +97,7 @@ void main() {
     expect(serviceName.value.stringValue, 'atserver');
 
     final List<AtTelemetryLogRecord> decodedEvents =
-        const AtTelemetryOtelLogsCodec().decodeExportRequest(payload);
+        const AtTelemetryLogsCodec().decodeExportRequest(payload);
     expect(decodedEvents, hasLength(1));
     expect(decodedEvents.single.name, heartbeat.name);
     expect(decodedEvents.single.timestamp, timestamp);
@@ -109,7 +108,7 @@ void main() {
 
   test('rejects an OTLP request without log records', () {
     expect(
-      () => const AtTelemetryOtelLogsCodec().decodeExportRequest(<int>[]),
+      () => const AtTelemetryLogsCodec().decodeExportRequest(<int>[]),
       throwsFormatException,
     );
   });

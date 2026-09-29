@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 
 // Run with: dart run example/at_telemetry_example.dart
 Future<void> main() async {
@@ -32,15 +31,15 @@ Future<void> main() async {
 
   // Events can be packed into a base64 OTLP payload, for example to send
   // them as the value of an Atsign notification
-  const AtTelemetryOtelNotificationCodec codec =
-      AtTelemetryOtelNotificationCodec();
+  const AtTelemetryNotificationCodec codec =
+      AtTelemetryNotificationCodec();
   final String payload = codec.encode(
     <AtTelemetryLogRecord>[event],
     serviceName: 'my_app',
   );
   final List<AtTelemetryLogRecord> decoded = codec.decode(payload);
   print(
-    'Notification round trip (${AtTelemetryOtelNotificationCodec.idAndNamespace}): '
+    'Notification round trip (${AtTelemetryNotificationCodec.idAndNamespace}): '
     '${decoded.single.name} ${decoded.single.attributes}',
   );
 }

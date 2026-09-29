@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -39,7 +38,7 @@ void main() {
   });
 
   test('round-trips events through OTLP encoding', () {
-    const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
+    const AtTelemetryLogsCodec codec = AtTelemetryLogsCodec();
     final List<AtTelemetryLogRecord> decoded = codec.decodeExportRequest(
       codec.encodeExportRequest(<AtTelemetryLogRecord>[event],
           serviceName: 'app'),
@@ -60,7 +59,7 @@ void main() {
 
   test('refuses to encode unsupported attribute values', () {
     expect(
-      () => const AtTelemetryOtelLogsCodec().encodeExportRequest(
+      () => const AtTelemetryLogsCodec().encodeExportRequest(
         <AtTelemetryLogRecord>[
           AtTelemetryLogRecord(
             name: 'atsign.app.started',
@@ -74,8 +73,8 @@ void main() {
   });
 
   test('round-trips events through the notification codec', () {
-    const AtTelemetryOtelNotificationCodec codec =
-        AtTelemetryOtelNotificationCodec();
+    const AtTelemetryNotificationCodec codec =
+        AtTelemetryNotificationCodec();
     final List<AtTelemetryLogRecord> decoded = codec.decode(
       codec.encode(<AtTelemetryLogRecord>[event]),
     );
@@ -86,7 +85,7 @@ void main() {
 
   test('rejects a notification payload that is not base64', () {
     expect(
-      () => const AtTelemetryOtelNotificationCodec().decode('not base64!'),
+      () => const AtTelemetryNotificationCodec().decode('not base64!'),
       throwsFormatException,
     );
   });

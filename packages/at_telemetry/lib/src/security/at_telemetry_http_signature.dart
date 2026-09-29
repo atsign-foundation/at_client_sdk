@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:crypto/crypto.dart';
 
-import '../at_telemetry_signer.dart';
+import 'at_telemetry_rsa_signer.dart';
 
-final class AtTelemetryOtelHttpSignature {
+final class AtTelemetryHttpSignature {
   static const String digestHeader = 'content-digest';
   static const String audienceHeader = 'at-telemetry-audience';
   static const String inputHeader = 'signature-input';
@@ -36,7 +36,7 @@ final class AtTelemetryOtelHttpSignature {
   final String digest;
   final String signature;
 
-  const AtTelemetryOtelHttpSignature._({
+  const AtTelemetryHttpSignature._({
     required this.keyId,
     required this.created,
     required this.expires,
@@ -78,7 +78,7 @@ final class AtTelemetryOtelHttpSignature {
         '"@signature-params": ${input.substring(3)}';
   }
 
-  static Future<AtTelemetryOtelHttpSignature> sign({
+  static Future<AtTelemetryHttpSignature> sign({
     required List<int> body,
     required String path,
     required String keyId,
@@ -107,7 +107,7 @@ final class AtTelemetryOtelHttpSignature {
       input: input,
     );
     final Uint8List bytes = await signer.sign(utf8.encode(base));
-    return AtTelemetryOtelHttpSignature._(
+    return AtTelemetryHttpSignature._(
       keyId: keyId,
       created: created,
       expires: expires,
@@ -119,7 +119,7 @@ final class AtTelemetryOtelHttpSignature {
     );
   }
 
-  static AtTelemetryOtelHttpSignature parse({
+  static AtTelemetryHttpSignature parse({
     required String input,
     required String signature,
     required String digest,
@@ -144,7 +144,7 @@ final class AtTelemetryOtelHttpSignature {
         base64Decode(signed[1]!).length != 256) {
       throw const FormatException('Invalid telemetry signature size');
     }
-    return AtTelemetryOtelHttpSignature._(
+    return AtTelemetryHttpSignature._(
       keyId: keyId,
       created: created,
       expires: expires,

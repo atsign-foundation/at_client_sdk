@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 
 // Run with: dart run example/otel_signed_http_exporter_example.dart
 //
@@ -29,8 +28,8 @@ Future<void> main() async {
     (HttpRequest request) => _handle(request, publicKeys, seenNonces),
   );
 
-  final AtTelemetryOtelSignedHttpExporter exporter =
-      AtTelemetryOtelSignedHttpExporter(
+  final AtTelemetrySignedHttpExporter exporter =
+      AtTelemetrySignedHttpExporter(
     endpoint: Uri.parse('http://127.0.0.1:${server.port}'),
     serviceName: 'my_app',
     keyId: producer,
@@ -44,7 +43,7 @@ Future<void> main() async {
     name: 'atsign.server.heartbeat',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
-      AtTelemetryOtelHttpSignature.serverIdAttribute: producer,
+      AtTelemetryHttpSignature.serverIdAttribute: producer,
     },
   ));
   await exporter.shutdown();
@@ -61,19 +60,19 @@ Future<void> _handle(
     (List<int> bytes, List<int> chunk) => bytes..addAll(chunk),
   );
 
-  final AtTelemetryOtelHttpSignature signature;
+  final AtTelemetryHttpSignature signature;
   try {
-    signature = AtTelemetryOtelHttpSignature.parse(
+    signature = AtTelemetryHttpSignature.parse(
       input:
-          request.headers.value(AtTelemetryOtelHttpSignature.inputHeader) ?? '',
+          request.headers.value(AtTelemetryHttpSignature.inputHeader) ?? '',
       signature:
-          request.headers.value(AtTelemetryOtelHttpSignature.signatureHeader) ??
+          request.headers.value(AtTelemetryHttpSignature.signatureHeader) ??
               '',
       digest:
-          request.headers.value(AtTelemetryOtelHttpSignature.digestHeader) ??
+          request.headers.value(AtTelemetryHttpSignature.digestHeader) ??
               '',
       audience:
-          request.headers.value(AtTelemetryOtelHttpSignature.audienceHeader) ??
+          request.headers.value(AtTelemetryHttpSignature.audienceHeader) ??
               '',
     );
   } on FormatException {
@@ -85,7 +84,7 @@ Future<void> _handle(
   final String? publicKey = publicKeys[signature.keyId];
   final bool accepted = request.method == 'POST' &&
       signature.audience ==
-          AtTelemetryOtelHttpSignature.encodeAtsign(collector) &&
+          AtTelemetryHttpSignature.encodeAtsign(collector) &&
       signature.isFresh(DateTime.now()) &&
       signature.matchesBody(body) &&
       publicKey != null &&
@@ -95,7 +94,7 @@ Future<void> _handle(
     return _reply(request, HttpStatus.unauthorized);
   }
 
-  const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
+  const AtTelemetryLogsCodec codec = AtTelemetryLogsCodec();
   for (final AtTelemetryLogRecord event in codec.decodeExportRequest(body)) {
     print('Verified event from ${signature.keyId}: '
         '${event.name} ${event.attributes}');

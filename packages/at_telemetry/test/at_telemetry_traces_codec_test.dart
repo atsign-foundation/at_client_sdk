@@ -1,5 +1,4 @@
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:dartastic_opentelemetry/proto/collector/trace/v1/trace_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -9,7 +8,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:test/test.dart';
 
 void main() {
-  const AtTelemetryOtelTracesCodec codec = AtTelemetryOtelTracesCodec();
+  const AtTelemetryTracesCodec codec = AtTelemetryTracesCodec();
   const String traceId = '0123456789abcdef0123456789abcdef';
   const String spanId = '0123456789abcdef';
   final DateTime start = DateTime.utc(2026, 9, 29, 12, 0, 0, 0, 123);

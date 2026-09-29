@@ -1,9 +1,9 @@
-import 'package:at_telemetry/src/at_telemetry_aggregation_temporality.dart';
-import 'package:at_telemetry/src/at_telemetry_gauge.dart';
-import 'package:at_telemetry/src/at_telemetry_histogram.dart';
-import 'package:at_telemetry/src/at_telemetry_metric.dart';
-import 'package:at_telemetry/src/at_telemetry_sum.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_attributes_codec.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_aggregation_temporality.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_gauge.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_histogram.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_metric.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_sum.dart';
+import 'package:at_telemetry/src/internal/opentelemetry/dartastic_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/metrics/v1/metrics_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -14,12 +14,12 @@ import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
     as resource;
 import 'package:fixnum/fixnum.dart';
 
-final class AtTelemetryOtelMetricsCodec {
+final class DartasticMetricsCodec {
   static const String scopeName = 'at_telemetry';
-  static const AtTelemetryOtelAttributesCodec _attributes =
-      AtTelemetryOtelAttributesCodec();
+  static const DartasticAttributesCodec _attributes =
+      DartasticAttributesCodec();
 
-  const AtTelemetryOtelMetricsCodec();
+  const DartasticMetricsCodec();
 
   List<int> encodeExportRequest(
     Iterable<AtTelemetryMetric> measurements, {

@@ -1,5 +1,4 @@
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:dartastic_opentelemetry/proto/collector/metrics/v1/metrics_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -10,7 +9,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:test/test.dart';
 
 void main() {
-  const AtTelemetryOtelMetricsCodec codec = AtTelemetryOtelMetricsCodec();
+  const AtTelemetryMetricsCodec codec = AtTelemetryMetricsCodec();
   final DateTime start = DateTime.utc(2026, 9, 29, 12);
   final DateTime timestamp = start.add(const Duration(seconds: 10));
 

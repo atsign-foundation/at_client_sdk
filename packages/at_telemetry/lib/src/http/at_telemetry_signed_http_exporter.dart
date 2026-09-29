@@ -1,19 +1,19 @@
 import 'dart:async';
 
-import 'package:at_telemetry/src/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/at_telemetry_log_record_exporter.dart';
-import 'package:at_telemetry/src/at_telemetry_metric.dart';
-import 'package:at_telemetry/src/at_telemetry_metric_exporter.dart';
-import 'package:at_telemetry/src/at_telemetry_span.dart';
-import 'package:at_telemetry/src/at_telemetry_span_exporter.dart';
-import 'package:at_telemetry/src/at_telemetry_signer.dart';
-import 'package:at_telemetry/src/otel/at_telemetry_otel_http_signature.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_logs_codec.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_metrics_codec.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_otel_traces_codec.dart';
+import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
+import 'package:at_telemetry/src/exporters/at_telemetry_log_record_exporter.dart';
+import 'package:at_telemetry/src/models/metrics/at_telemetry_metric.dart';
+import 'package:at_telemetry/src/exporters/at_telemetry_metric_exporter.dart';
+import 'package:at_telemetry/src/models/traces/at_telemetry_span.dart';
+import 'package:at_telemetry/src/exporters/at_telemetry_span_exporter.dart';
+import 'package:at_telemetry/src/security/at_telemetry_rsa_signer.dart';
+import 'package:at_telemetry/src/security/at_telemetry_http_signature.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_metrics_codec.dart';
+import 'package:at_telemetry/src/codec/at_telemetry_traces_codec.dart';
 import 'package:http/http.dart' as http;
 
-final class AtTelemetryOtelSignedHttpExporter
+final class AtTelemetrySignedHttpExporter
     implements
         AtTelemetryLogRecordExporter,
         AtTelemetryMetricExporter,
@@ -35,7 +35,7 @@ final class AtTelemetryOtelSignedHttpExporter
   Future<void> _pending = Future<void>.value();
   bool _closed = false;
 
-  AtTelemetryOtelSignedHttpExporter({
+  AtTelemetrySignedHttpExporter({
     required Uri endpoint,
     required String serviceName,
     required String keyId,
@@ -81,7 +81,7 @@ final class AtTelemetryOtelSignedHttpExporter
     }
     return _enqueue(
         _logsEndpoint,
-        () => const AtTelemetryOtelLogsCodec().encodeExportRequest(
+        () => const AtTelemetryLogsCodec().encodeExportRequest(
               <AtTelemetryLogRecord>[event],
               serviceName: _serviceName,
             ));
@@ -96,7 +96,7 @@ final class AtTelemetryOtelSignedHttpExporter
         List<AtTelemetryMetric>.of(measurements);
     _enqueue(
         _metricsEndpoint,
-        () => const AtTelemetryOtelMetricsCodec().encodeExportRequest(
+        () => const AtTelemetryMetricsCodec().encodeExportRequest(
               snapshot,
               serviceName: _serviceName,
             ));
@@ -111,7 +111,7 @@ final class AtTelemetryOtelSignedHttpExporter
     final List<AtTelemetrySpan> snapshot = List<AtTelemetrySpan>.of(spans);
     _enqueue(
         _tracesEndpoint,
-        () => const AtTelemetryOtelTracesCodec().encodeExportRequest(
+        () => const AtTelemetryTracesCodec().encodeExportRequest(
               snapshot,
               serviceName: _serviceName,
             ));
@@ -146,8 +146,8 @@ final class AtTelemetryOtelSignedHttpExporter
 
   Future<void> _send(Uri endpoint, List<int> body) async {
     for (int attempt = 0; attempt < 3; attempt++) {
-      final AtTelemetryOtelHttpSignature signed =
-          await AtTelemetryOtelHttpSignature.sign(
+      final AtTelemetryHttpSignature signed =
+          await AtTelemetryHttpSignature.sign(
         body: body,
         path: endpoint.path,
         keyId: _keyId,
@@ -157,11 +157,11 @@ final class AtTelemetryOtelSignedHttpExporter
       final http.Request request = http.Request('POST', endpoint)
         ..followRedirects = false
         ..headers.addAll(<String, String>{
-          'content-type': AtTelemetryOtelHttpSignature.contentType,
-          AtTelemetryOtelHttpSignature.digestHeader: signed.digest,
-          AtTelemetryOtelHttpSignature.audienceHeader: signed.audience,
-          AtTelemetryOtelHttpSignature.inputHeader: signed.input,
-          AtTelemetryOtelHttpSignature.signatureHeader: signed.signature,
+          'content-type': AtTelemetryHttpSignature.contentType,
+          AtTelemetryHttpSignature.digestHeader: signed.digest,
+          AtTelemetryHttpSignature.audienceHeader: signed.audience,
+          AtTelemetryHttpSignature.inputHeader: signed.input,
+          AtTelemetryHttpSignature.signatureHeader: signed.signature,
         })
         ..bodyBytes = body;
       try {

@@ -1,5 +1,4 @@
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 import 'package:crypton/crypton.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,8 +8,8 @@ void main() {
   test('sends exact OTLP bytes with a verifiable signature', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     int requests = 0;
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
@@ -19,8 +18,8 @@ void main() {
       client: MockClient((http.Request request) async {
         requests++;
         expect(request.url.path, '/v1/logs');
-        final AtTelemetryOtelHttpSignature signed =
-            AtTelemetryOtelHttpSignature.parse(
+        final AtTelemetryHttpSignature signed =
+            AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -34,7 +33,7 @@ void main() {
             ),
             isTrue);
         expect(
-            const AtTelemetryOtelLogsCodec()
+            const AtTelemetryLogsCodec()
                 .decodeExportRequest(request.bodyBytes)
                 .single
                 .name,
@@ -53,8 +52,8 @@ void main() {
 
   test('sends a signed OTLP gauge to /v1/metrics', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
@@ -62,8 +61,8 @@ void main() {
       signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
       client: MockClient((http.Request request) async {
         expect(request.url.path, '/v1/metrics');
-        final AtTelemetryOtelHttpSignature signed =
-            AtTelemetryOtelHttpSignature.parse(
+        final AtTelemetryHttpSignature signed =
+            AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -77,7 +76,7 @@ void main() {
           ),
           isTrue,
         );
-        final AtTelemetryGauge gauge = const AtTelemetryOtelMetricsCodec()
+        final AtTelemetryGauge gauge = const AtTelemetryMetricsCodec()
             .decodeExportRequest(request.bodyBytes)
             .single as AtTelemetryGauge;
         expect(gauge.name, 'atsign.atserver.uptime');
@@ -107,8 +106,8 @@ void main() {
     final List<String> paths = <String>[];
     final DateTime start = DateTime.utc(2026, 9, 29);
     final DateTime end = start.add(const Duration(seconds: 1));
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'application',
       keyId: '@producer1',
@@ -118,14 +117,14 @@ void main() {
         paths.add(request.url.path);
         expect(request.followRedirects, isFalse);
         expect(request.headers, isNot(contains('authorization')));
-        final AtTelemetryOtelHttpSignature signature =
-            AtTelemetryOtelHttpSignature.parse(
-          input: request.headers[AtTelemetryOtelHttpSignature.inputHeader]!,
+        final AtTelemetryHttpSignature signature =
+            AtTelemetryHttpSignature.parse(
+          input: request.headers[AtTelemetryHttpSignature.inputHeader]!,
           signature:
-              request.headers[AtTelemetryOtelHttpSignature.signatureHeader]!,
-          digest: request.headers[AtTelemetryOtelHttpSignature.digestHeader]!,
+              request.headers[AtTelemetryHttpSignature.signatureHeader]!,
+          digest: request.headers[AtTelemetryHttpSignature.digestHeader]!,
           audience:
-              request.headers[AtTelemetryOtelHttpSignature.audienceHeader]!,
+              request.headers[AtTelemetryHttpSignature.audienceHeader]!,
         );
         expect(signature.matchesBody(request.bodyBytes), isTrue);
         expect(
@@ -134,14 +133,14 @@ void main() {
             isTrue);
         if (request.url.path == '/v1/metrics') {
           final List<AtTelemetryMetric> decoded =
-              const AtTelemetryOtelMetricsCodec()
+              const AtTelemetryMetricsCodec()
                   .decodeExportRequest(request.bodyBytes);
           expect(decoded[0], isA<AtTelemetrySum>());
           expect(decoded[1], isA<AtTelemetryHistogram>());
           expect(decoded.first.attributes['service.name'], 'application');
         }
         if (request.url.path == '/v1/traces') {
-          final AtTelemetrySpan span = const AtTelemetryOtelTracesCodec()
+          final AtTelemetrySpan span = const AtTelemetryTracesCodec()
               .decodeExportRequest(request.bodyBytes)
               .single;
           expect(span.name, 'lookup');
@@ -200,8 +199,8 @@ void main() {
       '/v1/traces'
     ]) {
       final List<String> delivered = <String>[];
-      final AtTelemetryOtelSignedHttpExporter exporter =
-          AtTelemetryOtelSignedHttpExporter(
+      final AtTelemetrySignedHttpExporter exporter =
+          AtTelemetrySignedHttpExporter(
         endpoint: Uri.parse('http://localhost:4318$path'),
         serviceName: 'application',
         keyId: '@producer1',
@@ -230,8 +229,8 @@ void main() {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final List<Object> errors = <Object>[];
     int requests = 0;
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'application',
       keyId: '@producer1',
@@ -257,8 +256,8 @@ void main() {
     final List<Object> errors = <Object>[];
     final List<String> paths = <String>[];
     final DateTime timestamp = DateTime.utc(2026, 9, 29);
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'application',
       keyId: '@producer1',
@@ -289,8 +288,8 @@ void main() {
   test('best-effort export reports rejection through onError', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final List<Object> errors = <Object>[];
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
@@ -319,8 +318,8 @@ void main() {
     );
     final List<Object> errors = <Object>[];
     int requests = 0;
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
@@ -329,8 +328,8 @@ void main() {
       onError: errors.add,
       client: MockClient((http.Request request) async {
         requests++;
-        final AtTelemetryOtelHttpSignature signed =
-            AtTelemetryOtelHttpSignature.parse(
+        final AtTelemetryHttpSignature signed =
+            AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,
@@ -343,7 +342,7 @@ void main() {
               publicKey: keys.publicKey.toString(),
             ),
             isTrue);
-        final AtTelemetryLogRecord received = const AtTelemetryOtelLogsCodec()
+        final AtTelemetryLogRecord received = const AtTelemetryLogsCodec()
             .decodeExportRequest(request.bodyBytes)
             .single;
         expect(received.name, event.name);
@@ -365,7 +364,7 @@ void main() {
 
   test('sends stored bytes and reports failure before a later retry', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
-    final List<int> payload = const AtTelemetryOtelLogsCodec()
+    final List<int> payload = const AtTelemetryLogsCodec()
         .encodeExportRequest(<AtTelemetryLogRecord>[
       AtTelemetryLogRecord(
         name: 'atsign.atserver.heartbeat',
@@ -376,8 +375,8 @@ void main() {
     final List<String> signatureInputs = <String>[];
     final List<Object> errors = <Object>[];
     int requests = 0;
-    final AtTelemetryOtelSignedHttpExporter exporter =
-        AtTelemetryOtelSignedHttpExporter(
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
       serviceName: 'at_secondary_server',
       keyId: '@producer1',
@@ -389,8 +388,8 @@ void main() {
         expect(request.followRedirects, isFalse);
         expect(request.url.path, '/v1/logs');
         expect(request.bodyBytes, payload);
-        final AtTelemetryOtelHttpSignature signed =
-            AtTelemetryOtelHttpSignature.parse(
+        final AtTelemetryHttpSignature signed =
+            AtTelemetryHttpSignature.parse(
           input: request.headers['signature-input']!,
           signature: request.headers['signature']!,
           digest: request.headers['content-digest']!,

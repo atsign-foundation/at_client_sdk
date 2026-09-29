@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:at_telemetry/at_telemetry_otel.dart';
 
 // Run with: dart run example/otel_http_exporter_example.dart
 //
@@ -15,8 +14,8 @@ Future<void> main() async {
   collector.listen(_handle);
 
   final Uri endpoint = Uri.parse('http://127.0.0.1:${collector.port}');
-  final AtTelemetryOtelHttpExporter exporter =
-      await AtTelemetryOtelHttpExporter.create(
+  final AtTelemetryHttpExporter exporter =
+      await AtTelemetryHttpExporter.create(
     endpoint: endpoint,
     serviceName: 'my_app',
   );
@@ -38,7 +37,7 @@ Future<void> _handle(HttpRequest request) async {
     <int>[],
     (List<int> bytes, List<int> chunk) => bytes..addAll(chunk),
   );
-  const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
+  const AtTelemetryLogsCodec codec = AtTelemetryLogsCodec();
   final List<AtTelemetryLogRecord> events = codec.decodeExportRequest(body);
 
   print('Collector received ${request.method} ${request.uri.path}');
