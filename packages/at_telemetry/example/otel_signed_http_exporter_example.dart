@@ -35,7 +35,7 @@ Future<void> main() async {
     serviceName: 'my_app',
     keyId: producer,
     audience: collector,
-    signer: AtTelemetryOtelRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
+    signer: AtTelemetryRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
     // Send failures are only reported here, export() does not throw them
     onError: (Object error) => print('Telemetry failed: $error'),
   );

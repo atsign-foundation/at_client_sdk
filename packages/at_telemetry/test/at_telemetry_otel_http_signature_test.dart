@@ -15,7 +15,7 @@ void main() {
         path: '/v1/logs',
         keyId: '@Producer1',
         audience: '@telemetry1',
-        signer: AtTelemetryOtelRsaSigner.fromBase64(keys.privateKey.toString()),
+        signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
         now: () => now,
       );
 

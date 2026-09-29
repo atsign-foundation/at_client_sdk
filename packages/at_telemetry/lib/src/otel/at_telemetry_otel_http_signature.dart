@@ -5,18 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:crypto/crypto.dart';
 
-final class AtTelemetryOtelRsaSigner {
-  final Uint8List _secretKey;
-
-  AtTelemetryOtelRsaSigner.fromBase64(String privateKey)
-      : _secretKey = base64Decode(privateKey);
-
-  Future<Uint8List> sign(List<int> message) =>
-      RsaSignatureAlgo.rsa2048().signBytes(
-        Uint8List.fromList(message),
-        secretKey: _secretKey,
-      );
-}
+import '../at_telemetry_signer.dart';
 
 final class AtTelemetryOtelHttpSignature {
   static const String digestHeader = 'content-digest';
@@ -94,7 +83,7 @@ final class AtTelemetryOtelHttpSignature {
     required String path,
     required String keyId,
     required String audience,
-    required AtTelemetryOtelRsaSigner signer,
+    required AtTelemetryRsaSigner signer,
     DateTime Function()? now,
     Random? random,
   }) async {

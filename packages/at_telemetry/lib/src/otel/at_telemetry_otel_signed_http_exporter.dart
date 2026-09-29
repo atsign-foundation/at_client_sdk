@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_telemetry/src/at_telemetry_event.dart';
 import 'package:at_telemetry/src/at_telemetry_exporter.dart';
+import 'package:at_telemetry/src/at_telemetry_signer.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_http_signature.dart';
 import 'package:at_telemetry/src/otel/at_telemetry_otel_logs_codec.dart';
 import 'package:http/http.dart' as http;
@@ -11,7 +12,7 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
   final String _serviceName;
   final String _keyId;
   final String _audience;
-  final AtTelemetryOtelRsaSigner _signer;
+  final AtTelemetryRsaSigner _signer;
   final String? _apiKey;
   final http.Client _client;
   final bool _ownsClient;
@@ -24,7 +25,7 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
     required String serviceName,
     required String keyId,
     required String audience,
-    required AtTelemetryOtelRsaSigner signer,
+    required AtTelemetryRsaSigner signer,
     String? apiKey,
     http.Client? client,
     void Function(Object)? onError,
@@ -53,20 +54,47 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
 
   @override
   Future<void> export(AtTelemetryEvent event) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final Future<void> sent = _pending.then((_) => _send(event));
-    _pending = sent.catchError((Object error) {
-      _onError?.call(error);
-    });
+    sendConfirmed(event);
     return _pending;
   }
 
-  Future<void> _send(AtTelemetryEvent event) async {
-    final List<int> body = const AtTelemetryOtelLogsCodec().encodeExportRequest(
-        <AtTelemetryEvent>[event],
-        serviceName: _serviceName);
+  Future<void> sendConfirmed(AtTelemetryEvent event) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    return _enqueue(() => const AtTelemetryOtelLogsCodec().encodeExportRequest(
+          <AtTelemetryEvent>[event],
+          serviceName: _serviceName,
+        ));
+  }
+
+  Future<void> sendEncodedLogs(List<int> body) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final List<int> payload = List<int>.unmodifiable(body);
+    return _enqueue(() => payload);
+  }
+
+  @override
+  Future<void> flush() => _pending;
+
+  @override
+  Future<void> shutdown() async {
+    _closed = true;
+    await _pending;
+    if (_ownsClient) _client.close();
+  }
+
+  Future<void> _enqueue(List<int> Function() encode) {
+    final Future<void> sent = _pending.then((_) => _send(encode()));
+    _pending = sent.catchError((Object error) {
+      _onError?.call(error);
+    });
+    return sent;
+  }
+
+  Future<void> _send(List<int> body) async {
     for (int attempt = 0; attempt < 3; attempt++) {
       final AtTelemetryOtelHttpSignature signed =
           await AtTelemetryOtelHttpSignature.sign(
@@ -76,21 +104,22 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
         audience: _audience,
         signer: _signer,
       );
-      final Map<String, String> headers = <String, String>{
-        'content-type': AtTelemetryOtelHttpSignature.contentType,
-        AtTelemetryOtelHttpSignature.digestHeader: signed.digest,
-        AtTelemetryOtelHttpSignature.audienceHeader: signed.audience,
-        AtTelemetryOtelHttpSignature.inputHeader: signed.input,
-        AtTelemetryOtelHttpSignature.signatureHeader: signed.signature,
-        if (_apiKey != null) 'authorization': 'Bearer $_apiKey',
-      };
+      final http.Request request = http.Request('POST', _endpoint)
+        ..followRedirects = false
+        ..headers.addAll(<String, String>{
+          'content-type': AtTelemetryOtelHttpSignature.contentType,
+          AtTelemetryOtelHttpSignature.digestHeader: signed.digest,
+          AtTelemetryOtelHttpSignature.audienceHeader: signed.audience,
+          AtTelemetryOtelHttpSignature.inputHeader: signed.input,
+          AtTelemetryOtelHttpSignature.signatureHeader: signed.signature,
+          if (_apiKey != null) 'authorization': 'Bearer $_apiKey',
+        })
+        ..bodyBytes = body;
       try {
-        final http.Response response = await _client
-            .post(
-              _endpoint,
-              headers: headers,
-              body: body,
-            )
+        final http.StreamedResponse response =
+            await _client.send(request).timeout(const Duration(seconds: 10));
+        await response.stream
+            .drain<void>()
             .timeout(const Duration(seconds: 10));
         if (response.statusCode == 200) {
           return;
@@ -109,15 +138,5 @@ final class AtTelemetryOtelSignedHttpExporter implements AtTelemetryExporter {
       }
       await Future<void>.delayed(Duration(milliseconds: 200 * (1 << attempt)));
     }
-  }
-
-  @override
-  Future<void> flush() => _pending;
-
-  @override
-  Future<void> shutdown() async {
-    _closed = true;
-    await _pending;
-    if (_ownsClient) _client.close();
   }
 }
