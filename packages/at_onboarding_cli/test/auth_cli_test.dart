@@ -415,15 +415,40 @@ void postureArgumentTests() {
               'only a post-quantum approval is refused, by at_client');
     });
 
-    test('a bare invocation is refused rather than treated as onboard',
-        () async {
-      // NOTE: `wrappedMain` reaches the refusal before any command is parsed,
-      // so this needs no atServer.
-      expect(await wrappedMain(['-a', '@alice']), 1);
-      // The positive control.
+    test('a bare invocation runs onboard, with a warning that hides secrets',
+        () {
+      final implicit =
+          withImplicitOnboard(['-a', '@alice', '-c', 'cram-s3cret']);
+      expect(
+          implicit.arguments, ['onboard', '-a', '@alice', '-c', 'cram-s3cret'],
+          reason: 'as 1.x did, so instructions that omit the command still '
+              'activate the atSign');
+      expect(implicit.warning, contains('Deprecated'));
+      expect(implicit.warning, isNot(contains('cram-s3cret')),
+          reason: 'the warning goes to stderr, and the arguments can carry '
+              'the CRAM secret');
+
+      for (final named in [
+        ['onboard', '-a', '@alice'],
+        ['--version'],
+        ['-h'],
+        ['--help'],
+      ]) {
+        final unchanged = withImplicitOnboard(named);
+        expect(unchanged.arguments, named,
+            reason: '$named names a command or asks for help or the version');
+        expect(unchanged.warning, isNull);
+      }
+    });
+
+    test('wrappedMain inserts onboard before parsing', () async {
+      // NOTE: --help stops at onboard's usage, so this needs no atServer.
+      expect(await wrappedMain(['-a', '@alice', '--help']), 0,
+          reason: 'with no insertion, a leading -a reaches the top-level '
+              'parser, which has no such option');
       expect(await wrappedMain(['--version']), 0,
           reason: 'a leading option that is not a command must still be '
-              'served, or the refusal has swallowed --version and --help too');
+              'served');
     });
 
     test('an approver may still name pqActive', () {

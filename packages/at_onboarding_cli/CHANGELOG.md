@@ -1,3 +1,9 @@
+## 2.0.0-rc2
+
+- fix: `at_activate` with no command runs `onboard` again, as 1.x did, and
+  prints a deprecation warning, where 2.0.0-rc1 refused it outright; 3.0 will
+  refuse it.
+
 ## 2.0.0-rc1
 
 - **BREAKING:** `AtOnboardingService` keeps only
