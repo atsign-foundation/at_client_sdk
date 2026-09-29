@@ -6,8 +6,10 @@ import 'package:at_telemetry/src/at_telemetry_sum.dart';
 import 'package:at_telemetry/src/codec/at_telemetry_otel_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/metrics/v1/metrics_service.pb.dart'
     as collector;
-import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart' as common;
-import 'package:dartastic_opentelemetry/proto/metrics/v1/metrics.pb.dart' as metrics;
+import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
+    as common;
+import 'package:dartastic_opentelemetry/proto/metrics/v1/metrics.pb.dart'
+    as metrics;
 import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
     as resource;
 import 'package:fixnum/fixnum.dart';
@@ -23,12 +25,19 @@ final class AtTelemetryOtelMetricsCodec {
     Iterable<AtTelemetryMetric> measurements, {
     String? serviceName,
   }) {
-    final List<metrics.Metric> encoded = <metrics.Metric>[
-      for (final AtTelemetryMetric measurement in measurements)
-        _encodeMetric(measurement),
-    ];
+    final Map<String, metrics.Metric> encoded = <String, metrics.Metric>{};
+    for (final AtTelemetryMetric measurement in measurements) {
+      final metrics.Metric metric = _encodeMetric(measurement);
+      final metrics.Metric? existing = encoded[metric.name];
+      if (existing == null) {
+        encoded[metric.name] = metric;
+      } else {
+        _appendMetric(existing, metric);
+      }
+    }
     if (encoded.isEmpty) {
-      throw ArgumentError.value(measurements, 'measurements', 'must not be empty');
+      throw ArgumentError.value(
+          measurements, 'measurements', 'must not be empty');
     }
     return collector.ExportMetricsServiceRequest(
       resourceMetrics: <metrics.ResourceMetrics>[
@@ -46,7 +55,7 @@ final class AtTelemetryOtelMetricsCodec {
           scopeMetrics: <metrics.ScopeMetrics>[
             metrics.ScopeMetrics(
               scope: common.InstrumentationScope(name: scopeName),
-              metrics: encoded,
+              metrics: encoded.values,
             ),
           ],
         ),
@@ -62,11 +71,14 @@ final class AtTelemetryOtelMetricsCodec {
       throw FormatException('Invalid OTLP metrics Protobuf payload', error);
     }
     final List<AtTelemetryMetric> decoded = <AtTelemetryMetric>[];
-    for (final metrics.ResourceMetrics resourceMetrics in request.resourceMetrics) {
-      final Map<String, Object?> resourceAttributes = resourceMetrics.hasResource()
-          ? _attributes.decode(resourceMetrics.resource.attributes)
-          : const <String, Object?>{};
-      for (final metrics.ScopeMetrics scopeMetrics in resourceMetrics.scopeMetrics) {
+    for (final metrics.ResourceMetrics resourceMetrics
+        in request.resourceMetrics) {
+      final Map<String, Object?> resourceAttributes =
+          resourceMetrics.hasResource()
+              ? _attributes.decode(resourceMetrics.resource.attributes)
+              : const <String, Object?>{};
+      for (final metrics.ScopeMetrics scopeMetrics
+          in resourceMetrics.scopeMetrics) {
         final Map<String, Object?> scopeAttributes = scopeMetrics.hasScope()
             ? _attributes.decode(scopeMetrics.scope.attributes)
             : const <String, Object?>{};
@@ -77,7 +89,8 @@ final class AtTelemetryOtelMetricsCodec {
           };
           switch (metric.whichData()) {
             case metrics.Metric_Data.gauge:
-              for (final metrics.NumberDataPoint point in metric.gauge.dataPoints) {
+              for (final metrics.NumberDataPoint point
+                  in metric.gauge.dataPoints) {
                 decoded.add(AtTelemetryGauge(
                   name: metric.name,
                   unit: metric.unit,
@@ -89,13 +102,15 @@ final class AtTelemetryOtelMetricsCodec {
             case metrics.Metric_Data.sum:
               final AtTelemetryAggregationTemporality temporality =
                   _decodeTemporality(metric.sum.aggregationTemporality);
-              for (final metrics.NumberDataPoint point in metric.sum.dataPoints) {
+              for (final metrics.NumberDataPoint point
+                  in metric.sum.dataPoints) {
                 decoded.add(AtTelemetrySum(
                   name: metric.name,
                   unit: metric.unit,
                   value: _decodeNumber(point),
                   timestamp: _decodeTimestamp(point.timeUnixNano),
-                  startTimestamp: _decodeStartTimestamp(point.startTimeUnixNano),
+                  startTimestamp:
+                      _decodeStartTimestamp(point.startTimeUnixNano),
                   temporality: temporality,
                   isMonotonic: metric.sum.isMonotonic,
                   attributes: _decodeAttributes(shared, point.attributes),
@@ -116,9 +131,11 @@ final class AtTelemetryOtelMetricsCodec {
                   bucketCounts: List<int>.unmodifiable(
                     point.bucketCounts.map((Int64 count) => count.toInt()),
                   ),
-                  explicitBounds: List<double>.unmodifiable(point.explicitBounds),
+                  explicitBounds:
+                      List<double>.unmodifiable(point.explicitBounds),
                   timestamp: _decodeTimestamp(point.timeUnixNano),
-                  startTimestamp: _decodeStartTimestamp(point.startTimeUnixNano),
+                  startTimestamp:
+                      _decodeStartTimestamp(point.startTimeUnixNano),
                   temporality: temporality,
                   attributes: _decodeAttributes(shared, point.attributes),
                 ));
@@ -133,7 +150,8 @@ final class AtTelemetryOtelMetricsCodec {
       }
     }
     if (decoded.isEmpty) {
-      throw const FormatException('OTLP metrics request must contain a data point');
+      throw const FormatException(
+          'OTLP metrics request must contain a data point');
     }
     try {
       for (final AtTelemetryMetric measurement in decoded) {
@@ -147,6 +165,35 @@ final class AtTelemetryOtelMetricsCodec {
 
   List<int> encodeExportResponse() {
     return collector.ExportMetricsServiceResponse().writeToBuffer();
+  }
+
+  void _appendMetric(metrics.Metric existing, metrics.Metric metric) {
+    if (existing.whichData() != metric.whichData() ||
+        existing.unit != metric.unit) {
+      throw ArgumentError(
+          'Metrics with the same name must have consistent metadata');
+    }
+    switch (metric.whichData()) {
+      case metrics.Metric_Data.gauge:
+        existing.gauge.dataPoints.addAll(metric.gauge.dataPoints);
+      case metrics.Metric_Data.sum:
+        if (existing.sum.isMonotonic != metric.sum.isMonotonic ||
+            existing.sum.aggregationTemporality !=
+                metric.sum.aggregationTemporality) {
+          throw ArgumentError(
+              'Sums with the same name must have consistent metadata');
+        }
+        existing.sum.dataPoints.addAll(metric.sum.dataPoints);
+      case metrics.Metric_Data.histogram:
+        if (existing.histogram.aggregationTemporality !=
+            metric.histogram.aggregationTemporality) {
+          throw ArgumentError(
+              'Histograms with the same name must have consistent temporality');
+        }
+        existing.histogram.dataPoints.addAll(metric.histogram.dataPoints);
+      default:
+        throw ArgumentError('Unsupported metric data type');
+    }
   }
 
   metrics.Metric _encodeMetric(AtTelemetryMetric measurement) {
@@ -188,7 +235,8 @@ final class AtTelemetryOtelMetricsCodec {
           aggregationTemporality: _encodeTemporality(histogram.temporality),
         );
       default:
-        throw ArgumentError.value(measurement, 'measurement', 'unsupported type');
+        throw ArgumentError.value(
+            measurement, 'measurement', 'unsupported type');
     }
     return metric;
   }
@@ -241,18 +289,25 @@ final class AtTelemetryOtelMetricsCodec {
   AtTelemetryAggregationTemporality _decodeTemporality(
     metrics.AggregationTemporality temporality,
   ) {
-    if (temporality == metrics.AggregationTemporality.AGGREGATION_TEMPORALITY_DELTA) {
+    if (temporality ==
+        metrics.AggregationTemporality.AGGREGATION_TEMPORALITY_DELTA) {
       return AtTelemetryAggregationTemporality.delta;
     }
     if (temporality ==
         metrics.AggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE) {
       return AtTelemetryAggregationTemporality.cumulative;
     }
-    throw const FormatException('OTLP aggregation temporality must be specified');
+    throw const FormatException(
+        'OTLP aggregation temporality must be specified');
   }
 
   Int64 _encodeTimestamp(DateTime timestamp) {
-    return Int64(timestamp.microsecondsSinceEpoch) * 1000;
+    final int microseconds = timestamp.microsecondsSinceEpoch;
+    if (microseconds <= 0 || microseconds > 9223372036854775) {
+      throw ArgumentError.value(
+          timestamp, 'timestamp', 'outside the supported nanosecond range');
+    }
+    return Int64(microseconds) * 1000;
   }
 
   DateTime _decodeTimestamp(Int64 timestamp) {
@@ -273,6 +328,7 @@ final class AtTelemetryOtelMetricsCodec {
     if (measurement.name.trim().isEmpty) {
       throw ArgumentError.value(measurement.name, 'name', 'must not be empty');
     }
+    _encodeTimestamp(measurement.timestamp);
     switch (measurement) {
       case final AtTelemetryGauge gauge:
         _finite(gauge.value);
@@ -280,28 +336,42 @@ final class AtTelemetryOtelMetricsCodec {
         _finite(sum.value);
         _validateStartTimestamp(sum.startTimestamp, sum.timestamp);
         if (sum.isMonotonic && sum.value < 0) {
-          throw ArgumentError.value(sum.value, 'value', 'monotonic sums must be non-negative');
+          throw ArgumentError.value(
+              sum.value, 'value', 'monotonic sums must be non-negative');
         }
       case final AtTelemetryHistogram histogram:
         _validateStartTimestamp(histogram.startTimestamp, histogram.timestamp);
-        if (histogram.count < 0 || histogram.bucketCounts.any((int count) => count < 0)) {
+        if (histogram.count < 0 ||
+            histogram.bucketCounts.any((int count) => count < 0)) {
           throw ArgumentError('Histogram counts must be non-negative');
         }
-        for (final double? value in <double?>[histogram.sum, histogram.min, histogram.max]) {
+        for (final double? value in <double?>[
+          histogram.sum,
+          histogram.min,
+          histogram.max
+        ]) {
           if (value != null) _finite(value);
         }
-        if (histogram.min != null && histogram.max != null && histogram.min! > histogram.max!) {
+        if (histogram.min != null &&
+            histogram.max != null &&
+            histogram.min! > histogram.max!) {
           throw ArgumentError('Histogram min must not exceed max');
         }
-        if (histogram.count == 0 && (histogram.min != null || histogram.max != null)) {
+        if (histogram.count == 0 &&
+            (histogram.min != null || histogram.max != null)) {
           throw ArgumentError('Empty histograms must not have min or max');
         }
-        if (histogram.bucketCounts.isEmpty && histogram.explicitBounds.isEmpty) {
+        if (histogram.bucketCounts.isEmpty &&
+            histogram.explicitBounds.isEmpty) {
           return;
         }
-        if (histogram.bucketCounts.length != histogram.explicitBounds.length + 1 ||
-            histogram.bucketCounts.fold<int>(0, (int total, int count) => total + count) != histogram.count) {
-          throw ArgumentError('Histogram buckets must match bounds and total count');
+        if (histogram.bucketCounts.length !=
+                histogram.explicitBounds.length + 1 ||
+            histogram.bucketCounts.fold<BigInt>(BigInt.zero,
+                    (BigInt total, int count) => total + BigInt.from(count)) !=
+                BigInt.from(histogram.count)) {
+          throw ArgumentError(
+              'Histogram buckets must match bounds and total count');
         }
         double? previous;
         for (final double bound in histogram.explicitBounds) {
@@ -312,13 +382,16 @@ final class AtTelemetryOtelMetricsCodec {
           previous = bound;
         }
       default:
-        throw ArgumentError.value(measurement, 'measurement', 'unsupported type');
+        throw ArgumentError.value(
+            measurement, 'measurement', 'unsupported type');
     }
   }
 
   void _validateStartTimestamp(DateTime? startTimestamp, DateTime timestamp) {
+    if (startTimestamp != null) _encodeTimestamp(startTimestamp);
     if (startTimestamp != null && startTimestamp.isAfter(timestamp)) {
-      throw ArgumentError('Start timestamp must not follow the data point timestamp');
+      throw ArgumentError(
+          'Start timestamp must not follow the data point timestamp');
     }
   }
 

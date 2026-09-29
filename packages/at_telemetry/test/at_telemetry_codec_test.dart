@@ -41,7 +41,8 @@ void main() {
   test('round-trips events through OTLP encoding', () {
     const AtTelemetryOtelLogsCodec codec = AtTelemetryOtelLogsCodec();
     final List<AtTelemetryLogRecord> decoded = codec.decodeExportRequest(
-      codec.encodeExportRequest(<AtTelemetryLogRecord>[event], serviceName: 'app'),
+      codec.encodeExportRequest(<AtTelemetryLogRecord>[event],
+          serviceName: 'app'),
     );
 
     expect(decoded, hasLength(1));

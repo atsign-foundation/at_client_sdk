@@ -6,7 +6,8 @@ import 'package:at_telemetry/src/at_telemetry_span_status.dart';
 import 'package:at_telemetry/src/codec/at_telemetry_otel_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/trace/v1/trace_service.pb.dart'
     as collector;
-import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart' as common;
+import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
+    as common;
 import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
     as resource;
 import 'package:dartastic_opentelemetry/proto/trace/v1/trace.pb.dart' as traces;
@@ -63,9 +64,10 @@ final class AtTelemetryOtelTracesCodec {
     }
     final List<AtTelemetrySpan> decoded = <AtTelemetrySpan>[];
     for (final traces.ResourceSpans resourceSpans in request.resourceSpans) {
-      final Map<String, Object?> resourceAttributes = resourceSpans.hasResource()
-          ? _attributes.decode(resourceSpans.resource.attributes)
-          : const <String, Object?>{};
+      final Map<String, Object?> resourceAttributes =
+          resourceSpans.hasResource()
+              ? _attributes.decode(resourceSpans.resource.attributes)
+              : const <String, Object?>{};
       for (final traces.ScopeSpans scopeSpans in resourceSpans.scopeSpans) {
         final Map<String, Object?> scopeAttributes = scopeSpans.hasScope()
             ? _attributes.decode(scopeSpans.scope.attributes)
@@ -75,9 +77,8 @@ final class AtTelemetryOtelTracesCodec {
             name: span.name,
             traceId: _decodeId(span.traceId),
             spanId: _decodeId(span.spanId),
-            parentSpanId: span.parentSpanId.isEmpty
-                ? null
-                : _decodeId(span.parentSpanId),
+            parentSpanId:
+                span.parentSpanId.isEmpty ? null : _decodeId(span.parentSpanId),
             traceState: span.traceState,
             flags: span.flags,
             startTimestamp: _decodeTimestamp(span.startTimeUnixNano),
@@ -90,7 +91,8 @@ final class AtTelemetryOtelTracesCodec {
               ...scopeAttributes,
               ..._attributes.decode(span.attributes),
             }),
-            events: List<AtTelemetrySpanEvent>.unmodifiable(<AtTelemetrySpanEvent>[
+            events:
+                List<AtTelemetrySpanEvent>.unmodifiable(<AtTelemetrySpanEvent>[
               for (final traces.Span_Event event in span.events)
                 AtTelemetrySpanEvent(
                   name: event.name,
@@ -138,9 +140,8 @@ final class AtTelemetryOtelTracesCodec {
       name: span.name,
       traceId: _encodeId(span.traceId, 16),
       spanId: _encodeId(span.spanId, 8),
-      parentSpanId: span.parentSpanId == null
-          ? null
-          : _encodeId(span.parentSpanId!, 8),
+      parentSpanId:
+          span.parentSpanId == null ? null : _encodeId(span.parentSpanId!, 8),
       traceState: span.traceState,
       flags: span.flags,
       startTimeUnixNano: _encodeTimestamp(span.startTimestamp),
@@ -181,7 +182,8 @@ final class AtTelemetryOtelTracesCodec {
   }
 
   AtTelemetrySpanStatus _decodeStatus(traces.Status_StatusCode status) {
-    if (status.value < 0 || status.value >= AtTelemetrySpanStatus.values.length) {
+    if (status.value < 0 ||
+        status.value >= AtTelemetrySpanStatus.values.length) {
       throw const FormatException('Invalid OTLP span status');
     }
     return AtTelemetrySpanStatus.values[status.value];
@@ -189,7 +191,8 @@ final class AtTelemetryOtelTracesCodec {
 
   List<int> _encodeId(String id, int length) {
     if (id.length != length * 2 || !_hex.hasMatch(id)) {
-      throw ArgumentError.value(id, 'id', 'must contain ${length * 2} hexadecimal characters');
+      throw ArgumentError.value(
+          id, 'id', 'must contain ${length * 2} hexadecimal characters');
     }
     final List<int> bytes = <int>[
       for (int offset = 0; offset < id.length; offset += 2)
@@ -202,11 +205,18 @@ final class AtTelemetryOtelTracesCodec {
   }
 
   String _decodeId(List<int> bytes) {
-    return bytes.map((int byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    return bytes
+        .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Int64 _encodeTimestamp(DateTime timestamp) {
-    return Int64(timestamp.microsecondsSinceEpoch) * 1000;
+    final int microseconds = timestamp.microsecondsSinceEpoch;
+    if (microseconds <= 0 || microseconds > 9223372036854775) {
+      throw ArgumentError.value(
+          timestamp, 'timestamp', 'outside the supported nanosecond range');
+    }
+    return Int64(microseconds) * 1000;
   }
 
   DateTime _decodeTimestamp(Int64 timestamp) {
@@ -226,14 +236,17 @@ final class AtTelemetryOtelTracesCodec {
     _encodeId(span.traceId, 16);
     _encodeId(span.spanId, 8);
     if (span.parentSpanId != null) _encodeId(span.parentSpanId!, 8);
-    if (span.startTimestamp.microsecondsSinceEpoch <= 0 ||
-        span.endTimestamp.isBefore(span.startTimestamp)) {
+    _encodeTimestamp(span.startTimestamp);
+    _encodeTimestamp(span.endTimestamp);
+    if (span.endTimestamp.isBefore(span.startTimestamp)) {
       throw ArgumentError('Span timestamps must be positive and ordered');
     }
     _validateFlags(span.flags);
     for (final AtTelemetrySpanEvent event in span.events) {
-      if (event.name.trim().isEmpty || event.timestamp.microsecondsSinceEpoch <= 0) {
-        throw ArgumentError('Span events must have a name and a positive timestamp');
+      _encodeTimestamp(event.timestamp);
+      if (event.name.trim().isEmpty) {
+        throw ArgumentError(
+            'Span events must have a name and a positive timestamp');
       }
     }
     for (final AtTelemetrySpanLink link in span.links) {
@@ -245,7 +258,8 @@ final class AtTelemetryOtelTracesCodec {
 
   void _validateFlags(int flags) {
     if (flags < 0 || flags > 0xffffffff) {
-      throw ArgumentError.value(flags, 'flags', 'must be an unsigned 32-bit value');
+      throw ArgumentError.value(
+          flags, 'flags', 'must be an unsigned 32-bit value');
     }
   }
 }

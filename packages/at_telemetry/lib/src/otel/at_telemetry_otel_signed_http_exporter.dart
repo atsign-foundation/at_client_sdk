@@ -61,7 +61,9 @@ final class AtTelemetryOtelSignedHttpExporter
         endpoint.hasFragment ||
         (endpoint.path.isNotEmpty &&
             endpoint.path != '/' &&
-            !endpoint.path.endsWith(logsPath))) {
+            !endpoint.path.endsWith(logsPath) &&
+            !endpoint.path.endsWith(metricsPath) &&
+            !endpoint.path.endsWith(tracesPath))) {
       throw ArgumentError.value(endpoint, 'endpoint', 'invalid OTLP endpoint');
     }
     return endpoint.replace(path: path);
@@ -90,7 +92,8 @@ final class AtTelemetryOtelSignedHttpExporter
     if (_closed) {
       throw StateError('Exporter is closed');
     }
-    final List<AtTelemetryMetric> snapshot = List<AtTelemetryMetric>.of(measurements);
+    final List<AtTelemetryMetric> snapshot =
+        List<AtTelemetryMetric>.of(measurements);
     _enqueue(
         _metricsEndpoint,
         () => const AtTelemetryOtelMetricsCodec().encodeExportRequest(
