@@ -1,8 +1,3 @@
-## 2.0.0-rc2
-
-- **FEAT**: at_activate interactive now has `exit` and `quit`
-- **FIX**: better string parsing in at_activate interactive
-
 ## 2.0.0-rc1
 
 - **BREAKING:** `AtOnboardingService` keeps only
@@ -33,8 +28,9 @@
   version 1 envelope, with a random per-file salt, which older tooling cannot
   read. `--hashingAlgoType` is ignored and hidden: it had set the PKAM hash,
   which an RSA-2048 key refuses for argon2id.
-- fix: `--version` reports the real version, and the enrollment commands say
-  what they did.
+- fix: `--version` reports the real version, the enrollment commands say what
+  they did, and `at_activate interactive` ends on `exit`, `quit` or Ctrl-D and
+  splits its input on any run of whitespace.
 - build: requires `at_client` ^3.15.0-rc1, `at_auth` ^4.0.0-rc2 and
   `at_lookup` ^3.7.0-rc2. `at_server_status` is no longer a dependency.
 
