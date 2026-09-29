@@ -13,9 +13,17 @@ import 'storage_contract.dart';
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
 class _GatedStorage extends AtClientStorageBase {
-  _GatedStorage(this._location, {Completer<void>? gate}) : _gate = gate;
+  _GatedStorage(this._location,
+      {Completer<void>? gate, this.closeGate, this.throwOnClose = false})
+      : _gate = gate;
   final String _location;
   final Completer<void>? _gate;
+
+  /// Holds [closeBackend] open until completed.
+  final Completer<void>? closeGate;
+
+  /// Makes [closeBackend] throw once [closeGate] has completed.
+  final bool throwOnClose;
 
   @override
   String get location => _location;
@@ -27,7 +35,11 @@ class _GatedStorage extends AtClientStorageBase {
   }
 
   @override
-  Future<void> closeBackend() async {}
+  Future<void> closeBackend() async {
+    final gate = closeGate;
+    if (gate != null) await gate.future;
+    if (throwOnClose) throw StateError('closeBackend failed');
+  }
 
   @override
   Future<void> clearData() async {}
@@ -100,6 +112,46 @@ void main() {
     await firstAttach;
     expect(first.isAttached, isTrue);
     await first.close();
+  });
+
+  test(
+      'close() holds its location claim until closeBackend() finishes, so a '
+      'racing attach() cannot open a backend over one being torn down',
+      () async {
+    final closeGate = Completer<void>();
+    final first = _GatedStorage('@closerace', closeGate: closeGate);
+    await first.attach(FakeClient('@closerace', 'e1'));
+
+    final closing = first.close();
+    final second = _GatedStorage('@closerace');
+    await expectLater(
+        () => second.attach(FakeClient('@closerace', 'e2')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('already open at'))),
+        reason: 'first is still inside closeBackend(), so its location must '
+            'still read as held');
+
+    closeGate.complete();
+    await closing;
+    await second.attach(FakeClient('@closerace', 'e2'));
+    expect(second.isAttached, isTrue,
+        reason: 'once close() has finished the location is free');
+    await second.close();
+  });
+
+  test('close() releases its location claim even when closeBackend() throws',
+      () async {
+    final first = _GatedStorage('@closethrows', throwOnClose: true);
+    await first.attach(FakeClient('@closethrows', 'e1'));
+
+    await expectLater(first.close, throwsA(isA<StateError>()));
+
+    final second = _GatedStorage('@closethrows');
+    await second.attach(FakeClient('@closethrows', 'e2'));
+    expect(second.isAttached, isTrue,
+        reason: 'a failed closeBackend() must not leave the location claimed '
+            'for the rest of the isolate');
+    await second.close();
   });
 
   test('two storages for one atSign at different locations both open',
@@ -185,6 +237,35 @@ void main() {
         reason: 'an injected store outlives the client that borrowed it - the '
             'caller owns its lifetime, so stop() must not have closed it');
     await injected.close();
+  });
+
+  test(
+      'create() refuses a storage the cached client for that atSign does not '
+      'hold', () async {
+    final held = InMemoryAtClientStorage(atSign: '@cachedstore');
+    final first = await AtClientImpl.create(
+            '@cachedstore', 'wavi', AtClientPreference(), storage: held)
+        as AtClientImpl;
+
+    final other = InMemoryAtClientStorage(atSign: '@cachedstore');
+    await expectLater(
+        () => AtClientImpl.create('@cachedstore', 'wavi', AtClientPreference(),
+            storage: other),
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'storage')),
+        reason: 'the cached client keeps its own storage, so accepting '
+            'another would leave it unattached while the caller believes it '
+            'is live');
+    expect(other.isAttached, isFalse);
+
+    final again = await AtClientImpl.create(
+        '@cachedstore', 'wavi', AtClientPreference(),
+        storage: held);
+    expect(identical(again, first), isTrue,
+        reason: 'offering the storage the cached client already holds is not '
+            'a change, so the cached client is still returned');
+    await first.stop();
+    await held.close();
+    await other.close();
   });
 
   test(

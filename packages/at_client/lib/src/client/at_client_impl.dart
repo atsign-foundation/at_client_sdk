@@ -689,8 +689,9 @@ class AtClientImpl implements AtClient {
   /// bundle refuses a second open at a location already open, but on a cache
   /// hit nothing opens, so the path is dropped.
   ///
-  /// One mismatch is **refused** rather than ignored: a preference naming
-  /// different rollout axes — see [refuseChangedRolloutAxes]. A test or an app
+  /// Two mismatches are **refused** rather than ignored: a [storage] the cached
+  /// client does not hold, and a preference naming different rollout axes —
+  /// see [refuseChangedRolloutAxes]. A test or an app
   /// that needs a genuinely different client must not rely on passing
   /// different arguments here.
   ///
@@ -767,6 +768,14 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
+      if (storage != null && !storage.isHeldBy(atClientImpl!)) {
+        throw ArgumentError.value(
+            storage,
+            'storage',
+            'the client already built for $currentAtSign does not hold this '
+                'storage, and a built client never changes storage. Pass the '
+                'storage it holds, or none');
+      }
       refuseChangedRolloutAxes(
           running: atClientImpl!.getPreferences(),
           asked: preferences,
