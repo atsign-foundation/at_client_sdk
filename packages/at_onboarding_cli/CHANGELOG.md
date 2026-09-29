@@ -1,3 +1,8 @@
+## 2.0.0-rc2
+
+- **FEAT**: at_activate interactive now has `exit` and `quit`
+- **FIX**: better string parsing in at_activate interactive
+
 ## 2.0.0-rc1
 
 - **BREAKING:** `AtOnboardingService` keeps `AtOnboardingServiceImpl(atSign,
