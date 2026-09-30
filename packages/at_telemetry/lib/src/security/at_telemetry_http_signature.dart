@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:crypto/crypto.dart';
 
-import 'at_telemetry_rsa_signer.dart';
+import 'at_telemetry_signer.dart';
 
 final class AtTelemetryHttpSignature {
   static const String digestHeader = 'content-digest';
@@ -83,7 +83,7 @@ final class AtTelemetryHttpSignature {
     required String path,
     required String keyId,
     required String audience,
-    required AtTelemetryRsaSigner signer,
+    required AtTelemetrySigner signer,
     DateTime Function()? now,
     Random? random,
   }) async {

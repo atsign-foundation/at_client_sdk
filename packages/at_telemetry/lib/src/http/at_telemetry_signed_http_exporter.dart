@@ -6,7 +6,7 @@ import 'package:at_telemetry/src/models/metrics/at_telemetry_metric.dart';
 import 'package:at_telemetry/src/exporters/at_telemetry_metric_exporter.dart';
 import 'package:at_telemetry/src/models/traces/at_telemetry_span.dart';
 import 'package:at_telemetry/src/exporters/at_telemetry_span_exporter.dart';
-import 'package:at_telemetry/src/security/at_telemetry_rsa_signer.dart';
+import 'package:at_telemetry/src/security/at_telemetry_signer.dart';
 import 'package:at_telemetry/src/security/at_telemetry_http_signature.dart';
 import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
 import 'package:at_telemetry/src/codec/at_telemetry_metrics_codec.dart';
@@ -28,7 +28,7 @@ final class AtTelemetrySignedHttpExporter
   final String _serviceName;
   final String _keyId;
   final String _audience;
-  final AtTelemetryRsaSigner _signer;
+  final AtTelemetrySigner _signer;
   final http.Client _client;
   final bool _ownsClient;
   final void Function(Object)? _onError;
@@ -40,7 +40,7 @@ final class AtTelemetrySignedHttpExporter
     required String serviceName,
     required String keyId,
     required String audience,
-    required AtTelemetryRsaSigner signer,
+    required AtTelemetrySigner signer,
     http.Client? client,
     void Function(Object)? onError,
   })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
