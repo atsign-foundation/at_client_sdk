@@ -23,24 +23,35 @@ import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('CkManager');
 
-/// Collects unused content keys once [sync] first reports this client caught
-/// up, with whichever manager [manager] names by then.
+/// Collects unused content keys once [sync] reports this client caught up,
+/// with whichever manager [manager] names by then, and again at each later
+/// catch-up while a pass is refused because writes arrived in between.
 ///
 /// A service that stops first ends the wait, and nothing is collected.
 Future<void> collectUnusedOnceCaughtUp(SyncService sync,
     CkManager? Function() manager, CryptoContext context) async {
-  try {
-    await sync.waitUntilCaughtUp();
-  } on StoppedException {
-    return;
+  while (true) {
+    try {
+      await sync.waitUntilCaughtUp();
+    } on StoppedException {
+      return;
+    }
+    if (await _ranOrGaveUp(manager(), context)) return;
   }
+}
+
+/// One collection pass: false when it was refused because sync had not caught
+/// up, true when it ran or failed in a way a retry would not change.
+Future<bool> _ranOrGaveUp(CkManager? manager, CryptoContext context) async {
+  if (manager == null) return true;
   try {
-    await manager()?.collectUnused(context);
+    return await manager._tryCollect(context) != null;
   } on StoppedException {
-    return;
+    return true;
   } catch (e) {
-    _logger.warning('Could not collect unused content keys once sync caught '
-        'up; the next start tries again: $e');
+    _logger.warning('Could not collect unused content keys; the next start '
+        'tries again: $e');
+    return true;
   }
 }
 
@@ -251,15 +262,17 @@ class CkManager {
     return ck;
   }
 
+  /// Collects now, or at the next sync that leaves this client caught up when
+  /// the cut's own writes are still waiting to push.
   Future<void> _collectAfterReplacing(CryptoContext context) async {
+    if (await _ranOrGaveUp(this, context)) return;
+    final SyncService sync;
     try {
-      await collectUnused(context);
-    } on StoppedException {
+      sync = context.atClient.syncService;
+    } on StateError {
       return;
-    } catch (e) {
-      _logger.warning('Could not collect the content key just replaced; the '
-          'next start tries again: $e');
     }
+    await collectUnusedOnceCaughtUp(sync, () => this, context);
   }
 
   /// Deletes the conveyances of every content key this enrollment cut that is
@@ -270,10 +283,15 @@ class CkManager {
   /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
   /// collects nothing, leaving it to a later start. A client with no
   /// enrollment id names no cutter on what it conveys, so it collects nothing.
-  Future<int> collectUnused(CryptoContext context) =>
+  Future<int> collectUnused(CryptoContext context) async =>
+      await _tryCollect(context) ?? 0;
+
+  /// [collectUnused], answering null when it was refused because sync had not
+  /// caught up, the one refusal a later pass can overcome.
+  Future<int?> _tryCollect(CryptoContext context) =>
       _inTurn(() => _collectUnused(context));
 
-  Future<int> _collectUnused(CryptoContext context) async {
+  Future<int?> _collectUnused(CryptoContext context) async {
     final atClient = context.atClient;
     final me = atClient.getCurrentAtSign()?.toLowerCase();
     final enrollmentId = atClient.enrollmentId;
@@ -281,8 +299,9 @@ class CkManager {
     if (me == null || enrollmentId == null || store == null) return 0;
     final partial = await _whyLocalStorageIsPartial(atClient);
     if (partial != null) {
-      _logger.info('Not collecting unused content keys for $me: $partial');
-      return 0;
+      _logger.info('Not collecting unused content keys for $me: '
+          '${partial.why}');
+      return partial.transient ? null : 0;
     }
 
     final cut = <String, List<({String key, Map<String, dynamic> about})>>{};
@@ -327,24 +346,31 @@ class CkManager {
   }
 
   /// Why local storage cannot answer "does any record cite this key?"
-  /// completely, or null when it can.
-  static Future<String?> _whyLocalStorageIsPartial(AtClient atClient) async {
+  /// completely, and whether a later pass might, or null when it can.
+  static Future<({String why, bool transient})?> _whyLocalStorageIsPartial(
+      AtClient atClient) async {
     final preference = atClient.getPreferences();
     if (preference == null || !preference.isLocalStoreRequired) {
-      return 'this client keeps no local store';
+      return (why: 'this client keeps no local store', transient: false);
     }
     final syncRegex = preference.syncRegex;
     if (syncRegex != null && syncRegex.isNotEmpty) {
-      return 'syncRegex "$syncRegex" narrows what local storage holds';
+      return (
+        why: 'syncRegex "$syncRegex" narrows what local storage holds',
+        transient: false
+      );
     }
     try {
       if (!await atClient.syncService.isInSync()) {
-        return 'sync has not caught up';
+        return (why: 'sync has not caught up', transient: true);
       }
     } on StoppedException {
       rethrow;
     } catch (e) {
-      return 'could not ask whether sync has caught up: $e';
+      return (
+        why: 'could not ask whether sync has caught up: $e',
+        transient: true
+      );
     }
     return null;
   }

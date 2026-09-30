@@ -356,6 +356,68 @@ void main() {
       expect(a.deleted, ['$bob:orphan0000000000.__ck.$namespace$alice']);
     });
 
+    test('a collection refused mid-sync runs at the next caught-up sync',
+        () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      conveyance(a.store, 'orphan0000000000', cutBy: enrollmentId);
+      final listeners = <SyncProgressListener>[];
+      when(() => a.sync.addProgressListener(any()))
+          .thenAnswer((inv) => listeners.add(inv.positionalArguments[0]));
+      // Caught up by the event, but writes arrived before the check.
+      when(() => a.sync.isInSync()).thenAnswer((_) async => false);
+      void caughtUp() {
+        for (final listener in List.of(listeners)) {
+          listener.onSyncProgressEvent(SyncProgress()
+            ..syncStatus = SyncStatus.success
+            ..pendingPushCount = 0);
+        }
+      }
+
+      final waiting =
+          collectUnusedOnceCaughtUp(a.sync, () => a.manager, a.context);
+      await Future<void>.delayed(Duration.zero);
+      caughtUp();
+      await a.manager.idle;
+      await Future<void>.delayed(Duration.zero);
+      expect(a.deleted, isEmpty, reason: 'the first pass is refused');
+
+      when(() => a.sync.isInSync()).thenAnswer((_) async => true);
+      caughtUp();
+      await waiting;
+
+      expect(a.deleted, ['$bob:orphan0000000000.__ck.$namespace$alice'],
+          reason: 'a refusal waits for the next quiet moment, not the next '
+              'start');
+    });
+
+    test('a replacement refused mid-sync collects at the next caught-up sync',
+        () async {
+      final a = enrolled();
+      final listeners = <SyncProgressListener>[];
+      when(() => a.sync.addProgressListener(any()))
+          .thenAnswer((inv) => listeners.add(inv.positionalArguments[0]));
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      when(() => a.sync.isInSync()).thenAnswer((_) async => false);
+      await a.manager.rotateContentKey(a.context, shared());
+      await a.manager.idle;
+      await Future<void>.delayed(Duration.zero);
+      expect(a.deleted, isEmpty,
+          reason: 'the cut\'s own writes are still waiting to push');
+
+      when(() => a.sync.isInSync()).thenAnswer((_) async => true);
+      for (final listener in List.of(listeners)) {
+        listener.onSyncProgressEvent(SyncProgress()
+          ..syncStatus = SyncStatus.success
+          ..pendingPushCount = 0);
+      }
+      await Future<void>.delayed(Duration.zero);
+      await a.manager.idle;
+
+      expect(a.deleted.toSet(), conveyancesOf(superseded).toSet());
+    });
+
     test('a service that stops before catching up collects nothing', () async {
       final a = enrolled();
       conveyance(a.store, 'orphan0000000000', cutBy: enrollmentId);

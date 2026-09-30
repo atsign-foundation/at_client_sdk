@@ -14492,7 +14492,10 @@ conveyance names the enrollment that cut its key, as `cutBy` in its
 cut, less the keys its pointers or its memory name as current, less those a
 record in local storage cites. A collection waits for any cut in progress in
 its process. Unlike a list, this also collects a key whose cut stopped before
-its pointer was written.
+its pointer was written. And a collection refused because sync had not caught
+up does not wait for a later start: it tries again at each later sync that
+catches up, until one pass runs, since live an active client is almost always
+mid-push at the moment a start or a replacement asks.
 
 **Accepted cost.** A value that exists only on the recipient's side loses its
 key: a notification-delivered value, including a `cacheAtRecipient` copy, or a
