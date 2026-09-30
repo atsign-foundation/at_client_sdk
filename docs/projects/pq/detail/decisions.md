@@ -14654,7 +14654,9 @@ enrollment's `_apsk` was still accepted at `.a.__e`.
 **Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
 (the P0 row's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
-Nothing here is built yet. The atServer half lands in at_server.
+The client half is built: `LookUpBuilderManager.get` sets `bypassCache` on every
+lookup of either record, pinned in `test/verb_builder_test.dart`. The atServer
+half lands in at_server.
 
 **The atServer (at_server).** A reader's atServer writes no `cached:public:`
 copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at

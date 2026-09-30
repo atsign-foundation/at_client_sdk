@@ -7,6 +7,9 @@ abstract class RequestOptions {}
 class GetRequestOptions extends RequestOptions {
   /// Whether the `get` request should bypass this atSign's cache of data owned
   /// by another atSign
+  ///
+  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
+  /// it whatever this says.
   bool bypassCache = false;
 
   /// Whether to send this get request directly to the remote atServer.

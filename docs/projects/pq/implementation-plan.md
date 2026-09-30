@@ -521,8 +521,9 @@ with it*
     existed; a refresh finding a changed value dropped the copy's ttl; and the
     configured refresh hour was ignored. Owed *(at_server)*: no cached copy of
     those two record kinds, the 24-hour copy kept for other public data, and
-    the three defects fixed. Owed *(at_client)*: `bypassCache` on every `_apsk`
-    and `__nskey` fetch.
+    the three defects fixed. The client half is built: `LookUpBuilderManager.get`
+    sets `bypassCache` on every lookup of either record, whatever the caller
+    asked.
 
 **Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd` are
 pinned on the built command; nothing pins the absence of `ttl` and `ttr` on

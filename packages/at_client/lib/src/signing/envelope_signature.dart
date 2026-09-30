@@ -19,6 +19,10 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, EnrollmentConstants;
 
+/// The record name an enrollment's APKAM public signing key is published
+/// under: see [apskUri].
+const String apskRecordName = '_apsk';
+
 /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
 /// APKAM public signing key lives, and the one record its own connection may
 /// write.
@@ -27,8 +31,8 @@ import 'package:at_commons/at_commons.dart'
 /// cross-implementation contract; it is pinned in
 /// `test/wire_literal_pins_test.dart`.
 String apskUri(String atSign, String enrollmentId) =>
-    'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
-    '$atSign';
+    'public:$apskRecordName.$enrollmentId.'
+    '${EnrollmentConstants.perEnrollmentApproved}$atSign';
 
 /// The envelope's payload version, carried inside each protected header where
 /// the signature covers it.
