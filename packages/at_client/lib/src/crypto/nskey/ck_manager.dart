@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
@@ -210,19 +211,25 @@ class CkManager {
   ///
   /// Sealed here and written as it is, because the put pipeline replaces the
   /// `appMetadata` that names the recipient. An atSign holding no key covering
-  /// [ckNs] shares without one.
+  /// [ckNs] mints one there first, at the recipient's level rather than the
+  /// value's own; where it makes none, the share goes without a copy.
   Future<void> _conveySiblingCopy(
       CryptoContext context, String destination, String ckNs, ContentKey ck,
       {required bool useRemoteAtServer}) async {
     final sender = context.atClient.getCurrentAtSign();
     if (sender == null || destination == sender) return;
-    final own = await resolver.resolve(sender, ckNs);
+    var own = await resolver.resolve(sender, ckNs);
     if (own == null) {
-      _logger.warning('$sender holds no namespace key covering $ckNs, so the '
-          'content key ${ck.ckKid} shared with $destination has no sibling '
-          'copy: no other enrollment of $sender can open what it shares, and '
-          'this one cuts a fresh key after a restart');
-      return;
+      final reached = await context.atClient.ensureReachable(ckNs);
+      if (reached.isReachable) own = await resolver.resolve(sender, ckNs);
+      if (own == null) {
+        _logger.warning('$sender holds no namespace key covering $ckNs and '
+            'made none, because ${_whyNoKey(reached, ckNs)}, so the content '
+            'key ${ck.ckKid} shared with $destination has no sibling copy: '
+            'no other enrollment of $sender can open what it shares, and this '
+            'one cuts a fresh key after a restart');
+        return;
+      }
     }
     final key = ckSiblingCopyKey(sender: sender, ckKid: ck.ckKid, ckNs: ckNs)
       ..metadata.appMetadata = AppMetadata(
@@ -235,6 +242,19 @@ class CkManager {
           ..shouldEncrypt = false
           ..useRemoteAtServer = useRemoteAtServer);
   }
+
+  static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>
+      switch (reached.outcome) {
+        AtReachability.postureDoesNotSeed => 'seedNamespaceKeys is off',
+        AtReachability.noKeySource =>
+          'this client has no key source to file one in',
+        AtReachability.notAuthorised => '$ckNs can never hold a key',
+        AtReachability.timedOut => 'minting one timed out',
+        AtReachability.failed => 'minting one failed: ${reached.error}',
+        AtReachability.alreadyReachable ||
+        AtReachability.published =>
+          'a key is published there that this client could not resolve',
+      };
 
   /// Deletes the conveyance record carrying [ckKid] and drops the key from
   /// this client's cache.

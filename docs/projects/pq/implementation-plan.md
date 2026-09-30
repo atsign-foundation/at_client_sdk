@@ -436,9 +436,11 @@ with it*
    Found and fixed on the way: `AtClient.ensureReachable`, which the mint on
    demand goes through, minted on a client with no key source, publishing a
    key whose private lived only in memory; it now answers `noKeySource`
-   (`no_atkeysio_inertness_test.dart`).
-   Owed: resume and a sibling's read from the sibling copy; mint on demand at
-   the recipient's level unless `seedNamespaceKeys` is off; deleting a key
+   (`no_atkeysio_inertness_test.dart`). Built: a sender holding no key
+   covering `ckNs` calls `ensureReachable(ckNs)` first, at the recipient's
+   level rather than the value's own, and where that mints nothing the share
+   goes without a copy and the warning names why.
+   Owed: resume and a sibling's read from the sibling copy; deleting a key
    deletes both conveyances; UC-A4.1's "This `put` writes no self-copy" and
    `nskey_cross_atsign_test`'s assertion rewritten.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in

@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 typedef _Put = ({AtKey key, String value, PutRequestOptions? options});
 
@@ -21,11 +22,14 @@ void main() {
 
   late XWingKeyPair aliceNskey;
   late XWingKeyPair bobNskey;
+  final logs = RecordedLogs();
 
   setUpAll(() async {
+    logs.installOn();
     aliceNskey = await XWingKeyPair.generate();
     bobNskey = await XWingKeyPair.generate();
     registerFallbackValue(AtKey());
+    registerFallbackValue(Duration.zero);
   });
 
   ContentKey ck() =>
@@ -153,12 +157,22 @@ void main() {
     /// A client of alice whose puts run the way the pipeline does: a record
     /// routed to a provider is sealed by it, and one sent with `shouldEncrypt`
     /// off goes as it is.
+    ///
+    /// [reach] answers `ensureReachable`, which a sender holding no key
+    /// covering the namespace asks; it declines, as a client whose posture
+    /// seeds nothing would, unless a test says otherwise.
     ({
       CkManager manager,
       ContentKeyCache cache,
       CryptoContext context,
       List<_Put> puts,
-    }) sender({bool aliceHoldsKey = true, bool failSiblingWrite = false}) {
+      List<String> reachedFor,
+    }) sender(
+        {bool aliceHoldsKey = true,
+        bool failSiblingWrite = false,
+        Future<AtReachabilityResult> Function(
+                String namespace, InMemoryNskeyKeyRing ring)?
+            reach}) {
       final ring = InMemoryNskeyKeyRing()
         ..seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
       if (aliceHoldsKey) {
@@ -170,6 +184,15 @@ void main() {
       final client = MockAtClient();
       client.getPreferences().crypto = config;
       when(() => client.getCurrentAtSign()).thenReturn(alice);
+      final reachedFor = <String>[];
+      when(() => client.ensureReachable(any(), timeout: any(named: 'timeout')))
+          .thenAnswer((inv) async {
+        final ns = inv.positionalArguments[0] as String;
+        reachedFor.add(ns);
+        return reach == null
+            ? const AtReachabilityResult(AtReachability.postureDoesNotSeed)
+            : reach(ns, ring);
+      });
       final puts = <_Put>[];
       when(() => client.put(any(), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
@@ -195,12 +218,13 @@ void main() {
         cache: data.cache,
         context: CryptoContext(atClient: client),
         puts: puts,
+        reachedFor: reachedFor,
       );
     }
 
-    AtKey value({String? sharedWith = bob}) => AtKey()
+    AtKey value({String? sharedWith = bob, String ns = namespace}) => AtKey()
       ..key = 'treaty'
-      ..namespace = namespace
+      ..namespace = ns
       ..sharedBy = alice
       ..sharedWith = sharedWith
       ..metadata = Metadata();
@@ -263,14 +287,52 @@ void main() {
       ]);
     });
 
-    test('a sender holding no key covering the namespace shares without one',
+    test(
+        'a sender holding no key covering the namespace mints one where the '
+        'recipient\'s was found', () async {
+      final s = sender(
+          aliceHoldsKey: false,
+          reach: (ns, ring) async {
+            ring.seedKeypair(alice, ns,
+                publicKey: aliceNskey.publicKeyBytes,
+                privateKey: aliceNskey.privateKeyBytes);
+            return const AtReachabilityResult(AtReachability.published);
+          });
+
+      // An AtCollection sub-collection's namespace carries an item id.
+      await s.manager.ensureCurrent(s.context, value(ns: 'item-7.$namespace'));
+
+      expect(s.reachedFor, [namespace],
+          reason: 'at the level bob\'s key was found, never the value\'s own, '
+              'or every item would get a key of its own');
+      final ckKid = s.cache.current(bob, namespace)!.ckKid;
+      expect(s.puts.map((p) => p.key.toString()), [
+        '@bob:$ckKid.__ck.app_1.my_apps@alice',
+        '$ckKid.__ck.app_1.my_apps@alice',
+      ]);
+    });
+
+    test('with seedNamespaceKeys off a share goes without one, and says why',
         () async {
       final s = sender(aliceHoldsKey: false);
 
       await s.manager.ensureCurrent(s.context, value());
 
       expect(s.puts.single.key.sharedWith, bob);
-      expect(s.cache.current(bob, namespace), isNotNull);
+      expect(s.cache.current(bob, namespace), isNotNull,
+          reason: 'the share itself goes ahead');
+      final ckKid = s.cache.current(bob, namespace)!.ckKid;
+      expect(logs.at('WARNING').where((m) => m.contains(ckKid)),
+          [contains('seedNamespaceKeys is off')]);
+    });
+
+    test('a sender that holds a key asks for none — the control', () async {
+      final s = sender();
+
+      await s.manager.ensureCurrent(s.context, value());
+
+      expect(s.reachedFor, isEmpty);
+      expect(s.puts, hasLength(2));
     });
 
     test('a sibling copy that is not written leaves no current key', () async {
