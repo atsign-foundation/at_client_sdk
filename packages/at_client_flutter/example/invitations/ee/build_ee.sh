@@ -7,8 +7,8 @@
 # Usage: build_ee.sh [<at_server checkout> [<ref>]]
 #   default: the at_server checkout beside this repo, at origin/trunk
 #
-# up.sh uses the published atsigncompany/ephemeral:dev_env, built from trunk,
-# unless INV_EE_IMAGE names another. This builds at_ephemeral:invitations, so
+# up.sh uses the published atsigncompany/ephemeral:latest, built from the
+# latest production release, unless INV_EE_IMAGE names another. This builds at_ephemeral:invitations, so
 # run INV_EE_IMAGE=at_ephemeral:invitations ee/up.sh to use it. It builds in a
 # temporary worktree, so the checkout's own working tree is never touched,
 # using at_server's own buildee.sh.

@@ -63,12 +63,13 @@ to ask for permission.
 - `127.0.0.1 vip.ve.atsign.zone` in `/etc/hosts`. The EE carries real
   certificates for that name.
 
-`ee/up.sh` runs `atsigncompany/ephemeral:dev_env`, which at_server publishes
-from trunk. `atsigncompany/ephemeral:latest` is built from the latest
-production release, which cannot verify the ML-DSA keys the `pqActive`
-posture authenticates with. To run against an at_server branch that is not on
-trunk yet, build an image from it with `ee/build_ee.sh <checkout> <ref>`, then
-`INV_EE_IMAGE=at_ephemeral:invitations ee/up.sh`.
+`ee/up.sh` runs `atsigncompany/ephemeral:latest`, which at_server builds from
+its latest production release. The example needs p3.16.5 or later, the first
+production release that verifies the ML-DSA keys the `pqActive` posture
+authenticates with. `INV_EE_IMAGE=atsigncompany/ephemeral:dev_env ee/up.sh`
+runs at_server trunk instead. To run against an at_server branch that is not
+on trunk yet, build an image from it with `ee/build_ee.sh <checkout> <ref>`,
+then `INV_EE_IMAGE=at_ephemeral:invitations ee/up.sh`.
 
 ## How it works
 

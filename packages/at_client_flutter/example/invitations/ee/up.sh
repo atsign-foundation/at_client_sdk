@@ -11,8 +11,9 @@
 # old EE stay in that app's keychain but no longer exist.
 #
 # Environment: INV_EE_BASE (default 35000), INV_ISSUER_PORT (default 35100),
-# INV_EE_IMAGE (default atsigncompany/ephemeral:dev_env, the EE built from
-# at_server trunk; build_ee.sh makes one from any at_server checkout).
+# INV_EE_IMAGE (default atsigncompany/ephemeral:latest, the EE built from the
+# latest at_server production release; atsigncompany/ephemeral:dev_env is built
+# from trunk, and build_ee.sh makes one from any at_server checkout).
 
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -23,8 +24,9 @@ command -v dart >/dev/null || die "dart is not on PATH"
 grep -qE "^[^#]*[[:space:]]$ROOT_HOST([[:space:]]|$)" /etc/hosts \
   || die "/etc/hosts has no entry for $ROOT_HOST. Add: 127.0.0.1 $ROOT_HOST"
 ok "/etc/hosts maps $ROOT_HOST"
-# NOTE: a published image is pulled every time, because dev_env moves with
-# trunk; a local one, from build_ee.sh, only has to exist. Not
+# NOTE: a published image is pulled every time, because its tag moves: latest
+# with each rebuild, dev_env with trunk. A local one, from build_ee.sh, only
+# has to exist. Not
 # `docker image inspect`, which under the containerd image store can refuse a
 # short name that `docker image ls` finds.
 if [[ "$IMAGE" == */* ]]; then
