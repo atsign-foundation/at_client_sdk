@@ -1,0 +1,286 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
+
+typedef _Put = ({AtKey key, String value, PutRequestOptions? options});
+
+/// The sibling copy: a shared content key conveyed a second time, to the
+/// sender's own namespace key, so the sender's other enrollments — and the
+/// sender after a restart — can open what it shared.
+void main() {
+  const alice = '@alice';
+  const bob = '@bob';
+  const namespace = 'app_1.my_apps';
+
+  late XWingKeyPair aliceNskey;
+  late XWingKeyPair bobNskey;
+
+  setUpAll(() async {
+    aliceNskey = await XWingKeyPair.generate();
+    bobNskey = await XWingKeyPair.generate();
+    registerFallbackValue(AtKey());
+  });
+
+  ContentKey ck() =>
+      ContentKey(Uint8List.fromList(List.generate(32, (i) => i + 1)));
+
+  group('a sibling copy, sealed and opened', () {
+    // NOTE: alice's key sits one level above the namespace bob's was found at,
+    // so the level the copy is sealed at and the scope it is filed under
+    // differ, and an assertion that confused them would go red.
+    const aliceLevel = 'my_apps';
+
+    AtKey siblingCopy(ContentKey key) => AtKey()
+      ..key = '${key.ckKid}.__ck'
+      ..namespace = namespace
+      ..sharedBy = alice
+      ..metadata = (Metadata()
+        ..appMetadata = AppMetadata(
+            providerId: nskeyCryptoProviderId,
+            additional: {'destination': bob, 'ns': aliceLevel}));
+
+    ({NskeyProvider provider, ContentKeyCache cache, String kid})
+        aliceEnrollment() {
+      final ring = InMemoryNskeyKeyRing();
+      final kid = ring.seedKeypair(alice, aliceLevel,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      final cache = ContentKeyCache();
+      return (
+        provider: NskeyProvider(keyRing: ring, cache: cache),
+        cache: cache,
+        kid: kid,
+      );
+    }
+
+    test(
+        'is sealed to the sender\'s key covering the namespace and names the '
+        'recipient — raw literal', () async {
+      final writer = aliceEnrollment();
+      final key = siblingCopy(ck());
+
+      final wire = await writer.provider.encrypt(
+          CryptoContext(atClient: MockAtClient()), key, ck().toBase64());
+
+      // NOTE: frozen — a reader files the key by `destination` and `ckNs`, and
+      // opens it with the private at `ns`.
+      expect(key.metadata.appMetadata!.additional, {
+        'recipientKind': 'nskey',
+        'ckKid': ck().ckKid,
+        'nskeyKid': writer.kid,
+        'ns': 'my_apps',
+        'destination': '@bob',
+        'ckNs': 'app_1.my_apps',
+      });
+      final opened = await pqOpen(XWingPureDartAlgo.instance,
+          aliceNskey.privateKeyBytes, base64Decode(wire),
+          info: Uint8List.fromList(utf8.encode('at/nskey:@alice:my_apps')));
+      expect(opened, ck().bytes,
+          reason: 'sealed at the level of the key that sealed it, bound as '
+              'every other conveyance is');
+    });
+
+    test(
+        'another enrollment of the sender opens it and files the key for the '
+        'recipient', () async {
+      final writer = aliceEnrollment();
+      final written = siblingCopy(ck());
+      final wire = await writer.provider.encrypt(
+          CryptoContext(atClient: MockAtClient()), written, ck().toBase64());
+      final sibling = aliceEnrollment();
+
+      final synced = AtKey()
+        ..key = written.key
+        ..namespace = written.namespace
+        ..sharedBy = alice
+        ..metadata = (Metadata()..appMetadata = written.metadata.appMetadata);
+      final opened = await sibling.provider
+          .decrypt(CryptoContext(atClient: MockAtClient()), synced, wire);
+
+      expect(opened, ck().toBase64());
+      expect(sibling.cache.get(bob, namespace, ck().ckKid)?.bytes, ck().bytes,
+          reason: 'values shared with bob cite it in bob\'s scope');
+      expect(sibling.cache.get(alice, namespace, ck().ckKid), isNull);
+      expect(sibling.cache.get(alice, aliceLevel, ck().ckKid), isNull,
+          reason: 'it is not a key for alice\'s own data');
+    });
+
+    test('a record with a recipient cannot be sealed as one', () async {
+      final writer = aliceEnrollment();
+      final shared = siblingCopy(ck())..sharedWith = '@carol';
+
+      await expectLater(
+          writer.provider.encrypt(
+              CryptoContext(atClient: MockAtClient()), shared, ck().toBase64()),
+          throwsA(isA<AtEncryptionException>()
+              .having((e) => e.message, 'message', contains('recipient'))));
+    });
+
+    test('a record with a recipient naming one is refused on open', () async {
+      final writer = aliceEnrollment();
+      final written = siblingCopy(ck());
+      final wire = await writer.provider.encrypt(
+          CryptoContext(atClient: MockAtClient()), written, ck().toBase64());
+      final reader = aliceEnrollment();
+
+      // The same record, presented as one @carol shared with alice.
+      final inbound = AtKey()
+        ..key = written.key
+        ..namespace = written.namespace
+        ..sharedBy = '@carol'
+        ..sharedWith = alice
+        ..metadata = (Metadata()..appMetadata = written.metadata.appMetadata);
+
+      await expectLater(
+          reader.provider
+              .decrypt(CryptoContext(atClient: MockAtClient()), inbound, wire),
+          throwsA(isA<AtDecryptionException>()
+              .having((e) => e.message, 'message', contains('recipient'))),
+          reason: 'only the sender\'s own record says whose scope a key is '
+              'for; anyone else\'s could file a key under a third atSign');
+      expect(reader.cache.get(bob, namespace, ck().ckKid), isNull);
+    });
+  });
+
+  group('a sibling copy, written', () {
+    /// A client of alice whose puts run the way the pipeline does: a record
+    /// routed to a provider is sealed by it, and one sent with `shouldEncrypt`
+    /// off goes as it is.
+    ({
+      CkManager manager,
+      ContentKeyCache cache,
+      CryptoContext context,
+      List<_Put> puts,
+    }) sender({bool aliceHoldsKey = true, bool failSiblingWrite = false}) {
+      final ring = InMemoryNskeyKeyRing()
+        ..seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      if (aliceHoldsKey) {
+        ring.seedKeypair(alice, namespace,
+            publicKey: aliceNskey.publicKeyBytes,
+            privateKey: aliceNskey.privateKeyBytes);
+      }
+      final config = CryptoConfig.nskey(keyRing: ring);
+      final client = MockAtClient();
+      client.getPreferences().crypto = config;
+      when(() => client.getCurrentAtSign()).thenReturn(alice);
+      final puts = <_Put>[];
+      when(() => client.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        var value = inv.positionalArguments[1] as String;
+        final options =
+            inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+        if (options?.shouldEncrypt ?? true) {
+          key.metadata.appMetadata =
+              AppMetadata(providerId: options!.cryptoProviderId!);
+          value = await CryptoRuntime(client).encryptForPut(key, value);
+        } else if (failSiblingWrite) {
+          throw SecondaryConnectException('the sibling copy was not written');
+        }
+        puts.add((key: key, value: value, options: options));
+        return true;
+      });
+      final data = config.lookup(symmetricAesGcmCryptoProviderId)
+          as SymmetricAesGcmProvider;
+      return (
+        manager: data.ckManager!,
+        cache: data.cache,
+        context: CryptoContext(atClient: client),
+        puts: puts,
+      );
+    }
+
+    AtKey value({String? sharedWith = bob}) => AtKey()
+      ..key = 'treaty'
+      ..namespace = namespace
+      ..sharedBy = alice
+      ..sharedWith = sharedWith
+      ..metadata = Metadata();
+
+    test('a share conveys its key to the recipient, then to the sender',
+        () async {
+      final s = sender();
+
+      await s.manager.ensureCurrent(s.context, value());
+
+      final ckKid = s.cache.current(bob, namespace)!.ckKid;
+      expect(s.puts.map((p) => p.key.toString()), [
+        '@bob:$ckKid.__ck.app_1.my_apps@alice',
+        '$ckKid.__ck.app_1.my_apps@alice',
+      ]);
+    });
+
+    test('the sibling copy goes sealed, on the route the recipient\'s took',
+        () async {
+      final s = sender();
+
+      await s.manager
+          .ensureCurrent(s.context, value(), useRemoteAtServer: true);
+
+      final recipients = s.puts.first;
+      final sibling = s.puts.last;
+      expect(sibling.options?.shouldEncrypt, isFalse,
+          reason: 'sealed before the put, since the pipeline would overwrite '
+              'the appMetadata naming the recipient');
+      expect(sibling.options?.useRemoteAtServer, isTrue);
+      expect(recipients.options?.useRemoteAtServer, isTrue);
+
+      final command = (await PutRequestTransformer().transform(
+              Tuple<AtKey, dynamic>()
+                ..one = sibling.key
+                ..two = sibling.value,
+              requestOptions: sibling.options))
+          .buildCommand();
+      final ckKid = s.cache.current(bob, namespace)!.ckKid;
+      final shape = RegExp('^update:isEncrypted:true:appMetadata:'
+          '([A-Za-z0-9+/=]+):'
+          '${RegExp.escape('$ckKid.__ck.app_1.my_apps@alice')} '
+          '[A-Za-z0-9+/=]+\\n\$');
+      final match = shape.firstMatch(command);
+      expect(match, isNotNull, reason: command);
+      final sent = jsonDecode(utf8.decode(base64Decode(match!.group(1)!)))
+          as Map<String, dynamic>;
+      expect(sent['providerId'], nskeyCryptoProviderId);
+      expect(sent['destination'], bob);
+      expect(sent['ckNs'], namespace);
+    });
+
+    test('self data gets no sibling copy — the control', () async {
+      final s = sender();
+
+      await s.manager.ensureCurrent(s.context, value(sharedWith: null));
+
+      expect(s.puts.map((p) => p.key.toString()), [
+        '${s.cache.current(alice, namespace)!.ckKid}.__ck.app_1.my_apps@alice'
+      ]);
+    });
+
+    test('a sender holding no key covering the namespace shares without one',
+        () async {
+      final s = sender(aliceHoldsKey: false);
+
+      await s.manager.ensureCurrent(s.context, value());
+
+      expect(s.puts.single.key.sharedWith, bob);
+      expect(s.cache.current(bob, namespace), isNotNull);
+    });
+
+    test('a sibling copy that is not written leaves no current key', () async {
+      final s = sender(failSiblingWrite: true);
+
+      await expectLater(s.manager.ensureCurrent(s.context, value()),
+          throwsA(isA<SecondaryConnectException>()));
+      expect(s.cache.current(bob, namespace), isNull,
+          reason: 'a key the sender cannot reopen would be cut again by '
+              'every restart, the fault the copy exists to end');
+    });
+  });
+}

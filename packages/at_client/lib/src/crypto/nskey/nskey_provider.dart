@@ -139,11 +139,18 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   static Uint8List _info(String sharedBy, String namespace) =>
       Uint8List.fromList(utf8.encode('$_infoLabel:$sharedBy:$namespace'));
 
+  /// Seals the CK in [plaintext] into [atKey]'s conveyance record.
+  ///
+  /// A **sibling copy** — the sender's own record of a key it shares — arrives
+  /// with `appMetadata` naming the recipient as `destination` and the level of
+  /// the sender's key as `ns`; it is sealed at that level and records the scope
+  /// it is filed under, since the pipeline that writes it cannot.
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final nskeyOwner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
+    final sibling = _siblingCopyOf(atKey);
+    final namespace = sibling?.sealNs ?? _namespaceOf(atKey);
 
     final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
     if (advertised == null) {
@@ -191,6 +198,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         // the wire string — AtKey.fromString cuts at the last dot, so
         // `<ckKid>.__ck.app_1.my_apps` parses back as `my_apps`.
         'ns': namespace,
+        if (sibling != null) ...{
+          'destination': sibling.destination,
+          'ckNs': _namespaceOf(atKey),
+        },
       },
     );
 
@@ -198,7 +209,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // transformer, with the write still to come, so promoting a CK whose
     // conveyance never reaches storage leaves `CkManager.ensureCurrent`
     // skipping it forever. The manager promotes it once the write returns.
-    cache.put(nskeyOwner, namespace, ck);
+    cache.put(sibling?.destination ?? nskeyOwner,
+        sibling == null ? namespace : _namespaceOf(atKey), ck);
 
     return envelope;
   }
@@ -212,6 +224,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // re-parsed from the wire mis-splits a multi-segment one — both the private
     // lookup and the HPKE binding would then be wrong.
     final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
+    final filedUnder = _filingScopeOf(atKey, additional, nskeyOwner, namespace);
 
     final nskeyKid = additional?['nskeyKid'];
     if (nskeyKid is! String) {
@@ -251,8 +264,51 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // NOTE: cached but not made current — sync is unordered, so this conveyance
     // may be older than the CK new writes are already using.
     final ck = ContentKey(ckBytes);
-    cache.put(nskeyOwner, namespace, ck);
+    cache.put(filedUnder.owner, filedUnder.namespace, ck);
     return ck.toBase64();
+  }
+
+  /// The recipient and seal level a sibling copy is being written with, or null
+  /// for any other conveyance.
+  static ({String destination, String sealNs})? _siblingCopyOf(AtKey atKey) {
+    final additional = atKey.metadata.appMetadata?.additional;
+    final destination = additional?['destination'];
+    if (destination == null) return null;
+    if (destination is! String || _hasRecipient(atKey)) {
+      throw AtEncryptionException('only a sender\'s own record can name the '
+          'recipient of a content key it shares; ${atKey.sharedWith} is this '
+          'record\'s recipient');
+    }
+    return (
+      destination: destination,
+      sealNs: additional?['ns'] as String? ?? _namespaceOf(atKey),
+    );
+  }
+
+  /// Whose CK cache scope an opened conveyance belongs to: the recipient a
+  /// sibling copy names, else the nskey owner's own.
+  static ({String owner, String namespace}) _filingScopeOf(AtKey atKey,
+      Map<String, dynamic>? additional, String nskeyOwner, String namespace) {
+    final destination = additional?['destination'];
+    if (destination == null) return (owner: nskeyOwner, namespace: namespace);
+    final ckNs = additional?['ckNs'];
+    if (_hasRecipient(atKey)) {
+      throw AtDecryptionException('only a sender\'s own record can name the '
+          'recipient of a content key it shares, and this one has a recipient, '
+          '${atKey.sharedWith}');
+    }
+    if (destination is! String || ckNs is! String) {
+      throw AtDecryptionException('a sibling copy must name the recipient and '
+          'the namespace its key is filed under, as destination and ckNs');
+    }
+    return (owner: destination, namespace: ckNs);
+  }
+
+  static bool _hasRecipient(AtKey atKey) {
+    final sharedWith = atKey.sharedWith;
+    return sharedWith != null &&
+        sharedWith.isNotEmpty &&
+        sharedWith != atKey.sharedBy;
   }
 
   /// Who owns the *record* — what the HPKE `info` binds, so an envelope sealed

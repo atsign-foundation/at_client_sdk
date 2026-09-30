@@ -14440,6 +14440,16 @@ should be able to see what was written by their siblings."
   without the sibling copy, and a warning names why.
 - Deleting a content key deletes both of its conveyances.
 
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** the sibling copy is
+`<ckKid>.__ck.<ckNs>@<sender>`, a self record in the recipient's content-key
+scope, so a reader finds it from the shared value alone. It is sealed to the
+sender's key covering `ckNs`, the key the sender's own data there uses, which
+can sit above the level the recipient's key was found at; its `appMetadata`
+names the recipient as `destination` and the scope as `ckNs`, beside the level
+it was sealed at as `ns`. "Holding no namespace key where it is sharing" means
+holding none covering `ckNs`, so a sender with a key only at a higher level
+mints nothing.
+
 A consequence, set out before the ruling: a forward-secrecy rotation
 (`rotateContentKey`) replaces only the calling enrollment's key for that
 destination, and each sibling's key goes on to its own rotation policy.

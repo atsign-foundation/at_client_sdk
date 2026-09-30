@@ -511,10 +511,12 @@ crypto:
    for shared — written as a `<ckKid>.__ck.<ns>@<owner>` record stamping `nskeyKid`.
    (Skip if the CK is already conveyed to that generation.) For shared data the
    same CK is conveyed a second time, to the sender's **own** nskey — the
-   **sibling copy** — so the sender's other enrollments, and the sender after a
-   restart, can open it; a sender holding no nskey of its own there mints one
-   first, at the level the recipient's key was found, unless the application
-   turned `seedNamespaceKeys` off
+   **sibling copy**, `<ckKid>.__ck.<ckNs>@<sender>`, sealed to the sender's key
+   covering `ckNs` and naming the recipient in its `appMetadata` — so the
+   sender's other enrollments, and the sender after a restart, can open it; a
+   sender holding no nskey covering `ckNs` mints one first, at the level the
+   recipient's key was found, unless the application turned
+   `seedNamespaceKeys` off
    ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
 3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
    `ckKid` (+ `iv`) in `appMetadata`.

@@ -49,8 +49,13 @@ void main() {
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
       final value = inv.positionalArguments[1] as String;
+      final options =
+          inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
       written.add(key);
-      await nskey.encrypt(CryptoContext(atClient: atClient), key, value);
+      // A sibling copy arrives sealed, and the pipeline sends it as it is.
+      if (options?.shouldEncrypt ?? true) {
+        await nskey.encrypt(CryptoContext(atClient: atClient), key, value);
+      }
       return true;
     });
 
@@ -91,11 +96,14 @@ void main() {
 
       await NotificationRequestTransformer(c.atClient).transform(params);
 
-      expect(c.written, hasLength(1),
+      expect(c.written, hasLength(2),
           reason: 'a namespace-less key makes CkManager.ensureCurrent bail, so '
-              'no conveyance is written and nothing can decrypt the value');
-      expect(c.written.single.key, endsWith('.__ck'));
-      expect(c.written.single.namespace, namespace);
+              'no conveyance is written and nothing can decrypt the value; a '
+              'share writes bob\'s and alice\'s sibling copy');
+      for (final conveyance in c.written) {
+        expect(conveyance.key, endsWith('.__ck'));
+        expect(conveyance.namespace, namespace);
+      }
     });
 
     test('a key that already carries its own namespace is unaffected',

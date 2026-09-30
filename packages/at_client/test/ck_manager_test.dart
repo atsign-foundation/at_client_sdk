@@ -135,6 +135,13 @@ void main() {
     final mockAtClient = MockAtClient();
     when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
     final context = CryptoContext(atClient: mockAtClient);
+    // NOTE: the manager seals a sibling copy through the runtime, which finds
+    // the provider in the client's config, so the rig's has to be registered.
+    void register(NskeyProvider provider) =>
+        mockAtClient.getPreferences().crypto = CryptoConfig(
+            defaultProviderId: symmetricAesGcmCryptoProviderId,
+            providers: [provider]);
+    register(nskey);
 
     when(() => mockAtClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
@@ -146,7 +153,10 @@ void main() {
       written.add(key);
       providerIds.add(options?.cryptoProviderId);
       routings.add(options?.useRemoteAtServer);
-      conveyed[key.toString()] = await nskey.encrypt(context, key, value);
+      // A sibling copy arrives sealed, and the pipeline sends it as it is.
+      conveyed[key.toString()] = (options?.shouldEncrypt ?? true)
+          ? await nskey.encrypt(context, key, value)
+          : value;
       conveyedKeys[key.toString()] = key;
       if (writesLeftToFail > 0) {
         writesLeftToFail--;
@@ -210,6 +220,7 @@ void main() {
           {CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
         activeNskey =
             NskeyProvider(keyRing: ring, cache: c, keyAlgo: nskeyKeyAlgo);
+        register(activeNskey);
         return CkManager(
             cache: c,
             keyRing: ring,
@@ -546,13 +557,14 @@ void main() {
       await c.manager.ensureCurrent(c.context, selfValue('treaty'));
       await c.manager.ensureCurrent(c.context, sharedValue('treaty'));
 
-      expect(c.written, hasLength(2),
+      expect(c.written, hasLength(3),
           reason: 'alice-to-self and alice-to-bob are different destinations, '
-              'so they get different content keys');
+              'so they get different content keys, and bob\'s is conveyed to '
+              'him and to alice');
       expect(c.cache.current(owner, namespace)!.ckKid,
           isNot(c.cache.current(bob, namespace)!.ckKid));
 
-      final toBob = c.written.last;
+      final toBob = c.written[1];
       expect(toBob.sharedWith, bob);
       expect(toBob.sharedBy, owner);
     });

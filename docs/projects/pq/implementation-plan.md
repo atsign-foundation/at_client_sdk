@@ -429,11 +429,13 @@ with it*
    the pointer is `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>`,
    ids only, sent unencrypted to the atServer first and read from it first; a
    client with no enrollment id keeps none. The built command is pinned raw in
-   `current_ck_pointer_test.dart`. Owed: the sibling copy of every share key,
+   `current_ck_pointer_test.dart`. Built: every share key's sibling copy,
    `<ckKid>.__ck.<ckNs>@<sender>` sealed to the sender's key covering `ckNs`
-   and naming the recipient, and resume from it; mint on demand at the
-   recipient's level unless `seedNamespaceKeys` is off; deleting a key deletes
-   both conveyances; UC-A4.1's "This `put` writes no self-copy" and
+   and naming the recipient, written after the recipient's conveyance and on
+   its route, and a failed one fails the write (`ck_sibling_copy_test.dart`).
+   Owed: resume and a sibling's read from the sibling copy; mint on demand at
+   the recipient's level unless `seedNamespaceKeys` is off; deleting a key
+   deletes both conveyances; UC-A4.1's "This `put` writes no self-copy" and
    `nskey_cross_atsign_test`'s assertion rewritten.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
    `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller

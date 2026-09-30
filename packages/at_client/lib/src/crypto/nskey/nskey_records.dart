@@ -13,6 +13,7 @@
 /// | advertisement      | `public:__nskey.<ns>@<owner>`                                |
 /// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                                    |
 /// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`                |
+/// | CK sibling copy    | `<ckKid>.__ck.<ckNs>@<sender>`, naming its recipient         |
 /// | current-CK pointer | `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>` |
 /// | signing root       | `public:pq_signing_root@<atSign>`                            |
 /// | root mint lock     | `_rootlock@<atSign>`                                         |
@@ -206,6 +207,22 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
         ..ttr = -1
         ..ccd = true)
       : Metadata();
+
+/// The at-key of a shared CK's **sibling copy**: `<ckKid>.__ck.<ckNs>@<sender>`,
+/// the sender's own record of a key it conveyed to a recipient.
+///
+/// Addressed like a self conveyance in the recipient's CK scope, so a reader
+/// finds it from the shared value alone; the record's `appMetadata` names the
+/// recipient, and the level of the sender's key that sealed it.
+AtKey ckSiblingCopyKey(
+        {required String sender,
+        required String ckKid,
+        required String ckNs}) =>
+    AtKey()
+      ..key = '$ckKid.$ckConveyanceRecordName'
+      ..namespace = ckNs
+      ..sharedBy = sender
+      ..metadata = Metadata();
 
 bool _isShare(AtKey value) {
   final sharedWith = value.sharedWith;

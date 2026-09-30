@@ -4,7 +4,10 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show ckSiblingCopyKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -191,12 +194,46 @@ class CkManager {
         // the recipient before its key does.
         ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
+    await _conveySiblingCopy(context, owner, ckNs, ck,
+        useRemoteAtServer: useRemoteAtServer ?? false);
 
     // NOTE: promoted only once the record is durable — a failed conveyance left
     // as the current key would make every later value cite a CK never sent.
     cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
     await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
     return ck;
+  }
+
+  /// Conveys [ck], shared with [destination], a second time — to this atSign's
+  /// own key covering [ckNs] — so its other enrollments, and this one after a
+  /// restart, can open it.
+  ///
+  /// Sealed here and written as it is, because the put pipeline replaces the
+  /// `appMetadata` that names the recipient. An atSign holding no key covering
+  /// [ckNs] shares without one.
+  Future<void> _conveySiblingCopy(
+      CryptoContext context, String destination, String ckNs, ContentKey ck,
+      {required bool useRemoteAtServer}) async {
+    final sender = context.atClient.getCurrentAtSign();
+    if (sender == null || destination == sender) return;
+    final own = await resolver.resolve(sender, ckNs);
+    if (own == null) {
+      _logger.warning('$sender holds no namespace key covering $ckNs, so the '
+          'content key ${ck.ckKid} shared with $destination has no sibling '
+          'copy: no other enrollment of $sender can open what it shares, and '
+          'this one cuts a fresh key after a restart');
+      return;
+    }
+    final key = ckSiblingCopyKey(sender: sender, ckKid: ck.ckKid, ckNs: ckNs)
+      ..metadata.appMetadata = AppMetadata(
+          providerId: nskeyProviderIdFor(own.alg) ?? nskeyCryptoProviderId,
+          additional: {'destination': destination, 'ns': own.namespace});
+    final sealed =
+        await CryptoRuntime(context.atClient).encryptForPut(key, ck.toBase64());
+    await context.atClient.put(key, sealed,
+        putRequestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..useRemoteAtServer = useRemoteAtServer);
   }
 
   /// Deletes the conveyance record carrying [ckKid] and drops the key from
