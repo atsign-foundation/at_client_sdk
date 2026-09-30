@@ -72,6 +72,15 @@ void main() {
     );
     await tapText(tester, 'Contacts');
     await waitFor(tester, find.text(bob));
+    final bobsContact = find.ancestor(
+      of: find.text(bob),
+      matching: find.byType(ListTile),
+    );
+    expect(
+      find.descendant(of: bobsContact, matching: find.text('Bob Brown')),
+      findsOneWidget,
+      reason: 'the contact takes the name the invitee gave',
+    );
     await signOut(tester);
 
     // Bob is connected, and reads the content.

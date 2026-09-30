@@ -35,8 +35,9 @@ Then, as two people:
    atSign*. The invitation opens: who it is from, and whether it carries
    private content. Enter the code and your name, and *Accept*.
 3. **Alice's** app, while it is open, checks the code and confirms Bob, and
-   her *Sent* tab shows the name he gave. Both apps now list the other under
-   *Contacts*, and Bob's *Received* tab shows the private content, decrypted.
+   her *Sent* tab shows the name he gave, which her contact for him takes.
+   Both apps now list the other under *Contacts*, and Bob's *Received* tab
+   shows the private content, decrypted.
 
 `ee/up.sh` starts from nothing each time: it destroys the previous EE and
 forgets what the issuer handed out, so an atSign from an earlier run no longer

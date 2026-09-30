@@ -57,8 +57,9 @@ class Session extends ChangeNotifier {
       );
 
   /// Brings the contacts up to date with the invitations: an invitee whose
-  /// acceptance was confirmed gets their atSign, and an inviter who
-  /// confirmed this atSign becomes a contact.
+  /// acceptance was confirmed gets their atSign, and the name they gave if
+  /// they gave one, and an inviter who confirmed this atSign becomes a
+  /// contact.
   ///
   /// Everything comes from the invitation records, and a contact's id is its
   /// invitation's, so this is safe to run on every pass and on any device.
@@ -77,7 +78,16 @@ class Session extends ChangeNotifier {
       if (invitee == null || contact == null || contact.atSign != null) {
         continue;
       }
-      await contacts.upsert(id: sent.id, obj: contact.withAtSign(invitee));
+      final given = AcceptanceDetails.fromJson(
+        sent.obj.acceptanceDetails ?? const {},
+      ).name;
+      await contacts.upsert(
+        id: sent.id,
+        obj: Contact(
+          name: given.isEmpty ? contact.name : given,
+          atSign: invitee,
+        ),
+      );
     }
     for (final received
         in await (await invitations.receivedInvitations).getItems(owner: me)) {

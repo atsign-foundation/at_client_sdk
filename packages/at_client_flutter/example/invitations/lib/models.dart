@@ -15,8 +15,6 @@ class Contact {
     'name': name,
     if (atSign != null) 'atSign': atSign,
   };
-
-  Contact withAtSign(String atSign) => Contact(name: name, atSign: atSign);
 }
 
 /// What an invitation shows before it is accepted. It travels in the
