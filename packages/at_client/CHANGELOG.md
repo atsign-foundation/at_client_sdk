@@ -1,45 +1,39 @@
 ## 3.15.0-rc1
 
-- feat (experimental): post-quantum cryptography, selected by
+- feat (experimental): post-quantum cryptography, chosen by
   `AtClientPreference.posture` (`PqPosture.legacy`, the default, `pqReady` or
-  `pqActive`): ML-DSA-65 authentication and data signing, ML-KEM and X-Wing key
-  establishment, per-namespace keys, a signing root and approval chain, secret
-  conveyance at enrollment approval, `selfRetrofit`, and content-key and
-  namespace-key rotation. The default posture runs none of it. These surfaces,
-  including the 3.14.0 secret-sharing substrate, changed shape in this release.
-- build: requires `at_auth` ^4.0.0-rc2, `at_lookup` ^3.7.0-rc2,
-  `at_commons` ^5.18.0, `at_chops` ^3.6.0 and
-  `at_persistence_secondary_server` ^5.3.0.
-- feat: `Atsign('@alice')` is the entry point for a client's lifecycle —
-  `activate` (CRAM onboarding), `enroll` / `resumeEnrollment`, `open` (a client
-  from a keyfile, which serves local storage while offline) and
-  `authenticatesAs`. `client.enrollments` is the approving side: list, approve,
-  deny, revoke, and issue OTPs and SPPs. `buildAtClient(...)` builds a client
-  directly, and `AtClientManager.getInstance().use(client)` makes one current.
+  `pqActive`): ML-DSA-65 signing, ML-KEM and X-Wing key establishment,
+  per-namespace keys, a signing root, secret conveyance at enrollment approval,
+  and key rotation. The default posture runs none of it. The 3.14.0
+  secret-sharing substrate changed shape.
+- feat: `Atsign('@alice')` lifecycle verbs: `activate`, `enroll` /
+  `resumeEnrollment`, `open` (serves local storage while offline) and
+  `authenticatesAs`. `client.enrollments` lists, approves, denies and revokes,
+  and issues OTPs and SPPs. `buildAtClient(...)` builds a client, and
+  `AtClientManager.getInstance().use(client)` makes it current.
+- feat: pluggable local storage: `AtClientStorage`, defaulting to
+  `HiveAtClientStorage`, with `SqliteAtClientStorage` and
+  `InMemoryAtClientStorage` in `package:at_client/sqlite.dart`.
+- feat: `client.connection` reports `online`, `offline` or `refused`;
+  `attempt()` and `awaitOnline()` retry. `monitorSilenceTimeout` (default 60s)
+  rebuilds a notification connection that has gone quiet.
+- fix: `AtClient.stop()` ends everything the client started and releases its
+  storage, so the process can exit. A stopped client cannot be restarted.
+- fix: `NotificationService.send()` encrypts under the namespace the caller
+  named and throws `ArgumentError` for a name with no dot; `namespace` is
+  deprecated in favour of `idAndNamespace`.
+- fix: sync and notifications. A write racing a sync push is no longer lost, a
+  monitor reconnect neither loses nor repeats notifications, the sync push
+  keeps `appMetadata` and `immutable`, expired records are reclaimed, and
+  `AtCollection` no longer duplicates, misses or deletes live items.
+- fix: authenticated connections send `clientConfig` again,
+  `AtClientImpl.create` refuses a `storage` its cached client doesn't hold, and
+  closing a storage no longer races a concurrent attach.
 - deprecated, to be removed in 4.0: `AtClientManager.setCurrentAtSign` and
   `fromAuthSession`; `AtClient.atChops`; `AtClientPreference.decryptPackets`,
   `tlsKeysSavePath`, `pathToCerts`, `hiveStoragePath` and `commitLogPath`.
-- feat: pluggable local storage. `AtClientStorage` holds a client's keystore
-  and sync queue, with `HiveAtClientStorage` as the default and
-  `SqliteAtClientStorage` / `InMemoryAtClientStorage` in
-  `package:at_client/sqlite.dart`. One client holds a storage at a time.
-- fix: `AtClient.stop()` ends everything the client started (connections,
-  monitor, sync, timers, `AtCollection` streams), releases its storage and
-  removes it from the instance cache, so the process can exit once `stop()`
-  returns. A stopped client cannot be restarted; build a new one.
-- feat: `client.connection` reports `online`, `offline` or `refused` and every
-  change; `attempt()` and `awaitOnline()` retry.
-  `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
-  notification connection that has gone quiet.
-- fix: `NotificationService.send()` splits its name at the first dot, so it
-  encrypts under the namespace the caller named, and throws `ArgumentError`
-  when there is no dot; `namespace` is deprecated in favour of
-  `idAndNamespace`.
-- fix: sync and notification reliability. A local write racing a sync push is
-  no longer lost, a monitor reconnect neither loses nor re-delivers
-  notifications, the sync push keeps `appMetadata` and `immutable`, expired
-  records are reclaimed, and `AtCollection` reads, scans and cleanup no longer
-  duplicate, miss or delete live items.
+- build: requires `at_auth` ^4.0.0-rc2, `at_lookup` ^3.7.0-rc2, `at_commons`
+  ^5.18.0, `at_chops` ^3.6.0 and `at_persistence_secondary_server` ^5.3.0.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —
