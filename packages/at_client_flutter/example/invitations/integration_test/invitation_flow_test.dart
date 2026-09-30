@@ -26,6 +26,10 @@ void main() {
     await Incoming.instance.start();
   });
 
+  tearDownAll(
+    () => Directory(Session.keyfileDirectory!).deleteSync(recursive: true),
+  );
+
   testWidgets('an invitation is created, accepted, confirmed and read', (
     tester,
   ) async {

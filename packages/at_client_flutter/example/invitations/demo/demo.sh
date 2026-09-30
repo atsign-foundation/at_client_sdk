@@ -5,7 +5,8 @@
 #
 # Usage: demo/demo.sh [--record <file.mp4>]
 #
-# Starts a fresh EE with ee/up.sh, builds the app with
+# Starts a fresh EE with ee/up.sh, which destroys any EE already running and
+# the atSigns in it, builds the app with
 # integration_test/two_window_demo.dart as its entry point, and runs one
 # instance as Alice and one as Bob. Keep both windows in view until it
 # finishes: runs have been seen to stall while they were hidden.
@@ -38,18 +39,25 @@ TMPD="$HOME/Library/Containers/com.atsign.examples.invitations/Data/tmp"
 HANDOFF="$TMPD/invitations_demo_handoff.json"
 WORK=$(mktemp -d)
 CAPTURE=""
+STARTED=""
 
 cleanup() {
   [[ -z "$CAPTURE" ]] || kill -INT "$CAPTURE" 2>/dev/null || true
-  pkill -f "$BINARY" 2>/dev/null || true
-  [[ ! -f "$WORK/clipboard" ]] || pbcopy < "$WORK/clipboard"
+  # NOTE: only the instances this script opened; others of the same app stay.
+  [[ -z "$STARTED" ]] || kill $STARTED 2>/dev/null || true
+  if [[ -f "$WORK/clipboard" ]]; then
+    pbcopy < "$WORK/clipboard"
+    rm -f "$WORK/clipboard"
+  fi
+  rm -f "$HANDOFF"*
 }
 trap cleanup EXIT
 
 say "Layout"
-read -r _ _ W H < <(
-  osascript -e 'tell application "Finder" to get bounds of window of desktop' |
-    tr -d ','
+read -r W H < <(
+  osascript -l JavaScript -e 'ObjC.import("AppKit");
+    var f = $.NSScreen.screens.objectAtIndex(0).frame;
+    Math.round(f.size.width) + " " + Math.round(f.size.height)'
 )
 WIN_W=$(( (W - 30) / 2 > 828 ? 828 : (W - 30) / 2 ))
 WIN_H=$(( (H - 117 > 1000 ? 1000 : H - 117) / 2 * 2 ))
@@ -89,6 +97,7 @@ say "Two windows"
 pbpaste > "$WORK/clipboard" 2>/dev/null || true
 printf '' | pbcopy
 rm -f "$HANDOFF"*
+BEFORE=$(pgrep -f "$BINARY" | sort || true)
 open -n "$BUNDLE" --env DEMO_ROLE=alice \
   --env "DEMO_FRAME=$LEFT,$BOTTOM,$WIN_W,$WIN_H" \
   --stdout "$WORK/alice.log" --stderr "$WORK/alice.log"
@@ -98,6 +107,7 @@ open -n "$BUNDLE" --env DEMO_ROLE=bob \
   --env "DEMO_FRAME=$((LEFT + WIN_W)),$BOTTOM,$WIN_W,$WIN_H" \
   --stdout "$WORK/bob.log" --stderr "$WORK/bob.log"
 sleep 6
+STARTED=$(comm -13 <(printf '%s\n' "$BEFORE") <(pgrep -f "$BINARY" | sort) | xargs)
 ok "Alice on the left, Bob on the right"
 
 if [[ -n "$OUT" ]]; then
@@ -147,6 +157,7 @@ if [[ -n "$OUT" ]]; then
   ok "recorded $OUT (${END}s)"
 fi
 
+rm -rf "$WORK"
 cat <<EOF
 
   Done. The EE is still up: ee/down.sh stops it. Rebuild with

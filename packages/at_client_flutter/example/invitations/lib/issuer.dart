@@ -4,8 +4,13 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:http/http.dart' as http;
 
 /// Where the issuer runs: `ee/up.sh` starts it beside the Ephemeral
-/// Environment. It stands in for a registrar.
-const String issuerUrl = 'http://localhost:35100';
+/// Environment. It stands in for a registrar. Build with
+/// `--dart-define=ISSUER_URL=http://localhost:<port>` when `up.sh` ran with
+/// `INV_ISSUER_PORT`.
+const String issuerUrl = String.fromEnvironment(
+  'ISSUER_URL',
+  defaultValue: 'http://localhost:35100',
+);
 
 /// A new atSign, with the CRAM secret that activates it.
 typedef IssuedAtSign = ({

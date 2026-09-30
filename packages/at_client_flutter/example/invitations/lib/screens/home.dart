@@ -74,6 +74,21 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   Future<void> _passOnce() async {
     try {
       final decided = await _invitations.processAcceptances();
+      final accepted = [
+        for (final d in decided)
+          if (d.outcome == InvitationOutcome.accepted) d.acceptance,
+      ];
+      if (accepted.isNotEmpty) {
+        final sent = await (await _invitations.sentInvitations).getItems(
+          owner: _invitations.me,
+        );
+        if (mounted) {
+          _tabs.animateTo(1);
+          for (final acceptance in accepted) {
+            unawaited(_showConfirmed(acceptance, sent));
+          }
+        }
+      }
       final connected = await _invitations.processConnections();
       await Session.instance.linkContacts();
       final me = _invitations.me;
@@ -100,14 +115,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
               : '$from confirmed you, and the key to the private content '
                     'arrived',
         );
-      }
-      final accepted = [
-        for (final d in decided)
-          if (d.outcome == InvitationOutcome.accepted) d.acceptance,
-      ];
-      if (accepted.isNotEmpty) _tabs.animateTo(1);
-      for (final acceptance in accepted) {
-        unawaited(_showConfirmed(acceptance, sent));
       }
     } catch (e) {
       _snack('$e');
@@ -251,7 +258,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
               _contacts.map(
                 (c) => ListTile(
                   title: Text(c.obj.name),
-                  subtitle: Text(c.obj.atSign ?? 'invited, not yet joined'),
+                  subtitle: Text(c.obj.atSign ?? _invitedNote(c.id)),
+                  onLongPress: c.obj.atSign == null ? () => _forget(c) : null,
                 ),
               ),
               'No contacts yet.',
@@ -260,6 +268,44 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  /// What became of the invitation behind a contact who has not joined.
+  String _invitedNote(String id) {
+    final sent = _sent.where((s) => s.id == id).firstOrNull?.obj;
+    if (sent == null) return 'invited';
+    return switch (sent.status) {
+      SentInvitationStatus.pending
+          when DateTime.now().isAfter(sent.expiresAt) =>
+        'invitation expired',
+      SentInvitationStatus.pending => 'invited, not yet joined',
+      SentInvitationStatus.accepted => 'joined',
+      SentInvitationStatus.burned => 'invitation burned by wrong codes',
+      SentInvitationStatus.revoked => 'invitation withdrawn',
+    };
+  }
+
+  /// Forgets a contact who never joined, once the user confirms.
+  Future<void> _forget(CItem<Contact> contact) async {
+    final forget = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Forget ${contact.obj.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+    if (forget != true) return;
+    await (await Session.instance.contacts).delete(contact);
+    await _pass();
   }
 
   String _contactName(String id) =>

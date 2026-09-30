@@ -19,7 +19,12 @@ die()  { printf '\n\033[1;31m%s: %s\033[0m\n' "$(basename "$0")" "$*" >&2; exit 
 
 stop_issuer() {
   if [[ -f "$STATE/issuer.pid" ]]; then
-    kill "$(cat "$STATE/issuer.pid")" 2>/dev/null || true
+    local pid
+    pid=$(cat "$STATE/issuer.pid")
+    # NOTE: after a reboot the recorded pid can belong to something else.
+    if ps -p "$pid" -o command= 2>/dev/null | grep -q 'issuer/bin/issuer.dart'; then
+      kill "$pid" 2>/dev/null || true
+    fi
     rm -f "$STATE/issuer.pid"
   fi
 }

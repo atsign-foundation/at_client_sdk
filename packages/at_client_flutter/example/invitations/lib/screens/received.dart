@@ -96,7 +96,7 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
     if (pasted.isNotEmpty) {
       try {
         separate = SealedInvitationContent.fromJson(jsonDecode(pasted));
-      } on FormatException {
+      } catch (_) {
         _snack('The encrypted content is not in the expected form');
         return;
       }
@@ -218,7 +218,10 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                   child: const Text('Decline'),
                 ),
                 Text(
-                  'Declining tells ${_details.inviterName} nothing.',
+                  preview.status == ReceivedInvitationStatus.accepted
+                      ? 'Declining withdraws your acceptance, unless '
+                            '${_details.inviterName} has already decided.'
+                      : 'Declining tells ${_details.inviterName} nothing.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),

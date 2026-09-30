@@ -25,6 +25,9 @@ void main() {
     Session.keyfileDirectory = Directory.systemTemp
         .createTempSync('demo_keys_$role')
         .path;
+    addTearDown(
+      () => Directory(Session.keyfileDirectory!).deleteSync(recursive: true),
+    );
     await Incoming.instance.start();
     await tester.pumpWidget(const InvitationsApp());
     await _pause(tester, 2);

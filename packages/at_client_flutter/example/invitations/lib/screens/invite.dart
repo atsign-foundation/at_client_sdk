@@ -41,11 +41,11 @@ class _InviteScreenState extends State<InviteScreen> {
         content: content.isEmpty ? null : PrivateContent(content).toJson(),
         contentOutOfBand: content.isNotEmpty && _contentSeparately,
       );
+      if (mounted) setState(() => _created = created);
       await (await Session.instance.contacts).create(
         id: created.link.id,
         obj: Contact(name: _contact.text.trim()),
       );
-      setState(() => _created = created);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

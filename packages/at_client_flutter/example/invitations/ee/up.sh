@@ -10,7 +10,9 @@
 # a re-run is a teardown, not a restart. Atsigns an app activated against the
 # old EE stay in that app's keychain but no longer exist.
 #
-# Environment: INV_EE_BASE (default 35000), INV_ISSUER_PORT (default 35100),
+# Environment: INV_EE_BASE (default 35000), INV_ISSUER_PORT (default 35100;
+# an app built without --dart-define=ISSUER_URL=http://localhost:<port> looks
+# for the issuer on 35100),
 # INV_EE_IMAGE (default atsigncompany/ephemeral:latest, the EE built from the
 # latest at_server production release; atsigncompany/ephemeral:dev_env is built
 # from trunk, and build_ee.sh makes one from any at_server checkout).

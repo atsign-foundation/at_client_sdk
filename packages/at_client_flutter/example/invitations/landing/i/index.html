@@ -58,8 +58,8 @@
     <div class="card" id="ios" hidden>
       <p><strong>On iPhone or iPad</strong></p>
       <p class="muted">If the app is installed, the link opens it directly.
-        Otherwise, copy the invitation, install the app, and paste it when the
-        app asks.</p>
+        Otherwise, copy the invitation, install the app, and paste it with
+        Paste an invitation.</p>
       <button class="button" id="copy">Copy invitation</button>
       <a class="button secondary" id="app-store">Get the app</a>
     </div>
@@ -90,7 +90,12 @@
   const APP_STORE_URL = 'https://apps.apple.com/app/idYOUR_APP_ID';
   const ANDROID_PACKAGE = 'com.atsign.examples.invitations';
 
-  const fragment = decodeURIComponent(location.hash.slice(1));
+  let fragment = '';
+  try {
+    fragment = decodeURIComponent(location.hash.slice(1));
+  } catch (e) {
+    // NOTE: a malformed escape is not an invitation; it shows as invalid.
+  }
   const match = /^(@[^/\s]+)\/([0-9a-f]{32})$/.exec(fragment);
   const show = (id) => { document.getElementById(id).hidden = false; };
   const text = (id, value) => { document.getElementById(id).textContent = value; };

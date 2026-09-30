@@ -42,7 +42,8 @@ Then, as two people:
 
 `ee/up.sh` starts from nothing each time: it destroys the previous EE and
 forgets what the issuer handed out, so an atSign from an earlier run no longer
-exists.
+exists. The issuer hands each atSign out once, even when the app then fails
+to activate it, so a failed activation uses up one of the EE's 26.
 
 A debug build is signed ad hoc, so after a rebuild macOS may ask whether the
 app can use its keychain items. Choose *Always Allow*.
@@ -141,7 +142,8 @@ connection. The code is never the key: once ciphertext has left in an email,
 a short code could be brute-forced offline.
 
 **Declining** forgets the invitation on Bob's device, so Alice never learns
-his atSign.
+his atSign. After accepting, declining also withdraws the acceptance, unless
+Alice has already decided on it.
 
 **The app's own data.** `AtClientInvitations` carries the app's data as JSON
 and keeps nothing else of the app's. `lib/models.dart` defines this app's:
@@ -160,14 +162,18 @@ namespace, that calls `processAcceptances()`.
 
 - `landing/i/index.html` shows who the invitation is from and sends the
   visitor to the app, or to the right store. On iOS it copies the link, for
-  the app to take on first run; on Android the Play install referrer carries
-  it through the install. The invitation stays in the fragment, so the site's
-  server never sees it.
+  *Paste an invitation* once the app is installed; on Android the Play install
+  referrer carries it through the install, so Google Play sees who the
+  invitation is from and its id, though never the code. The invitation stays
+  in the fragment, so the site's server never sees it.
 - `landing/.well-known/` holds the two files that let iOS and Android open
   `https://<host>/i` links in the app. Replace the team id, the signing
   certificate fingerprint and `invite.example.com` (also in
   `lib/screens/invite.dart`, the Android manifest and
-  `ios/Runner/Runner.entitlements`) with your own.
+  `ios/Runner/Runner.entitlements`) with your own, and the app id
+  `com.atsign.examples.invitations` too: it is in both files, in
+  `ANDROID_PACKAGE` in `landing/i/index.html`, and in the Android and Apple
+  build settings.
 
 The macOS build takes invitations by paste only: opening links there needs a
 development-signed build.
