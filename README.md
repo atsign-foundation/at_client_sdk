@@ -170,8 +170,9 @@ take a major are the ones that used to hand at_auth's types to an app:
   keys store and the preference, and hand back the `AtClient`. An app no
   longer imports at_auth. The table is in the
   [at_client_flutter README](./packages/at_client_flutter/README.md#migrating-from-1x).
-- **at_onboarding_cli 1.x → 2.0**: `at_activate` names its command
-  (`at_activate onboard -a @alice`), `--posture` sets how far into the
+- **at_onboarding_cli 1.x → 2.0**: `at_activate` should name its command
+  (`at_activate onboard -a @alice`; with none it still runs `onboard`, with a
+  deprecation warning), `--posture` sets how far into the
   post-quantum rollout every command runs, and `AtOnboardingService` keeps
   `authenticate()` and `atClient` while `onboard`, `enroll` and `close` become
   `Atsign.activate`, `Atsign.enroll` and `atClient.stop()`. The table is in
