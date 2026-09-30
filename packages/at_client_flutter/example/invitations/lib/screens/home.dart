@@ -23,7 +23,8 @@ class Home extends StatefulWidget {
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> {
+class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 3, vsync: this);
   Timer? _timer;
   StreamSubscription<CEvent>? _acceptances;
   StreamSubscription<CEvent>? _connections;
@@ -58,6 +59,7 @@ class _HomeState extends State<Home> {
     _timer?.cancel();
     _acceptances?.cancel();
     _connections?.cancel();
+    _tabs.dispose();
     Incoming.instance.removeListener(_openIncoming);
     super.dispose();
   }
@@ -66,7 +68,7 @@ class _HomeState extends State<Home> {
     if (_passing) return;
     _passing = true;
     try {
-      await _invitations.processAcceptances();
+      final decided = await _invitations.processAcceptances();
       final connected = await _invitations.processConnections();
       await Session.instance.linkContacts();
       final me = _invitations.me;
@@ -86,7 +88,21 @@ class _HomeState extends State<Home> {
         _contacts = contacts;
       });
       for (final c in connected) {
-        _snack('Connected with ${_inviterName(c.obj)} (${c.obj.inviter})');
+        final from = '${_inviterName(c.obj)} (${c.obj.inviter})';
+        _snack(
+          c.obj.content == null
+              ? 'Connected with $from'
+              : '$from confirmed you, and the key to the private content '
+                    'arrived',
+        );
+      }
+      final accepted = [
+        for (final d in decided)
+          if (d.outcome == InvitationOutcome.accepted) d.acceptance,
+      ];
+      if (accepted.isNotEmpty) _tabs.animateTo(1);
+      for (final acceptance in accepted) {
+        unawaited(_showConfirmed(acceptance, sent));
       }
     } catch (e) {
       _snack('$e');
@@ -112,96 +128,122 @@ class _HomeState extends State<Home> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Tells the inviter that an invitee's code checked out, and what this
+  /// app sent them in return.
+  Future<void> _showConfirmed(
+    CItem<InvitationAcceptance> acceptance,
+    List<CItem<SentInvitation>> sent,
+  ) {
+    final name = AcceptanceDetails.fromJson(acceptance.obj.details).name;
+    final who = name.isEmpty ? '${acceptance.owner}' : name;
+    final invitation = sent
+        .where((s) => s.id == acceptance.obj.invitationId)
+        .firstOrNull;
+    final sentKey = invitation?.obj.contentKey != null;
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.verified_user),
+        title: Text('$who accepted'),
+        content: Text(
+          '${name.isEmpty ? who : '$name (${acceptance.owner})'} sent the '
+          'right code, so this app confirmed them'
+          '${sentKey ? ' and sent them the key to the private content' : ''}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Invitations — ${_invitations.me}'),
-          actions: [
-            IconButton(
-              tooltip: 'Paste an invitation',
-              icon: const Icon(Icons.content_paste),
-              onPressed: () => enterInvitation(context),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Invitations — ${_invitations.me}'),
+        actions: [
+          IconButton(
+            tooltip: 'Paste an invitation',
+            icon: const Icon(Icons.content_paste),
+            onPressed: () => enterInvitation(context),
+          ),
+          IconButton(
+            tooltip: 'Sign out',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await Session.instance.signOut();
+              if (context.mounted) Navigator.of(context).pop();
+            },
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [
+            Tab(text: 'Received'),
+            Tab(text: 'Sent'),
+            Tab(text: 'Contacts'),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.person_add),
+        label: const Text('Invite'),
+        onPressed: () async {
+          await Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const InviteScreen()));
+          await _pass();
+        },
+      ),
+      body: RefreshIndicator(
+        onRefresh: _pass,
+        child: TabBarView(
+          controller: _tabs,
+          children: [
+            _list(
+              _received.map(
+                (r) => ListTile(
+                  key: ValueKey(r.id),
+                  title: Text('${_inviterName(r.obj)} (${r.obj.inviter})'),
+                  subtitle: _ReceivedSubtitle(invitation: r.obj),
+                  trailing: Text(r.obj.status.name),
+                  onTap: r.obj.status == ReceivedInvitationStatus.previewed
+                      ? () => Incoming.instance.value = InvitationLink(
+                          inviter: r.obj.inviter,
+                          id: r.id,
+                        )
+                      : null,
+                ),
+              ),
+              'No invitations yet. Open an invitation link, or paste one.',
             ),
-            IconButton(
-              tooltip: 'Sign out',
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                await Session.instance.signOut();
-                if (context.mounted) Navigator.of(context).pop();
-              },
+            _list(
+              _sent.map(
+                (s) => ListTile(
+                  title: Text(_contactName(s.id)),
+                  subtitle: Text('code ${s.obj.code} · link id ${s.id}'),
+                  trailing: Text(_sentStatus(s.obj)),
+                  onLongPress: s.obj.status == SentInvitationStatus.pending
+                      ? () => _revoke(s.id)
+                      : null,
+                ),
+              ),
+              'Nothing sent yet.',
+            ),
+            _list(
+              _contacts.map(
+                (c) => ListTile(
+                  title: Text(c.obj.name),
+                  subtitle: Text(c.obj.atSign ?? 'invited, not yet joined'),
+                ),
+              ),
+              'No contacts yet.',
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Received'),
-              Tab(text: 'Sent'),
-              Tab(text: 'Contacts'),
-            ],
-          ),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          icon: const Icon(Icons.person_add),
-          label: const Text('Invite'),
-          onPressed: () async {
-            await Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const InviteScreen()));
-            await _pass();
-          },
-        ),
-        body: RefreshIndicator(
-          onRefresh: _pass,
-          child: TabBarView(
-            children: [
-              _list(
-                _received.map(
-                  (r) => ListTile(
-                    title: Text('${_inviterName(r.obj)} (${r.obj.inviter})'),
-                    subtitle: Text(
-                      r.obj.content == null
-                          ? InviteDetails.fromJson(r.obj.publicDetails).message
-                          : PrivateContent.fromJson(r.obj.content!).text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Text(r.obj.status.name),
-                    onTap: r.obj.status == ReceivedInvitationStatus.previewed
-                        ? () => Incoming.instance.value = InvitationLink(
-                            inviter: r.obj.inviter,
-                            id: r.id,
-                          )
-                        : null,
-                  ),
-                ),
-                'No invitations yet. Open an invitation link, or paste one.',
-              ),
-              _list(
-                _sent.map(
-                  (s) => ListTile(
-                    title: Text(_contactName(s.id)),
-                    subtitle: Text('code ${s.obj.code} · link id ${s.id}'),
-                    trailing: Text(_sentStatus(s.obj)),
-                    onLongPress: s.obj.status == SentInvitationStatus.pending
-                        ? () => _revoke(s.id)
-                        : null,
-                  ),
-                ),
-                'Nothing sent yet.',
-              ),
-              _list(
-                _contacts.map(
-                  (c) => ListTile(
-                    title: Text(c.obj.name),
-                    subtitle: Text(c.obj.atSign ?? 'invited, not yet joined'),
-                  ),
-                ),
-                'No contacts yet.',
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -242,6 +284,95 @@ class _HomeState extends State<Home> {
               ),
             ]
           : children,
+    );
+  }
+}
+
+/// A received invitation's message and, when it carries private content,
+/// that content: sealed until the inviter confirms, then opened in place.
+class _ReceivedSubtitle extends StatelessWidget {
+  final ReceivedInvitation invitation;
+
+  const _ReceivedSubtitle({required this.invitation});
+
+  @override
+  Widget build(BuildContext context) {
+    final details = InviteDetails.fromJson(invitation.publicDetails);
+    final content = invitation.content;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (details.message.isNotEmpty) Text(details.message),
+        if (invitation.sealedContent != null) ...[
+          const SizedBox(height: 6),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 1200),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween(begin: 0.85, end: 1.0).animate(animation),
+                child: child,
+              ),
+            ),
+            child: content == null
+                ? _ContentBox(
+                    key: const ValueKey('sealed'),
+                    icon: Icons.lock,
+                    text:
+                        'Encrypted: you can read it once '
+                        '${details.inviterName} confirms you',
+                    sealed: true,
+                  )
+                : _ContentBox(
+                    key: const ValueKey('open'),
+                    icon: Icons.lock_open,
+                    text: PrivateContent.fromJson(content).text,
+                    sealed: false,
+                  ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ContentBox extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final bool sealed;
+
+  const _ContentBox({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.sealed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: sealed
+            ? colours.surfaceContainerHighest
+            : colours.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: sealed
+                  ? const TextStyle(fontStyle: FontStyle.italic)
+                  : null,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

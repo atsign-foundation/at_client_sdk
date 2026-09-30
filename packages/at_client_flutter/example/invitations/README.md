@@ -33,11 +33,12 @@ Then, as two people:
    private. The app shows the link and the code.
 2. **Bob**: *Paste an invitation*, and paste the link. Then *Get a new
    atSign*. The invitation opens: who it is from, and whether it carries
-   private content. Enter the code and your name, and *Accept*.
-3. **Alice's** app, while it is open, checks the code and confirms Bob, and
-   her *Sent* tab shows the name he gave, which her contact for him takes.
-   Both apps now list the other under *Contacts*, and Bob's *Received* tab
-   shows the private content, decrypted.
+   private content. Enter the code and your name, and *Accept*. Bob's
+   *Received* tab shows the private content sealed until Alice confirms him.
+3. **Alice's** app, while it is open, checks the code, confirms Bob and says
+   so, and her *Sent* tab shows the name he gave, which her contact for him
+   takes. Bob's app gets the key and opens the private content in place.
+   Both apps now list the other under *Contacts*.
 
 `ee/up.sh` starts from nothing each time: it destroys the previous EE and
 forgets what the issuer handed out, so an atSign from an earlier run no longer

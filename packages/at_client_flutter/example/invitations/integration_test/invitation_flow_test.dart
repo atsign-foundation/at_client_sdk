@@ -60,16 +60,25 @@ void main() {
     await enter(tester, 'Your name, as Alice will see it', 'Bob Brown');
     await tapText(tester, 'Accept');
     await waitFor(tester, find.textContaining('Invitations — $bob'));
-    await signOut(tester);
-
-    // Alice's app, while it is open, confirms Bob.
-    await tapText(tester, 'Sign in as $alice');
-    await tapText(tester, 'Sent', timeout: const Duration(seconds: 60));
     await waitFor(
       tester,
-      find.text('accepted by $bob (Bob Brown)'),
+      find.text('Encrypted: you can read it once Alice confirms you'),
+    );
+    await signOut(tester);
+
+    // Alice's app, while it is open, confirms Bob and says so.
+    await tapText(tester, 'Sign in as $alice');
+    await waitFor(
+      tester,
+      find.text('Bob Brown accepted'),
       timeout: const Duration(seconds: 90),
     );
+    expect(
+      find.textContaining('sent them the key to the private content'),
+      findsOneWidget,
+    );
+    await tapText(tester, 'OK');
+    await waitFor(tester, find.text('accepted by $bob (Bob Brown)'));
     await tapText(tester, 'Contacts');
     await waitFor(tester, find.text(bob));
     final bobsContact = find.ancestor(
