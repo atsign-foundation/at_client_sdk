@@ -373,7 +373,7 @@ never. A `public:` record with no `ttr` is still stored on the reader's atServer
 for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 (`AtCacheManager.get`); a shared record with no `ttr` is not cached at all.
 
-**What each write sets today.**
+**What each write set at `b3e1a8c99`, before these rulings.**
 
 | Record | Writer | `ttl` | `ttr` |
 | --- | --- | --- | --- |
@@ -385,7 +385,7 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 | `_nskeylock.<ns>@alice`, `_rootlock@alice` | `MintLock._take`, immutable and uncommitted | 2 minutes, 15 seconds | none |
 | `<uuid>.<replyTo>.<kpid>.__ssenv.<ns>@alice` | `PairwiseSecretSharing.sendEnvelope` | 7 days | none |
 
-**What each reader caches today.**
+**What each reader cached at `b3e1a8c99`, before these rulings.**
 
 | What | Where | Keyed by | Lifetime |
 | --- | --- | --- | --- |
@@ -507,9 +507,12 @@ with it*
     AtClient (144.1).** Found: `EnvelopeSigning.lookupPubKey` reset the expiry
     on every hit, before verification, and a failure never evicted, so a stale
     entry was kept alive by its own failures (**measured** with shortened
-    timings), in three uncoordinated caches per AtClient. Owed: a fixed expiry
-    from fetch; evict and re-fetch once on a failed verification; one cache per
-    AtClient, the per-call signers included.
+    timings), in three uncoordinated caches per AtClient. Done: an entry expires
+    a fixed time after its fetch (`resetOnLookup` is gone from
+    `publicKeyCacheSettings`); a cached key that fails verification is dropped
+    and fetched once more; and the cache is the AtClient's, shared by every
+    signer built on it, the per-call ones included. Proven in
+    `envelope_signing_test`.
 15. **A republish clears the links; a root holder re-anchors (144.2).** Found:
     `publishPublicSigningKey` sent no `appMetadata`, the atServer kept the stored
     one, and the chain read `broken`. Owed: the republish removes the link fields

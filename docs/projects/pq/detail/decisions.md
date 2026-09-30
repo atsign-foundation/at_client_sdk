@@ -14623,8 +14623,10 @@ failure: mutual exclusion holds, and the delay ends on its own.
 **Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
 work-through (items 14–17 of the P0 row's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
-Nothing here is built yet; 144.3 and 144.4 include at_server work, and the
-acceptance clauses change test-first, with the implementation.
+144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
+after a cached key fails, and one cache per AtClient. The rest is not built yet;
+144.3 and 144.4 include at_server work, and the acceptance clauses change
+test-first, with the implementation.
 
 ### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
 

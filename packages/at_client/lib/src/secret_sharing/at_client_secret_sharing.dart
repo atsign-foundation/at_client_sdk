@@ -52,12 +52,8 @@ class AtClientSecretSharing
     AtClient atClient, {
     SecretStorePersistence? persistence,
     ({
-      Duration cacheExpiry,
-      bool resetOnLookup
-    })? publicKeyCacheSettings = const (
-      cacheExpiry: Duration(minutes: 5),
-      resetOnLookup: true,
-    ),
+      Duration cacheExpiry
+    })? publicKeyCacheSettings = const (cacheExpiry: Duration(minutes: 5)),
   }) {
     var instance = _instances[atClient];
     if (instance == null) {
@@ -76,7 +72,7 @@ class AtClientSecretSharing
   final AtSignLogger logger = AtSignLogger('AtClientSecretSharing');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings;
 
   /// Direct construction creates an independent instance with its own
   /// enc keypair. Use [forClient] unless that is what you want (tests,
@@ -85,9 +81,6 @@ class AtClientSecretSharing
   /// closed — until a composition installs a resolver.
   AtClientSecretSharing(
     this.atClient, {
-    this.publicKeyCacheSettings = const (
-      cacheExpiry: Duration(minutes: 5),
-      resetOnLookup: true,
-    ),
+    this.publicKeyCacheSettings = const (cacheExpiry: Duration(minutes: 5)),
   });
 }

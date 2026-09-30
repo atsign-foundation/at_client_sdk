@@ -11,6 +11,11 @@ import 'package:at_commons/at_commons.dart'
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
+/// The `_apsk` values each AtClient's verifiers have fetched, and when each
+/// expires: one cache per client, shared by every signer built on it.
+final Expando<Map<String, (String, DateTime)>> _apskCaches =
+    Expando('apskCaches');
+
 /// Wraps payloads in signed JSON envelopes, and verifies envelopes created by
 /// other clients of the same or another atSign.
 ///
@@ -20,18 +25,12 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// [ApkamSigning.enrollmentId] so that verifiers can fetch that key.
 @experimental
 mixin EnvelopeSigning on ApkamSigning {
-  /// How to handle caching of public keys used for verification
+  /// How long a public key fetched for verification is used before it is
+  /// fetched again: `cacheExpiry` from the fetch, however often it is used.
   ///
-  /// Set this value to null to disable caching.
-  ///
-  /// cacheExpiry: how long until the cached public key expires
-  ///              (used for verification)
-  ///
-  /// resetOnLookup: Whether to reset the expiry timer when a lookup is made
-  abstract final ({
-    Duration cacheExpiry,
-    bool resetOnLookup
-  })? publicKeyCacheSettings;
+  /// Null disables caching. The cache itself is the AtClient's, shared by
+  /// every signer built on it.
+  abstract final ({Duration cacheExpiry})? publicKeyCacheSettings;
 
   /// Create a json envelope around [payload] in a format that can be verified
   /// by [verifyEnvelopeSignature].
@@ -99,7 +98,9 @@ mixin EnvelopeSigning on ApkamSigning {
   /// owning enrollment may write to that location, so a valid signature proves
   /// the envelope was created by a client of that (approved) enrollment.
   ///
-  /// Throws an [Exception] on failed validation.
+  /// Throws an [Exception] on failed validation. A cached key that fails is
+  /// dropped and fetched once more first, since the enrollment may have
+  /// rotated away from it.
   ///
   /// [signerEnrollmentId] overrides the envelope's own `enrollmentId` claim as
   /// the address to fetch `_apsk` from. Supply it whenever something outside
@@ -123,7 +124,19 @@ mixin EnvelopeSigning on ApkamSigning {
           'none: there is no _apsk to check the signature against');
     }
 
-    final pk = await getApkamPublicKey(signerAtSign, id);
+    final atSign = signerAtSign.toAtsign();
+    final cached = lookupPubKey(atSign, id);
+    if (cached != null) {
+      try {
+        await verifyEnvelope(envelope,
+            signerPublicKey: cached, expecting: expecting);
+        return;
+      } on AtSigningVerificationException {
+        pubKeyCache.remove(_cacheKey(atSign, id));
+      }
+    }
+
+    final pk = await getApkamPublicKey(atSign, id);
     try {
       await verifyEnvelope(envelope, signerPublicKey: pk, expecting: expecting);
     } on AtSigningVerificationException catch (e) {
@@ -161,7 +174,8 @@ mixin EnvelopeSigning on ApkamSigning {
   /// Cached public keys and when each expires. An entry is dropped when a
   /// lookup finds it expired, and on each insert, so nothing here holds a timer.
   @visibleForTesting
-  final Map<String, (String, DateTime)> pubKeyCache = {};
+  Map<String, (String, DateTime)> get pubKeyCache =>
+      _apskCaches[atClient] ??= {};
 
   String _cacheKey(String atSign, String enrollmentId) =>
       '$atSign#$enrollmentId';
@@ -187,10 +201,6 @@ mixin EnvelopeSigning on ApkamSigning {
     if (!DateTime.now().isBefore(cacheValue.$2)) {
       pubKeyCache.remove(key);
       return null;
-    }
-
-    if (publicKeyCacheSettings!.resetOnLookup) {
-      pubKeyCache[key] = (cacheValue.$1, _expiry);
     }
     return cacheValue.$1;
   }

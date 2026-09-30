@@ -25,8 +25,7 @@ class TestRegistrant
   final AtSignLogger logger = AtSignLogger('TestRegistrant');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings = null;
 
   TestRegistrant(this.atClient);
 
