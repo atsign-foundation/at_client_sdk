@@ -949,6 +949,29 @@ void main() {
               'unwrapped, or the deletion closes off nobody');
     });
 
+    test('deleting a shared key deletes its sibling copy too', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final superseded = c.cache.current(bob, namespace)!;
+
+      await c.manager.rotateContentKey(c.context, sharedValue('pact'),
+          deleteSuperseded: true);
+
+      expect(
+          c.deleted.map((k) => k.toString()),
+          [
+            '@bob:${superseded.ckKid}.__ck.app_1.my_apps@alice',
+            '${superseded.ckKid}.__ck.app_1.my_apps@alice',
+          ],
+          reason: 'the sibling copy left behind is a sealed copy every '
+              'enrollment of alice can still open');
+      expect(c.cache.get(bob, namespace, superseded.ckKid), isNull);
+    });
+
     test('deletes before cutting the successor, and the next write cuts one',
         () async {
       // A stop or failure between the two then leaves no current key, which

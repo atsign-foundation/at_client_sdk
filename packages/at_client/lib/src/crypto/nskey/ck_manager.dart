@@ -256,15 +256,23 @@ class CkManager {
           'a key is published there that this client could not resolve',
       };
 
-  /// Deletes the conveyance record carrying [ckKid] and drops the key from
-  /// this client's cache.
+  /// Deletes the conveyance records carrying [ckKid] — for a shared key, the
+  /// recipient's and the sibling copy — and drops the key from this client's
+  /// cache.
   ///
   /// Neither half is sufficient alone: the deletion stops anyone unwrapping the
   /// CK again, the eviction stops this client using the copy it already has.
+  /// Another enrollment of this atSign evicts when it syncs the recipient's
+  /// record going, whose name carries the recipient's scope.
   Future<void> _deleteConveyance(CryptoContext context, AtKey valueKey,
       String owner, String ckNs, String ckKid) async {
     await context.atClient.delete(
         SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
+    final sender = context.atClient.getCurrentAtSign();
+    if (sender != null && owner != sender) {
+      await context.atClient
+          .delete(ckSiblingCopyKey(sender: sender, ckKid: ckKid, ckNs: ckNs));
+    }
     cache.evict(owner, ckNs, ckKid);
   }
 

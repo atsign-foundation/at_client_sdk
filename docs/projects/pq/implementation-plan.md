@@ -442,9 +442,12 @@ with it*
    goes without a copy and the warning names why. Built: a restart resumes a
    key it shares, and another client of the sender reads what it shared, from
    the sibling copy, never the recipient's conveyance; resume reads local
-   storage and then the atServer.
-   Owed: deleting a key deletes both conveyances; UC-A4.1's "This `put` writes
-   no self-copy" and `nskey_cross_atsign_test`'s assertion rewritten.
+   storage and then the atServer. Built: deleting a shared key deletes both
+   conveyances; another enrollment of the sender evicts it when it syncs the
+   recipient's record going.
+   Owed: UC-A4.1's "This `put` writes no self-copy" and
+   `nskey_cross_atsign_test`'s assertion rewritten, and the sibling copy
+   proven live.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
    `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller
    outside tests. Owed: the cutting enrollment's list of superseded keys beside
