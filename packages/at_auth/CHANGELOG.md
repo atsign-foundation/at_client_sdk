@@ -1,3 +1,10 @@
+## 4.0.0-rc3
+
+- fix: a keyfile lock left by a process or isolate that stopped part way
+  through a write no longer fails every writer for 30 seconds. A holder now
+  refreshes the lock while it runs, so a lock nobody refreshes is broken
+  after 5 seconds, inside a waiter's 10-second timeout.
+
 ## 4.0.0-rc2
 
 at_auth is the protocol layer under at_client's lifecycle verbs. What an
