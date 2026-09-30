@@ -1,9 +1,7 @@
 ## 4.0.0-rc3
 
-- fix: a keyfile lock left by a process or isolate that stopped part way
-  through a write no longer fails every writer for 30 seconds. A holder now
-  refreshes the lock while it runs, so a lock nobody refreshes is broken
-  after 5 seconds, inside a waiter's 10-second timeout.
+- fix: a keyfile lock left behind by a process that stopped mid-write is
+  released within 5 seconds, instead of blocking every other writer for 30.
 
 ## 4.0.0-rc2
 

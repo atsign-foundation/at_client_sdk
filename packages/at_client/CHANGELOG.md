@@ -1,19 +1,14 @@
 ## 3.15.0-rc2
 
-- feat (experimental): invitations, including to someone with no atSign yet.
-  `AtClientInvitations`, in `at_client_mixins.dart`, creates an invitation
-  (a link plus a separate code, optionally with encrypted content), lets the
-  invitee preview and accept it, and lets any of the inviter's clients decide
-  it exactly once. The app's own data travels as JSON (public details, the
-  invitee's acceptance details and private content), and contacts stay in
-  the app's own collections. The `Invitations` mixin carries the same API.
-- fix: a post-quantum write routed to the atServer by
-  `AtClientPreference.remoteLocalPref` now sends its content key there too.
-  Before, the key went only to local storage, so another process of the same
-  atSign could not read the value.
-- fix: `AtCollection` reads an item this atSign shared from its own copy,
-  never from a recipient's copy, which a post-quantum share seals to the
-  recipient. Before, listing a collection holding such an item could fail.
+- feat (experimental): invitations, including to someone with no atSign yet:
+  `AtClientInvitations` in `at_client_mixins.dart`, also as the `Invitations`
+  mixin. An invitation is a link plus a separate code and can carry encrypted
+  content; the invitee previews and accepts it, and the inviter decides it
+  once.
+- fix: a post-quantum write that `remoteLocalPref` sends to the atServer now
+  sends its content key there too, so the atSign's other clients can read it.
+- fix: listing an `AtCollection` that holds an item this atSign shared
+  post-quantum no longer fails.
 
 ## 3.15.0-rc1
 
