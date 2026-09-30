@@ -1,29 +1,6 @@
 import 'package:at_commons/at_commons.dart' show Atsign, AtsignString;
 import 'package:meta/meta.dart' show experimental;
 
-/// Someone this atSign knows, with or without an atSign of their own yet.
-@experimental
-class InvitationContact {
-  final String name;
-  final Atsign? atSign;
-
-  const InvitationContact({required this.name, this.atSign});
-
-  factory InvitationContact.fromJson(Map<String, dynamic> json) =>
-      InvitationContact(
-        name: json['name'],
-        atSign: (json['atSign'] as String?)?.toAtsign(),
-      );
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        if (atSign != null) 'atSign': atSign.toString(),
-      };
-
-  InvitationContact withAtSign(Atsign atSign) =>
-      InvitationContact(name: name, atSign: atSign);
-}
-
 /// Where a sent invitation has got to.
 ///
 /// Every value but [pending] is final, and is decided by the invitation's
@@ -34,61 +11,64 @@ enum SentInvitationStatus { pending, accepted, burned, revoked }
 /// An invitation this atSign sent. Only this atSign reads it.
 @experimental
 class SentInvitation {
-  final String contactId;
   final String code;
   final DateTime expiresAt;
-  final String inviterName;
-  final String message;
+
+  /// The app's details, as published in the preview for anyone holding the
+  /// link.
+  final Map<String, dynamic> publicDetails;
 
   /// The content key, base64, when the invitation carries content.
   final String? contentKey;
   final SentInvitationStatus status;
   final Atsign? acceptedBy;
 
+  /// The details the invitee sent with the acceptance that was accepted.
+  final Map<String, dynamic>? acceptanceDetails;
+
   const SentInvitation({
-    required this.contactId,
     required this.code,
     required this.expiresAt,
-    required this.inviterName,
-    required this.message,
+    required this.publicDetails,
     this.contentKey,
     this.status = SentInvitationStatus.pending,
     this.acceptedBy,
+    this.acceptanceDetails,
   });
 
   factory SentInvitation.fromJson(Map<String, dynamic> json) => SentInvitation(
-        contactId: json['contactId'],
         code: json['code'],
         expiresAt: DateTime.parse(json['expiresAt']),
-        inviterName: json['inviterName'],
-        message: json['message'],
+        publicDetails: _map(json['publicDetails'])!,
         contentKey: json['contentKey'],
         status: SentInvitationStatus.values.byName(json['status']),
         acceptedBy: (json['acceptedBy'] as String?)?.toAtsign(),
+        acceptanceDetails: _map(json['acceptanceDetails']),
       );
 
   Map<String, dynamic> toJson() => {
-        'contactId': contactId,
         'code': code,
         'expiresAt': expiresAt.toUtc().toIso8601String(),
-        'inviterName': inviterName,
-        'message': message,
+        'publicDetails': publicDetails,
         if (contentKey != null) 'contentKey': contentKey,
         'status': status.name,
         if (acceptedBy != null) 'acceptedBy': acceptedBy.toString(),
+        if (acceptanceDetails != null) 'acceptanceDetails': acceptanceDetails,
       };
 
-  SentInvitation withStatus(SentInvitationStatus status,
-          {Atsign? acceptedBy}) =>
+  SentInvitation withStatus(
+    SentInvitationStatus status, {
+    Atsign? acceptedBy,
+    Map<String, dynamic>? acceptanceDetails,
+  }) =>
       SentInvitation(
-        contactId: contactId,
         code: code,
         expiresAt: expiresAt,
-        inviterName: inviterName,
-        message: message,
+        publicDetails: publicDetails,
         contentKey: contentKey,
         status: status,
         acceptedBy: acceptedBy ?? this.acceptedBy,
+        acceptanceDetails: acceptanceDetails ?? this.acceptanceDetails,
       );
 }
 
@@ -118,16 +98,14 @@ class SealedInvitationContent {
 class InvitationPreview {
   static const int version = 1;
 
-  final String inviterName;
-  final String message;
+  final Map<String, dynamic> publicDetails;
   final DateTime expiresAt;
 
   /// The content, when it travels in the preview rather than out of band.
   final SealedInvitationContent? content;
 
   const InvitationPreview({
-    required this.inviterName,
-    required this.message,
+    required this.publicDetails,
     required this.expiresAt,
     this.content,
   });
@@ -138,8 +116,7 @@ class InvitationPreview {
           'unsupported invitation preview version ${json['v']}');
     }
     return InvitationPreview(
-      inviterName: json['inviterName'],
-      message: json['message'],
+      publicDetails: _map(json['publicDetails'])!,
       expiresAt: DateTime.parse(json['expiresAt']),
       content: json['content'] == null
           ? null
@@ -149,8 +126,7 @@ class InvitationPreview {
 
   Map<String, dynamic> toJson() => {
         'v': version,
-        'inviterName': inviterName,
-        'message': message,
+        'publicDetails': publicDetails,
         'expiresAt': expiresAt.toUtc().toIso8601String(),
         if (content != null) 'content': content!.toJson(),
       };
@@ -164,85 +140,98 @@ enum ReceivedInvitationStatus { previewed, accepted, connected }
 @experimental
 class ReceivedInvitation {
   final Atsign inviter;
-  final String inviterName;
-  final String message;
+
+  /// The inviter's details, from the preview.
+  final Map<String, dynamic> publicDetails;
   final DateTime expiresAt;
-  final SealedInvitationContent? content;
+
+  /// The content, still encrypted, when the invitation carries any.
+  final SealedInvitationContent? sealedContent;
   final ReceivedInvitationStatus status;
 
-  /// The decrypted content, once the inviter has released its key.
-  final String? plaintext;
+  /// The content, decrypted, once the inviter has released its key.
+  final Map<String, dynamic>? content;
 
   const ReceivedInvitation({
     required this.inviter,
-    required this.inviterName,
-    required this.message,
+    required this.publicDetails,
     required this.expiresAt,
-    this.content,
+    this.sealedContent,
     this.status = ReceivedInvitationStatus.previewed,
-    this.plaintext,
+    this.content,
   });
 
   factory ReceivedInvitation.fromJson(Map<String, dynamic> json) =>
       ReceivedInvitation(
         inviter: (json['inviter'] as String).toAtsign(),
-        inviterName: json['inviterName'],
-        message: json['message'],
+        publicDetails: _map(json['publicDetails'])!,
         expiresAt: DateTime.parse(json['expiresAt']),
-        content: json['content'] == null
+        sealedContent: json['sealedContent'] == null
             ? null
-            : SealedInvitationContent.fromJson(json['content']),
+            : SealedInvitationContent.fromJson(json['sealedContent']),
         status: ReceivedInvitationStatus.values.byName(json['status']),
-        plaintext: json['plaintext'],
+        content: _map(json['content']),
       );
 
   Map<String, dynamic> toJson() => {
         'inviter': inviter.toString(),
-        'inviterName': inviterName,
-        'message': message,
+        'publicDetails': publicDetails,
         'expiresAt': expiresAt.toUtc().toIso8601String(),
-        if (content != null) 'content': content!.toJson(),
+        if (sealedContent != null) 'sealedContent': sealedContent!.toJson(),
         'status': status.name,
-        if (plaintext != null) 'plaintext': plaintext,
+        if (content != null) 'content': content,
       };
 
-  ReceivedInvitation withContent(SealedInvitationContent content) =>
+  ReceivedInvitation withSealedContent(SealedInvitationContent sealed) =>
       ReceivedInvitation(
         inviter: inviter,
-        inviterName: inviterName,
-        message: message,
+        publicDetails: publicDetails,
         expiresAt: expiresAt,
-        content: content,
+        sealedContent: sealed,
         status: status,
-        plaintext: plaintext,
+        content: content,
       );
 
-  ReceivedInvitation withStatus(ReceivedInvitationStatus status,
-          {String? plaintext}) =>
+  ReceivedInvitation withStatus(
+    ReceivedInvitationStatus status, {
+    Map<String, dynamic>? content,
+  }) =>
       ReceivedInvitation(
         inviter: inviter,
-        inviterName: inviterName,
-        message: message,
+        publicDetails: publicDetails,
         expiresAt: expiresAt,
-        content: content,
+        sealedContent: sealedContent,
         status: status,
-        plaintext: plaintext ?? this.plaintext,
+        content: content ?? this.content,
       );
 }
 
 /// An invitee's answer to an invitation, shared with the inviter.
+///
+/// [details] are unverified, since anyone holding the link can send an
+/// acceptance. [SentInvitation.acceptanceDetails] holds them once the
+/// inviter has checked the code.
 @experimental
 class InvitationAcceptance {
   final String invitationId;
   final String code;
+  final Map<String, dynamic> details;
 
-  const InvitationAcceptance({required this.invitationId, required this.code});
+  const InvitationAcceptance({
+    required this.invitationId,
+    required this.code,
+    this.details = const {},
+  });
 
   factory InvitationAcceptance.fromJson(Map<String, dynamic> json) =>
       InvitationAcceptance(
-          invitationId: json['invitationId'], code: json['code']);
+        invitationId: json['invitationId'],
+        code: json['code'],
+        details: _map(json['details']) ?? const {},
+      );
 
-  Map<String, dynamic> toJson() => {'invitationId': invitationId, 'code': code};
+  Map<String, dynamic> toJson() =>
+      {'invitationId': invitationId, 'code': code, 'details': details};
 }
 
 /// The inviter's confirmation of an accepted invitation, shared with the
@@ -250,25 +239,21 @@ class InvitationAcceptance {
 @experimental
 class InvitationConnection {
   final String invitationId;
-  final String inviterName;
   final String? contentKey;
 
-  const InvitationConnection({
-    required this.invitationId,
-    required this.inviterName,
-    this.contentKey,
-  });
+  const InvitationConnection({required this.invitationId, this.contentKey});
 
   factory InvitationConnection.fromJson(Map<String, dynamic> json) =>
       InvitationConnection(
         invitationId: json['invitationId'],
-        inviterName: json['inviterName'],
         contentKey: json['contentKey'],
       );
 
   Map<String, dynamic> toJson() => {
         'invitationId': invitationId,
-        'inviterName': inviterName,
         if (contentKey != null) 'contentKey': contentKey,
       };
 }
+
+Map<String, dynamic>? _map(Object? json) =>
+    json == null ? null : Map<String, dynamic>.from(json as Map);

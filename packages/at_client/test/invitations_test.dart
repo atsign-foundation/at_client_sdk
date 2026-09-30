@@ -54,8 +54,7 @@ void main() {
 
     test('its JSON is frozen', () {
       final preview = InvitationPreview(
-        inviterName: 'Alice',
-        message: 'Join me',
+        publicDetails: {'from': 'Alice', 'message': 'Join me'},
         expiresAt: DateTime.utc(2026, 10, 6, 21),
         content: const SealedInvitationContent(
             nonce: 'bm9uY2U=', ciphertext: 'Y3Q='),
@@ -63,17 +62,30 @@ void main() {
 
       expect(
           jsonEncode(preview.toJson()),
-          '{"v":1,"inviterName":"Alice","message":"Join me",'
+          '{"v":1,"publicDetails":{"from":"Alice","message":"Join me"},'
           '"expiresAt":"2026-10-06T21:00:00.000Z",'
           '"content":{"nonce":"bm9uY2U=","ciphertext":"Y3Q="}}');
+    });
+
+    test('a preview reads back the app details it was written with', () {
+      final json =
+          jsonDecode('{"v":1,"publicDetails":{"from":"Alice","tags":["a","b"]},'
+              '"expiresAt":"2026-10-06T21:00:00.000Z"}');
+
+      final preview = InvitationPreview.fromJson(json);
+
+      expect(preview.publicDetails, {
+        'from': 'Alice',
+        'tags': ['a', 'b']
+      });
+      expect(preview.content, isNull);
     });
 
     test('a preview of an unknown version is refused', () {
       expect(
           () => InvitationPreview.fromJson({
                 'v': 2,
-                'inviterName': 'Alice',
-                'message': '',
+                'publicDetails': <String, dynamic>{},
                 'expiresAt': '2026-10-06T21:00:00.000Z',
               }),
           throwsFormatException);
@@ -119,14 +131,13 @@ void main() {
   group('records round-trip through JSON', () {
     test('SentInvitation', () {
       final sent = SentInvitation(
-        contactId: 'c1',
         code: '012345',
         expiresAt: DateTime.utc(2026, 10, 6),
-        inviterName: 'Alice',
-        message: 'hi',
+        publicDetails: {'from': 'Alice'},
         contentKey: 'a2V5',
         status: SentInvitationStatus.accepted,
         acceptedBy: '@bob'.toAtsign(),
+        acceptanceDetails: {'name': 'Bob'},
       );
 
       final back =
@@ -134,24 +145,40 @@ void main() {
 
       expect(back.toJson(), sent.toJson());
       expect(back.code, '012345', reason: 'a code keeps its leading zero');
+      expect(back.acceptanceDetails, {'name': 'Bob'});
     });
 
     test('ReceivedInvitation', () {
       final received = ReceivedInvitation(
         inviter: '@alice'.toAtsign(),
-        inviterName: 'Alice',
-        message: 'hi',
+        publicDetails: {'from': 'Alice'},
         expiresAt: DateTime.utc(2026, 10, 6),
-        content:
+        sealedContent:
             const SealedInvitationContent(nonce: 'bg==', ciphertext: 'Yw=='),
         status: ReceivedInvitationStatus.connected,
-        plaintext: 'the recipe',
+        content: {'recipe': 'lemon cake'},
       );
 
+      final back = ReceivedInvitation.fromJson(
+          jsonDecode(jsonEncode(received.toJson())));
+
+      expect(back.toJson(), received.toJson());
+      expect(back.content, {'recipe': 'lemon cake'});
+    });
+
+    test('InvitationAcceptance, with and without details', () {
+      const acceptance = InvitationAcceptance(
+          invitationId: id, code: '012345', details: {'name': 'Bob'});
+
       expect(
-          ReceivedInvitation.fromJson(jsonDecode(jsonEncode(received.toJson())))
-              .toJson(),
-          received.toJson());
+          InvitationAcceptance.fromJson(
+                  jsonDecode(jsonEncode(acceptance.toJson())))
+              .details,
+          {'name': 'Bob'});
+      expect(
+          InvitationAcceptance.fromJson({'invitationId': id, 'code': '1'})
+              .details,
+          isEmpty);
     });
   });
 }

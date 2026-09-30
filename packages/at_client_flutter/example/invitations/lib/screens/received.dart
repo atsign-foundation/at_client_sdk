@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:flutter/material.dart';
 
+import '../models.dart';
 import '../session.dart';
 
 /// An invitation someone sent: who from, and whether to accept it, and as
@@ -18,6 +19,7 @@ class ReceivedScreen extends StatefulWidget {
 
 class _ReceivedScreenState extends State<ReceivedScreen> {
   final _code = TextEditingController();
+  final _name = TextEditingController();
   final _separateContent = TextEditingController();
   ReceivedInvitation? _preview;
   String? _error;
@@ -25,6 +27,8 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
   List<String> _atSigns = [];
 
   String get _me => Session.instance.invitations!.me;
+
+  InviteDetails get _details => InviteDetails.fromJson(_preview!.publicDetails);
 
   @override
   void initState() {
@@ -83,9 +87,10 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
       await Session.instance.invitations!.accept(
         widget.link,
         code,
+        details: AcceptanceDetails(name: _name.text.trim()).toJson(),
         outOfBandContent: separate,
       );
-      _snack('Accepted. ${_preview!.inviterName} will confirm you shortly.');
+      _snack('Accepted. ${_details.inviterName} will confirm you shortly.');
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _snack('$e');
@@ -119,19 +124,19 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  '${preview.inviterName} (${preview.inviter}) invited you',
+                  '${_details.inviterName} (${preview.inviter}) invited you',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (preview.message.isNotEmpty) ...[
+                if (_details.message.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text(preview.message),
+                  Text(_details.message),
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  preview.content == null
+                  preview.sealedContent == null
                       ? 'No private content came with the invitation.'
                       : 'Private content came with it. You can read it once '
-                            '${preview.inviterName} confirms you.',
+                            '${_details.inviterName} confirms you.',
                 ),
                 const SizedBox(height: 24),
                 if (_atSigns.length > 1)
@@ -150,10 +155,17 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                   controller: _code,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'The code ${preview.inviterName} sent you',
+                    labelText: 'The code ${_details.inviterName} sent you',
                   ),
                 ),
-                if (preview.content == null)
+                TextField(
+                  controller: _name,
+                  decoration: InputDecoration(
+                    labelText:
+                        'Your name, as ${_details.inviterName} will see it',
+                  ),
+                ),
+                if (preview.sealedContent == null)
                   TextField(
                     controller: _separateContent,
                     decoration: const InputDecoration(
@@ -170,7 +182,7 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                   child: const Text('Decline'),
                 ),
                 Text(
-                  'Declining tells ${preview.inviterName} nothing.',
+                  'Declining tells ${_details.inviterName} nothing.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),

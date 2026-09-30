@@ -72,10 +72,12 @@ AtKey invitationPreviewKey(Atsign inviter, String id, String namespace) =>
 /// - an **outcome** per invitation — accepted, burned or revoked — so an
 ///   invitation is decided once, whichever of those gets there first.
 ///
-/// Content can be attached when the invitation is created. It is encrypted
-/// under a fresh content key, the invitee holds the ciphertext before
-/// accepting, and the key is shared with them only once the inviter has
-/// verified their acceptance.
+/// The app's own data travels as JSON: public details in the preview, the
+/// invitee's details in the acceptance, and private content encrypted under
+/// a fresh content key. The invitee holds the ciphertext before accepting,
+/// and the key is shared with them only once the inviter has verified their
+/// acceptance. Everything else the app keeps, contacts included, lives in
+/// the app's own collections, keyed by the invitation id.
 ///
 /// Nothing here needs Flutter. An app or a CLI uses it through
 /// [AtClientInvitations], and an always-on process, such as a CLI helper
@@ -86,7 +88,7 @@ AtKey invitationPreviewKey(Atsign inviter, String id, String namespace) =>
 /// final invitations =
 ///     AtClientInvitations(atClient, invitationsNamespace: 'my_app');
 /// final created = await invitations.invite(
-///     contactName: 'Bob', inviterName: 'Alice', content: 'the recipe');
+///     publicDetails: {'from': 'Alice'}, content: {'recipe': 'lemon cake'});
 /// // Send created.link and created.code separately.
 /// ```
 @experimental
@@ -101,17 +103,11 @@ mixin Invitations {
   /// Wrong codes allowed before an invitation is burned.
   static const int attemptLimit = 5;
 
-  static const Duration _contactLifetime = Duration(days: 3650);
-
   /// How long an invitation's records outlive its expiry, so that its fate
   /// stays visible for a while.
   static const Duration _afterExpiry = Duration(days: 30);
 
   Atsign get me => atClient.getCurrentAtSign()!.toAtsign();
-
-  /// The people invited, and those who invited this atSign, once connected.
-  Future<AtCollection<InvitationContact>> get contacts =>
-      _collection('contacts', InvitationContact.fromJson, 'InvitationContact');
 
   /// Invitations this atSign sent. Only this atSign reads them.
   Future<AtCollection<SentInvitation>> get sentInvitations => _collection(
@@ -148,16 +144,17 @@ mixin Invitations {
   // ---------------------------------------------------------------------------
   // The inviter
 
-  /// Creates an invitation for [contactName], and a contact to link the
-  /// invitee's atSign to once they accept.
+  /// Creates an invitation. The app links its own records, such as a
+  /// contact, to it by the id in the returned link.
   ///
-  /// [content] is fixed here. With [contentOutOfBand] it is returned for the
-  /// app to send alongside the link rather than published in the preview.
+  /// [publicDetails] travel in the preview, so anyone holding the link reads
+  /// them; anything private belongs in [content], which is encrypted and
+  /// fixed here. With [contentOutOfBand] the encrypted content is returned
+  /// for the app to send alongside the link rather than published in the
+  /// preview.
   Future<CreatedInvitation> invite({
-    required String contactName,
-    required String inviterName,
-    String message = '',
-    String? content,
+    Map<String, dynamic> publicDetails = const {},
+    Map<String, dynamic>? content,
     bool contentOutOfBand = false,
     Duration expiresIn = const Duration(days: 7),
   }) async {
@@ -169,29 +166,23 @@ mixin Invitations {
     SealedInvitationContent? sealed;
     if (content != null) {
       contentKey = InvitationKey.mint();
-      sealed = await contentKey.seal(content, inviter: me, invitationId: id);
+      sealed = await contentKey.seal(jsonEncode(content),
+          inviter: me, invitationId: id);
     }
 
-    final contact = await (await contacts).create(
-      obj: InvitationContact(name: contactName),
-      expiresAt: DateTime.now().add(_contactLifetime),
-    );
     await (await sentInvitations).create(
       id: id,
       obj: SentInvitation(
-        contactId: contact.id,
         code: code,
         expiresAt: expiresAt,
-        inviterName: inviterName,
-        message: message,
+        publicDetails: publicDetails,
         contentKey: contentKey?.base64,
       ),
       expiresAt: expiresAt.add(_afterExpiry),
     );
 
     final preview = InvitationPreview(
-      inviterName: inviterName,
-      message: message,
+      publicDetails: publicDetails,
       expiresAt: expiresAt,
       content: contentOutOfBand ? null : sealed,
     );
@@ -234,14 +225,17 @@ mixin Invitations {
       CItem<InvitationAcceptance> acceptance,
       InvitationOutcome outcome
     })>[];
-    for (final acceptance in await (await acceptances).getItems()) {
-      if (acceptance.owner == me) continue;
+    final received = [
+      for (final a in await (await acceptances).getItems())
+        if (a.owner != me) a
+    ];
+    for (final acceptance in received) {
       final outcome = await _process(acceptance);
       if (outcome != null) {
         results.add((acceptance: acceptance, outcome: outcome));
       }
     }
-    await _finishDecided();
+    await _finishDecided(received);
     return results;
   }
 
@@ -271,7 +265,7 @@ mixin Invitations {
       'accepted:${acceptance.owner}',
     );
     if (!decided) return InvitationOutcome.alreadyDecided;
-    await _finishAccepted(invitation, acceptance.owner);
+    await _finishAccepted(invitation, acceptance.owner, acceptance.obj.details);
     return InvitationOutcome.accepted;
   }
 
@@ -297,16 +291,22 @@ mixin Invitations {
 
   /// Finishes invitations whose outcome is recorded as accepted but whose
   /// record still says pending: the client that decided them stopped part way.
-  Future<void> _finishDecided() async {
+  Future<void> _finishDecided(
+    List<CItem<InvitationAcceptance>> received,
+  ) async {
     for (final invitation
         in await (await sentInvitations).getItems(owner: me)) {
       if (invitation.obj.status != SentInvitationStatus.pending) continue;
       final outcome = await _readOutcome(invitation.id);
       if (outcome == null || !outcome.startsWith('accepted:')) continue;
-      await _finishAccepted(
-        invitation,
-        outcome.substring('accepted:'.length).toAtsign(),
-      );
+      final invitee = outcome.substring('accepted:'.length).toAtsign();
+      final accepted = received
+          .where((a) =>
+              a.owner == invitee &&
+              a.obj.invitationId == invitation.id &&
+              _sameCode(a.obj.code, invitation.obj.code))
+          .firstOrNull;
+      await _finishAccepted(invitation, invitee, accepted?.obj.details);
     }
   }
 
@@ -315,29 +315,26 @@ mixin Invitations {
   Future<void> _finishAccepted(
     CItem<SentInvitation> invitation,
     Atsign invitee,
+    Map<String, dynamic>? acceptanceDetails,
   ) async {
     await (await connections).upsert(
       id: invitation.id,
       obj: InvitationConnection(
         invitationId: invitation.id,
-        inviterName: invitation.obj.inviterName,
         contentKey: invitation.obj.contentKey,
       ),
       sharedWith: {invitee},
       expiresAt: DateTime.now().add(_afterExpiry),
     );
-    final contact =
-        await (await contacts).getOrNull(invitation.obj.contactId, me);
-    if (contact != null) {
-      await (await contacts)
-          .update(_withObj(contact, contact.obj.withAtSign(invitee)));
-    }
     await _deletePreview(invitation.id);
     await (await sentInvitations).update(
       _withObj(
         invitation,
-        invitation.obj
-            .withStatus(SentInvitationStatus.accepted, acceptedBy: invitee),
+        invitation.obj.withStatus(
+          SentInvitationStatus.accepted,
+          acceptedBy: invitee,
+          acceptanceDetails: acceptanceDetails,
+        ),
       ),
     );
   }
@@ -354,12 +351,12 @@ mixin Invitations {
   }) async {
     final existing = await (await receivedInvitations).getOrNull(link.id, me);
     if (existing != null && existing.obj.inviter == link.inviter) {
-      if (existing.obj.content != null || outOfBandContent == null) {
+      if (existing.obj.sealedContent != null || outOfBandContent == null) {
         return existing;
       }
       final withContent = _withObj(
         existing,
-        existing.obj.withContent(outOfBandContent),
+        existing.obj.withSealedContent(outOfBandContent),
       );
       await (await receivedInvitations).update(withContent);
       return withContent;
@@ -373,27 +370,29 @@ mixin Invitations {
       id: link.id,
       obj: ReceivedInvitation(
         inviter: link.inviter,
-        inviterName: preview.inviterName,
-        message: preview.message,
+        publicDetails: preview.publicDetails,
         expiresAt: preview.expiresAt,
-        content: preview.content ?? outOfBandContent,
+        sealedContent: preview.content ?? outOfBandContent,
       ),
       expiresAt: preview.expiresAt.add(_afterExpiry),
     );
   }
 
-  /// Accepts an invitation with the [code] its inviter sent separately.
+  /// Accepts an invitation with the [code] its inviter sent separately,
+  /// sending the inviter [details] of this atSign's choosing.
   ///
   /// The inviter decides; [processConnections] reports the connection once
   /// they have.
   Future<void> accept(
     InvitationLink link,
     String code, {
+    Map<String, dynamic> details = const {},
     SealedInvitationContent? outOfBandContent,
   }) async {
     final invitation = await preview(link, outOfBandContent: outOfBandContent);
     await (await acceptances).create(
-      obj: InvitationAcceptance(invitationId: link.id, code: code),
+      obj: InvitationAcceptance(
+          invitationId: link.id, code: code, details: details),
       sharedWith: {link.inviter},
       expiresAt: invitation.obj.expiresAt.add(_afterExpiry),
     );
@@ -407,12 +406,15 @@ mixin Invitations {
   /// this atSign.
   Future<void> decline(String id) async {
     final invitation = await (await receivedInvitations).getOrNull(id, me);
-    if (invitation != null)
+    if (invitation != null) {
       await (await receivedInvitations).delete(invitation);
+    }
   }
 
-  /// Completes every accepted invitation whose inviter has confirmed it:
-  /// adds the inviter as a contact and decrypts any content.
+  /// Completes every accepted invitation whose inviter has confirmed it,
+  /// decrypting any content, and returns those it completed. The app adds
+  /// the inviter to its own contacts from these, or from any received
+  /// invitation whose status is connected.
   Future<List<CItem<ReceivedInvitation>>> processConnections() async {
     final connected = <CItem<ReceivedInvitation>>[];
     for (final connection in await (await connections).getItems()) {
@@ -424,28 +426,21 @@ mixin Invitations {
           invitation.obj.status == ReceivedInvitationStatus.connected) {
         continue;
       }
-      String? plaintext;
-      final sealed = invitation.obj.content;
+      Map<String, dynamic>? content;
+      final sealed = invitation.obj.sealedContent;
       final key = connection.obj.contentKey;
       if (sealed != null && key != null) {
-        plaintext = await InvitationKey.fromBase64(key).open(
+        content = jsonDecode(await InvitationKey.fromBase64(key).open(
           sealed,
           inviter: connection.owner,
           invitationId: connection.id,
-        );
+        )) as Map<String, dynamic>;
       }
-      await (await contacts).create(
-        obj: InvitationContact(
-          name: invitation.obj.inviterName,
-          atSign: connection.owner,
-        ),
-        expiresAt: DateTime.now().add(_contactLifetime),
-      );
       final done = _withObj(
         invitation,
         invitation.obj.withStatus(
           ReceivedInvitationStatus.connected,
-          plaintext: plaintext,
+          content: content,
         ),
       );
       await (await receivedInvitations).update(done);

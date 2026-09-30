@@ -4,6 +4,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models.dart';
 import '../session.dart';
 
 /// Where the landing page is hosted. Replace it with the app's own domain,
@@ -33,11 +34,16 @@ class _InviteScreenState extends State<InviteScreen> {
     try {
       final content = _content.text.trim();
       final created = await Session.instance.invitations!.invite(
-        contactName: _contact.text.trim(),
-        inviterName: _from.text.trim(),
-        message: _message.text.trim(),
-        content: content.isEmpty ? null : content,
+        publicDetails: InviteDetails(
+          inviterName: _from.text.trim(),
+          message: _message.text.trim(),
+        ).toJson(),
+        content: content.isEmpty ? null : PrivateContent(content).toJson(),
         contentOutOfBand: content.isNotEmpty && _contentSeparately,
+      );
+      await (await Session.instance.contacts).create(
+        id: created.link.id,
+        obj: Contact(name: _contact.text.trim()),
       );
       setState(() => _created = created);
     } catch (e) {

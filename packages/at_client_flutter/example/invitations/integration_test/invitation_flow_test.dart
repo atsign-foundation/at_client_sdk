@@ -57,6 +57,7 @@ void main() {
     await waitFor(tester, find.text('Alice ($alice) invited you'));
     expect(find.textContaining('Private content came with it'), findsOneWidget);
     await enter(tester, 'The code Alice sent you', code);
+    await enter(tester, 'Your name, as Alice will see it', 'Bob Brown');
     await tapText(tester, 'Accept');
     await waitFor(tester, find.textContaining('Invitations — $bob'));
     await signOut(tester);
@@ -66,7 +67,7 @@ void main() {
     await tapText(tester, 'Sent', timeout: const Duration(seconds: 60));
     await waitFor(
       tester,
-      find.text('accepted by $bob'),
+      find.text('accepted by $bob (Bob Brown)'),
       timeout: const Duration(seconds: 90),
     );
     await tapText(tester, 'Contacts');

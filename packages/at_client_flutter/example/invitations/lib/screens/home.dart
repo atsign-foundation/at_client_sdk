@@ -5,6 +5,7 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../incoming.dart';
+import '../models.dart';
 import '../session.dart';
 import 'enter_invitation.dart';
 import 'invite.dart';
@@ -30,7 +31,7 @@ class _HomeState extends State<Home> {
 
   List<CItem<ReceivedInvitation>> _received = [];
   List<CItem<SentInvitation>> _sent = [];
-  List<CItem<InvitationContact>> _contacts = [];
+  List<CItem<Contact>> _contacts = [];
 
   AtClientInvitations get _invitations => Session.instance.invitations!;
 
@@ -67,6 +68,7 @@ class _HomeState extends State<Home> {
     try {
       await _invitations.processAcceptances();
       final connected = await _invitations.processConnections();
+      await Session.instance.linkContacts();
       final me = _invitations.me;
       final received = await (await _invitations.receivedInvitations).getItems(
         owner: me,
@@ -74,7 +76,9 @@ class _HomeState extends State<Home> {
       final sent = await (await _invitations.sentInvitations).getItems(
         owner: me,
       );
-      final contacts = await (await _invitations.contacts).getItems(owner: me);
+      final contacts = await (await Session.instance.contacts).getItems(
+        owner: me,
+      );
       if (!mounted) return;
       setState(() {
         _received = received;
@@ -82,7 +86,7 @@ class _HomeState extends State<Home> {
         _contacts = contacts;
       });
       for (final c in connected) {
-        _snack('Connected with ${c.obj.inviterName} (${c.obj.inviter})');
+        _snack('Connected with ${_inviterName(c.obj)} (${c.obj.inviter})');
       }
     } catch (e) {
       _snack('$e');
@@ -155,9 +159,11 @@ class _HomeState extends State<Home> {
               _list(
                 _received.map(
                   (r) => ListTile(
-                    title: Text('${r.obj.inviterName} (${r.obj.inviter})'),
+                    title: Text('${_inviterName(r.obj)} (${r.obj.inviter})'),
                     subtitle: Text(
-                      r.obj.plaintext ?? r.obj.message,
+                      r.obj.content == null
+                          ? InviteDetails.fromJson(r.obj.publicDetails).message
+                          : PrivateContent.fromJson(r.obj.content!).text,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -175,13 +181,9 @@ class _HomeState extends State<Home> {
               _list(
                 _sent.map(
                   (s) => ListTile(
-                    title: Text(_contactName(s.obj.contactId)),
+                    title: Text(_contactName(s.id)),
                     subtitle: Text('code ${s.obj.code} · link id ${s.id}'),
-                    trailing: Text(
-                      s.obj.acceptedBy == null
-                          ? s.obj.status.name
-                          : '${s.obj.status.name} by ${s.obj.acceptedBy}',
-                    ),
+                    trailing: Text(_sentStatus(s.obj)),
                     onLongPress: s.obj.status == SentInvitationStatus.pending
                         ? () => _revoke(s.id)
                         : null,
@@ -208,6 +210,20 @@ class _HomeState extends State<Home> {
   String _contactName(String id) =>
       _contacts.where((c) => c.id == id).map((c) => c.obj.name).firstOrNull ??
       'someone';
+
+  String _inviterName(ReceivedInvitation r) =>
+      InviteDetails.fromJson(r.publicDetails).inviterName;
+
+  /// The status, and once accepted, who by and the name they gave.
+  String _sentStatus(SentInvitation s) {
+    if (s.acceptedBy == null) return s.status.name;
+    final details = s.acceptanceDetails;
+    final name = details == null
+        ? ''
+        : AcceptanceDetails.fromJson(details).name;
+    return '${s.status.name} by ${s.acceptedBy}'
+        '${name.isEmpty ? '' : ' ($name)'}';
+  }
 
   Future<void> _revoke(String id) async {
     final revoked = await _invitations.revoke(id);

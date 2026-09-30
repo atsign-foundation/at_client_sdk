@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 
 import 'issuer.dart';
+import 'models.dart';
 
 /// The namespace the invitations live under.
 const String invitationsNamespace = 'my_app';
@@ -44,6 +45,55 @@ class Session extends ChangeNotifier {
   AtClientInvitations? _invitations;
 
   AtClientInvitations? get invitations => _invitations;
+
+  /// The signed-in atSign's contacts: the people it invited, and those who
+  /// invited it.
+  Future<AtCollection<Contact>> get contacts =>
+      _invitations!.atClient.collection<Contact>(
+        'contacts.$invitationsNamespace',
+        const Duration(days: 3650),
+        fromJson: Contact.fromJson,
+        typeTag: 'Contact',
+      );
+
+  /// Brings the contacts up to date with the invitations: an invitee whose
+  /// acceptance was confirmed gets their atSign, and an inviter who
+  /// confirmed this atSign becomes a contact.
+  ///
+  /// Everything comes from the invitation records, and a contact's id is its
+  /// invitation's, so this is safe to run on every pass and on any device.
+  Future<void> linkContacts() async {
+    final invitations = _invitations!;
+    final me = invitations.me;
+    final contacts = await this.contacts;
+    final known = {
+      for (final c in await contacts.getItems(owner: me)) c.id: c.obj,
+    };
+    for (final sent in await (await invitations.sentInvitations).getItems(
+      owner: me,
+    )) {
+      final invitee = sent.obj.acceptedBy?.toString();
+      final contact = known[sent.id];
+      if (invitee == null || contact == null || contact.atSign != null) {
+        continue;
+      }
+      await contacts.upsert(id: sent.id, obj: contact.withAtSign(invitee));
+    }
+    for (final received
+        in await (await invitations.receivedInvitations).getItems(owner: me)) {
+      if (received.obj.status != ReceivedInvitationStatus.connected ||
+          known.containsKey(received.id)) {
+        continue;
+      }
+      await contacts.upsert(
+        id: received.id,
+        obj: Contact(
+          name: InviteDetails.fromJson(received.obj.publicDetails).inviterName,
+          atSign: received.obj.inviter.toString(),
+        ),
+      );
+    }
+  }
 
   /// The atSigns signed in during this run, which [signInFromKeychain] can
   /// sign in as again without asking for a root domain.
