@@ -992,7 +992,8 @@ the atServer that serves it. So the signing separates two adversaries sharply:
 
 So the operator of an atSign's atServer is in the **confidentiality TCB for all data
 destined to that atSign** (inbound cross-atSign shares, and self-data where the client
-relies on server-served keys) — a transparent, split-view MITM that this signing does
+relies on server-served keys) and for the data that atSign sends out, since its
+clients fetch every peer's keys through it — a transparent, split-view MITM that this signing does
 not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
 classical Atsign has the same property (a sender fetches `public:publickey@alice` from
 @alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
