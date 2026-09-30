@@ -479,8 +479,10 @@ once, so the worst-case exposure after a rotation is the TTL plus the grace
 ([ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30)).
 Without this, a sender keeps sealing to a pre-rotation generation that a revoked
 enrollment can still open, and **B6 revocation silently fails for inbound
-cross-atSign data**. The advertisement carries no `ttr`, so a reader's atServer never
-serves a cached copy of it. For self data the owner's own advertisement is read
+cross-atSign data**. The advertisement carries no `ttr`, and the client fetches it
+with `bypassCache`, so a reader's atServer never serves a cached copy of it
+([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)).
+For self data the owner's own advertisement is read
 local-first, which sync keeps current, through the same cache, cleared early when sync
 pulls a change; the privates her clients hold come from the substrate
 ([§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)).

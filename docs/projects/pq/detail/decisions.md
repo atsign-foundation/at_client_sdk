@@ -14648,3 +14648,36 @@ lookup handlers' comment — the fetch "ensures that expired enrollment keys are
 the right place" — already claims; the expiry sweep stays as the backstop. This
 closes the window, 10 seconds to about 10.5 minutes, in which an expired
 enrollment's `_apsk` was still accepted at `.a.__e`.
+
+## 145. A reader's atServer caches no post-quantum key records, and the client bypasses its cache for them (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
+(the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
+Nothing here is built yet. The atServer half lands in at_server.
+
+**The atServer (at_server).** A reader's atServer writes no `cached:public:`
+copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at
+every lookup — "for backwards compatibility, we will temporarily cache other
+public data with a ttl of 24 hours" — committed it and synced it to the reader's
+clients, yet never served it, because a lookup serves a cached copy only with
+`ttr -1` or before its `refreshAt`, and nothing on the client reads those
+records by their cached name. The 24-hour copy stays for other public data with
+no `ttr`, which an application may read by asking for the `cached:public:` key
+explicitly. Three defects are fixed with it:
+
+- a lookup miss commits a DELETE of the cached name only when a cached copy
+  existed, rather than every time;
+- a cache refresh that finds a changed value keeps the copy's ttl, rather than
+  re-putting it with none, which left it expiring only when the next lookup
+  re-stamped it;
+- `runRefreshJobHour` is honoured when set; the random start hour, which spreads
+  the refresh load across atServers, stays the default.
+
+**The client, in the interim (gkc).** The client sets `bypassCache` on every
+`_apsk` and `__nskey` fetch. That does not stop the copies being written: a
+bypassed lookup still calls `remoteLookUp(..., maintainCache: true)`. What it
+buys is freshness — if any other writer ever gives such a record a `ttr`, a
+reader still fetches from the owner rather than being served a stale copy, which
+guards [ruling 143.1](#1431-the-advertisement-carries-no-ttr) against owners
+that do not follow it.

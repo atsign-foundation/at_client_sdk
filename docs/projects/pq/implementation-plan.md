@@ -90,7 +90,7 @@ it stopped being parked.
 | **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
 | **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
 | **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
-| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Work through with gkc, one aspect at a time, what every namespace-key advertisement, content-key and `_apsk` write should carry (`ttl`, `ttr`) and what every reader should cache, on its client and on its atServer; then implement the rulings. The section maps what the code does today and lists the defects and open decisions, the advertisement `ttr` ruling among them. | Nothing — gkc's rulings, taken in the work-through |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Implement rulings 142–145, which settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. The section maps what the code does today and lists, item by item, what each ruling owes; items 16, 17 and 18 include at_server work, and each acceptance clause is written test-first with its implementation. | Nothing |
 
 ### P1 — must do before D1 closes
 
@@ -360,7 +360,8 @@ at_server `origin/trunk` `dc285b54`, with scratch probes for the wire commands a
 the verifier cache; nothing here was run against a live atServer. gkc's direction
 (2026-09-30): work through every aspect of namespace-key advertisement, content-key
 and `_apsk` writing and fetching, server-side and client-side caching included,
-decide the correct behaviour, and implement it. **Nothing below is ruled yet.**
+decide the correct behaviour, and implement it. **All eighteen items were ruled on
+2026-09-30, in rulings 142 to 145**; what each owes is the implementation.
 
 **What the two fields do on an atServer.** `ttl`, in milliseconds, expires a
 record on its owner's atServer, and an `update` that omits `ttl` or `ttr` keeps the
@@ -398,7 +399,8 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 | a shared conveyance, on the recipient's atServer | not cached | – | – |
 | the signing root | not cached; only the owner reads it | – | – |
 
-**Defects and open decisions.** Read from source unless marked otherwise.
+**Defects, their rulings, and what each owes.** Read from source unless marked
+otherwise.
 
 *Content keys — ruled by gkc on 2026-09-30 in
 [ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30);
@@ -509,16 +511,18 @@ with it*
     handlers' "ensures that expired enrollment keys are in the right place" true;
     the expiry sweep stays the backstop.
 
-*Server-side caching (at_server)*
+*Server-side caching — ruled by gkc on 2026-09-30 in
+[ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)*
 
-18. **Writes nothing reads.** Every lookup of a public record with no `ttr`
-    rewrites a 24-hour cached copy and commits it; every lookup miss commits a
-    DELETE whether or not a copy existed (`AtCacheManager.delete`, then the
-    keystore's unconditional commit); both sync to the reader's clients, where
-    nothing reads them. A cache refresh that finds a changed value re-puts it
-    without the 24-hour `ttl`, so that copy never expires until the next lookup
-    re-stamps it. The refresh job runs at an hour drawn at start
-    (`random.nextInt(23)`), not the configured one.
+18. **A reader's atServer caches no post-quantum key records; the client
+    bypasses its cache for them (145).** Found: every lookup of an `_apsk` or
+    `__nskey` record wrote and committed a 24-hour copy that was never served
+    and never read; every lookup miss committed a DELETE whether or not a copy
+    existed; a refresh finding a changed value dropped the copy's ttl; and the
+    configured refresh hour was ignored. Owed *(at_server)*: no cached copy of
+    those two record kinds, the 24-hour copy kept for other public data, and
+    the three defects fixed. Owed *(at_client)*: `bypassCache` on every `_apsk`
+    and `__nskey` fetch.
 
 **Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd` are
 pinned on the built command; nothing pins the absence of `ttl` and `ttr` on
