@@ -1994,7 +1994,9 @@ class AtClientImpl implements AtClient {
           requestedProviderId: options.cryptoProviderId,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer: options.useRemoteAtServer,
+          useRemoteAtServer:
+              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
+                  RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.
