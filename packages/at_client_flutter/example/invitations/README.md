@@ -57,7 +57,10 @@ flutter test integration_test -d macos --concurrency=1
 `integration_test/invitation_flow_test.dart` drives the same steps through
 the app's screens, playing Alice and Bob in turn on one device. It keeps keys
 in files in a temporary directory rather than the keychain, which could stop
-to ask for permission.
+to ask for permission. Leave its window in view until it finishes: runs have
+been seen to stall while it was covered. Setting `DEMO_ROLE` to any value in
+front of the command makes the window float above the others; the two-window
+demo also reads it to choose Alice or Bob.
 
 ### Two windows, for a demo
 
