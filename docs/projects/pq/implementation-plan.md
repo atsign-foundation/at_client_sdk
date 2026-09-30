@@ -90,6 +90,7 @@ it stopped being parked.
 | **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
 | **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
 | **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Work through with gkc, one aspect at a time, what every namespace-key advertisement, content-key and `_apsk` write should carry (`ttl`, `ttr`) and what every reader should cache, on its client and on its atServer; then implement the rulings. The section maps what the code does today and lists the defects and open decisions, the advertisement `ttr` ruling among them. | Nothing — gkc's rulings, taken in the work-through |
 
 ### P1 — must do before D1 closes
 
@@ -98,7 +99,6 @@ it stopped being parked.
 | **deprecation debt: `deprecated_member_use` across the workspace** | gkc ruled 2026-09-11 that these packages do not publish carrying their deprecation warnings, and that at_auth's own surface is cleaned in the current rc — **bounded the same day by the rule that a package an application depends on directly does not break**, the baseline being the PUBLISHED version on pub.dev. The plan is [`docs/projects/deprecations/plan.md`](../deprecations/plan.md), which holds every figure, ruling and what is owed: steps 0 to 7 are done, step 8's families E, H, A and G are removed, B went with the auth DTOs, and F cleared through a legacy writer and two readers on `AtKeys` (gkc, 2026-09-13). **C and D are superseded** by the client-lifecycle design (the P0 row above); their annotations stay until at_auth internalises the types, and no consumer in this repository names them. Every workspace member reports no `deprecated_member_use`; the plan's decided floor in at_auth's and at_client's `lib` sits under line-level ignores. What this row still owes is the majors' removals the plan lists under step 8: `AtClient.atChops` and its carrier, the preference's storage and transport fields, `setCurrentAtSign` and `fromAuthSession` in at_client 4.0, and at_lookup's ladder. | the 4.0 majors |
 | **the PQ e2e job fails on a keyfile lock nothing released** | `pqe2e_tests` went red once in eleven runs (2026-09-08) on `@bob🛠.nskey.atKeys.lock` held past its 10s acquire timeout (since 2026-09-12 that keyfile is the login keyfile itself, `@bob🛠_key.atKeys`, so the same abandonment now blocks a reopen rather than a side file) but inside its 30s staleness window, so no waiter could break it; a client stopped mid-write is the suspected holder. Levers: a heartbeat a live holder refreshes, or find and close the abandonment — not the constants, since pairing them let a re-entrant acquire break its own caller's lock (tried and reverted). | Nothing |
 | **a restored pre-retrofit `.atKeys` mints another uncapped enrollment** | at_auth decides "already retrofitted" from the keyfile alone, so a keyfile restored from a pre-retrofit backup retrofits again and leaves a further fully privileged, never-expiring enrollment. Probe it (retrofit, restore, start, `enroll:list`), then decide whether that is the intended sibling-clone case or the client should recognise its enrollment from the atServer. | Nothing |
-| **advertisement fetch volume, `ttr` and client caching** | A wire capture showed 110 `_apsk` lookups in one short client run; and `EnvelopeSigning`'s `_apsk` cache resets its five-minute expiry on every read and never invalidates on a failed verification, so a busy verifier holds a superseded advertisement indefinitely and refuses everything the rotated signer writes. Measure the fetch volume after the negative-cache and `enroll:infons` changes, then rule on `ttr` and client caching together — a client cache with no `ttr` is a rotation that never takes effect. | Nothing. A measurement, then a ruling |
 | **the PQ upgrade guide does not exist** | The retrofit clean-up instructions [ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) names, routed to a guide by [ruling 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 7; `docs/projects/pq/` has no such file. | gkc, on where it lives |
 | **there is no best-practices guide for application owners** | The only mitigation for the repopulation window after an nskey rotation: a guide carrying gkc's two-rollout recipe (rollout 1 mints old and new and seals to old; rollout 2 mints and seals to new), the two levers `keyEstablishmentAlgorithms` and `sealsToKeyAlgorithms` moving in different releases, and the English-to-French analogy. Whether it is one document with the upgrade guide is unsettled. | gkc, on whether it joins the upgrade guide |
 | **step 3 of a signing migration has no lever** | A verifier cannot decline an algorithm it implements — `verifyEnvelope` takes `strongestOf(shared)` with no accepted set — so a retired signing key is a standing forgery surface ([ruling 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)). Build the verifier-side set mirroring `sealsToKeyAlgorithms`; it falsifies UC-G2.9 c3, which `unprovableClauses` enumerates for that reason. | Nothing |
@@ -157,6 +157,8 @@ it stopped being parked.
 | **an `at_lookup` unit test resolves a production FQDN** | `secondary_address_cache_test.dart` calls `root.atsign.wtf` from the unit pack (its own group name says move it) and its 30s finder deadline equals the test timeout, so the retry path it was written around never runs; it reddened an unrelated PR on 2026-09-06. Move it to a functional pack with a longer timeout. | Nothing |
 | **the local e2e fixture cannot reproduce an APKAM enrollment-id defect** | `local_setup.dart` mints every local keyfile from `at_demo_data` with `enrollmentId: null` while declaring `authType: 'apkam'`, so a local run passes where CI's `end2end_test_14` catches an enrollment-id defect. Enrol for real, or say in its dartdoc that it cannot. | Nothing |
 | **a store write in flight when `stop()` lands still reaches the closed store** | The stopped-flag guards cannot reach a write that already passed them, so a `closeAll()` after `stop()` still logs `Box not found` for the pull cursor and the notification watermark (four lines a run in two of three). Make `stop()` drain in-flight writes before it returns — a lifecycle change, so all three live packs. | Nothing |
+| **secret-sharing envelope lifetimes are unpinned and unvalidated** | `PairwiseSecretSharing.envelopeTtl` (7 days) has no test pinning its default and no validation — a `Duration` under a millisecond sends `:ttl:0`, which the atServer reads as never expiring — and one assignment on the `AtClientSecretSharing.forClient` instance changes it for every envelope the SDK sends. The wake-up's `notificationExpiry: envelopeTtl` is unpinned too and falls back to 24 hours if dropped; and an envelope `_consume` rejects is retried every sweep, once a minute, until its ttl ends. | Nothing |
+| **`public:publickey`'s `ttr -1` is unpinned** | `AtAuthImpl.completeActivation` publishes the encryption public key with `ttr -1` so peers may cache it indefinitely (at_libraries#297, at_server#1226); the functional test that asserted it lost the assertion in `9b55a2365`, and nothing has checked it since. Pin the built command. | Nothing |
 
 ### P3 — nice to have, explicitly after D1, or in another repo
 
@@ -183,6 +185,7 @@ it stopped being parked.
 | [14.39](detail/implementation-plan.md#1439-pqposture-and-the-rollout-it-drives) **public-data signature verification** | Post-D1 and deliberately outside the catalogue (gkc, 2026-08-23): `pqActive` signs public data and nothing anywhere verifies it — not at_client, not any atServer — so a signature nobody checks is emitted knowingly. Undesigned. | a design |
 | **at_server's `at_server_spec` hosted fallback** | at_server's `unit_tests` job runs `dart pub get` per package with no melos step, so a PR changing `at_server_spec` and `at_secondary_server` together tests the new server against the old published spec and stays green. gkc has left it for a considered decision. | gkc |
 | **a functional client built on an empty keys store** | `crypto_era_default_test.dart` builds its client on an `InMemoryAtKeysIo` holding nothing, so the construction-time read logs "Could not read the keys" at warning on every functional run and the client runs as a null id. Write the demo keys into that store or stop passing one. | Nothing |
+| **two latent sync-queue defects** | The queue keeps one entry per key and the last operation wins, so a local `putMeta` landing after a local value put and before the drain pushes only `update:meta`, and the value never reaches the atServer (nothing calls `AtClient.putMeta` today); and a push the atServer refuses — a local-first write to a record immutable there — stays queued and logs at severe every round, with no cap. Not PQ. | Nothing |
 
 ### The four missing self-to-self mirrors
 
@@ -372,6 +375,178 @@ revocation on its own.
 `VIRTUALENV_IMAGE`, then per run `grep -c "Dropping parked notification"` and
 check whether the pqActive receiver logged `Filed the nskey private`, against the
 `##GRID## up:` lines that map each cell to its `runningAs` id.
+
+### PQ key writing and fetching: lifetimes and caching
+
+**Traced from source on 2026-09-30**, against at_client_sdk `b3e1a8c99` and
+at_server `origin/trunk` `dc285b54`, with scratch probes for the wire commands and
+the verifier cache; nothing here was run against a live atServer. gkc's direction
+(2026-09-30): work through every aspect of namespace-key advertisement, content-key
+and `_apsk` writing and fetching, server-side and client-side caching included,
+decide the correct behaviour, and implement it. **Nothing below is ruled yet.**
+
+**What the two fields do on an atServer.** `ttl`, in milliseconds, expires a
+record on its owner's atServer, and an `update` that omits `ttl` or `ttr` keeps the
+stored values without restarting the expiry clock
+(`AbstractUpdateVerbHandler._unsetOrRetainMetadata`). `ttr`, in seconds whatever
+the server's `ttrMillis` parameter names say, decides whether another atServer may
+serve its cached copy: `-1` forever, a positive value until `refreshAt`, absent
+never. A `public:` record with no `ttr` is still stored on the reader's atServer
+for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
+(`AtCacheManager.get`); a shared record with no `ttr` is not cached at all.
+
+**What each write sets today.**
+
+| Record | Writer | `ttl` | `ttr` |
+| --- | --- | --- | --- |
+| `<ckKid>.__ck.<ckNs>@alice`, and `@bob:<ckKid>.__ck.<ckNs>@alice` for a share | `CkManager._cutAndConvey` | none | none |
+| `__ckcur.<destination>.<ckNs>@alice` | `CurrentCkPointer.write` | none | none |
+| `public:_apsk.<enrollmentId>.a.__e@alice` | `PqSigningChain._publishInto`, `ApkamSigning.publishPublicSigningKey`, the atServer's `_publishApskSigningKey` | none | none |
+| `public:__nskey.<ns>@alice` | `PublishedNskeyKeyRing._mint` | none | none |
+| `public:pq_signing_root@alice` | `PqSigningRoot._publish` | none | none |
+| `_nskeylock.<ns>@alice`, `_rootlock@alice` | `MintLock._take`, immutable and uncommitted | 2 minutes, 15 seconds | none |
+| `<uuid>.<replyTo>.<kpid>.__ssenv.<ns>@alice` | `PairwiseSecretSharing.sendEnvelope` | 7 days | none |
+
+**What each reader caches today.**
+
+| What | Where | Keyed by | Lifetime |
+| --- | --- | --- | --- |
+| a peer's advertisement | `PublishedNskeyKeyRing._remote` | owner + namespace | 15 minutes from fetch; up to 30 while re-fetches fail or answer not-found |
+| this ring's own advertisement | `PublishedNskeyKeyRing._ownCurrent` | owner + namespace | never expires |
+| empty namespace levels | `NskeyResolver`'s miss memory | owner + namespace | 15 minutes |
+| `_apsk` values | `EnvelopeSigning.pubKeyCache`, one per signer object | atSign + enrollment id | 5 minutes, reset on every lookup |
+| content keys | `ContentKeyCache` | recipient + namespace + `ckKid` | no expiry |
+| the recipient's nskey privates | `_ownPrivates`, the keyfile, the secret store | owner + namespace + generation | kept forever |
+| a peer's advertisement or `_apsk`, on the reader's atServer | `cached:public:…` | record name | 24 hours, rewritten at every lookup, never served; `_apsk` lookups bypass the cache |
+| a shared conveyance, on the recipient's atServer | not cached | – | – |
+| the signing root | not cached; only the owner reads it | – | – |
+
+**Defects and open decisions.** Read from source unless marked otherwise.
+
+*Content keys*
+
+1. **A recipient holds nothing durable for a shared content key.** Both reads in
+   `SymmetricAesGcmProvider._resolveFromConveyance` go through the recipient's
+   atServer to the sender's, and the conveyance carries no `ttr`, so after a
+   restart the recipient cannot decrypt anything shared with it — a value its own
+   atServer cached with `ttr -1` included — while the sender's atServer is
+   unreachable. `design.md` says otherwise in four places ("synced to Alice as
+   cached replicas", "On syncing a `…__ck…` record", eviction "via sync", "a
+   synced cached replica"); this decision settles those clauses, and the dartdocs
+   of `_resolveFromConveyance` ("Local storage first") and
+   `ContentKeyUnavailableException` follow it.
+2. **A sender cannot resume a shared content key after a restart.**
+   `CkManager._resumeCurrent` reads the conveyance back, but it is sealed to the
+   recipient's nskey and `PublishedNskeyKeyRing.privateHalf` answers only for the
+   client's own atSign, so every restart that writes to a peer cuts a new content
+   key and a new conveyance, and `rotateContentKey(deleteSuperseded: true)`
+   removes only the newest. **Measured** on a scratch rig built from the real
+   `CkManager`, `NskeyProvider` and pointer; the self-data control resumed.
+   [Content keys per scope](#content-keys-per-scope) is the same proliferation
+   from a different cause.
+3. **Conveyances and `__ckcur` pointers never expire, and nothing in `lib`
+   deletes them.** Keeping conveyances is ruled (`design.md`'s retention knob);
+   the pointers' unbounded count is not, and `rotateContentKey` has no caller
+   outside tests.
+4. **The recipient's content-key cache has no expiry and no revocation path.**
+   Only a synced DELETE of a conveyance (`ContentKeyEviction`) or the client
+   stopping evicts, so a running recipient keeps a superseded key until it exits.
+   The one accidental eviction is a lookup miss, after which the recipient's
+   atServer commits a DELETE for a `cached:` conveyance that never existed. The
+   cache key omits the sender — harmless while a `ckKid` is a content hash, but
+   not `(owner, id)`.
+5. **The plaintext content key reaches application code.** A subscriber with
+   `shouldDecrypt: true` whose regex matches a `__ck` name receives it
+   decrypted, and `AtCollection._updateLocal` writes it to local storage
+   unencrypted when a collection namespace equals the key's namespace (read, not
+   run).
+6. **The pointer write is itself encrypted by the nskey provider**, so writing
+   the pointer for one destination can run `ensureCurrent` for the sender's own
+   scope and cut a self content key and a second pointer. It terminates only
+   because `putAsCurrent` runs before the pointer write.
+
+*Namespace-key advertisements*
+
+7. **`ttr` on the advertisement.** A wire capture showed 110 `_apsk` lookups in
+   one short client run; measure the advertisement fetch volume after the
+   negative-cache and `enroll:infons` changes, then rule on `ttr` and client
+   caching together. No advertisement read sets `bypassCache`, so a positive
+   `ttr` would add a server-side staleness window on top of `advertisementTtl`;
+   and `AtKey.public(...)..cache(ttr, ccd)` cannot set it, because it marks the
+   key `cached:` and `put` refuses one.
+8. **A withdrawal is handled like a network failure.**
+   `PublishedNskeyKeyRing.currentPublic` sends not-found and every exception to
+   `_staleOrNothing`, so a withdrawn advertisement is sealed to for up to 30
+   minutes, and `_getLocalThenRemote` sends the same plookup twice on each miss.
+9. **`_ownCurrent` never expires**, so a sibling enrollment's rotation of this
+   client's own namespace is not seen until restart; `NskeyRotation.forClient`
+   builds a separate ring.
+10. **There is no durable copy of a peer's advertisement**, so after a restart
+    the first write to a peer needs the network; the "local first" rationale in
+    `_getLocalThenRemote`'s dartdoc holds only for the client's own atSign.
+11. **A failed fetch at a deeper level counts as a miss**, so `NskeyResolver`
+    falls back to a broader level and goes on skipping the deeper one for 15
+    minutes after the network recovers.
+12. **`_fileFetched` files the server's metadata only by side effect**
+    (`GetResponseTransformer` replaces the caller's `AtKey.metadata`), and
+    writes without comparing against a newer copy a sync pull may have landed in
+    between (the race is a hypothesis).
+13. **Mint-lock release by expiry needs at_server c3.16.2 or later**
+    (`00c2f9a6`); an older atServer refuses a new create until its expiry sweep,
+    up to about ten minutes, and the client has no version gate.
+
+*`_apsk`*
+
+14. **The verifier cache can keep a stale entry alive indefinitely.**
+    `EnvelopeSigning.lookupPubKey` resets the five-minute expiry on every hit,
+    before verification, and a failed verification never evicts, while
+    `PairwiseSecretSharing.sweepOnce` retries a failed envelope every minute — so
+    a pre-rotation entry is kept alive by its own failures. **Measured** with
+    shortened timings. One AtClient holds three such caches with no shared
+    invalidation (the secret-sharing instance, its enrollment directory, the
+    advertisement verifier), and after a revocation moves `_apsk` off `.a.__e`
+    a cached entry goes on verifying for as long as lookups continue.
+15. **A republish keeps the old chain link.** `publishPublicSigningKey` sends no
+    `appMetadata`, and the atServer keeps the stored one
+    (`appMetadata ??= existing?.appMetadata`), so a link signed over the old value
+    rides the new one and `verifyChain` reports `broken` — not the `unsigned` that
+    [`design.md` 9.8.3](design.md#983-the-chain-and-why-a-link-is-bound-to-the-exact-string)
+    and the NOTE in `publishPublicSigningKeyLocked` describe. The unit test behind
+    that claim runs on a fake that replaces metadata wholesale.
+16. **`_apsk` ends by being renamed, and two rulings disagree about it.**
+    Revocation, supersession of a non-root predecessor at its successor's first
+    authentication, and the expiry sweep move the record to `.r.__e` or `.d.__e`,
+    where no verifier looks.
+    [Ruling 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)
+    and UC-G2.7 say it is deleted by nothing and goes on verifying;
+    [ruling 22.2c](detail/decisions.md#222c-revocation-the-chain-inherits-what-the-atserver-already-does)
+    and `_verifyAgainstApsk` rely on the move as the revocation signal.
+17. **An expired enrollment's `_apsk` is still served at `.a.__e` until the
+    expiry sweep runs**, 10 seconds to about 10.5 minutes later, and the at_server
+    lookup handlers' comment that the fetch "ensures that expired enrollment keys
+    are in the right place" is stale. *(at_server)*
+
+*Server-side caching (at_server)*
+
+18. **Writes nothing reads.** Every lookup of a public record with no `ttr`
+    rewrites a 24-hour cached copy and commits it; every lookup miss commits a
+    DELETE whether or not a copy existed (`AtCacheManager.delete`, then the
+    keystore's unconditional commit); both sync to the reader's clients, where
+    nothing reads them. A cache refresh that finds a changed value re-puts it
+    without the 24-hour `ttl`, so that copy never expires until the next lookup
+    re-stamps it. The refresh job runs at an hour drawn at start
+    (`random.nextInt(23)`), not the configured one.
+
+**Tests owed with the rulings:** nothing pins the absence of `ttl` and `ttr` on
+conveyances, pointers, advertisements, `_apsk` or the root, and the lock ttls are
+pinned on the key object rather than on the built command.
+
+**Related rows, which stay where they are:** [content keys per
+scope](#content-keys-per-scope), [the late-arriving nskey
+private](#the-late-arriving-nskey-private), *step 3 of a signing migration has no
+lever*, *`retiredAt` on the `_apsk` advertisement*, *a rotating atSign could tell
+its senders*, *the conveyance catch still swallows too much*, and
+*`useRemoteAtServer` on a key another atSign shared fails*.
 
 ### The registrar certificate test
 
