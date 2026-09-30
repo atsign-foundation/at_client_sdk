@@ -3470,8 +3470,8 @@ against it, and mint-once reuse.
   `signingAlgo:mldsa65` → on `approved`, persist into the SAME keyfile.
   The whole check → mint → submit → persist span is serialised per keyfile by
   its own advisory lock (`<keyfile>.retrofit.lock`, staleness sized for a
-  network round trip — the keyfile lock's milliseconds-scale settings still
-  guard the flush inside). Mint-once is the check inside that lock: an
+  network round trip — the keyfile lock's own shorter settings still guard
+  the flush inside). Mint-once is the check inside that lock: an
   existing active ML-DSA signing material under any enrollment id is reused,
   never re-minted — [design.md's "if the keyfile already carries a PQ APKAM
   keypair use it"](../design.md), now code. Accepted crash window: dying between
