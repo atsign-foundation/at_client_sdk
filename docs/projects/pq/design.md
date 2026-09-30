@@ -303,8 +303,8 @@ the envelope, verified against `_apsk`. What immutability *was* doing is stoppin
 of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
 since no one else can write the owner's records. Take the lock, **re-read**, mint,
-write the advertisement, convey the private, release (or let the ttl expire). The
-loser of the race backs off and re-reads.
+write the advertisement, convey the private; nothing deletes the lock, and its ttl
+releases it. The loser of the race backs off and re-reads.
 
 Both re-reads go to the **atServer**, never to local storage or a cache: a sibling
 enrollment's publication is not in local storage until sync catches up, and reading
@@ -1185,8 +1185,10 @@ existing `enroll:revoke`; per-APKAM future-data revocation is nskey-keypair rota
 excluding it, [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 
 **`pq_signing_root` lifecycle.** **Mutable, minted under a lock**: the interlock is
-`_rootlock@<atSign>`, a short-ttl immutable self key (`Metadata.immutable` — a
-long-standing atServer feature, already live; no server change), and minting is
+`_rootlock@<atSign>`, a short-ttl immutable self key (`Metadata.immutable`, whose
+refusal of a second create is a long-standing atServer feature; release by ttl
+expiry needs an atServer carrying at_server `00c2f9a6`, c3.16.2 or later, and
+the client does not check), and minting is
 restricted to a fully privileged enrollment (`rw` on `*` **and** `__manage`). The
 winner of the lock re-reads the record under it, generates the ML-DSA-65 keypair,
 stores the private half in its own `.atKeys`, seeds it as the conveyable root secret,

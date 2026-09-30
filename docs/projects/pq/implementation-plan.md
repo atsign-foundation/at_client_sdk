@@ -478,6 +478,14 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
    `PublishedNskeyKeyRing.currentPublic` sends not-found and every exception to
    `_staleOrNothing`, so a withdrawn advertisement is sealed to for up to 30
    minutes, and `_getLocalThenRemote` sends the same plookup twice on each miss.
+   The same conflation makes `CryptoRuntime.isReadyFor` answer false for an
+   unreachable atServer, where its dartdoc says it throws. The stated exposure
+   after a rotation — the freshness window "plus one content-key lifetime", in
+   `design.md` section 1.5, UC-A5.1's **Then (b)**, ruling 13 and the
+   `advertisementTtl` dartdoc — is loose rather than the mechanism: a sender
+   re-cuts on the first write after it sees the new generation, so the worst
+   case is `advertisementTtl` plus `advertisementStaleGrace`, which the
+   statements omit.
 9. **`_ownCurrent` never expires**, so a sibling enrollment's rotation of this
    client's own namespace is not seen until restart; `NskeyRotation.forClient`
    builds a separate ring.

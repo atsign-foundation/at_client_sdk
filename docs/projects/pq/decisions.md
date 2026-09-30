@@ -75,7 +75,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
 | [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-08-15        |
-| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | LIVE                      |
+| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
 | [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | LIVE                      |
@@ -159,10 +159,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [99]  | The keyfile groups by enrollment, and the atSign's own keys move out                        | 2026-08-14 | LIVE                      |
 | [100] | The seven shapes ruling 99 left open                                                        | 2026-08-14 | LIVE                      |
 | [101] | The signing root becomes an ordinary signing key, and rotatable                             | 2026-08-15 | LIVE                      |
-| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | AMENDED 2026-08-17        |
+| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | AMENDED 2026-09-30        |
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
 | [104] | ~~Per-generation nskey records~~                                                            | 2026-08-16 | REJECTED — see [105]      |
-| [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
+| [105] | The nskey mint elects a winner                                                              | 2026-08-16 | AMENDED 2026-09-30        |
 | [106] | A notification that outruns its key is dropped, not parked                                  | 2026-08-16 | AMENDED 2026-08-17        |
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
 | [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | AMENDED 2026-08-28        |

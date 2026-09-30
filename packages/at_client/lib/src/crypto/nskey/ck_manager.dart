@@ -58,9 +58,11 @@ class CkManager {
   /// Ensure `(destination, namespace)` has a current CK sealed to the
   /// destination's live nskey generation, minting and conveying one if not.
   ///
-  /// The destination's advertised generation is re-fetched on every call: a
-  /// sender never sees a recipient's decapsulation fail, so that check is the
-  /// only way it learns of a rotation.
+  /// The destination's advertised generation is resolved on every call — from
+  /// the key ring's cache while that is fresh — and compared with the one the
+  /// current CK was conveyed to: a sender never sees a recipient's
+  /// decapsulation fail, so that comparison is the only way it learns of a
+  /// rotation.
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;

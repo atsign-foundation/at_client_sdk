@@ -237,7 +237,7 @@ class PqSigningRoot {
     if (outcome == null) {
       _logger.info('Not minting a signing root for $atSign: the mint lock is '
           'already held, by another of this atSign\'s enrollments or by this '
-          'one from a run inside the last couple of minutes');
+          'one from a run inside the last ${lockTtl.inSeconds} seconds');
       return null;
     }
     final publicKey = outcome.publicKey;

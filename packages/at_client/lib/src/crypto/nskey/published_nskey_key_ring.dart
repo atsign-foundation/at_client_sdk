@@ -753,7 +753,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   }
 
   /// Reads [atKey] from local storage, falling back to the atServer when it is
-  /// not held there.
+  /// not held there — for this client's own atSign. For another atSign's key
+  /// both reads are the same `plookup` to this client's atServer, because
+  /// another atSign's public record is never read locally, so a miss asks
+  /// twice.
   ///
   /// Local first because [currentPublic] sits on the write path, so a round
   /// trip by default would break offline writes; the fallback is what keeps a
@@ -829,8 +832,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           String owner, String namespace) async =>
       (await publishedRecord(owner, namespace))?.advertisement;
 
-  /// What `(owner, namespace)` has published **on the atServer**, fetched with
-  /// both caches skipped, and the atServer's own stamp on that record.
+  /// What `(owner, namespace)` has published **on the atServer**, read past
+  /// local storage and this ring's own caches, and the atServer's own stamp on
+  /// that record.
   ///
   /// Null means the atServer says there is none; any other failure throws,
   /// since a mint must not read an unreachable atServer as a cold start.

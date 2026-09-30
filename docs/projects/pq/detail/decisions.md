@@ -1702,6 +1702,10 @@ Stating the lifetimes once, because they are easy to conflate:
 There is **no TTL on the published record**: `nskeyAdvertisementKey` sets only
 `isPublic = true`, so `public:__nskey.<ns>@<owner>` lives on the atServer until overwritten.
 The only record-level ttl in the design is on `_nskeylock`, a different key.
+⚠️ **AMENDED 2026-09-30: no longer the only one.** `_rootlock@<atSign>` carries
+15 seconds since
+[ruling 124](#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28),
+and the substrate's envelopes carry `envelopeTtl`, 7 days.
 
 **The accepted exposure.** A level probed and found empty stays empty to that sender for one
 `missMemory` window, so a key minted at that level inside the window is missed and the write
@@ -10423,6 +10427,10 @@ well as to the mint election. Two things follow, both built:
 - **`mintLockTtl` is injectable** — `PublishedNskeyKeyRing.lockTtl` and
   `PqSigningRoot.lockTtl`, defaulting to the constant. Without it every live
   rotation test would wait two minutes between its mint and its rotation.
+  ⚠️ **AMENDED 2026-09-30:** since
+  [ruling 124](#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28),
+  `PqSigningRoot.lockTtl` defaults to `signingRootMintLockTtl`, 15 seconds; only
+  the nskey ring defaults to `mintLockTtl`.
 - **`revokeEnrollmentAndRotate`'s partial state is documented rather than
   retried.** It revokes first, so a rotation refused by the cooldown leaves the
   enrollment cut off from the atServer while still holding the live generation.
