@@ -434,6 +434,33 @@ void main() {
       expect(NskeyRecipientKind.nskey, 'nskey');
     });
 
+    test('a conveyance names the enrollment that cut its key', () async {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
+      final kem = XWingPureDartAlgo.instance;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair('@alice', 'myapp',
+            publicKey: pair.publicKey,
+            privateKey: pair.secretKey,
+            keyAlgo: 'x-wing');
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final atKey = AtKey()
+        ..key = 'ckkid.__ck'
+        ..namespace = 'myapp'
+        ..sharedBy = '@alice';
+
+      await provider.encrypt(
+          CryptoContext(atClient: atClient), atKey, ck.toBase64());
+
+      // NOTE: frozen — only the enrollment named here collects the key once
+      // nothing cites it, so a conveyance without it is never collected.
+      final json = atKey.metadata.appMetadata!.toJson();
+      expect(json.keys.toList(),
+          ['providerId', 'recipientKind', 'ckKid', 'nskeyKid', 'ns', 'cutBy']);
+      expect(json['cutBy'], 'enroll-1');
+    });
+
     test('a data value\'s appMetadata, field by field', () async {
       final cache = ContentKeyCache();
       final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));

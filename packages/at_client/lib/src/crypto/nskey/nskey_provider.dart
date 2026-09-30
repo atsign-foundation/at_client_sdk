@@ -151,6 +151,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     final nskeyOwner = _nskeyOwnerOf(atKey);
     final sibling = _siblingCopyOf(atKey);
     final namespace = sibling?.sealNs ?? _namespaceOf(atKey);
+    final cutBy = context.atClient.enrollmentId;
 
     final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
     if (advertised == null) {
@@ -202,6 +203,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'destination': sibling.destination,
           'ckNs': _namespaceOf(atKey),
         },
+        // NOTE: only this enrollment collects the key once nothing cites it;
+        // a sibling cannot tell a key about to be cited from an unused one.
+        if (cutBy != null) 'cutBy': cutBy,
       },
     );
 
