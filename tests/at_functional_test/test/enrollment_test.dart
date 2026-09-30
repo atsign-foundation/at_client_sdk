@@ -215,11 +215,11 @@ void main() {
 
       expect(atResponse.response.isNotEmpty, true);
       var otp = atResponse.response;
-      expect(otp.length, 6);
-      expect(
-          otp.contains('0') || otp.contains('o') || otp.contains('O'), false);
-      // check whether otp contains at least one number and one alphabet
-      expect(RegExp(r'^(?=.*[a-zA-Z])(?=.*\d).+$').hasMatch(otp), true);
+      expect(otp, matches(RegExp(r'^[A-NP-Z1-9]{6}$')),
+          reason: 'six upper-case letters and digits, never 0 or O');
+      expect(otp, matches(RegExp(r'\d')),
+          reason: 'the atServer guarantees a digit; a letter is not '
+              'guaranteed, so an all-digit OTP is valid');
     });
 
     test('A test to verify invalid OTP results in error response from server',

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>You're invited</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; --accent: #f05e3f;
+    --card: #f5f5f7; --border: #e0e0e3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111113; --fg: #f2f2f4; --muted: #a1a1a8; --accent: #ff7a5c;
+      --card: #1c1c1f; --border: #2c2c30;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 32rem; margin: 0 auto; padding: 3rem 1rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 0.5rem; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: 0.95rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.25rem; margin: 1.5rem 0;
+  }
+  .button {
+    display: block; width: 100%; text-align: center; text-decoration: none;
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+    padding: 0.85rem 1rem; margin: 0.75rem 0 0;
+  }
+  .button.secondary {
+    background: transparent; color: var(--fg); border: 1px solid var(--border);
+  }
+  code { word-break: break-all; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <section id="invalid" hidden>
+    <h1>This invitation link is incomplete</h1>
+    <p>Ask the person who invited you to send the link again, whole.</p>
+  </section>
+
+  <section id="valid" hidden>
+    <h1><span id="inviter"></span> invited you</h1>
+    <p>Open the invitation in <strong id="app-name-1"></strong>. You'll need
+      the code <span id="inviter-2"></span> sent you separately. It isn't in
+      this link.</p>
+
+    <div class="card" id="ios" hidden>
+      <p><strong>On iPhone or iPad</strong></p>
+      <p class="muted">If the app is installed, the link opens it directly.
+        Otherwise, copy the invitation, install the app, and paste it with
+        Paste an invitation.</p>
+      <button class="button" id="copy">Copy invitation</button>
+      <a class="button secondary" id="app-store">Get the app</a>
+    </div>
+
+    <div class="card" id="android" hidden>
+      <p><strong>On Android</strong></p>
+      <p class="muted">If the app is installed, the link opens it directly.
+        Otherwise, install it from here and the invitation will be waiting.</p>
+      <a class="button" id="play-store">Get the app</a>
+    </div>
+
+    <div class="card" id="desktop" hidden>
+      <p><strong>On a computer</strong></p>
+      <p class="muted">Open this link on your phone, or paste the invitation
+        below into <span id="app-name-2"></span>.</p>
+      <p><code id="invitation"></code></p>
+      <button class="button secondary" id="copy-desktop">Copy invitation</button>
+    </div>
+
+    <p class="muted">Your invitation stays in your browser: the part of the
+      link after <code>#</code> is never sent to this website.</p>
+  </section>
+</main>
+
+<script>
+  // Replace these for your app.
+  const APP_NAME = 'Invitations';
+  const APP_STORE_URL = 'https://apps.apple.com/app/idYOUR_APP_ID';
+  const ANDROID_PACKAGE = 'com.atsign.examples.invitations';
+
+  let fragment = '';
+  try {
+    fragment = decodeURIComponent(location.hash.slice(1));
+  } catch (e) {
+    // NOTE: a malformed escape is not an invitation; it shows as invalid.
+  }
+  const match = /^(@[^/\s]+)\/([0-9a-f]{32})$/.exec(fragment);
+  const show = (id) => { document.getElementById(id).hidden = false; };
+  const text = (id, value) => { document.getElementById(id).textContent = value; };
+
+  if (!match) {
+    show('invalid');
+  } else {
+    const inviter = match[1];
+    const invitation = location.href;
+    text('inviter', inviter);
+    text('inviter-2', inviter);
+    text('app-name-1', APP_NAME);
+    text('app-name-2', APP_NAME);
+    text('invitation', invitation);
+    show('valid');
+
+    const copy = async (button) => {
+      try {
+        await navigator.clipboard.writeText(invitation);
+        button.textContent = 'Copied';
+      } catch (e) {
+        button.textContent = 'Copy failed: select the link and copy it';
+      }
+    };
+
+    const ua = navigator.userAgent;
+    const isIos = /iPhone|iPad|iPod/.test(ua) ||
+      (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/.test(ua);
+
+    if (isIos) {
+      show('ios');
+      document.getElementById('app-store').href = APP_STORE_URL;
+      document.getElementById('copy').onclick = (e) => copy(e.target);
+    } else if (isAndroid) {
+      show('android');
+      // NOTE: the Play install referrer carries the invitation through the
+      // install, so Google Play sees it; the code never travels this way.
+      const referrer = encodeURIComponent('invitation=' + fragment);
+      document.getElementById('play-store').href =
+        'https://play.google.com/store/apps/details?id=' + ANDROID_PACKAGE +
+        '&referrer=' + referrer;
+    } else {
+      show('desktop');
+      document.getElementById('copy-desktop').onclick = (e) => copy(e.target);
+    }
+  }
+</script>
+</body>
+</html>
