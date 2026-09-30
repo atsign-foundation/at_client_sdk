@@ -149,8 +149,8 @@ class PqSigningChain {
           utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-  /// signing advertisement lives, and the one record its own connection may
-  /// write.
+  /// signing advertisement lives, in the reserved namespace only that
+  /// enrollment may write.
   static String apskUri(String atSign, String enrollmentId) =>
       envelope_signature.apskUri(atSign, enrollmentId);
 

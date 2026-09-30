@@ -425,13 +425,16 @@ with it*
    key (**measured** on a scratch rig built from the real `CkManager`,
    `NskeyProvider` and pointer; the self-data control resumed); and the
    per-atSign pointer, written local-first, never converged siblings — three
-   sender enrollments cut three keys, and sync dropped pointer writes. Owed: the
-   per-enrollment pointer in `<enrollmentId>.a.__e` (ids only, unencrypted,
-   remote-first) in place of `__ckcur`; the sibling copy of every share key and
-   resume from it; mint on demand at the recipient's level unless
-   `seedNamespaceKeys` is off; deleting a key deletes both conveyances; UC-A4.1's
-   "This `put` writes no self-copy" and `nskey_cross_atsign_test`'s assertion
-   rewritten.
+   sender enrollments cut three keys, and sync dropped pointer writes. Built:
+   the pointer is `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>`,
+   ids only, sent unencrypted to the atServer first and read from it first; a
+   client with no enrollment id keeps none. The built command is pinned raw in
+   `current_ck_pointer_test.dart`. Owed: the sibling copy of every share key,
+   `<ckKid>.__ck.<ckNs>@<sender>` sealed to the sender's key covering `ckNs`
+   and naming the recipient, and resume from it; mint on demand at the
+   recipient's level unless `seedNamespaceKeys` is off; deleting a key deletes
+   both conveyances; UC-A4.1's "This `put` writes no self-copy" and
+   `nskey_cross_atsign_test`'s assertion rewritten.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
    `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller
    outside tests. Owed: the cutting enrollment's list of superseded keys beside

@@ -24,8 +24,8 @@ import 'package:at_commons/at_commons.dart'
 const String apskRecordName = '_apsk';
 
 /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-/// APKAM public signing key lives, and the one record its own connection may
-/// write.
+/// APKAM public signing key lives, in the reserved namespace only that
+/// enrollment may write.
 ///
 /// The atServer mints the record at approval, so the spelling is a
 /// cross-implementation contract; it is pinned in

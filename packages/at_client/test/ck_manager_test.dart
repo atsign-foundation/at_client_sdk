@@ -143,11 +143,6 @@ void main() {
       final value = inv.positionalArguments[1] as String;
       final options =
           inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-      // The current-CK pointer writes an ordinary self key through this same
-      // client; it is not a conveyance, so it is not counted here.
-      if (key.key.startsWith('__ckcur') == true) {
-        return true;
-      }
       written.add(key);
       providerIds.add(options?.cryptoProviderId);
       routings.add(options?.useRemoteAtServer);
@@ -763,9 +758,6 @@ void main() {
         final key = inv.positionalArguments[0] as AtKey;
         final options =
             inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-        // The current-CK pointer writes an ordinary self key through this
-        // same client; it is not a conveyance, so it is not counted here.
-        if (key.key.startsWith('__ckcur') == true) return true;
         written.add(key);
         // Mirror the pipeline: route the conveyance through the runtime, which
         // resolves at/nskey out of the very config under test.
@@ -948,13 +940,13 @@ void main() {
       final atClient = MockAtClient();
       final stopped = StoppedException('the client has stopped');
       when(() => atClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => atClient.enrollmentId).thenReturn('enr-1');
       when(() => atClient.get(any(),
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(stopped);
       when(() => atClient.put(any(), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(stopped);
-      when(() => atClient.put(any(), any())).thenThrow(stopped);
 
       await expectLater(
           const CurrentCkPointer().read(atClient, owner, namespace),

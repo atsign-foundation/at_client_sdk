@@ -8,14 +8,14 @@
 /// intended change (there should be none) edits the pin in the same commit,
 /// and that edit is the review.
 ///
-/// | record             | shape                                          |
-/// |--------------------|------------------------------------------------|
-/// | advertisement      | `public:__nskey.<ns>@<owner>`                  |
-/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                      |
-/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`  |
-/// | current-CK pointer | `__ckcur.<destination>.<ckNs>@<atSign>`        |
-/// | signing root       | `public:pq_signing_root@<atSign>`              |
-/// | root mint lock     | `_rootlock@<atSign>`                           |
+/// | record             | shape                                                        |
+/// |--------------------|--------------------------------------------------------------|
+/// | advertisement      | `public:__nskey.<ns>@<owner>`                                |
+/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                                    |
+/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`                |
+/// | current-CK pointer | `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>` |
+/// | signing root       | `public:pq_signing_root@<atSign>`                            |
+/// | root mint lock     | `_rootlock@<atSign>`                                         |
 ///
 /// At-rest ids freeze the same way — existing keyfiles hold them and scans
 /// match on them: the `nskey.<ns>.<kid>` AtKeys id and the `__nskey.<kid>`
@@ -29,7 +29,8 @@
 /// shared constant would move them in lockstep.
 library;
 
-import 'package:at_commons/at_commons.dart' show AtKey, Metadata;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, EnrollmentConstants, Metadata;
 
 /// The record name an nskey advertisement is published under, in the
 /// namespace the key serves: `public:__nskey.<ns>@<owner>`.
@@ -108,22 +109,27 @@ const Duration mintLockTtl = Duration(minutes: 2);
 const Duration signingRootMintLockTtl = Duration(seconds: 15);
 
 /// The leading segment of the current-CK pointer record:
-/// `__ckcur.<destination>.<ckNs>@<atSign>`.
+/// `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>`.
 const String currentCkPointerRecordName = '__ckcur';
 
-/// The at-key remembering which CK [sharedBy] is currently writing under for
-/// [destination], namespaced by the namespace the nskey resolved to — matching
-/// the CK's own scope.
+/// The at-key remembering which CK [enrollmentId] of [sharedBy] is currently
+/// writing under for [destination] in [ckNs], the namespace the destination's
+/// nskey resolved to.
 ///
-/// The destination's `@` is stripped — the emitted segment is `bob`, not
-/// `@bob` — and the double underscore hides the record from an ordinary scan.
+/// It lives in the enrollment's own reserved namespace, which the atServer
+/// lets that enrollment alone read and write, and moves aside when the
+/// enrollment is revoked. The destination's `@` is stripped — the emitted
+/// segment is `bob`, not `@bob` — and the double underscore hides the record
+/// from an ordinary scan.
 AtKey currentCkPointerKey(
         {required String? sharedBy,
+        required String enrollmentId,
         required String destination,
         required String ckNs}) =>
     AtKey()
       ..key = '$currentCkPointerRecordName.${destination.replaceAll('@', '')}'
-      ..namespace = ckNs
+          '.$ckNs'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       ..sharedBy = sharedBy
       ..metadata = Metadata();
 

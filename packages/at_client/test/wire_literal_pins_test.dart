@@ -94,12 +94,13 @@ void main() {
     });
 
     test('the current-CK pointer strips the destination owner\'s @', () {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
       // The emitted segment is 'bob', not '@bob' — easy to mis-pin.
       expect(
           const CurrentCkPointer()
               .keyFor(atClient, '@bob', 'app_1.my_apps')
               .toString(),
-          '__ckcur.bob.app_1.my_apps@alice');
+          '__ckcur.bob.app_1.my_apps.enroll-1.a.__e@alice');
     });
 
     test('a self conveyance is <ckKid>.__ck.<ckNs>@<owner>', () {
