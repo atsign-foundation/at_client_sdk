@@ -3980,10 +3980,13 @@ which is the same mechanism stated once.
   rather than anchored, and an enrollment whose own key moved **re-anchors
   itself** rather than publishing a link that vouches for a value it no longer
   holds.
-  *And* the break is not recoverable by the record alone:
-  `publishPublicSigningKey` writes the value on its own and does not carry over
-  the `appMetadata` a link rides, so the enrollment goes from `chained` to
-  `unsigned` with nothing re-conveying it.
+  *And* the break is not recoverable by the record alone, and a republish does
+  not leave it standing: `publishPublicSigningKey` sends the record's
+  `appMetadata` without a link over the old value, which the atServer would
+  otherwise keep, so the enrollment reads `unsigned` rather than `broken` until
+  the next fully privileged start's sweep conveys a root link over the new
+  value. An enrollment whose client holds the signing root is instead
+  re-anchored over the new value in the same write.
 
   ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
   `_apsk` held the APKAM public key alone. It is a member of the signed preimage,

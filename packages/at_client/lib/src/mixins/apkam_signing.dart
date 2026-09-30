@@ -6,8 +6,15 @@ import 'package:at_chops/at_chops.dart' show AtPkamKeyPair, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show PqSigningChain;
 import 'package:at_commons/at_commons.dart'
-    show AtClientException, AtKey, AtKeyNotFoundException, EnrollmentConstants;
+    show
+        AppMetadata,
+        AtClientException,
+        AtKey,
+        AtKeyNotFoundException,
+        EnrollmentConstants;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -100,6 +107,7 @@ mixin ApkamSigning {
     value ??= await publicSigningKeyValue;
 
     String? published;
+    AppMetadata? stored;
     try {
       logger.finer('publishPublicSigningKey: checking $publicSigningKeyUri');
       final current = await atClient.get(
@@ -107,6 +115,7 @@ mixin ApkamSigning {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
       published = current.value is String ? current.value as String : null;
+      stored = current.metadata?.appMetadata;
     } on AtKeyNotFoundException catch (err) {
       logger.info('${err.message} - publishing now');
     }
@@ -119,10 +128,11 @@ mixin ApkamSigning {
       logger.info('publishPublicSigningKey: what is published is not what this '
           'client holds - republishing');
     }
-    // NOTE: this writes the value alone — a chain link riding this record's
-    // `appMetadata` is not carried over.
+    final atKey = AtKey.fromString(publicSigningKeyUri);
+    atKey.metadata.appMetadata = await PqSigningChain.republishedAppMetadata(
+        atClient, enrollmentId, stored, value);
     await atClient.put(
-      AtKey.fromString(publicSigningKeyUri),
+      atKey,
       value,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );

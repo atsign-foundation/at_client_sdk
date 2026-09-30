@@ -310,6 +310,62 @@ class PqSigningChain {
     );
   }
 
+  /// The `appMetadata` a republish of [enrollmentId]'s `_apsk` under [value]
+  /// sends over the [stored] one, or null when that needs no change.
+  ///
+  /// A link that does not vouch for [value] is removed, and a root link is
+  /// signed afresh over [value] when this client holds the signing root; an
+  /// enrollment with no root link gets none here. Sent explicitly because an
+  /// atServer keeps the stored `appMetadata` for an update carrying none, so a
+  /// link over the old key would ride the new one and read broken.
+  static Future<AppMetadata?> republishedAppMetadata(AtClient atClient,
+      String enrollmentId, AppMetadata? stored, String value) async {
+    final additional = stored?.additional;
+    if (additional == null) return null;
+    final chainLink = additional[linkField];
+    final rootLink = additional[rootLinkField];
+    final chainStale = chainLink != null &&
+        !_vouchesFor(_envelopePayload(chainLink), enrollmentId, value);
+    final rootStale = rootLink != null &&
+        !_vouchesFor(
+            rootLink is Map ? rootLink['payload'] : null, enrollmentId, value);
+    if (!chainStale && !rootStale) return null;
+
+    final kept = Map<String, dynamic>.of(additional);
+    if (chainStale) kept.remove(linkField);
+    if (rootStale) {
+      kept.remove(rootLinkField);
+      final signer = await PqSigningRoot(atClient, keysIo: atClient.atKeysIo)
+          .signingKey(atClient.getCurrentAtSign()!);
+      if (signer != null) {
+        kept[rootLinkField] = await _rootLinkOver(
+          linkPayload(
+              childEnrollmentId: enrollmentId, childApkamPublicKey: value),
+          signer.private,
+          kid: signer.kid,
+        );
+      }
+    }
+    return AppMetadata(
+        providerId: stored!.providerId, additional: kept.isEmpty ? null : kept);
+  }
+
+  /// Whether a link [payload] vouches for [value] as [enrollmentId]'s key.
+  static bool _vouchesFor(Object? payload, String enrollmentId, String value) =>
+      payload is Map &&
+      payload['childEnrollmentId'] == enrollmentId &&
+      payload['apkamPublicKey'] == value;
+
+  /// The payload of a chain link as stored, or null when it does not parse.
+  static Object? _envelopePayload(Object? link) {
+    if (link is! Map) return null;
+    try {
+      return SignedEnvelope.fromJson(link).payload;
+    } on Exception {
+      return null;
+    }
+  }
+
   /// The chain link an enrollment has published, or null if it has none.
   ///
   /// An absent link is ordinary, so this reports absence rather than failing.

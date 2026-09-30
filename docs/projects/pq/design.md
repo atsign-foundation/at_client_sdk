@@ -2662,8 +2662,10 @@ invalidate it: a republish removes the link fields from the record's
 `appMetadata`, which the atServer would otherwise keep, so the enrollment goes
 from `chained` to `unsigned` rather than `broken`
 ([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
-An enrollment holding the signing root re-anchors in the same step; nothing
-re-conveys a chain link. This is why the mint must be inert at first start, and
+An enrollment holding the signing root re-anchors in the same write; any other
+is re-conveyed by the next fully privileged start's sweep, as a root link over
+the new value. A link that still vouches for the value being published is kept.
+This is why the mint must be inert at first start, and
 why 9.8.2's two composers must agree.
 
 #### 9.8.4 What the approver conveys is a three-way branch

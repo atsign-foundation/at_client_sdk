@@ -14624,7 +14624,9 @@ failure: mutual exclusion holds, and the delay ends on its own.
 work-through (items 14–17 of the P0 row's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
 144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
-after a cached key fails, and one cache per AtClient. The rest is not built yet;
+after a cached key fails, and one cache per AtClient. 144.2 is built in
+`PqSigningChain.republishedAppMetadata`, which `publishPublicSigningKey` sends.
+The rest is not built yet;
 144.3 and 144.4 include at_server work, and the acceptance clauses change
 test-first, with the implementation.
 
@@ -14653,6 +14655,19 @@ signing root re-anchors in the same step. A chain-linked enrollment stays
 unsigned until something re-conveys its link, which nothing does yet. The
 unit-test fake learns the atServer's field merge; it replaced metadata
 wholesale, which is what hid this.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built.** A link that still vouches
+for the value being published is kept, and only one over another value is
+removed: a republish restoring the value a link names would otherwise leave an
+enrollment nobody had stopped vouching for reading as `unsigned`. A root holder
+re-anchors by keeping an existing anchor — its client re-signs a root link the
+record carried when it holds the signing root, and adds none where there was
+none — so the republish needs no privilege check; first anchoring stays with
+the startup step. And "nothing re-conveys yet" was wrong: the fully privileged
+sweep (`sweepUnanchoredEnrollments`) conveys a root link to any approved
+enrollment without one, so once the stale link is cleared the next privileged
+start re-anchors the enrollment over its new value. Before, a stale root link
+made the sweep skip it for good.
 
 ### 144.3 Every move of _apsk stands, and verification tells the locations apart
 

@@ -515,10 +515,14 @@ with it*
     `envelope_signing_test`.
 15. **A republish clears the links; a root holder re-anchors (144.2).** Found:
     `publishPublicSigningKey` sent no `appMetadata`, the atServer kept the stored
-    one, and the chain read `broken`. Owed: the republish removes the link fields
-    explicitly; a root holder re-anchors in the same step; the unit-test fake
-    models the atServer's field merge; re-conveying a chain-linked enrollment's
-    link, which nothing does yet.
+    one, and the chain read `broken`. Done: the republish sends `appMetadata`
+    without a link that does not vouch for the new value
+    (`PqSigningChain.republishedAppMetadata`), and a client holding the signing
+    root re-signs a root link the record carried, in the same write; the
+    unit-test fake merges as the atServer does. Re-conveyance needed nothing
+    new: with the stale link gone, the next fully privileged start's sweep
+    conveys a root link over the new value. Proven in `pq_signing_chain_test`
+    and `chain_sweep_test.dart`.
 16. **Every move of `_apsk` stands, and verification tells the locations apart
     (144.3).** Found: a moved `_apsk` gave a bare lookup failure, and ruling 134
     and UC-G2.7 claimed the record was deleted by nothing. Owed: verification
