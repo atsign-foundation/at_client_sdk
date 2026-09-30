@@ -25,11 +25,10 @@ final Expando<Future<void>> _apskWriteChain = Expando('apskWriteChain');
 
 /// Runs [action] with no other `_apsk` write for [client] interleaved.
 ///
-/// A minter publishes its new key before it files it, so that no envelope is
-/// ever signed under a key the advertisement does not name. Between those two
-/// steps the keyfile does not yet hold what was advertised, and any other
-/// writer composing from the keyfile sees no signing key, takes the
-/// authentication-key fallback, and overwrites the advertisement with it.
+/// Every `_apsk` write re-sends a whole record composed from something read
+/// first: the keyfile for a publish of the signing keys, the record itself for
+/// a link. A write landing between another's read and its put is therefore
+/// lost, so a caller holds this from that read through its put.
 ///
 /// ⚠️ This is in-process only and claims nothing more: a concurrent second
 /// client of the same atSign in another process can still interleave, which is

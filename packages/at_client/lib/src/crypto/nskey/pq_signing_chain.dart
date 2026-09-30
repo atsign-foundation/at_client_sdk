@@ -9,6 +9,8 @@ import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/at_auth.dart' show ApskSigningKey, AtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
+import 'package:at_client/src/mixins/apkam_signing.dart'
+    show serialiseApskWrite;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -254,18 +256,18 @@ class PqSigningChain {
   /// the record with its value unchanged and the link added to
   /// `appMetadata.additional`.
   ///
-  /// A caller that has already read the record passes it as [current], so its
-  /// checks and this write come from one snapshot.
-  Future<void> publishLink(
-    String enrollmentId,
-    SignedEnvelope link, {
-    AtValue? current,
-  }) async {
-    final signer = link.signerEnrollmentId;
+  /// Serialised against every other `_apsk` write this client makes, as
+  /// [serialiseApskWrite] describes.
+  Future<void> publishLink(String enrollmentId, SignedEnvelope link) =>
+      serialiseApskWrite(_atClient, () => _stampLink(enrollmentId, link));
+
+  /// [publishLink] for a caller already holding [serialiseApskWrite].
+  Future<void> _stampLink(String enrollmentId, SignedEnvelope link,
+      {AtValue? current}) async {
     await _publishInto(enrollmentId, linkField, link.toJson(),
         current: current);
     _logger.info('Published chain link for $enrollmentId, signed by enrollment '
-        '$signer');
+        '${link.signerEnrollmentId}');
   }
 
   /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
@@ -274,6 +276,10 @@ class PqSigningChain {
   /// A put replaces the record, so its current state is re-sent: [current]
   /// when the caller has already read it, so its checks and this write come
   /// from one snapshot, else a read here.
+  ///
+  /// The caller holds [serialiseApskWrite] from its read of [current] through
+  /// this write, or a republish landing in between is put back to the value
+  /// read.
   Future<void> _publishInto(
     String enrollmentId,
     String field,
@@ -364,41 +370,43 @@ class PqSigningChain {
       return false;
     }
 
-    final AtValue current;
-    try {
-      current = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, enrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+    return serialiseApskWrite(_atClient, () async {
+      final AtValue current;
+      try {
+        current = await _atClient.get(
+          AtKey.fromString(apskUri(atSign, enrollmentId)),
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+        );
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        _logger.info('No _apsk published for $enrollmentId yet, so there is '
+            'nothing to anchor: $e');
+        return false;
+      }
+
+      final existing = _fieldFrom(current, rootLinkField);
+      if (existing != null &&
+          await _rootLinkStillHolds(atSign, enrollmentId, existing, current)) {
+        return false;
+      }
+      if (existing != null) {
+        _logger.warning('The root link on $enrollmentId no longer holds, so '
+            'this enrollment is re-anchoring itself');
+      }
+
+      final link = await _rootLinkOver(
+        linkPayload(
+          childEnrollmentId: enrollmentId,
+          childApkamPublicKey: current.value as String,
+        ),
+        signer.private,
+        kid: signer.kid,
       );
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.info('No _apsk published for $enrollmentId yet, so there is '
-          'nothing to anchor: $e');
-      return false;
-    }
 
-    final existing = _fieldFrom(current, rootLinkField);
-    if (existing != null &&
-        await _rootLinkStillHolds(atSign, enrollmentId, existing, current)) {
-      return false;
-    }
-    if (existing != null) {
-      _logger.warning('The root link on $enrollmentId no longer holds, so this '
-          'enrollment is re-anchoring itself');
-    }
-
-    final link = await _rootLinkOver(
-      linkPayload(
-        childEnrollmentId: enrollmentId,
-        childApkamPublicKey: current.value as String,
-      ),
-      signer.private,
-      kid: signer.kid,
-    );
-
-    await _publishInto(enrollmentId, rootLinkField, link, current: current);
-    _logger.info('Anchored $enrollmentId to the signing root');
-    return true;
+      await _publishInto(enrollmentId, rootLinkField, link, current: current);
+      _logger.info('Anchored $enrollmentId to the signing root');
+      return true;
+    });
   }
 
   /// Whether the root link already on this enrollment's record is one a
@@ -515,34 +523,36 @@ class PqSigningChain {
       return false;
     }
 
-    final AtValue current;
-    try {
-      current = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, enrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('This enrollment has no readable _apsk to publish a '
-          'root link onto: $e');
-      return false;
-    }
+    return serialiseApskWrite(_atClient, () async {
+      final AtValue current;
+      try {
+        current = await _atClient.get(
+          AtKey.fromString(apskUri(atSign, enrollmentId)),
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+        );
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        _logger.warning('This enrollment has no readable _apsk to publish a '
+            'root link onto: $e');
+        return false;
+      }
 
-    if (payload['apkamPublicKey'] != current.value) {
-      _logger.warning('Conveyed root link vouches for a key that is not the '
-          'one published for $enrollmentId; not publishing it');
-      return false;
-    }
+      if (payload['apkamPublicKey'] != current.value) {
+        _logger.warning('Conveyed root link vouches for a key that is not the '
+            'one published for $enrollmentId; not publishing it');
+        return false;
+      }
 
-    final existing = _fieldFrom(current, rootLinkField);
-    if (existing != null && _sameLink(existing, link)) {
-      return false;
-    }
+      final existing = _fieldFrom(current, rootLinkField);
+      if (existing != null && _sameLink(existing, link)) {
+        return false;
+      }
 
-    await _publishInto(enrollmentId, rootLinkField, link, current: current);
-    _logger.info('Anchored $enrollmentId to the signing root via a conveyed '
-        'root link');
-    return true;
+      await _publishInto(enrollmentId, rootLinkField, link, current: current);
+      _logger.info('Anchored $enrollmentId to the signing root via a conveyed '
+          'root link');
+      return true;
+    });
   }
 
   /// Stamps a conveyed chain link.
@@ -589,32 +599,34 @@ class PqSigningChain {
       return false;
     }
 
-    final AtValue current;
-    try {
-      current = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, enrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('This enrollment has no readable _apsk to publish a '
-          'chain link onto: $e');
-      return false;
-    }
+    return serialiseApskWrite(_atClient, () async {
+      final AtValue current;
+      try {
+        current = await _atClient.get(
+          AtKey.fromString(apskUri(atSign, enrollmentId)),
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+        );
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        _logger.warning('This enrollment has no readable _apsk to publish a '
+            'chain link onto: $e');
+        return false;
+      }
 
-    if (payload['apkamPublicKey'] != current.value) {
-      _logger.warning('Conveyed chain link vouches for a key that is not the '
-          'one published for $enrollmentId; not publishing it');
-      return false;
-    }
+      if (payload['apkamPublicKey'] != current.value) {
+        _logger.warning('Conveyed chain link vouches for a key that is not the '
+            'one published for $enrollmentId; not publishing it');
+        return false;
+      }
 
-    final existing = _fieldFrom(current, linkField);
-    if (existing != null && _sameLink(existing, link.toJson())) {
-      return false;
-    }
+      final existing = _fieldFrom(current, linkField);
+      if (existing != null && _sameLink(existing, link.toJson())) {
+        return false;
+      }
 
-    await publishLink(enrollmentId, link, current: current);
-    return true;
+      await _stampLink(enrollmentId, link, current: current);
+      return true;
+    });
   }
 
   /// Whether [a] and [b] are the same link, compared whole.

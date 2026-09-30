@@ -1,5 +1,6 @@
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1262,6 +1263,158 @@ void main() {
         reason: 'a claimed parent is checked against that parent\'s own '
             'published key, and the claim is under the signature besides — '
             'otherwise any enrollment could name any other as its approver');
+  });
+
+  group('a link write and a republish of the same record', () {
+    /// Starts [linkWrite], parks it on its first remote read of [uri], starts
+    /// a republish of [value] by [sharing], then lets the link write go on.
+    ///
+    /// A link write re-sends the value it read, so a republish landing
+    /// between that read and its put is reverted unless the two are
+    /// serialised.
+    Future<void> republishDuring(
+      MockAtClient c,
+      AtClientSecretSharing sharing,
+      String uri,
+      String value,
+      Future<Object?> Function() linkWrite,
+    ) async {
+      final gate = Completer<void>();
+      var parked = false;
+      when(() =>
+              c.get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0].toString();
+        final stored = remoteData[key];
+        if (stored == null) throw AtKeyNotFoundException('$key not found');
+        final snapshot = AtValue()
+          ..value = stored
+          ..metadata = remoteMetadata[key];
+        if (key == uri && !parked) {
+          parked = true;
+          await gate.future;
+        }
+        return snapshot;
+      });
+
+      final writing = linkWrite();
+      await pumpEventQueue();
+      expect(parked, isTrue,
+          reason: 'the link write has to be parked on its read, or the '
+              'republish below runs outside the window and proves nothing');
+
+      final republishing = sharing.publishPublicSigningKey(value: value);
+      await pumpEventQueue();
+      gate.complete();
+      await Future.wait([writing, republishing]);
+    }
+
+    /// A value different from [enrollmentId]'s own `_apsk`, which a republish
+    /// can write over it.
+    Future<String> anotherValue(String enrollmentId) async {
+      await registered(client('donor-1'));
+      final value = remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
+      expect(value,
+          isNot(remoteData[PqSigningChain.apskUri(atSign, enrollmentId)]),
+          reason: 'a republish of the value already there writes nothing, '
+              'and there would be nothing for the link write to revert');
+      return value;
+    }
+
+    const reverted = 'the republish landed while the link write held a '
+        'snapshot, and the link write then put the old value back: the '
+        'advertisement loses the keys just published';
+
+    test('publishLink', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishLink('child-1', link!));
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishOwnRootLink', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      final c = client('priv-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, pair.secretKey);
+      when(() => c.atKeysIo).thenReturn(io);
+      final sharing = await registered(c);
+      final uri = PqSigningChain.apskUri(atSign, 'priv-1');
+      final republished = await anotherValue('priv-1');
+
+      await republishDuring(
+          c,
+          sharing,
+          uri,
+          republished,
+          () => PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io));
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishPendingLink stamping a conveyed root link', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link = await PqSigningChain(client('priv-1'))
+          .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.rootLinkSecretName,
+              value: PqSigningChain.encodeLink(link!)),
+          allowReservedName: true);
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishPendingLink());
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishPendingLink stamping a conveyed chain link', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link!.toJson())),
+          allowReservedName: true);
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishPendingLink());
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
   });
 }
 

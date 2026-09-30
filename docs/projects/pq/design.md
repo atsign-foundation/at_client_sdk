@@ -2724,8 +2724,11 @@ The three rules are complementary, not redundant:
 
 A mint files before it publishes, and `serialiseApskWrite` holds the filing,
 the publish and the retirement, so no other **writer** composing from the
-keyfile republishes part way. A stop between the filing and the publish leaves
-a key held that the advertisement does not name yet, which the next start's
+keyfile republishes part way. A link write, which re-sends the record value it
+read, holds the same lock from that read through its put, so it can never put
+back a value a republish has just replaced. A stop between the filing and the
+publish leaves a key held that the advertisement does not name yet, which the
+next start's
 `_apsk` republish, composed from the keyfile, puts right; publishing first could
 leave a key advertised that nothing holds. The window left open is against a
 **reader**: a signer calling `ApkamSigning.signingKeys` between the two writes
