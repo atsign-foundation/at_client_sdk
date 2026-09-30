@@ -257,6 +257,10 @@ class SymmetricAesGcmProvider
         // NOTE: the record is there and will not open — reporting it as absent
         // would send the caller to wait for a sync that has already happened.
         rethrow;
+      } on AtKeyNotFoundException {
+        return false;
+      } on KeyNotFoundException {
+        return false;
       } catch (e) {
         if (e is StoppedException) rethrow;
         // NOTE: an unexpected failure lands here as well and is reported to

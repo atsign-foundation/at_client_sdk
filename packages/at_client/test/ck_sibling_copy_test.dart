@@ -415,6 +415,9 @@ void main() {
       expect(r.reads, [(sibling, null), (sibling, true)],
           reason: 'the sibling copy, from local storage and then the '
               'atServer; bob\'s conveyance is sealed to bob and never read');
+      expect(logs.at('WARNING').where((m) => m.contains(sibling)), isEmpty,
+          reason: 'a record absent from local storage is the ordinary answer '
+              'on that leg, not something to warn about');
     });
 
     test('a share with no sibling copy reads as a key not yet available',
