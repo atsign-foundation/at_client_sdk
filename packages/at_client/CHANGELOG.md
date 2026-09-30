@@ -4,7 +4,9 @@
   `AtClientInvitations`, in `at_client_mixins.dart`, creates an invitation
   (a link plus a separate code, optionally with encrypted content), lets the
   invitee preview and accept it, and lets any of the inviter's clients decide
-  it exactly once. The `Invitations` mixin carries the same API.
+  it exactly once. The app's own data travels as JSON (public details, the
+  invitee's acceptance details and private content), and contacts stay in
+  the app's own collections. The `Invitations` mixin carries the same API.
 - fix: a post-quantum write routed to the atServer by
   `AtClientPreference.remoteLocalPref` now sends its content key there too.
   Before, the key went only to local storage, so another process of the same

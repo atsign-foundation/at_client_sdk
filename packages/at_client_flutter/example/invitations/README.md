@@ -33,10 +33,10 @@ Then, as two people:
    private. The app shows the link and the code.
 2. **Bob**: *Paste an invitation*, and paste the link. Then *Get a new
    atSign*. The invitation opens: who it is from, and whether it carries
-   private content. Enter the code and *Accept*.
-3. **Alice's** app, while it is open, checks the code and confirms Bob. Both
-   apps now list the other under *Contacts*, and Bob's *Received* tab shows
-   the private content, decrypted.
+   private content. Enter the code and your name, and *Accept*.
+3. **Alice's** app, while it is open, checks the code and confirms Bob, and
+   her *Sent* tab shows the name he gave. Both apps now list the other under
+   *Contacts*, and Bob's *Received* tab shows the private content, decrypted.
 
 `ee/up.sh` starts from nothing each time: it destroys the previous EE and
 forgets what the issuer handed out, so an atSign from an earlier run no longer
@@ -81,13 +81,14 @@ URL fragment, which browsers never send to the host, and the code never
 appears in the link.
 
 **The preview.** Alice publishes `public:_<id>.invitations.my_app@alice`,
-holding her name, a message, the expiry and, unless it is sent separately, the
-encrypted content. Anyone with the id can read it; a `public:_` record is
-never listed by a scan. It expires with the invitation and is deleted once
-the invitation is decided.
+holding the invitation's public details (in this app, her name and a
+message), the expiry and, unless it is sent separately, the encrypted
+content. Anyone with the id can read it; a `public:_` record is never listed
+by a scan. It expires with the invitation and is deleted once the invitation
+is decided.
 
-**Accepting.** Bob's app keeps the preview, then shares an acceptance carrying
-the code with Alice.
+**Accepting.** Bob's app keeps the preview, then shares an acceptance with
+Alice, carrying the code and the name Bob gives.
 
 **Deciding, from any of Alice's clients.** Every decision two of her clients
 could race on is an immutable create on Alice's atServer, which refuses the
@@ -96,8 +97,8 @@ fifth burns the invitation), and one outcome per invitation (accepted, burned
 or revoked).
 
 **Confirming.** The client that wins shares a connection with Bob, which
-carries the content key, links his atSign to the contact, and deletes the
-preview. Bob's app then adds Alice as a contact and decrypts the content.
+carries the content key, records his atSign and the name he gave on the sent
+invitation, and deletes the preview. Bob's app then decrypts the content.
 
 **Content.** An invitation with content gets a fresh AES-256-GCM key, bound to
 the invitation, when it is created, and the content is fixed then. Bob holds
@@ -107,6 +108,13 @@ a short code could be brute-forced offline.
 
 **Declining** forgets the invitation on Bob's device, so Alice never learns
 his atSign.
+
+**The app's own data.** `AtClientInvitations` carries the app's data as JSON
+and keeps nothing else of the app's. `lib/models.dart` defines this app's:
+`InviteDetails` for the preview, `AcceptanceDetails` for the acceptance and
+`PrivateContent` for the content. Contacts belong to the app too. A contact
+takes its invitation's id, and `Session.linkContacts` fills in both sides
+from the invitation records on every pass.
 
 Alice's app handles acceptances only while it is open. A deployment that wants
 Bob confirmed promptly runs an always-on client of Alice's, enrolled for the
