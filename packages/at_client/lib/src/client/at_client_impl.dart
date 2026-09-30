@@ -218,6 +218,9 @@ class AtClientImpl implements AtClient {
       if (_preference?.seedNamespaceKeys != true) {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
       }
+      if (_atKeysIo == null) {
+        return const AtReachabilityResult(AtReachability.noKeySource);
+      }
 
       // NOTE: safe here only because `MintLock` holds an in-flight guard for
       // the ring this client uses. The lock itself excludes a different

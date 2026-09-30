@@ -433,6 +433,10 @@ with it*
    `<ckKid>.__ck.<ckNs>@<sender>` sealed to the sender's key covering `ckNs`
    and naming the recipient, written after the recipient's conveyance and on
    its route, and a failed one fails the write (`ck_sibling_copy_test.dart`).
+   Found and fixed on the way: `AtClient.ensureReachable`, which the mint on
+   demand goes through, minted on a client with no key source, publishing a
+   key whose private lived only in memory; it now answers `noKeySource`
+   (`no_atkeysio_inertness_test.dart`).
    Owed: resume and a sibling's read from the sibling copy; mint on demand at
    the recipient's level unless `seedNamespaceKeys` is off; deleting a key
    deletes both conveyances; UC-A4.1's "This `put` writes no self-copy" and
