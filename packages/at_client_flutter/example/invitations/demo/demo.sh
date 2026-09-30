@@ -60,11 +60,12 @@ ok "screen ${W}x${H} points, two windows of ${WIN_W}x${WIN_H}"
 
 if [[ -n "$OUT" ]]; then
   DEVICE=$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 |
-    sed -n 's/.*\[\([0-9]*\)\] Capture screen 0.*/\1/p')
-  [[ -n "$DEVICE" ]] || die "ffmpeg lists no screen to capture"
+    sed -n 's/.*\[\([0-9]*\)\] Capture screen 0.*/\1/p' || true)
+  [[ -n "$DEVICE" ]] \
+    || die "ffmpeg lists no screen to capture; check Screen Recording permission"
   PIXELS=$(ffmpeg -hide_banner -f avfoundation -pixel_format uyvy422 \
     -i "$DEVICE:none" -frames:v 1 -f null - 2>&1 |
-    grep -o -E '[0-9]{3,}x[0-9]{3,}' | head -1)
+    grep -o -E '[0-9]{3,}x[0-9]{3,}' | head -1 || true)
   [[ -n "$PIXELS" ]] || die "could not capture the screen; check Screen Recording permission"
   S=$(( ${PIXELS%x*} / W ))
   CROP="crop=$((2 * WIN_W * S)):$((WIN_H * S)):$((LEFT * S)):$((TOP * S))"

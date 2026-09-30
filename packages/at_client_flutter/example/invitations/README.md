@@ -55,9 +55,12 @@ flutter test integration_test -d macos --concurrency=1
 ```
 
 `integration_test/invitation_flow_test.dart` drives the same steps through
-the app's screens, playing Alice and Bob in turn on one device. It keeps keys
+the app's screens, playing Alice and Bob in turn on one device. A second test
+switches atSign on the invitation screen and back, and signs out while the EE
+is offline: the issuer disconnects the EE from its network on
+`POST /ee/offline` and reconnects it on `POST /ee/online`. The tests keep keys
 in files in a temporary directory rather than the keychain, which could stop
-to ask for permission. Leave its window in view until it finishes: runs have
+to ask for permission. Leave the window in view until they finish: runs have
 been seen to stall while it was covered. Setting `DEMO_ROLE` to any value in
 front of the command makes the window float above the others; the two-window
 demo also reads it to choose Alice or Bob.

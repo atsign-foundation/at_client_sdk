@@ -168,19 +168,30 @@ class Session extends ChangeNotifier {
     return _open(client, issued.rootDomain);
   }
 
-  /// Signs out, once this client's writes have reached the atServer or
-  /// [syncFor] has passed, and stops the client so that its atSign can be
-  /// signed in again.
-  Future<void> signOut({Duration syncFor = const Duration(seconds: 30)}) async {
+  /// Signs out, and stops the client so that its atSign can be signed in
+  /// again.
+  Future<void> signOut() async {
     final client = _invitations?.atClient;
+    if (client == null) return;
+    await _stop(client);
     _invitations = null;
-    AtClientManager.getInstance().reset();
-    if (client != null) {
+    notifyListeners();
+  }
+
+  /// Stops [client] once its writes have reached the atServer, or once
+  /// [syncFor] has passed or the atServer cannot be reached.
+  Future<void> _stop(
+    AtClient client, {
+    Duration syncFor = const Duration(seconds: 30),
+  }) async {
+    try {
       // NOTE: stop() abandons unsynced writes, and this app writes local-first.
-      await _syncOut(client).timeout(syncFor, onTimeout: () {});
+      await _syncOut(client).timeout(syncFor);
+    } catch (e) {
+      debugPrint('Stopping ${client.getCurrentAtSign()} before it synced: $e');
+    } finally {
       await client.stop();
     }
-    notifyListeners();
   }
 
   Future<void> _syncOut(AtClient client) async {
@@ -190,23 +201,28 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Makes [client] the signed-in one, stopping the one it replaces. A
+  /// client this refuses is stopped too, so its atSign can be tried again.
   Future<bool> _open(AtClient? client, AtRootDomain rootDomain) async {
     if (client == null) return false;
-    AtClientManager.getInstance().use(client);
     final atSign = client.getCurrentAtSign()!;
     _rootDomainOf[atSign] = rootDomain;
     final reachable = await client.ensureReachable(invitationsNamespace);
     if (!reachable.isReachable) {
+      await client.stop();
       throw StateError(
         'Other atSigns cannot send to $atSign in $invitationsNamespace '
         '(${reachable.outcome.name})',
       );
     }
+    final previous = _invitations?.atClient;
+    AtClientManager.getInstance().use(client);
     _invitations = AtClientInvitations(
       client,
       invitationsNamespace: invitationsNamespace,
     );
     notifyListeners();
+    if (previous != null && previous != client) await _stop(previous);
     return true;
   }
 

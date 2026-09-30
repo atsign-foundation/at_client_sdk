@@ -48,6 +48,7 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
       setState(() {
         _atSigns = {...atSigns, _me}.toList()..sort();
         _preview = item.obj;
+        _error = _unavailable(item.obj);
       });
     } catch (e) {
       if (mounted) {
@@ -60,13 +61,31 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
     }
   }
 
+  String? _unavailable(ReceivedInvitation invitation) {
+    final from = InviteDetails.fromJson(invitation.publicDetails).inviterName;
+    if (invitation.status == ReceivedInvitationStatus.connected) {
+      return 'You are already connected with $from.';
+    }
+    if (DateTime.now().isAfter(invitation.expiresAt)) {
+      return 'This invitation from $from has expired.';
+    }
+    return null;
+  }
+
   Future<void> _switchTo(String atSign) async {
     if (atSign == _me) return;
-    final signedIn = await Session.instance.signInFromKeychain(
-      context,
-      atSign: atSign,
-    );
-    if (signedIn) await _load();
+    setState(() => _busy = true);
+    try {
+      final signedIn = await Session.instance.signInFromKeychain(
+        context,
+        atSign: atSign,
+      );
+      if (signedIn) await _load();
+    } catch (e) {
+      _snack('Could not switch to $atSign: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _accept() async {
@@ -90,7 +109,9 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
         details: AcceptanceDetails(name: _name.text.trim()).toJson(),
         outOfBandContent: separate,
       );
-      _snack('Accepted. ${_details.inviterName} will confirm you shortly.');
+      _snack(
+        'Sent. ${_details.inviterName} confirms you if the code is right.',
+      );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _snack('$e');
@@ -139,15 +160,30 @@ class _ReceivedScreenState extends State<ReceivedScreen> {
                             '${_details.inviterName} confirms you.',
                 ),
                 const SizedBox(height: 24),
+                if (preview.status == ReceivedInvitationStatus.accepted) ...[
+                  Text(
+                    'You accepted this. If ${_details.inviterName} has not '
+                    'confirmed you, check the code and accept again.',
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 if (_atSigns.length > 1)
-                  DropdownButtonFormField<String>(
-                    initialValue: _me,
+                  InputDecorator(
                     decoration: const InputDecoration(labelText: 'Accept as'),
-                    items: [
-                      for (final a in _atSigns)
-                        DropdownMenuItem(value: a, child: Text(a)),
-                    ],
-                    onChanged: (a) => a == null ? null : _switchTo(a),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _me,
+                        isDense: true,
+                        isExpanded: true,
+                        items: [
+                          for (final a in _atSigns)
+                            DropdownMenuItem(value: a, child: Text(a)),
+                        ],
+                        onChanged: _busy
+                            ? null
+                            : (a) => a == null ? null : _switchTo(a),
+                      ),
+                    ),
                   )
                 else
                   Text('Accepting as $_me'),

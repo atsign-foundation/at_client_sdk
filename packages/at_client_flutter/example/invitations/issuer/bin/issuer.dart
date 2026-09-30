@@ -11,6 +11,10 @@ import 'package:args/args.dart';
 /// `{"atSign", "cramKey", "rootDomain"}`, or answers 410 when none is left.
 /// `GET /atsigns` reports what has been issued and how many remain. What has
 /// been issued survives a restart, in the state file.
+///
+/// `POST /ee/offline` disconnects the EE from its network, and
+/// `POST /ee/online` reconnects it, so that a test can see what the app does
+/// when its atServer cannot be reached.
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption(
@@ -20,7 +24,9 @@ Future<void> main(List<String> args) async {
     )
     ..addOption('state', mandatory: true, help: 'Where issued atSigns are kept')
     ..addOption('root-domain', defaultsTo: 'vip.ve.atsign.zone:35000')
-    ..addOption('port', defaultsTo: '35100');
+    ..addOption('port', defaultsTo: '35100')
+    ..addOption('container', help: 'The EE container /ee/offline disconnects')
+    ..addOption('network', help: 'The network /ee/offline disconnects it from');
   final parsed = parser.parse(args);
 
   final issuer = Issuer(
@@ -29,6 +35,10 @@ Future<void> main(List<String> args) async {
     ),
     state: File(parsed['state']),
     rootDomain: parsed['root-domain'],
+  );
+  final ee = (
+    container: parsed['container'] as String?,
+    network: parsed['network'] as String?,
   );
 
   final server = await HttpServer.bind(
@@ -40,11 +50,15 @@ Future<void> main(List<String> args) async {
     '${issuer.remaining} of ${issuer.total} atSigns to issue',
   );
   await for (final request in server) {
-    await _handle(issuer, request);
+    await _handle(issuer, ee, request);
   }
 }
 
-Future<void> _handle(Issuer issuer, HttpRequest request) async {
+Future<void> _handle(
+  Issuer issuer,
+  ({String? container, String? network}) ee,
+  HttpRequest request,
+) async {
   final response = request.response..headers.contentType = ContentType.json;
   try {
     switch ((request.method, request.uri.path)) {
@@ -61,6 +75,23 @@ Future<void> _handle(Issuer issuer, HttpRequest request) async {
         response.write(
           jsonEncode({'issued': issuer.issued, 'remaining': issuer.remaining}),
         );
+      case ('POST', '/ee/offline' || '/ee/online'):
+        final (:container, :network) = ee;
+        if (container == null || network == null) {
+          throw StateError('started without --container and --network');
+        }
+        final verb = request.uri.path.endsWith('offline')
+            ? 'disconnect'
+            : 'connect';
+        final docker = await Process.run('docker', [
+          'network',
+          verb,
+          network,
+          container,
+        ]);
+        if (docker.exitCode != 0) throw StateError('${docker.stderr}'.trim());
+        stdout.writeln('${verb}ed $container');
+        response.write(jsonEncode({'network': verb}));
       default:
         response.statusCode = HttpStatus.notFound;
         response.write(jsonEncode({'error': 'no such endpoint'}));

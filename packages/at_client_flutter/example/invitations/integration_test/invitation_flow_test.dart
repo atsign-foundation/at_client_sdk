@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:invitations/incoming.dart';
+import 'package:invitations/issuer.dart' show issuerUrl;
 import 'package:invitations/main.dart';
 import 'package:invitations/session.dart';
 
@@ -17,13 +19,16 @@ import 'package:invitations/session.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('an invitation is created, accepted, confirmed and read', (
-    tester,
-  ) async {
+  setUpAll(() async {
     Session.keyfileDirectory = Directory.systemTemp
         .createTempSync('invitations_keys')
         .path;
     await Incoming.instance.start();
+  });
+
+  testWidgets('an invitation is created, accepted, confirmed and read', (
+    tester,
+  ) async {
     await tester.pumpWidget(const InvitationsApp());
 
     // Alice gets an atSign and invites Bob.
@@ -101,6 +106,79 @@ void main() {
     );
     await tapText(tester, 'Contacts');
     await waitFor(tester, find.text(alice));
+    await signOut(tester);
+  });
+
+  testWidgets('the accept screen switches atSign and back, and signing out '
+      'needs no atServer', (tester) async {
+    await tester.pumpWidget(const InvitationsApp());
+
+    // Alice invites Dan, and Carol has an atSign on this device too.
+    await tapText(tester, 'Get a new atSign');
+    final alice = await appBarAtSign(tester);
+    await tapText(tester, 'Invite');
+    await enter(tester, 'Who are you inviting?', 'Dan');
+    await enter(tester, 'Your name, as they will see it', 'Alice');
+    await tapText(tester, 'Create invitation');
+    final link = await copyable(tester, 'The link');
+    final code = await copyable(tester, 'The code');
+    await tester.pageBack();
+    await signOut(tester);
+    await tapText(tester, 'Get a new atSign');
+    final carol = await appBarAtSign(tester);
+    await signOut(tester);
+
+    // Dan opens the invitation, switches to Carol and back, and accepts.
+    await tapText(tester, 'Paste an invitation');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'The invitation link you were sent'),
+      link,
+    );
+    await tapText(tester, 'Open');
+    await waitFor(tester, find.textContaining('$alice invited you'));
+    await tapText(tester, 'Get a new atSign');
+    final dan = await appBarAtSign(tester);
+    await waitFor(tester, find.text('Alice ($alice) invited you'));
+    await acceptAs(tester, carol);
+    await expectAcceptingAs(tester, carol);
+    await acceptAs(tester, dan);
+    await expectAcceptingAs(tester, dan);
+
+    // A switch that fails leaves Dan signed in, and the field saying so.
+    var offline = false;
+    addTearDown(() async {
+      if (offline) await setEeOnline(true);
+    });
+    await setEeOnline(false);
+    offline = true;
+    await acceptAs(tester, carol);
+    await waitFor(
+      tester,
+      find.textContaining('Could not switch to $carol'),
+      timeout: const Duration(seconds: 120),
+    );
+    await expectAcceptingAs(tester, dan);
+    await setEeOnline(true);
+    offline = false;
+
+    await enter(tester, 'The code Alice sent you', code);
+    await tapText(tester, 'Accept');
+    await waitFor(tester, find.textContaining('Invitations — $dan'));
+
+    // Dan signs out while the atServer cannot be reached, and signs in
+    // again once it can.
+    await setEeOnline(false);
+    offline = true;
+    await signOut(tester, timeout: const Duration(seconds: 90));
+    await setEeOnline(true);
+    offline = false;
+    await tapText(tester, 'Sign in as $dan');
+    await waitFor(
+      tester,
+      find.textContaining('Invitations — $dan'),
+      timeout: const Duration(seconds: 120),
+    );
+    await signOut(tester);
   });
 }
 
@@ -164,9 +242,55 @@ Future<String> copyable(WidgetTester tester, String label) async {
 /// Signs out from the home screen, once the button can take the tap: after
 /// a page closes, it is found while the page's exit transition still covers
 /// it.
-Future<void> signOut(WidgetTester tester) async {
+Future<void> signOut(
+  WidgetTester tester, {
+  Duration timeout = const Duration(seconds: 60),
+}) async {
   final button = find.byTooltip('Sign out').hitTestable();
   await waitFor(tester, button);
   await tester.tap(button);
-  await waitFor(tester, find.text('Get a new atSign'));
+  await waitFor(tester, find.text('Get a new atSign'), timeout: timeout);
+}
+
+/// Chooses [atSign] under "Accept as".
+Future<void> acceptAs(WidgetTester tester, String atSign) async {
+  final field = find.byType(DropdownButton<String>);
+  await waitFor(tester, field);
+  await tester.tap(field);
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.tap(find.text(atSign).last);
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+/// Waits until "Accept as" can be changed again and shows [atSign], and
+/// checks that the session holds that atSign too.
+Future<void> expectAcceptingAs(WidgetTester tester, String atSign) async {
+  await waitFor(
+    tester,
+    find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButton<String> &&
+          w.value == atSign &&
+          w.onChanged != null,
+    ),
+    timeout: const Duration(seconds: 120),
+  );
+  expect(
+    Session.instance.invitations?.me.toString(),
+    atSign,
+    reason: 'the field shows the atSign the invitation will be accepted as',
+  );
+}
+
+/// Disconnects the Ephemeral Environment from its network, or reconnects
+/// it, through the issuer `ee/up.sh` started.
+Future<void> setEeOnline(bool online) async {
+  final response = await http.post(
+    Uri.parse('$issuerUrl/ee/${online ? 'online' : 'offline'}'),
+  );
+  if (response.statusCode != 200) {
+    throw StateError(
+      'The issuer could not change the network: ${response.body}',
+    );
+  }
 }

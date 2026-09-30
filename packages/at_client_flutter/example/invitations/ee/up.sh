@@ -67,12 +67,14 @@ docker compose -f "$STATE/docker-compose.yaml" up -d >/dev/null
 ok "container $CONTAINER started"
 
 # NOTE: a fresh connection per probe, because the atDirectory drops a
-# connection after its third not-found.
+# connection after its third not-found. perl's alarm stands in for timeout(1),
+# which macOS lacks.
 say "Waiting for the atDirectory"
 ready=0
 for _ in $(seq 1 90); do
   answer=$(printf 'alpha\n' \
-    | timeout 5 openssl s_client -connect "$ROOT" -quiet -verify_quiet 2>/dev/null \
+    | perl -e 'alarm shift; exec @ARGV' 5 \
+      openssl s_client -connect "$ROOT" -quiet 2>/dev/null \
     | head -1 | tr -d '\r@' || true)
   if [[ "$answer" == "$ROOT_HOST:"* ]]; then ready=1; break; fi
   sleep 2
@@ -92,7 +94,9 @@ say "Issuer on http://localhost:$ISSUER_PORT"
 (cd "$APP_DIR/issuer" && dart pub get >/dev/null)
 nohup dart run "$APP_DIR/issuer/bin/issuer.dart" \
   --cram-keys "$STATE/cram_keys.txt" --state "$STATE/issued.json" \
-  --root-domain "$ROOT" --port "$ISSUER_PORT" > "$LOGS/issuer.log" 2>&1 &
+  --root-domain "$ROOT" --port "$ISSUER_PORT" \
+  --container "$CONTAINER" --network "${CONTAINER}_default" \
+  > "$LOGS/issuer.log" 2>&1 &
 echo $! > "$STATE/issuer.pid"
 listening=0
 for _ in $(seq 1 60); do

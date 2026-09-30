@@ -28,7 +28,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   Timer? _timer;
   StreamSubscription<CEvent>? _acceptances;
   StreamSubscription<CEvent>? _connections;
-  bool _passing = false;
+  Future<void>? _passing;
+  bool _signingOut = false;
 
   List<CItem<ReceivedInvitation>> _received = [];
   List<CItem<SentInvitation>> _sent = [];
@@ -64,9 +65,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _pass() async {
-    if (_passing) return;
-    _passing = true;
+  /// Runs one pass, or joins the pass already running.
+  Future<void> _pass() {
+    if (_signingOut) return Future.value();
+    return _passing ??= _passOnce().whenComplete(() => _passing = null);
+  }
+
+  Future<void> _passOnce() async {
     try {
       final decided = await _invitations.processAcceptances();
       final connected = await _invitations.processConnections();
@@ -106,9 +111,15 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       }
     } catch (e) {
       _snack('$e');
-    } finally {
-      _passing = false;
     }
+  }
+
+  Future<void> _signOut() async {
+    setState(() => _signingOut = true);
+    _timer?.cancel();
+    await _passing;
+    await Session.instance.signOut();
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _openIncoming() async {
@@ -162,8 +173,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(canPop: false, child: _scaffold(context));
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text('Invitations — ${_invitations.me}'),
         actions: [
           IconButton(
@@ -174,10 +190,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await Session.instance.signOut();
-              if (context.mounted) Navigator.of(context).pop();
-            },
+            onPressed: _signingOut ? null : _signOut,
           ),
         ],
         bottom: TabBar(
@@ -211,7 +224,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                   title: Text('${_inviterName(r.obj)} (${r.obj.inviter})'),
                   subtitle: _ReceivedSubtitle(invitation: r.obj),
                   trailing: Text(r.obj.status.name),
-                  onTap: r.obj.status == ReceivedInvitationStatus.previewed
+                  onTap: r.obj.status != ReceivedInvitationStatus.connected
                       ? () => Incoming.instance.value = InvitationLink(
                           inviter: r.obj.inviter,
                           id: r.id,
