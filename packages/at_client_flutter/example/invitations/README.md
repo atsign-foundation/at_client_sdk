@@ -118,13 +118,18 @@ Alice, carrying the code and the name Bob gives.
 
 **Deciding, from any of Alice's clients.** Every decision two of her clients
 could race on is an immutable create on Alice's atServer, which refuses the
-second writer: a claim per acceptance, an attempt slot per wrong code (the
-fifth burns the invitation), and one outcome per invitation (accepted, burned
-or revoked).
+second writer: one outcome per invitation (accepted, burned or revoked), an
+attempt slot per wrong code (the fifth wrong code burns the invitation), and a
+claim per acceptance that cannot decide the invitation (a wrong code, or one
+that arrived after expiry), so that each is counted once. These records
+expire with the invitation. A record that cannot be read or handled is logged
+and skipped, so it cannot hold up the others.
 
 **Confirming.** The client that wins shares a connection with Bob, which
 carries the content key, records his atSign and the name he gave on the sent
-invitation, and deletes the preview. Bob's app then decrypts the content.
+invitation, and deletes the preview. Bob's app then decrypts the content. The
+key goes only to an atSign whose acceptance carries the code, whatever the
+outcome record on the atServer says.
 
 **Content.** An invitation with content gets a fresh AES-256-GCM key, bound to
 the invitation, when it is created, and the content is fixed then. Bob holds
