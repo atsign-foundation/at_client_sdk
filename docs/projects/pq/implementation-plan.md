@@ -444,10 +444,19 @@ with it*
    the sibling copy, never the recipient's conveyance; resume reads local
    storage and then the atServer. Built: deleting a shared key deletes both
    conveyances; another enrollment of the sender evicts it when it syncs the
-   recipient's record going.
-   Owed: UC-A4.1's "This `put` writes no self-copy" and
-   `nskey_cross_atsign_test`'s assertion rewritten, and the sibling copy
-   proven live.
+   recipient's record going. Found and fixed on the way, by the first live run:
+   `AtClientUtil.getKeyWithNameSpace`, which builds every get, dropped a key's
+   own namespace when its name ended in the preference namespace, so the
+   pointer `__ckcur.<destination>.<ckNs>` was written and never read back; a
+   get now appends a key's own namespace as `AtKey.toString` does
+   (`verb_builder_test.dart`). And a read of a conveyance leg that finds
+   nothing no longer logs a warning, since that is the ordinary answer there.
+   And `nskey_cross_atsign_test`'s "bob rotates, and alice's next write seals
+   to the new generation" never rotated bob — a second `mintAndPublish` adopts
+   what is published — and passed only because a restart could not resume; it
+   now rotates, and checks the generation moved. Proven live on the e2e pack:
+   UC-A4.1 and UC-A4.3 rewritten for the sibling copy, the restart resuming and
+   reading from it, and alice1 reading what alice2 shared.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
    `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller
    outside tests. Owed: the cutting enrollment's list of superseded keys beside

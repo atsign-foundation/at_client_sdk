@@ -909,13 +909,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
-     sealed to.
+     sealed to. Seal it again to **alice's own** nskey covering the namespace, as the
+     **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
+     `appMetadata`; an alice holding no such key mints one there first, unless
+     `seedNamespaceKeys` is off.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
-  ⛔ **This `put` writes no self-copy.** `AtClient.put` writes one value and
-  one CK conveyance, and that conveyance is sealed to **bob** — `nskey_cross_atsign_test`
-  asserts alice cannot open it, on the grounds that if she could, her own scope would
-  have been handed bob's content key. Writing a second copy for the sender is
+  ⛔ **This `put` writes one value, and no copy of it for alice.** Alice's
+  enrollments read that value itself, opening its CK from the sibling copy; bob's
+  conveyance stays sealed to bob. Writing a second copy of the value is
   **AtCollection's** behaviour, a separate earlier `put` to a plain self key, and
   AtCollection is a *consumer* of this API whose behaviour these rows do not
   assert. A row about `put` or `notify` is about **self→self or
@@ -924,9 +926,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read. The
     same nskey private opens every CK record sealed to that nskey, so which of bob's
     enrollments reads is immaterial — the reads differ by record-owner, not by key.
-    ⚠️ There is no self-copy for alice to read here; alice's own reading of her own
-    data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists), the
-    self→self mirror of this row.
+  - `alice1` after a restart, and every other enrollment of alice, read the shared
+    value, opening its CK from the sibling copy and never from bob's conveyance; the
+    restarted `alice1` goes on writing under the CK it had.
   - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
@@ -953,9 +955,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice2` shares with `@bob`.
 - **Then:** all of bob's authorised enrollments read the shared record, whichever of
   alice's enrollments wrote it; no authorised enrollment on the receiving side is left
-  unable to decrypt. There is no self-copy: the self→self mirror, alice's own
-  enrollments reading alice's own data, is
-  [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists).
+  unable to decrypt. Every enrollment of alice reads it as well, whichever of them
+  wrote it, opening its CK from the sibling copy.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|

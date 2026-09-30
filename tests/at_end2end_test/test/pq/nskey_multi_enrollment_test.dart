@@ -262,6 +262,20 @@ void main() {
             'record — the seal is to (owner, namespace) on the RECIPIENT side '
             'and carries no sender identity a reader has to hold');
 
+    // And alice1 reads what alice2 shared. alice2 cut that content key, so
+    // alice1 never held it: it opens it from alice2's sibling copy, sealed to
+    // the namespace key alice1 minted. Read from the atServer: this fixture
+    // syncs only the suite namespace, so nothing in this one reaches alice1's
+    // local storage.
+    expect(
+        (await aliceClient.get(fromAliceSecond(),
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .value,
+        secondPlaintext,
+        reason: 'every authorised reader on the SENDING side reads it too, '
+            'whichever of alice\'s enrollments wrote it');
+
     // ── And what an UNAUTHORISED enrollment of @bob can reach ─────────────
     //
     // A bob enrollment never granted the namespace cannot fetch the ciphertext
