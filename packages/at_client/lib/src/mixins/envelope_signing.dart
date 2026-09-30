@@ -1,13 +1,27 @@
 import 'dart:async' show FutureOr;
 import 'dart:convert' show jsonEncode;
 
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, EnvelopeType, SignedEnvelope, signEnvelope, verifyEnvelope;
+    show
+        apskRecordName,
+        apskUri,
+        EnvelopeType,
+        SignedEnvelope,
+        signEnvelope,
+        verifyEnvelope;
 import 'package:at_commons/at_commons.dart'
-    show AtKey, AtSigningVerificationException, AtValue, IllegalStateException;
+    show
+        AtKey,
+        AtKeyNotFoundException,
+        AtSigningVerificationException,
+        AtValue,
+        EnrollmentConstants,
+        IllegalStateException,
+        KeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
@@ -15,6 +29,44 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// expires: one cache per client, shared by every signer built on it.
 final Expando<Map<String, (String, DateTime)>> _apskCaches =
     Expando('apskCaches');
+
+/// A signature refused because the signer's `_apsk` is no longer at `.a.__e`:
+/// the atServer moved it to [location] — `r.__e` when the enrollment was
+/// revoked or superseded, `d.__e` when it was deleted or expired.
+///
+/// The moved record says why the key is refused; nothing is verified with it.
+@experimental
+class WithdrawnSigningKeyException extends AtSigningVerificationException {
+  /// `r.__e` or `d.__e`.
+  final String location;
+
+  WithdrawnSigningKeyException(super.message, {required this.location});
+}
+
+/// Where [enrollmentId]'s `_apsk` went when it is not at `.a.__e`: `r.__e`
+/// when the enrollment was revoked or superseded, `d.__e` when it was deleted
+/// or expired, or null when neither location holds it.
+Future<String?> withdrawnApskLocation(
+    AtClient atClient, String atSign, String enrollmentId) async {
+  for (final location in const [
+    EnrollmentConstants.perEnrollmentRevoked,
+    EnrollmentConstants.perEnrollmentDeleted,
+  ]) {
+    try {
+      final value = await atClient.get(
+        AtKey.fromString(
+            'public:$apskRecordName.$enrollmentId.$location$atSign'),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+      if (value.value != null) return location;
+    } on AtKeyNotFoundException {
+      continue;
+    } on KeyNotFoundException {
+      continue;
+    }
+  }
+  return null;
+}
 
 /// Wraps payloads in signed JSON envelopes, and verifies envelopes created by
 /// other clients of the same or another atSign.
@@ -156,10 +208,19 @@ mixin EnvelopeSigning on ApkamSigning {
     if (cached != null) return cached;
 
     var s = apskUri(atSign, enrollmentId);
-    final AtValue av = await atClient.get(
-      AtKey.fromString(s),
-      getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-    );
+    final AtValue av;
+    try {
+      av = await atClient.get(
+        AtKey.fromString(s),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+    } on AtKeyNotFoundException {
+      await _refuseIfWithdrawn(atSign, enrollmentId);
+      rethrow;
+    } on KeyNotFoundException {
+      await _refuseIfWithdrawn(atSign, enrollmentId);
+      rethrow;
+    }
     if (av.value is! String) {
       throw IllegalStateException('Value of $s is not a String');
     }
@@ -167,6 +228,22 @@ mixin EnvelopeSigning on ApkamSigning {
     cachePubKey(atSign, enrollmentId, av.value);
 
     return av.value;
+  }
+
+  /// Throws [WithdrawnSigningKeyException] when the atServer moved
+  /// [enrollmentId]'s `_apsk` out of `.a.__e`, saying why.
+  Future<void> _refuseIfWithdrawn(String atSign, String enrollmentId) async {
+    final location =
+        await withdrawnApskLocation(atClient, atSign, enrollmentId);
+    if (location == null) return;
+    final why = location == EnrollmentConstants.perEnrollmentRevoked
+        ? 'revoked or superseded'
+        : 'deleted or expired';
+    throw WithdrawnSigningKeyException(
+        'The signing key of $atSign enrollment $enrollmentId was $why: the '
+        'atServer moved its _apsk to .$location, so nothing it signed '
+        'verifies',
+        location: location);
   }
 
   // In memory caching of public keys (to reduce latency)

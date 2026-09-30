@@ -90,7 +90,7 @@ it stopped being parked.
 | **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
 | **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
 | **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
-| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Implement rulings 142–145, which settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. The section maps what the code does today and lists, item by item, what each ruling owes; items 16, 17 and 18 include at_server work, and each acceptance clause is written test-first with its implementation. | Nothing |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Implement rulings 142–145, which settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. The section maps what the code does today and lists, item by item, what each ruling owes; items 17 and 18 include at_server work, and each acceptance clause is written test-first with its implementation. | Nothing |
 
 ### P1 — must do before D1 closes
 
@@ -500,8 +500,7 @@ PR*
 
 *`_apsk` — ruled by gkc on 2026-09-30 in
 [ruling 144](detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30);
-what is owed is the implementation, each acceptance clause written test-first
-with it*
+items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
 
 14. **The verifier cache: fixed five minutes, refetch on failure, one per
     AtClient (144.1).** Found: `EnvelopeSigning.lookupPubKey` reset the expiry
@@ -525,10 +524,16 @@ with it*
     and `chain_sweep_test.dart`.
 16. **Every move of `_apsk` stands, and verification tells the locations apart
     (144.3).** Found: a moved `_apsk` gave a bare lookup failure, and ruling 134
-    and UC-G2.7 claimed the record was deleted by nothing. Owed: verification
-    looks in `.a.__e`, then `.r.__e` and `.d.__e`, and refuses a key found only
-    in a moved location with the reason; chain verification reports that
-    standing; UC-G2.7 rewritten.
+    and UC-G2.7 claimed the record was deleted by nothing. Done: a signature
+    whose signer's `_apsk` is only at `.r.__e` or `.d.__e` is refused with a
+    `WithdrawnSigningKeyException` naming why, and a chain walk meeting one ends
+    `ChainVerdict.revoked` or `ChainVerdict.deleted` (gkc's choice of a verdict
+    over a reason string); UC-G2.7 says so. No at_server change was needed: a
+    revoke moves `_apsk` to `.r.__e` and the atServer serves it to any reader,
+    proven live against the published `vip` image by `apsk_server_side_test`,
+    where a peer atSign and a sibling enrollment are both refused as revoked.
+    Proven in-process in `envelope_signing_test.dart` and
+    `pq_signing_chain_test`.
 17. **The atServer moves an expired enrollment's data on first sight (144.4).**
     Owed *(at_server)*: a lookup of a per-enrollment key whose enrollment has
     expired moves that enrollment's data to `.d.__e` then, making the lookup

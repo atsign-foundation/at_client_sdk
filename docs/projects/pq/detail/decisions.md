@@ -14626,9 +14626,14 @@ work-through (items 14–17 of the P0 row's
 144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
 after a cached key fails, and one cache per AtClient. 144.2 is built in
 `PqSigningChain.republishedAppMetadata`, which `publishPublicSigningKey` sends.
-The rest is not built yet;
-144.3 and 144.4 include at_server work, and the acceptance clauses change
-test-first, with the implementation.
+144.3 is built in `EnvelopeSigning.getApkamPublicKey` and the chain walk: a key
+found only at `.r.__e` or `.d.__e` is refused with a `WithdrawnSigningKeyException`
+naming why, and the walk reports `ChainVerdict.revoked` or `ChainVerdict.deleted`
+(gkc chose a verdict over a reason string, 2026-09-30); it needed no at_server
+change: a revoke moves `_apsk` to `.r.__e` and the atServer serves it to any
+reader, proven live against the published `vip` image by
+`apsk_server_side_test` (a peer atSign and a sibling enrollment both refused as
+revoked). 144.4 is at_server work and not built yet.
 
 ### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
 

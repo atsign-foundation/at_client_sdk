@@ -3668,9 +3668,11 @@ is where its missing lever lives.
     strands it until the next start re-signs it. The premise holds because a
     posture move **replaces** the enrollment: reaching a
     PQ posture retrofits an rsa2048 credential into a new enrollment owning a
-    signing key from birth, and the superseded enrollment keeps its own `_apsk`
-    record — published with no TTL and deleted by nothing — so what its
-    authentication key signed goes on verifying;
+    signing key from birth. A superseded predecessor that is not fully
+    privileged has its `_apsk` moved to `.r.__e` at its successor's first
+    authentication, so what its authentication key signed stops verifying and
+    is refused as revoked or superseded rather than as a missing key; a fully
+    privileged predecessor keeps its record at `.a.__e`;
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a

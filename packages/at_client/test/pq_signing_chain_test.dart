@@ -882,6 +882,81 @@ void main() {
     });
   });
 
+  group('a key the atServer moved', () {
+    /// Moves [enrollmentId]'s `_apsk` record to [location], as the atServer
+    /// does on revocation or supersession (`r.__e`) and on deletion or expiry
+    /// (`d.__e`).
+    void move(String enrollmentId, String location) {
+      final from = PqSigningChain.apskUri(atSign, enrollmentId);
+      final to = from.replaceFirst('.a.__e@', '.$location@');
+      remoteData[to] = remoteData.remove(from)!;
+      final meta = remoteMetadata.remove(from);
+      if (meta != null) remoteMetadata[to] = meta;
+    }
+
+    /// A child carrying a link its parent signed.
+    Future<({MockAtClient client, AtClientSecretSharing sharing})>
+        linkedChild() async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', link!);
+      return (client: childClient, sharing: child);
+    }
+
+    test('an enrollment whose own key was revoked reads revoked', () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      move('child-1', 'r.__e');
+
+      final result =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+
+      expect(result.verdict, ChainVerdict.revoked,
+          reason: 'its record is gone from .a.__e because it was revoked or '
+              'superseded, which is not the same as never having been vouched '
+              'for');
+      expect(result.reason, contains('child-1'));
+    });
+
+    test('a link whose signer was revoked reads revoked', () async {
+      final child = await linkedChild();
+      move('parent-1', 'r.__e');
+
+      final result = await PqSigningChain(child.client)
+          .verifyChain(child.sharing, 'child-1');
+
+      expect(result.verdict, ChainVerdict.revoked,
+          reason: 'the link does not fail to verify; its signer\'s key was '
+              'withdrawn, and the walk says which');
+      expect(result.reason, contains('parent-1'));
+    });
+
+    test('a link whose signer was deleted reads deleted', () async {
+      final child = await linkedChild();
+      move('parent-1', 'd.__e');
+
+      final result = await PqSigningChain(child.client)
+          .verifyChain(child.sharing, 'child-1');
+
+      expect(result.verdict, ChainVerdict.deleted);
+    });
+
+    test('an enrollment that never published reads unsigned — the control',
+        () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final result = await PqSigningChain(childClient)
+          .verifyChain(child, 'never-published');
+
+      expect(result.verdict, ChainVerdict.unsigned);
+    });
+  });
+
   group('walking the chain', () {
     late MockAtClient verifierClient;
     late AtClientSecretSharing verifier;

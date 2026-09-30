@@ -138,6 +138,56 @@ void main() {
     });
   });
 
+  group('a key the atServer moved', () {
+    /// B's lookups of A's `_apsk`: only [location] holds it, or nothing does.
+    void stubApskAt(String? location) {
+      when(() => atClientB.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments.first.toString();
+        if (location != null &&
+            key == 'public:_apsk.enroll-a.$location$atSign') {
+          return AtValue()..value = pkamPublicKey(keyA);
+        }
+        throw AtKeyNotFoundException('$key not found');
+      });
+    }
+
+    test('to .r.__e is refused as revoked or superseded', () async {
+      stubApskAt('r.__e');
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<WithdrawnSigningKeyException>()
+              .having((e) => e.location, 'location', 'r.__e')
+              .having((e) => e.message, 'message',
+                  contains('revoked or superseded'))));
+    });
+
+    test('to .d.__e is refused as deleted or expired', () async {
+      stubApskAt('d.__e');
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<WithdrawnSigningKeyException>()
+              .having((e) => e.location, 'location', 'd.__e')
+              .having((e) => e.message, 'message',
+                  contains('deleted or expired'))));
+    });
+
+    test('at none of the three fails as not found — the control', () async {
+      stubApskAt(null);
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(allOf(isA<AtKeyNotFoundException>(),
+              isNot(isA<WithdrawnSigningKeyException>()))));
+    });
+  });
+
   group('public key caching', () {
     test('with caching enabled, the _apsk key is fetched only once', () async {
       final cachingVerifier = TestEnvelopeSigner(atClientB,

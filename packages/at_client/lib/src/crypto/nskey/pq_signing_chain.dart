@@ -12,7 +12,7 @@ import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show serialiseApskWrite;
 import 'package:at_client/src/mixins/envelope_signing.dart'
-    show EnvelopeSigning;
+    show EnvelopeSigning, WithdrawnSigningKeyException, withdrawnApskLocation;
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -46,6 +46,15 @@ enum ChainVerdict {
   /// Distinct from [chained]: an absent link means nobody has vouched yet, a
   /// bad one means something claimed to and the claim does not hold.
   broken,
+
+  /// A key the walk depends on — the enrollment's own, or a signer's — was
+  /// revoked, or superseded by a successor enrollment: the atServer moved its
+  /// `_apsk` to `.r.__e`.
+  revoked,
+
+  /// A key the walk depends on was deleted, or expired: the atServer moved its
+  /// `_apsk` to `.d.__e`.
+  deleted,
 }
 
 /// What [PqSigningChain.verifyChain] found.
@@ -724,6 +733,17 @@ class PqSigningChain {
 
       final link = await readLink(current);
       if (link == null) {
+        if (await _publishedKey(atSign, current) == null) {
+          final location =
+              await withdrawnApskLocation(_atClient, atSign, current);
+          if (location != null) {
+            return ChainResult(
+                _verdictFor(location),
+                path,
+                'enrollment $current\'s key is no longer published: the '
+                'atServer moved its _apsk to .$location');
+          }
+        }
         return ChainResult(
             path.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
             path,
@@ -731,7 +751,16 @@ class PqSigningChain {
             'the root');
       }
 
-      final failure = await _checkChainLink(verifier, atSign, current, link);
+      final String? failure;
+      try {
+        failure = await _checkChainLink(verifier, atSign, current, link);
+      } on WithdrawnSigningKeyException catch (e) {
+        return ChainResult(
+            _verdictFor(e.location),
+            path,
+            'the link on $current was signed by ${link.signerEnrollmentId}: '
+            '${e.message}');
+      }
       if (failure != null) {
         return ChainResult(ChainVerdict.broken, path, failure);
       }
@@ -752,6 +781,12 @@ class PqSigningChain {
     }
   }
 
+  /// The verdict for a key the atServer moved to [location].
+  static ChainVerdict _verdictFor(String location) =>
+      location == EnrollmentConstants.perEnrollmentRevoked
+          ? ChainVerdict.revoked
+          : ChainVerdict.deleted;
+
   /// Null when [link] is sound for [enrollmentId]; otherwise why it is not.
   Future<String?> _checkChainLink(
     EnvelopeSigning verifier,
@@ -763,7 +798,7 @@ class PqSigningChain {
       await verifier.verifyEnvelopeSignature(link,
           signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      if (e is StoppedException || e is WithdrawnSigningKeyException) rethrow;
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
     }

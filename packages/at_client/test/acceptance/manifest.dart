@@ -106,8 +106,6 @@ const liveProofOwed = <String, String>{
       'feasible and additive for the same reason: the advertisements here are composed and signed inside the test. A live arm would publish one carrying an unusable entry and prove the atServer returns it unchanged, which is what a sender actually reads',
   'UC-G2.3':
       'feasible and additive for the same reason: the _apsk values here are hand-built strings. A live arm would publish one carrying an unknown alg and prove the atServer serves it to a verifier verbatim',
-  'UC-G2.7':
-      'every citation is in-process and a live test is feasible; the retired-key arms all run over hand-built advertisements rather than one an atServer served',
   'UC-G2.8':
       'every citation is in-process and a live test is feasible; the multi-key _apsk is assembled in the test rather than published by a real rotation and fetched back',
   'UC-G2.9':
