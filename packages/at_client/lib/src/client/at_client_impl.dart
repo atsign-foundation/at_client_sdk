@@ -25,6 +25,8 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show parseCkConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -1816,11 +1818,16 @@ class AtClientImpl implements AtClient {
 
     var scanResult = await secondary.executeVerb(scanBuilder);
     scanResult = _formatResult(scanResult);
-    var result = [];
+    var result = <String>[];
     if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
-    return result as FutureOr<List<String>>;
+    // NOTE: a content key's conveyance is the SDK's own record, kept from an
+    // application like the other reserved ones unless it asks for them.
+    if (!showHiddenKeys) {
+      result.removeWhere((key) => parseCkConveyanceKey(key) != null);
+    }
+    return result;
   }
 
   @override

@@ -482,9 +482,14 @@ with it*
 5. **Conveyances are kept from application code (142.5).** Found: a subscriber
    with `shouldDecrypt: true` whose regex matched a `__ck` name received the
    content key decrypted, and `AtCollection._updateLocal` could write it to local
-   storage unencrypted. Owed: the notification service withholds conveyance
-   notifications from application subscribers; scans and key streams hide
-   conveyance records; `showHiddenKeys` opts in.
+   storage unencrypted. Built: no subscriber is handed a conveyance
+   notification, whatever its regex, which also keeps them from key streams
+   and from `AtCollection`, both built on subscriptions; and `getKeys` and
+   `getAtKeys` list conveyances only with `showHiddenKeys`
+   (`conveyance_hiding_test.dart`). Proven live in
+   `nskey_cross_atsign_test.dart`: bob's catch-all subscription hears alice's
+   share and not its conveyance, and hears the conveyance with the filter
+   removed.
 6. **Settled by 142.2.** The pointer no longer goes through the nskey provider,
    so writing it can no longer cut a self content key.
 

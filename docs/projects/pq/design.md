@@ -462,8 +462,9 @@ unencrypted. After a restart it resumes by opening the sibling copy
 ([§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)), so an
 ephemeral local store does not force a fresh CK
 ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
-Conveyance records and their notifications are kept from application code, which
-can opt in with `showHiddenKeys`
+Conveyance records and their notifications are kept from application code: no
+subscriber is handed a conveyance notification, and a scan lists conveyances only
+when it asks for hidden keys with `showHiddenKeys`
 ([ruling 142.5](detail/decisions.md#1425-conveyances-are-kept-from-application-code)).
 
 **Key discovery, and how a sender learns of a rotation.** A sender obtains a

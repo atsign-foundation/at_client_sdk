@@ -217,6 +217,54 @@ void main() {
             'opens it');
   });
 
+  test('bob hears the value alice shares, and never its conveyance', () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    final heard = <String>[];
+    final subscription = bobSide.client.notificationService
+        .subscribe(regex: '.*')
+        .listen((n) => heard.add(n.key));
+    final keyName = uniqueKey('heard');
+    final shared = AtKey()
+      ..key = keyName
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    // A fresh cut, so this share has a conveyance of its own to notify: an
+    // earlier test in this file left alice a current key for bob.
+    final manager = (CryptoConfig.forClient(aliceSide.client)
+            .lookup(symmetricAesGcmCryptoProviderId) as SymmetricAesGcmProvider)
+        .ckManager!;
+    final cut = await manager.rotateContentKey(
+        CryptoContext(atClient: aliceSide.client), shared,
+        useRemoteAtServer: true);
+    expect(
+        await aliceSide.client.put(shared, 'for bob',
+            putRequestOptions: PutRequestOptions()..useRemoteAtServer = true),
+        true);
+    expect(
+        (await aliceSide.client.get(shared,
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .metadata
+            ?.appMetadata
+            ?.additional?['ckKid'],
+        cut.ckKid,
+        reason: 'the control: the value cites the key just conveyed to bob');
+    for (var attempt = 0;
+        attempt < 40 && !heard.any((k) => k.contains(keyName));
+        attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    await subscription.cancel();
+
+    expect(heard.where((k) => k.contains(keyName)), isNotEmpty,
+        reason: 'the control: bob\'s subscription hears the value');
+    expect(heard.where((k) => k.contains('.__ck.')), isEmpty,
+        reason: 'its conveyance was notified first, and is the SDK\'s own');
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
   /// Notify, on the nskey path, across two atSigns.
   ///
   /// Both notify entry points pick a provider, and a provider chosen before
