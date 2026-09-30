@@ -279,20 +279,28 @@ class CkManager {
     if (remembered == null || remembered.nskeyKid != nskeyKid) return false;
 
     // NOTE: reading the conveyance record routes back through the at/nskey
-    // provider, which decapsulates and caches the CK as a side effect.
+    // provider, which decapsulates and caches the CK as a side effect. The
+    // atServer is asked when local storage has nothing, which is all an
+    // ephemeral store ever has.
+    final record = SymmetricAesGcmProvider.openableConveyanceKeyFor(
+        valueKey, remembered.ckKid, ckNs, context.atClient.getCurrentAtSign());
     DateTime? conveyedAt;
-    try {
-      final record = await context.atClient.get(
-          SymmetricAesGcmProvider.conveyanceKeyFor(
-              valueKey, remembered.ckKid, ckNs));
-      conveyedAt = record.metadata?.createdAt?.toUtc();
-    } on StoppedException {
-      rethrow;
-    } catch (e) {
-      _logger.info('Could not resume content key ${remembered.ckKid} for '
-          '$owner:$ckNs, so cutting a fresh one: $e');
-      return false;
+    var opened = false;
+    for (final remote in const [false, true]) {
+      try {
+        final read = await context.atClient.get(record,
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
+        conveyedAt = read.metadata?.createdAt?.toUtc();
+        opened = true;
+        break;
+      } on StoppedException {
+        rethrow;
+      } catch (e) {
+        _logger.info('Could not open $record to resume content key '
+            '${remembered.ckKid} for $owner:$ckNs (remote: $remote): $e');
+      }
     }
+    if (!opened) return false;
 
     final resumed = cache.get(owner, ckNs, remembered.ckKid);
     if (resumed == null) return false;

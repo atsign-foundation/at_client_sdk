@@ -439,10 +439,12 @@ with it*
    (`no_atkeysio_inertness_test.dart`). Built: a sender holding no key
    covering `ckNs` calls `ensureReachable(ckNs)` first, at the recipient's
    level rather than the value's own, and where that mints nothing the share
-   goes without a copy and the warning names why.
-   Owed: resume and a sibling's read from the sibling copy; deleting a key
-   deletes both conveyances; UC-A4.1's "This `put` writes no self-copy" and
-   `nskey_cross_atsign_test`'s assertion rewritten.
+   goes without a copy and the warning names why. Built: a restart resumes a
+   key it shares, and another client of the sender reads what it shared, from
+   the sibling copy, never the recipient's conveyance; resume reads local
+   storage and then the atServer.
+   Owed: deleting a key deletes both conveyances; UC-A4.1's "This `put` writes
+   no self-copy" and `nskey_cross_atsign_test`'s assertion rewritten.
 3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
    `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller
    outside tests. Owed: the cutting enrollment's list of superseded keys beside

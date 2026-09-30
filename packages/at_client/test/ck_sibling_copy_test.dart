@@ -163,6 +163,7 @@ void main() {
     /// seeds nothing would, unless a test says otherwise.
     ({
       CkManager manager,
+      SymmetricAesGcmProvider data,
       ContentKeyCache cache,
       CryptoContext context,
       List<_Put> puts,
@@ -215,6 +216,7 @@ void main() {
           as SymmetricAesGcmProvider;
       return (
         manager: data.ckManager!,
+        data: data,
         cache: data.cache,
         context: CryptoContext(atClient: client),
         puts: puts,
@@ -333,6 +335,101 @@ void main() {
 
       expect(s.reachedFor, isEmpty);
       expect(s.puts, hasLength(2));
+    });
+
+    /// Another client of alice — a sibling enrollment, or this one after a
+    /// restart — holding her namespace key and nothing in memory, whose local
+    /// storage is empty and whose atServer holds what [written] put.
+    ({
+      SymmetricAesGcmProvider data,
+      CryptoContext context,
+      List<(String, bool?)> reads,
+    }) reader(List<_Put> written) {
+      final stored = {for (final p in written) p.key.toString(): p};
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair(alice, namespace,
+            publicKey: aliceNskey.publicKeyBytes,
+            privateKey: aliceNskey.privateKeyBytes);
+      final config = CryptoConfig.nskey(keyRing: ring);
+      final client = MockAtClient();
+      client.getPreferences().crypto = config;
+      when(() => client.getCurrentAtSign()).thenReturn(alice);
+      final reads = <(String, bool?)>[];
+      when(() => client.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final asked = inv.positionalArguments[0] as AtKey;
+        final remote =
+            (inv.namedArguments[#getRequestOptions] as GetRequestOptions?)
+                ?.useRemoteAtServer;
+        reads.add((asked.toString(), remote));
+        final held = stored[asked.toString()];
+        if (held == null || remote != true) {
+          throw AtKeyNotFoundException('$asked');
+        }
+        // What the get pipeline does with a fetched record: route it to the
+        // provider its appMetadata names.
+        final fetched = AtKey()
+          ..key = held.key.key
+          ..namespace = held.key.namespace
+          ..sharedBy = held.key.sharedBy
+          ..sharedWith = held.key.sharedWith
+          ..metadata = (Metadata()
+            ..appMetadata = held.key.metadata.appMetadata
+            ..isEncrypted = true);
+        return AtValue()
+          ..value =
+              await CryptoRuntime(client).decryptForGet(fetched, held.value);
+      });
+      final data = config.lookup(symmetricAesGcmCryptoProviderId)
+          as SymmetricAesGcmProvider;
+      return (
+        data: data,
+        context: CryptoContext(atClient: client),
+        reads: reads,
+      );
+    }
+
+    AtKey asSynced(AtKey written) => AtKey()
+      ..key = written.key
+      ..namespace = written.namespace
+      ..sharedBy = written.sharedBy
+      ..sharedWith = written.sharedWith
+      ..metadata = (Metadata()..appMetadata = written.metadata.appMetadata);
+
+    test(
+        'another client of the sender opens what it shared, from the sibling '
+        'copy', () async {
+      final s = sender();
+      final shared = value();
+      await s.manager.ensureCurrent(s.context, shared);
+      final ciphertext = await s.data.encrypt(s.context, shared, 'the pact');
+      final r = reader(s.puts);
+
+      final read =
+          await r.data.decrypt(r.context, asSynced(shared), ciphertext);
+
+      expect(read, 'the pact');
+      final sibling = '${s.cache.current(bob, namespace)!.ckKid}'
+          '.__ck.app_1.my_apps@alice';
+      expect(r.reads, [(sibling, null), (sibling, true)],
+          reason: 'the sibling copy, from local storage and then the '
+              'atServer; bob\'s conveyance is sealed to bob and never read');
+    });
+
+    test('a share with no sibling copy reads as a key not yet available',
+        () async {
+      final s = sender(aliceHoldsKey: false);
+      final shared = value();
+      await s.manager.ensureCurrent(s.context, shared);
+      final ciphertext = await s.data.encrypt(s.context, shared, 'the pact');
+      final r = reader(s.puts);
+
+      await expectLater(r.data.decrypt(r.context, asSynced(shared), ciphertext),
+          throwsA(isA<ContentKeyUnavailableException>()),
+          reason: 'not a failure to open bob\'s conveyance, which says '
+              'nothing true about why alice cannot read her own share');
+      expect(r.reads.where((read) => read.$1.startsWith('@bob:')), isEmpty);
     });
 
     test('a sibling copy that is not written leaves no current key', () async {

@@ -84,6 +84,7 @@ void main() {
   ({
     CkManager manager,
     CryptoContext context,
+    Future<AtValue> Function(AtKey) serve,
     InMemoryNskeyKeyRing ring,
     ContentKeyCache cache,
     List<AtKey> written,
@@ -179,9 +180,8 @@ void main() {
       return true;
     });
 
-    when(() => mockAtClient.get(any(),
-        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((inv) {
-      final key = inv.positionalArguments[0] as AtKey;
+    /// A read of a conveyance, served the way sync would leave it.
+    Future<AtValue> serve(AtKey key) {
       final ciphertext = conveyed[key.toString()];
       if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
       // at/nskey decapsulates and caches the CK as a side effect, which is what
@@ -194,24 +194,18 @@ void main() {
           .then((plain) => AtValue()
             ..value = plain
             ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
-    });
-    when(() => mockAtClient.get(any())).thenAnswer((inv) {
-      final key = inv.positionalArguments[0] as AtKey;
-      final ciphertext = conveyed[key.toString()];
-      if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
-      return activeNskey
-          .decrypt(CryptoContext(atClient: mockAtClient),
-              conveyedKeys[key.toString()]!, ciphertext)
-          // NOTE: the resume path takes this one-argument overload, so the
-          // record's date has to be stamped here as well as on the other stub.
-          .then((plain) => AtValue()
-            ..value = plain
-            ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
-    });
+    }
+
+    when(() => mockAtClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) => serve(inv.positionalArguments[0] as AtKey));
+    when(() => mockAtClient.get(any()))
+        .thenAnswer((inv) => serve(inv.positionalArguments[0] as AtKey));
 
     return (
       manager: manager,
       context: context,
+      serve: serve,
       ring: ring,
       cache: cache,
       pointer: pointer,
@@ -354,6 +348,86 @@ void main() {
       expect(c.cache.currentNskeyKid(owner, namespace), sealedTo,
           reason: 'sealed to the entry it was sealed to before, so nothing in '
               'this client\'s own state records that its advertisement grew');
+    });
+
+    test('a restarted sender resumes the key it shares, from the sibling copy',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final cut = c.cache.current(bob, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.written, hasLength(conveyed),
+          reason: 'bob\'s conveyance is sealed to bob, so a restart that '
+              'reads it cuts a key and leaves another conveyance behind');
+      expect(coldCache.current(bob, namespace)?.ckKid, cut);
+    });
+
+    test('a restart with nothing in local storage resumes from the atServer',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final cut = c.cache.current(owner, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      // An ephemeral store: local reads find nothing, the atServer has it all.
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer != true) {
+          throw AtKeyNotFoundException('local storage is empty');
+        }
+        return c.serve(inv.positionalArguments[0] as AtKey);
+      });
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.written, hasLength(conveyed));
+      expect(coldCache.current(owner, namespace)?.ckKid, cut);
+    });
+
+    test('an offline restart resumes from local storage', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final cut = c.cache.current(owner, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer == true) {
+          throw SecondaryConnectException('the atServer is unreachable');
+        }
+        return c.serve(inv.positionalArguments[0] as AtKey);
+      });
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.written, hasLength(conveyed));
+      expect(coldCache.current(owner, namespace)?.ckKid, cut);
     });
 
     test('a restart after the widening resumes rather than cutting another',
@@ -982,7 +1056,8 @@ void main() {
       final cold = c.coldManager(ContentKeyCache());
       // NOTE: this rig keeps the pointer in memory, so the only read that
       // meets the stop is the resume reading the remembered record.
-      when(() => c.context.atClient.get(any()))
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(StoppedException('the client has stopped'));
 
       await expectLater(cold.ensureCurrent(c.context, selfValue('treaty')),

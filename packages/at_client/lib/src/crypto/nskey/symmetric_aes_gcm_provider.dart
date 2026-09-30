@@ -7,7 +7,7 @@ import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey;
+    show ckConveyanceKey, ckSiblingCopyKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -207,6 +207,9 @@ class SymmetricAesGcmProvider
   /// `at/nskey` provider decapsulates and caches it as a side effect, then
   /// look the CK up again rather than taking it from the read.
   ///
+  /// **For a value this atSign shared, its sibling copy**, the only record of
+  /// that key sealed to this atSign; the recipient's conveyance is never read.
+  ///
   /// **For a shared value, the recipient's cached copy first**, which its
   /// atServer made from the conveyance's notification: a restarted recipient
   /// opens what was shared with it while the sender's atServer is unreachable.
@@ -233,7 +236,8 @@ class SymmetricAesGcmProvider
     String namespace,
     String ckKid,
   ) async {
-    final conveyance = conveyanceKeyFor(value, ckKid, namespace);
+    final conveyance = openableConveyanceKeyFor(
+        value, ckKid, namespace, context.atClient.getCurrentAtSign());
 
     /// Returns true when the record was read and opened. A read that finds
     /// nothing returns false; a record that will not open still throws.
@@ -297,6 +301,21 @@ class SymmetricAesGcmProvider
   /// which owns the format.
   static AtKey conveyanceKeyFor(AtKey value, String ckKid, String ckNs) =>
       ckConveyanceKey(value, ckKid, ckNs);
+
+  /// The record [me] opens the CK for [value] from: the sibling copy when [me]
+  /// shared the value, else the record the CK was conveyed under.
+  static AtKey openableConveyanceKeyFor(
+      AtKey value, String ckKid, String ckNs, String? me) {
+    final sharedWith = value.sharedWith;
+    final sharedOut = me != null &&
+        value.sharedBy == me &&
+        sharedWith != null &&
+        sharedWith.isNotEmpty &&
+        sharedWith != me;
+    return sharedOut
+        ? ckSiblingCopyKey(sender: me, ckKid: ckKid, ckNs: ckNs)
+        : conveyanceKeyFor(value, ckKid, ckNs);
+  }
 
   /// The CK cache's scope: whose nskey the CK was conveyed under. On an inbound
   /// value this is the recipient, matching how the conveyance was cached.
