@@ -2627,10 +2627,11 @@ server at the base port itself"* — describes the EE's `EPHEMERAL_BASE_PORT`
 contract exactly. Pointing an arm at an EE is 2 environment variables.
 
 ⛔ **Build every EE from a named ref; never pull `ephemeral:latest`.**
-`atsigncompany/ephemeral` is rebuilt **monthly** (newest tag 2026-08-15) while
-the VE publishes per commit, so `:latest` walks straight back into "the
-published image cannot verify ML-DSA PKAM". The VE stays as it is for the
-existing functional pack.
+`atsigncompany/ephemeral:latest` follows the production release and is rebuilt
+only when trunk's certificates change or on a manual dispatch, so it trails
+trunk; `ephemeral:dev_env` follows trunk but moves with every commit. An arm
+needs an atServer at a ref it can name. The VE stays as it is for the existing
+functional pack.
 
 ### Prerequisites for the build
 
