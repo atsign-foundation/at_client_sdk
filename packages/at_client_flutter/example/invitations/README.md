@@ -59,6 +59,27 @@ the app's screens, playing Alice and Bob in turn on one device. It keeps keys
 in files in a temporary directory rather than the keychain, which could stop
 to ask for permission.
 
+### Two windows, for a demo
+
+```sh
+demo/demo.sh                          # watch it
+demo/demo.sh --record invitations.mp4 # and record it
+```
+
+`demo/demo.sh` plays the flow at a pace a viewer can follow, in two windows
+side by side: Alice on the left, Bob on the right. Alice invites Bob and goes
+offline; Bob accepts and sees the private content sealed; Alice comes back,
+her app confirms Bob and sends him the key, and his content opens. It starts
+a fresh EE and builds the app with `integration_test/two_window_demo.dart` as
+its entry point, so rebuild with `flutter build macos --debug` before running
+the app by hand afterwards.
+
+Keep both windows in view until it finishes: runs have been seen to stall
+while they were hidden. `--record` needs `ffmpeg` and Screen Recording
+permission for the terminal, and captures only the rectangle the two windows
+fill. The paste dialog pre-fills from the clipboard, so the script saves the
+clipboard's text and restores it at the end.
+
 ### Prerequisites
 
 - Docker, Dart and Flutter.

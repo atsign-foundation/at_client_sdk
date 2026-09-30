@@ -11,5 +11,29 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
+
+    if ProcessInfo.processInfo.environment["DEMO_ROLE"] != nil {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.placeForDemo() }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { self.placeForDemo() }
+    }
+  }
+
+  /// Places the window where demo/demo.sh asks, in DEMO_FRAME ("x,y,w,h" in
+  /// points from the bottom left), titles it after DEMO_ROLE, and floats it
+  /// above other windows so that nothing covers it during a demo.
+  private func placeForDemo() {
+    let env = ProcessInfo.processInfo.environment
+    if let spec = env["DEMO_FRAME"] {
+      let n = spec.split(separator: ",").compactMap { Double($0) }
+      if n.count == 4 {
+        self.setFrame(
+          NSRect(x: n[0], y: n[1], width: n[2], height: n[3]),
+          display: true, animate: false)
+      }
+    }
+    if let role = env["DEMO_ROLE"] {
+      self.title = role.prefix(1).uppercased() + role.dropFirst()
+      self.level = .floating
+    }
   }
 }
