@@ -281,8 +281,9 @@ class CkManager {
   ///
   /// Asks local storage only where it answers completely — the client keeps
   /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
-  /// collects nothing, leaving it to a later start. A client with no
-  /// enrollment id names no cutter on what it conveys, so it collects nothing.
+  /// deletes nothing; the passes the SDK runs itself, at a start and after a
+  /// replacement, try again at the next sync that catches up. A client with no
+  /// enrollment id names no cutter on what it conveys, so it deletes nothing.
   Future<int> collectUnused(CryptoContext context) async =>
       await _tryCollect(context) ?? 0;
 

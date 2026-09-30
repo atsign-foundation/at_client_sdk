@@ -14399,8 +14399,9 @@ work-through (the P0 row *PQ key writing and fetching* in
 items 1–6, which record the behaviour each part replaces). 142.1 is built in
 `ckConveyanceKey` and `SymmetricAesGcmProvider._resolveFromConveyance`, and
 proven live: the recipient's atServer caches the conveyance with its
-`appMetadata` and the recipient opens the copy. The rest is not built yet; the
-acceptance clauses change test-first, with the implementation.
+`appMetadata` and the recipient opens the copy. All of 142 is built on
+`gkc-pq-key-caching` and proven live; 142.2 and 142.3 were amended while they
+were built.
 
 ### 142.1 A shared conveyance is cached at its recipient
 
@@ -14464,9 +14465,11 @@ every enrollment holding the sender's namespace key already reads the sender's
 self data there, and separation between recipients — the reason for
 [ruling 14](#14-content-keys-are-scoped-per-recipient-2026-08-02) — is unchanged.
 
-**What it reverses and settles.** It reverses UC-A4.1's "This `put` writes no
-self-copy" and `nskey_cross_atsign_test`'s assertion that alice cannot open the
-conveyance she wrote. It settles *content keys per scope* as intended behaviour
+**What it reverses and settles.** It reverses the reasoning under UC-A4.1's
+"This `put` writes no self-copy", that alice must not hold the key she shares
+with bob, though `put` still writes no copy of the value; and
+`nskey_cross_atsign_test`'s assertion that alice cannot open the conveyance she
+wrote. It settles *content keys per scope* as intended behaviour
 (one key per writing enrollment per destination, readable by every sibling),
 takes the pointer off the nskey provider's path, and settles *a wildcard
 enrolment seeds nothing* for every namespace a client shares into.
@@ -14491,12 +14494,12 @@ other enrollment checking would delete keys about to be cited.
 conveyance names the enrollment that cut its key, as `cutBy` in its
 `appMetadata`, and that enrollment derives what to delete: the conveyances it
 cut, less the keys its pointers or its memory name as current, less those a
-record in local storage cites. A collection waits for any cut in progress in
-its process. Unlike a list, this also collects a key whose cut stopped before
-its pointer was written. And a collection refused because sync had not caught
-up does not wait for a later start: it tries again at each later sync that
-catches up, until one pass runs, since live an active client is almost always
-mid-push at the moment a start or a replacement asks.
+record in local storage cites. Deleting waits for any cut in progress in its
+process. Unlike a list, this also deletes a key whose cut stopped before its
+pointer was written. And a pass refused because sync had not caught up does not
+wait for a later start: it tries again at each later sync that catches up,
+until one pass runs, since live an active client is almost always mid-push at
+the moment a start or a replacement asks.
 
 **Accepted cost.** A value that exists only on the recipient's side loses its
 key: a notification-delivered value, including a `cacheAtRecipient` copy, or a

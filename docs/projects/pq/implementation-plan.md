@@ -90,7 +90,7 @@ it stopped being parked.
 | **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
 | **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
 | **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
-| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Implement rulings 142–145, which settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. The section maps what the code does today and lists, item by item, what each ruling owes; items 17 and 18 include at_server work, and each acceptance clause is written test-first with its implementation. | Nothing |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Rulings 142–145 settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. Their at_client half is built, in PR #2294 (stacked on #2290, so its build-and-test CI runs only once it targets trunk), and proven on the functional, e2e and onboarding-CLI live packs. What remains is item 17 and the server half of item 18, at_server work with no worktree, branch or PR yet, which nothing on the client waits on. The section lists each item and what it built or owes. | Nothing |
 
 ### P1 — must do before D1 closes
 
@@ -358,11 +358,13 @@ check whether the pqActive receiver logged `Filed the nskey private`, against th
 
 **Traced from source on 2026-09-30**, against at_client_sdk `b3e1a8c99` and
 at_server `origin/trunk` `dc285b54`, with scratch probes for the wire commands and
-the verifier cache; nothing here was run against a live atServer. gkc's direction
+the verifier cache; the trace ran against no live atServer, and each item below
+says what has since been proven live. gkc's direction
 (2026-09-30): work through every aspect of namespace-key advertisement, content-key
 and `_apsk` writing and fetching, server-side and client-side caching included,
 decide the correct behaviour, and implement it. **All eighteen items were ruled on
-2026-09-30, in rulings 142 to 145**; what each owes is the implementation.
+2026-09-30, in rulings 142 to 145**, and their at_client half built the same day on
+`gkc-pq-key-caching` (PR #2294); what remains is at_server work, items 17 and 18.
 
 **What the two fields do on an atServer.** `ttl`, in milliseconds, expires a
 record on its owner's atServer, and an `update` that omits `ttl` or `ttr` keeps the
@@ -404,9 +406,8 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 otherwise.
 
 *Content keys — ruled by gkc on 2026-09-30 in
-[ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30);
-what is owed is the implementation, each acceptance clause written test-first
-with it*
+[ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30),
+and built on `gkc-pq-key-caching`*
 
 1. **Shared conveyances are cached at the recipient (142.1).** Found: both reads
    in `SymmetricAesGcmProvider._resolveFromConveyance` went through the
@@ -471,15 +472,15 @@ with it*
    that replaces a current key, without holding up the write; a pass refused
    because writes arrived in between tries again at each later sync that
    catches up. UC-A5.4 now says
-   a superseded key is kept while a record cites it and collected once none
-   does, with its default's rationale restated. Proven live in
+   a superseded key is kept while a record cites it and deleted by the
+   enrollment that cut it once none does, with its default's rationale restated. Proven live in
    `content_key_rotation_live_test.dart`: a cited key survives its rotation,
    an uncited one leaves the atServer, and a restarted client with nothing in
    memory collects once sync catches up and keeps the key its pointer names.
    The policy-driven replacement is proven live too: the key it replaces
    leaves the atServer at the next sync that catches up, with no restart.
-4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed
-   beyond items 1 and 3, which give it an eviction path.
+4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed:
+   items 1 and 3, both built, give it an eviction path.
 5. **Conveyances are kept from application code (142.5).** Found: a subscriber
    with `shouldDecrypt: true` whose regex matched a `__ck` name received the
    content key decrypted, and `AtCollection._updateLocal` could write it to local
@@ -496,8 +497,7 @@ with it*
 
 *Namespace-key advertisements — ruled by gkc on 2026-09-30 in
 [ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30),
-and built on `gkc-pq-key-caching`; what remains is its live-pack run before the
-PR*
+and built on `gkc-pq-key-caching`*
 
 7. **No `ttr` on the advertisement (143.1).** Nothing to build; a measurement of
    advertisement fetch volume reopens it if volume becomes a problem (one short

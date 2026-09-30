@@ -505,7 +505,7 @@ crypto:
 1. `ensureCurrent(destination, ns)` — re-`plookup` the destination's advertised nskey,
    and if there is no current CK for that destination, or the advertised `nskeyKid`
    has moved, cut a fresh **CK** (cadence is otherwise the sender's policy). A CK is
-   **per recipient**, so writing to Bob and writing the self-copy use different keys
+   **per recipient**, so writing to Bob and writing alice's own data use different keys
    ([`decisions.md`](decisions.md) [section 14](detail/decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)).
 2. **Convey the CK once** (`at/nskey`): `X-Wing-seal(CK)` to that destination's
    nskey — the owner's **own** nskey for self data; the recipient's published nskey
