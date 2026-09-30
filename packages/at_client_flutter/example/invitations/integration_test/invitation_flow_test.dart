@@ -100,7 +100,15 @@ Future<void> waitFor(
     await tester.pump(const Duration(milliseconds: 250));
     if (finder.evaluate().isNotEmpty) return;
   }
-  throw TestFailure('Timed out after $timeout waiting for $finder');
+  final onScreen = find
+      .byType(Text)
+      .evaluate()
+      .map((e) => (e.widget as Text).data)
+      .nonNulls
+      .join(' | ');
+  throw TestFailure(
+    'Timed out after $timeout waiting for $finder. On screen: $onScreen',
+  );
 }
 
 Future<void> tapText(
@@ -135,8 +143,12 @@ Future<String> copyable(WidgetTester tester, String label) async {
   return tester.widget<SelectableText>(text).data!;
 }
 
+/// Signs out from the home screen, once the button can take the tap: after
+/// a page closes, it is found while the page's exit transition still covers
+/// it.
 Future<void> signOut(WidgetTester tester) async {
-  await waitFor(tester, find.byTooltip('Sign out'));
-  await tester.tap(find.byTooltip('Sign out'));
+  final button = find.byTooltip('Sign out').hitTestable();
+  await waitFor(tester, button);
+  await tester.tap(button);
   await waitFor(tester, find.text('Get a new atSign'));
 }
