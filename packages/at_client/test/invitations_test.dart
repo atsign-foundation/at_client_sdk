@@ -117,6 +117,20 @@ void main() {
           throwsA(isA<AtDecryptionException>()));
     });
 
+    test('its encryption is frozen: AES-256-GCM bound to inviter/id', () async {
+      // NOTE: the invitee's app, whichever build, opens what the inviter's
+      // sealed.
+      const sealed = SealedInvitationContent(
+          nonce: 'mLMShcGxtp9RhpUp',
+          ciphertext: 'KsPKso/drdOiD0FkCF5RlMwGxyKmnbIhJk0sZL2yrxbX');
+
+      expect(
+          await InvitationKey.fromBase64(
+                  'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=')
+              .open(sealed, inviter: '@alice', invitationId: id),
+          '{"text":"secret"}');
+    });
+
     test('refuses a different key', () async {
       final sealed = await InvitationKey.mint()
           .seal('the recipe', inviter: '@alice', invitationId: id);
@@ -179,6 +193,80 @@ void main() {
           InvitationAcceptance.fromJson({'invitationId': id, 'code': '1'})
               .details,
           isEmpty);
+    });
+  });
+
+  group('record JSON is frozen', () {
+    // NOTE: the other party's app, and this atSign's other clients, read
+    // these records whichever build wrote them.
+    void frozen<T>(T record, Map<String, dynamic> Function(T) toJson,
+        T Function(Map<String, dynamic>) fromJson, String json) {
+      expect(jsonEncode(toJson(record)), json);
+      expect(jsonEncode(toJson(fromJson(jsonDecode(json)))), json);
+    }
+
+    test('SentInvitation', () {
+      frozen(
+          SentInvitation(
+            code: '012345',
+            expiresAt: DateTime.utc(2026, 10, 6),
+            publicDetails: {'from': 'Alice'},
+            contentKey: 'a2V5',
+            status: SentInvitationStatus.accepted,
+            acceptedBy: '@bob'.toAtsign(),
+            acceptanceDetails: {'name': 'Bob'},
+          ),
+          (r) => r.toJson(),
+          SentInvitation.fromJson,
+          '{"code":"012345","expiresAt":"2026-10-06T00:00:00.000Z",'
+          '"publicDetails":{"from":"Alice"},"contentKey":"a2V5",'
+          '"status":"accepted","acceptedBy":"@bob",'
+          '"acceptanceDetails":{"name":"Bob"}}');
+    });
+
+    test('ReceivedInvitation', () {
+      frozen(
+          ReceivedInvitation(
+            inviter: '@alice'.toAtsign(),
+            publicDetails: {'from': 'Alice'},
+            expiresAt: DateTime.utc(2026, 10, 6),
+            sealedContent: const SealedInvitationContent(
+                nonce: 'bg==', ciphertext: 'Yw=='),
+            status: ReceivedInvitationStatus.connected,
+            content: {'recipe': 'lemon cake'},
+          ),
+          (r) => r.toJson(),
+          ReceivedInvitation.fromJson,
+          '{"inviter":"@alice","publicDetails":{"from":"Alice"},'
+          '"expiresAt":"2026-10-06T00:00:00.000Z",'
+          '"sealedContent":{"nonce":"bg==","ciphertext":"Yw=="},'
+          '"status":"connected","content":{"recipe":"lemon cake"}}');
+    });
+
+    test('InvitationAcceptance', () {
+      frozen(
+          const InvitationAcceptance(
+              invitationId: id, code: '012345', details: {'name': 'Bob'}),
+          (r) => r.toJson(),
+          InvitationAcceptance.fromJson,
+          '{"invitationId":"$id","code":"012345","details":{"name":"Bob"}}');
+    });
+
+    test('InvitationConnection', () {
+      frozen(
+          const InvitationConnection(invitationId: id, contentKey: 'a2V5'),
+          (r) => r.toJson(),
+          InvitationConnection.fromJson,
+          '{"invitationId":"$id","contentKey":"a2V5"}');
+      frozen(const InvitationConnection(invitationId: id), (r) => r.toJson(),
+          InvitationConnection.fromJson, '{"invitationId":"$id"}');
+    });
+
+    test('the statuses', () {
+      expect(SentInvitationStatus.values.map((s) => s.name),
+          ['pending', 'accepted', 'burned', 'revoked']);
+      expect(ReceivedInvitationStatus.values.map((s) => s.name),
+          ['previewed', 'accepted', 'connected']);
     });
   });
 }

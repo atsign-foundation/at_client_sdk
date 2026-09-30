@@ -243,7 +243,7 @@ void main() {
       servers.plant(
           '@alice',
           'cached:@alice:bad.acceptances.invitations.$_ns@mallory',
-          'InvitationAcceptance',
+          'at_client.InvitationAcceptance',
           {'invitationId': 1, 'code': 'x'});
 
       expect(await pass(), [InvitationOutcome.accepted],
@@ -255,7 +255,7 @@ void main() {
       servers.plant(
           '@alice',
           'cached:@alice:${'x' * 180}.acceptances.invitations.$_ns@mallory',
-          'InvitationAcceptance', {
+          'at_client.InvitationAcceptance', {
         'invitationId': created.link.id,
         'code': wrongCode(created.code),
       });
@@ -292,7 +292,7 @@ void main() {
       servers.plant(
           '@alice',
           'cached:@alice:late.acceptances.invitations.$_ns@bob',
-          'InvitationAcceptance',
+          'at_client.InvitationAcceptance',
           {'invitationId': created.link.id, 'code': created.code});
       expect(await pass(), isEmpty);
       expect((await sent(created.link.id)).status, SentInvitationStatus.burned);
@@ -315,7 +315,7 @@ void main() {
       servers.plant(
           '@alice',
           'cached:@alice:late.acceptances.invitations.$_ns@bob',
-          'InvitationAcceptance',
+          'at_client.InvitationAcceptance',
           {'invitationId': id, 'code': created.code});
       expect(await pass(), isEmpty);
       expect((await sent(id)).status, SentInvitationStatus.burned);
@@ -330,7 +330,7 @@ void main() {
         servers.plant(
             '@alice',
             'cached:@alice:late$i.acceptances.invitations.$_ns@m$i',
-            'InvitationAcceptance',
+            'at_client.InvitationAcceptance',
             {'invitationId': created.link.id, 'code': wrongCode(created.code)});
       }
 
@@ -399,6 +399,90 @@ void main() {
     });
   });
 
+  group('the wire format is frozen', () {
+    // NOTE: the other party's app, and this atSign's other clients, read
+    // these records by name and shape, whichever build wrote them.
+    test('invite and accept write these records', () async {
+      final created = await alice.invite(publicDetails: {'from': 'Alice'});
+      final id = created.link.id;
+      await bob
+          .accept(created.link, created.code, details: {'name': 'Bob Brown'});
+
+      expect(
+          servers.find('@alice', '$id.sent.invitations.my_app@alice')?.value,
+          matches(RegExp(r'^\{"type":"at_client\.SentInvitation","obj":\{'
+              r'"code":"\d{6}","expiresAt":"[0-9T:.\-]+Z",'
+              r'"publicDetails":\{"from":"Alice"\},"status":"pending"\}\}$')));
+      final acceptance = servers
+          .of('@bob')
+          .entries
+          .where((e) => e.key.startsWith('@alice:'))
+          .single;
+      expect(
+          acceptance.key,
+          matches(RegExp(r'^@alice:[a-z0-9]{8}\.acceptances\.invitations\.'
+              r'my_app@bob$')));
+      expect(
+          acceptance.value.value,
+          '{"type":"at_client.InvitationAcceptance","obj":{"invitationId":'
+          '"$id","code":"${created.code}","details":{"name":"Bob Brown"}}}');
+      expect(servers.find('@bob', '$id.received.invitations.my_app@bob'),
+          isNotNull);
+    });
+
+    test('deciding writes these records', () async {
+      const id = '0123456789abcdef0123456789abcdef';
+      const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=';
+      servers.plant('@alice', '$id.sent.invitations.my_app@alice',
+          'at_client.SentInvitation', {
+        'code': '123456',
+        'expiresAt': '2099-01-01T00:00:00.000Z',
+        'publicDetails': <String, dynamic>{},
+        'contentKey': key,
+        'status': 'pending',
+      });
+      servers.plant(
+          '@alice',
+          'cached:@alice:accm1001.acceptances.invitations.my_app@m1',
+          'at_client.InvitationAcceptance',
+          {'invitationId': id, 'code': '000000', 'details': {}});
+      expect(await pass(), [InvitationOutcome.wrongCode]);
+      servers.plant(
+          '@alice',
+          'cached:@alice:accbob01.acceptances.invitations.my_app@bob',
+          'at_client.InvitationAcceptance', {
+        'invitationId': id,
+        'code': '123456',
+        'details': {'name': 'Bob'}
+      });
+      expect(await pass(), contains(InvitationOutcome.accepted));
+
+      expect({
+        for (final lock in servers.locks('@alice')) lock.key: lock.value.value
+      }, {
+        'claim.7eedb0bdf62f572d0d3a053ba9a7a42dc31a667cdbdad7f89df021bf85e20581'
+            '.locks.invitations.my_app@alice': 'claimed',
+        'attempt1.$id.locks.invitations.my_app@alice': 'wrong',
+        'outcome.$id.locks.invitations.my_app@alice': 'accepted:@bob',
+      });
+      expect(
+          servers
+              .find(
+                  '@bob',
+                  'cached:@bob:$id.connections.invitations.'
+                      'my_app@alice')
+              ?.value,
+          '{"type":"at_client.InvitationConnection","obj":{"invitationId":'
+          '"$id","contentKey":"$key"}}');
+      expect(
+          servers.find('@alice', '$id.sent.invitations.my_app@alice')?.value,
+          '{"type":"at_client.SentInvitation","obj":{"code":"123456",'
+          '"expiresAt":"2099-01-01T00:00:00.000Z","publicDetails":{},'
+          '"contentKey":"$key","status":"accepted","acceptedBy":"@bob",'
+          '"acceptanceDetails":{"name":"Bob"}}}');
+    });
+  });
+
   group('processConnections', () {
     test('completes only an invitation this atSign accepted', () async {
       final mallory = clientOf('@mallory');
@@ -407,7 +491,7 @@ void main() {
       servers.plant(
           '@bob',
           'cached:@bob:${created.link.id}.connections.invitations.$_ns@mallory',
-          'InvitationConnection',
+          'at_client.InvitationConnection',
           {'invitationId': created.link.id});
 
       expect(await bob.processConnections(), isEmpty,
@@ -426,14 +510,14 @@ void main() {
       servers.plant(
           '@bob',
           'cached:@bob:${fromCarol.link.id}.connections.invitations.$_ns@carol',
-          'InvitationConnection', {
+          'at_client.InvitationConnection', {
         'invitationId': fromCarol.link.id,
         'contentKey': InvitationKey.mint().base64,
       });
       servers.plant(
           '@bob',
           'cached:@bob:bad.connections.invitations.$_ns@mallory',
-          'InvitationConnection',
+          'at_client.InvitationConnection',
           {'invitationId': 7});
 
       final connected = await bob.processConnections();

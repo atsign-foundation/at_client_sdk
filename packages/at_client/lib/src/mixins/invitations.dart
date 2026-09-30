@@ -119,24 +119,24 @@ mixin Invitations {
 
   /// Invitations this atSign sent. Only this atSign reads them.
   Future<AtCollection<SentInvitation>> get sentInvitations => _collection(
-      'sent.invitations', SentInvitation.fromJson, 'SentInvitation');
+      'sent.invitations', SentInvitation.fromJson, 'at_client.SentInvitation');
 
   /// Invitations this atSign received. Only this atSign reads them.
   Future<AtCollection<ReceivedInvitation>> get receivedInvitations =>
       _collection('received.invitations', ReceivedInvitation.fromJson,
-          'ReceivedInvitation');
+          'at_client.ReceivedInvitation');
 
   /// Acceptances, each shared by an invitee with its inviter.
   Future<AtCollection<InvitationAcceptance>> get acceptances => _collection(
       'acceptances.invitations',
       InvitationAcceptance.fromJson,
-      'InvitationAcceptance');
+      'at_client.InvitationAcceptance');
 
   /// Confirmations, each shared by an inviter with the invitee it accepted.
   Future<AtCollection<InvitationConnection>> get connections => _collection(
       'connections.invitations',
       InvitationConnection.fromJson,
-      'InvitationConnection');
+      'at_client.InvitationConnection');
 
   // NOTE: AtClient.collection caches one instance per namespace, so these
   // are opened once however often they are asked for.
