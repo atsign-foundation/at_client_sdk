@@ -1,10 +1,11 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:convert' show jsonDecode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_client/src/crypto/crypto.dart'
     show FiledNskeyPrivate, SignalsPrivateFiling;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
@@ -167,6 +168,14 @@ typedef _MintedKey = ({
   Uint8List secretKey,
 });
 
+/// An advertisement a ring holds, when it was read, and the verified bytes it
+/// came from where known.
+typedef _CachedAdvertisement = ({
+  NskeyAdvertisement advertisement,
+  DateTime fetchedAt,
+  String? payload,
+});
+
 /// Everything a mint computes **before** it holds the lock — the keys, the
 /// advertisement built from them, and this enrollment's signature over it.
 typedef _PreparedMint = ({
@@ -204,6 +213,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// has said the record is gone.
   final Duration advertisementStaleGrace;
 
+  /// [ownChanges], when given, is where the ring hears that local storage's
+  /// copy of this client's own advertisement changed — sync landing a
+  /// sibling's rotation — so it re-reads at once rather than when
+  /// [advertisementTtl] runs out. It is listened to from the first read of an
+  /// own advertisement, so a client that never reads one subscribes to nothing.
   PublishedNskeyKeyRing(
     this._atClient, {
     AdvertisedKeyVerifier? verifier,
@@ -214,11 +228,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
+    Stream<DataEvent> Function()? ownChanges,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
         privateFiling = privateFiling ?? _filingFor(_atClient),
         _requestConveyance = requestConveyance,
+        _ownChanges = ownChanges,
         _signer = AtClientEnvelopeSigner(_atClient);
+
+  final Stream<DataEvent> Function()? _ownChanges;
 
   /// The filing a ring builds for itself when its caller named none, over the
   /// client's own `AtKeysIo`; null when the client has no key source at all.
@@ -285,8 +303,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Signs this atSign's own advertisements.
   final AtClientEnvelopeSigner _signer;
 
-  final Map<String, NskeyAdvertisement> _ownCurrent = {};
-
   /// Record a generation as this client's own, without minting one.
   ///
   /// For a test that needs a ring in the "already minted" state without a
@@ -294,7 +310,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @visibleForTesting
   void rememberOwn(
           String owner, String namespace, NskeyAdvertisement advertisement) =>
-      _ownCurrent[_scope(owner, namespace)] = advertisement;
+      _remote[_scope(owner, namespace)] = (
+        advertisement: advertisement,
+        fetchedAt: DateTime.now(),
+        payload: null,
+      );
 
   /// Drop what this ring cached for `(owner, namespace)`, forcing the next
   /// read to go to the atServer.
@@ -307,8 +327,42 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _remote.remove(_scope(owner, namespace));
 
   final Map<String, NskeyDecapsulationKey> _ownPrivates = {};
-  final Map<String, ({NskeyAdvertisement advertisement, DateTime fetchedAt})>
-      _remote = {};
+
+  /// Advertisements this ring has read or published, with when and, where
+  /// known, the verified bytes they came from.
+  final Map<String, _CachedAdvertisement> _remote = {};
+
+  StreamSubscription<DataEvent>? _ownChangesSubscription;
+
+  /// Starts expiring this client's own cached advertisements whenever local
+  /// storage's copy changes.
+  void _listenForOwnChanges() {
+    final changes = _ownChanges;
+    if (changes == null || _ownChangesSubscription != null) return;
+    _ownChangesSubscription = changes().listen(_expireOwnOnChange);
+  }
+
+  /// Marks the cached advertisement [event] names as due for a re-read,
+  /// keeping its bytes so an unchanged copy is not verified again.
+  void _expireOwnOnChange(DataEvent event) {
+    final own = _atClient.getCurrentAtSign();
+    final changed = event.key.toString().toLowerCase();
+    for (final scope in _remote.keys.toList()) {
+      final bar = scope.indexOf('|');
+      final owner = scope.substring(0, bar);
+      if (owner != own) continue;
+      final name = nskeyAdvertisementKey(owner, scope.substring(bar + 1))
+          .toString()
+          .toLowerCase();
+      if (name != changed) continue;
+      final cached = _remote[scope]!;
+      _remote[scope] = (
+        advertisement: cached.advertisement,
+        fetchedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        payload: cached.payload,
+      );
+    }
+  }
 
   static String _scope(String owner, String namespace) => '$owner|$namespace';
 
@@ -699,18 +753,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'own. Retry: the next attempt takes a fresh lock');
     }
 
-    // NOTE: the atServer, and never a local write as well. A local write of a
-    // sync-eligible key queues the key's *name*, and a drain sends whatever
-    // local storage holds when it runs — so a drain landing in that window
-    // pushes the superseded generation back over the one just published, and
-    // nothing corrects it. Local storage still ends up with this record: sync
-    // pulls it down as a server-originated change, which is the one write path
-    // that never enqueues a push.
     await _atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
       ..atKey = advertisementKey
       ..value = payload);
+    await _fileMinted(advertisementKey, payload);
 
-    _ownCurrent[_scope(owner, namespace)] = advertisement;
+    _remote[_scope(owner, namespace)] = (
+      advertisement: advertisement,
+      fetchedAt: DateTime.now(),
+      payload: payload,
+    );
     for (final key in prepared.minted) {
       _ownPrivates[_generation(owner, namespace, nskeyKidOf(key.publicKey))] =
           NskeyDecapsulationKey(key.secretKey);
@@ -721,13 +773,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyAdvertisement?> currentPublic(
       String owner, String namespace) async {
-    // NOTE: falling through when this client has minted nothing is the point.
-    // Another of the owner's enrollments, or this one after a restart, holds
-    // no `_ownCurrent` entry while the advertisement sits on the owner's own
-    // atServer, and reporting a published namespace as a cold start invites a
-    // mint that rotates the key out from under every peer.
-    final own = _ownCurrent[_scope(owner, namespace)];
-    if (own != null) return own;
+    final isOwn = owner == _atClient.getCurrentAtSign();
+    if (isOwn) _listenForOwnChanges();
 
     final scope = _scope(owner, namespace);
     final cached = _remote[scope];
@@ -752,9 +799,43 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return null;
     }
 
-    final advertisement = await verifier.verify(owner, payload);
-    _remote[scope] = (advertisement: advertisement, fetchedAt: DateTime.now());
+    // NOTE: verifying fetches the signer's _apsk from the atServer, so
+    // re-verifying unchanged bytes would stop a client writing its own data
+    // once it had been offline longer than the TTL.
+    final advertisement = isOwn && cached?.payload == payload
+        ? cached!.advertisement
+        : await verifier.verify(owner, payload);
+    _remote[scope] = (
+      advertisement: advertisement,
+      fetchedAt: DateTime.now(),
+      payload: payload,
+    );
     return advertisement;
+  }
+
+  /// Files an advertisement this ring just published into local storage, so a
+  /// local-first re-read finds it rather than the generation local storage
+  /// held before.
+  ///
+  /// `cameFromServer: true` keeps the write out of the client→server sync
+  /// queue: a queued entry carries only the key's *name*, so a drain landing
+  /// later would push whatever local storage held by then back over the
+  /// published generation. A failure is logged, since the advertisement is
+  /// published and sync brings local storage the same copy.
+  Future<void> _fileMinted(AtKey advertisementKey, String payload) async {
+    try {
+      await _atClient.getLocalSecondary()?.executeVerb(
+          UpdateVerbBuilder()
+            ..atKey = advertisementKey
+            ..value = payload,
+          cameFromServer: true);
+    } on StoppedException {
+      rethrow;
+    } on Object catch (e) {
+      _logger.warning('Published $advertisementKey but could not file it '
+          'locally, so local storage holds the previous generation until sync '
+          'pulls this one: $e');
+    }
   }
 
   /// Reads [atKey], or null when the atServer says there is none; any other
@@ -833,8 +914,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// while [advertisementTtl] plus [advertisementStaleGrace] has not passed
   /// since it was fetched; past that, null, so the failure reaches the caller
   /// rather than sealing to a generation that may have been rotated away from.
-  NskeyAdvertisement? _withinGrace(
-      ({NskeyAdvertisement advertisement, DateTime fetchedAt})? cached) {
+  NskeyAdvertisement? _withinGrace(_CachedAdvertisement? cached) {
     if (cached == null) return null;
     final age = DateTime.now().difference(cached.fetchedAt);
     if (age <= advertisementTtl + advertisementStaleGrace) {
@@ -891,8 +971,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'replace it');
       return null;
     }
-    _remote[_scope(owner, namespace)] =
-        (advertisement: advertisement, fetchedAt: DateTime.now());
+    _remote[_scope(owner, namespace)] = (
+      advertisement: advertisement,
+      fetchedAt: DateTime.now(),
+      payload: value.value as String,
+    );
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 

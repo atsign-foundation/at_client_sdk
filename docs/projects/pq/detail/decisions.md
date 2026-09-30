@@ -14510,9 +14510,9 @@ every mint, rotation and add sends is asserted raw in
 `PublishedNskeyKeyRing.currentPublic` and `_getLocalThenRemote`: a not-found
 answers none and drops the cached generation, and any other failure serves the
 cached one within the grace or throws, which is what stops the resolver's walk.
-143.6 is built in `_fileFetched` and `LocalSecondary.putIfAbsent`. 143.7 is
-documented in the at_client README. 143.3 is not built yet; the acceptance
-clauses change test-first, with the implementation.
+143.3 is built in the ring's cache, its `ownChanges` listener and `_mint`'s
+local filing; 143.6 in `_fileFetched` and `LocalSecondary.putIfAbsent`. 143.7
+is documented in the at_client README.
 
 ### 143.1 The advertisement carries no ttr
 
@@ -14560,6 +14560,15 @@ own advertisement, whichever comes first. The ring files what it mints locally
 copy. This closes the gap in which a running client kept sealing self data —
 and, after ruling 142, sibling copies — to a generation a sibling had rotated
 away from to cut off a revoked enrollment.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** a re-read of the client's
+own advertisement whose bytes are the ones it already verified is not verified
+again. Verifying fetches the signer's `_apsk` from the atServer, so re-verifying
+every 15 minutes would have stopped a client writing its own data once it had
+been offline that long, where the pinned generation had let it carry on. A
+changed advertisement is verified as before, and a peer's always is. The cost:
+a signing enrollment revoked since the first check is not re-checked until the
+advertisement changes, which a revocation that rotates does.
 
 ### 143.4 A peer's advertisement stays in memory
 

@@ -1973,8 +1973,12 @@ answer is the only thing standing between them.
 - **Then:** she takes the **same verify path a peer takes** — no owner
   shortcut. One path means a defect in verification cannot hide behind the
   common case, and it is what makes "same-atSign and cross-atSign are the same
-  code" a tested property rather than an aspiration. A namespace nobody minted
-  for resolves to nothing rather than to an error or a guess.
+  code" a tested property rather than an aspiration. A re-read whose bytes are
+  the ones she already verified is not verified again, while a peer's always
+  is: verifying fetches her enrollment's `_apsk` from the atServer, so her own
+  writes would otherwise stop once she had been offline longer than
+  `advertisementTtl`. A namespace nobody minted for resolves to nothing rather
+  than to an error or a guess.
 
 - **Cross-ref:** [UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open).
 - **Impl/verify:** **SS-4** + **B-1**.

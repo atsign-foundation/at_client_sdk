@@ -211,6 +211,7 @@ class PqClientBootstrap {
     ring = PublishedNskeyKeyRing(
       _atClient,
       privateFiling: filing,
+      ownChanges: () => _atClient.dataEvents,
       // NOTE: the read-miss hook must file what it receives, not merely ask.
       // An answer left in the in-memory secret store is not filed again until
       // the next start, so a hook that only broadcast would heal the client

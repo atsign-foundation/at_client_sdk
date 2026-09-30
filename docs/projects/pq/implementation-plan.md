@@ -447,9 +447,9 @@ with it*
    so writing it can no longer cut a self content key.
 
 *Namespace-key advertisements — ruled by gkc on 2026-09-30 in
-[ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30);
-what is owed is the implementation, each acceptance clause written test-first
-with it*
+[ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30),
+and built on `gkc-pq-key-caching`; what remains is its live-pack run before the
+PR*
 
 7. **No `ttr` on the advertisement (143.1).** Nothing to build; a measurement of
    advertisement fetch volume reopens it if volume becomes a problem (one short
@@ -468,8 +468,13 @@ with it*
    `cold_start_test`.
 9. **A client's own advertisement refreshes like a peer's, and on sync (143.3).**
    Found: `_ownCurrent` pinned the ring's own generation for the life of the
-   process. Owed: the own advertisement through the 15-minute cache, cleared when
-   sync pulls a change; the ring files what it mints locally.
+   process. Done: the own advertisement goes through the 15-minute cache and is
+   expired when the client's `dataEvents` report its local copy changed (the
+   bootstrap's ring listens from its first own read); a mint files what it
+   published locally with `cameFromServer`; and, on gkc's choice while
+   building, an own re-read whose bytes were already verified is not verified
+   again. Proven in `published_nskey_key_ring_test`, `nskey_minting_test` and
+   `pq_client_bootstrap_test`.
 10. **A peer's advertisement stays in memory (143.4).** Done: `_getLocalThenRemote`
     reads local storage first for the client's own atSign only, and says so.
     Offline sealing to a peer waits for
