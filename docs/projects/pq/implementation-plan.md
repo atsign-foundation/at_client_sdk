@@ -453,8 +453,9 @@ with it*
 
 7. **No `ttr` on the advertisement (143.1).** Nothing to build; a measurement of
    advertisement fetch volume reopens it if volume becomes a problem (one short
-   client run once made 110 `_apsk` lookups). Owed: a pin that the advertisement
-   carries no `ttr`.
+   client run once made 110 `_apsk` lookups). Pinned: `nskey_minting_test`
+   asserts raw the command every mint, rotation and add sends, with no `ttl` and
+   no `ttr`.
 8. **A not-found is final; only a transport failure gets the grace (143.2).**
    Found: `PublishedNskeyKeyRing.currentPublic` sent not-found and every
    exception to `_staleOrNothing`, sealing to a withdrawn advertisement for up to
@@ -525,10 +526,11 @@ with it*
     sets `bypassCache` on every lookup of either record, whatever the caller
     asked.
 
-**Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd` are
-pinned on the built command; nothing pins the absence of `ttl` and `ttr` on
-advertisements, `_apsk` or the root; and the lock ttls are pinned on the key
-object rather than on the built command.
+**Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd`,
+pinned on the built command with item 1, and the absence of `ttl` and `ttr` on
+`_apsk`, with item 15. The advertisement, the signing root and both locks are
+pinned raw on the command each sends, in `nskey_minting_test` and
+`pq_signing_root_test`.
 
 **Related rows, which stay where they are:** [the late-arriving nskey
 private](#the-late-arriving-nskey-private), *step 3 of a signing migration has no

@@ -308,6 +308,45 @@ void main() {
     expect(keys.single['kid'], advertisement.nskeyKid);
   });
 
+  test('what a mint, a rotation and an add send carries — raw literals',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    await ring.mintAndPublish(namespace);
+    await ring.rotate(namespace);
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    await ring.add(namespace);
+
+    List<String> sent(String record) => c.builders
+        .whereType<UpdateVerbBuilder>()
+        .where((b) => b.atKey.key == record)
+        .map((b) => b.buildCommand().split(' ').first)
+        .toList();
+    expect(
+        sent('__nskey'),
+        [
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:uAt:2026-03-04T00:00:00.000000Z:isEncrypted:false:'
+              'public:__nskey.app_1.my_apps@alice',
+        ],
+        reason: 'no ttr, or a reader\'s atServer may serve its copy after a '
+            'rotation; no ttl, or the key every sender seals to expires');
+    expect(
+        sent('_nskeylock'),
+        List.filled(
+            3,
+            'update:nc:ttl:120000:isEncrypted:false:immutable:true:'
+            '_nskeylock.app_1.my_apps@alice'),
+        reason: 'the ttl is what releases the lock, and the atServer\'s '
+            'refusal of a second immutable create is the interlock');
+  });
+
   group('the record stamp says when the generation was minted', () {
     // `updatedAt` on `public:__nskey.<ns>@alice` only means "when this
     // generation was minted" because an add puts the atServer's own previous
