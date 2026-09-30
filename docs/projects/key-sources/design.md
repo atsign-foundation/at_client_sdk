@@ -237,6 +237,9 @@ whose key can't be exported still fits: a TPM, a cloud KMS, or a
 non-extractable WebCrypto key. `FileAtKeysIo(passPhrase: …)` keeps working as
 shorthand for a passphrase source, since apps outside this repository call it.
 
+A device's secure hardware fits as one more source through a
+`SecurityPlatformKeySource`; see [`apkam-custody.md`](apkam-custody.md#6-securityplatformkeysource).
+
 ## 5. Envelope version 2
 
 ```json
@@ -353,6 +356,10 @@ atServer implementation. The cost of the enrollment route is that every
 atServer implementation has to verify WebAuthn assertions: `clientDataJSON`,
 `authenticatorData`, the origin and relying-party id, and ES256 signatures. The
 per-connection challenge from `from:` already covers replay.
+
+A third gate, deriving the APKAM key itself from the passkey so an ordinary
+PKAM precedes the fetch, is in
+[`apkam-custody.md`](apkam-custody.md#9-the-browser-as-the-only-device).
 
 Updating the document needs the same atomicity `update` has for a file. I
 haven't checked whether the atServer offers anything like a compare-and-swap,
