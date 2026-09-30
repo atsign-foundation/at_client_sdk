@@ -1115,6 +1115,13 @@ advertisement for a bounded **TTL** and re-fetches when it is stale. Total expos
 path costs no network. The original wording chose the tightest bound without costing
 it; this is the same mechanism with a lever on it.
 
+⚠️ **AMENDED 2026-09-30 by
+[ruling 143.2](#1432-a-not-found-is-final-only-a-transport-failure-gets-the-grace):**
+the worst-case exposure is the TTL plus `advertisementStaleGrace`, not "TTL + one
+CK lifetime". A sender re-cuts on the first write after it sees the new
+generation, so the CK term was loose, and the grace a failed re-fetch gets was
+missing from the bound.
+
 **Generation retention — current on join, older pulled on demand.** A new enrollment is
 pushed the **current** generation only, so join cost stays O(1). When a reader meets a
 `__ck` tagged with an `nskeyKid` it does not hold, it issues `requestSecret` for that
@@ -1722,6 +1729,12 @@ a signalling flag on the parent advertisement, on the grounds that deeper keys a
 the window is short. Note this is strictly narrower than the exposure the rejected
 remember-hits design carried, which had no bound at all for a namespace whose deeper level
 was never probed.
+
+⚠️ **AMENDED 2026-09-30 by
+[ruling 143.5](#1435-only-a-not-found-lets-the-resolver-walk-up):** only an
+authoritative not-found counts as "found empty". The implementation also recorded a
+failed fetch as a miss, extending this exposure to every network failure at a deeper
+level; a transport failure now stops the walk instead.
 
 ### 19.5 The wire
 
@@ -14475,3 +14488,86 @@ and key streams like other reserved records — which also stops
 opt in to scan and view them (gkc: "provide a way for an application to
 explicitly scan and view them if it wishes to"); the proposed switch is
 `showHiddenKeys`.
+
+## 143. Namespace-key advertisements: no ttr, a not-found is final, and a client's own advertisement refreshes (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the advertisement area of the key-caching
+work-through (items 7–13 of the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+which record the behaviour each part replaces). Nothing here is built yet; the
+acceptance clauses change test-first, with the implementation.
+
+### 143.1 The advertisement carries no ttr
+
+`public:__nskey.<ns>@<owner>` carries no `ttr`, so the sender's
+`advertisementTtl` cache (15 minutes) stays the only cache: a rotation is seen
+within 15 minutes, at about one round trip to the owner per client, destination
+and 15 minutes. A positive `ttr` would let the reader's atServer serve its copy
+to every client of that atSign, but would add up to one `ttr` of staleness on
+top, and rotation is the revocation lever. Revisit with a measurement if fetch
+volume becomes a problem.
+
+### 143.2 A not-found is final; only a transport failure gets the grace
+
+An authoritative not-found from the owner's atServer ends sealing to that peer
+at once: the record is gone, withdrawn or lost in an atServer reset, and sealing
+to it for another 15 minutes writes data nobody can open, or a compromised key
+can. Only a transport failure keeps serving the cached advertisement, for
+`advertisementStaleGrace` (15 minutes) — the blip the grace was written for.
+`CryptoRuntime.isReadyFor` throws for an unreachable atServer, as its dartdoc
+says, rather than answering false. A miss sends one `plookup`, not the two
+`_getLocalThenRemote` sends today. The worst-case exposure after a rotation is
+`advertisementTtl` plus `advertisementStaleGrace` — the "plus one content-key
+lifetime" of [ruling 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+was loose, because a sender re-cuts on the first write after it sees the new
+generation, and it omitted the grace.
+
+### 143.3 A client's own advertisement refreshes like a peer's, and on sync
+
+`_ownCurrent` no longer pins, for the life of the process, the generation this
+ring minted. The own advertisement goes through the same 15-minute cache as a
+peer's, re-read local-first, and is also cleared as soon as sync pulls a changed
+own advertisement, whichever comes first. The ring files what it mints locally
+(with `cameFromServer`, as `_fileFetched` does), so it never reads back an older
+copy. This closes the gap in which a running client kept sealing self data —
+and, after ruling 142, sibling copies — to a generation a sibling had rotated
+away from to cut off a revoked enrollment.
+
+### 143.4 A peer's advertisement stays in memory
+
+No durable copy of a peer's advertisement: a restarted client needs the network
+before its first write to each peer, and `_getLocalThenRemote`'s "local first …
+would break offline writes" is corrected to say it covers the client's own
+atSign. gkc: "another item we need to address once #2117 has been implemented.
+(Intent in this case would be, I want to seal to $peer but I'm offline)" —
+[#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117) is the
+issue for intent-based client operations.
+
+### 143.5 Only a not-found lets the resolver walk up
+
+A not-found at a namespace level is a miss: the walk goes broader and
+`missMemory` remembers the miss for 15 minutes, which is the exposure
+[ruling 19.4](#194-cost-and-the-three-lifetimes) accepted. A transport failure
+is not a miss: it stops the walk, and the write uses that level's cached
+advertisement within its grace, or fails. Before this, every network failure at
+a deeper level sealed to the broader key — letting exactly the enrollments the
+deeper key was minted to exclude read the data — and hid the deeper level for 15
+minutes after the network recovered.
+
+### 143.6 The own-advertisement filing is explicit, and only if absent
+
+`_fileFetched` files from the fetched value's own metadata, not from the key
+object `GetResponseTransformer` happens to mutate, and never over a copy sync
+has landed: an atomic put-if-absent in the local keystore, added if the keystore
+lacks one. Otherwise a sync landing a newer generation between the local miss
+and the filing could be overwritten with the older one, and 143.3's local-first
+re-read would then seal to it.
+
+### 143.7 Minting needs at_server c3.16.2 or later
+
+Post-quantum minting needs an atServer carrying at_server `00c2f9a6` (c3.16.2 or
+later), which deletes an expired immutable record on the next write; this is
+documented rather than checked. An older atServer refuses a new create until its
+expiry sweep, up to about 10.5 minutes, instead of the lock's 2 minutes (a
+namespace key) or 15 seconds (the signing root). That is a delay, not a safety
+failure: mutual exclusion holds, and the delay ends on its own.

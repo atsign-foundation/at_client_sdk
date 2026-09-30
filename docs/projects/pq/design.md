@@ -324,7 +324,12 @@ where a second election is wanted inside the window is the winner having failed,
 which is what the ttl bounds. It has one operational consequence worth stating,
 because `revokeEnrollmentAndRotate` **revokes first**: a rotation the cooldown
 refuses leaves that enrollment cut off from the atServer while still holding the
-live generation, until the caller retries after the ttl. The root `public:pq_signing_root@<atSign>` now follows
+live generation, until the caller retries after the ttl. Release at expiry needs an
+atServer carrying at_server `00c2f9a6` (c3.16.2 or later), which deletes an expired
+immutable record on the next write; an older one refuses a new create until its expiry
+sweep, up to about 10.5 minutes, and the client does not check
+([ruling 143.7](detail/decisions.md#1437-minting-needs-at_server-c3162-or-later)).
+The root `public:pq_signing_root@<atSign>` now follows
 exactly the same pattern, behind `_rootlock@<atSign>`
 ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)):
 it is an ordinary signing key, and advertising a successor beside a retired
@@ -467,11 +472,17 @@ it when stale, and compares the advertised `nskeyKid` against the one its curren
 was conveyed under; a mismatch forces a fresh CK sealed to the new generation. The
 cache is what keeps this off the write path — `ensureCurrent` runs on every `put`, so
 fetching each time would make a write depend on the recipient's atServer being
-reachable and break offline writes. Exposure is **the TTL plus one CK lifetime**. Without this, a sender
-keeps sealing to a pre-rotation generation that a revoked enrollment can still open,
-and **B6 revocation silently fails for inbound cross-atSign data**; with it, exposure
-is bounded by one CK lifetime. The owner's **own nskey is never looked up** for self
-data — her clients hold it from the substrate
+reachable and break offline writes. The cache holds an advertisement for
+`advertisementTtl` (15 minutes); a transport failure keeps serving it for up to
+`advertisementStaleGrace` (15 more), while a not-found ends sealing to that peer at
+once, so the worst-case exposure after a rotation is the TTL plus the grace
+([ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30)).
+Without this, a sender keeps sealing to a pre-rotation generation that a revoked
+enrollment can still open, and **B6 revocation silently fails for inbound
+cross-atSign data**. The advertisement carries no `ttr`, so a reader's atServer never
+serves a cached copy of it. For self data the owner's own advertisement is read
+local-first, which sync keeps current, through the same cache, cleared early when sync
+pulls a change; the privates her clients hold come from the substrate
 ([§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)).
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
@@ -581,10 +592,11 @@ device that never reads back never pays.
 
 **Senders must notice.** Rotation is the revocation lever, so a peer still sealing to
 the superseded generation hands the revoked enrollment a key it can still open. There
-is no failure signal back to a sender, so the sender re-`plookup`s at every
-`ensureCurrent` and re-cuts its CK on an `nskeyKid` change
+is no failure signal back to a sender, so the sender re-resolves the advertisement at
+every `ensureCurrent`, from its cache while that is fresh, and re-cuts its CK on an
+`nskeyKid` change
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)). Exposure is bounded by
-one CK lifetime.
+`advertisementTtl` plus `advertisementStaleGrace`.
 
 Rotation buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation

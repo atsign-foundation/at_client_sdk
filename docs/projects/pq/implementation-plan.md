@@ -444,43 +444,40 @@ with it*
 6. **Settled by 142.2.** The pointer no longer goes through the nskey provider,
    so writing it can no longer cut a self content key.
 
-*Namespace-key advertisements*
+*Namespace-key advertisements — ruled by gkc on 2026-09-30 in
+[ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30);
+what is owed is the implementation, each acceptance clause written test-first
+with it*
 
-7. **`ttr` on the advertisement.** A wire capture showed 110 `_apsk` lookups in
-   one short client run; measure the advertisement fetch volume after the
-   negative-cache and `enroll:infons` changes, then rule on `ttr` and client
-   caching together. No advertisement read sets `bypassCache`, so a positive
-   `ttr` would add a server-side staleness window on top of `advertisementTtl`;
-   and `AtKey.public(...)..cache(ttr, ccd)` cannot set it, because it marks the
-   key `cached:` and `put` refuses one.
-8. **A withdrawal is handled like a network failure.**
-   `PublishedNskeyKeyRing.currentPublic` sends not-found and every exception to
-   `_staleOrNothing`, so a withdrawn advertisement is sealed to for up to 30
-   minutes, and `_getLocalThenRemote` sends the same plookup twice on each miss.
-   The same conflation makes `CryptoRuntime.isReadyFor` answer false for an
-   unreachable atServer, where its dartdoc says it throws. The stated exposure
-   after a rotation — the freshness window "plus one content-key lifetime", in
-   `design.md` section 1.5, UC-A5.1's **Then (b)**, ruling 13 and the
-   `advertisementTtl` dartdoc — is loose rather than the mechanism: a sender
-   re-cuts on the first write after it sees the new generation, so the worst
-   case is `advertisementTtl` plus `advertisementStaleGrace`, which the
-   statements omit.
-9. **`_ownCurrent` never expires**, so a sibling enrollment's rotation of this
-   client's own namespace is not seen until restart; `NskeyRotation.forClient`
-   builds a separate ring.
-10. **There is no durable copy of a peer's advertisement**, so after a restart
-    the first write to a peer needs the network; the "local first" rationale in
-    `_getLocalThenRemote`'s dartdoc holds only for the client's own atSign.
-11. **A failed fetch at a deeper level counts as a miss**, so `NskeyResolver`
-    falls back to a broader level and goes on skipping the deeper one for 15
-    minutes after the network recovers.
-12. **`_fileFetched` files the server's metadata only by side effect**
-    (`GetResponseTransformer` replaces the caller's `AtKey.metadata`), and
-    writes without comparing against a newer copy a sync pull may have landed in
-    between (the race is a hypothesis).
-13. **Mint-lock release by expiry needs at_server c3.16.2 or later**
-    (`00c2f9a6`); an older atServer refuses a new create until its expiry sweep,
-    up to about ten minutes, and the client has no version gate.
+7. **No `ttr` on the advertisement (143.1).** Nothing to build; a measurement of
+   advertisement fetch volume reopens it if volume becomes a problem (one short
+   client run once made 110 `_apsk` lookups). Owed: a pin that the advertisement
+   carries no `ttr`.
+8. **A not-found is final; only a transport failure gets the grace (143.2).**
+   Found: `PublishedNskeyKeyRing.currentPublic` sent not-found and every
+   exception to `_staleOrNothing`, sealing to a withdrawn advertisement for up to
+   30 minutes. Owed: not-found answers nothing at once; `CryptoRuntime.isReadyFor`
+   throws for an unreachable atServer; `_getLocalThenRemote` sends one `plookup`
+   per miss, not two; the `advertisementTtl` and `advertisementStaleGrace`
+   dartdocs and UC-A5.1's **Then (b)** state the bound as the TTL plus the grace.
+9. **A client's own advertisement refreshes like a peer's, and on sync (143.3).**
+   Found: `_ownCurrent` pinned the ring's own generation for the life of the
+   process. Owed: the own advertisement through the 15-minute cache, cleared when
+   sync pulls a change; the ring files what it mints locally.
+10. **A peer's advertisement stays in memory (143.4).** Owed: `_getLocalThenRemote`'s
+    dartdoc says "local first" covers the client's own atSign. Offline sealing to
+    a peer waits for [#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117).
+11. **Only a not-found lets the resolver walk up (143.5).** Found: a failed fetch
+    at a deeper level counted as a miss and re-scoped to the broader key for 15
+    minutes. Owed: a transport failure stops `NskeyResolver`'s walk.
+12. **The own-advertisement filing is explicit, and only if absent (143.6).**
+    Found: `_fileFetched` filed the server's metadata only by side effect, and
+    could overwrite a newer copy sync had landed. Owed: file from the fetched
+    value's metadata through an atomic put-if-absent in the local keystore, added
+    if missing.
+13. **Minting needs at_server c3.16.2 or later (143.7).** Owed: the requirement
+    stated where an application reads it (the at_client README's post-quantum
+    section); `design.md` already states it.
 
 *`_apsk`*
 
