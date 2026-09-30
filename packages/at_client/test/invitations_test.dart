@@ -30,6 +30,10 @@ void main() {
         'alice/$id',
         '@alice/${id.toUpperCase()}',
         '@alice/$id/extra',
+        '100%',
+        '@alice/$id%',
+        '@a!ice/$id',
+        '@@alice/$id',
       ]) {
         expect(() => InvitationLink.parse(text), throwsFormatException,
             reason: text);
@@ -79,6 +83,22 @@ void main() {
         'tags': ['a', 'b']
       });
       expect(preview.content, isNull);
+    });
+
+    test('a malformed preview is refused as a FormatException', () {
+      for (final json in [
+        {'v': 1, 'publicDetails': 'x', 'expiresAt': '2026-10-06T21:00:00.000Z'},
+        {'v': 1, 'publicDetails': <String, dynamic>{}},
+        {
+          'v': 1,
+          'publicDetails': <String, dynamic>{},
+          'expiresAt': '2026-10-06T21:00:00.000Z',
+          'content': 'sealed',
+        },
+      ]) {
+        expect(() => InvitationPreview.fromJson(json), throwsFormatException,
+            reason: '$json');
+      }
     });
 
     test('a preview of an unknown version is refused', () {

@@ -14,17 +14,23 @@ class InvitationLink {
   const InvitationLink({required this.inviter, required this.id});
 
   /// Parses a full link, or the bare `@alice/<id>` its fragment holds.
+  ///
+  /// Throws a [FormatException] for anything that is not a whole invitation.
   factory InvitationLink.parse(String text) {
     final trimmed = text.trim();
     final hash = trimmed.indexOf('#');
-    final fragment = Uri.decodeComponent(
-      hash >= 0 ? trimmed.substring(hash + 1) : trimmed,
-    );
-    final match = RegExp(r'^(@[^/\s]+)/([0-9a-f]{32})$').firstMatch(fragment);
-    if (match == null) {
-      throw FormatException('not an invitation link', text);
+    try {
+      final fragment = Uri.decodeComponent(
+        hash >= 0 ? trimmed.substring(hash + 1) : trimmed,
+      );
+      final match = RegExp(r'^(@[^/\s]+)/([0-9a-f]{32})$').firstMatch(fragment);
+      if (match == null) throw FormatException('not an invitation link', text);
+      return InvitationLink(inviter: match[1]!.toAtsign(), id: match[2]!);
+    } on FormatException {
+      rethrow;
+    } catch (e) {
+      throw FormatException('not an invitation link: $e', text);
     }
-    return InvitationLink(inviter: match[1]!.toAtsign(), id: match[2]!);
   }
 
   /// The link to send, for a landing page at [linkBase] (e.g.

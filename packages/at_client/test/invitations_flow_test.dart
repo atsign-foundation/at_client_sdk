@@ -20,6 +20,9 @@ class _Servers {
   /// cannot be sent to.
   final failAlways = <String>[];
 
+  /// Every key name put, in order.
+  final puts = <String>[];
+
   Map<String, _Record> of(String atSign) =>
       _stores.putIfAbsent(atSign, () => {});
 
@@ -98,6 +101,7 @@ class _Client extends Fake implements AtClient {
   Future<bool> put(AtKey key, dynamic value,
       {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
     final name = key.toString();
+    servers.puts.add(name);
     final validation = AtKeyValidators.get().validate(
       name,
       ValidationContext()
@@ -396,6 +400,102 @@ void main() {
             expiresAt!.difference(item.expiresAt).inSeconds.abs(), lessThan(60),
             reason: lock.key);
       }
+    });
+  });
+
+  group('the invitee', () {
+    test('an invitation must last at least a millisecond', () async {
+      for (final expiresIn in [
+        Duration.zero,
+        const Duration(microseconds: 500),
+        const Duration(days: -1),
+      ]) {
+        await expectLater(
+            alice.invite(expiresIn: expiresIn), throwsArgumentError,
+            reason: 'a preview with a ttl of 0 would never expire');
+      }
+      expect(servers.puts, isEmpty);
+    });
+
+    test('a preview with a known id from another inviter is refused', () async {
+      final created = await alice.invite();
+      final id = created.link.id;
+      await bob.preview(created.link);
+      servers.of('@mallory')['public:_$id.invitations.$_ns@mallory'] = _Record(
+          jsonEncode(InvitationPreview(publicDetails: const {
+        'from': 'Mallory'
+      }, expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)))
+              .toJson()));
+
+      await expectLater(
+          bob.preview(InvitationLink(inviter: '@mallory'.toAtsign(), id: id)),
+          throwsStateError);
+      expect(
+          (await (await bob.receivedInvitations).get(id, bob.me)).obj.inviter,
+          alice.me);
+    });
+
+    test('an expired or connected invitation cannot be accepted', () async {
+      for (final (status, expiresAt) in [
+        ('previewed', DateTime.now().toUtc().subtract(const Duration(days: 1))),
+        ('connected', DateTime.now().toUtc().add(const Duration(days: 1))),
+      ]) {
+        final id = status == 'previewed' ? 'a' * 32 : 'b' * 32;
+        servers.plant(
+            '@bob',
+            '$id.received.invitations.$_ns@bob',
+            'at_client.ReceivedInvitation',
+            ReceivedInvitation(
+              inviter: alice.me,
+              publicDetails: const {},
+              expiresAt: expiresAt,
+              status: ReceivedInvitationStatus.values.byName(status),
+            ).toJson());
+
+        await expectLater(
+            bob.accept(InvitationLink(inviter: alice.me, id: id), '123456'),
+            throwsStateError,
+            reason: status);
+      }
+      expect(servers.puts.where((k) => k.contains('.acceptances.')), isEmpty);
+    });
+
+    test('declining after accepting withdraws the acceptance', () async {
+      final created = await alice.invite();
+      await bob.accept(created.link, created.code);
+
+      await bob.decline(created.link.id);
+
+      expect(
+          servers.of('@alice').keys.where((k) => k.contains('.acceptances.')),
+          isEmpty);
+      expect(await pass(), isEmpty);
+    });
+
+    test('content sent separately opens even after the inviter confirmed',
+        () async {
+      final created = await alice
+          .invite(content: {'text': 'secret'}, contentOutOfBand: true);
+      await bob.accept(created.link, created.code);
+      await alice.processAcceptances();
+      expect((await bob.processConnections()).single.obj.content, isNull);
+
+      await bob.preview(created.link,
+          outOfBandContent: created.outOfBandContent);
+
+      expect((await bob.processConnections()).single.obj.content,
+          {'text': 'secret'});
+    });
+
+    test('a wrong code already counted costs no write on later passes',
+        () async {
+      final created = await alice.invite();
+      await clientOf('@m1').accept(created.link, wrongCode(created.code));
+      expect(await pass(), [InvitationOutcome.wrongCode]);
+      servers.puts.clear();
+
+      expect(await pass(), [InvitationOutcome.handledElsewhere]);
+      expect(servers.puts, isEmpty);
     });
   });
 

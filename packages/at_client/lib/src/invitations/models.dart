@@ -110,18 +110,26 @@ class InvitationPreview {
     this.content,
   });
 
+  /// Reads a preview, throwing a [FormatException] for one this version
+  /// cannot read.
   factory InvitationPreview.fromJson(Map<String, dynamic> json) {
     if (json['v'] != version) {
       throw FormatException(
           'unsupported invitation preview version ${json['v']}');
     }
-    return InvitationPreview(
-      publicDetails: _map(json['publicDetails'])!,
-      expiresAt: DateTime.parse(json['expiresAt']),
-      content: json['content'] == null
-          ? null
-          : SealedInvitationContent.fromJson(json['content']),
-    );
+    try {
+      return InvitationPreview(
+        publicDetails: _map(json['publicDetails'])!,
+        expiresAt: DateTime.parse(json['expiresAt']),
+        content: json['content'] == null
+            ? null
+            : SealedInvitationContent.fromJson(json['content']),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (e) {
+      throw FormatException('malformed invitation preview: $e');
+    }
   }
 
   Map<String, dynamic> toJson() => {
@@ -141,7 +149,8 @@ enum ReceivedInvitationStatus { previewed, accepted, connected }
 class ReceivedInvitation {
   final Atsign inviter;
 
-  /// The inviter's details, from the preview.
+  /// The inviter's details, from the preview. The inviter's app wrote them,
+  /// so they say what it chose to say, verified by nothing.
   final Map<String, dynamic> publicDetails;
   final DateTime expiresAt;
 

@@ -11,7 +11,13 @@ import 'package:at_client/src/invitations/invitation_key.dart';
 import 'package:at_client/src/invitations/invitation_link.dart';
 import 'package:at_client/src/invitations/models.dart';
 import 'package:at_commons/at_commons.dart'
-    show AtKey, AtKeyNotFoundException, Atsign, AtsignString, StoppedException;
+    show
+        AtKey,
+        AtKeyNotFoundException,
+        Atsign,
+        AtsignString,
+        KeyNotFoundException,
+        StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -159,13 +165,18 @@ mixin Invitations {
   /// them; anything private belongs in [content], which is encrypted and
   /// fixed here. With [contentOutOfBand] the encrypted content is returned
   /// for the app to send alongside the link rather than published in the
-  /// preview.
+  /// preview. [expiresIn] must be at least a millisecond.
   Future<CreatedInvitation> invite({
     Map<String, dynamic> publicDetails = const {},
     Map<String, dynamic>? content,
     bool contentOutOfBand = false,
     Duration expiresIn = const Duration(days: 7),
   }) async {
+    // NOTE: a preview ttl of 0 would never expire.
+    if (expiresIn.inMilliseconds < 1) {
+      throw ArgumentError.value(
+          expiresIn, 'expiresIn', 'must be at least a millisecond');
+    }
     final id = _randomHex(16);
     final code = _randomCode();
     final expiresAt = DateTime.now().toUtc().add(expiresIn);
@@ -225,6 +236,11 @@ mixin Invitations {
   ///
   /// A record it cannot read, or an acceptance it cannot handle, is logged
   /// and skipped, so it cannot hold up the others.
+  ///
+  /// An acceptance is judged against the invitation's expiry when it is
+  /// handled, not when it was sent, since only the invitee vouches for when
+  /// that was. An invitation that should confirm promptly wants a client of
+  /// the inviter's running.
   Future<
       List<
           ({
@@ -278,7 +294,8 @@ mixin Invitations {
     // NOTE: only an acceptance that cannot decide the invitation takes a
     // claim. A claim taken before a decision would strand the acceptance if
     // the decision then failed.
-    if (!await _createOnce(_claimKey(acceptance), 'claimed', invitation)) {
+    if (await _heldLocally(_claimKey(acceptance)) ||
+        !await _createOnce(_claimKey(acceptance), 'claimed', invitation)) {
       return InvitationOutcome.handledElsewhere;
     }
     return expired ? InvitationOutcome.expired : _countWrongCode(invitation);
@@ -411,13 +428,21 @@ mixin Invitations {
 
   /// Fetches an invitation's preview and keeps it, with its content when the
   /// content travels in the preview. [outOfBandContent] is content that
-  /// travelled some other way, e.g. in an email.
+  /// travelled some other way, e.g. in an email. It can arrive after the
+  /// inviter has confirmed this atSign; [processConnections] then opens it.
+  ///
+  /// Throws a [StateError] when this atSign already holds an invitation with
+  /// the same id from a different inviter.
   Future<CItem<ReceivedInvitation>> preview(
     InvitationLink link, {
     SealedInvitationContent? outOfBandContent,
   }) async {
     final existing = await (await receivedInvitations).getOrNull(link.id, me);
-    if (existing != null && existing.obj.inviter == link.inviter) {
+    if (existing != null && existing.obj.inviter != link.inviter) {
+      throw StateError('${existing.obj.inviter} already sent an invitation '
+          'with the id ${link.id}');
+    }
+    if (existing != null) {
       if (existing.obj.sealedContent != null || outOfBandContent == null) {
         return existing;
       }
@@ -449,7 +474,8 @@ mixin Invitations {
   /// sending the inviter [details] of this atSign's choosing.
   ///
   /// The inviter decides; [processConnections] reports the connection once
-  /// they have.
+  /// they have. Throws a [StateError] when the invitation has expired or is
+  /// already connected.
   Future<void> accept(
     InvitationLink link,
     String code, {
@@ -457,6 +483,12 @@ mixin Invitations {
     SealedInvitationContent? outOfBandContent,
   }) async {
     final invitation = await preview(link, outOfBandContent: outOfBandContent);
+    if (invitation.obj.status == ReceivedInvitationStatus.connected) {
+      throw StateError('invitation ${link.id} is already connected');
+    }
+    if (DateTime.now().toUtc().isAfter(invitation.obj.expiresAt)) {
+      throw StateError('invitation ${link.id} has expired');
+    }
     await (await acceptances).create(
       obj: InvitationAcceptance(
           invitationId: link.id, code: code, details: details),
@@ -469,9 +501,17 @@ mixin Invitations {
     );
   }
 
-  /// Forgets an invitation. The inviter is not told, so they never learn
-  /// this atSign.
+  /// Forgets an invitation, and withdraws this atSign's acceptance of it if
+  /// there is one.
+  ///
+  /// Declining before accepting tells the inviter nothing, so they never
+  /// learn this atSign. After accepting, the inviter may already have seen
+  /// the acceptance, or decided on it.
   Future<void> decline(String id) async {
+    final sent = await acceptances;
+    for (final acceptance in await _readable(sent, owner: me)) {
+      if (acceptance.obj.invitationId == id) await sent.delete(acceptance);
+    }
     final invitation = await (await receivedInvitations).getOrNull(id, me);
     if (invitation != null) {
       await (await receivedInvitations).delete(invitation);
@@ -508,9 +548,16 @@ mixin Invitations {
       CItem<InvitationConnection> connection) async {
     final invitation =
         await (await receivedInvitations).getOrNull(connection.id, me);
-    if (invitation == null ||
-        invitation.obj.inviter != connection.owner ||
-        invitation.obj.status != ReceivedInvitationStatus.accepted) {
+    if (invitation == null || invitation.obj.inviter != connection.owner) {
+      return null;
+    }
+    final contentArrivedLate =
+        invitation.obj.status == ReceivedInvitationStatus.connected &&
+            invitation.obj.content == null &&
+            invitation.obj.sealedContent != null &&
+            connection.obj.contentKey != null;
+    if (invitation.obj.status != ReceivedInvitationStatus.accepted &&
+        !contentArrivedLate) {
       return null;
     }
     Map<String, dynamic>? content;
@@ -586,6 +633,17 @@ mixin Invitations {
     } catch (e) {
       if (e.toString().toLowerCase().contains('immutable')) return false;
       rethrow;
+    }
+  }
+
+  /// Whether this client already holds [key], without asking the atServer.
+  Future<bool> _heldLocally(AtKey key) async {
+    try {
+      return (await atClient.get(key)).value != null;
+    } on AtKeyNotFoundException {
+      return false;
+    } on KeyNotFoundException {
+      return false;
     }
   }
 

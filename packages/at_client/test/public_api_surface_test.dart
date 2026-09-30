@@ -212,8 +212,9 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/enroll/signing_key_mint.dart',
   'package:at_client/src/secret_sharing/secret_sharing.dart',
   // Invitations sit here, off the AtClient API: `AtClientInvitations` takes a
-  // client, and the `Invitations` mixin carries the same API. The three files
-  // after it are the types that API takes and returns.
+  // client, and the `Invitations` mixin carries the same API. The link and
+  // model files are the types that API takes and returns; the key file is the
+  // content key's cipher, for code that seals or opens content itself.
   'package:at_client/src/mixins/invitations.dart',
   'package:at_client/src/invitations/invitation_key.dart',
   'package:at_client/src/invitations/invitation_link.dart',
