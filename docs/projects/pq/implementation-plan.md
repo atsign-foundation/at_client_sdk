@@ -478,9 +478,9 @@ with it*
     could overwrite a newer copy sync had landed. Owed: file from the fetched
     value's metadata through an atomic put-if-absent in the local keystore, added
     if missing.
-13. **Minting needs at_server c3.16.2 or later (143.7).** Owed: the requirement
-    stated where an application reads it (the at_client README's post-quantum
-    section); `design.md` already states it.
+13. **Minting needs at_server c3.16.2 or later (143.7).** Done: the at_client
+    README's post-quantum section states it (as atServer 3.16.2, the version
+    that tag reports), beside `design.md`.
 
 *`_apsk` — ruled by gkc on 2026-09-30 in
 [ruling 144](detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30);

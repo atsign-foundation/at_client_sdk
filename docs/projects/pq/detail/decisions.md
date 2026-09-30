@@ -14506,8 +14506,9 @@ work-through (items 7–13 of the P0 row's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 which record the behaviour each part replaces). 143.1 is pinned: the command
 every mint, rotation and add sends is asserted raw in
-`test/nskey_minting_test.dart`. The rest is not built yet; the acceptance clauses
-change test-first, with the implementation.
+`test/nskey_minting_test.dart`. 143.7 is documented in the at_client README.
+The rest is not built yet; the acceptance clauses change test-first, with the
+implementation.
 
 ### 143.1 The advertisement carries no ttr
 

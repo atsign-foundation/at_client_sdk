@@ -558,6 +558,13 @@ What each posture switches on:
   chain to a per-atSign signing root that only fully privileged
   enrollments hold.
 
+**atServer version.** Minting a namespace key or a signing root needs
+atServer 3.16.2 or later. Each mint takes a lock that its ttl releases: two
+minutes for a namespace key, 15 seconds for the root. An older atServer
+keeps the lock until its expiry sweep, up to about ten and a half minutes,
+and refuses another mint or rotation of the same key until then. The client
+doesn't check the version.
+
 `pqActive` is for a deployment that controls every client of its
 namespaces and has seeded them: a destination with no published namespace
 key is refused rather than written with the legacy provider. The design,
