@@ -49,10 +49,12 @@ example app. Read these rather than copying snippets from here:
 Smaller copy/paste snippets live under
 [`example/lib/snippets`](example/lib/snippets):
 
-- [`example/lib/snippets/at_invitation.dart`](example/lib/snippets/at_invitation.dart)
-  — replacement for the deprecated `at_invitation_flutter` package. It keeps
-  the SMS/email invite flow as app-owned code instead of a separate Flutter
-  package.
+- [`example/lib/snippets/at_backup_key.dart`](example/lib/snippets/at_backup_key.dart)
+  — replacement for the deprecated `at_backupkey_flutter` package.
+
+Invitations, which replace the deprecated `at_invitation_flutter` package, are
+`AtClientInvitations` in `at_client`; the app at
+[`example/invitations`](example/invitations) shows them end to end.
 
 For a **full Flutter app** using `at_client_flutter` in anger, see
 the two flagship examples — deliberately positioned side-by-side

@@ -992,7 +992,8 @@ the atServer that serves it. So the signing separates two adversaries sharply:
 
 So the operator of an atSign's atServer is in the **confidentiality TCB for all data
 destined to that atSign** (inbound cross-atSign shares, and self-data where the client
-relies on server-served keys) — a transparent, split-view MITM that this signing does
+relies on server-served keys) and for the data that atSign sends out, since its
+clients fetch every peer's keys through it — a transparent, split-view MITM that this signing does
 not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
 classical Atsign has the same property (a sender fetches `public:publickey@alice` from
 @alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
@@ -3492,8 +3493,8 @@ against it, and mint-once reuse.
   `signingAlgo:mldsa65` → on `approved`, persist into the SAME keyfile.
   The whole check → mint → submit → persist span is serialised per keyfile by
   its own advisory lock (`<keyfile>.retrofit.lock`, staleness sized for a
-  network round trip — the keyfile lock's milliseconds-scale settings still
-  guard the flush inside). Mint-once is the check inside that lock: an
+  network round trip — the keyfile lock's own shorter settings still guard
+  the flush inside). Mint-once is the check inside that lock: an
   existing active ML-DSA signing material under any enrollment id is reused,
   never re-minted — [design.md's "if the keyfile already carries a PQ APKAM
   keypair use it"](../design.md), now code. Accepted crash window: dying between

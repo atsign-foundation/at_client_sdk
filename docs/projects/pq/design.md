@@ -1822,8 +1822,8 @@ Given/When/Then test plan + harness mapping is in [`acceptance.md`](acceptance.m
 This section records the confidentiality trust boundary honestly, so nothing elsewhere
 in the doc set overclaims what the advertised-key signing ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
 [decisions.md §12](decisions.md)) achieves. The headline: **the operator of an atSign's
-atServer is in the confidentiality TCB for all data destined to that atSign**, and the
-signing does not, by itself, change that. The last subsection sketches the key-transparency
+atServer is in the confidentiality TCB for all data destined to that atSign, and for the
+data that atSign sends to others**, and the signing does not, by itself, change that. The last subsection sketches the key-transparency
 direction that would.
 
 ### 7.1 The anchor problem: an atServer is the de-facto CA for its own atSign
@@ -1859,14 +1859,18 @@ The signing gives the sender **zero** protection here, because the sender's only
 for the `_apsk` it verifies against is the same server that forged the signature — the
 trust is circular for any party whose sole path to @alice's keys is @alice's atServer.
 
+The same applies to what @alice sends *out*. Her clients fetch a peer's keys only through
+her atServer, which proxies the lookup to the peer's
+([section 7.1](#71-the-anchor-problem-an-atserver-is-the-de-facto-ca-for-its-own-atsign)),
+so the keys @alice seals to are also only as trustworthy as her atServer.
+
 ### 7.3 Impact scope — precisely what an operator can and cannot do
 
 - **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
   — inbound cross-atSign shares, and self-data where the client relies on server-served
-  keys rather than locally-held ones — by substituting the *recipient* key. The power is
-  **per-inbound and symmetric**: @alice's operator owns inbound-to-@alice; @bob's operator
-  owns inbound-to-@bob. @alice's operator cannot read what @alice sends *out* to @bob (that
-  is sealed to @bob's key, from @bob's atServer).
+  keys rather than locally-held ones — by substituting the *recipient* key. The same holds
+  for data those atSigns send out, since their clients fetch every peer key through it,
+  so the trust covers both directions of an atSign's traffic.
 - **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
   read is a pass-through re-seal, so any *sender* signature inside the payload survives
   unchanged and still verifies. To silently **modify**, the operator must also defeat that
@@ -1880,7 +1884,7 @@ trust is circular for any party whose sole path to @alice's keys is @alice's atS
 - **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
   substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
   (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
-  break); or MITM traffic to atSigns it does not host.
+  break); or MITM traffic between atSigns it does not host.
 - **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
   the matching public and should seal self-data to the **locally-held** key, never a
   server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD

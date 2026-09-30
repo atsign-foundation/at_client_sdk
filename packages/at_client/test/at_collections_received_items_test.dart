@@ -345,6 +345,52 @@ void main() {
       expect(ids, ['aaa', 'ccc']);
     });
   });
+
+  group('an owner reads its own copy, never one it shared out', () {
+    // A post-quantum share seals each recipient's copy to that recipient's
+    // namespace key, so the owner cannot open it; only its own copy opens.
+    void outboundCopiesAreSealed() {
+      when(() => atClient.get(any())).thenAnswer((inv) async {
+        final k = inv.positionalArguments.first as AtKey;
+        if (k.sharedWith != null && k.sharedBy == selfStr) {
+          throw Exception(
+              'sealed to ${k.sharedWith}, not openable by $selfStr');
+        }
+        return AtValue()
+          ..value = jsonEncode({
+            'type': 'n/a',
+            'readBy': <String>[],
+            'obj': universe[k.toString()]
+          })
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+    }
+
+    test('a shared item is read from the owner\'s copy', () async {
+      // NOTE: the outbound copy is inserted first, which is where a scan puts
+      // it: `@bob:q1…` sorts before `q1…`.
+      universe[sharedByMeKey('q1', bobStr)] = 'bob copy';
+      universe[selfKey('q1')] = 'mine';
+      outboundCopiesAreSealed();
+      final c = buildCollection();
+
+      final items = await c.getItems();
+
+      expect(items.map((i) => i.obj), ['mine']);
+      expect(items.single.sharedWith, {bob},
+          reason: 'the outbound copy still says who the item is shared with');
+    });
+
+    test('an outbound copy whose own copy is gone yields nothing', () async {
+      universe[sharedByMeKey('q1', bobStr)] = 'bob copy';
+      outboundCopiesAreSealed();
+      final c = buildCollection();
+
+      expect(await c.getItems(), isEmpty);
+    });
+  });
 }
 
 /// Captures the regex the id-scoped read path emits for

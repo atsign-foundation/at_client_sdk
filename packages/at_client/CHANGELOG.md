@@ -1,5 +1,14 @@
 ## 3.15.0-rc2
 
+- feat (experimental): invitations, including to someone with no atSign yet:
+  `AtClientInvitations` in `at_client_mixins.dart`, also as the `Invitations`
+  mixin. An invitation is a link plus a separate code and can carry encrypted
+  content; the invitee previews and accepts it, and the inviter decides it
+  once.
+- fix: a post-quantum write that `remoteLocalPref` sends to the atServer now
+  sends its content key there too, so the atSign's other clients can read it.
+- fix: listing an `AtCollection` that holds an item this atSign shared
+  post-quantum no longer fails.
 - fix: every enrollment of an atSign reads what its other enrollments shared,
   and a restart no longer writes a new key record for each peer it writes to.
 - fix: key records nothing needs any more are deleted, rather than kept for the
