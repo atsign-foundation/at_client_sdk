@@ -14486,6 +14486,14 @@ a caught-up local store answers completely. Siblings cannot read each other's
 pointers, and a key's conveyance lands just before its first value, so any
 other enrollment checking would delete keys about to be cited.
 
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** no list is kept. Every
+conveyance names the enrollment that cut its key, as `cutBy` in its
+`appMetadata`, and that enrollment derives what to delete: the conveyances it
+cut, less the keys its pointers or its memory name as current, less those a
+record in local storage cites. A collection waits for any cut in progress in
+its process. Unlike a list, this also collects a key whose cut stopped before
+its pointer was written.
+
 **Accepted cost.** A value that exists only on the recipient's side loses its
 key: a notification-delivered value, including a `cacheAtRecipient` copy, or a
 recipient's cached copy of a `ccd: false` record that outlives the sender's.

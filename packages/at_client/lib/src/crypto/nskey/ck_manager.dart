@@ -2,13 +2,18 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckSiblingCopyKey;
+    show
+        ckConveyanceMarker,
+        ckSiblingCopyKey,
+        currentCkPointerRecordName,
+        parseCkConveyanceKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -180,6 +185,19 @@ class CkManager {
     String nskeyKid, {
     required String keyAlgo,
     bool? useRemoteAtServer,
+  }) =>
+      _inTurn(() => _cutAndConveyInTurn(
+          context, valueKey, owner, ckNs, nskeyKid,
+          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer));
+
+  Future<ContentKey> _cutAndConveyInTurn(
+    CryptoContext context,
+    AtKey valueKey,
+    String owner,
+    String ckNs,
+    String nskeyKid, {
+    required String keyAlgo,
+    bool? useRemoteAtServer,
   }) async {
     // NOTE: this must not recurse — the conveyance write routes to at/nskey,
     // which asks for no preparation of its own.
@@ -203,6 +221,127 @@ class CkManager {
     cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
     await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
     return ck;
+  }
+
+  /// Deletes the conveyances of every content key this enrollment cut that is
+  /// neither current nor cited by a record in local storage, and returns how
+  /// many keys went.
+  ///
+  /// Asks local storage only where it answers completely — the client keeps
+  /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
+  /// collects nothing, leaving it to a later start. A client with no
+  /// enrollment id names no cutter on what it conveys, so it collects nothing.
+  Future<int> collectUnused(CryptoContext context) =>
+      _inTurn(() => _collectUnused(context));
+
+  Future<int> _collectUnused(CryptoContext context) async {
+    final atClient = context.atClient;
+    final me = atClient.getCurrentAtSign()?.toLowerCase();
+    final enrollmentId = atClient.enrollmentId;
+    final store = atClient.getLocalSecondary()?.keyStore;
+    if (me == null || enrollmentId == null || store == null) return 0;
+    final partial = await _whyLocalStorageIsPartial(atClient);
+    if (partial != null) {
+      _logger.info('Not collecting unused content keys for $me: $partial');
+      return 0;
+    }
+
+    final cut = <String, List<({String key, Map<String, dynamic> about})>>{};
+    final current = <String>{...cache.currentKids};
+    final cited = <String>{};
+    final ownPointer =
+        '.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}$me';
+    await for (final key in await store.getKeys()) {
+      final lower = key.toLowerCase();
+      if (!lower.endsWith(me)) continue;
+      if (lower.startsWith('$currentCkPointerRecordName.')) {
+        if (lower.endsWith(ownPointer)) {
+          final ckKid = _ckKidIn((await store.get(key))?.data);
+          if (ckKid != null) current.add(ckKid);
+        }
+        continue;
+      }
+      final about = (await store.getMeta(key))?.appMetadata?.additional;
+      final ckKid = about?['ckKid'];
+      if (ckKid is! String) continue;
+      if (!key.contains(ckConveyanceMarker)) {
+        cited.add(ckKid);
+      } else if (about!['cutBy'] == enrollmentId) {
+        (cut[ckKid] ??= []).add((key: key, about: about));
+      }
+    }
+    cut.removeWhere(
+        (ckKid, _) => current.contains(ckKid) || cited.contains(ckKid));
+
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      for (final record in records) {
+        await context.atClient.delete(AtKey.fromString(record.key));
+        final scope = _scopeOf(record.key, record.about);
+        if (scope != null) cache.evict(scope.owner, scope.ckNs, ckKid);
+      }
+    }
+    if (cut.isNotEmpty) {
+      _logger.info('Collected ${cut.length} content key(s) $enrollmentId cut '
+          'and nothing cites any more: ${cut.keys.join(', ')}');
+    }
+    return cut.length;
+  }
+
+  /// Why local storage cannot answer "does any record cite this key?"
+  /// completely, or null when it can.
+  static Future<String?> _whyLocalStorageIsPartial(AtClient atClient) async {
+    final preference = atClient.getPreferences();
+    if (preference == null || !preference.isLocalStoreRequired) {
+      return 'this client keeps no local store';
+    }
+    final syncRegex = preference.syncRegex;
+    if (syncRegex != null && syncRegex.isNotEmpty) {
+      return 'syncRegex "$syncRegex" narrows what local storage holds';
+    }
+    try {
+      if (!await atClient.syncService.isInSync()) {
+        return 'sync has not caught up';
+      }
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      return 'could not ask whether sync has caught up: $e';
+    }
+    return null;
+  }
+
+  static String? _ckKidIn(String? pointer) {
+    if (pointer == null) return null;
+    try {
+      final ckKid = jsonDecode(pointer)['ckKid'];
+      return ckKid is String ? ckKid : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The CK cache scope a conveyance record filed its key under.
+  static ({String owner, String ckNs})? _scopeOf(
+      String key, Map<String, dynamic> about) {
+    final destination = about['destination'];
+    final ckNs = about['ckNs'];
+    if (destination is String && ckNs is String) {
+      return (owner: destination, ckNs: ckNs);
+    }
+    final parsed = parseCkConveyanceKey(key);
+    return parsed == null
+        ? null
+        : (owner: parsed.nskeyOwner, ckNs: parsed.ckNs);
+  }
+
+  Future<void> _turn = Future<void>.value();
+
+  /// Runs [work] once every cut and collection already begun here has
+  /// finished, so a collection never sees a key conveyed but not yet current.
+  Future<T> _inTurn<T>(Future<T> Function() work) {
+    final result = _turn.then((_) => work());
+    _turn = result.then((_) {}, onError: (_) {});
+    return result;
   }
 
   /// Conveys [ck], shared with [destination], a second time — to this atSign's
