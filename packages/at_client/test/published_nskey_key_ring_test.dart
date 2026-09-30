@@ -153,6 +153,29 @@ void main() {
           reason: 'an ordinary blip must not cost a working key');
     });
 
+    test('an atServer error keeps serving the known key inside the grace too',
+        () async {
+      // NOTE: the shape AtClient.get delivers. Every failure but a not-found
+      // arrives as a plain AtClientException carrying only the message, and
+      // at_server reports a peer's unreachable atServer as AT0011.
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => AtClientException.message(
+              'Internal server exception : Outbound connection invalid'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      final first = await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(
+          (await ring.currentPublic(bob, namespace))?.nskeyKid, first?.nskeyKid,
+          reason: 'a peer\'s atServer being down reaches the client as this, '
+              'so only a not-found may end sealing at once');
+    });
+
     test('a failed re-fetch stops serving the known key past the grace',
         () async {
       final c = client(succeedFor: 1, payload: await signedPayloadFor(bobKey));
@@ -163,10 +186,81 @@ void main() {
       expect(await ring.currentPublic(bob, namespace), isNotNull);
       await Future.delayed(const Duration(milliseconds: 30));
 
-      expect(await ring.currentPublic(bob, namespace), isNull,
+      await expectLater(ring.currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
           reason: 'serving a stale generation indefinitely makes the stated '
-              '"TTL plus one content key" exposure unbounded — and a peer that '
-              'rotated because of a revocation is the one to stop sealing to');
+              'TTL-plus-grace exposure unbounded, and a peer that rotated '
+              'because of a revocation is the one to stop sealing to. It '
+              'throws rather than answering none, because none reads as an '
+              'unpublished namespace and sends the resolver to a broader key');
+    });
+
+    test('a not-found on re-fetch ends sealing at once, inside the grace',
+        () async {
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => AtKeyNotFoundException('withdrawn'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      expect(await ring.currentPublic(bob, namespace), isNotNull);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(await ring.currentPublic(bob, namespace), isNull,
+          reason: 'the owner\'s atServer says the record is gone — withdrawn, '
+              'or lost in a reset — so sealing to the cached generation for '
+              'another grace period writes data nobody can open, or that a '
+              'compromised key can');
+    });
+
+    test('a failed fetch after a not-found does not bring the key back',
+        () async {
+      var failures = 0;
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => ++failures == 1
+              ? KeyNotFoundException('withdrawn')
+              : SecondaryConnectException('atServer unreachable'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(await ring.currentPublic(bob, namespace), isNull);
+
+      await expectLater(ring.currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'the not-found dropped the cached generation, so the grace '
+              'has nothing to serve');
+    });
+
+    test('an unreachable atServer with nothing cached throws, not none',
+        () async {
+      final c = client(succeedFor: 0, payload: await signedPayloadFor(bobKey));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'none is a cold start, which a caller reports as the peer '
+              'not having enabled the namespace');
+    });
+
+    test('a peer\'s miss costs one lookup, not two', () async {
+      final c = client(
+          succeedFor: 0,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => KeyNotFoundException('no such key'));
+
+      expect(
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          isNull);
+      expect(c.fetches, hasLength(1),
+          reason: 'another atSign\'s public record is never read locally, so '
+              'a local-first read of it is the same plookup sent twice');
     });
 
     test('a stop during a re-fetch is not read as nothing published', () async {
@@ -363,6 +457,47 @@ void main() {
       expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
           nskeyKidOf(bobKey.publicKeyBytes));
       expect(c.fetches, isEmpty, reason: 'the common case stays free');
+    });
+  });
+
+  group('a failed fetch is not a miss', () {
+    test('it stops the resolver\'s walk rather than sealing to a broader key',
+        () async {
+      final deepKey = await XWingKeyPair.generate();
+      final broad = await signedPayloadFor(bobKey);
+      final deep = await signedPayloadFor(deepKey);
+      var deepReachable = false;
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.atKeysIo).thenReturn(
+          keysHoldingApkam(alice, null, pkamKeyPairFor(alice, null)));
+      Future<AtValue> answer(Invocation invocation) async {
+        final key = invocation.positionalArguments.first as AtKey;
+        if (key.key != '__nskey') return AtValue()..value = bobsApskPublicKey();
+        if (key.namespace != 'medical.notes') return AtValue()..value = broad;
+        if (!deepReachable) {
+          throw SecondaryConnectException('atServer unreachable');
+        }
+        return AtValue()..value = deep;
+      }
+
+      when(() => atClient.get(any())).thenAnswer(answer);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer(answer);
+      final resolver = NskeyResolver(PublishedNskeyKeyRing(atClient));
+
+      await expectLater(resolver.resolve(bob, 'medical.notes'),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'the deeper key exists to exclude enrollments approved only '
+              'for the broader namespace, so sealing to the broader key on a '
+              'failed fetch hands them the data');
+
+      deepReachable = true;
+      expect((await resolver.resolve(bob, 'medical.notes'))?.namespace,
+          'medical.notes',
+          reason: 'the failure was not remembered as an empty level, so the '
+              'deeper key is found as soon as the atServer answers');
     });
   });
 

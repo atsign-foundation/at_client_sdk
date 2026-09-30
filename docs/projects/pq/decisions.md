@@ -200,7 +200,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
 | [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | LIVE               |
-| [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | LIVE               |
+| [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
 | [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | LIVE               |
 | [145] | A reader's atServer caches no PQ key records; the client bypasses its cache                  | 2026-09-30 | LIVE               |
 

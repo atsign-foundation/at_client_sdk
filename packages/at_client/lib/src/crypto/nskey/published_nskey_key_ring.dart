@@ -189,18 +189,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// The lever on how long a peer's rotation can go unnoticed: a sender never
   /// sees a recipient's decapsulation fail, so re-fetching is the only way it
-  /// learns of one, and total exposure is this window plus one content-key
-  /// lifetime.
+  /// learns of one. The worst-case exposure after a rotation is this plus
+  /// [advertisementStaleGrace].
   final Duration advertisementTtl;
 
-  /// How far past [advertisementTtl] a *failed* re-fetch may keep serving the
-  /// advertisement it already has, before this stops answering for the
-  /// destination at all.
+  /// How far past [advertisementTtl] a re-fetch that cannot reach an answer
+  /// may keep serving the advertisement it already has, before the failure is
+  /// thrown to the caller.
   ///
   /// A short grace absorbs an ordinary blip; past it the write fails rather
   /// than silently handing a revoked enrollment a key it can still open, since
   /// a peer that rotated *because of a revocation* is the one a sender most
-  /// needs to stop sealing to.
+  /// needs to stop sealing to. A not-found gets no grace: the owner's atServer
+  /// has said the record is gone.
   final Duration advertisementStaleGrace;
 
   PublishedNskeyKeyRing(
@@ -735,16 +736,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return cached.advertisement;
     }
 
-    final String payload;
+    final String? payload;
     try {
-      final value =
+      payload =
           await _getLocalThenRemote(nskeyAdvertisementKey(owner, namespace));
-      if (value == null) return _staleOrNothing(cached);
-      payload = value;
     } on StoppedException {
       rethrow;
     } catch (_) {
-      return _staleOrNothing(cached);
+      final stale = _withinGrace(cached);
+      if (stale != null) return stale;
+      rethrow;
+    }
+    if (payload == null) {
+      _remote.remove(scope);
+      return null;
     }
 
     final advertisement = await verifier.verify(owner, payload);
@@ -752,31 +757,39 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return advertisement;
   }
 
-  /// Reads [atKey] from local storage, falling back to the atServer when it is
-  /// not held there — for this client's own atSign. For another atSign's key
-  /// both reads are the same `plookup` to this client's atServer, because
-  /// another atSign's public record is never read locally, so a miss asks
-  /// twice.
+  /// Reads [atKey], or null when the atServer says there is none; any other
+  /// failure throws.
   ///
-  /// Local first because [currentPublic] sits on the write path, so a round
-  /// trip by default would break offline writes; the fallback is what keeps a
-  /// client that has just minted — or whose sibling enrollment minted a moment
-  /// ago — from reading its own published namespace as a cold start until sync
-  /// pulls the record down. What the atServer answers is filed locally on the
-  /// way back.
+  /// For this client's own atSign, local storage first: [currentPublic] sits on
+  /// the write path, so a round trip by default would break offline writes. The
+  /// fallback to the atServer is what keeps a client that has just minted — or
+  /// whose sibling enrollment minted a moment ago — from reading its own
+  /// published namespace as a cold start until sync pulls the record down, and
+  /// what the atServer answers is filed locally on the way back. Another
+  /// atSign's public record is never held locally, so it is read from the
+  /// atServer alone, and an offline write to a peer waits for the network.
   Future<String?> _getLocalThenRemote(AtKey atKey) async {
-    try {
-      final local = await _atClient.get(atKey);
-      if (local.value != null) return local.value as String;
-    } on AtKeyNotFoundException {
-      // NOTE: absent locally is the ordinary state for a record this device
-      // has not synced, and the local keystore and the client's own validation
-      // raise different types for it.
-    } on KeyNotFoundException {
-      // As above.
+    if (atKey.sharedBy == _atClient.getCurrentAtSign()) {
+      try {
+        final local = await _atClient.get(atKey);
+        if (local.value != null) return local.value as String;
+      } on AtKeyNotFoundException {
+        // NOTE: absent locally is the ordinary state for a record this device
+        // has not synced, and the local keystore and the client's own
+        // validation raise different types for it.
+      } on KeyNotFoundException {
+        // As above.
+      }
     }
-    final remote = await _atClient.get(atKey,
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    final AtValue remote;
+    try {
+      remote = await _atClient.get(atKey,
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    } on AtKeyNotFoundException {
+      return null;
+    } on KeyNotFoundException {
+      return null;
+    }
     final value = remote.value as String?;
     if (value != null) await _fileFetched(atKey, value);
     return value;
@@ -808,11 +821,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     }
   }
 
-  /// Serve a cached advertisement whose re-fetch just failed, but only inside
-  /// the grace window — beyond it, answer with nothing so the write fails
-  /// loudly rather than sealing to a generation that may have been rotated
-  /// away from.
-  NskeyAdvertisement? _staleOrNothing(
+  /// The cached advertisement, for a re-fetch that could not reach an answer,
+  /// while [advertisementTtl] plus [advertisementStaleGrace] has not passed
+  /// since it was fetched; past that, null, so the failure reaches the caller
+  /// rather than sealing to a generation that may have been rotated away from.
+  NskeyAdvertisement? _withinGrace(
       ({NskeyAdvertisement advertisement, DateTime fetchedAt})? cached) {
     if (cached == null) return null;
     final age = DateTime.now().difference(cached.fetchedAt);

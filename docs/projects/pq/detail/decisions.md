@@ -1116,7 +1116,7 @@ path costs no network. The original wording chose the tightest bound without cos
 it; this is the same mechanism with a lever on it.
 
 ⚠️ **AMENDED 2026-09-30 by
-[ruling 143.2](#1432-a-not-found-is-final-only-a-transport-failure-gets-the-grace):**
+[ruling 143.2](#1432-a-not-found-is-final-any-other-failure-gets-the-grace):**
 the worst-case exposure is the TTL plus `advertisementStaleGrace`, not "TTL + one
 CK lifetime". A sender re-cuts on the first write after it sees the new
 generation, so the CK term was loose, and the grace a failed re-fetch gets was
@@ -1734,7 +1734,7 @@ was never probed.
 [ruling 143.5](#1435-only-a-not-found-lets-the-resolver-walk-up):** only an
 authoritative not-found counts as "found empty". The implementation also recorded a
 failed fetch as a miss, extending this exposure to every network failure at a deeper
-level; a transport failure now stops the walk instead.
+level; any other failure now stops the walk instead.
 
 ### 19.5 The wire
 
@@ -14506,9 +14506,12 @@ work-through (items 7–13 of the P0 row's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 which record the behaviour each part replaces). 143.1 is pinned: the command
 every mint, rotation and add sends is asserted raw in
-`test/nskey_minting_test.dart`. 143.7 is documented in the at_client README.
-The rest is not built yet; the acceptance clauses change test-first, with the
-implementation.
+`test/nskey_minting_test.dart`. 143.2, 143.4 and 143.5 are built in
+`PublishedNskeyKeyRing.currentPublic` and `_getLocalThenRemote`: a not-found
+answers none and drops the cached generation, and any other failure serves the
+cached one within the grace or throws, which is what stops the resolver's walk.
+143.7 is documented in the at_client README. 143.3 and 143.6 are not built yet;
+the acceptance clauses change test-first, with the implementation.
 
 ### 143.1 The advertisement carries no ttr
 
@@ -14520,13 +14523,14 @@ to every client of that atSign, but would add up to one `ttr` of staleness on
 top, and rotation is the revocation lever. Revisit with a measurement if fetch
 volume becomes a problem.
 
-### 143.2 A not-found is final; only a transport failure gets the grace
+### 143.2 A not-found is final; any other failure gets the grace
 
 An authoritative not-found from the owner's atServer ends sealing to that peer
 at once: the record is gone, withdrawn or lost in an atServer reset, and sealing
 to it for another 15 minutes writes data nobody can open, or a compromised key
-can. Only a transport failure keeps serving the cached advertisement, for
-`advertisementStaleGrace` (15 minutes) — the blip the grace was written for.
+can. Any other failure keeps serving the cached advertisement, for
+`advertisementStaleGrace` (15 minutes) — the blip the grace was written for — and
+past that is thrown to the caller.
 `CryptoRuntime.isReadyFor` throws for an unreachable atServer, as its dartdoc
 says, rather than answering false. A miss sends one `plookup`, not the two
 `_getLocalThenRemote` sends today. The worst-case exposure after a rotation is
@@ -14534,6 +14538,16 @@ says, rather than answering false. A miss sends one `plookup`, not the two
 lifetime" of [ruling 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
 was loose, because a sender re-cuts on the first write after it sees the new
 generation, and it omitted the grace.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** this read "only a transport
+failure keeps serving the cached advertisement", and 143.5 read "a transport
+failure is not a miss". at_server reports a peer's atServer being unreachable as
+`AT0011` (`Internal server exception`), because its outbound client's connection
+exceptions have no code of their own, and `AtClient.get` hands the ring every
+failure but a not-found as a plain `AtClientException` carrying only the message.
+Telling a transport failure apart would mean matching another program's error
+text, so every failure other than a not-found gets the grace instead; a genuine
+atServer error seals to the cached generation for at most the same 15 minutes.
 
 ### 143.3 A client's own advertisement refreshes like a peer's, and on sync
 
@@ -14560,7 +14574,7 @@ issue for intent-based client operations.
 
 A not-found at a namespace level is a miss: the walk goes broader and
 `missMemory` remembers the miss for 15 minutes, which is the exposure
-[ruling 19.4](#194-cost-and-the-three-lifetimes) accepted. A transport failure
+[ruling 19.4](#194-cost-and-the-three-lifetimes) accepted. Any other failure
 is not a miss: it stops the walk, and the write uses that level's cached
 advertisement within its grace, or fails. Before this, every network failure at
 a deeper level sealed to the broader key — letting exactly the enrollments the

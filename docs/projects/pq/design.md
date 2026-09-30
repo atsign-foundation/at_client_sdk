@@ -435,9 +435,13 @@ namespace it lands on is `ckNs`, and cold start is the whole walk coming up empt
 walk mirrors the atServer's own suffix authorisation, so the crypto gate never widens
 past the transport gate, and it is what makes AtCollection viable: sub-collection
 namespaces embed a per-**item** id, so an exact-match rule would need a keypair and a
-per-enrollment conveyance per item. Senders remember which namespaces an owner holds
-levels it has found **empty**, so a repeated write re-probes nothing; a namespace never seen
-before still probes its own levels once, which is the irreducible cost. Remembering *hits*
+per-enrollment conveyance per item. Senders remember the levels of an owner's namespaces
+they have found **empty**, so a repeated write re-probes nothing; a namespace never seen
+before still probes its own levels once, which is the irreducible cost. Only a not-found
+makes a level empty: a level whose advertisement cannot be fetched stops the walk, and the
+write uses that level's cached advertisement within its grace or fails, rather than
+sealing to a broader key the deeper one was minted to exclude
+([ruling 143.5](detail/decisions.md#1435-only-a-not-found-lets-the-resolver-walk-up)). Remembering *hits*
 instead is unsafe and was rejected: it lets a resolution skip the deeper probes entirely, so
 a key at `medical.notes` goes unseen because some earlier write warmed `notes`. Full ruling,
 its cost floor and its accepted exposure: [`decisions.md`](decisions.md) [section 19](detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03).
@@ -473,7 +477,7 @@ was conveyed under; a mismatch forces a fresh CK sealed to the new generation. T
 cache is what keeps this off the write path — `ensureCurrent` runs on every `put`, so
 fetching each time would make a write depend on the recipient's atServer being
 reachable and break offline writes. The cache holds an advertisement for
-`advertisementTtl` (15 minutes); a transport failure keeps serving it for up to
+`advertisementTtl` (15 minutes); any other failure keeps serving it for up to
 `advertisementStaleGrace` (15 more), while a not-found ends sealing to that peer at
 once, so the worst-case exposure after a rotation is the TTL plus the grace
 ([ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30)).

@@ -48,12 +48,15 @@ void main() {
       // THEN  new CKs seal to the successor nskey and their conveyances carry
       //       the new nskeyKid; survivors retain the prior private so retained
       //       history still opens. A peer notices only at its next
-      //       ensureCurrent re-plookup — WITHOUT that the revocation does not
-      //       hold, since a peer still sealing to the superseded generation
-      //       hands the revoked enrollment a key it can open. A joiner approved
-      //       after the rotation is pushed EVERY generation its approver holds
-      //       for the namespaces it was approved for, with requestSecret as
-      //       the backstop for one the push missed. Heavy,
+      //       ensureCurrent re-plookup once its cached advertisement is
+      //       advertisementTtl old — WITHOUT that re-fetch the revocation does
+      //       not hold, since a peer still sealing to the superseded generation
+      //       hands the revoked enrollment a key it can open. A re-fetch that
+      //       cannot reach an answer keeps the cached generation for at most
+      //       advertisementStaleGrace; a not-found drops it at once. A joiner
+      //       approved after the rotation is pushed EVERY generation its
+      //       approver holds for the namespaces it was approved for, with
+      //       requestSecret as the backstop for one the push missed. Heavy,
       //       O(n)-per-enrollment, DISTINCT from CK rotation.
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
@@ -93,6 +96,41 @@ void main() {
             'output is whether a fresh key was cut.',
         clauses: [
           'new CKs are sealed to the successor nskey',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'the advertisement is re-fetched once the TTL has passed',
+        proves: 'the first leg of the bound: an advertisement cached past '
+            'advertisementTtl is fetched again rather than served, counted as '
+            'a second fetch against the first arm of the same group, which '
+            'asserts one fetch inside the TTL.',
+        clauses: [
+          'cached advertisement is `advertisementTtl` (15 minutes) old',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a failed re-fetch stops serving the known key past the grace',
+        proves: 'the second leg: a re-fetch that fails for any reason but a '
+            'not-found serves the cached generation inside '
+            'advertisementStaleGrace (the sibling tests, one of them with the '
+            'AT0011 an unreachable peer atServer produces) and throws past it, '
+            'rather than answering none, which the resolver would read as an '
+            'empty level and walk past.',
+        clauses: [
+          'for at most `advertisementStaleGrace`',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a not-found on re-fetch ends sealing at once, inside the grace',
+        proves: 'a not-found from the owner\'s atServer answers none with the '
+            'grace fifteen minutes long, so the grace is not what ends it; its '
+            'sibling shows the not-found also drops the cached generation, so '
+            'a failed fetch afterwards throws instead of bringing it back.',
+        clauses: [
+          'answered not-found stops sealing to that peer at once',
         ],
       );
       provenIn(

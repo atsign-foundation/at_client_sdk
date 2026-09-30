@@ -1125,8 +1125,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   generation.
 - **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry
   the new `nskeyKid`; each surviving enrollment **retains** the prior private, so
-  retained history still opens. A peer notices at its next `ensureCurrent`: it
-  re-`plookup`s, sees the changed `nskeyKid`, and cuts a fresh CK to the successor.
+  retained history still opens. A peer notices at its first `ensureCurrent` once its
+  cached advertisement is `advertisementTtl` (15 minutes) old: it re-`plookup`s, sees
+  the changed `nskeyKid`, and cuts a fresh CK to the successor. A re-fetch that cannot
+  reach an answer keeps sealing to the cached generation for at most
+  `advertisementStaleGrace` (15 more minutes) and then fails the write, so a peer seals
+  to a superseded generation for no longer than the two together; a re-fetch answered
+  not-found stops sealing to that peer at once.
   **Without that re-fetch the revocation does not hold** — a peer still sealing to the
   superseded generation hands the revoked enrollment a key it can open, so the
   bounded-exposure assertion is part of this case, not an optimisation. This is the
@@ -1254,9 +1259,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
   ⚠️ **The cut is bounded, not instantaneous.** A peer keeps sealing content keys
   to the superseded generation until its next `ensureCurrent` sees the changed
-  `nskeyKid`, and the revoked holder can still open those. The exposure is the
-  advertisement's freshness window plus one content-key lifetime — UC-A5.1's
-  **Then (b)** calls that part of the case rather than an optimisation.
+  `nskeyKid`, and the revoked holder can still open those. The exposure is
+  `advertisementTtl` plus `advertisementStaleGrace` — UC-A5.1's **Then (b)**
+  calls that part of the case rather than an optimisation.
 
   **Stranding.** Three rules bear on it. An enrollment may not revoke itself
   without `force`, and a revoker must be authorised for every namespace in the
@@ -3467,8 +3472,8 @@ is where its missing lever lives.
     is how a peer learns a rotation happened at all — a sender never sees a
     recipient's decapsulation fail — and it is also the **bound**: until each peer
     re-resolves it goes on sealing to the superseded generation, which the
-    revoked holder can still open. The exposure is the advertisement's freshness
-    window plus one content-key lifetime, which is
+    revoked holder can still open. The exposure is `advertisementTtl` plus
+    `advertisementStaleGrace`, which is
     [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise)'s **Then (b)**
     and not an optimisation;
   - **a client decides a rotation is due without coordinating with another

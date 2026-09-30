@@ -456,23 +456,30 @@ with it*
    client run once made 110 `_apsk` lookups). Pinned: `nskey_minting_test`
    asserts raw the command every mint, rotation and add sends, with no `ttl` and
    no `ttr`.
-8. **A not-found is final; only a transport failure gets the grace (143.2).**
+8. **A not-found is final; any other failure gets the grace (143.2).**
    Found: `PublishedNskeyKeyRing.currentPublic` sent not-found and every
    exception to `_staleOrNothing`, sealing to a withdrawn advertisement for up to
-   30 minutes. Owed: not-found answers nothing at once; `CryptoRuntime.isReadyFor`
-   throws for an unreachable atServer; `_getLocalThenRemote` sends one `plookup`
-   per miss, not two; the `advertisementTtl` and `advertisementStaleGrace`
-   dartdocs and UC-A5.1's **Then (b)** state the bound as the TTL plus the grace.
+   30 minutes. Done: a not-found answers none and drops the cached generation; a
+   failure to reach an answer serves the cached one within the grace and
+   otherwise throws, so `CryptoRuntime.isReadyFor` throws for an unreachable
+   atServer; a peer's miss is one `plookup`. The `advertisementTtl` and
+   `advertisementStaleGrace` dartdocs and UC-A5.1's **Then (b)** state the bound
+   as the TTL plus the grace, proven in `published_nskey_key_ring_test` and
+   `cold_start_test`.
 9. **A client's own advertisement refreshes like a peer's, and on sync (143.3).**
    Found: `_ownCurrent` pinned the ring's own generation for the life of the
    process. Owed: the own advertisement through the 15-minute cache, cleared when
    sync pulls a change; the ring files what it mints locally.
-10. **A peer's advertisement stays in memory (143.4).** Owed: `_getLocalThenRemote`'s
-    dartdoc says "local first" covers the client's own atSign. Offline sealing to
-    a peer waits for [#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117).
+10. **A peer's advertisement stays in memory (143.4).** Done: `_getLocalThenRemote`
+    reads local storage first for the client's own atSign only, and says so.
+    Offline sealing to a peer waits for
+    [#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117).
 11. **Only a not-found lets the resolver walk up (143.5).** Found: a failed fetch
     at a deeper level counted as a miss and re-scoped to the broader key for 15
-    minutes. Owed: a transport failure stops `NskeyResolver`'s walk.
+    minutes. Done with item 8: the ring throws rather than answering none, so
+    the walk stops; proven through the real ring under the real resolver in
+    `published_nskey_key_ring_test`, including that the failure is not
+    remembered as a miss.
 12. **The own-advertisement filing is explicit, and only if absent (143.6).**
     Found: `_fileFetched` filed the server's metadata only by side effect, and
     could overwrite a newer copy sync had landed. Owed: file from the fetched
