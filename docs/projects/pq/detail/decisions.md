@@ -14510,8 +14510,9 @@ every mint, rotation and add sends is asserted raw in
 `PublishedNskeyKeyRing.currentPublic` and `_getLocalThenRemote`: a not-found
 answers none and drops the cached generation, and any other failure serves the
 cached one within the grace or throws, which is what stops the resolver's walk.
-143.7 is documented in the at_client README. 143.3 and 143.6 are not built yet;
-the acceptance clauses change test-first, with the implementation.
+143.6 is built in `_fileFetched` and `LocalSecondary.putIfAbsent`. 143.7 is
+documented in the at_client README. 143.3 is not built yet; the acceptance
+clauses change test-first, with the implementation.
 
 ### 143.1 The advertisement carries no ttr
 
@@ -14589,6 +14590,15 @@ has landed: an atomic put-if-absent in the local keystore, added if the keystore
 lacks one. Otherwise a sync landing a newer generation between the local miss
 and the filing could be overwritten with the older one, and 143.3's local-first
 re-read would then seal to it.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** the put-if-absent is
+`LocalSecondary.putIfAbsent`, not a new keystore operation. The keystore is
+`at_persistence_secondary_server`'s `AtKeyValueStore`, published from the at_server
+repo, and its `create` upserts on SQLite, so adding one meant an at_server release
+before at_client could use it. Every write of this record — sync's pull, the
+filing, an application's put — goes through `LocalSecondary`, which now runs the
+writes to one record name one at a time, so the check and the write cannot be
+split by another of them.
 
 ### 143.7 Minting needs at_server c3.16.2 or later
 

@@ -791,12 +791,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return null;
     }
     final value = remote.value as String?;
-    if (value != null) await _fileFetched(atKey, value);
+    if (value != null) await _fileFetched(atKey, value, remote.metadata);
     return value;
   }
 
   /// Files a value this client just fetched from the atServer into local
-  /// storage, without offering it back to the atServer.
+  /// storage, with the metadata the atServer answered with, unless local
+  /// storage holds one by then — a copy sync landed, which sync keeps current,
+  /// and which writing over could put back a generation sync has moved past.
   ///
   /// `cameFromServer: true` is what keeps the write out of the client→server
   /// sync queue: a queued entry carries the key's *name*, so a later drain
@@ -806,12 +808,18 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// **Our own atSign only** — a peer's advertisement is not ours to publish,
   /// and for a peer the [advertisementTtl] cache is the mechanism. Failure is
   /// logged and swallowed, since the read already has its answer.
-  Future<void> _fileFetched(AtKey atKey, String value) async {
+  Future<void> _fileFetched(
+      AtKey atKey, String value, Metadata? fetchedMetadata) async {
     if (atKey.sharedBy != _atClient.getCurrentAtSign()) return;
+    final filed = AtKey()
+      ..key = atKey.key
+      ..namespace = atKey.namespace
+      ..sharedBy = atKey.sharedBy
+      ..metadata = fetchedMetadata ?? (Metadata()..isPublic = true);
     try {
-      await _atClient.getLocalSecondary()!.executeVerb(
+      await _atClient.getLocalSecondary()!.putIfAbsent(
           UpdateVerbBuilder()
-            ..atKey = atKey
+            ..atKey = filed
             ..value = value,
           cameFromServer: true);
     } on StoppedException {

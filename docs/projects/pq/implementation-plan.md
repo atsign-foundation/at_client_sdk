@@ -482,9 +482,13 @@ with it*
     remembered as a miss.
 12. **The own-advertisement filing is explicit, and only if absent (143.6).**
     Found: `_fileFetched` filed the server's metadata only by side effect, and
-    could overwrite a newer copy sync had landed. Owed: file from the fetched
-    value's metadata through an atomic put-if-absent in the local keystore, added
-    if missing.
+    could overwrite a newer copy sync had landed. Done: `_fileFetched` files
+    with the fetched value's metadata through `LocalSecondary.putIfAbsent`, and
+    `LocalSecondary` runs the writes to one record name one at a time — gkc chose
+    that over a keystore operation in at_server's
+    `at_persistence_secondary_server`, which would have waited on its release.
+    Proven in `local_secondary_put_if_absent_test` (a write landing mid-filing
+    survives) and `published_nskey_key_ring_test`.
 13. **Minting needs at_server c3.16.2 or later (143.7).** Done: the at_client
     README's post-quantum section states it (as atServer 3.16.2, the version
     that tag reports), beside `design.md`.

@@ -362,7 +362,11 @@ void main() {
         final remote = options?.useRemoteAtServer ?? false;
         askedRemote.add(remote);
         if (!remote) throw AtKeyNotFoundException('$key');
-        return AtValue()..value = payload;
+        return AtValue()
+          ..value = payload
+          ..metadata = (Metadata()
+            ..isPublic = true
+            ..updatedAt = DateTime.utc(2026, 3, 4));
       }
 
       when(() => atClient.get(any())).thenAnswer(answer);
@@ -370,14 +374,14 @@ void main() {
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenAnswer(answer);
 
-      when(() => localSecondary.executeVerb(any(),
+      when(() => localSecondary.putIfAbsent(any(),
           cameFromServer: any(named: 'cameFromServer'))).thenAnswer((i) async {
         filedLocally.add((
           command:
               (i.positionalArguments.first as UpdateVerbBuilder).buildCommand(),
           cameFromServer: i.namedArguments[#cameFromServer] as bool,
         ));
-        return 'data:1';
+        return true;
       });
 
       return (
@@ -405,8 +409,9 @@ void main() {
               'atServer only once local storage has nothing');
     });
 
-    test('what the atServer answered is filed locally, and not offered back',
-        () async {
+    test(
+        'what the atServer answered is filed locally only if absent, and not '
+        'offered back', () async {
       final c = clientMissingLocally(await signedPayloadFor(bobKey));
 
       await PublishedNskeyKeyRing(c.atClient).currentPublic(alice, namespace);
@@ -416,6 +421,11 @@ void main() {
               'the round trip on every read');
       expect(c.filedLocally.single.command,
           contains('public:__nskey.$namespace$alice'));
+      expect(c.filedLocally.single.command,
+          contains(':uAt:2026-03-04T00:00:00.000000Z:'),
+          reason: 'filed with the metadata of the value the atServer answered, '
+              'not with whatever the key object passed to the read carries '
+              'afterwards');
       expect(c.filedLocally.single.cameFromServer, isTrue,
           reason: 'an ordinary local write queues the key NAME for a '
               'client→server push, and the push sends whatever local storage '
