@@ -465,10 +465,11 @@ with it*
    enrollment cut and nothing names any more — not its pointers, not its
    memory, not a record in local storage — only where the client keeps a local
    store, no `syncRegex` narrows it and sync has caught up, and never while a
-   cut in its process is in progress (`ck_collection_test.dart`). Owed: running
-   it at each start and after each rotation; UC-A5.4's "the superseded
-   conveyance record is **retained**" and its default's rationale rewritten; a
-   live proof.
+   cut in its process is in progress (`ck_collection_test.dart`). It runs once
+   sync first reports the client caught up after a start, and behind every cut
+   that replaces a current key, without holding up the write. Owed: UC-A5.4's
+   "the superseded conveyance record is **retained**" and its default's
+   rationale rewritten; a live proof.
 4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed
    beyond items 1 and 3, which give it an eviction path.
 5. **Conveyances are kept from application code (142.5).** Found: a subscriber

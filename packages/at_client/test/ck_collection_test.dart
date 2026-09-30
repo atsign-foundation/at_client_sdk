@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    show collectUnusedOnceCaughtUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -26,6 +28,8 @@ class _Store extends Mock
   Future<AtMetaData?> getMeta(String key) async => data[key]?.metaData;
 }
 
+class _FakeListener extends Fake implements SyncProgressListener {}
+
 /// Collecting the content keys an enrollment cut and nothing cites any more.
 void main() {
   const alice = '@alice';
@@ -40,6 +44,7 @@ void main() {
     aliceNskey = await XWingKeyPair.generate();
     bobNskey = await XWingKeyPair.generate();
     registerFallbackValue(AtKey());
+    registerFallbackValue(_FakeListener());
   });
 
   /// A client of alice, enrolled as [enrollmentId], whose writes land in
@@ -53,13 +58,16 @@ void main() {
     MockAtClient client,
     MockSyncService sync,
     Completer<void> Function() parkNextConveyance,
-  }) enrolled({String? enrolledAs = enrollmentId}) {
+  }) enrolled(
+      {String? enrolledAs = enrollmentId,
+      CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
     final ring = InMemoryNskeyKeyRing()
       ..seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes)
       ..seedKeypair(alice, namespace,
           publicKey: aliceNskey.publicKeyBytes,
           privateKey: aliceNskey.privateKeyBytes);
-    final config = CryptoConfig.nskey(keyRing: ring);
+    final config =
+        CryptoConfig.nskey(keyRing: ring, ckRotationPolicy: ckRotationPolicy);
     final client = MockAtClient();
     client.getPreferences().crypto = config;
     when(() => client.getCurrentAtSign()).thenReturn(alice);
@@ -155,17 +163,15 @@ void main() {
 
   group('collecting unused content keys', () {
     test(
-        'a key this enrollment superseded, which nothing cites, goes — both '
+        'a rotation collects the key it superseded, which nothing cites — both '
         'conveyances', () async {
       final a = enrolled();
       await a.manager.ensureCurrent(a.context, shared());
       final superseded = a.cache.current(bob, namespace)!.ckKid;
       await a.manager.rotateContentKey(a.context, shared());
       final current = a.cache.current(bob, namespace)!.ckKid;
+      await a.manager.idle;
 
-      final collected = await a.manager.collectUnused(a.context);
-
-      expect(collected, 1);
       expect(a.deleted.toSet(), conveyancesOf(superseded).toSet());
       expect(a.store.data.keys, containsAll(conveyancesOf(current)));
       expect(a.cache.get(bob, namespace, superseded), isNull,
@@ -175,13 +181,24 @@ void main() {
     test('a superseded key a record still cites is kept', () async {
       final a = enrolled();
       await a.manager.ensureCurrent(a.context, shared());
-      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      cite(a.store, a.cache.current(bob, namespace)!.ckKid);
       await a.manager.rotateContentKey(a.context, shared());
-      cite(a.store, superseded);
+      await a.manager.idle;
 
       expect(await a.manager.collectUnused(a.context), 0);
       expect(a.deleted, isEmpty,
           reason: 'deleting it would leave that record unreadable');
+    });
+
+    test('a key replaced on the policy\'s say-so is collected too', () async {
+      final a = enrolled(ckRotationPolicy: (_) async => true);
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      await a.manager.ensureCurrent(a.context, shared());
+      await a.manager.idle;
+
+      expect(a.cache.current(bob, namespace)!.ckKid, isNot(superseded));
+      expect(a.deleted.toSet(), conveyancesOf(superseded).toSet());
     });
 
     test('the current key is kept although nothing cites it yet', () async {
@@ -260,22 +277,24 @@ void main() {
   });
 
   group('collecting nothing where local storage may be partial', () {
-    /// A superseded, uncited key, which a collection would otherwise delete.
+    /// A superseded, uncited key, which the rotation's collection and any
+    /// later one would otherwise delete.
     Future<({CkManager manager, CryptoContext context, List<String> deleted})>
         withGarbage(
             void Function(MockAtClient client, MockSyncService sync) narrow,
             {String? enrolledAs = enrollmentId}) async {
       final a = enrolled(enrolledAs: enrolledAs);
       await a.manager.ensureCurrent(a.context, shared());
-      await a.manager.rotateContentKey(a.context, shared());
       narrow(a.client, a.sync);
+      await a.manager.rotateContentKey(a.context, shared());
+      await a.manager.idle;
       return (manager: a.manager, context: a.context, deleted: a.deleted);
     }
 
     test('the control: with nothing narrowed, the key goes', () async {
       final a = await withGarbage((_, __) {});
 
-      expect(await a.manager.collectUnused(a.context), 1);
+      expect(a.deleted, hasLength(2));
     });
 
     test('while sync has not caught up', () async {
@@ -308,6 +327,50 @@ void main() {
       });
 
       expect(await a.manager.collectUnused(a.context), 0);
+      expect(a.deleted, isEmpty);
+    });
+  });
+
+  group('at each start', () {
+    test('a collection runs once sync first reports this client caught up',
+        () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      conveyance(a.store, 'orphan0000000000', cutBy: enrollmentId);
+      final listeners = <SyncProgressListener>[];
+      when(() => a.sync.addProgressListener(any()))
+          .thenAnswer((inv) => listeners.add(inv.positionalArguments[0]));
+
+      final waiting =
+          collectUnusedOnceCaughtUp(a.sync, () => a.manager, a.context);
+      await Future<void>.delayed(Duration.zero);
+      expect(a.deleted, isEmpty, reason: 'nothing before sync has caught up');
+
+      for (final listener in List.of(listeners)) {
+        listener.onSyncProgressEvent(SyncProgress()
+          ..syncStatus = SyncStatus.success
+          ..pendingPushCount = 0);
+      }
+      await waiting;
+
+      expect(a.deleted, ['$bob:orphan0000000000.__ck.$namespace$alice']);
+    });
+
+    test('a service that stops before catching up collects nothing', () async {
+      final a = enrolled();
+      conveyance(a.store, 'orphan0000000000', cutBy: enrollmentId);
+      final listeners = <SyncProgressListener>[];
+      when(() => a.sync.addProgressListener(any()))
+          .thenAnswer((inv) => listeners.add(inv.positionalArguments[0]));
+
+      final waiting =
+          collectUnusedOnceCaughtUp(a.sync, () => a.manager, a.context);
+      await Future<void>.delayed(Duration.zero);
+      for (final listener in List.of(listeners)) {
+        listener.onSyncProgressEvent(SyncProgress()..stopped = true);
+      }
+      await waiting;
+
       expect(a.deleted, isEmpty);
     });
   });

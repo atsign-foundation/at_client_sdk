@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -16,9 +17,32 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
         parseCkConveyanceKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('CkManager');
+
+/// Collects unused content keys once [sync] first reports this client caught
+/// up, with whichever manager [manager] names by then.
+///
+/// A service that stops first ends the wait, and nothing is collected.
+Future<void> collectUnusedOnceCaughtUp(SyncService sync,
+    CkManager? Function() manager, CryptoContext context) async {
+  try {
+    await sync.waitUntilCaughtUp();
+  } on StoppedException {
+    return;
+  }
+  try {
+    await manager()?.collectUnused(context);
+  } on StoppedException {
+    return;
+  } catch (e) {
+    _logger.warning('Could not collect unused content keys once sync caught '
+        'up; the next start tries again: $e');
+  }
+}
 
 /// Keeps a current content key in place for each destination a client writes to.
 ///
@@ -218,9 +242,24 @@ class CkManager {
 
     // NOTE: promoted only once the record is durable — a failed conveyance left
     // as the current key would make every later value cite a CK never sent.
+    final replaced = cache.current(owner, ckNs) != null;
     cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
     await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
+    // NOTE: queued behind this cut and not awaited, so the write it serves is
+    // not held up by a pass over local storage.
+    if (replaced) unawaited(_collectAfterReplacing(context));
     return ck;
+  }
+
+  Future<void> _collectAfterReplacing(CryptoContext context) async {
+    try {
+      await collectUnused(context);
+    } on StoppedException {
+      return;
+    } catch (e) {
+      _logger.warning('Could not collect the content key just replaced; the '
+          'next start tries again: $e');
+    }
   }
 
   /// Deletes the conveyances of every content key this enrollment cut that is
@@ -335,6 +374,10 @@ class CkManager {
   }
 
   Future<void> _turn = Future<void>.value();
+
+  /// Completes once every cut and collection begun here so far has finished.
+  @visibleForTesting
+  Future<void> get idle => _turn;
 
   /// Runs [work] once every cut and collection already begun here has
   /// finished, so a collection never sees a key conveyed but not yet current.

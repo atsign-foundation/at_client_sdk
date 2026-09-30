@@ -23,6 +23,8 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -338,6 +340,12 @@ class AtClientImpl implements AtClient {
     if (cache != null) {
       syncService.addProgressListener(ContentKeyEviction(cache));
     }
+    // NOTE: the manager is looked up once sync has caught up rather than now,
+    // since an application may name its crypto configuration after this runs.
+    unawaited(collectUnusedOnceCaughtUp(
+        syncService,
+        () => CryptoConfig.forClient(this).ckManager,
+        CryptoContext(atClient: this)));
     _pqBootstrap?.sharing.attachToServices();
   }
 
