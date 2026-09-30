@@ -921,9 +921,9 @@ void main() {
       expect(c.cache.current(owner, namespace)!.ckKid, rotated.ckKid,
           reason: 'new writes encrypt under the successor');
       expect(c.deleted, isEmpty,
-          reason: 'retaining the old conveyance is the DEFAULT: it is what '
-              'lets a late-joining enrollment read history, which is the '
-              'legacy-like behaviour most apps expect');
+          reason: 'a rotation deletes nothing itself: a superseded key goes '
+              'only through the collection, which keeps it while a record '
+              'cites it');
       expect(c.cache.get(owner, namespace, superseded.ckKid), isNotNull,
           reason: 'and data written under it still decrypts');
     });

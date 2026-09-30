@@ -1327,16 +1327,17 @@ knows which is which. Design in
   so a restart does not present every key to the policy as freshly cut, and two
   devices reading the same record reach the same answer.
 - **Then, what a yes does:** a fresh content key is cut and conveyed, and the
-  superseded conveyance record is **retained** — which is what lets an
-  enrollment that joins later read what was written before it. Retention is the
-  per-namespace history knob of UC-A5.1's lever (a), and the SDK's own lever
-  does not delete on the application's behalf.
+  superseded key's conveyances are **kept while any record cites it** — which
+  is what lets an enrollment that joins later read what was written before it
+  — and deleted by the enrollment that cut it once none does. Deleting a key
+  that records still cite is UC-A5.1's lever (a), which the SDK never pulls on
+  the application's behalf.
 - **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
   week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
-  than a day because every replacement writes a record that is then retained,
-  so a short period accumulates records for the lifetime of the atSign; rather
-  than a month because a week is already the period this design measures an
-  envelope's life in.
+  than a day because each replacement adds a conveyance that is kept as long
+  as any record written under its key lives, so a short period multiplies what
+  a long-lived store keeps; rather than a month because a week is already the
+  period this design measures an envelope's life in.
 
 ### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
 

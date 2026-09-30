@@ -467,9 +467,16 @@ with it*
    store, no `syncRegex` narrows it and sync has caught up, and never while a
    cut in its process is in progress (`ck_collection_test.dart`). It runs once
    sync first reports the client caught up after a start, and behind every cut
-   that replaces a current key, without holding up the write. Owed: UC-A5.4's
-   "the superseded conveyance record is **retained**" and its default's
-   rationale rewritten; a live proof.
+   that replaces a current key, without holding up the write; a pass refused
+   because writes arrived in between tries again at each later sync that
+   catches up. UC-A5.4 now says
+   a superseded key is kept while a record cites it and collected once none
+   does, with its default's rationale restated. Proven live in
+   `content_key_rotation_live_test.dart`: a cited key survives its rotation,
+   an uncited one leaves the atServer, and a restarted client with nothing in
+   memory collects once sync catches up and keeps the key its pointer names.
+   The policy-driven replacement is proven live too: the key it replaces
+   leaves the atServer at the next sync that catches up, with no restart.
 4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed
    beyond items 1 and 3, which give it an eviction path.
 5. **Conveyances are kept from application code (142.5).** Found: a subscriber

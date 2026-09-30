@@ -93,7 +93,7 @@ const unprovableClauses = <String, String>{
 const provenClauseCount = 233;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 95;
+const serverProvenClauseCount = 96;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -166,8 +166,6 @@ const liveProofOwed = <String, String>{
       'feasible and additive, and the live arm is the one that found the defect: the unit test bounds a single signingKeys call at five seconds, while the failure was `at_activate approve` not exiting within two minutes because a startup step waited on a later one. Only a real CLI run exercises that ordering, and the CLI pack already spawns at_activate',
   'UC-G3.10':
       'feasible and additive: the row is about the STATE THE ATSERVER IS LEFT IN — the enrolment must still be pending and still approvable by someone else. A mock records that no approval command was sent; only a real atServer can be asked whether the record is still pending and then approved by a second client',
-  'UC-A5.4':
-      'feasible and additive: the unit arm counts conveyance writes against a fixture, and what a rotation actually has to leave behind is a fresh conveyance record ON THE ATSERVER beside the retained superseded one. content_key_rotation_live_test.dart already drives CK rotation live for UC-A5.1(a); an arm supplying a policy that says yes would prove the POLICY route reaches the same place',
   'UC-A5.5':
       'feasible and additive for the same reason, and more so: a namespace-key rotation publishes a successor advertisement and conveys to every authorised enrollment, which a single-process fixture cannot show. The live arm would set a policy that says yes, restart, and read the successor generation back off the atServer',
 };

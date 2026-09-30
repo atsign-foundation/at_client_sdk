@@ -257,14 +257,35 @@ void main() {
               'an assertion that matched `now` would pass whether the age came '
               'from the record or from the device clock',
           clauses: ['takes its **age from that record\'s own date**']);
-      provenIn('packages/at_client/test/ck_manager_test.dart',
-          'cuts a successor and leaves the superseded conveyance in place',
-          proves: 'RETENTION, which is the half a reader is most likely to '
-              'get backwards — the superseded conveyance record survives the '
-              'rotation, and that is what lets a later joiner read what was '
-              'written before it. Deleting it is UC-A5.1(a), a separate and '
-              'deliberate act',
-          clauses: ['the superseded conveyance record is **retained**']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'a superseded key a record still cites is kept',
+          proves: 'the half a reader is most likely to get backwards: the '
+              'collection a rotation queues keeps a key while a record cites '
+              'it, which is what lets a later joiner read what was written '
+              'before it',
+          clauses: ['kept while any record cites it']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'a rotation collects the key it superseded, which nothing cites',
+          proves: 'and deletes both conveyances of one nothing cites, which '
+              'only the enrollment that cut it may do',
+          clauses: ['deleted by the enrollment that cut it once none does']);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'a superseded key is kept while a record cites it, and collected '
+              'once none does',
+          proves: 'both halves against a live atServer: the key survives the '
+              'rotation while a record cites it, and once that record is '
+              'deleted the collection removes its conveyance from the '
+              'atServer and keeps the current one',
+          clauses: ['deleted by the enrollment that cut it once none does']);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'a key the policy replaces is collected at the next caught-up sync',
+          proves: 'the POLICY route reaches the same place live: a policy that '
+              'says yes replaces the key, the replacement\'s collection is '
+              'refused while its own writes push, and at the next sync that '
+              'catches up the uncited key leaves the atServer',
+          clauses: ['deleted by the enrollment that cut it once none does']);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'the period is SEVEN days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '
