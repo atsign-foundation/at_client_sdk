@@ -149,6 +149,22 @@ void main() {
     });
 
     test(
+        'a namespace set on the key is appended even when the name ends in '
+        'the preference namespace', () {
+      final atKey = AtKey()
+        ..key = '__ckcur.bob.buzz'
+        ..namespace = 'primary.a.__e'
+        ..sharedBy = '@alice';
+      expect(
+          AtClientUtil.getKeyWithNameSpace(
+              atKey, AtClientPreference()..namespace = 'buzz'),
+          '__ckcur.bob.buzz.primary.a.__e',
+          reason: 'what the put wrote: AtKey.toString appends the key\'s own '
+              'namespace whatever the name ends in');
+      expect(atKey.toString(), '__ckcur.bob.buzz.primary.a.__e@alice');
+    });
+
+    test(
         'A test to verify namespace is not appended when namespaceAware is set to false',
         () {
       String atKey = AtClientUtil.getKeyWithNameSpace(
