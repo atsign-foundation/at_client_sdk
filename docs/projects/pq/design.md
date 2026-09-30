@@ -199,7 +199,10 @@ Cross-atSign mirrors this with `@bob` as owner of the values he writes for
 Alice — e.g. the data value `@alice:<key>.app_1.my_apps@bob` and the CK conveyance
 `@alice:<ckKid>.__ck.app_1.my_apps@bob`, both sealed to Alice's **nskey** (fetched
 from `public:__nskey.app_1.my_apps@alice`, which exists from the moment she minted
-it) and synced to Alice as cached replicas. (This ownership is why cross-atSign
+it) and synced to Alice as cached replicas: the conveyance carries `ttr -1` and
+`ccd: true`, so Alice's atServer caches it and deleting it cascades to her copy
+([ruling 142.1](detail/decisions.md#1421-a-shared-conveyance-is-cached-at-its-recipient)).
+(This ownership is why cross-atSign
 FS is bilateral — [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 
 **Two atSigns, never one.** Every operation resolves both the **record owner**
@@ -443,6 +446,17 @@ marks it **current**: an arriving conveyance is cached but never promoted, becau
 sync is unordered and an older record would otherwise roll new writes back onto a
 superseded key.
 
+**The current CK is per enrollment.** Each writing enrollment keeps its own current
+CK per destination, named by a pointer on the atServer in the enrollment's own
+reserved namespace, `<enrollmentId>.a.__e`, which holds only ids and is written
+unencrypted. After a restart it resumes by opening the sibling copy
+([§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)), so an
+ephemeral local store does not force a fresh CK
+([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
+Conveyance records and their notifications are kept from application code, which
+can opt in with `showHiddenKeys`
+([ruling 142.5](detail/decisions.md#1425-conveyances-are-kept-from-application-code)).
+
 **Key discovery, and how a sender learns of a rotation.** A sender obtains a
 recipient's `public:__nskey.<ns>@<recipient>` via an exact `plookup` and verifies the
 envelope against the publisher's `_apsk`. There is **no feedback path from a failed
@@ -476,13 +490,19 @@ crypto:
 2. **Convey the CK once** (`at/nskey`): `X-Wing-seal(CK)` to that destination's
    nskey — the owner's **own** nskey for self data; the recipient's published nskey
    for shared — written as a `<ckKid>.__ck.<ns>@<owner>` record stamping `nskeyKid`.
-   (Skip if the CK is already conveyed to that generation.)
+   (Skip if the CK is already conveyed to that generation.) For shared data the
+   same CK is conveyed a second time, to the sender's **own** nskey — the
+   **sibling copy** — so the sender's other enrollments, and the sender after a
+   restart, can open it; a sender holding no nskey of its own there mints one
+   first, at the level the recipient's key was found, unless the application
+   turned `seedNamespaceKeys` off
+   ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
 3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
    `ckKid` (+ `iv`) in `appMetadata`.
 
-A cross-atSign share runs this twice — once for the recipient, once for the sender's
-own scope so her other clients can read what she sent — producing two conveyances and
-two ciphertexts.
+A cross-atSign share therefore writes one ciphertext and two conveyances, the
+recipient's and the sibling copy. An application that wants a separate self-copy
+of the value, as AtCollection writes, still puts one.
 
 **Read** (recipient = an authorised client):
 1. On syncing a `…__ck…` record, `at/nskey` **decapsulates the CK** with the private
@@ -535,9 +555,11 @@ was never embedded in data values). It rides **ordinary sync, not the substrate*
 Conveying the new CK is O(1) — one record, every client unwraps with the shared
 nskey private.
 
-- **Retention knob.** Default: **retain** the `__ck` records (no ttl) → a
-  late-joining APKAM keypair reads history (legacy-like; no FS). **Delete** on
-  rotation → coarse FS. An offline / never-resynced client that retains a cached
+- **Retention knob.** Default: **retain** a superseded `__ck` record (no ttl)
+  while any record cites its CK → a late-joining APKAM keypair reads history
+  (legacy-like; no FS); once none does, the enrollment that cut it deletes it
+  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it)).
+  **Delete** on rotation → coarse FS. An offline / never-resynced client that retains a cached
   CK is the residual: coarse FS is bounded by eviction *reachability*, not only by
   record deletion. Deletion discipline is the FS trusted-computing base.
 

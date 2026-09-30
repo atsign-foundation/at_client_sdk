@@ -1192,6 +1192,12 @@ paid only by a genuine multi-recipient write.
 **Implementation status.** The cache re-scope is **B-1a**; the per-destination mint
 trigger is **B-1**'s routing work.
 
+⚠️ **AMENDED 2026-09-30 by
+[ruling 142.2](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30):**
+a share's content key is also conveyed to the sender's own namespace key, so
+the sender's sibling enrollments can open it. Scoping per recipient otherwise
+stands: carol still cannot open what alice sends bob.
+
 ---
 
 ## 15. The record owner and the nskey owner are different atSigns (2026-08-02)
@@ -14360,3 +14366,112 @@ carries an empty top-level keys array"* compares the written array as raw JSON,
 and its control, *"a document holding no typed material carries neither version
 nor keys"*, stays green when the writer is removed and goes red when the array
 is stamped onto the legacy shape.
+
+## 142. Content keys: recipients cache shared conveyances, siblings open every key, and a key goes once nothing cites it (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
+work-through (the P0 row *PQ key writing and fetching* in
+[`implementation-plan.md`](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+items 1–6, which record the behaviour each part replaces). Nothing here is built
+yet. The acceptance clauses change test-first, with the implementation.
+
+### 142.1 A shared conveyance is cached at its recipient
+
+**Decision.** A conveyance for a share, `@bob:<ckKid>.__ck.<ckNs>@alice`, carries
+`ttr -1` and `ccd: true`. The sender's atServer passes the stored `ttr` on in
+its automatic notification, so the recipient's atServer caches
+`cached:@bob:<ckKid>.__ck.<ckNs>@alice` and serves it from cache, and the copy
+syncs to the recipient's clients. Deleting the conveyance cascades to the cached
+copy, whose synced DELETE evicts the key through `ContentKeyEviction`.
+`_resolveFromConveyance` reads the cached copy.
+
+**Why.** With no `ttr`, the recipient's atServer never caches the conveyance.
+A restarted recipient then cannot decrypt anything shared with it — a value its
+own atServer cached with `ttr -1` included — while the sender's atServer is
+unreachable, and a deletion never reaches a recipient's memory by sync. `-1`
+because a conveyance never changes after its one write. `design.md` already
+described this ("synced to Alice as cached replicas", eviction "via sync").
+
+### 142.2 Each enrollment keeps its own key, and its siblings can open it
+
+**Decision.** gkc: "I don't want isolation; siblings who have namespace access
+should be able to see what was written by their siblings."
+
+- A writing enrollment keeps its own current content key per destination. Its
+  pointer lives on the atServer in the enrollment's own reserved namespace,
+  `<enrollmentId>.a.__e`: read-write for that enrollment only, refused to its
+  siblings, and moved aside when it is revoked. The pointer holds only ids
+  (`ckKid` and the generation), so it is written unencrypted and remote-first,
+  and an ephemeral local store no longer forces a fresh key.
+- Every content key is also conveyed to the sender's own namespace key — the
+  **sibling copy** — so the sender's other enrollments with that namespace, and
+  the sender itself after a restart, can open it. Resuming is reading the
+  pointer and opening the sibling copy.
+- A sender holding no namespace key of its own where it is sharing mints one on
+  demand, at the level where the recipient's key was found, never at the value's
+  own namespace, which for an AtCollection sub-collection carries an item id. An
+  application that turned `seedNamespaceKeys` off gets no mint: the share goes
+  without the sibling copy, and a warning names why.
+- Deleting a content key deletes both of its conveyances.
+
+A consequence, set out before the ruling: a forward-secrecy rotation
+(`rotateContentKey`) replaces only the calling enrollment's key for that
+destination, and each sibling's key goes on to its own rotation policy.
+
+**Why.** A shared conveyance sealed only to the recipient leaves the sender
+unable to re-read its own outbound shares after a restart, and its siblings
+never able to; every restart that writes to a peer cuts another key and leaves
+another conveyance. Legacy encryption keeps `shared_key.<bob>@alice` for the
+sender, so the sibling copy restores parity. It crosses no new trust boundary:
+every enrollment holding the sender's namespace key already reads the sender's
+self data there, and separation between recipients — the reason for
+[ruling 14](#14-content-keys-are-scoped-per-recipient-2026-08-02) — is unchanged.
+
+**What it reverses and settles.** It reverses UC-A4.1's "This `put` writes no
+self-copy" and `nskey_cross_atsign_test`'s assertion that alice cannot open the
+conveyance she wrote. It settles *content keys per scope* as intended behaviour
+(one key per writing enrollment per destination, readable by every sibling),
+takes the pointer off the nskey provider's path, and settles *a wildcard
+enrolment seeds nothing* for every namespace a client shares into.
+
+### 142.3 A superseded key goes once no record cites it
+
+**Decision.** A superseded content key's conveyances are deleted once no record
+on the sender's atServer cites it. Only the enrollment that cut the key deletes
+it, from a list of its superseded keys kept beside its pointer, at each start
+and after each rotation. The check reads local storage, and runs only when sync
+is on, caught up, and not narrowed by an application's `syncRegex`; otherwise
+it waits for a later start.
+
+**Why.** Every record citing a key was written by the enrollment that cut it —
+siblings write under their own keys, and nothing writes under a superseded
+one — and sync carries `appMetadata`, `ckKid` included, into local storage, so
+a caught-up local store answers completely. Siblings cannot read each other's
+pointers, and a key's conveyance lands just before its first value, so any
+other enrollment checking would delete keys about to be cited.
+
+**Accepted cost.** A value that exists only on the recipient's side loses its
+key: a notification-delivered value, including a `cacheAtRecipient` copy, or a
+recipient's cached copy of a `ccd: false` record that outlives the sender's.
+Keys cut by an enrollment later revoked or removed are never collected. The
+forward-secrecy lever — `deleteSuperseded`, UC-A5.1(a) — is unchanged; this
+replaces only the default of keeping every conveyance forever.
+
+### 142.4 The recipient's content-key cache stays as it is
+
+Once 142.1 and 142.3 are built it has an eviction path. An expiry would buy
+nothing, because the client re-derives any key from its synced conveyance and
+the namespace-key privates it keeps. The sender missing from the cache key is
+harmless: ids are content hashes, and a collision throws rather than
+overwriting. A client told its own enrollment is revoked (AT0027) reports it, as
+today; a wipe on revocation can be a feature of its own.
+
+### 142.5 Conveyances are kept from application code
+
+The notification service never hands a conveyance notification to an
+application subscriber, and conveyance records are hidden from application scans
+and key streams like other reserved records — which also stops
+`AtCollection._updateLocal` filing a plaintext content key. An application can
+opt in to scan and view them (gkc: "provide a way for an application to
+explicitly scan and view them if it wishes to"); the proposed switch is
+`showHiddenKeys`.

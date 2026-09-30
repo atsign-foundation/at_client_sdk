@@ -109,8 +109,7 @@ it stopped being parked.
 | [the four missing self-to-self mirrors](#the-four-missing-self-to-self-mirrors) | gkc's rule (2026-08-27): a put/notify or get/receipt row is about self-to-self or self-to-other, never both, and where one direction has a row so should the other. Four self-to-other rows have no mirror; rule which become catalogue rows, then write them and their scenarios — the denominator rises, correctly. | gkc's ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | The nine-layer stacked-PR plan for the at_client release candidate lives only in gitignored `untracked/at-client-stacked-prs.md`; get it into git and make the five decisions the section names — a file in no layer never lands. | whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | A ruling on which rows arm 1 owes; the measuring is done and arm 3 cannot be scoped until it is settled. | gkc's ruling |
-| [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | An atSign reachable only through a wildcard (`*`) enrolment publishes no namespace keys, so nobody can seal to it; rule whether that is intended. | gkc's ruling |
-| [content keys per scope](#content-keys-per-scope) | Rule whether one content key per writing enrollment per scope is the intent; if not, `CurrentCkPointer` needs a remote-first write through an atomic verb and rotation must supersede every content key in scope. | gkc's ruling, then the fix |
+| [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | An atSign reachable only through a wildcard (`*`) enrolment publishes no namespace keys, so nobody can seal to it; rule whether that is intended. Ruling 142.2 mints one on demand for every namespace such a client shares into, so what is left is the namespaces it never writes to. | gkc's ruling |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | Ruled 2026-09-07: a standing conveyance subscriber — a handler on the envelope listener `PqClientBootstrap` already runs, not a second listener — files nskey privates and content keys when they land, and only for a generation this client asked for (the reverted attempt filed any arrival). The analysis is the X6 row of [the wasm plan](../wasm/implementation-plan.md). | Nothing |
 | **two clients of one atSign sharing a store** | Ruled 2026-09-07: sweep the e2e pack and the unit tree for two clients of one atSign sharing a local keystore (the functional pack is already isolated per file) — candidates are files with two or more `Atsign.open`, `buildAtClient`, or the deprecated `setCurrentAtSign`/`fromAuthSession` calls for one atSign; a second client gets its own bundle (`forPrincipal`) or a hand-over. `open` and `buildAtClient` now refuse a second live client on one storage location and for one principal, so the sweep is looking for the cases that refusal turns into a failure rather than a silent share. | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Build the matrix's rotation arm — an enrollment followed by an `enroll:update` APKAM rotation mid-run — against a dedicated CRAM atSign; [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 11 (a rotation that lands and is not persisted locks the enrollment out) is what it waits on. | the at_auth publish, and a dedicated CRAM atSign |
@@ -271,28 +270,6 @@ under the prose a retrofit is an edge and belongs to arm 3.
 agree on, so nothing is blocked — but arm 3 cannot be scoped until this is
 settled, and the count table stays wrong until then.
 
-### Content keys per scope
-
-⚠️ **A defect found while diagnosing the atServer's pairwise-lookup bug, and
-separate from it.** One content key per writing enrollment per scope, cut at that
-enrollment's first write, with no re-minting — three sender enrollments produced
-three CKs under `(bob, ns)` and three under `(alice, ns)`.
-
-`CurrentCkPointer` is the only thing meant to converge them and cannot as
-written: it is put **`localOnly`** into each enrollment's own store and reaches
-siblings only by sync, so cold enrollments writing together each read no pointer
-and each mint. `CkManager._resumeCurrent`'s "cutting a fresh one" fired **zero**
-times across the run. Sync dropped four of those pointer writes, logging
-`sync queue race: __ckcur.… missing persisted record; removing`.
-
-**Why it matters beyond waste**: `rotateContentKey` supersedes only the CK in
-hand, so a rotation asking for forward secrecy leaves the other enrollments' keys
-live and their data readable — **read from the source, not run**.
-
-**What a fix needs, if the ruling goes that way**: the pointer written
-remote-first through an atomic verb or behind an interlock, and rotation
-superseding every CK in scope rather than the one in hand.
-
 ### A wildcard enrolment seeds nothing
 
 ⚠️ **Found 2026-08-26 while answering a question about a demo, and the doc
@@ -423,47 +400,49 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 
 **Defects and open decisions.** Read from source unless marked otherwise.
 
-*Content keys*
+*Content keys — ruled by gkc on 2026-09-30 in
+[ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30);
+what is owed is the implementation, each acceptance clause written test-first
+with it*
 
-1. **A recipient holds nothing durable for a shared content key.** Both reads in
-   `SymmetricAesGcmProvider._resolveFromConveyance` go through the recipient's
-   atServer to the sender's, and the conveyance carries no `ttr`, so after a
-   restart the recipient cannot decrypt anything shared with it — a value its own
-   atServer cached with `ttr -1` included — while the sender's atServer is
-   unreachable. `design.md` says otherwise in four places ("synced to Alice as
-   cached replicas", "On syncing a `…__ck…` record", eviction "via sync", "a
-   synced cached replica"); this decision settles those clauses, and the dartdocs
-   of `_resolveFromConveyance` ("Local storage first") and
-   `ContentKeyUnavailableException` follow it.
-2. **A sender cannot resume a shared content key after a restart.**
-   `CkManager._resumeCurrent` reads the conveyance back, but it is sealed to the
-   recipient's nskey and `PublishedNskeyKeyRing.privateHalf` answers only for the
-   client's own atSign, so every restart that writes to a peer cuts a new content
-   key and a new conveyance, and `rotateContentKey(deleteSuperseded: true)`
-   removes only the newest. **Measured** on a scratch rig built from the real
-   `CkManager`, `NskeyProvider` and pointer; the self-data control resumed.
-   [Content keys per scope](#content-keys-per-scope) is the same proliferation
-   from a different cause.
-3. **Conveyances and `__ckcur` pointers never expire, and nothing in `lib`
-   deletes them.** Keeping conveyances is ruled (`design.md`'s retention knob);
-   the pointers' unbounded count is not, and `rotateContentKey` has no caller
-   outside tests.
-4. **The recipient's content-key cache has no expiry and no revocation path.**
-   Only a synced DELETE of a conveyance (`ContentKeyEviction`) or the client
-   stopping evicts, so a running recipient keeps a superseded key until it exits.
-   The one accidental eviction is a lookup miss, after which the recipient's
-   atServer commits a DELETE for a `cached:` conveyance that never existed. The
-   cache key omits the sender — harmless while a `ckKid` is a content hash, but
-   not `(owner, id)`.
-5. **The plaintext content key reaches application code.** A subscriber with
-   `shouldDecrypt: true` whose regex matches a `__ck` name receives it
-   decrypted, and `AtCollection._updateLocal` writes it to local storage
-   unencrypted when a collection namespace equals the key's namespace (read, not
-   run).
-6. **The pointer write is itself encrypted by the nskey provider**, so writing
-   the pointer for one destination can run `ensureCurrent` for the sender's own
-   scope and cut a self content key and a second pointer. It terminates only
-   because `putAsCurrent` runs before the pointer write.
+1. **Shared conveyances are cached at the recipient (142.1).** Found: both reads
+   in `SymmetricAesGcmProvider._resolveFromConveyance` went through the
+   recipient's atServer to the sender's, so a restarted recipient could not
+   decrypt anything shared with it while the sender's atServer was unreachable.
+   Owed: share conveyances carry `ttr -1` and `ccd: true`;
+   `_resolveFromConveyance` reads the cached copy; its "Local storage first"
+   dartdoc, `ContentKeyUnavailableException`'s and `SymmetricAesGcmProvider`'s
+   follow.
+2. **Each enrollment keeps its own key, and siblings can open it (142.2).**
+   Found: `CkManager._resumeCurrent` could not open a share conveyance, which is
+   sealed to the recipient while `PublishedNskeyKeyRing.privateHalf` answers only
+   for the client's own atSign, so every restart that wrote to a peer cut a new
+   key (**measured** on a scratch rig built from the real `CkManager`,
+   `NskeyProvider` and pointer; the self-data control resumed); and the
+   per-atSign pointer, written local-first, never converged siblings — three
+   sender enrollments cut three keys, and sync dropped pointer writes. Owed: the
+   per-enrollment pointer in `<enrollmentId>.a.__e` (ids only, unencrypted,
+   remote-first) in place of `__ckcur`; the sibling copy of every share key and
+   resume from it; mint on demand at the recipient's level unless
+   `seedNamespaceKeys` is off; deleting a key deletes both conveyances; UC-A4.1's
+   "This `put` writes no self-copy" and `nskey_cross_atsign_test`'s assertion
+   rewritten.
+3. **A superseded key goes once no record cites it (142.3).** Found: nothing in
+   `lib` deleted a conveyance or a pointer, and `rotateContentKey` had no caller
+   outside tests. Owed: the cutting enrollment's list of superseded keys beside
+   its pointer; the check at each start and after each rotation, reading local
+   storage only when sync is on, caught up and not narrowed by a `syncRegex`;
+   UC-A5.4's "the superseded conveyance record is **retained**" rewritten.
+4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed
+   beyond items 1 and 3, which give it an eviction path.
+5. **Conveyances are kept from application code (142.5).** Found: a subscriber
+   with `shouldDecrypt: true` whose regex matched a `__ck` name received the
+   content key decrypted, and `AtCollection._updateLocal` could write it to local
+   storage unencrypted. Owed: the notification service withholds conveyance
+   notifications from application subscribers; scans and key streams hide
+   conveyance records; `showHiddenKeys` opts in.
+6. **Settled by 142.2.** The pointer no longer goes through the nskey provider,
+   so writing it can no longer cut a self content key.
 
 *Namespace-key advertisements*
 
@@ -545,12 +524,12 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
     re-stamps it. The refresh job runs at an hour drawn at start
     (`random.nextInt(23)`), not the configured one.
 
-**Tests owed with the rulings:** nothing pins the absence of `ttl` and `ttr` on
-conveyances, pointers, advertisements, `_apsk` or the root, and the lock ttls are
-pinned on the key object rather than on the built command.
+**Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd` are
+pinned on the built command; nothing pins the absence of `ttl` and `ttr` on
+advertisements, `_apsk` or the root; and the lock ttls are pinned on the key
+object rather than on the built command.
 
-**Related rows, which stay where they are:** [content keys per
-scope](#content-keys-per-scope), [the late-arriving nskey
+**Related rows, which stay where they are:** [the late-arriving nskey
 private](#the-late-arriving-nskey-private), *step 3 of a signing migration has no
 lever*, *`retiredAt` on the `_apsk` advertisement*, *a rotating atSign could tell
 its senders*, *the conveyance catch still swallows too much*, and

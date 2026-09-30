@@ -70,7 +70,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [11]  | Single nskey per namespace, lazily published                                                | 2026-06-30 | PARTLY SUPERSEDED by [13] |
 | [12]  | Advertised recipient keys are signed against `_apsk`                                        | 2026-07-02 | LIVE                      |
 | [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-08-02        |
-| [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | LIVE                      |
+| [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | AMENDED 2026-09-30        |
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
@@ -199,6 +199,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
+| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -342,3 +343,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [139]: detail/decisions.md#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09
 [140]: detail/decisions.md#140-2161s-deferral-note-stays-as-written-2026-09-01
 [141]: detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14
+[142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30
