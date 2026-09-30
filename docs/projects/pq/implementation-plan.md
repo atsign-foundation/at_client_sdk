@@ -479,36 +479,35 @@ with it*
     stated where an application reads it (the at_client README's post-quantum
     section); `design.md` already states it.
 
-*`_apsk`*
+*`_apsk` — ruled by gkc on 2026-09-30 in
+[ruling 144](detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30);
+what is owed is the implementation, each acceptance clause written test-first
+with it*
 
-14. **The verifier cache can keep a stale entry alive indefinitely.**
-    `EnvelopeSigning.lookupPubKey` resets the five-minute expiry on every hit,
-    before verification, and a failed verification never evicts, while
-    `PairwiseSecretSharing.sweepOnce` retries a failed envelope every minute — so
-    a pre-rotation entry is kept alive by its own failures. **Measured** with
-    shortened timings. One AtClient holds three such caches with no shared
-    invalidation (the secret-sharing instance, its enrollment directory, the
-    advertisement verifier), and after a revocation moves `_apsk` off `.a.__e`
-    a cached entry goes on verifying for as long as lookups continue.
-15. **A republish keeps the old chain link.** `publishPublicSigningKey` sends no
-    `appMetadata`, and the atServer keeps the stored one
-    (`appMetadata ??= existing?.appMetadata`), so a link signed over the old value
-    rides the new one and `verifyChain` reports `broken` — not the `unsigned` that
-    [`design.md` 9.8.3](design.md#983-the-chain-and-why-a-link-is-bound-to-the-exact-string)
-    and the NOTE in `publishPublicSigningKeyLocked` describe. The unit test behind
-    that claim runs on a fake that replaces metadata wholesale.
-16. **`_apsk` ends by being renamed, and two rulings disagree about it.**
-    Revocation, supersession of a non-root predecessor at its successor's first
-    authentication, and the expiry sweep move the record to `.r.__e` or `.d.__e`,
-    where no verifier looks.
-    [Ruling 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)
-    and UC-G2.7 say it is deleted by nothing and goes on verifying;
-    [ruling 22.2c](detail/decisions.md#222c-revocation-the-chain-inherits-what-the-atserver-already-does)
-    and `_verifyAgainstApsk` rely on the move as the revocation signal.
-17. **An expired enrollment's `_apsk` is still served at `.a.__e` until the
-    expiry sweep runs**, 10 seconds to about 10.5 minutes later, and the at_server
-    lookup handlers' comment that the fetch "ensures that expired enrollment keys
-    are in the right place" is stale. *(at_server)*
+14. **The verifier cache: fixed five minutes, refetch on failure, one per
+    AtClient (144.1).** Found: `EnvelopeSigning.lookupPubKey` reset the expiry
+    on every hit, before verification, and a failure never evicted, so a stale
+    entry was kept alive by its own failures (**measured** with shortened
+    timings), in three uncoordinated caches per AtClient. Owed: a fixed expiry
+    from fetch; evict and re-fetch once on a failed verification; one cache per
+    AtClient, the per-call signers included.
+15. **A republish clears the links; a root holder re-anchors (144.2).** Found:
+    `publishPublicSigningKey` sent no `appMetadata`, the atServer kept the stored
+    one, and the chain read `broken`. Owed: the republish removes the link fields
+    explicitly; a root holder re-anchors in the same step; the unit-test fake
+    models the atServer's field merge; re-conveying a chain-linked enrollment's
+    link, which nothing does yet.
+16. **Every move of `_apsk` stands, and verification tells the locations apart
+    (144.3).** Found: a moved `_apsk` gave a bare lookup failure, and ruling 134
+    and UC-G2.7 claimed the record was deleted by nothing. Owed: verification
+    looks in `.a.__e`, then `.r.__e` and `.d.__e`, and refuses a key found only
+    in a moved location with the reason; chain verification reports that
+    standing; UC-G2.7 rewritten.
+17. **The atServer moves an expired enrollment's data on first sight (144.4).**
+    Owed *(at_server)*: a lookup of a per-enrollment key whose enrollment has
+    expired moves that enrollment's data to `.d.__e` then, making the lookup
+    handlers' "ensures that expired enrollment keys are in the right place" true;
+    the expiry sweep stays the backstop.
 
 *Server-side caching (at_server)*
 

@@ -14015,6 +14015,16 @@ references are the four publish call sites and the composer. So the record
 outlives revocation, supersession and the expired-key sweep, which takes only
 keys carrying an expiry.
 
+⚠️ **AMENDED 2026-09-30 by
+[ruling 144.3](#1443-every-move-of-_apsk-stands-and-verification-tells-the-locations-apart):**
+the measurement counted `_apsk` references and missed the generic mover. The
+atServer's `movePerEnrollmentDataFor` moves every per-enrollment key, `_apsk`
+included, to `.r.__e` on revocation and on supersession of a non-root
+predecessor, and to `.d.__e` on deletion and at the expiry sweep. Only a fully
+privileged predecessor keeps its record at `.a.__e`. A superseded non-root
+enrollment's signatures therefore stop verifying, and 144.3 keeps it that way,
+refusing with the reason.
+
 **Consequently the authentication key is never retained, and the reason is the
 replacement, not a claim about birth.** The composer's *"an enrollment that
 holds signing keys held them from birth"* is false in general — the ledger says
@@ -14571,3 +14581,70 @@ documented rather than checked. An older atServer refuses a new create until its
 expiry sweep, up to about 10.5 minutes, instead of the lock's 2 minutes (a
 namespace key) or 15 seconds (the signing root). That is a delay, not a safety
 failure: mutual exclusion holds, and the delay ends on its own.
+
+## 144. The _apsk record: a fixed verifier cache, links cleared on republish, and refusals that say why (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
+work-through (items 14–17 of the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
+Nothing here is built yet; 144.3 and 144.4 include at_server work, and the
+acceptance clauses change test-first, with the implementation.
+
+### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
+
+An `_apsk` value a verifier fetched expires five minutes after the fetch,
+whatever its hits: `resetOnLookup` sliding goes. A failed verification evicts
+the entry and re-fetches once before failing, so a rotation is picked up at the
+first mismatch. One AtClient holds one such cache, instead of three
+uncoordinated ones (the secret-sharing instance, its enrollment directory and
+the advertisement verifier) plus a fresh signer per conveyance call. A revoked
+enrollment's signatures are then accepted for at most five minutes after the
+last fetch. Before this, the expiry was reset before each verification and a
+failure never evicted, while the envelope sweep retried every minute, so a stale
+entry was kept alive by its own failures — measured with shortened timings.
+
+### 144.2 A republish clears the links; a root holder re-anchors
+
+A republish of an enrollment's `_apsk` value removes the link fields from the
+record's `appMetadata` explicitly. The atServer otherwise keeps the stored
+`appMetadata` (`appMetadata ??= existing?.appMetadata`), so a link signed over
+the old value rode the new one and the chain read `broken` — "something claimed
+to and the claim does not hold" — where a routine key change should read
+`unsigned`, which is tolerated during the changeover. An enrollment holding the
+signing root re-anchors in the same step. A chain-linked enrollment stays
+unsigned until something re-conveys its link, which nothing does yet. The
+unit-test fake learns the atServer's field merge; it replaced metadata
+wholesale, which is what hid this.
+
+### 144.3 Every move of _apsk stands, and verification tells the locations apart
+
+Revocation, and supersession of a non-root predecessor at its successor's first
+authentication, move `_apsk` to `.r.__e`; deletion and the expiry sweep move it
+to `.d.__e`. Every move stands, and
+[ruling 22.2c](#222c-revocation-the-chain-inherits-what-the-atserver-already-does)
+with them. gkc: "Verification needs to be extended so it knows about, and
+understands the difference between, .a.__e and .r.__e and .d.__e" (he wrote
+`.e.__e` and confirmed he meant `.d.__e`; expired and deleted stay one
+location).
+
+- Verification looks in `.a.__e`, then `.r.__e` and `.d.__e`. A key found only
+  in `.r.__e` or `.d.__e` is **refused, with the reason** — revoked or
+  superseded, deleted or expired — instead of a bare lookup failure, and chain
+  verification reports such a link with that standing. The moved locations are
+  read to say why a key is refused, never to verify with it, which is the
+  rescue 22.2c rejected.
+- A superseded non-root enrollment's signatures, chain links it signed
+  included, therefore stop verifying. That amends
+  [ruling 134](#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)
+  and UC-G2.7, which said it "keeps its own `_apsk` record — published with no
+  TTL and deleted by nothing — so what its authentication key signed goes on
+  verifying".
+
+### 144.4 The atServer moves an expired enrollment's data on first sight
+
+An at_server change: when a lookup of a per-enrollment key finds its enrollment
+expired, the atServer moves that enrollment's data to `.d.__e` then, as the
+lookup handlers' comment — the fetch "ensures that expired enrollment keys are in
+the right place" — already claims; the expiry sweep stays as the backstop. This
+closes the window, 10 seconds to about 10.5 minutes, in which an expired
+enrollment's `_apsk` was still accepted at `.a.__e`.

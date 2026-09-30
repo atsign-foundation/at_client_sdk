@@ -2424,9 +2424,12 @@ reason — the latter is false in general and stood here as the justification
 until 2026-09-08.** What makes the premise hold is that a posture move
 **replaces** the enrollment: a credential whose posture wants a stronger
 authentication algorithm retrofits into a new enrollment owning a data signing
-key from birth, and the superseded enrollment keeps its own `_apsk` record, so
-what its authentication key signed goes on verifying
-([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)). Naming an algorithm this build
+key from birth
+([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)).
+A fully privileged predecessor keeps its `_apsk` where verifiers read it; a
+non-root predecessor's moves to `.r.__e` when its successor first authenticates,
+and what it signed is then refused with that reason
+([ruling 144.3](detail/decisions.md#1443-every-move-of-_apsk-stands-and-verification-tells-the-locations-apart)). Naming an algorithm this build
 produces no envelope signature for is refused at construction rather than
 skipped. The reasoning for each of those is in
 [`decisions.md` 91.3](detail/decisions.md#913-the-rulings) ruling 16.
@@ -2647,10 +2650,13 @@ so renaming it changes what verifies.
 **Every verification of it is a whole-string comparison** — five of them in
 `PqSigningChain`. Any republish that changes the `_apsk` value therefore
 invalidates a link signed over the old one, and the publish does not merely
-invalidate it: `publishPublicSigningKey` writes the record value alone, so the
-link riding its `appMetadata` is not carried over and the enrollment goes from
-`chained` to `unsigned` with nothing re-conveying it. This is why the mint must
-be inert at first start, and why 9.8.2's two composers must agree.
+invalidate it: a republish removes the link fields from the record's
+`appMetadata`, which the atServer would otherwise keep, so the enrollment goes
+from `chained` to `unsigned` rather than `broken`
+([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
+An enrollment holding the signing root re-anchors in the same step; nothing
+re-conveys a chain link. This is why the mint must be inert at first start, and
+why 9.8.2's two composers must agree.
 
 #### 9.8.4 What the approver conveys is a three-way branch
 
