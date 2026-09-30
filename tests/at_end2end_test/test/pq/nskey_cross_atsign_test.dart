@@ -126,6 +126,48 @@ void main() {
     expect(received.metadata?.appMetadata?.additional?['ckKid'], ckKid);
   });
 
+  test(
+      'a shared conveyance is cached on the recipient\'s atServer, and opens '
+      'from there', () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    final shared = AtKey()
+      ..key = uniqueKey('cached')
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    expect(await aliceSide.client.put(shared, 'kept for bob'), true);
+    final cites =
+        (await aliceSide.client.get(shared)).metadata?.appMetadata?.additional;
+    final cachedCopy = AtKey()
+      ..key = '${cites?['ckKid']}.__ck'
+      ..namespace = cites?['ckNs'] as String
+      ..sharedBy = alice
+      ..sharedWith = bob
+      ..metadata = (Metadata()..isCached = true);
+
+    // NOTE: the copy is made when alice's atServer notifies bob's, which does
+    // not finish with the put.
+    AtValue? copy;
+    for (var attempt = 0; attempt < 20 && copy == null; attempt++) {
+      try {
+        copy = await bobSide.client.get(cachedCopy,
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+      } on AtKeyNotFoundException {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    expect(copy?.value, isNotNull,
+        reason: 'the conveyance carries ttr -1, so alice\'s atServer passes it '
+            'on in its notification and bob\'s caches it; a copy that did not '
+            'open would have thrown rather than read as absent');
+    expect(copy!.metadata?.ttr, -1);
+    expect(copy.metadata?.appMetadata?.providerId, startsWith('at/nskey'),
+        reason: 'the copy keeps the appMetadata naming the provider that '
+            'opens it');
+  });
+
   /// Notify, on the nskey path, across two atSigns.
   ///
   /// Both notify entry points pick a provider, and a provider chosen before

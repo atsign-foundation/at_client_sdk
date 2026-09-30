@@ -10,12 +10,14 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/test_keypairs.dart';
 import 'test_utils/recorded_logs.dart';
 
 /// [envelope] with its signature replaced by one that cannot verify.
@@ -167,6 +169,37 @@ void main() {
       await registered(client('donor-1'));
       return remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
     }
+
+    test('sends no ttl and no ttr — raw literal', () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final newKey = await anotherKey();
+
+      clearInteractions(childClient);
+      await child.publishPublicSigningKey(value: newKey);
+
+      final key = verify(() => childClient.put(captureAny(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .cast<AtKey>()
+          .singleWhere((k) => k.toString() == uri);
+      final command = (await PutRequestTransformer().transform(
+              Tuple<AtKey, dynamic>()
+                ..one = key
+                ..two = newKey,
+              encryptionPrivateKey:
+                  pkamKeyPairFor(atSign, 'signer').atPrivateKey.privateKey,
+              requestOptions: PutRequestOptions()..shouldEncrypt = false))
+          .buildCommand();
+      expect(
+          command.split(' ').first,
+          matches(RegExp(r'^update:dataSignature:[^:]+:isEncrypted:false:'
+              r'public:_apsk\.child-1\.a\.__e@alice$')),
+          reason: 'a ttl, ttb, ttr or ccd would come before the signature; no '
+              'ttl, or the key every verifier resolves expires, and no ttr, or '
+              'a reader\'s atServer may serve its copy after a rotation');
+    });
 
     test('clears the chain link, so the chain reads unsigned, not broken',
         () async {

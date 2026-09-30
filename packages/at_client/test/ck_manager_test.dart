@@ -2,6 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -559,6 +560,43 @@ void main() {
       final toBob = c.written.last;
       expect(toBob.sharedWith, bob);
       expect(toBob.sharedBy, owner);
+    });
+
+    /// The update command [key] builds, through the transformer every put
+    /// goes through.
+    Future<String> commandFor(AtKey key) async =>
+        (await PutRequestTransformer().transform(
+                Tuple<AtKey, dynamic>()
+                  ..one = key
+                  ..two = 'sealed',
+                requestOptions: PutRequestOptions()..shouldEncrypt = false))
+            .buildCommand();
+
+    test('a share\'s conveyance is sent with ttr -1 and ccd — raw literal',
+        () async {
+      final c = client();
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, sharedValue('treaty'));
+
+      expect(await commandFor(c.written.single),
+          startsWith('update:ttr:-1:ccd:true:'),
+          reason: 'the sender\'s atServer passes the stored ttr on in its '
+              'notification, which is what makes the recipient\'s atServer '
+              'cache the conveyance; ccd deletes that copy with the original');
+    });
+
+    test('a self conveyance is sent with neither — the control', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(await commandFor(c.written.single),
+          startsWith('update:isEncrypted:false:'),
+          reason: 'no other atServer holds a copy of a self conveyance');
     });
 
     test('a failed conveyance write leaves no current CK', () async {

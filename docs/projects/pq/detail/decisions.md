@@ -14395,8 +14395,11 @@ is stamped onto the legacy shape.
 **Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
 work-through (the P0 row *PQ key writing and fetching* in
 [`implementation-plan.md`](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
-items 1–6, which record the behaviour each part replaces). Nothing here is built
-yet. The acceptance clauses change test-first, with the implementation.
+items 1–6, which record the behaviour each part replaces). 142.1 is built in
+`ckConveyanceKey` and `SymmetricAesGcmProvider._resolveFromConveyance`, and
+proven live: the recipient's atServer caches the conveyance with its
+`appMetadata` and the recipient opens the copy. The rest is not built yet; the
+acceptance clauses change test-first, with the implementation.
 
 ### 142.1 A shared conveyance is cached at its recipient
 

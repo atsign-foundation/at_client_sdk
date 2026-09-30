@@ -17,9 +17,10 @@ final _logger = AtSignLogger('SymmetricAesGcmProvider');
 
 /// The value cites a CK this client cannot resolve *yet*.
 ///
-/// Retry the read once the conveyance record syncs, where a plain
-/// [AtDecryptionException] means give up; a CK deleted for forward secrecy
-/// surfaces here too and never resolves.
+/// Retry the read once the conveyance record — for a shared value, the
+/// recipient's cached copy of it — syncs, where a plain [AtDecryptionException]
+/// means give up; a CK deleted for forward secrecy surfaces here too and never
+/// resolves.
 class ContentKeyUnavailableException extends AtDecryptionException {
   /// The kid the value cited, as it appears in `appMetadata`.
   final String ckKid;
@@ -33,7 +34,7 @@ class ContentKeyUnavailableException extends AtDecryptionException {
 /// A value carries its ciphertext and *cites* a CK by `ckKid` rather than
 /// carrying a sealed key inline; the CK is resolved from the [ContentKeyCache],
 /// which the `at/nskey` provider populates when the matching conveyance record
-/// syncs.
+/// — for a shared value, the recipient's cached copy of it — syncs.
 class SymmetricAesGcmProvider
     implements
         CryptoProvider,
@@ -206,7 +207,13 @@ class SymmetricAesGcmProvider
   /// `at/nskey` provider decapsulates and caches it as a side effect, then
   /// look the CK up again rather than taking it from the read.
   ///
-  /// **Local storage first, then the atServer.** The remote leg is not an
+  /// **For a shared value, the recipient's cached copy first**, which its
+  /// atServer made from the conveyance's notification: a restarted recipient
+  /// opens what was shared with it while the sender's atServer is unreachable.
+  /// The conveyance itself is read after it, since one written before shares
+  /// carried a `ttr` has no cached copy.
+  ///
+  /// **Each from local storage first, then the atServer.** The remote leg is not an
   /// optimisation: a value delivered remote-only — which every notification is
   /// — cites a conveyance its sender wrote remote-first, so the record is on
   /// the atServer before the value arrives and may not reach local storage
@@ -230,7 +237,7 @@ class SymmetricAesGcmProvider
 
     /// Returns true when the record was read and opened. A read that finds
     /// nothing returns false; a record that will not open still throws.
-    Future<bool> read({required bool remote}) async {
+    Future<bool> read(AtKey conveyance, {required bool remote}) async {
       try {
         await context.atClient.get(conveyance,
             getRequestOptions: remote
@@ -259,11 +266,28 @@ class SymmetricAesGcmProvider
       }
     }
 
-    if (await read(remote: false)) {
+    final sharedWith = conveyance.sharedWith;
+    if (sharedWith != null &&
+        conveyance.sharedBy != context.atClient.getCurrentAtSign()) {
+      final cachedCopy = AtKey()
+        ..key = conveyance.key
+        ..namespace = conveyance.namespace
+        ..sharedBy = conveyance.sharedBy
+        ..sharedWith = sharedWith
+        ..metadata = (Metadata()..isCached = true);
+      for (final remote in const [false, true]) {
+        if (await read(cachedCopy, remote: remote)) {
+          final hit = cache.get(owner, namespace, ckKid);
+          if (hit != null) return hit;
+        }
+      }
+    }
+
+    if (await read(conveyance, remote: false)) {
       final local = cache.get(owner, namespace, ckKid);
       if (local != null) return local;
     }
-    if (await read(remote: true)) {
+    if (await read(conveyance, remote: true)) {
       return cache.get(owner, namespace, ckKid);
     }
     return null;

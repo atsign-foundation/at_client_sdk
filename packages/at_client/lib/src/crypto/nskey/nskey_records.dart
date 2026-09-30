@@ -182,6 +182,9 @@ const String ckConveyanceMarker = '.$ckConveyanceRecordName.';
 /// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
 /// the value rather than from the nskey owner alone is what keeps the inbound
 /// case addressable, since there sender and recipient are different atSigns.
+/// A share's conveyance carries `ttr -1` and `ccd: true`, so its recipient's
+/// atServer caches it from the notification and drops the copy when the
+/// original goes.
 ///
 /// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
 /// conveyance therefore serves every namespace beneath it — which is what
@@ -192,7 +195,18 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
   ..namespace = ckNs
   ..sharedBy = value.sharedBy
   ..sharedWith = value.sharedWith
-  ..metadata = Metadata();
+  ..metadata = _isShare(value)
+      ? (Metadata()
+        ..ttr = -1
+        ..ccd = true)
+      : Metadata();
+
+bool _isShare(AtKey value) {
+  final sharedWith = value.sharedWith;
+  return sharedWith != null &&
+      sharedWith.isNotEmpty &&
+      sharedWith != value.sharedBy;
+}
 
 /// Splits a conveyance key string into the CK it carries, the namespace that
 /// CK lives in, and the nskey owner whose cache scope it belongs to — or

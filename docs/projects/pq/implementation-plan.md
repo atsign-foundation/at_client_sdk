@@ -411,10 +411,13 @@ with it*
    in `SymmetricAesGcmProvider._resolveFromConveyance` went through the
    recipient's atServer to the sender's, so a restarted recipient could not
    decrypt anything shared with it while the sender's atServer was unreachable.
-   Owed: share conveyances carry `ttr -1` and `ccd: true`;
-   `_resolveFromConveyance` reads the cached copy; its "Local storage first"
-   dartdoc, `ContentKeyUnavailableException`'s and `SymmetricAesGcmProvider`'s
-   follow.
+   Done: a share's conveyance carries `ttr -1` and `ccd: true`
+   (`ckConveyanceKey`), and `_resolveFromConveyance` reads the recipient's
+   `cached:` copy first, then the sender's record for a conveyance written
+   before. Pinned on the built command in `ck_manager_test`, resolved while the
+   sender is away in `ck_conveyance_refusal_test`, and proven live by
+   `nskey_cross_atsign_test.dart`: the recipient's atServer caches the copy with
+   its `appMetadata` and it opens, and without the `ttr` there is no copy.
 2. **Each enrollment keeps its own key, and siblings can open it (142.2).**
    Found: `CkManager._resumeCurrent` could not open a share conveyance, which is
    sealed to the recipient while `PublishedNskeyKeyRing.privateHalf` answers only
@@ -554,11 +557,11 @@ items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
     sets `bypassCache` on every lookup of either record, whatever the caller
     asked.
 
-**Tests owed with the rulings:** the share conveyance's `ttr -1` and `ccd`,
-pinned on the built command with item 1, and the absence of `ttl` and `ttr` on
-`_apsk`, with item 15. The advertisement, the signing root and both locks are
-pinned raw on the command each sends, in `nskey_minting_test` and
-`pq_signing_root_test`.
+**Pins on what each write sends:** the advertisement, the signing root and
+both locks in `nskey_minting_test` and `pq_signing_root_test`; the share
+conveyance's `ttr -1` and `ccd` in `ck_manager_test`; and the `_apsk`
+republish's lack of `ttl` and `ttr` in `pq_signing_chain_test`, each raw on the
+command it sends.
 
 **Related rows, which stay where they are:** [the late-arriving nskey
 private](#the-late-arriving-nskey-private), *step 3 of a signing migration has no
