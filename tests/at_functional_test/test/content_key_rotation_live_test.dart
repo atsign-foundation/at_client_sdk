@@ -167,20 +167,25 @@ void main() {
         ?.additional?['ckKid'] as String;
     final context = CryptoContext(atClient: atClient);
 
+    // NOTE: the pass the rotation starts waits for a caught-up sync and can run
+    // before or after each call below, so assert what is served, never a
+    // call's count.
     final successor = await ckManager.rotateContentKey(context, first);
     await ckManager.idle;
     await sync('ck-collect-rotated');
+    await ckManager.collectUnused(context);
+    await sync('ck-collect-cited');
     expect(await served(superseded), isTrue,
-        reason: 'the rotation\'s own collection keeps a key a record cites');
+        reason: 'a collection over a key a record cites keeps it');
 
     expect(await atClient.delete(first), true);
     await sync('ck-collect-uncited');
-    expect(await ckManager.collectUnused(context), 1,
-        reason: 'nothing cites it now, and this enrollment cut it');
+    await ckManager.collectUnused(context);
     await sync('ck-collect-deleted');
 
     expect(await served(superseded), isFalse,
-        reason: 'the deletion reached the atServer');
+        reason: 'nothing cites it now and this enrollment cut it, so a '
+            'collection took it, and the deletion reached the atServer');
     expect(await served(successor.ckKid), isTrue,
         reason: 'the current key is kept although nothing cites it yet');
   });
