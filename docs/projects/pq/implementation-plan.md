@@ -90,7 +90,7 @@ it stopped being parked.
 | **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
 | **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
 | **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
-| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Rulings 142–145 settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. Their at_client half is built, in PR #2294, and proven on the functional, e2e and onboarding-CLI live packs. What remains is item 17 and the server half of item 18, at_server work with no worktree, branch or PR yet, which nothing on the client waits on. The section lists each item and what it built or owes. | Nothing |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Rulings 142–145 settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. Their at_client half is built, in PR #2294, and proven on the functional, e2e and onboarding-CLI live packs. What remains is item 17 and the server half of item 18, at_server work filed as [at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831) with no worktree, branch or PR yet, which nothing on the client waits on. The section lists each item and what it built or owes. | Nothing |
 
 ### P1 — must do before D1 closes
 
@@ -364,7 +364,8 @@ says what has since been proven live. gkc's direction
 and `_apsk` writing and fetching, server-side and client-side caching included,
 decide the correct behaviour, and implement it. **All eighteen items were ruled on
 2026-09-30, in rulings 142 to 145**, and their at_client half built the same day on
-`gkc-pq-key-caching` (PR #2294); what remains is at_server work, items 17 and 18.
+`gkc-pq-key-caching` (PR #2294); what remains is at_server work, items 17 and 18,
+filed as [at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831).
 
 **What the two fields do on an atServer.** `ttl`, in milliseconds, expires a
 record on its owner's atServer, and an `update` that omits `ttl` or `ttr` keeps the
@@ -583,7 +584,9 @@ items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
     Proven in-process in `envelope_signing_test.dart` and
     `pq_signing_chain_test`.
 17. **The atServer moves an expired enrollment's data on first sight (144.4).**
-    Owed *(at_server)*: a lookup of a per-enrollment key whose enrollment has
+    Owed *(at_server,
+    [#2831](https://github.com/atsign-foundation/at_server/issues/2831))*: a
+    lookup of a per-enrollment key whose enrollment has
     expired moves that enrollment's data to `.d.__e` then, making the lookup
     handlers' "ensures that expired enrollment keys are in the right place" true;
     the expiry sweep stays the backstop.
@@ -596,7 +599,9 @@ items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
     `__nskey` record wrote and committed a 24-hour copy that was never served
     and never read; every lookup miss committed a DELETE whether or not a copy
     existed; a refresh finding a changed value dropped the copy's ttl; and the
-    configured refresh hour was ignored. Owed *(at_server)*: no cached copy of
+    configured refresh hour was ignored. Owed *(at_server,
+    [#2831](https://github.com/atsign-foundation/at_server/issues/2831))*: no
+    cached copy of
     those two record kinds, the 24-hour copy kept for other public data, and
     the three defects fixed. The client half is built: `LookUpBuilderManager.get`
     sets `bypassCache` on every lookup of either record, whatever the caller
