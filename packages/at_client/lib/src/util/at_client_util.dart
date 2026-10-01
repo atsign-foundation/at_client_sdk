@@ -121,20 +121,19 @@ class AtClientUtil {
     if (!(atKey.metadata.namespaceAware)) {
       return atKey.key;
     }
-    // Do not append the namespace if the key already ends in it. The check
-    // wants the dot: a key NAMED like the namespace has not got it yet.
-    final namespace = atClientPreference.namespace;
-    if (namespace != null && atKey.key.endsWith('.$namespace')) {
-      return atKey.key;
-    }
-    // If key does not have any namespace, append the namespace to the key.
-    if (atKey.namespace.isNotNull) {
+    // NOTE: a namespace set on the key is appended as `AtKey.toString` appends
+    // it, so a read addresses the record the write made.
+    if (atKey.namespace.isNotNull && atKey.namespace!.isNotEmpty) {
       return '${atKey.key}.${atKey.namespace!}';
     }
-    if (atClientPreference.namespace.isNotNull) {
-      return '${atKey.key}.${atClientPreference.namespace}';
+    // Do not append the preference's namespace if the key already ends in it.
+    // The check wants the dot: a key NAMED like the namespace has not got it
+    // yet.
+    final namespace = atClientPreference.namespace;
+    if (namespace == null || atKey.key.endsWith('.$namespace')) {
+      return atKey.key;
     }
-    return atKey.key;
+    return '${atKey.key}.$namespace';
   }
 
   // TODO Remove this once AtUtils.fixAtSign accepts and returns String?

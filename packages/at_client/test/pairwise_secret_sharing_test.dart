@@ -34,8 +34,7 @@ class TestSharer
   final AtSignLogger logger = AtSignLogger('TestSharer');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings = null;
 
   TestSharer(this.atClient);
 }

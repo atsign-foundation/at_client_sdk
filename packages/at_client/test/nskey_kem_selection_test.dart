@@ -138,7 +138,6 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((inv) async {
         final key = inv.positionalArguments[0] as AtKey;
-        if (key.key.startsWith('__ckcur')) return true;
         final opts =
             inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
         stamped.add(opts?.cryptoProviderId);

@@ -65,6 +65,9 @@ void main() {
     Map<String, DateTime> advertisedStamps,
     List<GetRequestOptions?> advertisementReads,
 
+    /// Every write handed to local storage.
+    List<({UpdateVerbBuilder builder, bool cameFromServer})> filedLocally,
+
     /// [takeDelay] makes the lock's own take slow, which is the only way to
     /// tell a lease stamped BEFORE the request from one stamped after it.
   }) client(
@@ -82,6 +85,17 @@ void main() {
     final advertised = <String, String>{};
     final advertisedStamps = <String, DateTime>{};
     final advertisementReads = <GetRequestOptions?>[];
+    final filedLocally = <({UpdateVerbBuilder builder, bool cameFromServer})>[];
+    final local = MockLocalSecondary();
+    when(() => atClient.getLocalSecondary()).thenReturn(local);
+    when(() => local.executeVerb(any(),
+        cameFromServer: any(named: 'cameFromServer'))).thenAnswer((inv) async {
+      filedLocally.add((
+        builder: inv.positionalArguments[0] as UpdateVerbBuilder,
+        cameFromServer: inv.namedArguments[#cameFromServer] as bool,
+      ));
+      return 'data:1';
+    });
     final pair = pkamKeyPairFor(atSign, 'enroll-a');
     final chops = AtChopsImpl(AtChopsKeys.create(
         null,
@@ -158,6 +172,7 @@ void main() {
       advertised: advertised,
       advertisedStamps: advertisedStamps,
       advertisementReads: advertisementReads,
+      filedLocally: filedLocally,
     );
   }
 
@@ -167,7 +182,7 @@ void main() {
     return NskeyPrivateFiling(keysIo: io, atSign: atSign);
   }
 
-  test('the advertisement is written to the atServer and nowhere else',
+  test('the advertisement is published to the atServer, never by a local put',
       () async {
     final c = client();
     final filer = await filing();
@@ -184,6 +199,27 @@ void main() {
     // generation back on the atServer.
     verifyNever(() => c.client
         .put(any(), any(), putRequestOptions: any(named: 'putRequestOptions')));
+  });
+
+  test('a mint files what it published locally, without queueing a push',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace);
+
+    final advertisements =
+        c.filedLocally.where((f) => f.builder.atKey.key == '__nskey').toList();
+    expect(advertisements, hasLength(1),
+        reason: 'a local-first re-read would otherwise find whatever '
+            'generation local storage held before, until sync pulled this '
+            'one down');
+    expect(advertisements.single.builder.buildCommand().split(' ').first,
+        'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice');
+    expect(advertisements.single.builder.value, c.advertised[namespace]);
+    expect(advertisements.single.cameFromServer, isTrue,
+        reason: 'a queued local write carries only the key\'s name, and a '
+            'drain sends whatever local storage holds by then');
   });
 
   test('the private is durable before the public half is published', () async {
@@ -306,6 +342,45 @@ void main() {
     expect(keys.single['use'], 'enc');
     expect(keys.single['alg'], 'x-wing');
     expect(keys.single['kid'], advertisement.nskeyKid);
+  });
+
+  test('what a mint, a rotation and an add send carries — raw literals',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    await ring.mintAndPublish(namespace);
+    await ring.rotate(namespace);
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    await ring.add(namespace);
+
+    List<String> sent(String record) => c.builders
+        .whereType<UpdateVerbBuilder>()
+        .where((b) => b.atKey.key == record)
+        .map((b) => b.buildCommand().split(' ').first)
+        .toList();
+    expect(
+        sent('__nskey'),
+        [
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:uAt:2026-03-04T00:00:00.000000Z:isEncrypted:false:'
+              'public:__nskey.app_1.my_apps@alice',
+        ],
+        reason: 'no ttr, or a reader\'s atServer may serve its copy after a '
+            'rotation; no ttl, or the key every sender seals to expires');
+    expect(
+        sent('_nskeylock'),
+        List.filled(
+            3,
+            'update:nc:ttl:120000:isEncrypted:false:immutable:true:'
+            '_nskeylock.app_1.my_apps@alice'),
+        reason: 'the ttl is what releases the lock, and the atServer\'s '
+            'refusal of a second immutable create is the interlock');
   });
 
   group('the record stamp says when the generation was minted', () {

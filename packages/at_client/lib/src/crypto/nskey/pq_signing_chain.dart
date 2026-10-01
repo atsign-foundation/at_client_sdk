@@ -12,7 +12,7 @@ import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show serialiseApskWrite;
 import 'package:at_client/src/mixins/envelope_signing.dart'
-    show EnvelopeSigning;
+    show EnvelopeSigning, WithdrawnSigningKeyException, withdrawnApskLocation;
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -46,6 +46,15 @@ enum ChainVerdict {
   /// Distinct from [chained]: an absent link means nobody has vouched yet, a
   /// bad one means something claimed to and the claim does not hold.
   broken,
+
+  /// A key the walk depends on — the enrollment's own, or a signer's — was
+  /// revoked, or superseded by a successor enrollment: the atServer moved its
+  /// `_apsk` to `.r.__e`.
+  revoked,
+
+  /// A key the walk depends on was deleted, or expired: the atServer moved its
+  /// `_apsk` to `.d.__e`.
+  deleted,
 }
 
 /// What [PqSigningChain.verifyChain] found.
@@ -140,8 +149,8 @@ class PqSigningChain {
           utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-  /// signing advertisement lives, and the one record its own connection may
-  /// write.
+  /// signing advertisement lives, in the reserved namespace only that
+  /// enrollment may write.
   static String apskUri(String atSign, String enrollmentId) =>
       envelope_signature.apskUri(atSign, enrollmentId);
 
@@ -308,6 +317,62 @@ class PqSigningChain {
       current.value,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );
+  }
+
+  /// The `appMetadata` a republish of [enrollmentId]'s `_apsk` under [value]
+  /// sends over the [stored] one, or null when that needs no change.
+  ///
+  /// A link that does not vouch for [value] is removed, and a root link is
+  /// signed afresh over [value] when this client holds the signing root; an
+  /// enrollment with no root link gets none here. Sent explicitly because an
+  /// atServer keeps the stored `appMetadata` for an update carrying none, so a
+  /// link over the old key would ride the new one and read broken.
+  static Future<AppMetadata?> republishedAppMetadata(AtClient atClient,
+      String enrollmentId, AppMetadata? stored, String value) async {
+    final additional = stored?.additional;
+    if (additional == null) return null;
+    final chainLink = additional[linkField];
+    final rootLink = additional[rootLinkField];
+    final chainStale = chainLink != null &&
+        !_vouchesFor(_envelopePayload(chainLink), enrollmentId, value);
+    final rootStale = rootLink != null &&
+        !_vouchesFor(
+            rootLink is Map ? rootLink['payload'] : null, enrollmentId, value);
+    if (!chainStale && !rootStale) return null;
+
+    final kept = Map<String, dynamic>.of(additional);
+    if (chainStale) kept.remove(linkField);
+    if (rootStale) {
+      kept.remove(rootLinkField);
+      final signer = await PqSigningRoot(atClient, keysIo: atClient.atKeysIo)
+          .signingKey(atClient.getCurrentAtSign()!);
+      if (signer != null) {
+        kept[rootLinkField] = await _rootLinkOver(
+          linkPayload(
+              childEnrollmentId: enrollmentId, childApkamPublicKey: value),
+          signer.private,
+          kid: signer.kid,
+        );
+      }
+    }
+    return AppMetadata(
+        providerId: stored!.providerId, additional: kept.isEmpty ? null : kept);
+  }
+
+  /// Whether a link [payload] vouches for [value] as [enrollmentId]'s key.
+  static bool _vouchesFor(Object? payload, String enrollmentId, String value) =>
+      payload is Map &&
+      payload['childEnrollmentId'] == enrollmentId &&
+      payload['apkamPublicKey'] == value;
+
+  /// The payload of a chain link as stored, or null when it does not parse.
+  static Object? _envelopePayload(Object? link) {
+    if (link is! Map) return null;
+    try {
+      return SignedEnvelope.fromJson(link).payload;
+    } on Exception {
+      return null;
+    }
   }
 
   /// The chain link an enrollment has published, or null if it has none.
@@ -668,6 +733,17 @@ class PqSigningChain {
 
       final link = await readLink(current);
       if (link == null) {
+        if (await _publishedKey(atSign, current) == null) {
+          final location =
+              await withdrawnApskLocation(_atClient, atSign, current);
+          if (location != null) {
+            return ChainResult(
+                _verdictFor(location),
+                path,
+                'enrollment $current\'s key is no longer published: the '
+                'atServer moved its _apsk to .$location');
+          }
+        }
         return ChainResult(
             path.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
             path,
@@ -675,7 +751,16 @@ class PqSigningChain {
             'the root');
       }
 
-      final failure = await _checkChainLink(verifier, atSign, current, link);
+      final String? failure;
+      try {
+        failure = await _checkChainLink(verifier, atSign, current, link);
+      } on WithdrawnSigningKeyException catch (e) {
+        return ChainResult(
+            _verdictFor(e.location),
+            path,
+            'the link on $current was signed by ${link.signerEnrollmentId}: '
+            '${e.message}');
+      }
       if (failure != null) {
         return ChainResult(ChainVerdict.broken, path, failure);
       }
@@ -696,6 +781,12 @@ class PqSigningChain {
     }
   }
 
+  /// The verdict for a key the atServer moved to [location].
+  static ChainVerdict _verdictFor(String location) =>
+      location == EnrollmentConstants.perEnrollmentRevoked
+          ? ChainVerdict.revoked
+          : ChainVerdict.deleted;
+
   /// Null when [link] is sound for [enrollmentId]; otherwise why it is not.
   Future<String?> _checkChainLink(
     EnvelopeSigning verifier,
@@ -707,7 +798,7 @@ class PqSigningChain {
       await verifier.verifyEnvelopeSignature(link,
           signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      if (e is StoppedException || e is WithdrawnSigningKeyException) rethrow;
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
     }

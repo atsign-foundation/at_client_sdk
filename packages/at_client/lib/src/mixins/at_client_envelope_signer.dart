@@ -21,13 +21,10 @@ class AtClientEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   final AtSignLogger logger = AtSignLogger('AtClientEnvelopeSigner');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings;
 
   AtClientEnvelopeSigner(
     this.atClient, {
-    this.publicKeyCacheSettings = const (
-      cacheExpiry: Duration(minutes: 5),
-      resetOnLookup: true,
-    ),
+    this.publicKeyCacheSettings = const (cacheExpiry: Duration(minutes: 5)),
   });
 }

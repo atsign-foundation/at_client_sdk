@@ -9,6 +9,26 @@
   sends its content key there too, so the atSign's other clients can read it.
 - fix: listing an `AtCollection` that holds an item this atSign shared
   post-quantum no longer fails.
+- fix: every enrollment of an atSign reads what its other enrollments shared,
+  and a restart no longer writes a new key record for each peer it writes to.
+- fix: key records nothing needs any more are deleted, rather than kept for the
+  life of the atSign.
+- fix: a recipient reads a post-quantum share while the sender's atServer is
+  unreachable.
+- fix: a namespace key a peer withdraws stops being used at once, and one it
+  rotates within 15 minutes, including this atSign's own, rotated on another
+  device.
+- feat (experimental): a signature from a revoked or deleted enrollment is
+  refused with `WithdrawnSigningKeyException`, which says which.
+  `EnvelopeSigning.publicKeyCacheSettings` no longer takes `resetOnLookup`: a
+  fetched key is kept for a fixed time.
+- fix: application scans and notification subscriptions no longer see the
+  SDK's content-key records; a scan with `showHiddenKeys` lists them.
+- fix: a read of a record whose name ends in the app's namespace no longer
+  reads a different record.
+- fix: `ensureReachable` on a client with no `AtKeysIo` no longer publishes a
+  key only that process could open. It answers `AtReachability.noKeySource`,
+  which an exhaustive `switch` must now handle.
 
 ## 3.15.0-rc1
 

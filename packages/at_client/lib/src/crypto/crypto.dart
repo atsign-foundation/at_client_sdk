@@ -17,7 +17,8 @@ import 'package:meta/meta.dart' show visibleForTesting;
 // NOTE: the nskey data path is public surface — these types are what
 // `CryptoConfig.nskey` requires, returns and throws, so they have to reach the
 // package barrel.
-export 'package:at_client/src/crypto/nskey/ck_manager.dart';
+export 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    hide collectUnusedOnceCaughtUp;
 export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
