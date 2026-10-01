@@ -9713,6 +9713,17 @@ holds it across **publish, file and retire together** — one critical section,
 not three steps that happen to run in order. A writer arriving mid-mint composes
 after the filing and finds nothing to change.
 
+⚠️ **AMENDED 2026-09-30, in the commit that did it: "every `_apsk` write" was
+not true until then.** `PqSigningChain`'s link writes (`publishLink`,
+`publishOwnRootLink`, and both halves of `publishPendingLink`) took no lock, and
+each re-sends the record value it read. A republish landing between that read
+and the link's put was put back to the old value, so the advertisement lost the
+keys just published; a unit test parking the link write on its read reproduced
+it for all four. No in-process caller reached it: the only writer that changes
+the value is startup's `mintInUseSigningKeys`, which runs before both link
+steps. Each link write now holds the lock from its read of the record through
+its put.
+
 **It says only what it can keep.** 102 rejected serialising because "both
 triggers are publicly exported, so it would read as a guarantee it could not
 give". That objection is about a *cross-process* guarantee and it still stands:
