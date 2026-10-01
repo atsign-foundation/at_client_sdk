@@ -167,9 +167,9 @@ void main() {
         ?.additional?['ckKid'] as String;
     final context = CryptoContext(atClient: atClient);
 
-    // NOTE: the pass the rotation starts waits for a caught-up sync and can run
-    // before or after each call below, so assert what is served, never a
-    // call's count.
+    // NOTE: the collection a rotation queues runs at once or, when refused, at
+    // a later caught-up sync, so it can run before or after each call below;
+    // assert what is served, never a call's count.
     final successor = await ckManager.rotateContentKey(context, first);
     await ckManager.idle;
     await sync('ck-collect-rotated');
