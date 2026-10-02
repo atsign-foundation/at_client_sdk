@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.0.0-rc2
+
+- build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
+  post-quantum sharing and keyfile lock fixes.
+
 ## 2.0.0-rc1
 
 - BREAKING: `AuthService` and `FlutterEnrollmentService` are removed. Use

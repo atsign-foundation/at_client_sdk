@@ -1,3 +1,8 @@
+## 3.15.0-rc3
+
+- build: requires `at_auth` ^4.0.0-rc3, which releases a keyfile lock left
+  behind by a process that stopped mid-write within 5 seconds.
+
 ## 3.15.0-rc2
 
 - feat (experimental): invitations, including to someone with no atSign yet:

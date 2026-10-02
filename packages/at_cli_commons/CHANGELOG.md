@@ -1,3 +1,8 @@
+## 3.1.2-rc2
+
+- build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
+  post-quantum sharing and keyfile lock fixes.
+
 ## 3.1.2-rc1
 
 - feat: `CLIBase` opens its client with at_client's `Atsign.open` and waits up

@@ -1,3 +1,8 @@
+## 2.0.0-rc3
+
+- build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
+  post-quantum sharing and keyfile lock fixes.
+
 ## 2.0.0-rc2
 
 - fix: `at_activate` with no command runs `onboard` again, as 1.x did, and
