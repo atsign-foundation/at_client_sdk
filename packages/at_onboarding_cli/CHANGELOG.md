@@ -37,8 +37,7 @@
   post-quantum startup.
 - **Compatibility:** a passphrase-protected `.atKeys` file now uses at_auth's
   version 1 envelope, with a random per-file salt, which older tooling cannot
-  read. `--hashingAlgoType` is ignored and hidden: it had set the PKAM hash,
-  which an RSA-2048 key refuses for argon2id.
+  read. `--hashingAlgoType` is now ignored and hidden.
 - fix: `--version` reports the real version, the enrollment commands say what
   they did, and `at_activate interactive` ends on `exit`, `quit` or Ctrl-D and
   splits its input on any run of whitespace.
@@ -46,7 +45,8 @@
   `at_lookup` ^3.7.0-rc2. `at_server_status` is no longer a dependency.
 
 ## 1.16.1-rc1
-- fix: pass passPhrase to FileAtKeysIo during onboarding so password-protected atKeys files are written correctly
+
+- fix: onboarding with a passphrase writes the `.atKeys` file protected by it.
 
 ## 1.16.0
 - refactor: route enrollment crypto — `sha256` hashing, AES key generation and RSA keypair generation — through at_chops (`SHA256HashingAlgo`, `AtChopsUtil.generateSymmetricKey`, `AtChopsUtil.generateAtEncryptionKeyPair`). `crypto`, `encrypt` and `crypton` are no longer imported anywhere in the package and have been dropped from `dependencies`. Byte-identical by construction.

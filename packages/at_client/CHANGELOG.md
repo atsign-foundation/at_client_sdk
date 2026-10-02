@@ -27,8 +27,8 @@
   device.
 - feat (experimental): a signature from a revoked or deleted enrollment is
   refused with `WithdrawnSigningKeyException`, which says which.
-  `EnvelopeSigning.publicKeyCacheSettings` no longer takes `resetOnLookup`: a
-  fetched key is kept for a fixed time.
+- BREAKING (experimental): `EnvelopeSigning.publicKeyCacheSettings` no longer
+  takes `resetOnLookup`; a fetched key is kept for a fixed time.
 - fix: application scans and notification subscriptions no longer see the
   SDK's content-key records; a scan with `showHiddenKeys` lists them.
 - fix: a read of a record whose name ends in the app's namespace no longer

@@ -5,16 +5,12 @@
 
 ## 3.1.2-rc1
 
-- feat: `CLIBase` opens its client with at_client's `Atsign.open` and waits up
-  to `maxConnectAttempts` tries, three seconds apart, for it to come online,
-  instead of re-authenticating in a loop. A refusal on a device that has never
-  held the atSign online throws `AtOpenRefusedException`; any other failure to
-  connect throws `SecondaryServerConnectivityException`, as before.
+- feat: `CLIBase` waits up to `maxConnectAttempts` tries, 3 seconds apart, for
+  its client to come online, rather than re-authenticating in a loop. A device
+  that has never held the atSign online gets `AtOpenRefusedException`; any
+  other failure to connect still throws `SecondaryServerConnectivityException`.
 - feat: `lookUps` on `CLIBase` and `fromCommandLineArgs` chooses the
-  transport; by default, the proxy when the root domain names one, else TLS.
-- chore: `CLIBase` sets `AtOnboardingPreference.storagePath` in place of the
-  deprecated `hiveStoragePath` (same location), and no longer sets the unused
-  `commitLogPath`.
+  transport: by default the proxy when the root domain names one, else TLS.
 - build: requires `at_onboarding_cli` ^2.0.0-rc1, `at_client` ^3.15.0-rc1 and
   `at_auth` ^4.0.0-rc2.
 

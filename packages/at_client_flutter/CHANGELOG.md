@@ -29,11 +29,11 @@
   the keys-store types come through at_client.
 - feat: keychain entries use `:` as the name delimiter. Keys under the old `_`
   name are copied across, and the `_` copy is kept until 3.0.0.
-- fix: keychain reliability. An atSign finds its entry however it is spelled,
-  a failed read no longer wipes the store, `write` refuses an atSign that has
-  an entry (use `flush`), `flush` and `update` work, `read` throws
-  `AtKeysSourceAbsentException` for an atSign it doesn't hold, and entries
-  written by older releases are found and removed.
+- fix: the keychain store finds an atSign however it is spelled, keeps its
+  contents when a read fails, and finds and removes entries older releases
+  wrote; `flush` and `update` work. `write` refuses an atSign that already has
+  an entry (use `flush`), and `read` throws `AtKeysSourceAbsentException` for
+  one it doesn't hold.
 - fix: the enrollment request list approves a post-quantum request instead of
   crashing, and shows a post-approval conveyance refusal's own message.
 - docs: the examples in `example/`, `example/todos` and `example/dockerstats`
