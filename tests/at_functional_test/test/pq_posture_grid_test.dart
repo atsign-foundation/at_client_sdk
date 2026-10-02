@@ -54,7 +54,7 @@ class _GridEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   /// Null: a cached public key would let one cell verify against a key another
   /// cell published.
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
+  final ({Duration cacheExpiry})? publicKeyCacheSettings =
       null;
 }
 

@@ -277,9 +277,20 @@ void main() {
   test(
       'UC-B4.2 opt-out · an atSign that refused legacy material is not '
       'reachable by a legacy peer, and says so', () async {
-    // GIVEN an atSign activated PQ-native with mintLegacyMaterial:false. The
-    //       flag is spent at activation and cannot be taken back, which is why
-    //       it needs an atSign of its own.
+    // GIVEN an atSign with no public:publickey, as a genuinely new atSign has.
+    //       The virtualenv provisions one for most demo atSigns but not for
+    //       this one, and an atServer refuses to delete its own. The control
+    //       is the same call against an atSign that has one, so null here
+    //       means absent rather than "plookup did not work".
+    expect(await plookupOrNull(legacyClient, 'publickey$pqNative'), isNotNull);
+    expect(await plookupOrNull(legacyClient, 'publickey$pqOptOut'), isNull,
+        reason: 'the fixture: the opt-out atSign must start with no '
+            'publickey, or the absence asserted after its activation is not '
+            'the activation\'s doing (pqNativeOptOutAtSign in config.yaml)');
+
+    // AND activated PQ-native with mintLegacyMaterial:false. The flag is spent
+    //     at activation and cannot be taken back, which is why it needs an
+    //     atSign of its own.
     final optOutClient = (await pqNativeOnboard(
       atSign: pqOptOut,
       cramSecret: cramKeyMap[pqOptOut]!,
@@ -301,25 +312,12 @@ void main() {
 
     // What the activation published, established by VALUE rather than by
     // presence. The ordinary PQ-native activation publishes the key from its
-    // own keyfile; the opt-out publishes nothing, so whatever stands at that
-    // address is not this atSign's — and it holds no encryption key at all, so
-    // it never could be.
+    // own keyfile; the opt-out publishes nothing.
     final pqKeys = await FileAtKeysIo(filePath: keysFilePath).read(pqNative);
     expect(await plookupOrNull(optOutClient, 'publickey$pqNative'),
         pqKeys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'the positive control: an activation that minted legacy '
             'material publishes exactly the key it minted');
-
-    // The virtualenv image ships every demo atSign with a `public:publickey`
-    // already installed — provisioning state, not something any activation
-    // wrote (an untouched `@denise` has one too). A genuinely new atSign has
-    // no such record, so removing this one is restoring the condition under
-    // test rather than shaping it. The atSign removes its own record; nothing
-    // else can.
-    final removed = await optOutClient
-        .getRemoteSecondary()!
-        .executeCommand('delete:public:publickey$pqOptOut\n', auth: true);
-    expect(removed, startsWith('data:'));
     expect(await plookupOrNull(optOutClient, 'publickey$pqOptOut'), isNull,
         reason: 'an absent publickey is how this atSign tells a legacy peer it '
             'has no legacy path');
