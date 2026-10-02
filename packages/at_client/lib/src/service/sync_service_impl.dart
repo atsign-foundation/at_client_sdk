@@ -1346,7 +1346,7 @@ class SyncServiceImpl implements SyncService {
       // — kept aligned so app-level `isInSync()` callers see the
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
-          lastReceivedServerCommitId == serverCommitId;
+          serverCommitId <= lastReceivedServerCommitId;
     } on StoppedException {
       rethrow;
     } on Exception catch (e) {
@@ -1379,7 +1379,7 @@ class SyncServiceImpl implements SyncService {
     // client-side push backlog lives in `LocalSecondary`'s sync
     // queue.
     return pendingPushCount == 0 &&
-        lastReceivedServerCommitId == serverCommitId;
+        serverCommitId <= lastReceivedServerCommitId;
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.

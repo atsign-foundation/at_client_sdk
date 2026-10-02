@@ -47,7 +47,12 @@ abstract class SyncService {
   @Deprecated('Use SyncProgressListener')
   void setOnDone(Function onDone);
 
-  /// Returns true if local and cloud secondary are in sync. false otherwise
+  /// Whether nothing waits to push and the atServer holds nothing this
+  /// client's sync filter admits beyond what it has already pulled.
+  ///
+  /// The atServer's figure for a filtered client can fall below what the
+  /// client has pulled, when the newest entry the filter admits is purged;
+  /// that still counts as in sync.
   Future<bool> isInSync();
 
   /// Returns true if sync is in-progress; else false.

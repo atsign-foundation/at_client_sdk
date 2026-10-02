@@ -4,6 +4,9 @@
   behind by a process that stopped mid-write within 5 seconds.
 - build: requires `at_lookup` ^3.7.0-rc3, whose notification connection logs
   `Heartbeat OK: lastReceipt <time>` on each answered heartbeat again.
+- fix: `isInSync()` answers true once a client with a sync regex, or on an
+  enrollment limited to some namespaces, has pulled everything its filter
+  admits, rather than staying false until the next write the filter admits.
 
 ## 3.15.0-rc2
 
