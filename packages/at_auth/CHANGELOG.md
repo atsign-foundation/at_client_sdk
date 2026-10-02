@@ -1,3 +1,8 @@
+## 4.0.0-rc3
+
+- fix: a keyfile lock left behind by a process that stopped mid-write is
+  released within 5 seconds, instead of blocking every other writer for 30.
+
 ## 4.0.0-rc2
 
 at_auth is the protocol layer under at_client's lifecycle verbs. What an

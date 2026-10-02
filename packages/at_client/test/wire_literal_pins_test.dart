@@ -94,12 +94,13 @@ void main() {
     });
 
     test('the current-CK pointer strips the destination owner\'s @', () {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
       // The emitted segment is 'bob', not '@bob' — easy to mis-pin.
       expect(
           const CurrentCkPointer()
               .keyFor(atClient, '@bob', 'app_1.my_apps')
               .toString(),
-          '__ckcur.bob.app_1.my_apps@alice');
+          '__ckcur.bob.app_1.my_apps.enroll-1.a.__e@alice');
     });
 
     test('a self conveyance is <ckKid>.__ck.<ckNs>@<owner>', () {
@@ -431,6 +432,33 @@ void main() {
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');
       expect(NskeyRecipientKind.nskey, 'nskey');
+    });
+
+    test('a conveyance names the enrollment that cut its key', () async {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
+      final kem = XWingPureDartAlgo.instance;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair('@alice', 'myapp',
+            publicKey: pair.publicKey,
+            privateKey: pair.secretKey,
+            keyAlgo: 'x-wing');
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final atKey = AtKey()
+        ..key = 'ckkid.__ck'
+        ..namespace = 'myapp'
+        ..sharedBy = '@alice';
+
+      await provider.encrypt(
+          CryptoContext(atClient: atClient), atKey, ck.toBase64());
+
+      // NOTE: frozen — only the enrollment named here collects the key once
+      // nothing cites it, so a conveyance without it is never collected.
+      final json = atKey.metadata.appMetadata!.toJson();
+      expect(json.keys.toList(),
+          ['providerId', 'recipientKind', 'ckKid', 'nskeyKid', 'ns', 'cutBy']);
+      expect(json['cutBy'], 'enroll-1');
     });
 
     test('a data value\'s appMetadata, field by field', () async {

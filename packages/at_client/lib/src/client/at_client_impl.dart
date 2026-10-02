@@ -23,6 +23,10 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    show collectUnusedOnceCaughtUp;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show parseCkConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -218,6 +222,9 @@ class AtClientImpl implements AtClient {
       if (_preference?.seedNamespaceKeys != true) {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
       }
+      if (_atKeysIo == null) {
+        return const AtReachabilityResult(AtReachability.noKeySource);
+      }
 
       // NOTE: safe here only because `MintLock` holds an in-flight guard for
       // the ring this client uses. The lock itself excludes a different
@@ -335,6 +342,12 @@ class AtClientImpl implements AtClient {
     if (cache != null) {
       syncService.addProgressListener(ContentKeyEviction(cache));
     }
+    // NOTE: the manager is looked up once sync has caught up rather than now,
+    // since an application may name its crypto configuration after this runs.
+    unawaited(collectUnusedOnceCaughtUp(
+        syncService,
+        () => CryptoConfig.forClient(this).ckManager,
+        CryptoContext(atClient: this)));
     _pqBootstrap?.sharing.attachToServices();
   }
 
@@ -1805,11 +1818,16 @@ class AtClientImpl implements AtClient {
 
     var scanResult = await secondary.executeVerb(scanBuilder);
     scanResult = _formatResult(scanResult);
-    var result = [];
+    var result = <String>[];
     if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
-    return result as FutureOr<List<String>>;
+    // NOTE: a content key's conveyance is the SDK's own record, kept from an
+    // application like the other reserved ones unless it asks for them.
+    if (!showHiddenKeys) {
+      result.removeWhere((key) => parseCkConveyanceKey(key) != null);
+    }
+    return result;
   }
 
   @override
@@ -1994,7 +2012,9 @@ class AtClientImpl implements AtClient {
           requestedProviderId: options.cryptoProviderId,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer: options.useRemoteAtServer,
+          useRemoteAtServer:
+              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
+                  RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.

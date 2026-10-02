@@ -909,13 +909,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
-     sealed to.
+     sealed to. Seal it again to **alice's own** nskey covering the namespace, as the
+     **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
+     `appMetadata`; an alice holding no such key mints one there first, unless
+     `seedNamespaceKeys` is off.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
-  ⛔ **This `put` writes no self-copy.** `AtClient.put` writes one value and
-  one CK conveyance, and that conveyance is sealed to **bob** — `nskey_cross_atsign_test`
-  asserts alice cannot open it, on the grounds that if she could, her own scope would
-  have been handed bob's content key. Writing a second copy for the sender is
+  ⛔ **This `put` writes one value, and no copy of it for alice.** Alice's
+  enrollments read that value itself, opening its CK from the sibling copy; bob's
+  conveyance stays sealed to bob. Writing a second copy of the value is
   **AtCollection's** behaviour, a separate earlier `put` to a plain self key, and
   AtCollection is a *consumer* of this API whose behaviour these rows do not
   assert. A row about `put` or `notify` is about **self→self or
@@ -924,9 +926,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read. The
     same nskey private opens every CK record sealed to that nskey, so which of bob's
     enrollments reads is immaterial — the reads differ by record-owner, not by key.
-    ⚠️ There is no self-copy for alice to read here; alice's own reading of her own
-    data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists), the
-    self→self mirror of this row.
+  - `alice1` after a restart, and every other enrollment of alice, read the shared
+    value, opening its CK from the sibling copy and never from bob's conveyance; the
+    restarted `alice1` goes on writing under the CK it had.
   - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
@@ -953,9 +955,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice2` shares with `@bob`.
 - **Then:** all of bob's authorised enrollments read the shared record, whichever of
   alice's enrollments wrote it; no authorised enrollment on the receiving side is left
-  unable to decrypt. There is no self-copy: the self→self mirror, alice's own
-  enrollments reading alice's own data, is
-  [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists).
+  unable to decrypt. Every enrollment of alice reads it as well, whichever of them
+  wrote it, opening its CK from the sibling copy.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
@@ -1125,8 +1126,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   generation.
 - **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry
   the new `nskeyKid`; each surviving enrollment **retains** the prior private, so
-  retained history still opens. A peer notices at its next `ensureCurrent`: it
-  re-`plookup`s, sees the changed `nskeyKid`, and cuts a fresh CK to the successor.
+  retained history still opens. A peer notices at its first `ensureCurrent` once its
+  cached advertisement is `advertisementTtl` (15 minutes) old: it re-`plookup`s, sees
+  the changed `nskeyKid`, and cuts a fresh CK to the successor. A re-fetch that cannot
+  reach an answer keeps sealing to the cached generation for at most
+  `advertisementStaleGrace` (15 more minutes) and then fails the write, so a peer seals
+  to a superseded generation for no longer than the two together; a re-fetch answered
+  not-found stops sealing to that peer at once.
   **Without that re-fetch the revocation does not hold** — a peer still sealing to the
   superseded generation hands the revoked enrollment a key it can open, so the
   bounded-exposure assertion is part of this case, not an optimisation. This is the
@@ -1254,9 +1260,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
   ⚠️ **The cut is bounded, not instantaneous.** A peer keeps sealing content keys
   to the superseded generation until its next `ensureCurrent` sees the changed
-  `nskeyKid`, and the revoked holder can still open those. The exposure is the
-  advertisement's freshness window plus one content-key lifetime — UC-A5.1's
-  **Then (b)** calls that part of the case rather than an optimisation.
+  `nskeyKid`, and the revoked holder can still open those. The exposure is
+  `advertisementTtl` plus `advertisementStaleGrace` — UC-A5.1's **Then (b)**
+  calls that part of the case rather than an optimisation.
 
   **Stranding.** Three rules bear on it. An enrollment may not revoke itself
   without `force`, and a revoker must be authorised for every namespace in the
@@ -1321,16 +1327,17 @@ knows which is which. Design in
   so a restart does not present every key to the policy as freshly cut, and two
   devices reading the same record reach the same answer.
 - **Then, what a yes does:** a fresh content key is cut and conveyed, and the
-  superseded conveyance record is **retained** — which is what lets an
-  enrollment that joins later read what was written before it. Retention is the
-  per-namespace history knob of UC-A5.1's lever (a), and the SDK's own lever
-  does not delete on the application's behalf.
+  superseded key's conveyances are **kept while any record cites it** — which
+  is what lets an enrollment that joins later read what was written before it
+  — and deleted by the enrollment that cut it once none does. Deleting a key
+  that records still cite is UC-A5.1's lever (a), which the SDK never pulls on
+  the application's behalf.
 - **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
   week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
-  than a day because every replacement writes a record that is then retained,
-  so a short period accumulates records for the lifetime of the atSign; rather
-  than a month because a week is already the period this design measures an
-  envelope's life in.
+  than a day because each replacement adds a conveyance that is kept as long
+  as any record written under its key lives, so a short period multiplies what
+  a long-lived store keeps; rather than a month because a week is already the
+  period this design measures an envelope's life in.
 
 ### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
 
@@ -1968,8 +1975,12 @@ answer is the only thing standing between them.
 - **Then:** she takes the **same verify path a peer takes** — no owner
   shortcut. One path means a defect in verification cannot hide behind the
   common case, and it is what makes "same-atSign and cross-atSign are the same
-  code" a tested property rather than an aspiration. A namespace nobody minted
-  for resolves to nothing rather than to an error or a guess.
+  code" a tested property rather than an aspiration. A re-read whose bytes are
+  the ones she already verified is not verified again, while a peer's always
+  is: verifying fetches her enrollment's `_apsk` from the atServer, so her own
+  writes would otherwise stop once she had been offline longer than
+  `advertisementTtl`. A namespace nobody minted for resolves to nothing rather
+  than to an error or a guess.
 
 - **Cross-ref:** [UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open).
 - **Impl/verify:** **SS-4** + **B-1**.
@@ -3468,8 +3479,8 @@ is where its missing lever lives.
     is how a peer learns a rotation happened at all — a sender never sees a
     recipient's decapsulation fail — and it is also the **bound**: until each peer
     re-resolves it goes on sealing to the superseded generation, which the
-    revoked holder can still open. The exposure is the advertisement's freshness
-    window plus one content-key lifetime, which is
+    revoked holder can still open. The exposure is `advertisementTtl` plus
+    `advertisementStaleGrace`, which is
     [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise)'s **Then (b)**
     and not an optimisation;
   - **a client decides a rotation is due without coordinating with another
@@ -3660,9 +3671,11 @@ is where its missing lever lives.
     strands it until the next start re-signs it. The premise holds because a
     posture move **replaces** the enrollment: reaching a
     PQ posture retrofits an rsa2048 credential into a new enrollment owning a
-    signing key from birth, and the superseded enrollment keeps its own `_apsk`
-    record — published with no TTL and deleted by nothing — so what its
-    authentication key signed goes on verifying;
+    signing key from birth. A superseded predecessor that is not fully
+    privileged has its `_apsk` moved to `.r.__e` at its successor's first
+    authentication, so what its authentication key signed stops verifying and
+    is refused as revoked or superseded rather than as a missing key; a fully
+    privileged predecessor keeps its record at `.a.__e`;
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
@@ -3972,10 +3985,13 @@ which is the same mechanism stated once.
   rather than anchored, and an enrollment whose own key moved **re-anchors
   itself** rather than publishing a link that vouches for a value it no longer
   holds.
-  *And* the break is not recoverable by the record alone:
-  `publishPublicSigningKey` writes the value on its own and does not carry over
-  the `appMetadata` a link rides, so the enrollment goes from `chained` to
-  `unsigned` with nothing re-conveying it.
+  *And* the break is not recoverable by the record alone, and a republish does
+  not leave it standing: `publishPublicSigningKey` sends the record's
+  `appMetadata` without a link over the old value, which the atServer would
+  otherwise keep, so the enrollment reads `unsigned` rather than `broken` until
+  the next fully privileged start's sweep conveys a root link over the new
+  value. An enrollment whose client holds the signing root is instead
+  re-anchored over the new value in the same write.
 
   ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
   `_apsk` held the APKAM public key alone. It is a member of the signed preimage,
