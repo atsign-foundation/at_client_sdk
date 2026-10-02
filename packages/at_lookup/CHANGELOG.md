@@ -1,3 +1,9 @@
+## 3.7.0-rc3
+
+- feat: while notifications are on, each heartbeat the atServer answers logs
+  `Heartbeat OK: lastReceipt <time of the last notification>` at info, the
+  line at_client's Monitor used to log.
+
 ## 3.7.0-rc2
 
 - fix: the listener reads the connection a line at a time, and each line is

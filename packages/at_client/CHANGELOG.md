@@ -2,6 +2,8 @@
 
 - build: requires `at_auth` ^4.0.0-rc3, which releases a keyfile lock left
   behind by a process that stopped mid-write within 5 seconds.
+- build: requires `at_lookup` ^3.7.0-rc3, whose notification connection logs
+  `Heartbeat OK: lastReceipt <time>` on each answered heartbeat again.
 
 ## 3.15.0-rc2
 
