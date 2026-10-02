@@ -25,8 +25,8 @@ class HiveAtClientStorage extends AtClientStorageBase {
   String get location =>
       '${HiveInstances.canonicalPathFor(storagePath)}::$atSign';
 
-  /// The persistence bundle, or `null` before the first [attach].
-  AtPersistenceBundle? get bundle => _manager?.bundleOrNull;
+  @override
+  AtPersistenceBundle? get persistenceBundle => _manager?.bundleOrNull;
 
   @override
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>

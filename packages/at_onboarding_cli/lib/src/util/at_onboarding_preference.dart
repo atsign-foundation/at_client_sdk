@@ -1,6 +1,7 @@
 import 'dart:core';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_onboarding_cli/src/util/proxy_lookups.dart';
 import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
