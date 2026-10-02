@@ -1,5 +1,26 @@
 ## 4.0.0-rc3
 
+### Added
+
+- `RegistrarService.registerAtSign` — checks availability and/or activates an
+  atSign in a single v4 registrar call (`/register-atsign/`), returning a
+  cramkey when `operation: 'register'`.
+- `RegistrarService.generateAtSignDeleteToken` and `.deleteAtSigns` — the two
+  steps of the v4 `/manage-atsigns` delete flow (Super API key required).
+
+### Changed
+
+- `Registrar.registrarApiRequest`'s `data` parameter is now
+  `Map<String, dynamic>` (was `Map<String, String?>`), so list-valued fields
+  (e.g. `atSigns`) can be sent without bypassing the shared request method.
+
+### Removed
+
+- **BREAKING:** `getFreeAtSign`, `getFreeAtSignByCategory`, `registerPerson`
+  and `validatePerson` — the free-atsign-generation and email/OTP person
+  registration flow. `registerAtSign` (above) is the current v4 path for
+  checking availability and activating an atSign. These had no callers
+  anywhere in this monorepo outside at_auth's own tests.
 - fix: a keyfile lock left behind by a process that stopped mid-write is
   released within 5 seconds, instead of blocking every other writer for 30.
 
