@@ -18,16 +18,38 @@ void main() {
       // WHEN  alice1 does put @bob:<k>.app_1.my_apps@alice (shouldEncrypt).
       // THEN  bob's clients decapsulate bob's CK record with bob's nskey private
       //       and read; which of bob's enrollments reads is immaterial, the
-      //       reads differing by record-owner rather than by key. PQ end to
-      //       end — no RSA on any path. Every authorised reader on both
-      //       atSigns decrypts, and an unauthorised @bob enrollment can
-      //       neither fetch the ciphertext (server-gated) nor decrypt it.
+      //       reads differing by record-owner rather than by key. alice1 after
+      //       a restart, and every other enrollment of alice, read the shared
+      //       value from the sibling copy, and the restarted alice1 goes on
+      //       writing under the CK it had. PQ end to end — no RSA on any path.
+      //       Every authorised reader on both atSigns decrypts, and an
+      //       unauthorised @bob enrollment can neither fetch the ciphertext
+      //       (server-gated) nor decrypt it.
       provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
           'alice shares with bob, and bob reads it with his own nskey private',
           proves:
-              'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
+              'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot open that record, while her sibling copy of the CK opens and names bob',
           clauses: [
             'decapsulate bob\'s CK record with bob\'s nskey private and read',
+          ]);
+      provenIn(
+          'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
+          'a restarted sender resumes the key it shares, and reads what it '
+              'shared, from the sibling copy',
+          proves: 'with nothing held in memory, alice writes to bob under the '
+              'CK she had, named by the pointer on the atServer and opened '
+              'from the sibling copy, and reads the value she shared before',
+          clauses: [
+            'goes on writing under the CK it had',
+          ]);
+      provenIn(
+          'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
+          'UC-A4.3: whichever alice enrollment writes, every bob enrollment '
+              'reads',
+          proves: 'alice1 reads, from the atServer, the value alice2 shared '
+              'with bob, opening the CK alice2 cut from its sibling copy',
+          clauses: [
+            'every other enrollment of alice, read the shared',
           ]);
       provenIn(
         'packages/at_client/test/acceptance/cross_cutting_test.dart',
@@ -139,6 +161,8 @@ void main() {
       // THEN  all of bob's authorised enrollments read the shared record,
       //       whichever of alice's enrollments wrote it; no authorised
       //       enrollment on the receiving side is left unable to decrypt.
+      //       Every enrollment of alice reads it as well, from the sibling
+      //       copy.
       provenIn(
         'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
         'UC-A4.3: whichever alice enrollment writes, every bob enrollment '
@@ -151,14 +175,24 @@ void main() {
             'generation @bob advertised. SENDER: a second enrollment of '
             '@alice, with a store of its own, writes a second record that '
             'both of @bob\'s enrollments then read. It carries a DIFFERENT '
-            'ckKid, which is what establishes that alice2 minted and conveyed '
-            'its own content key rather than resuming the current-CK pointer '
-            'alice1 left behind — mutating that write back onto alice1 '
-            'reddens exactly that assertion. Together: readability is a '
+            'ckKid: alice2 cut a content key of its own, as every enrollment '
+            'does, and mutating that write back onto alice1 reddens exactly '
+            'that assertion. Together: readability is a '
             'property of (owner, namespace) on the receiving side and carries '
             'no sender identity a reader has to hold',
         clauses: [
           'whichever of alice\'s enrollments wrote it',
+        ],
+      );
+      provenIn(
+        'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
+        'UC-A4.3: whichever alice enrollment writes, every bob enrollment '
+            'reads',
+        proves: 'alice1 reads what alice2 shared with bob, a CK alice1 never '
+            'held, opened from the sibling copy alice2 sealed to the '
+            'namespace key alice1 minted',
+        clauses: [
+          'Every enrollment of alice reads it as well',
         ],
       );
     });

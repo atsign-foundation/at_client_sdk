@@ -2629,6 +2629,11 @@ sat in the TODO table until 2026-08-18 because its opening read as a condition
 rather than a status, which also put the done marker outside the window the new
 TODO-row guard reads.
 
+⚠️ The gate below is closed. It was closed by moving CI to `dev_env` (the
+"Steps 32–34" row), and from p3.16.5, released 2026-09-30, the published image
+verifies ML-DSA PKAM as well: the onboarding-CLI pack passed all 21 of its tests
+against `atsigncompany/virtualenv:vip` that day.
+
 No PR opens against this branch until the published atServer image verifies
 ML-DSA PKAM (owner's call, 2026-08-08). The one thing that had to be true by
 then:
@@ -5873,8 +5878,9 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    instructive way. The variable *is* set on the job, and the step ran
    `sudo docker compose up -d`; **`sudo` resets the environment**, so compose
    never saw `VIRTUALENV_IMAGE` and fell back to the `atsigncompany/virtualenv:vip`
-   default in `docker-compose.yaml`. The published atServer cannot verify an
-   ML-DSA PKAM signature, and its symptom is exactly this `RangeError`.
+   default in `docker-compose.yaml`. The published atServer could not then
+   verify an ML-DSA PKAM signature (it can from p3.16.5, released 2026-09-30),
+   and its symptom is exactly this `RangeError`.
 
    It is the only container job in either workflow that used `sudo`; every one
    in `at_client_sdk.yaml` runs plain `docker compose` and gets its image. The
@@ -8689,7 +8695,7 @@ table, not from here; `git log` says what closed each.
 | [the at_client carve stack](../implementation-plan.md#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](../implementation-plan.md#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
 | [a wildcard enrolment seeds nothing](../implementation-plan.md#a-wildcard-enrolment-seeds-nothing) | **A ruling from gkc** on whether an atSign reachable only through a wildcard (`*`) enrolment is expected to publish namespace keys. Today it publishes none, so nobody can seal to it in any namespace, and the doc comment that said otherwise was false | gkc's ruling. The measuring is done |
-| [content keys per scope](../implementation-plan.md#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
+| [content keys per scope](decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](../implementation-plan.md#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee. ⛔ **Ruled 2026-09-07 (gkc): build a standing subscriber for conveyances** — nskey privates and content keys — so an arrival is filed when it lands rather than at the next start. A HANDLER on the envelope listener that already runs (`PqClientBootstrap._startEnvelopeListener`), not a second listener; it competes with `collectConveyedKeyMaterial`'s start sweep for the same envelopes, and the reverted attempt above is the constraint it has to honour. The analysis is in [`docs/projects/wasm/implementation-plan.md`](../../wasm/implementation-plan.md), the X6 row, under "conveyance has no standing subscriber". | Nothing |
 | **two clients of one atSign sharing a store** | ⛔ **Ruled 2026-09-07 (gkc): sweep for the shape anywhere two clients of one atSign exist**, not only the nskey family. The store split exposed two functional tests green only because two "installs" shared one local keystore — `nskey_rollout_ladder_live_test` never exercised its seal end to end, `enrollment_test` read records it had never written — and the functional pack is now isolated per file, so what remains is the e2e pack and the unit tree. Shortlist by cross-reads: `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart` (the name is the shape), `at_client_lifecycle_functional_test.dart`, `pq_posture_grid_test.dart` and the unit `enrollment_service_test.dart`. Re-derive the candidates rather than quoting a count: files with two or more `setCurrentAtSign`/`buildAtClient`/`fromAuthSession` calls for one atSign. A test found sharing gets its second client its own bundle (`forPrincipal`) or, for a succession, a hand-over. | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |

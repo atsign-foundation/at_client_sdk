@@ -109,4 +109,89 @@ void main() {
       );
     });
   });
+
+  group('a shared value\'s content key', () {
+    const bob = '@bob';
+
+    /// A value alice shared with bob, as it reaches bob, and the key it was
+    /// sealed under.
+    Future<({AtKey value, String ciphertext, ContentKey ck})>
+        sharedWithBob() async {
+      final writerCache = ContentKeyCache();
+      final ck = ContentKey(Uint8List.fromList(List<int>.filled(32, 9)));
+      writerCache.putAsCurrent(bob, namespace, ck, 'bobs-nskey-kid');
+      final valueKey = AtKey()
+        ..key = 'treaty'
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..sharedWith = bob
+        ..metadata = Metadata();
+      final sealed = await SymmetricAesGcmProvider(cache: writerCache)
+          .encrypt(context, valueKey, 'the treaty text');
+      return (
+        value: AtKey()
+          ..key = valueKey.key
+          ..namespace = valueKey.namespace
+          ..sharedBy = owner
+          ..sharedWith = bob
+          ..metadata =
+              (Metadata()..appMetadata = valueKey.metadata.appMetadata),
+        ciphertext: sealed,
+        ck: ck,
+      );
+    }
+
+    /// Bob's reads: whether his atServer's cached copy of the conveyance
+    /// answers ([cached]) and whether the sender's record does ([original]),
+    /// an answer filing the key as the at/nskey provider does.
+    void readsServe(ContentKeyCache readerCache, ContentKey ck,
+        {required bool cached, required bool original}) {
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn(bob);
+      Future<AtValue> answer(Invocation invocation) async {
+        final requested = invocation.positionalArguments.first as AtKey;
+        final isCachedCopy = requested.toString().startsWith('cached:');
+        if (isCachedCopy ? cached : original) {
+          readerCache.put(bob, namespace, ck);
+          return AtValue();
+        }
+        if (isCachedCopy) throw AtKeyNotFoundException('$requested not found');
+        throw SecondaryConnectException(
+            'the sender\'s atServer is unreachable');
+      }
+
+      when(() => mockAtClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer(answer);
+      when(() => mockAtClient.get(any())).thenAnswer(answer);
+    }
+
+    test('comes from the recipient\'s cached copy while the sender is away',
+        () async {
+      final shared = await sharedWithBob();
+      final readerCache = ContentKeyCache();
+      readsServe(readerCache, shared.ck, cached: true, original: false);
+
+      expect(
+          await SymmetricAesGcmProvider(cache: readerCache)
+              .decrypt(context, shared.value, shared.ciphertext),
+          'the treaty text',
+          reason: 'the conveyance was cached on bob\'s atServer and synced to '
+              'his clients, so a restarted client opens what was shared with '
+              'it without reaching alice\'s atServer');
+    });
+
+    test('falls back to the sender\'s record when no copy was cached',
+        () async {
+      final shared = await sharedWithBob();
+      final readerCache = ContentKeyCache();
+      readsServe(readerCache, shared.ck, cached: false, original: true);
+
+      expect(
+          await SymmetricAesGcmProvider(cache: readerCache)
+              .decrypt(context, shared.value, shared.ciphertext),
+          'the treaty text',
+          reason: 'a conveyance written before shares carried a ttr has no '
+              'cached copy anywhere');
+    });
+  });
 }

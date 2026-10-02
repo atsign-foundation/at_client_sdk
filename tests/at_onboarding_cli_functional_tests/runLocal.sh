@@ -20,11 +20,11 @@ set -euo pipefail
 #     no PKAM key yet. Starting it makes onboarding tests fail as "already
 #     activated", which reads like a product bug and is not.
 #  2. The image must be able to verify an ML-DSA PKAM signature, because these
-#     tests CRAM-onboard an atSign with a post-quantum keypair. The published
-#     `atsigncompany/virtualenv:vip` cannot, so the default is the locally
-#     built `at_virtual_env:local`.
+#     tests CRAM-onboard an atSign with a post-quantum keypair: at_server
+#     p3.16.5 or later, which the published `atsigncompany/virtualenv:vip` is.
+#     The default is still the locally built `at_virtual_env:local`.
 #
-#     ⚠️ A run against `vip` fails with a server-side `AT0010-Exception:
+#     ⚠️ An older atServer fails with a server-side `AT0010-Exception:
 #     RangeError` out of PKAM, which reads as a client bug and is not one.
 #
 #     To match CI exactly, or to run against a published build on purpose:
