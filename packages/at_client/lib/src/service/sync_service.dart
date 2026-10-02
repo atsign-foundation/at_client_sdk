@@ -47,12 +47,13 @@ abstract class SyncService {
   @Deprecated('Use SyncProgressListener')
   void setOnDone(Function onDone);
 
-  /// Whether nothing waits to push and the atServer holds nothing this
-  /// client's sync filter admits beyond what it has already pulled.
+  /// Whether nothing waits to push and the atServer's latest commit id for
+  /// this client's sync filter is at or below the one it has pulled to.
   ///
-  /// The atServer's figure for a filtered client can fall below what the
-  /// client has pulled, when the newest entry the filter admits is purged;
-  /// that still counts as in sync.
+  /// A filtered client's figure can fall below that, when the newest entry its
+  /// filter admits is purged or when the client has taken the atServer's
+  /// unfiltered commit id; both count as in sync. Throws
+  /// [AtClientException] when the atServer cannot be reached.
   Future<bool> isInSync();
 
   /// Returns true if sync is in-progress; else false.

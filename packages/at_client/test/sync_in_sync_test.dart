@@ -86,8 +86,20 @@ void main() {
   });
 
   tearDown(() async {
+    await sync.stop();
     await stats.close();
   });
+
+  /// The progress messages of one round an app requested.
+  Future<List<String?>> roundMessages() async {
+    final progress = _Progress();
+    sync.addProgressListener(progress);
+    sync.syncRequests.addLast(SyncRequest()
+      ..requestSource = SyncRequestSource.app
+      ..result = SyncResult());
+    await sync.processSyncRequests();
+    return progress.events.map((e) => e.message).toList();
+  }
 
   group('isInSync()', () {
     test('a server figure below the cursor is caught up', () async {
@@ -123,21 +135,22 @@ void main() {
     });
   });
 
-  test(
-      'a round requested with the server figure below the cursor finds the '
-      'client in sync', () async {
-    cursor = 120;
-    serverFigure = 100;
-    final progress = _Progress();
-    sync.addProgressListener(progress);
-    sync.syncRequests.addLast(SyncRequest()
-      ..requestSource = SyncRequestSource.app
-      ..result = SyncResult());
+  group('a round an app requests', () {
+    test('finds the client in sync with the server figure below the cursor',
+        () async {
+      cursor = 120;
+      serverFigure = 100;
 
-    await sync.processSyncRequests();
+      expect(await roundMessages(), contains('server and local are in sync'),
+          reason: 'the round decides with the same rule isInSync() answers by');
+    });
 
-    expect(progress.events.map((e) => e.message),
-        contains('server and local are in sync'),
-        reason: 'the round decides with the same rule isInSync() answers by');
+    test('finds the client in sync with the server figure equal to the cursor',
+        () async {
+      cursor = 120;
+      serverFigure = 120;
+
+      expect(await roundMessages(), contains('server and local are in sync'));
+    });
   });
 }
