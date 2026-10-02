@@ -1,3 +1,9 @@
+## 3.15.0-rc3
+
+- fix: `isInSync()` answers true once a client with a sync regex, or on an
+  enrollment limited to some namespaces, has pulled everything its filter
+  admits, rather than staying false until the next write the filter admits.
+
 ## 3.15.0-rc2
 
 - feat (experimental): invitations, including to someone with no atSign yet:
