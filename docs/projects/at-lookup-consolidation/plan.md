@@ -549,9 +549,9 @@ heading and the whole consolidation folds into it. Checked against pub.dev's
 API and `git log -L3,3:packages/at_lookup/pubspec.yaml`, not against in-tree
 precedent — which is the trap this repo has already hit once, at `66ec12a38`
 ("fold 3.7.0 entries back into unpublished 3.6.0"). The in-tree heading is
-now cut as prereleases, `3.7.0-rc1` (published) and `3.7.0-rc2` (in tree, the
-factory's), so "folds into 3.7.0" means folds into the rc series that
-publishes as it.
+now cut as prereleases — `3.7.0-rc1` to `3.7.0-rc3` are on pub.dev as of
+2026-10-03, the factory's in rc2 — so "folds into 3.7.0" means folds into the
+rc series that publishes as it.
 
 ## 6. Filed, not scheduled
 
