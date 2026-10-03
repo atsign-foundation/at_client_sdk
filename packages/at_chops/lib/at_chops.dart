@@ -63,4 +63,6 @@ export 'src/model/at_encrypted.dart';
 
 // Class representing the hashing parameters to pass to an hashing algorithm.
 export 'src/algorithm/hashing/types.dart';
+export 'src/algorithm/kdf/kdf_params.dart';
+export 'src/algorithm/kdf/passphrase_kdf.dart';
 export 'src/util/at_chops_util.dart';
