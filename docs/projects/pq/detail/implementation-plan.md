@@ -2629,6 +2629,11 @@ sat in the TODO table until 2026-08-18 because its opening read as a condition
 rather than a status, which also put the done marker outside the window the new
 TODO-row guard reads.
 
+⚠️ The gate below is closed. It was closed by moving CI to `dev_env` (the
+"Steps 32–34" row), and from p3.16.5, released 2026-09-30, the published image
+verifies ML-DSA PKAM as well: the onboarding-CLI pack passed all 21 of its tests
+against `atsigncompany/virtualenv:vip` that day.
+
 No PR opens against this branch until the published atServer image verifies
 ML-DSA PKAM (owner's call, 2026-08-08). The one thing that had to be true by
 then:
@@ -5873,8 +5878,9 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    instructive way. The variable *is* set on the job, and the step ran
    `sudo docker compose up -d`; **`sudo` resets the environment**, so compose
    never saw `VIRTUALENV_IMAGE` and fell back to the `atsigncompany/virtualenv:vip`
-   default in `docker-compose.yaml`. The published atServer cannot verify an
-   ML-DSA PKAM signature, and its symptom is exactly this `RangeError`.
+   default in `docker-compose.yaml`. The published atServer could not then
+   verify an ML-DSA PKAM signature (it can from p3.16.5, released 2026-09-30),
+   and its symptom is exactly this `RangeError`.
 
    It is the only container job in either workflow that used `sudo`; every one
    in `at_client_sdk.yaml` runs plain `docker compose` and gets its image. The
