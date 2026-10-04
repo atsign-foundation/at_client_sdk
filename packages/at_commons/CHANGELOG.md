@@ -4,6 +4,9 @@
   and an update can be marked ephemeral (`eph`), which no atServer persists.
   Send them only to an atServer whose `info` lists `notify.eAtn` and
   `notify.eph`.
+- feat: `InfoFeatures` reads the `features` an atServer lists in its `info`
+  reply, with `InfoFeature` and `InfoFeatureStatus` naming them: a feature
+  counts unless it is `Retired`, and one that is not `GA` warns once.
 
 ## 5.18.0
 
