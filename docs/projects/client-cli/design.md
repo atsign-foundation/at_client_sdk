@@ -144,9 +144,10 @@ name whichever way. The recommendation is A, built by moving the files
 holds the bulk (the commands) and `at_cli_commons` holds the entry point apps
 call, and neither is the natural survivor.
 
-The timing question is what the unpublished majors are for. `at_onboarding_cli`
-2.0.0-rc1 and `at_cli_commons` 3.1.2-rc1 are on this branch and unpublished, and
-the lifecycle work already breaks `at_onboarding_cli`'s API. Two orders:
+The timing question is what the unreleased majors are for. `at_onboarding_cli`
+2.0.0 and `at_cli_commons` 3.1.2 are published only as prereleases (2.0.0-rc3
+and 3.1.2-rc2 as of 2026-10-03), and the lifecycle work already breaks
+`at_onboarding_cli`'s API. Two orders:
 
 1. **Publish the lifecycle majors first, then do this.** `at_onboarding_cli`
    2.0.0 ships as designed (ruling 6's adapter and all), `at_client_cli` 1.0.0
