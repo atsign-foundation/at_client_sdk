@@ -4,8 +4,9 @@
   recipients in one request, and `NotifyMultiVerbBuilder` builds it. An
   atServer that predates the verb refuses it. It carries no ttr or ccd.
 - feat: a notification can carry its own expiry (`eAtn`) instead of `ttln`,
-  and be marked ephemeral (`eph`), which no atServer persists. Send them only
-  to an atServer whose `info` lists `notify.eAtn` and `notify.eph`.
+  and an update can be marked ephemeral (`eph`), which no atServer persists.
+  Send them only to an atServer whose `info` lists `notify.eAtn` and
+  `notify.eph`.
 
 ## 5.18.0
 

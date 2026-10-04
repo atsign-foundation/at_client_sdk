@@ -42,7 +42,10 @@ class NotifyMultiVerbBuilder extends AbstractVerbBuilder {
       sb.write(':${getOperationName(operation)}');
     }
     sb.write(VerbUtil.notificationLifetime(
-        ttln: ttln, expiresAt: notificationExpiresAt, ephemeral: ephemeral));
+        ttln: ttln,
+        expiresAt: notificationExpiresAt,
+        ephemeral: ephemeral,
+        isDelete: operation == OperationEnum.delete));
     sb.write(atKey.metadata.toAtProtocolFragment());
     sb.write(':${recipients.map(VerbUtil.formatAtSign).join(',')}');
     final namespace = atKey.namespace;

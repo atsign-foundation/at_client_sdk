@@ -71,18 +71,24 @@ class VerbUtil {
   ///
   /// Throws [ArgumentError] when [ttln] and [expiresAt] are both set, since two
   /// expiries are ambiguous, or when [ephemeral] comes with a [ttr] or [ccd],
-  /// which would make the recipient's atServer persist a cached record.
+  /// which would make the recipient's atServer persist a cached record, or
+  /// with [isDelete], which would remove one: an ephemeral notification is an
+  /// update.
   static String notificationLifetime(
       {int? ttln,
       DateTime? expiresAt,
       bool ephemeral = false,
       int? ttr,
-      bool? ccd}) {
+      bool? ccd,
+      bool isDelete = false}) {
     if (ttln != null && expiresAt != null) {
       throw ArgumentError('a notification carries ttln or eAtn, not both');
     }
     if (ephemeral && (ttr != null || ccd != null)) {
       throw ArgumentError('an ephemeral notification cannot carry ttr or ccd');
+    }
+    if (ephemeral && isDelete) {
+      throw ArgumentError('an ephemeral notification cannot be a delete');
     }
     final sb = StringBuffer();
     if (ttln != null) {

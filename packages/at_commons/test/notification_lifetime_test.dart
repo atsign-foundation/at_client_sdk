@@ -120,5 +120,31 @@ void main() {
               .buildCommand(),
           contains(':ttr:60000'));
     });
+
+    test('eph on a delete, since a delete removes a cached record', () {
+      expect(
+          () => (plainBuilder()..operation = OperationEnum.delete)
+              .buildCommand(),
+          throwsArgumentError);
+      expect(
+          () => (multiBuilder()..operation = OperationEnum.delete)
+              .buildCommand(),
+          throwsArgumentError);
+    });
+
+    test('the control: a delete without eph still builds', () {
+      expect(
+          (plainBuilder()
+                ..ephemeral = false
+                ..operation = OperationEnum.delete)
+              .buildCommand(),
+          startsWith('notify:id:n1:delete:'));
+      expect(
+          (multiBuilder()
+                ..ephemeral = false
+                ..operation = OperationEnum.delete)
+              .buildCommand(),
+          startsWith('notify:multi:delete:'));
+    });
   });
 }

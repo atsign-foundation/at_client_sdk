@@ -67,7 +67,8 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
         expiresAt: notificationExpiresAt,
         ephemeral: ephemeral,
         ttr: atKey.metadata.ttr,
-        ccd: atKey.metadata.ccd));
+        ccd: atKey.metadata.ccd,
+        isDelete: operation == OperationEnum.delete));
 
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
