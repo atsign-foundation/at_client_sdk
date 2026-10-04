@@ -205,7 +205,12 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         },
         // NOTE: only this enrollment collects the key once nothing cites it;
         // a sibling cannot tell a key about to be cited from an unused one.
-        if (cutBy != null) 'cutBy': cutBy,
+        // `cutAt` keeps the cut on the record, so its grace counts from the
+        // cut wherever it is read, not from when it reached a client's store.
+        if (cutBy != null) ...{
+          'cutBy': cutBy,
+          'cutAt': DateTime.now().toUtc().toIso8601String(),
+        },
       },
     );
 
