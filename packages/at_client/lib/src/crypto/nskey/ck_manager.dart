@@ -294,7 +294,9 @@ class CkManager {
   ///
   /// A key is superseded when this enrollment cuts the next key for the same
   /// destination and namespace; one with no successor counts from its own cut.
-  /// A key still inside its grace goes at a later start or replacement.
+  /// Each conveyance records when its key was cut (`cutAt`); one written before
+  /// it did counts from when this client stored it. A key still inside its
+  /// grace goes at a later start or replacement.
   ///
   /// Asks local storage only where it answers completely — the client keeps
   /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
@@ -347,7 +349,7 @@ class CkManager {
         cited.add(ckKid);
       } else if (about!['cutBy'] == enrollmentId) {
         (cut[ckKid] ??= []).add((key: key, about: about));
-        final at = meta!.createdAt ?? now;
+        final at = _cutAtOf(about) ?? meta!.createdAt ?? now;
         final earliest = cutAt[ckKid];
         if (earliest == null || at.isBefore(earliest)) cutAt[ckKid] = at;
       }
@@ -412,7 +414,12 @@ class CkManager {
     }
   }
 
-  /// The CK cache scope a conveyance record filed its key under.
+  /// When a conveyance says its key was cut, or null when it does not say.
+  static DateTime? _cutAtOf(Map<String, dynamic> about) {
+    final cutAt = about['cutAt'];
+    return cutAt is String ? DateTime.tryParse(cutAt) : null;
+  }
+
   /// When each of [cut] was superseded: the cut of the next key for the same
   /// scope, or its own cut when it has no successor.
   static Map<String, DateTime> _supersededAt(
@@ -435,6 +442,7 @@ class CkManager {
     return supersededAt;
   }
 
+  /// The CK cache scope a conveyance record filed its key under.
   static ({String owner, String ckNs})? _scopeOf(
       String key, Map<String, dynamic> about) {
     final destination = about['destination'];

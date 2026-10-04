@@ -12,6 +12,7 @@ import 'package:at_client/src/transformer/response_transformer/notification_resp
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -80,9 +81,16 @@ void main() {
     final cache = CryptoConfig.forClient(aliceClient).contentKeyCache!;
     final superseded = cache.current(bob, nsRotate)!.ckKid;
     final context = CryptoContext(atClient: aliceClient);
+    Future<void> sync(String label) => FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: aliceClient.syncService, label: label);
+
     await managerOf(aliceClient).rotateContentKey(context, valueKey(nsRotate));
     await managerOf(aliceClient).idle;
+    // NOTE: a collection deletes locally and sync pushes it, so a pass is run
+    // over a caught-up store and pushed before the atServer is asked.
+    await sync('ck-grace-rotated');
     await managerOf(aliceClient).collectUnused(context);
+    await sync('ck-grace-collected');
 
     final conveyance = '$bob:$superseded.__ck.$nsRotate$alice';
     Future<bool> served() async {
@@ -132,6 +140,7 @@ void main() {
     var collected = false;
     for (var attempt = 0; attempt < 20 && !collected; attempt++) {
       await managerOf(aliceClient).collectUnused(context);
+      await sync('ck-grace-none-$attempt');
       collected = !await served();
       if (!collected) {
         await Future<void>.delayed(const Duration(milliseconds: 500));

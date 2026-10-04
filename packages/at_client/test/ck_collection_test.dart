@@ -34,6 +34,7 @@ class _FakeListener extends Fake implements SyncProgressListener {}
 void main() {
   const alice = '@alice';
   const bob = '@bob';
+  const carol = '@carol';
   const namespace = 'app_1.my_apps';
   const enrollmentId = 'enr-1';
 
@@ -68,6 +69,7 @@ void main() {
       Duration? supersededCkGrace = Duration.zero}) {
     final ring = InMemoryNskeyKeyRing()
       ..seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes)
+      ..seedPublicOnly(carol, namespace, publicKey: bobNskey.publicKeyBytes)
       ..seedKeypair(alice, namespace,
           publicKey: aliceNskey.publicKeyBytes,
           privateKey: aliceNskey.privateKeyBytes);
@@ -136,10 +138,10 @@ void main() {
     );
   }
 
-  AtKey shared() => AtKey()
+  AtKey shared({String to = bob}) => AtKey()
     ..key = 'pact'
     ..namespace = namespace
-    ..sharedWith = bob
+    ..sharedWith = to
     ..sharedBy = alice
     ..metadata = Metadata();
 
@@ -167,24 +169,27 @@ void main() {
             if (cutBy != null) 'cutBy': cutBy,
           }));
 
-  List<String> conveyancesOf(String ckKid) => [
-        '$bob:$ckKid.__ck.$namespace$alice',
+  List<String> conveyancesOf(String ckKid, {String to = bob}) => [
+        '$to:$ckKid.__ck.$namespace$alice',
         '$ckKid.__ck.$namespace$alice',
       ];
 
-  /// Backdates the conveyances of [ckKid] to say it was cut [ago].
-  void cutAgo(_Store store, String ckKid, Duration ago) {
-    for (final key in conveyancesOf(ckKid)) {
-      store.data[key]!.metaData!.createdAt = DateTime.now().subtract(ago);
+  /// Backdates the conveyances of [ckKid] to say, in their `cutAt`, that it
+  /// was cut [ago].
+  void cutAgo(_Store store, String ckKid, Duration ago, {String to = bob}) {
+    for (final key in conveyancesOf(ckKid, to: to)) {
+      store.data[key]!.metaData!.appMetadata!.additional!['cutAt'] =
+          DateTime.now().toUtc().subtract(ago).toIso8601String();
     }
   }
 
   group('the grace a superseded key is kept for', () {
     test('defaults to 8 days', () {
-      expect(
-          CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()).supersededCkGrace,
-          const Duration(days: 8),
-          reason: 'the longest an atServer keeps a notification');
+      final provider = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing())
+          .lookup(symmetricAesGcmCryptoProviderId) as SymmetricAesGcmProvider;
+      expect(provider.ckManager!.supersededCkGrace, const Duration(days: 8),
+          reason: 'the longest an atServer keeps a notification, on the '
+              'manager the config an app builds without naming one wires');
     });
 
     test('by default, a superseded key nothing cites is kept', () async {
@@ -224,6 +229,24 @@ void main() {
       expect(await a.manager.collectUnused(a.context), 1);
       expect(a.deleted.toSet(), conveyancesOf(superseded).toSet(),
           reason: 'its successor is current, so it alone goes');
+    });
+
+    test('keeps each destination\'s keys apart', () async {
+      final a = enrolled(supersededCkGrace: const Duration(days: 8));
+      await a.manager.ensureCurrent(a.context, shared());
+      final bobOld = a.cache.current(bob, namespace)!.ckKid;
+      await a.manager.ensureCurrent(a.context, shared(to: carol));
+      final carols = a.cache.current(carol, namespace)!.ckKid;
+      final bobNew =
+          (await a.manager.rotateContentKey(a.context, shared())).ckKid;
+      await a.manager.idle;
+      cutAgo(a.store, bobOld, const Duration(days: 30));
+      cutAgo(a.store, carols, const Duration(days: 20), to: carol);
+      cutAgo(a.store, bobNew, const Duration(days: 1));
+
+      expect(await a.manager.collectUnused(a.context), 0,
+          reason: 'bob\'s old key was replaced by bob\'s new one a day ago; '
+              'carol\'s key, cut in between, is not its successor');
     });
 
     test('a key with no successor counts from its own cut', () async {

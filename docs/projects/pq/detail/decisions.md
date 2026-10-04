@@ -14504,7 +14504,9 @@ the moment a start or a replacement asks.
 ⚠️ **AMENDED 2026-10-04 by gkc:** a superseded key is also kept for a grace,
 `supersededCkGrace` on `CryptoConfig`, 8 days by default: the longest an atServer
 keeps a notification. The grace counts from the cut of the key that replaced it,
-or from the key's own cut when nothing replaced it. gkc: "This is not just a
+or from the key's own cut when nothing replaced it, as each conveyance records it
+in `cutAt` beside `cutBy`, so a record that reached a client by sync still counts
+from the cut. gkc: "This is not just a
 notifications issue, it's a general issue re overly eager CK cleanup." Until
 then a key went at the first pass after nothing cited it, which is in practice
 its rotation. A live probe on 2026-10-04 sent a notification to an offline
