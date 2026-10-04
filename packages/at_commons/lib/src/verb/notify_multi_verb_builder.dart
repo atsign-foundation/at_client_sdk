@@ -22,7 +22,7 @@ class NotifyMultiVerbBuilder extends AbstractVerbBuilder {
   /// When the notifications expire, written as `eAtn`; set this or [ttln].
   DateTime? notificationExpiresAt;
 
-  /// Whether no atServer persists the notifications, written as `eph:true`.
+  /// Whether no atServer persists the notifications, written as a bare `eph`.
   bool ephemeral = false;
 
   OperationEnum? operation;

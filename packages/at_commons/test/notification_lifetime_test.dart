@@ -8,9 +8,9 @@ void main() {
   // FROZEN: the wire forms every atServer implementation parses. An intended
   // change edits these literals, and that edit is the review.
   const plain =
-      'notify:id:n1:update:notifier:SYSTEM:eAtn:2026-10-04T10:45:00.721000Z:eph:true:isEncrypted:true:@bob:msg.chat.myapp@alice:CIPHERTEXT';
+      'notify:id:n1:update:notifier:SYSTEM:eAtn:2026-10-04T10:45:00.721000Z:eph:isEncrypted:true:@bob:msg.chat.myapp@alice:CIPHERTEXT';
   const multi =
-      'notify:multi:eAtn:2026-10-04T10:45:00.721000Z:eph:true:isEncrypted:true:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
+      'notify:multi:eAtn:2026-10-04T10:45:00.721000Z:eph:isEncrypted:true:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
 
   final expiresAt = DateTime.utc(2026, 10, 4, 10, 45, 0, 721);
 
@@ -49,7 +49,7 @@ void main() {
       final m = RegExp(VerbSyntax.notify).firstMatch(plain)!;
       expect(m.namedGroup(AtConstants.notificationExpiresAt),
           '2026-10-04T10:45:00.721000Z');
-      expect(m.namedGroup(AtConstants.ephemeral), 'true');
+      expect(m.namedGroup(AtConstants.ephemeral), 'eph');
       expect(m.namedGroup('forAtSign'), 'bob');
       expect(m.namedGroup('value'), 'CIPHERTEXT');
     });
@@ -57,7 +57,7 @@ void main() {
       final m = RegExp(VerbSyntax.notifyMulti).firstMatch(multi)!;
       expect(m.namedGroup(AtConstants.notificationExpiresAt),
           '2026-10-04T10:45:00.721000Z');
-      expect(m.namedGroup(AtConstants.ephemeral), 'true');
+      expect(m.namedGroup(AtConstants.ephemeral), 'eph');
       expect(m.namedGroup('forAtSign'), '@bob,@sitaram');
     });
   });
@@ -79,6 +79,22 @@ void main() {
         RegExp(VerbSyntax.notifyMulti).hasMatch(
             'notify:multi:eAtn:tomorrow:isEncrypted:true:@bob:msg.chat.myapp@alice:x'),
         isFalse);
+  });
+
+  test('eph is a bare flag: one carrying a value is refused', () {
+    expect(
+        RegExp(VerbSyntax.notify).hasMatch(
+            'notify:id:n4:update:eph:true:isEncrypted:true:@bob:msg.chat.myapp@alice:x'),
+        isFalse);
+    expect(
+        RegExp(VerbSyntax.notifyMulti).hasMatch(
+            'notify:multi:eph:true:isEncrypted:true:@bob:msg.chat.myapp@alice:x'),
+        isFalse);
+    expect(
+        RegExp(VerbSyntax.notifyMulti).hasMatch(
+            'notify:multi:eph:isEncrypted:true:@bob:msg.chat.myapp@alice:x'),
+        isTrue,
+        reason: 'the control: the same command with a bare eph parses');
   });
 
   group('the builders refuse what the atServer refuses', () {

@@ -98,7 +98,7 @@ class VerbUtil {
       sb.write(':eAtn:${formatIso8601Micros(expiresAt)}');
     }
     if (ephemeral) {
-      sb.write(':eph:true');
+      sb.write(':eph');
     }
     return sb.toString();
   }

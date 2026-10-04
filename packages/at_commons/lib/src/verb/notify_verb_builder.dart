@@ -19,7 +19,7 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// When the notification expires, written as `eAtn`; set this or [ttln].
   DateTime? notificationExpiresAt;
 
-  /// Whether no atServer persists the notification, written as `eph:true`.
+  /// Whether no atServer persists the notification, written as a bare `eph`.
   bool ephemeral = false;
 
   OperationEnum? operation;
