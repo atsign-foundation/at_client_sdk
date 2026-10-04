@@ -3,6 +3,8 @@
 - fix: a content key that has been replaced is kept for 8 days
   (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
   can still open a notification sent under it just before the rotation.
+- feat: `ensureReachable`'s result says whether this client can open what
+  peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
 
 ## 3.15.0-rc3
 

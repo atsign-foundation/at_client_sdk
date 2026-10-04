@@ -437,6 +437,29 @@ class NskeySeeding {
     return asked;
   }
 
+  /// Whether this client holds the private half of every key [advertisement]
+  /// offers peers to seal to in [owner]'s [namespace].
+  ///
+  /// Asks no other enrollment for a private it lacks. False for an
+  /// advertisement offering no key at all.
+  Future<bool> holdsPrivatesFor(
+      String owner, String namespace, NskeyAdvertisement advertisement) async {
+    var offered = 0;
+    for (final entry in advertisement.keys) {
+      // NOTE: every offered entry, not only the one this build would pick: a
+      // peer seals under its own algorithm list, so any of them can be chosen.
+      if (entry.use != SecretSharingAlgos.useEnc ||
+          !entry.offeredForNewOperations) {
+        continue;
+      }
+      offered++;
+      if (await ring.heldPrivateHalf(owner, namespace, entry.kid) == null) {
+        return false;
+      }
+    }
+    return offered > 0;
+  }
+
   /// Sends every nskey private this client holds for [approvedNamespaces] to
   /// one newly approved enrollment.
   ///

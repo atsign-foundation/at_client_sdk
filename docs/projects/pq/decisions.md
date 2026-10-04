@@ -203,6 +203,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
 | [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-09-30 |
 | [145] | A reader's atServer caches no PQ key records; the client bypasses its cache                  | 2026-09-30 | LIVE               |
+| [146] | Keys an app publishes below its grants are its own; ensureReachable reports holding          | 2026-10-04 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -350,3 +351,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [143]: detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30
 [144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30
 [145]: detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30
+[146]: detail/decisions.md#146-keys-an-app-publishes-below-its-grants-are-its-own-and-ensurereachable-reports-holding-them-2026-10-04

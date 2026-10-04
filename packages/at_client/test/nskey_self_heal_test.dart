@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart'
-    show KeyPackage, PackageKey;
+    show KeyEntryStatus, KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:mocktail/mocktail.dart';
@@ -557,6 +558,128 @@ void main() {
           reason: 'the two answers have one cause, and a future change that '
               'derived a filing without an ask would pass the row above while '
               'leaving this one true');
+    });
+  });
+
+  group('what this client holds (NskeySeeding.holdsPrivatesFor)', () {
+    late Uint8List mlKemPublic;
+
+    setUpAll(() async {
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      mlKemPublic = (await mlKem.keyPairFromSeed(mlKem.newSeed())).publicKey;
+    });
+
+    PackageKey xWingEntry({KeyEntryStatus status = KeyEntryStatus.active}) =>
+        PackageKey.fromBytes(
+            use: SecretSharingAlgos.useEnc,
+            alg: SecretSharingAlgos.xWing,
+            pub: pair.publicKeyBytes,
+            status: status);
+
+    PackageKey mlKemEntry({KeyEntryStatus status = KeyEntryStatus.active}) =>
+        PackageKey.fromBytes(
+            use: SecretSharingAlgos.useEnc,
+            alg: SecretSharingAlgos.mlKem1024,
+            pub: mlKemPublic,
+            status: status);
+
+    NskeyAdvertisement offering(List<PackageKey> keys) => NskeyAdvertisement(
+        v: nskeyAdvertisementVersion,
+        createdAt: DateTime.utc(2026),
+        keys: keys);
+
+    /// Seeding over a ring that has filed the X-Wing private, or nothing, and
+    /// records every ask it sends for a private it lacks.
+    Future<({NskeySeeding seeding, List<(String, String)> asked})> holding(
+        {required bool xWing}) async {
+      final atClient = client();
+      final filed = await filing();
+      if (xWing) {
+        await filed.store(
+            namespace: namespace,
+            nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+            seed: NskeySeed(pair.privateKeyBytes));
+      }
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(atClient,
+          privateFiling: filed,
+          requestConveyance: (ns, name) async => asked.add((ns, name)));
+      return (
+        seeding:
+            NskeySeeding(atClient: atClient, ring: ring, privateFiling: filed),
+        asked: asked,
+      );
+    }
+
+    test('holds the one offered key once its private is filed', () async {
+      final h = await holding(xWing: true);
+
+      expect(
+          await h.seeding
+              .holdsPrivatesFor(atSign, namespace, offering([xWingEntry()])),
+          isTrue);
+    });
+
+    test('a missing private is reported, and not asked for', () async {
+      final h = await holding(xWing: false);
+
+      expect(
+          await h.seeding
+              .holdsPrivatesFor(atSign, namespace, offering([xWingEntry()])),
+          isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.asked, isEmpty,
+          reason: 'a question about what this client holds must not broadcast '
+              'a request to every other enrollment of the namespace');
+
+      expect(
+          await h.seeding.ring
+              .privateHalf(atSign, namespace, nskeyKidOf(pair.publicKeyBytes)),
+          isNull);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.asked, hasLength(1),
+          reason: 'the control: the decrypt path\'s read of the same miss on '
+              'the same ring does ask, so the empty list above is the check '
+              'declining to and not a ring that cannot');
+    });
+
+    test('every offered key must be held, not only the one this build picks',
+        () async {
+      final h = await holding(xWing: true);
+
+      expect(
+          await h.seeding.holdsPrivatesFor(
+              atSign, namespace, offering([xWingEntry(), mlKemEntry()])),
+          isFalse,
+          reason: 'a peer seals under its own algorithm list, so one that '
+              'prefers ML-KEM seals to a key this client cannot open');
+    });
+
+    test('a retired key it lacks does not count', () async {
+      final h = await holding(xWing: true);
+
+      expect(
+          await h.seeding.holdsPrivatesFor(
+              atSign,
+              namespace,
+              offering([
+                xWingEntry(),
+                mlKemEntry(status: KeyEntryStatus.retired),
+              ])),
+          isTrue,
+          reason: 'no peer seals to a retired key, so lacking it costs nothing '
+              'new; the arm above differs only in that entry\'s status');
+    });
+
+    test('an advertisement offering no key is not held', () async {
+      final h = await holding(xWing: true);
+
+      expect(
+          await h.seeding.holdsPrivatesFor(atSign, namespace,
+              offering([xWingEntry(status: KeyEntryStatus.retired)])),
+          isFalse,
+          reason: 'nothing can be sealed to it, so there is nothing to open; '
+              'true here would come from an empty loop');
     });
   });
 }

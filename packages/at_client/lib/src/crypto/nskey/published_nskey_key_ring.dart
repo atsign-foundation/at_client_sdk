@@ -982,6 +982,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid) async {
+    final held = await heldPrivateHalf(owner, namespace, nskeyKid);
+    if (held != null || owner != _atClient.getCurrentAtSign()) return held;
+
+    // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
+    // owns waiting for the answer and filing it; nothing else does, so an ask
+    // wired without that repairs the client only at its next start.
+    _askForMissingPrivate(namespace, nskeyKid);
+    return null;
+  }
+
+  /// What [privateHalf] answers, without asking the atSign's other enrollments
+  /// for a private this client does not hold.
+  Future<NskeyDecapsulationKey?> heldPrivateHalf(
+      String owner, String namespace, String nskeyKid) async {
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
     if (held != null) return held;
 
@@ -989,14 +1003,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
       _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
-      return filed;
     }
-
-    // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
-    // owns waiting for the answer and filing it; nothing else does, so an ask
-    // wired without that repairs the client only at its next start.
-    _askForMissingPrivate(namespace, nskeyKid);
-    return null;
+    return filed;
   }
 
   /// How this ring asks, supplied or derived.

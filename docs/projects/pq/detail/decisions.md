@@ -14784,3 +14784,41 @@ buys is freshness — if any other writer ever gives such a record a `ttr`, a
 reader still fetches from the owner rather than being served a stale copy, which
 guards [ruling 143.1](#1431-the-advertisement-carries-no-ttr) against owners
 that do not follow it.
+
+## 146. Keys an app publishes below its grants are its own, and ensureReachable reports holding them (2026-10-04)
+
+**Decided by gkc on 2026-10-04**, working out how NoPorts can tell a
+post-quantum-capable daemon in a fleet where some daemons are not. What NoPorts
+owes is the P3 row *NoPorts: a device-level nskey as the PQ-capable signal* in
+the plan's [TODO](../implementation-plan.md#todo).
+
+**What a client seeds is unchanged.** It seeds every namespace its enrollment
+grants, and its `preference.namespace` only on the atSign's own credential or
+under a `*` grant (`authorisedNamespacesOf`). Two widenings were proposed and
+withdrawn the same day:
+
+- seeding the preference namespace whenever a grant covers it — NoPorts clients
+  set `<device>.sshnp` as theirs, so each would advertise a key for every device
+  it connects to;
+- a start-up pull covering every key published below a grant — one request goes
+  to every enrollment holding the namespace, so a daemon joining N others on one
+  atSign would send about N² (estimated from the code, not measured).
+
+**A key published below a grant is the app's.** A NoPorts daemon publishes
+`<device>.sshnp` with `ensureReachable` while granted only `sshnp`. The SDK
+does not fetch that key's private for an enrollment at start, nor replace it
+after a revocation: both run over the seeded namespaces only. Two routes do
+reach it. The mint pushes the private to every enrollment `enroll:listns`
+returns for the namespace, which on at_server trunk includes covering grants
+and `*`; and a decryption that misses an own key's private asks the other
+enrollments for it. Neither reaches a client on the atSign's own credential,
+which cannot list enrollments.
+
+**`ensureReachable` says whether this client holds the private.**
+`AtReachabilityResult.holdsPrivate` is checked on both reachable outcomes,
+after a mint too, since a mint adopts a key a sibling enrollment published in
+its window. It is true only when this client holds the private of every key the
+advertisement offers, since a peer seals under its own algorithm list. The check
+asks no other enrollment for anything, and a failure to make it reports false
+without changing the outcome. Pinned in `test/nskey_self_heal_test.dart` and
+`tests/at_functional_test/test/ensure_reachable_live_test.dart`.
