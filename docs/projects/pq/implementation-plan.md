@@ -410,7 +410,7 @@ for 24 hours at every lookup (`AtCacheManager.remoteLookUp`) but never served
 otherwise.
 
 *Content keys — ruled by gkc on 2026-09-30 in
-[ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30),
+[ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30),
 and built on `gkc-pq-key-caching`*
 
 1. **Shared conveyances are cached at the recipient (142.1).** Found: both reads
@@ -477,12 +477,17 @@ and built on `gkc-pq-key-caching`*
    because writes arrived in between tries again at each later sync that
    catches up. UC-A5.4 now says
    a superseded key is kept while a record cites it and deleted by the
-   enrollment that cut it once none does, with its default's rationale restated. Proven live in
+   enrollment that cut it once none does and its grace is over, with its
+   default's rationale restated. Proven live in
    `content_key_rotation_live_test.dart`: a cited key survives its rotation,
    an uncited one leaves the atServer, and a restarted client with nothing in
    memory collects once sync catches up and keeps the key its pointer names.
    The policy-driven replacement is proven live too: the key it replaces
    leaves the atServer at the next sync that catches up, with no restart.
+   **Amended 2026-10-04:** a superseded key is kept for `supersededCkGrace`
+   (8 days by default) from the cut of its successor, so a recipient can still
+   open a notification sent under it; `content_key_grace_live_test.dart` proves
+   it with an offline recipient, and the live tests above run with no grace.
 4. **The recipient's content-key cache stays as it is (142.4).** Nothing is owed:
    items 1 and 3, both built, give it an eviction path.
 5. **Conveyances are kept from application code (142.5).** Found: a subscriber
