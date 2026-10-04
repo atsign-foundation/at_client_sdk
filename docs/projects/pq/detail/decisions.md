@@ -1201,7 +1201,7 @@ paid only by a genuine multi-recipient write.
 trigger is **B-1**'s routing work.
 
 ⚠️ **AMENDED 2026-09-30 by
-[ruling 142.2](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30):**
+[ruling 142.2](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30):**
 a share's content key is also conveyed to the sender's own namespace key, so
 the sender's sibling enrollments can open it. Scoping per recipient otherwise
 stands: carol still cannot open what alice sends bob.
@@ -14391,7 +14391,7 @@ and its control, *"a document holding no typed material carries neither version
 nor keys"*, stays green when the writer is removed and goes red when the array
 is stamped onto the legacy shape.
 
-## 142. Content keys: recipients cache shared conveyances, siblings open every key, and a key goes once nothing cites it (2026-09-30)
+## 142. Content keys: recipients cache shared conveyances, siblings open every key, and a key goes once nothing cites it and its grace is over (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
 work-through (the P0 row *PQ key writing and fetching* in
@@ -14401,7 +14401,7 @@ items 1–6, which record the behaviour each part replaces). 142.1 is built in
 proven live: the recipient's atServer caches the conveyance with its
 `appMetadata` and the recipient opens the copy. All of 142 is built on
 `gkc-pq-key-caching` and proven live; 142.2 and 142.3 were amended while they
-were built.
+were built, and 142.3 again on 2026-10-04 to add a grace.
 
 ### 142.1 A shared conveyance is cached at its recipient
 
@@ -14474,7 +14474,7 @@ wrote. It settles *content keys per scope* as intended behaviour
 takes the pointer off the nskey provider's path, and settles *a wildcard
 enrolment seeds nothing* for every namespace a client shares into.
 
-### 142.3 A superseded key goes once no record cites it
+### 142.3 A superseded key goes once no record cites it and its grace is over
 
 **Decision.** A superseded content key's conveyances are deleted once no record
 on the sender's atServer cites it. Only the enrollment that cut the key deletes
@@ -14501,9 +14501,24 @@ wait for a later start: it tries again at each later sync that catches up,
 until one pass runs, since live an active client is almost always mid-push at
 the moment a start or a replacement asks.
 
+⚠️ **AMENDED 2026-10-04 by gkc:** a superseded key is also kept for a grace,
+`supersededCkGrace` on `CryptoConfig`, 8 days by default: the longest an atServer
+keeps a notification. The grace counts from the cut of the key that replaced it,
+or from the key's own cut when nothing replaced it, as each conveyance records it
+in `cutAt` beside `cutBy`, so a record that reached a client by sync still counts
+from the cut. gkc: "This is not just a
+notifications issue, it's a general issue re overly eager CK cleanup." Until
+then a key went at the first pass after nothing cited it, which is in practice
+its rotation. A live probe on 2026-10-04 sent a notification to an offline
+recipient, rotated, and the recipient's open failed with
+`ContentKeyUnavailableException`; `content_key_grace_live_test.dart` now proves
+it opens.
+
 **Accepted cost.** A value that exists only on the recipient's side loses its
-key: a notification-delivered value, including a `cacheAtRecipient` copy, or a
-recipient's cached copy of a `ccd: false` record that outlives the sender's.
+key once the grace is over: a notification-delivered value, including a
+`cacheAtRecipient` copy, or a recipient's cached copy of a `ccd: false` record
+that outlives the sender's. This said "loses its key" with no grace until the
+2026-10-04 amendment.
 Keys cut by an enrollment later revoked or removed are never collected. The
 forward-secrecy lever — `deleteSuperseded`, UC-A5.1(a) — is unchanged; this
 replaces only the default of keeping every conveyance forever.

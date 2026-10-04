@@ -450,15 +450,29 @@ void main() {
         ..namespace = 'myapp'
         ..sharedBy = '@alice';
 
+      final before = DateTime.now().toUtc();
       await provider.encrypt(
           CryptoContext(atClient: atClient), atKey, ck.toBase64());
+      final after = DateTime.now().toUtc();
 
       // NOTE: frozen — only the enrollment named here collects the key once
-      // nothing cites it, so a conveyance without it is never collected.
+      // nothing cites it, so a conveyance without it is never collected, and
+      // the key's grace counts from the cut it records.
       final json = atKey.metadata.appMetadata!.toJson();
-      expect(json.keys.toList(),
-          ['providerId', 'recipientKind', 'ckKid', 'nskeyKid', 'ns', 'cutBy']);
+      expect(json.keys.toList(), [
+        'providerId',
+        'recipientKind',
+        'ckKid',
+        'nskeyKid',
+        'ns',
+        'cutBy',
+        'cutAt'
+      ]);
       expect(json['cutBy'], 'enroll-1');
+      final cutAt = DateTime.parse(json['cutAt'] as String);
+      expect(json['cutAt'], endsWith('Z'), reason: 'UTC, ISO-8601');
+      expect(cutAt.isBefore(before), isFalse);
+      expect(cutAt.isAfter(after), isFalse);
     });
 
     test('a data value\'s appMetadata, field by field', () async {
