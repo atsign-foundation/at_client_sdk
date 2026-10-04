@@ -1329,7 +1329,9 @@ knows which is which. Design in
 - **Then, what a yes does:** a fresh content key is cut and conveyed, and the
   superseded key's conveyances are **kept while any record cites it** — which
   is what lets an enrollment that joins later read what was written before it
-  — and deleted by the enrollment that cut it once none does. Deleting a key
+  — and for **`supersededCkGrace`** after the cut of the key that replaced it,
+  8 days by default, so a recipient can still open a notification sent under
+  it; they are deleted by the enrollment that cut it once neither holds. Deleting a key
   that records still cite is UC-A5.1's lever (a), which the SDK never pulls on
   the application's behalf.
 - **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a

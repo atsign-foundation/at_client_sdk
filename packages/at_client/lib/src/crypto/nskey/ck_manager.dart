@@ -23,6 +23,10 @@ import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('CkManager');
 
+/// How long a superseded content key is kept, by default, once the key that
+/// replaced it was cut: the longest an atServer keeps a notification.
+const Duration defaultSupersededCkGrace = Duration(days: 8);
+
 /// Collects unused content keys once [sync] reports this client caught up,
 /// with whichever manager [manager] names by then, and again at each later
 /// catch-up while a pass is refused because writes arrived in between.
@@ -82,6 +86,13 @@ class CkManager {
   /// replaced before anything else is written under it.
   final CkRotationPolicy ckRotationPolicy;
 
+  /// How long a superseded content key is kept after the key that replaced it
+  /// was cut, even when nothing in local storage cites it.
+  ///
+  /// A recipient may still need it for something only the recipient holds: a
+  /// notification it has yet to open, or its cached copy of a shared value.
+  final Duration supersededCkGrace;
+
   /// Asked, before a content key is conveyed to a namespace key this atSign
   /// owns, whether that namespace key should be replaced first.
   ///
@@ -95,6 +106,7 @@ class CkManager {
       NskeyResolver? resolver,
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
       this.ckRotationPolicy = rotateCkAfterOneWeek,
+      this.supersededCkGrace = defaultSupersededCkGrace,
       this.pointer = const CurrentCkPointer()})
       : resolver = resolver ??
             NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
@@ -276,8 +288,13 @@ class CkManager {
   }
 
   /// Deletes the conveyances of every content key this enrollment cut that is
-  /// neither current nor cited by a record in local storage, and returns how
-  /// many keys went.
+  /// neither current nor cited by a record in local storage, and was
+  /// superseded at least [supersededCkGrace] ago, and returns how many keys
+  /// went.
+  ///
+  /// A key is superseded when this enrollment cuts the next key for the same
+  /// destination and namespace; one with no successor counts from its own cut.
+  /// A key still inside its grace goes at a later start or replacement.
   ///
   /// Asks local storage only where it answers completely — the client keeps
   /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
@@ -305,7 +322,9 @@ class CkManager {
       return partial.transient ? null : 0;
     }
 
+    final now = DateTime.now();
     final cut = <String, List<({String key, Map<String, dynamic> about})>>{};
+    final cutAt = <String, DateTime>{};
     final current = <String>{...cache.currentKids};
     final cited = <String>{};
     final ownPointer =
@@ -320,17 +339,24 @@ class CkManager {
         }
         continue;
       }
-      final about = (await store.getMeta(key))?.appMetadata?.additional;
+      final meta = await store.getMeta(key);
+      final about = meta?.appMetadata?.additional;
       final ckKid = about?['ckKid'];
       if (ckKid is! String) continue;
       if (!key.contains(ckConveyanceMarker)) {
         cited.add(ckKid);
       } else if (about!['cutBy'] == enrollmentId) {
         (cut[ckKid] ??= []).add((key: key, about: about));
+        final at = meta!.createdAt ?? now;
+        final earliest = cutAt[ckKid];
+        if (earliest == null || at.isBefore(earliest)) cutAt[ckKid] = at;
       }
     }
-    cut.removeWhere(
-        (ckKid, _) => current.contains(ckKid) || cited.contains(ckKid));
+    final supersededAt = _supersededAt(cut, cutAt);
+    cut.removeWhere((ckKid, _) =>
+        current.contains(ckKid) ||
+        cited.contains(ckKid) ||
+        now.difference(supersededAt[ckKid]!) < supersededCkGrace);
 
     for (final MapEntry(key: ckKid, value: records) in cut.entries) {
       for (final record in records) {
@@ -387,6 +413,28 @@ class CkManager {
   }
 
   /// The CK cache scope a conveyance record filed its key under.
+  /// When each of [cut] was superseded: the cut of the next key for the same
+  /// scope, or its own cut when it has no successor.
+  static Map<String, DateTime> _supersededAt(
+      Map<String, List<({String key, Map<String, dynamic> about})>> cut,
+      Map<String, DateTime> cutAt) {
+    final byScope = <String, List<String>>{};
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      final record = records.first;
+      final scope = _scopeOf(record.key, record.about);
+      final scopeId = scope == null ? ckKid : '${scope.owner}|${scope.ckNs}';
+      (byScope[scopeId] ??= []).add(ckKid);
+    }
+    final supersededAt = <String, DateTime>{};
+    for (final kids in byScope.values) {
+      kids.sort((a, b) => cutAt[a]!.compareTo(cutAt[b]!));
+      for (var i = 0; i < kids.length; i++) {
+        supersededAt[kids[i]] = cutAt[kids[i < kids.length - 1 ? i + 1 : i]]!;
+      }
+    }
+    return supersededAt;
+  }
+
   static ({String owner, String ckNs})? _scopeOf(
       String key, Map<String, dynamic> about) {
     final destination = about['destination'];

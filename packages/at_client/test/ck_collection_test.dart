@@ -49,6 +49,10 @@ void main() {
 
   /// A client of alice, enrolled as [enrollmentId], whose writes land in
   /// [store] the way the pipeline leaves them.
+  ///
+  /// [supersededCkGrace] defaults to none, so a test sees what a pass deletes
+  /// once a key's grace is over; null builds the config as an app naming no
+  /// grace does.
   ({
     CkManager manager,
     ContentKeyCache cache,
@@ -60,14 +64,19 @@ void main() {
     Completer<void> Function() parkNextConveyance,
   }) enrolled(
       {String? enrolledAs = enrollmentId,
-      CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
+      CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+      Duration? supersededCkGrace = Duration.zero}) {
     final ring = InMemoryNskeyKeyRing()
       ..seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes)
       ..seedKeypair(alice, namespace,
           publicKey: aliceNskey.publicKeyBytes,
           privateKey: aliceNskey.privateKeyBytes);
-    final config =
-        CryptoConfig.nskey(keyRing: ring, ckRotationPolicy: ckRotationPolicy);
+    final config = supersededCkGrace == null
+        ? CryptoConfig.nskey(keyRing: ring, ckRotationPolicy: ckRotationPolicy)
+        : CryptoConfig.nskey(
+            keyRing: ring,
+            ckRotationPolicy: ckRotationPolicy,
+            supersededCkGrace: supersededCkGrace);
     final client = MockAtClient();
     client.getPreferences().crypto = config;
     when(() => client.getCurrentAtSign()).thenReturn(alice);
@@ -144,10 +153,12 @@ void main() {
               additional: {'ckKid': ckKid, 'ckNs': namespace}));
 
   /// A conveyance nothing else in the fixture wrote, carrying [ckKid].
-  void conveyance(_Store store, String ckKid, {String? cutBy}) =>
+  void conveyance(_Store store, String ckKid,
+          {String? cutBy, DateTime? createdAt}) =>
       store.data['$bob:$ckKid.__ck.$namespace$alice'] = AtData()
         ..data = 'sealed'
         ..metaData = (AtMetaData()
+          ..createdAt = createdAt
           ..appMetadata =
               AppMetadata(providerId: nskeyCryptoProviderId, additional: {
             'recipientKind': 'nskey',
@@ -160,6 +171,75 @@ void main() {
         '$bob:$ckKid.__ck.$namespace$alice',
         '$ckKid.__ck.$namespace$alice',
       ];
+
+  /// Backdates the conveyances of [ckKid] to say it was cut [ago].
+  void cutAgo(_Store store, String ckKid, Duration ago) {
+    for (final key in conveyancesOf(ckKid)) {
+      store.data[key]!.metaData!.createdAt = DateTime.now().subtract(ago);
+    }
+  }
+
+  group('the grace a superseded key is kept for', () {
+    test('defaults to 8 days', () {
+      expect(
+          CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()).supersededCkGrace,
+          const Duration(days: 8),
+          reason: 'the longest an atServer keeps a notification');
+    });
+
+    test('by default, a superseded key nothing cites is kept', () async {
+      final a = enrolled(supersededCkGrace: null);
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      await a.manager.rotateContentKey(a.context, shared());
+      await a.manager.idle;
+
+      expect(await a.manager.collectUnused(a.context), 0);
+      expect(a.store.data.keys, containsAll(conveyancesOf(superseded)),
+          reason: 'a recipient may still hold a notification sent under it');
+
+      final control = enrolled();
+      await control.manager.ensureCurrent(control.context, shared());
+      final gone = control.cache.current(bob, namespace)!.ckKid;
+      await control.manager.rotateContentKey(control.context, shared());
+      await control.manager.idle;
+      expect(control.deleted.toSet(), conveyancesOf(gone).toSet(),
+          reason: 'the control: with no grace the same key goes');
+    });
+
+    test('counts from the cut of its successor, not its own', () async {
+      final a = enrolled(supersededCkGrace: const Duration(days: 8));
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      final successor =
+          (await a.manager.rotateContentKey(a.context, shared())).ckKid;
+      await a.manager.idle;
+      cutAgo(a.store, superseded, const Duration(days: 30));
+      cutAgo(a.store, successor, const Duration(days: 1));
+
+      expect(await a.manager.collectUnused(a.context), 0,
+          reason: 'cut a month ago, but superseded only yesterday');
+
+      cutAgo(a.store, successor, const Duration(days: 9));
+      expect(await a.manager.collectUnused(a.context), 1);
+      expect(a.deleted.toSet(), conveyancesOf(superseded).toSet(),
+          reason: 'its successor is current, so it alone goes');
+    });
+
+    test('a key with no successor counts from its own cut', () async {
+      final a = enrolled(supersededCkGrace: const Duration(days: 8));
+      conveyance(a.store, 'orphan0000000000',
+          cutBy: enrollmentId,
+          createdAt: DateTime.now().subtract(const Duration(days: 1)));
+      expect(await a.manager.collectUnused(a.context), 0);
+
+      conveyance(a.store, 'orphan0000000000',
+          cutBy: enrollmentId,
+          createdAt: DateTime.now().subtract(const Duration(days: 9)));
+      expect(await a.manager.collectUnused(a.context), 1);
+      expect(a.deleted, ['$bob:orphan0000000000.__ck.$namespace$alice']);
+    });
+  });
 
   group('collecting unused content keys', () {
     test(
