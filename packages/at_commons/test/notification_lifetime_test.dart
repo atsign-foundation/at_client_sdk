@@ -142,10 +142,6 @@ void main() {
           () => (plainBuilder()..operation = OperationEnum.delete)
               .buildCommand(),
           throwsArgumentError);
-      expect(
-          () => (multiBuilder()..operation = OperationEnum.delete)
-              .buildCommand(),
-          throwsArgumentError);
     });
 
     test('the control: a delete without eph still builds', () {
@@ -155,12 +151,6 @@ void main() {
                 ..operation = OperationEnum.delete)
               .buildCommand(),
           startsWith('notify:id:n1:delete:'));
-      expect(
-          (multiBuilder()
-                ..ephemeral = false
-                ..operation = OperationEnum.delete)
-              .buildCommand(),
-          startsWith('notify:multi:delete:'));
     });
   });
 }

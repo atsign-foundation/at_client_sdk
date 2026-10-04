@@ -147,10 +147,10 @@ class VerbSyntax {
   /// One key-type value and its metadata, notified to each of a
   /// comma-separated list of recipients.
   ///
-  /// Every recipient starts with `@`, so a malformed metadata field is a
-  /// syntax error rather than a recipient.
+  /// Always an update, carrying no operation: a delete would remove a cached
+  /// record at every recipient. Every recipient starts with `@`, so a malformed
+  /// metadata field is a syntax error rather than a recipient.
   static const notifyMulti = r'^notify:multi'
-      r'(:(?<operation>update|delete))?'
       r'(:ttln:(?<ttln>\d+))?'
       '$_notificationExpiryAndPersistence'
       '$metadataFragment'

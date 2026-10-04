@@ -1,8 +1,9 @@
 ## 5.19.0
 
 - feat: `notify:multi` sends one value and its metadata to a list of
-  recipients in one request, and `NotifyMultiVerbBuilder` builds it. An
-  atServer that predates the verb refuses it. It carries no ttr or ccd.
+  recipients in one request, and `NotifyMultiVerbBuilder` builds it. Every one
+  is an update, with no ttr or ccd. Send it only to an atServer whose `info`
+  lists `notify.multi`.
 - feat: a notification can carry its own expiry (`eAtn`) instead of `ttln`,
   and an update can be marked ephemeral (`eph`), which no atServer persists.
   Send them only to an atServer whose `info` lists `notify.eAtn` and
