@@ -144,24 +144,9 @@ class VerbSyntax {
       r'(?<forAtSign>(([^:\s])+)?(,([^:\s]+))*)'
       r'(:(?<atKey>[^@:\s]+))(@(?<atSign>[^@:\s]+))?(:(?<value>.+))?$';
 
-  /// One key-type value and its metadata, notified to each of a
-  /// comma-separated list of recipients.
-  ///
-  /// Always an update, carrying no operation: a delete would remove a cached
-  /// record at every recipient. Every recipient starts with `@`, so a malformed
-  /// metadata field is a syntax error rather than a recipient.
-  static const notifyMulti = r'^notify:multi'
-      r'(:ttln:(?<ttln>\d+))?'
-      '$_notificationExpiryAndPersistence'
-      '$metadataFragment'
-      r':(?<forAtSign>@[^@:,\s]+(,@[^@:,\s]+)*)'
-      r':(?<atKey>[^@:\s]+)'
-      r'@(?<atSign>[^@:\s]+)'
-      r'(:(?<value>.+))?'
-      r'$';
   /// The notification's own expiry (`eAtn`, in `eAt`'s format) and whether it
-  /// is ephemeral (a bare `eph`, present or absent), which notify and
-  /// notify:multi both carry after ttln.
+  /// is ephemeral (a bare `eph`, present or absent), which notify carries after
+  /// ttln.
   static const _notificationExpiryAndPersistence =
       r'(:eAtn:(?<notificationExpiresAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
       r'(:(?<ephemeral>eph))?';
