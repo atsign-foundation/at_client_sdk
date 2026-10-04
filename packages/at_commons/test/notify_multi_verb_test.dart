@@ -7,7 +7,7 @@ void main() {
   // FROZEN: the wire form every atServer implementation parses. An intended
   // change edits this literal, and that edit is the review.
   const built =
-      'notify:multi:ttln:900000:isEncrypted:true:appMetadata:eyJwcm92aWRlcklkIjoiYXQvc3ltbWV0cmljL0FFUy9HQ00vbXVsdGlyZWNpcGllbnQiLCJja0tpZCI6ImFiY2QiLCJpdiI6ImFYWT0iLCJucyI6ImNoYXQubXlhcHAiLCJja05zIjoiY2hhdC5teWFwcCJ9:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
+      'notify:multi:ttln:900000:isEncrypted:true:appMetadata:eyJwcm92aWRlcklkIjoiYXQvc3ltbWV0cmljL0FFUy9HQ00iLCJja0tpZCI6ImFiY2QiLCJpdiI6ImFYWT0iLCJucyI6ImNoYXQubXlhcHAiLCJja05zIjoiY2hhdC5teWFwcCIsIm11bHRpUmVjaXBpZW50Ijp0cnVlfQ==:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
 
   final notifyMulti = RegExp(VerbSyntax.notifyMulti);
 
@@ -19,12 +19,13 @@ void main() {
       ..metadata = (Metadata()
         ..isEncrypted = true
         ..appMetadata = AppMetadata(
-            providerId: 'at/symmetric/AES/GCM/multirecipient',
+            providerId: 'at/symmetric/AES/GCM',
             additional: {
               'ckKid': 'abcd',
               'iv': 'aXY=',
               'ns': 'chat.myapp',
-              'ckNs': 'chat.myapp'
+              'ckNs': 'chat.myapp',
+              'multiRecipient': true
             })))
     ..recipients = ['@bob', 'sitaram']
     ..ttln = 900000
