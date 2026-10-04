@@ -8,7 +8,7 @@ void main() {
   // FROZEN: the wire form every atServer implementation parses. An intended
   // change edits this literal, and that edit is the review.
   const built =
-      'notify:multi:update:ttln:900000:isEncrypted:true:appMetadata:eyJwcm92aWRlcklkIjoiYXQvc3ltbWV0cmljL0FFUy9HQ00vZ3JvdXAiLCJja0tpZCI6ImFiY2QiLCJpdiI6ImFYWT0iLCJucyI6ImNoYXQubXlhcHAiLCJja05zIjoiY2hhdC5teWFwcCJ9:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
+      'notify:multi:update:ttln:900000:isEncrypted:true:appMetadata:eyJwcm92aWRlcklkIjoiYXQvc3ltbWV0cmljL0FFUy9HQ00vbXVsdGlyZWNpcGllbnQiLCJja0tpZCI6ImFiY2QiLCJpdiI6ImFYWT0iLCJucyI6ImNoYXQubXlhcHAiLCJja05zIjoiY2hhdC5teWFwcCJ9:@bob,@sitaram:msg.chat.myapp@alice:CIPHERTEXT';
 
   final notifyMulti = RegExp(VerbSyntax.notifyMulti);
 
@@ -20,7 +20,7 @@ void main() {
       ..metadata = (Metadata()
         ..isEncrypted = true
         ..appMetadata = AppMetadata(
-            providerId: 'at/symmetric/AES/GCM/group',
+            providerId: 'at/symmetric/AES/GCM/multirecipient',
             additional: {
               'ckKid': 'abcd',
               'iv': 'aXY=',
