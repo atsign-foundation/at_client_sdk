@@ -59,12 +59,15 @@ class InfoFeatures {
     if (info is! Map) return null;
     final features = info['features'];
     if (features is! List) return InfoFeatures(const {});
-    return InfoFeatures({
-      for (final f in features)
-        if (f is Map && f['name'] is String)
-          f['name'] as String:
-              f['status'] is String ? f['status'] as String : null
-    });
+    final statuses = <String, String?>{};
+    for (final f in features) {
+      if (f is! Map || f['name'] is! String) continue;
+      final name = f['name'] as String;
+      // NOTE: a name listed twice is absent if either entry says Retired.
+      if (statuses[name] == InfoFeatureStatus.retired) continue;
+      statuses[name] = f['status'] is String ? f['status'] as String : null;
+    }
+    return InfoFeatures(statuses);
   }
 
   /// The status [feature] is listed with, as it travelled, or null when it is

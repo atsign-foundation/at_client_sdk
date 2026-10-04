@@ -56,6 +56,18 @@ void main() {
     expect(warnings.single, contains('Beta'));
   });
 
+  test('a name listed twice is absent if either entry says Retired', () {
+    for (final pair in [
+      ['GA', 'Retired'],
+      ['Retired', 'GA']
+    ]) {
+      final features = InfoFeatures.parse('{"features":['
+          '{"name":"notify.eph","status":"${pair[0]}"},'
+          '{"name":"notify.eph","status":"${pair[1]}"}]}')!;
+      expect(features.has('notify.eph'), isFalse, reason: '$pair');
+    }
+  });
+
   test('a reply it cannot read is null; one listing nothing is empty', () {
     expect(InfoFeatures.parse('data:not json'), isNull);
     expect(InfoFeatures.parse('[1,2]'), isNull);
