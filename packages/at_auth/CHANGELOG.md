@@ -1,3 +1,9 @@
+## 4.0.0-rc4
+
+- fix: waiting for an enrollment's approval ends at once, with the atServer's
+  reason, when the enrollment has expired or the atServer has no record of it
+  (`AT0028`), instead of after the whole retry budget.
+
 ## 4.0.0-rc3
 
 - fix: a keyfile lock left behind by a process that stopped mid-write is
