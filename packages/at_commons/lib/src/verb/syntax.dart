@@ -123,6 +123,7 @@ class VerbSyntax {
       r'(:latestN:(?<latestN>\d+))?'
       r'(:notifier:(?<notifier>[^\s:]+))?'
       r'(:ttln:(?<ttln>\d+))?'
+      '$_notificationExpiryAndPersistence'
       '$metadataFragment'
       r':((?<publicScope>public)|(@(?<forAtSign>[^:@\s]+)))'
       r':(?<atKey>[^:@]((?!:{2})[^@])+)'
@@ -154,12 +155,18 @@ class VerbSyntax {
   static const notifyMulti = r'^notify:multi'
       r'(:(?<operation>update|delete))?'
       r'(:ttln:(?<ttln>\d+))?'
+      '$_notificationExpiryAndPersistence'
       '$metadataFragment'
       r':(?<forAtSign>@[^@:,\s]+(,@[^@:,\s]+)*)'
       r':(?<atKey>[^@:\s]+)'
       r'@(?<atSign>[^@:\s]+)'
       r'(:(?<value>.+))?'
       r'$';
+  /// The notification's own expiry (`eAtn`, in `eAt`'s format) and whether it
+  /// is ephemeral (`eph`), which notify and notify:multi both carry after ttln.
+  static const _notificationExpiryAndPersistence =
+      r'(:eAtn:(?<notificationExpiresAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:eph:(?<ephemeral>true|false))?';
   static const batch = r'^batch:(?<json>.+)$';
   static const info = r'^info(:(brief|mtls|mtlsbrief))?$';
   static const noOp = r'^noop:(?<delayMillis>\d+)$';
