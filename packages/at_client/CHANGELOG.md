@@ -1,3 +1,13 @@
+## 3.15.0-rc4
+
+- feat: a notification can be ephemeral (`NotificationParams.forUpdate(...,
+  ephemeral: true)`, `send(..., ephemeral: true)`): an atServer that supports
+  it delivers it without storing it, for at most 2 minutes. It cannot carry a
+  `ttr` or be cached at the recipient.
+- feat: where the atServer supports it, a notification carries its exact
+  expiry rather than a relative `ttln`, so it no longer drifts at each hop.
+- build: requires `at_commons` ^5.19.0.
+
 ## 3.15.0-rc3
 
 - build: requires `at_auth` ^4.0.0-rc3, which releases a keyfile lock left
