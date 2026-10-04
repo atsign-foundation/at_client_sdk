@@ -1,3 +1,9 @@
+## 3.15.0-rc4
+
+- fix: a content key that has been replaced is kept for 8 days
+  (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
+  can still open a notification sent under it just before the rotation.
+
 ## 3.15.0-rc3
 
 - build: requires `at_auth` ^4.0.0-rc3, which releases a keyfile lock left
