@@ -142,6 +142,24 @@ class VerbSyntax {
       r'(?:ccd:(?<ccd>true|false+):)?'
       r'(?<forAtSign>(([^:\s])+)?(,([^:\s]+))*)'
       r'(:(?<atKey>[^@:\s]+))(@(?<atSign>[^@:\s]+))?(:(?<value>.+))?$';
+
+  /// One key-type value and its metadata, notified to each of a
+  /// comma-separated list of recipients.
+  ///
+  /// A verb of its own rather than more fields on `notify:all`: an atServer
+  /// that predates it refuses the command, where `notify:all`'s grammar there
+  /// would read the first metadata label as the recipient list. For the same
+  /// reason every recipient starts with `@`, so a malformed metadata field is
+  /// a syntax error rather than a recipient.
+  static const notifyMulti = r'^notify:multi'
+      r'(:(?<operation>update|delete))?'
+      r'(:ttln:(?<ttln>\d+))?'
+      '$metadataFragment'
+      r':(?<forAtSign>@[^@:,\s]+(,@[^@:,\s]+)*)'
+      r':(?<atKey>[^@:\s]+)'
+      r'@(?<atSign>[^@:\s]+)'
+      r'(:(?<value>.+))?'
+      r'$';
   static const batch = r'^batch:(?<json>.+)$';
   static const info = r'^info(:(brief|mtls|mtlsbrief))?$';
   static const noOp = r'^noop:(?<delayMillis>\d+)$';

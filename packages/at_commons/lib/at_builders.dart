@@ -7,6 +7,7 @@ export 'package:at_commons/src/verb/lookup_verb_builder.dart';
 export 'package:at_commons/src/verb/monitor_verb_builder.dart';
 export 'package:at_commons/src/verb/notify_all_verb_builder.dart';
 export 'package:at_commons/src/verb/notify_list_verb_builder.dart';
+export 'package:at_commons/src/verb/notify_multi_verb_builder.dart';
 export 'package:at_commons/src/verb/notify_remove_builder.dart';
 export 'package:at_commons/src/verb/notify_status_verb_builder.dart';
 export 'package:at_commons/src/verb/notify_verb_builder.dart';

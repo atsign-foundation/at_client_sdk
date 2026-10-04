@@ -1,3 +1,9 @@
+## 5.19.0
+
+- feat: `notify:multi` sends one value and its metadata to a list of
+  recipients in one request, and `NotifyMultiVerbBuilder` builds it. An
+  atServer that predates the verb refuses it.
+
 ## 5.18.0
 
 - feat: `StoppedException`, thrown by the work of a stopped `AtClient` and by
