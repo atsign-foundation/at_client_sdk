@@ -579,8 +579,11 @@ nskey private.
 
 - **Retention knob.** Default: **retain** a superseded `__ck` record (no ttl)
   while any record cites its CK → a late-joining APKAM keypair reads history
-  (legacy-like; no FS); once none does, the enrollment that cut it deletes it
-  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it)).
+  (legacy-like; no FS); once none does and its grace is over
+  (`supersededCkGrace`, 8 days from the cut of its successor by default, so a
+  recipient can still open a notification sent under it), the enrollment that
+  cut it deletes it
+  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it-and-its-grace-is-over)).
   **Delete** on rotation → coarse FS. An offline / never-resynced client that retains a cached
   CK is the residual: coarse FS is bounded by eviction *reachability*, not only by
   record deletion. Deletion discipline is the FS trusted-computing base.
