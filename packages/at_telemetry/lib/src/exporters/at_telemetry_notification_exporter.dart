@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
-import '../codec/at_telemetry_notification_codec.dart';
 import '../at_telemetry_log_record.dart';
 import 'at_telemetry_log_record_exporter.dart';
 
@@ -12,12 +12,12 @@ typedef AtTelemetryNotify = Future<void> Function(
 
 final class AtTelemetryNotificationExporter
     implements AtTelemetryLogRecordExporter {
+  static const String idAndNamespace = 'logs.at_telemetry';
   static const int defaultMaxQueuedExports = 1000;
   static const int defaultMaxPayloadCharacters = 4 * ((1024 * 1024 + 2) ~/ 3);
 
   final AtTelemetryNotify _notify;
   final String _serviceName;
-  final AtTelemetryNotificationCodec _codec;
   final int _maxQueuedExports;
   final int _maxPayloadCharacters;
   final ListQueue<(String, String, Completer<void>)> _queue =
@@ -30,12 +30,10 @@ final class AtTelemetryNotificationExporter
   AtTelemetryNotificationExporter({
     required AtTelemetryNotify notify,
     required String serviceName,
-    AtTelemetryNotificationCodec codec = const AtTelemetryNotificationCodec(),
     int maxQueuedExports = defaultMaxQueuedExports,
     int maxPayloadCharacters = defaultMaxPayloadCharacters,
   })  : _notify = notify,
         _serviceName = serviceName,
-        _codec = codec,
         _maxQueuedExports = maxQueuedExports,
         _maxPayloadCharacters = maxPayloadCharacters {
     if (serviceName.trim().isEmpty) {
@@ -52,11 +50,7 @@ final class AtTelemetryNotificationExporter
 
   @override
   Future<void> export(AtTelemetryLogRecord logRecord) {
-    return _enqueue(
-      AtTelemetryNotificationCodec.idAndNamespace,
-      () => _codec
-          .encode(<AtTelemetryLogRecord>[logRecord], serviceName: _serviceName),
-    );
+    return _enqueue(idAndNamespace, () => _encode(logRecord));
   }
 
   @override
@@ -73,6 +67,21 @@ final class AtTelemetryNotificationExporter
   Future<void> shutdown() {
     _closed = true;
     return flush();
+  }
+
+  String _encode(AtTelemetryLogRecord logRecord) {
+    if (logRecord.name.trim().isEmpty) {
+      throw ArgumentError.value(
+          logRecord.name, 'logRecord.name', 'must not be empty');
+    }
+    return jsonEncode(AtTelemetryLogRecord(
+      name: logRecord.name,
+      timestamp: logRecord.timestamp,
+      attributes: <String, Object?>{
+        'service.name': _serviceName,
+        ...logRecord.attributes,
+      },
+    ).toJson());
   }
 
   Future<void> _enqueue(String idAndNamespace, String Function() encode) {

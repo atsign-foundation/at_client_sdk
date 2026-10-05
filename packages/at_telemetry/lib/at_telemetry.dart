@@ -1,6 +1,5 @@
 export 'src/at_telemetry_log_record.dart';
 export 'src/codec/at_telemetry_logs_codec.dart';
-export 'src/codec/at_telemetry_notification_codec.dart';
 export 'src/exporters/at_telemetry_log_record_exporter.dart';
 export 'src/exporters/at_telemetry_notification_exporter.dart';
 export 'src/exporters/at_telemetry_signed_http_exporter.dart';

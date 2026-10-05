@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:test/test.dart';
 
 void main() {
-  const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
+  AtTelemetryLogRecord decode(String payload) =>
+      AtTelemetryLogRecord.fromJson(
+        jsonDecode(payload) as Map<String, Object?>,
+      );
   final DateTime timestamp = DateTime.utc(2026, 9, 29, 12);
   final AtTelemetryLogRecord log = AtTelemetryLogRecord(
     name: 'app.started',
@@ -34,7 +38,7 @@ void main() {
     await exporter.shutdown();
   });
 
-  test('exports logs as base64 OTLP notifications', () async {
+  test('exports logs as JSON notifications', () async {
     await exporter.export(log);
     await exporter.export(connected);
     await exporter.flush();
@@ -43,10 +47,8 @@ void main() {
       'logs.at_telemetry',
       'logs.at_telemetry',
     ]);
-    final AtTelemetryLogRecord actualLog =
-        codec.decode(notifications[0].$2).single;
-    final AtTelemetryLogRecord actualConnected =
-        codec.decode(notifications[1].$2).single;
+    final AtTelemetryLogRecord actualLog = decode(notifications[0].$2);
+    final AtTelemetryLogRecord actualConnected = decode(notifications[1].$2);
     expect(actualLog.name, log.name);
     expect(actualLog.timestamp, timestamp);
     expect(actualLog.attributes['version'], '1.2.3');
@@ -95,7 +97,7 @@ void main() {
     ));
     attributes['room'] = 'office';
     await sent;
-    expect(codec.decode(notifications.single.$2).single.attributes,
+    expect(decode(notifications.single.$2).attributes,
         <String, Object?>{'room': 'lab', 'service.name': 'my_app'});
   });
 
@@ -153,7 +155,7 @@ void main() {
       maxQueuedExports: 1,
       notify: (String key, String payload) async {
         await release.future;
-        delivered.add(codec.decode(payload).single.name);
+        delivered.add(decode(payload).name);
       },
     );
     AtTelemetryLogRecord named(String name) =>

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_telemetry/at_telemetry.dart';
 
@@ -30,10 +31,12 @@ Future<void> main() async {
 }
 
 Future<void> _monitor(Stream<(String, String)> notifications) async {
-  const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
   await for (final (String key, String payload) in notifications) {
-    if (key == AtTelemetryNotificationCodec.idAndNamespace) {
-      print('$key: ${codec.decode(payload).single.name}');
+    if (key == AtTelemetryNotificationExporter.idAndNamespace) {
+      final AtTelemetryLogRecord logRecord = AtTelemetryLogRecord.fromJson(
+        jsonDecode(payload) as Map<String, Object?>,
+      );
+      print('$key: ${logRecord.name}');
     }
   }
 }

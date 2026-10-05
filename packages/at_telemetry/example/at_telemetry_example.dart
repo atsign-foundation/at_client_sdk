@@ -28,19 +28,6 @@ Future<void> main() async {
     jsonDecode(json) as Map<String, Object?>,
   );
   print('JSON round trip: ${fromJson.name} at ${fromJson.timestamp}');
-
-  // Events can be packed into a base64 OTLP payload, for example to send
-  // them as the value of an Atsign notification
-  const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
-  final String payload = codec.encode(
-    <AtTelemetryLogRecord>[event],
-    serviceName: 'my_app',
-  );
-  final List<AtTelemetryLogRecord> decoded = codec.decode(payload);
-  print(
-    'Notification round trip (${AtTelemetryNotificationCodec.idAndNamespace}): '
-    '${decoded.single.name} ${decoded.single.attributes}',
-  );
 }
 
 final class ConsoleExporter implements AtTelemetryLogRecordExporter {

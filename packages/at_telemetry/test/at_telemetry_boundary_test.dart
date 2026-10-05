@@ -22,16 +22,14 @@ void main() {
         continue;
       }
       final String source = await entity.readAsString();
-      expect(source, isNot(contains('internal/')), reason: entity.path);
       expect(source, isNot(contains('dartastic')), reason: entity.path);
       expect(source, isNot(contains('AtTelemetryOtel')), reason: entity.path);
     }
   });
 
-  test('OpenTelemetry dependency imports stay in the internal adapter',
-      () async {
-    final String internalPath = Directory.fromUri(
-      library.uri.resolve('src/internal/'),
+  test('OpenTelemetry dependency imports stay in the logs codec', () async {
+    final String codecPath = File.fromUri(
+      library.uri.resolve('src/codec/at_telemetry_logs_codec.dart'),
     ).path;
     final RegExp dependency = RegExp(
       r'''(?:import|export)\s+['"]package:(?:dartastic_opentelemetry|dartastic_opentelemetry_api|fixnum)/''',
@@ -39,7 +37,7 @@ void main() {
     await for (final FileSystemEntity entity in library.list(recursive: true)) {
       if (entity is! File ||
           !entity.path.endsWith('.dart') ||
-          entity.path.startsWith(internalPath)) {
+          entity.path == codecPath) {
         continue;
       }
       final String source = await entity.readAsString();

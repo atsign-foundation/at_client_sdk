@@ -71,21 +71,4 @@ void main() {
       throwsArgumentError,
     );
   });
-
-  test('round-trips events through the notification codec', () {
-    const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
-    final List<AtTelemetryLogRecord> decoded = codec.decode(
-      codec.encode(<AtTelemetryLogRecord>[event]),
-    );
-
-    expect(decoded.single.name, event.name);
-    expect(decoded.single.timestamp, event.timestamp);
-  });
-
-  test('rejects a notification payload that is not base64', () {
-    expect(
-      () => const AtTelemetryNotificationCodec().decode('not base64!'),
-      throwsFormatException,
-    );
-  });
 }
