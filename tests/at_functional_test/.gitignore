@@ -16,7 +16,7 @@ test/testData/@sachin.atKeys
 test/testData/@colin.atKeys
 test/testData/@chris.atKeys
 test/testData/@xavier.atKeys
-test/testData/@jeremy.atKeys
+test/testData/@device2.atKeys
 test/testData/rf2b-legacy@*.atKeys
 # One per rsa2048 retrofit arm — a keyfile takes exactly one retrofit, so the
 # arms that ask for RSA cannot share the file the ML-DSA arms chain through.

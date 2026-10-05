@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/example/todos/)."
     },
     {
       "id": 2,

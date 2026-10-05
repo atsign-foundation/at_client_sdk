@@ -42,8 +42,7 @@ class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   final AtSignLogger logger = AtSignLogger('TestEnvelopeSigner');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings = null;
 
   TestEnvelopeSigner(this.atClient);
 }

@@ -339,6 +339,9 @@ class LocalSecondary implements Secondary {
 
   /// Executes a verb builder on the local secondary.
   ///
+  /// Updates and deletes of one record name run one at a time, in the order
+  /// they were started.
+  ///
   /// The [sync] parameter is retained for back-compat with the
   /// `Secondary` interface and is ignored: `_update` / `_delete`
   /// enqueue into the client→server sync queue themselves whenever
@@ -364,9 +367,11 @@ class LocalSecondary implements Secondary {
     try {
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         if (builder is UpdateVerbBuilder) {
-          verbResult = await _update(builder, cameFromServer: cameFromServer);
+          verbResult = await _inTurn(builder.buildKey(),
+              () => _update(builder, cameFromServer: cameFromServer));
         } else if (builder is DeleteVerbBuilder) {
-          verbResult = await _delete(builder, cameFromServer: cameFromServer);
+          verbResult = await _inTurn(builder.buildKey(),
+              () => _delete(builder, cameFromServer: cameFromServer));
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
@@ -379,6 +384,43 @@ class LocalSecondary implements Secondary {
       throw (AtClientException(e.errorCode, e.errorMessage));
     }
     return verbResult;
+  }
+
+  /// Writes [builder]'s record only when local storage holds none under its
+  /// name, and says whether it wrote.
+  ///
+  /// The check and the write are one step against every other write this
+  /// instance makes to the same name, so a copy landing in between — sync
+  /// pulling a newer one, say — is never overwritten.
+  Future<bool> putIfAbsent(UpdateVerbBuilder builder,
+      {bool cameFromServer = false}) async {
+    final key = builder.buildKey();
+    try {
+      return await _inTurn(key, () async {
+        if (await keyStore!.exists(key)) return false;
+        await _update(builder, cameFromServer: cameFromServer);
+        return true;
+      });
+    } on AtLookUpException catch (e) {
+      throw (AtClientException(e.errorCode, e.errorMessage));
+    }
+  }
+
+  /// The last write queued for each record name, lower-cased as the keystore
+  /// stores it.
+  final Map<String, Future<void>> _writeTurns = {};
+
+  /// Runs [write] once every write to [key] this instance started earlier has
+  /// finished.
+  Future<T> _inTurn<T>(String key, Future<T> Function() write) {
+    final name = key.toLowerCase();
+    final previous = _writeTurns[name] ?? Future<void>.value();
+    final done = Completer<void>();
+    _writeTurns[name] = done.future;
+    return previous.then((_) => write()).whenComplete(() {
+      done.complete();
+      if (identical(_writeTurns[name], done.future)) _writeTurns.remove(name);
+    });
   }
 
   Future<String> _update(UpdateVerbBuilder builder,
@@ -649,7 +691,8 @@ class LocalSecondary implements Secondary {
         // the publisher's atServer has already dropped (or will drop)
         // its own copy at the same TTL, and is responsible for the
         // recipients' `cached:` evictions.
-        await _delete(builder, localOnly: true, isExpiry: true);
+        await _inTurn(builder.buildKey(),
+            () => _delete(builder, localOnly: true, isExpiry: true));
         deleted++;
       } on StoppedException {
         rethrow;

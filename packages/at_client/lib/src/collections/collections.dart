@@ -1186,9 +1186,22 @@ interface class AtCollection<T> {
   Future<List<AtKey>> _getKeysInternal({String? id, Atsign? owner}) async {
     final regex =
         _directKeyRegex(id: id, ownerSuffix: owner?.toString() ?? '@');
-    return (await atClient.getAtKeys(regex: regex))
-      ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
+    return (await atClient.getAtKeys(regex: regex))..sort(_byItemThenOwnCopy);
   }
+
+  /// Groups every copy of an item together, with this atSign's own copy first:
+  /// the one copy of an item it owns that it can always open.
+  int _byItemThenOwnCopy(AtKey a, AtKey b) {
+    final byItem = a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner);
+    if (byItem != 0) return byItem;
+    return (_isOutboundCopy(a) ? 1 : 0) - (_isOutboundCopy(b) ? 1 : 0);
+  }
+
+  /// Whether [k] is the copy of one of this atSign's items that it shared
+  /// with someone else. A post-quantum share seals that copy to the
+  /// recipient, so the owner reads its own copy instead.
+  bool _isOutboundCopy(AtKey k) =>
+      k.sharedWith != null && k.sharedBy?.toAtsign() == atSign;
 
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
@@ -1389,6 +1402,8 @@ interface class AtCollection<T> {
           // and placeholder paths set `pending` again before any yield.
           pending = null;
           pendingKey = k.fullKeyAndOwner;
+          // NOTE: only when the owner's own copy is gone, which sorts first.
+          if (_isOutboundCopy(k)) continue;
           final v = await atClient.get(k);
           // An item that is not yet available (`availableAt` in the
           // future) or whose value the keystore won't return for any

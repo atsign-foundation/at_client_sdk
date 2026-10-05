@@ -1,3 +1,5 @@
+import 'package:at_client/src/version.dart';
+
 /// The class contains all the client configurations.
 class AtClientConfig {
   static final AtClientConfig _singleton = AtClientConfig._internal();
@@ -8,7 +10,7 @@ class AtClientConfig {
     return _singleton;
   }
 
-  /// Represents the at_client version.
-  /// Must always be the same as the actual version in pubspec.yaml
-  final String atClientVersion = '3.15.0-rc1';
+  /// The at_client version from pubspec.yaml, as generated into
+  /// `lib/src/version.dart`.
+  final String atClientVersion = packageVersion;
 }

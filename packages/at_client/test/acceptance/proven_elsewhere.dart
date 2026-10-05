@@ -17,7 +17,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-// ignore: implementation_imports, depend_on_referenced_packages
+// ignore: implementation_imports
 import 'package:test_api/src/backend/invoker.dart';
 import 'package:test/test.dart';
 

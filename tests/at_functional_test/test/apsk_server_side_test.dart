@@ -12,6 +12,7 @@ import 'package:at_client/src/secret_sharing/key_package_minting.dart'
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -297,5 +298,54 @@ void main() {
     expect(members.map((m) => m.enrollmentId), contains(member.enrollmentId),
         reason: 'including this one, which is authorised for the namespace it '
             'is asking about');
+  });
+
+  test(
+      'a revoked enrollment\'s signature is refused as revoked, by a peer '
+      'atSign and by a sibling enrollment', () async {
+    final peerAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'] as String;
+    final signer = await enrol('revoked-signer');
+    final envelope =
+        await AtClientEnvelopeSigner(signer.client).wrapAndSign({'run': runId});
+
+    // NOTE: opened directly rather than through TestUtils.initAtClient, which
+    // stops the current client first and would stop the approver.
+    final peerKeys = InMemoryAtKeysIo.holding(
+        peerAtSign,
+        AtEncryptionKeysLoader.getInstance()
+            .createAtKeysFromDemoKeys(peerAtSign));
+    await TestUtils.seedIfCredentialless(peerAtSign, peerKeys);
+    await TestUtils.stopClientRunningAs(peerAtSign, peerKeys);
+    final peer = await Atsign(peerAtSign).open(
+        keys: peerKeys,
+        preference:
+            TestUtils.getPreference(peerAtSign, posture: PqPosture.legacy)
+              ..namespace = namespace,
+        namespace: namespace,
+        storage: TestUtils.storageFor(peerAtSign));
+    addTearDown(peer.stop);
+
+    Future<void> verifyAs(AtClient verifier) =>
+        AtClientEnvelopeSigner(verifier, publicKeyCacheSettings: null)
+            .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+
+    await verifyAs(peer);
+    await verifyAs(approver);
+
+    final revoked = await approver.enrollmentService!
+        .revoke(EnrollmentRequestDecision.revoked(signer.enrollmentId, atSign));
+    expect(revoked.enrollmentStatus, EnrollmentStatus.revoked,
+        reason: 'the control arms verified before this; the refusals below '
+            'are the revoke');
+
+    final refusedAsRevoked = throwsA(isA<WithdrawnSigningKeyException>().having(
+        (e) => e.location,
+        'location',
+        EnrollmentConstants.perEnrollmentRevoked));
+    await expectLater(verifyAs(peer), refusedAsRevoked,
+        reason: 'the peer\'s atServer served the record the revoke moved to '
+            '.r.__e, so the refusal says why rather than that the key is gone');
+    await expectLater(verifyAs(approver), refusedAsRevoked,
+        reason: 'and the owner\'s atServer serves it to a sibling enrollment');
   });
 }

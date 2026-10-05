@@ -138,9 +138,9 @@ directly into your own app.
 
 ### `at_invitation_flutter` ⛔
 
-**Deprecated.** Copy the invitation snippet from
-`packages/at_client_flutter/example/lib/snippets/at_invitation.dart`
-directly into your own app.
+**Deprecated.** Use `AtClientInvitations` from
+`package:at_client/at_client_mixins.dart`, shown in
+`packages/at_client_flutter/example/invitations`.
 
 ### `at_sync_ui_flutter` / `at_theme_flutter` ⛔
 

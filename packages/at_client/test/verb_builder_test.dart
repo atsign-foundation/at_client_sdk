@@ -1,6 +1,9 @@
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyAdvertisementKey;
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/signing/envelope_signature.dart' show apskUri;
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -146,6 +149,22 @@ void main() {
     });
 
     test(
+        'a namespace set on the key is appended even when the name ends in '
+        'the preference namespace', () {
+      final atKey = AtKey()
+        ..key = '__ckcur.bob.buzz'
+        ..namespace = 'primary.a.__e'
+        ..sharedBy = '@alice';
+      expect(
+          AtClientUtil.getKeyWithNameSpace(
+              atKey, AtClientPreference()..namespace = 'buzz'),
+          '__ckcur.bob.buzz.primary.a.__e',
+          reason: 'what the put wrote: AtKey.toString appends the key\'s own '
+              'namespace whatever the name ends in');
+      expect(atKey.toString(), '__ckcur.bob.buzz.primary.a.__e@alice');
+    });
+
+    test(
         'A test to verify namespace is not appended when namespaceAware is set to false',
         () {
       String atKey = AtClientUtil.getKeyWithNameSpace(
@@ -197,6 +216,54 @@ void main() {
           getRequestOptions: requestOptions);
       expect(builder, isA<LookupVerbBuilder>());
       expect(builder.buildCommand(), contains('bypassCache:true'));
+    });
+  });
+
+  group('a post-quantum key record is always fetched past the cache', () {
+    test('a peer\'s nskey advertisement', () {
+      final builder = LookUpBuilderManager.get(
+          nskeyAdvertisementKey('@alice', 'app_1.my_apps'),
+          '@bob',
+          AtClientPreference());
+      expect(builder.buildCommand(),
+          'plookup:bypassCache:true:all:__nskey.app_1.my_apps@alice\n',
+          reason: 'a cached copy some writer gave a ttr must never be served '
+              'in place of the owner\'s advertisement');
+    });
+
+    test('a peer\'s _apsk record', () {
+      final builder = LookUpBuilderManager.get(
+          AtKey.fromString(apskUri('@alice', 'e1')),
+          '@bob',
+          AtClientPreference());
+      expect(builder.buildCommand(),
+          'plookup:bypassCache:true:all:_apsk.e1.a.__e@alice\n',
+          reason: 'a cached copy some writer gave a ttr must never be served '
+              'in place of the owner\'s signing key');
+    });
+
+    test('a caller that asks not to bypass is overridden', () {
+      final builder = LookUpBuilderManager.get(
+          nskeyAdvertisementKey('@alice', 'app_1.my_apps'),
+          '@bob',
+          AtClientPreference(),
+          getRequestOptions: GetRequestOptions()..bypassCache = false);
+      expect(builder.buildCommand(),
+          'plookup:bypassCache:true:all:__nskey.app_1.my_apps@alice\n');
+    });
+
+    test('other public records, and names that only begin like one, do not',
+        () {
+      for (final name in [
+        'public:phone.wavi@alice',
+        'public:__nskeys.wavi@alice',
+        'public:_apskx.wavi@alice',
+      ]) {
+        final builder = LookUpBuilderManager.get(
+            AtKey.fromString(name), '@bob', AtClientPreference());
+        expect(builder.buildCommand(), isNot(contains('bypassCache')),
+            reason: name);
+      }
     });
   });
 }

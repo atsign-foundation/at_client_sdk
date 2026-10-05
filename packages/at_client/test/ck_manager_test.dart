@@ -2,6 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -83,6 +84,7 @@ void main() {
   ({
     CkManager manager,
     CryptoContext context,
+    Future<AtValue> Function(AtKey) serve,
     InMemoryNskeyKeyRing ring,
     ContentKeyCache cache,
     List<AtKey> written,
@@ -134,6 +136,13 @@ void main() {
     final mockAtClient = MockAtClient();
     when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
     final context = CryptoContext(atClient: mockAtClient);
+    // NOTE: the manager seals a sibling copy through the runtime, which finds
+    // the provider in the client's config, so the rig's has to be registered.
+    void register(NskeyProvider provider) =>
+        mockAtClient.getPreferences().crypto = CryptoConfig(
+            defaultProviderId: symmetricAesGcmCryptoProviderId,
+            providers: [provider]);
+    register(nskey);
 
     when(() => mockAtClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
@@ -142,15 +151,13 @@ void main() {
       final value = inv.positionalArguments[1] as String;
       final options =
           inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-      // The current-CK pointer writes an ordinary self key through this same
-      // client; it is not a conveyance, so it is not counted here.
-      if (key.key.startsWith('__ckcur') == true) {
-        return true;
-      }
       written.add(key);
       providerIds.add(options?.cryptoProviderId);
       routings.add(options?.useRemoteAtServer);
-      conveyed[key.toString()] = await nskey.encrypt(context, key, value);
+      // A sibling copy arrives sealed, and the pipeline sends it as it is.
+      conveyed[key.toString()] = (options?.shouldEncrypt ?? true)
+          ? await nskey.encrypt(context, key, value)
+          : value;
       conveyedKeys[key.toString()] = key;
       if (writesLeftToFail > 0) {
         writesLeftToFail--;
@@ -173,9 +180,8 @@ void main() {
       return true;
     });
 
-    when(() => mockAtClient.get(any(),
-        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((inv) {
-      final key = inv.positionalArguments[0] as AtKey;
+    /// A read of a conveyance, served the way sync would leave it.
+    Future<AtValue> serve(AtKey key) {
       final ciphertext = conveyed[key.toString()];
       if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
       // at/nskey decapsulates and caches the CK as a side effect, which is what
@@ -188,24 +194,18 @@ void main() {
           .then((plain) => AtValue()
             ..value = plain
             ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
-    });
-    when(() => mockAtClient.get(any())).thenAnswer((inv) {
-      final key = inv.positionalArguments[0] as AtKey;
-      final ciphertext = conveyed[key.toString()];
-      if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
-      return activeNskey
-          .decrypt(CryptoContext(atClient: mockAtClient),
-              conveyedKeys[key.toString()]!, ciphertext)
-          // NOTE: the resume path takes this one-argument overload, so the
-          // record's date has to be stamped here as well as on the other stub.
-          .then((plain) => AtValue()
-            ..value = plain
-            ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
-    });
+    }
+
+    when(() => mockAtClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) => serve(inv.positionalArguments[0] as AtKey));
+    when(() => mockAtClient.get(any()))
+        .thenAnswer((inv) => serve(inv.positionalArguments[0] as AtKey));
 
     return (
       manager: manager,
       context: context,
+      serve: serve,
       ring: ring,
       cache: cache,
       pointer: pointer,
@@ -214,6 +214,7 @@ void main() {
           {CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
         activeNskey =
             NskeyProvider(keyRing: ring, cache: c, keyAlgo: nskeyKeyAlgo);
+        register(activeNskey);
         return CkManager(
             cache: c,
             keyRing: ring,
@@ -347,6 +348,86 @@ void main() {
       expect(c.cache.currentNskeyKid(owner, namespace), sealedTo,
           reason: 'sealed to the entry it was sealed to before, so nothing in '
               'this client\'s own state records that its advertisement grew');
+    });
+
+    test('a restarted sender resumes the key it shares, from the sibling copy',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final cut = c.cache.current(bob, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.written, hasLength(conveyed),
+          reason: 'bob\'s conveyance is sealed to bob, so a restart that '
+              'reads it cuts a key and leaves another conveyance behind');
+      expect(coldCache.current(bob, namespace)?.ckKid, cut);
+    });
+
+    test('a restart with nothing in local storage resumes from the atServer',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final cut = c.cache.current(owner, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      // An ephemeral store: local reads find nothing, the atServer has it all.
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer != true) {
+          throw AtKeyNotFoundException('local storage is empty');
+        }
+        return c.serve(inv.positionalArguments[0] as AtKey);
+      });
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.written, hasLength(conveyed));
+      expect(coldCache.current(owner, namespace)?.ckKid, cut);
+    });
+
+    test('an offline restart resumes from local storage', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final cut = c.cache.current(owner, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer == true) {
+          throw SecondaryConnectException('the atServer is unreachable');
+        }
+        return c.serve(inv.positionalArguments[0] as AtKey);
+      });
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.written, hasLength(conveyed));
+      expect(coldCache.current(owner, namespace)?.ckKid, cut);
     });
 
     test('a restart after the widening resumes rather than cutting another',
@@ -550,15 +631,53 @@ void main() {
       await c.manager.ensureCurrent(c.context, selfValue('treaty'));
       await c.manager.ensureCurrent(c.context, sharedValue('treaty'));
 
-      expect(c.written, hasLength(2),
+      expect(c.written, hasLength(3),
           reason: 'alice-to-self and alice-to-bob are different destinations, '
-              'so they get different content keys');
+              'so they get different content keys, and bob\'s is conveyed to '
+              'him and to alice');
       expect(c.cache.current(owner, namespace)!.ckKid,
           isNot(c.cache.current(bob, namespace)!.ckKid));
 
-      final toBob = c.written.last;
+      final toBob = c.written[1];
       expect(toBob.sharedWith, bob);
       expect(toBob.sharedBy, owner);
+    });
+
+    /// The update command [key] builds, through the transformer every put
+    /// goes through.
+    Future<String> commandFor(AtKey key) async =>
+        (await PutRequestTransformer().transform(
+                Tuple<AtKey, dynamic>()
+                  ..one = key
+                  ..two = 'sealed',
+                requestOptions: PutRequestOptions()..shouldEncrypt = false))
+            .buildCommand();
+
+    test('a share\'s conveyance is sent with ttr -1 and ccd — raw literal',
+        () async {
+      final c = client();
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, sharedValue('treaty'));
+
+      expect(await commandFor(c.written.single),
+          startsWith('update:ttr:-1:ccd:true:'),
+          reason: 'the sender\'s atServer passes the stored ttr on in its '
+              'notification, which is what makes the recipient\'s atServer '
+              'cache the conveyance; ccd deletes that copy with the original');
+    });
+
+    test('a self conveyance is sent with neither — the control', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(await commandFor(c.written.single),
+          startsWith('update:isEncrypted:false:'),
+          reason: 'no other atServer holds a copy of a self conveyance');
     });
 
     test('a failed conveyance write leaves no current CK', () async {
@@ -725,9 +844,6 @@ void main() {
         final key = inv.positionalArguments[0] as AtKey;
         final options =
             inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-        // The current-CK pointer writes an ordinary self key through this
-        // same client; it is not a conveyance, so it is not counted here.
-        if (key.key.startsWith('__ckcur') == true) return true;
         written.add(key);
         // Mirror the pipeline: route the conveyance through the runtime, which
         // resolves at/nskey out of the very config under test.
@@ -805,9 +921,9 @@ void main() {
       expect(c.cache.current(owner, namespace)!.ckKid, rotated.ckKid,
           reason: 'new writes encrypt under the successor');
       expect(c.deleted, isEmpty,
-          reason: 'retaining the old conveyance is the DEFAULT: it is what '
-              'lets a late-joining enrollment read history, which is the '
-              'legacy-like behaviour most apps expect');
+          reason: 'a rotation deletes nothing itself: a superseded key goes '
+              'only through the collection, which keeps it while a record '
+              'cites it');
       expect(c.cache.get(owner, namespace, superseded.ckKid), isNotNull,
           reason: 'and data written under it still decrypts');
     });
@@ -831,6 +947,29 @@ void main() {
       expect(c.cache.get(owner, namespace, superseded.ckKid), isNull,
           reason: 'and this client must stop using the copy it already '
               'unwrapped, or the deletion closes off nobody');
+    });
+
+    test('deleting a shared key deletes its sibling copy too', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final superseded = c.cache.current(bob, namespace)!;
+
+      await c.manager.rotateContentKey(c.context, sharedValue('pact'),
+          deleteSuperseded: true);
+
+      expect(
+          c.deleted.map((k) => k.toString()),
+          [
+            '@bob:${superseded.ckKid}.__ck.app_1.my_apps@alice',
+            '${superseded.ckKid}.__ck.app_1.my_apps@alice',
+          ],
+          reason: 'the sibling copy left behind is a sealed copy every '
+              'enrollment of alice can still open');
+      expect(c.cache.get(bob, namespace, superseded.ckKid), isNull);
     });
 
     test('deletes before cutting the successor, and the next write cuts one',
@@ -910,13 +1049,13 @@ void main() {
       final atClient = MockAtClient();
       final stopped = StoppedException('the client has stopped');
       when(() => atClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => atClient.enrollmentId).thenReturn('enr-1');
       when(() => atClient.get(any(),
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(stopped);
       when(() => atClient.put(any(), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(stopped);
-      when(() => atClient.put(any(), any())).thenThrow(stopped);
 
       await expectLater(
           const CurrentCkPointer().read(atClient, owner, namespace),
@@ -940,7 +1079,8 @@ void main() {
       final cold = c.coldManager(ContentKeyCache());
       // NOTE: this rig keeps the pointer in memory, so the only read that
       // meets the stop is the resume reading the remembered record.
-      when(() => c.context.atClient.get(any()))
+      when(() => c.context.atClient
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(StoppedException('the client has stopped'));
 
       await expectLater(cold.ensureCurrent(c.context, selfValue('treaty')),

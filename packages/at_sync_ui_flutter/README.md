@@ -44,7 +44,7 @@ For worked examples, see:
 - Dart and CLI collection examples:
   [`packages/at_client/example/bin/collections_*.dart`](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client/example/bin)
 - Flutter reference app:
-  [`packages/at_client_flutter/examples/todos`](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter/examples/todos)
+  [`packages/at_client_flutter/example/todos`](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter/example/todos)
 
 ## Legacy API
 

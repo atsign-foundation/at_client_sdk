@@ -48,12 +48,15 @@ void main() {
       // THEN  new CKs seal to the successor nskey and their conveyances carry
       //       the new nskeyKid; survivors retain the prior private so retained
       //       history still opens. A peer notices only at its next
-      //       ensureCurrent re-plookup — WITHOUT that the revocation does not
-      //       hold, since a peer still sealing to the superseded generation
-      //       hands the revoked enrollment a key it can open. A joiner approved
-      //       after the rotation is pushed EVERY generation its approver holds
-      //       for the namespaces it was approved for, with requestSecret as
-      //       the backstop for one the push missed. Heavy,
+      //       ensureCurrent re-plookup once its cached advertisement is
+      //       advertisementTtl old — WITHOUT that re-fetch the revocation does
+      //       not hold, since a peer still sealing to the superseded generation
+      //       hands the revoked enrollment a key it can open. A re-fetch that
+      //       cannot reach an answer keeps the cached generation for at most
+      //       advertisementStaleGrace; a not-found drops it at once. A joiner
+      //       approved after the rotation is pushed EVERY generation its
+      //       approver holds for the namespaces it was approved for, with
+      //       requestSecret as the backstop for one the push missed. Heavy,
       //       O(n)-per-enrollment, DISTINCT from CK rotation.
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
@@ -93,6 +96,41 @@ void main() {
             'output is whether a fresh key was cut.',
         clauses: [
           'new CKs are sealed to the successor nskey',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'the advertisement is re-fetched once the TTL has passed',
+        proves: 'the first leg of the bound: an advertisement cached past '
+            'advertisementTtl is fetched again rather than served, counted as '
+            'a second fetch against the first arm of the same group, which '
+            'asserts one fetch inside the TTL.',
+        clauses: [
+          'cached advertisement is `advertisementTtl` (15 minutes) old',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a failed re-fetch stops serving the known key past the grace',
+        proves: 'the second leg: a re-fetch that fails for any reason but a '
+            'not-found serves the cached generation inside '
+            'advertisementStaleGrace (the sibling tests, one of them with the '
+            'AT0011 an unreachable peer atServer produces) and throws past it, '
+            'rather than answering none, which the resolver would read as an '
+            'empty level and walk past.',
+        clauses: [
+          'for at most `advertisementStaleGrace`',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a not-found on re-fetch ends sealing at once, inside the grace',
+        proves: 'a not-found from the owner\'s atServer answers none with the '
+            'grace fifteen minutes long, so the grace is not what ends it; its '
+            'sibling shows the not-found also drops the cached generation, so '
+            'a failed fetch afterwards throws instead of bringing it back.',
+        clauses: [
+          'answered not-found stops sealing to that peer at once',
         ],
       );
       provenIn(
@@ -219,14 +257,67 @@ void main() {
               'an assertion that matched `now` would pass whether the age came '
               'from the record or from the device clock',
           clauses: ['takes its **age from that record\'s own date**']);
-      provenIn('packages/at_client/test/ck_manager_test.dart',
-          'cuts a successor and leaves the superseded conveyance in place',
-          proves: 'RETENTION, which is the half a reader is most likely to '
-              'get backwards — the superseded conveyance record survives the '
-              'rotation, and that is what lets a later joiner read what was '
-              'written before it. Deleting it is UC-A5.1(a), a separate and '
-              'deliberate act',
-          clauses: ['the superseded conveyance record is **retained**']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'a superseded key a record still cites is kept',
+          proves: 'the half a reader is most likely to get backwards: the '
+              'collection a rotation queues keeps a key while a record cites '
+              'it, which is what lets a later joiner read what was written '
+              'before it',
+          clauses: ['kept while any record cites it']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'a rotation collects the key it superseded, which nothing cites',
+          proves: 'and deletes both conveyances of one nothing cites, which '
+              'only the enrollment that cut it may do',
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'a superseded key is kept while a record cites it, and collected '
+              'once none does',
+          proves: 'both halves against a live atServer: the key survives the '
+              'rotation while a record cites it, and once that record is '
+              'deleted the collection removes its conveyance from the '
+              'atServer and keeps the current one',
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'a key the policy replaces is collected at the next caught-up sync',
+          proves: 'the POLICY route reaches the same place live: a policy that '
+              'says yes replaces the key, the replacement\'s collection is '
+              'refused while its own writes push, and at the next sync that '
+              'catches up the uncited key leaves the atServer',
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'defaults to 8 days',
+          proves: 'the default grace as a raw-literal pin on the config an '
+              'application builds without naming one',
+          clauses: ['8 days by default']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'counts from the cut of its successor, not its own',
+          proves: 'the grace runs from the replacement, not the key\'s age: a '
+              'key cut a month ago and replaced yesterday is kept, and goes '
+              'once its successor is 9 days old',
+          clauses: ['after the cut of the key that replaced it']);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'by default, a superseded key nothing cites is kept for its grace',
+          proves: 'live, with the default config: an uncited superseded key '
+              'stays on the atServer, and the same key goes at once under no '
+              'grace, so it was the grace that kept it',
+          clauses: ['8 days by default']);
+      provenIn('tests/at_functional_test/test/content_key_grace_live_test.dart',
+          'a notification sent under a key that is then replaced still opens',
+          proves: 'why the grace exists, end to end: a recipient offline while '
+              'its key was replaced opens the notification afterwards, and '
+              'with no grace the same open fails',
+          clauses: [
+            'so a recipient can still open a notification sent under it'
+          ]);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'the period is SEVEN days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '

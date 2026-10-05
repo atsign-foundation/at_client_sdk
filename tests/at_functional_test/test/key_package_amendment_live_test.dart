@@ -15,7 +15,7 @@ import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupImpl;
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -571,6 +571,10 @@ void main() {
     expect(accepted.enrollmentId, victim.enrollmentId,
         reason: 'the control arm did not take, so this test cannot tell a '
             'state gate from a request the atServer never liked');
+    final open = (lookupOf(victim) as AtLookupImpl).connection!;
+    expect(open.getMetaData()!.isClosed, isFalse,
+        reason: 'the control arm left the enrollment connected, so the arm '
+            'below can see the atServer close that connection');
 
     final revoked = await approver.enrollmentService!
         .revoke(EnrollmentRequestDecision.revoked(victim.enrollmentId, atSign));
@@ -578,8 +582,17 @@ void main() {
         reason: 'the atServer ACKed the revoke without moving the record, so '
             'a refusal below would not be about revocation');
 
-    // Arm 1: the enrollment itself. It is refused before the request is even
-    // considered — the connection cannot re-authenticate.
+    // Arm 1a: the atServer closes the revoked enrollment's open connection.
+    final closedBy = DateTime.now().add(const Duration(seconds: 10));
+    while (!open.getMetaData()!.isClosed && DateTime.now().isBefore(closedBy)) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    expect(open.getMetaData()!.isClosed, isTrue,
+        reason: 'the atServer closes every open connection carrying a revoked '
+            'enrollment; a request sent before that close lands races it');
+
+    // Arm 1b: the enrollment itself, on a new connection, which cannot
+    // authenticate.
     await expectLater(
         EnrollmentUpdater().update(
             EnrollmentUpdateRequest(

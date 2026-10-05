@@ -12,7 +12,7 @@
 //       -a @alice --other-at-signs @bob -P 2s --simulate
 //
 // Mirrors the receive-side wiring of the Flutter dashboard at
-// `packages/at_client_flutter/examples/dockerstats/`.
+// `packages/at_client_flutter/example/dockerstats/`.
 
 import 'dart:async';
 import 'dart:convert';

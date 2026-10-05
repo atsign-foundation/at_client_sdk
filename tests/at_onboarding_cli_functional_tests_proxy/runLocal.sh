@@ -22,10 +22,17 @@ set -euo pipefail
 # `virtualenvProxyPort` in lib/virtualenv_ports.dart is the one definition of
 # that, and the tests and the readiness check both read it.
 #
+#   ./runLocal.sh 47000      # atDirectory 47000, atServers 47001-47097, proxy 47098
+#
+# The base port is required, passed or exported as VIRTUALENV_BASE_PORT. It
+# also names the compose project, so a run in another checkout never takes
+# this one's containers down. A second run of this pack in this checkout waits
+# for the first to finish.
+#
 #     To match CI exactly, or to measure against a published build on purpose:
 #
-#         VIRTUALENV_IMAGE=atsigncompany/virtualenv:dev_env ./runLocal.sh
-#         VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip     ./runLocal.sh
+#         VIRTUALENV_IMAGE=atsigncompany/virtualenv:dev_env ./runLocal.sh 47000
+#         VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip     ./runLocal.sh 47000
 #
 # NOTE: tests that spawn at_activate must pass the root port to the child. It
 # builds its own client and defaults to 64, so a base-port run hangs to timeout
@@ -36,12 +43,20 @@ set -euo pipefail
 # work, so do not skip it.
 
 cd "$(dirname "$0")"
+source ../lib/rig_lock.sh
 
-if [[ -z "${1:-}" ]]; then
-  echo "*** You must supply a BASE_PORT"
+if [[ -n "${1:-}" ]]; then
+  VIRTUALENV_BASE_PORT="$1"
+fi
+if [[ -z "${VIRTUALENV_BASE_PORT:-}" ]]; then
+  echo "*** You must supply a BASE_PORT, as an argument or in VIRTUALENV_BASE_PORT"
   exit 1
 fi
-BASE_PORT="$1"
+if [[ ! "$VIRTUALENV_BASE_PORT" =~ ^[0-9]+$ ]]; then
+  echo "*** Not a base port: ${VIRTUALENV_BASE_PORT}" >&2
+  exit 2
+fi
+BASE_PORT="$VIRTUALENV_BASE_PORT"
 
 # The whole [BASE, BASE+99] range, assigned once. The atServers stop at +97
 # because the proxy takes +98 and redis +99; an earlier version of this block
@@ -53,23 +68,29 @@ export VE_SECONDARY_LOW=$((BASE_PORT + 1))
 export VE_SECONDARY_HIGH=$((BASE_PORT + 97))
 export VE_PROXY_PORT=$((BASE_PORT + 98))
 export VE_REDIS_PORT=$((BASE_PORT + 99))
+export COMPOSE_PROJECT_NAME="at_onboarding_cli_functional_tests_proxy-${BASE_PORT}"
+# CI runs docker-compose.yaml; a local run, and every compose call made from
+# the Dart readiness check, uses local-compose.yaml.
+export COMPOSE_FILE=local-compose.yaml
 echo "*** Using base port ${BASE_PORT}: atDirectory ${VE_ROOT_PORT}," \
      "atServers ${VE_SECONDARY_LOW}-${VE_SECONDARY_HIGH}," \
      "proxy ${VE_PROXY_PORT}, redis ${VE_REDIS_PORT}"
 
-echo "*** Getting dependencies" && dart pub get
+lock_pack
+
+echo "*** Getting dependencies" && pub_get_locked
 
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 echo "*** Using image ${VIRTUALENV_IMAGE}"
 
-echo "*** docker compose -f local-compose.yaml down" && docker compose -f local-compose.yaml down
+echo "*** docker compose down" && docker compose down
 # A locally built image is on no registry, so pulling it fails the run.
 if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
-  echo "*** docker compose -f local-compose.yaml pull" && docker compose -f local-compose.yaml pull
+  echo "*** docker compose pull" && docker compose pull
 else
   echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
 fi
-echo "*** docker compose -f local-compose.yaml up -d" && docker compose -f local-compose.yaml up -d
+echo "*** docker compose up -d" && docker compose up -d
 
 # The compose file's `extra_hosts` maps this name inside the containers only.
 # The test process dials the proxy BY NAME from the host, so the host needs its
@@ -123,6 +144,6 @@ dart test --concurrency=1 -r expanded
 TEST_EXIT=$?
 set -e
 
-echo "*** docker compose -f local-compose.yaml down" && docker compose -f local-compose.yaml down
+echo "*** docker compose down" && docker compose down
 
 exit "$TEST_EXIT"

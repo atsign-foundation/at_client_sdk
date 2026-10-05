@@ -67,6 +67,10 @@ void main() {
   });
 
   tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
     try {
       await Hive.close();
       AtClientImpl.atClientInstanceMap.clear();
@@ -133,5 +137,37 @@ void main() {
     expect(config.defaultProviderId, legacyCryptoProviderId,
         reason: 'reads route by the record\'s own stamp; the era default '
             'only decides what NEW writes use, and in 3.x that is the legacy provider');
+  });
+
+  test(
+      'ensureReachable on a client with no AtKeysIo mints nothing, and says '
+      'why', () async {
+    final client = await AtClientImpl.create(
+      atSign,
+      'buzz',
+      AtClientPreference(posture: PqPosture.pqReady)
+        ..hiveStoragePath = storageDir
+        ..commitLogPath = '$storageDir/commit',
+      remoteSecondary: buildRecordingRemote(
+          events: events, remoteData: remoteData, remoteMeta: remoteMeta),
+      atChops: AtChopsImpl(AtChopsKeys.create(
+          AtChopsUtil.generateAtEncryptionKeyPair(),
+          AtChopsUtil.generateAtPkamKeyPair())),
+    );
+    await untilStartupChainDone();
+    events.clear();
+
+    final result = await client.ensureReachable('my_apps');
+
+    expect(result.outcome, AtReachability.noKeySource,
+        reason: 'a key minted here is published while its private half lives '
+            'only in this process, so everything peers seal to it is '
+            'unreadable once the process ends. Answered: $result');
+    expect(events.where((e) => e.startsWith('update:')), isEmpty,
+        reason: 'no lock taken and nothing published. '
+            'Events:\n${events.join('\n')}');
+    expect(events, isNotEmpty,
+        reason: 'the control: it asked the atServer what is published, so the '
+            'empty filter above is not a client that sent nothing at all');
   });
 }

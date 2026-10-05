@@ -4,7 +4,7 @@ import 'package:at_onboarding_cli_functional_tests_proxy/virtualenv_ports.dart';
 
 import 'lib/docker_utils.dart';
 
-const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
+const List<String> requiredServices = ['at_proxyserver', 'at_virtualenv'];
 const String yesFlag = '-y';
 const int maxRetries = 5;
 const Duration retryDelay = Duration(seconds: 3);
@@ -32,8 +32,8 @@ const Duration serveRetryDelay = Duration(seconds: 3);
 /// Whether the proxy can actually carry a request to a secondary and back.
 ///
 /// ⚠️ **This is the check that was missing, and its absence is not visible in
-/// a passing run.** Readiness here asked `docker ps` whether two container
-/// NAMES existed and nothing more, so it returned success seconds after
+/// a passing run.** Readiness here asked compose whether two services were
+/// running and nothing more, so it returned success seconds after
 /// `compose up` while the atServer inside was still starting. The suite then
 /// slept a fixed ten seconds and began, and a CRAM onboard died mid-connection
 /// with "The connection went away before a response arrived" — which reads as a
@@ -91,10 +91,12 @@ Future<bool> checkDockerContainers() async {
     try {
       print('Attempt $attempt of $maxRetries...');
 
-      ProcessResult result = await Process.run('docker', ['ps']);
+      // NOTE: asked of compose, not `docker ps`: container names depend on the
+      // project name, which a base-port run sets.
+      ProcessResult result = await Process.run('docker', ['compose', 'ps', '--services', '--status', 'running']);
 
       if (result.exitCode != 0) {
-        print('Failed to run docker ps: ${result.stderr}');
+        print('Failed to run docker compose ps: ${result.stderr}');
         if (attempt < maxRetries) {
           print('Retrying in ${retryDelay.inSeconds} seconds...');
           await Future.delayed(retryDelay);
@@ -103,21 +105,14 @@ Future<bool> checkDockerContainers() async {
         return false;
       }
 
-      String output = result.stdout.toString();
-      List<String> foundContainers = [];
+      List<String> running = LineSplitter.split(result.stdout.toString()).map((s) => s.trim()).toList();
+      List<String> missing = requiredServices.where((name) => !running.contains(name)).toList();
 
-      for (String containerName in requiredContainers) {
-        if (output.contains(containerName)) {
-          foundContainers.add(containerName);
-        }
-      }
-
-      if (foundContainers.length == requiredContainers.length) {
-        print('✓ Found all required containers: ${foundContainers.join(', ')}');
+      if (missing.isEmpty) {
+        print('✓ All required services are running: ${requiredServices.join(', ')}');
         return true;
       } else {
-        List<String> missing = requiredContainers.where((name) => !foundContainers.contains(name)).toList();
-        print('Missing containers: ${missing.join(', ')}');
+        print('Services not running: ${missing.join(', ')}');
 
         if (attempt < maxRetries) {
           print('Retrying in ${retryDelay.inSeconds} seconds...');
@@ -135,7 +130,7 @@ Future<bool> checkDockerContainers() async {
     }
   }
 
-  print('✗ Failed to find all required containers after $maxRetries attempts');
+  print('✗ Required services were not all running after $maxRetries attempts');
   return false;
 }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:meta/meta.dart';
@@ -17,11 +18,11 @@ import 'package:meta/meta.dart';
 /// atomic on every platform Dart runs on. It is advisory: only paths that
 /// take it are serialised, which is exactly the keyfile read-modify-write.
 ///
-/// **Staleness.** A crashed process must not deadlock every future run, so a
-/// lock older than [staleAfter] is broken and retaken. That is safe here
-/// because the critical section is a handful of file operations — a healthy
-/// holder is done in milliseconds, and one that has held for thirty seconds
-/// is dead. Breaking claims the file by rename before deleting, so a breaker
+/// **Staleness.** A holder refreshes the lock file's timestamp every
+/// [heartbeat] while it runs, so a lock older than [staleAfter] belongs to a
+/// holder that has stopped — a crashed process, or an isolate killed part way
+/// through a write — and is broken and retaken rather than failing every
+/// writer until it ages out. Breaking claims the file by rename before deleting, so a breaker
 /// racing a faster breaker cannot delete the fresh lock that replaced the
 /// corpse. The lock file's content (pid + acquisition time) doubles as the
 /// holder's release token: a holder whose lock was broken while it ran finds
@@ -34,15 +35,18 @@ class AtKeysFileLock {
   /// Bounded, because an unbreakable wait inside key-material code turns a
   /// stuck sibling process into a hung app with no diagnosis.
   ///
-  /// Must stay below [staleAfter]: a waiter that outlasts the staleness window
-  /// breaks the lock of a holder that is still alive, putting two writers in
-  /// the critical section. The cost of that ordering is that an abandoned lock
-  /// fails every acquire for the whole staleness window rather than being
-  /// waited out.
+  /// Longer than [staleAfter], so that a waiter outlasts an abandoned lock and
+  /// breaks it. A live holder is protected by its [heartbeat], not by waiters
+  /// giving up first.
   final Duration timeout;
 
-  /// The age past which a held lock is presumed abandoned and broken.
+  /// The age past which a held lock is presumed abandoned and broken. It must
+  /// be comfortably longer than [heartbeat]: a holder whose isolate is blocked
+  /// for longer than this is taken for dead.
   final Duration staleAfter;
+
+  /// How often a holder refreshes the lock file's timestamp.
+  final Duration heartbeat;
 
   /// How long to sleep between acquisition attempts.
   final Duration pollInterval;
@@ -50,7 +54,8 @@ class AtKeysFileLock {
   const AtKeysFileLock(
     this.protectedPath, {
     this.timeout = const Duration(seconds: 10),
-    this.staleAfter = const Duration(seconds: 30),
+    this.staleAfter = const Duration(seconds: 5),
+    this.heartbeat = const Duration(seconds: 1),
     this.pollInterval = const Duration(milliseconds: 50),
   });
 
@@ -59,10 +64,20 @@ class AtKeysFileLock {
   /// Runs [action] holding the lock, releasing it however [action] exits.
   Future<T> synchronized<T>(Future<T> Function() action) async {
     final token = await _acquire();
+    final beat = Timer.periodic(heartbeat, (_) => _refresh());
     try {
       return await action();
     } finally {
+      beat.cancel();
       _release(token);
+    }
+  }
+
+  void _refresh() {
+    try {
+      File(lockPath).setLastModifiedSync(DateTime.now());
+    } on FileSystemException {
+      // NOTE: a lock that is gone or unwritable is sorted out at release.
     }
   }
 

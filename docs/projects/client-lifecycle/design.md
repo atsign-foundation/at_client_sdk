@@ -90,7 +90,7 @@ on the response rather than written to the store the app named.
 Five things, each observed in source rather than argued.
 
 **An app uses B and D as one chain.** at_client_flutter 1.1.4's published
-`examples/todos/lib/onboarding.dart` does, in 40 lines:
+`example/todos/lib/onboarding.dart` does, in 40 lines:
 `ApkamActivationDialog.show(...)`, then read
 `enrollmentResponse.atAuthKeys!` (line 77), then build
 `AtAuthRequest(atAuthKeys:)` (line 81), then `PkamDialog.show(...)`, then

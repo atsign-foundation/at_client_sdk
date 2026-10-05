@@ -282,6 +282,16 @@ class EnrollmentHandshake {
         else if (e.message.contains('error:AT0025')) {
           throw AtEnrollmentException(
               'The enrollment: $enrollmentIdFromServer is denied');
+        }
+        // NOTE AT0028 also names a throttled request, but the atServer
+        // throttles enrollment requests, never PKAM, so here it means the
+        // enrollment expired or never existed.
+        else if (e.message.contains('error:AT0028')) {
+          final refusal = 'Enrollment $enrollmentIdFromServer has expired or '
+              'does not exist: ${e.message}';
+          _logger.severe(refusal);
+          _progress.add('PKAM', refusal, ProgressEventType.error);
+          throw AtEnrollmentException(refusal);
         } else {
           // Neither "not yet decided" nor "denied", so waiting cannot turn it
           // into an approval — an enrollment revoked mid-wait answers here,

@@ -602,8 +602,8 @@ and atServers have migrated to newer persistent storage.
 - `dart test --concurrency=1` across the at_client suite,
   598 tests, all passing.
 - `flutter analyze` on the Flutter todos and dockerstats
-  examples (`packages/at_client_flutter/examples/todos`,
-  `packages/at_client_flutter/examples/dockerstats`), clean.
+  examples (`packages/at_client_flutter/example/todos`,
+  `packages/at_client_flutter/example/dockerstats`), clean.
   Todos is the idiomatic Flutter reference for AtCollection;
   dockerstats is a 3-level sub-collection demo that pairs with
   the `dockerstats_publish` / `dockerstats_subscribe` CLIs.

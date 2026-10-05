@@ -27,6 +27,10 @@ import 'ml_dsa_keyfile.dart';
 /// without it a `get` returns an [AtValue] with none, and an assertion about
 /// metadata fails for want of a fixture rather than for want of the feature.
 ///
+/// A remote put merges as an atServer's update does: a field it leaves unset
+/// keeps the stored value, so a put without `appMetadata` does not clear a
+/// record's links.
+///
 /// Callers must `registerFallbackValue(AtKey())` in `setUpAll`; this registers
 /// the [NotificationParams] fallback its own `notify` matcher needs.
 MockAtClient buildRemoteBackedMockClient({
@@ -76,8 +80,11 @@ MockAtClient buildRemoteBackedMockClient({
     final remote = options?.useRemoteAtServer ?? false;
     final values = remote ? remoteData : localValues;
     final meta = remote ? remoteMetadata : localMeta;
-    values[atKey.toString()] = inv.positionalArguments[1];
-    meta?[atKey.toString()] = atKey.metadata;
+    final key = atKey.toString();
+    values[key] = inv.positionalArguments[1];
+    meta?[key] = remote
+        ? _mergedAsTheAtServerDoes(atKey.metadata, meta[key])
+        : atKey.metadata;
     return Future.value(true);
   });
 
@@ -151,3 +158,11 @@ void syncToRemote({
     remoteMetadata.addAll(localMetadata);
   }
 }
+
+/// What an atServer stores for an update carrying [update] over a record
+/// holding [stored]: the update's fields, with the ones it leaves unset kept.
+Metadata _mergedAsTheAtServerDoes(Metadata update, Metadata? stored) => update
+  ..ttl ??= stored?.ttl
+  ..ttb ??= stored?.ttb
+  ..ttr ??= stored?.ttr
+  ..appMetadata ??= stored?.appMetadata;

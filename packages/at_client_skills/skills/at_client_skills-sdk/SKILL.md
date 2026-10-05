@@ -638,7 +638,7 @@ an operation must see or produce server-side truth immediately.
 | `AtCollectionModel` / `AtJsonCollectionModel`                                                                                                                | `AtCollection<T>` via `atClient.collection(...)` |
 | `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
 | `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
-| `at_invitation_flutter`                                                                                                                                      | Copy `at_client_flutter` invitation snippet      |
+| `at_invitation_flutter`                                                                                                                                      | `AtClientInvitations` in `at_client`             |
 | `at_sync_ui_flutter`, `at_theme_flutter`                                                                                                                     | Deprecated — do not use                          |
 | `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
 | `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
@@ -659,8 +659,8 @@ for the full migration table from old `AtCollectionModel` patterns to
   todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
 - `packages/at_client/example/bin/notifications.dart` — minimal
   `NotificationService` send/subscribe
-- `packages/at_client_flutter/examples/todos/` — canonical Flutter reference app
-- `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
+- `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
+- `packages/at_client_flutter/example/dockerstats/` — notifications + SQLite
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
 `AtCollection<T>`:** Both APIs share the same underlying atServer keystore but

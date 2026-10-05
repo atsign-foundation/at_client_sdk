@@ -290,7 +290,7 @@ hook, not a logout.
 <!-- pyml disable-num-lines 2 md013-->
 - [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_storage` and `_adopt` helpers
 - [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
-- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
+- [packages/at_client_flutter/example/todos/lib/onboarding.dart](../../../../at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 
 ---
 

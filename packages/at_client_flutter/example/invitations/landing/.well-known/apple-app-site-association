@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["YOUR_TEAM_ID.com.atsign.examples.invitations"],
+        "components": [
+          { "/": "/i", "comment": "Invitation links; the invitation is in the fragment" }
+        ]
+      }
+    ]
+  }
+}

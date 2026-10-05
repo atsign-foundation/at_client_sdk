@@ -101,4 +101,4 @@ else.
 ## Canonical example
 
 <!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/examples/todos/](../../../../at_client_flutter/examples/todos/README.md) — an `AtCollection<T>` app driving sync, shares, and read receipts through the widget stack.
+- [packages/at_client_flutter/example/todos/](../../../../at_client_flutter/example/todos/README.md) — an `AtCollection<T>` app driving sync, shares, and read receipts through the widget stack.

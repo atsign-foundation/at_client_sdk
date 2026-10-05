@@ -91,6 +91,7 @@ class RemoteSecondary implements Secondary {
     if (lookUp is! AtLookupMuxable) {
       return;
     }
+    final clientConfig = _getClientConfig();
 
     // The keyfile's keypair signs when it holds one for this enrollment; the
     // AtChops beside it is the door for a keyfile that holds none - a client
@@ -104,6 +105,7 @@ class RemoteSecondary implements Secondary {
         // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
         chops: _atChops,
+        clientConfig: clientConfig,
       );
       return;
     }
@@ -123,6 +125,7 @@ class RemoteSecondary implements Secondary {
         // The same preference field the constructor stamps on the lookup, so
         // the authenticator and the ladder it replaces read it alike.
         hashingAlgo: _preference.hashingAlgoType,
+        clientConfig: clientConfig,
       );
       return;
     }
@@ -136,6 +139,7 @@ class RemoteSecondary implements Secondary {
         privateKey,
         // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
+        clientConfig: clientConfig,
       );
       return;
     }
@@ -147,7 +151,8 @@ class RemoteSecondary implements Secondary {
     // seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
-      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
+      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret,
+          clientConfig: clientConfig);
       return;
     }
 

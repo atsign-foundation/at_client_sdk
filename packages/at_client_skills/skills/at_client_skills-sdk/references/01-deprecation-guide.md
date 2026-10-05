@@ -106,7 +106,7 @@ await collection.delete(item);
 | `at_common_flutter`     | ⛔ DEPRECATED   | `at_client_flutter`                                       |
 | `at_onboarding_flutter` | ⛔ DISCONTINUED | `at_client_flutter`                                       |
 | `at_backupkey_flutter`  | ⛔ DEPRECATED   | Copy `at_client_flutter` backup-key snippet into your app |
-| `at_invitation_flutter` | ⛔ DEPRECATED   | Copy `at_client_flutter` invitation snippet into your app |
+| `at_invitation_flutter` | ⛔ DEPRECATED   | `AtClientInvitations` in `at_client`                      |
 | `at_sync_ui_flutter`    | ⛔ DEPRECATED   | Avoid; being removed                                      |
 | `at_theme_flutter`      | ⛔ DEPRECATED   | Avoid; being removed                                      |
 
@@ -149,10 +149,10 @@ directly into your own app. Do not take a dependency on `at_backupkey_flutter`.
 
 ### at_invitation_flutter
 
-This package is deprecated. Implement invitation functionality by copying the
-snippet
-from `packages/at_client_flutter/example/lib/snippets/at_invitation.dart`
-directly into your own app. Do not take a dependency on `at_invitation_flutter`.
+This package is deprecated. Use `AtClientInvitations` from
+`package:at_client/at_client_mixins.dart`; the Flutter app in
+`packages/at_client_flutter/example/invitations` shows it end to end. Do not
+take a dependency on `at_invitation_flutter`.
 
 ### at_sync_ui_flutter / at_theme_flutter
 
@@ -186,4 +186,4 @@ dependencies.
 
 - `packages/at_client/example/bin/collections_primitives.dart`
 - `packages/at_client/example/bin/collections_domain_objects.dart`
-- `packages/at_client_flutter/examples/todos/lib/services/todos_service.dart`
+- `packages/at_client_flutter/example/todos/lib/services/todos_service.dart`

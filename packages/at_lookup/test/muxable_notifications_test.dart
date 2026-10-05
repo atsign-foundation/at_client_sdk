@@ -335,6 +335,51 @@ void main() {
       await atLookup.stopNotifications();
     });
 
+    test('an answered heartbeat logs when the last notification arrived',
+        () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 40)
+        ..heartbeatResponseTimeout = const Duration(seconds: 5);
+      await atLookup.startNotifications();
+      atLookup.notifications.listen((_) {});
+      final s = socket;
+
+      final before = DateTime.now().toUtc();
+      await s.serverSends('notification: {"id":"n1"}\n');
+      await s.settle();
+      final after = DateTime.now().toUtc();
+
+      for (var i = 0; i < 50 && s.written.last != 'noop:0\n'; i++) {
+        await Future.delayed(const Duration(milliseconds: 10));
+      }
+      expect(s.written.last, 'noop:0\n', reason: 'the probe must be out');
+      // Answered well after the notification, so a line stamped with the time
+      // the heartbeat was answered would fall outside [before, after].
+      await Future.delayed(const Duration(milliseconds: 150));
+      recorded.records.clear();
+      await s.serverSends('data:ok\n@alice@');
+      await s.settle();
+
+      // Raw literal: noports operators grep logs for this wording, which is
+      // at_client's Monitor's, so a change to it is a change they notice.
+      final heartbeatOk = RegExp(r'^Heartbeat OK: lastReceipt (\S+ \S+)$');
+      final logged = recorded
+          .at('INFO')
+          .map(heartbeatOk.firstMatch)
+          .whereType<RegExpMatch>()
+          .toList();
+      expect(logged, hasLength(1),
+          reason: 'one answered heartbeat, one line, at info');
+      final lastReceipt = DateTime.parse(logged.single.group(1)!);
+      expect(lastReceipt.isUtc, isTrue);
+      expect(
+          !lastReceipt.isBefore(before) && !lastReceipt.isAfter(after), isTrue,
+          reason: 'the time is when the notification arrived '
+              '($before to $after), not when the heartbeat was answered; '
+              'got $lastReceipt');
+      await atLookup.stopNotifications();
+    });
+
     test('an unanswered heartbeat starts recovery', () async {
       final atLookup = authenticated()
         ..heartbeatInterval = const Duration(milliseconds: 30)

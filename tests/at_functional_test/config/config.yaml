@@ -22,7 +22,9 @@ atSign:
   # PQ-native, keeping legacy material by default.
   pqNativeAtSign: '@xavier'
   # PQ-native with mintLegacyMaterial:false — the legacy-interop opt-out, set
-  # once at activation and never taken back.
-  pqNativeOptOutAtSign: '@jeremy'
+  # once at activation and never taken back. pkamLoad only CRAM-authenticates
+  # this atSign, so like a genuinely new one it has no public:publickey; the
+  # demo atSigns pkamLoad provisions all start with one.
+  pqNativeOptOutAtSign: '@device2'
 
 

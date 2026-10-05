@@ -50,6 +50,24 @@ void main() {
           await CryptoRuntime(c.atClient).isReadyFor(bob, namespace), isTrue);
     });
 
+    test('throws for an unreachable atServer rather than saying no', () async {
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.get(any()))
+          .thenThrow(SecondaryConnectException('atServer unreachable'));
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(SecondaryConnectException('atServer unreachable'));
+      atClient.getPreferences().namespace = namespace;
+      atClient.getPreferences().crypto =
+          CryptoConfig.nskey(keyRing: PublishedNskeyKeyRing(atClient));
+
+      await expectLater(CryptoRuntime(atClient).isReadyFor(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'no says the peer has not enabled the namespace, which an '
+              'app reports to its user; an unreachable atServer is not that');
+    });
+
     test('says yes for a scheme with no such precondition', () async {
       final atClient = MockAtClient();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);

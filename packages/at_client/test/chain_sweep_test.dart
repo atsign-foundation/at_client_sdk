@@ -191,6 +191,43 @@ void main() {
             '${result.reason}');
   });
 
+  test('an enrollment whose key changed is re-anchored by the next sweep',
+      () async {
+    final enrolleeClient = buildMockClient(enrolleeId);
+    final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
+    await enrollee.register();
+    final advertised = await enrollee.signedKeyPackagePayload();
+    final sweeperClient = buildMockClient('sweeper-1');
+    await AtClientSecretSharing.forClient(sweeperClient).register();
+    await giveRoot(sweeperClient);
+    stubApprovedList(sweeperClient, advertised);
+    final service = EnrollmentServiceImpl(sweeperClient, AtEnrollment.create());
+    Future<ChainVerdict> verdict() async =>
+        (await PqSigningChain(enrolleeClient).verifyChain(enrollee, enrolleeId))
+            .verdict;
+
+    await service.sweepUnanchoredEnrollments();
+    await enrollee.sweepOnce();
+    await PqSigningChain(enrolleeClient).publishPendingLink();
+    expect(await verdict(), ChainVerdict.anchored, reason: 'the premise');
+
+    await AtClientSecretSharing.forClient(buildMockClient('donor-1'))
+        .register();
+    await enrollee.publishPublicSigningKey(
+        value: remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!);
+    expect(await verdict(), ChainVerdict.unsigned,
+        reason: 'the republish cleared the anchor over the old key');
+
+    expect(await service.sweepUnanchoredEnrollments(), 1,
+        reason: 'with the stale anchor gone the enrollment reads as '
+            'unanchored, which is what the sweep looks for');
+    await enrollee.sweepOnce();
+    await PqSigningChain(enrolleeClient).publishPendingLink();
+
+    expect(await verdict(), ChainVerdict.anchored,
+        reason: 'the sweep is what re-conveys: a root link over the new key');
+  });
+
   test('a privileged sweeper without the root private conveys nothing',
       () async {
     final enrolleeClient = buildMockClient(enrolleeId);

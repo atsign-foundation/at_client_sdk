@@ -69,13 +69,13 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [10]  | nskey derivation from a shared master seed: rejected                                        | 2026-06-30 | LIVE                      |
 | [11]  | Single nskey per namespace, lazily published                                                | 2026-06-30 | PARTLY SUPERSEDED by [13] |
 | [12]  | Advertised recipient keys are signed against `_apsk`                                        | 2026-07-02 | LIVE                      |
-| [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-08-02        |
-| [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | LIVE                      |
+| [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-09-30        |
+| [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | AMENDED 2026-09-30        |
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
 | [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-08-15        |
-| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | LIVE                      |
+| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
 | [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | LIVE                      |
@@ -159,10 +159,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [99]  | The keyfile groups by enrollment, and the atSign's own keys move out                        | 2026-08-14 | LIVE                      |
 | [100] | The seven shapes ruling 99 left open                                                        | 2026-08-14 | LIVE                      |
 | [101] | The signing root becomes an ordinary signing key, and rotatable                             | 2026-08-15 | LIVE                      |
-| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | AMENDED 2026-08-17        |
+| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | AMENDED 2026-09-30        |
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
 | [104] | ~~Per-generation nskey records~~                                                            | 2026-08-16 | REJECTED — see [105]      |
-| [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
+| [105] | The nskey mint elects a winner                                                              | 2026-08-16 | AMENDED 2026-09-30        |
 | [106] | A notification that outruns its key is dropped, not parked                                  | 2026-08-16 | AMENDED 2026-08-17        |
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
 | [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | AMENDED 2026-08-28        |
@@ -191,7 +191,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
 | [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
-| [134] | A posture move replaces the enrollment, so the auth key is never retained                   | 2026-09-08 | LIVE               |
+| [134] | A posture move replaces the enrollment, so the auth key is never retained                   | 2026-09-08 | AMENDED 2026-09-30 |
 | [135] | `legacy` is the control arm: no wire write, no keyfile change                               | 2026-09-08 | LIVE               |
 | [136] | at_auth stays posture-blind, and both doors demand the algorithm                            | 2026-09-08 | LIVE               |
 | [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
@@ -199,6 +199,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
+| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-10-04 |
+| [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
+| [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-09-30 |
+| [145] | A reader's atServer caches no PQ key records; the client bypasses its cache                  | 2026-09-30 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -342,3 +346,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [139]: detail/decisions.md#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09
 [140]: detail/decisions.md#140-2161s-deferral-note-stays-as-written-2026-09-01
 [141]: detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14
+[142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30
+[143]: detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30
+[144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30
+[145]: detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30

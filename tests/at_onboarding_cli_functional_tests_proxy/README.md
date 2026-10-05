@@ -21,11 +21,13 @@ atServers and the tests reach them through it, so this pack exercises the
 ./runLocal.sh 47000
 ```
 
-The base port is required, and the pack takes the whole `[BASE, BASE+99]`
-range: atDirectory at `BASE`, atServers `BASE+1`–`BASE+97`, the proxy at
-`BASE+98`, redis at `BASE+99`. Pick a range that does not overlap another
-virtualenv — the functional pack defaults to the fixed `64` / `25000-25999`
-ports, and the e2e pack's runner takes a base port of its own.
+The base port is required, as the argument or in `VIRTUALENV_BASE_PORT`, and
+the pack takes the whole `[BASE, BASE+99]` range: atDirectory at `BASE`,
+atServers `BASE+1`–`BASE+97`, the proxy at `BASE+98`, redis at `BASE+99`. Pick
+a range that does not overlap another virtualenv — the functional pack
+defaults to the fixed `64` / `25000-25999` ports, and the e2e pack's runner
+takes a base port of its own. The compose project is named after the base, and
+a second run of the pack in the same checkout waits for the first.
 
 `lib/virtualenv_ports.dart` is the single definition of where those land; the
 tests and `check_docker_readiness.dart` both read it, so nothing hard-codes a

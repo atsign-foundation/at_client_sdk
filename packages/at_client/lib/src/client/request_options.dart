@@ -7,6 +7,9 @@ abstract class RequestOptions {}
 class GetRequestOptions extends RequestOptions {
   /// Whether the `get` request should bypass this atSign's cache of data owned
   /// by another atSign
+  ///
+  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
+  /// it whatever this says.
   bool bypassCache = false;
 
   /// Whether to send this get request directly to the remote atServer.
@@ -48,11 +51,12 @@ class PutRequestOptions extends RequestOptions {
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }
 
@@ -70,10 +74,11 @@ class DeleteRequestOptions extends RequestOptions {
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }

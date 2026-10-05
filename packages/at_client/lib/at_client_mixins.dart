@@ -10,3 +10,7 @@ export 'package:at_client/src/enroll/enrollment_update_request.dart';
 export 'package:at_client/src/enroll/enrollment_updater.dart';
 export 'package:at_client/src/enroll/self_retrofit.dart';
 export 'package:at_client/src/secret_sharing/secret_sharing.dart';
+export 'package:at_client/src/mixins/invitations.dart';
+export 'package:at_client/src/invitations/invitation_key.dart';
+export 'package:at_client/src/invitations/invitation_link.dart';
+export 'package:at_client/src/invitations/models.dart';

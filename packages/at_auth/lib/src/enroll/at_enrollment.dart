@@ -138,7 +138,9 @@ abstract class AtEnrollment {
   ///
   /// **The wait for a decision is unbounded.** Somebody has to decide this
   /// request, on their own schedule, so polling continues until the atServer
-  /// reports approval or denial — for as long as that takes. No parameter
+  /// reports approval or denial — for as long as that takes. An enrollment
+  /// that has expired, or that the atServer has no record of, ends the wait
+  /// at once with an `AtEnrollmentException` carrying its answer. No parameter
   /// here shortens it; a caller that needs to give up must race this against
   /// its own timer.
   ///

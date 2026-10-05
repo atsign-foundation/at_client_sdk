@@ -217,12 +217,14 @@ factory, and a two-process driver.
 
 Two of the three take a base port, and the design is deliberate rather than
 incidental. `tests/at_functional_test/runLocal.sh` accepts one as its first argument
-(`./runLocal.sh 27000` puts the root at 27000, secondaries at 27001-27080 and Redis
+(`./runLocal.sh 27000` puts the root at 27000, secondaries at 27001-27098 and Redis
 at 27099), and its `docker-compose.yaml` header states the purpose: the shift exists
 "so it can run alongside another virtualenv (e.g. the e2e suite) on a different base
 port". `tests/at_end2end_test/runLocal.sh` takes the same argument, defaulting to
-26000, and its compose carries a top-level `name: at_end2end_test` and
-`container_name: e2e_virtualenv` so the two projects cannot collide. Both composes
+26000, and its compose carries a top-level `name: at_end2end_test` so the two
+projects cannot collide; a base passed or exported to either runner also names the
+compose project after it, so a run from another checkout on another base cannot take
+its container down. Both composes
 override the entrypoint to `/atsign/entrypoint.sh`, because the published image's own
 CMD runs supervisord directly and would ignore the variable. CI already relies on it:
 `pqe2e_tests` and `legacy_server_tests` run at 26000. On the Dart side

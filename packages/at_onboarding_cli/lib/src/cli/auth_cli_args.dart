@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart'
     show EnrollmentKeyExchangeMode, PqPosture;
 import 'package:at_commons/at_commons.dart';
@@ -384,23 +383,19 @@ class AuthCliArgs {
         mandatory: false,
         hide: hide);
     p.addOption(argNameHashingAlgoType,
-        help: 'Hashing algorithm type. Defaults to argon2id',
+        help: 'Ignored: a passphrase-protected atKeys file is always '
+            'Argon2id. Accepted so existing scripts still run',
         mandatory: false,
-        defaultsTo: HashingAlgoType.argon2id.name,
-        hide: hide);
-    // NOTE: no defaultsTo, because the two roles resolve an unset value
-    // differently and a parser-level default could only state one of them.
-    // See postureForEnroller and postureForApprover.
+        hide: true);
+    // NOTE: no defaultsTo. An unset value must stay distinguishable so that
+    // postureForEnroller can announce at_client's default when it takes it.
     p.addOption(argNamePosture,
         help: 'How far into the post-quantum rollout to run. legacy drives no '
             'upgrade and configures no post-quantum providers, so it cannot '
-            'read post-quantum data; pqReady moves the credentials and keeps '
-            'writes on the legacy provider; '
-            'pqActive makes post-quantum writes the default. onboard and '
-            'enroll default to legacy, so the keys they write stay usable by a '
-            'legacy app; every other command defaults to pqReady and refuses '
-            'legacy, because approving a post-quantum enrolment needs the '
-            'post-quantum providers',
+            'read post-quantum data or approve a post-quantum enrolment; '
+            'pqReady moves the credentials and keeps writes on the legacy '
+            'provider; pqActive makes post-quantum writes the default. Unset, '
+            'every command runs at at_client\'s default posture',
         mandatory: false,
         allowed: postureNames.keys,
         hide: hide);

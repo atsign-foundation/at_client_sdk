@@ -17,7 +17,8 @@ import 'package:meta/meta.dart' show visibleForTesting;
 // NOTE: the nskey data path is public surface — these types are what
 // `CryptoConfig.nskey` requires, returns and throws, so they have to reach the
 // package barrel.
-export 'package:at_client/src/crypto/nskey/ck_manager.dart';
+export 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    hide collectUnusedOnceCaughtUp;
 export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
@@ -126,6 +127,14 @@ class CryptoConfig {
   /// Defaults to [rotateCkAfterOneWeek].
   final CkRotationPolicy ckRotationPolicy;
 
+  /// How long a superseded content key is kept after the key that replaced it
+  /// was cut, even when nothing in local storage cites it.
+  ///
+  /// Defaults to [defaultSupersededCkGrace], the longest an atServer keeps a
+  /// notification, so a recipient can still open one sent just before a
+  /// rotation.
+  final Duration supersededCkGrace;
+
   /// Asked whether a namespace key this atSign owns should be replaced.
   ///
   /// Defaults to [neverRotateNskey]: replacing one costs a conveyance to every
@@ -138,6 +147,7 @@ class CryptoConfig {
     this.providers = const [],
     this.keyRing,
     this.ckRotationPolicy = rotateCkAfterOneWeek,
+    this.supersededCkGrace = defaultSupersededCkGrace,
     this.nskeyRotationPolicy = neverRotateNskey,
   });
 
@@ -147,6 +157,7 @@ class CryptoConfig {
         providers = const [],
         keyRing = null,
         ckRotationPolicy = rotateCkAfterOneWeek,
+        supersededCkGrace = defaultSupersededCkGrace,
         nskeyRotationPolicy = neverRotateNskey;
 
   /// The distinguished "the app named nothing" marker — the default value of
@@ -178,9 +189,10 @@ class CryptoConfig {
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
           CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          Duration supersededCkGrace = defaultSupersededCkGrace,
           NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
       _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms,
-          ckRotationPolicy, nskeyRotationPolicy);
+          ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
@@ -194,9 +206,10 @@ class CryptoConfig {
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
           CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          Duration supersededCkGrace = defaultSupersededCkGrace,
           NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
       _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms,
-          ckRotationPolicy, nskeyRotationPolicy);
+          ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
   /// One [ContentKeyCache] shared by the manager and both providers.
   static CryptoConfig _nskeySet(
@@ -204,12 +217,14 @@ class CryptoConfig {
       String defaultProviderId,
       List<String> sealsToKeyAlgorithms,
       CkRotationPolicy ckRotationPolicy,
+      Duration supersededCkGrace,
       NskeyRotationPolicy nskeyRotationPolicy) {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
       keyRing: keyRing,
       ckRotationPolicy: ckRotationPolicy,
+      supersededCkGrace: supersededCkGrace,
       nskeyRotationPolicy: nskeyRotationPolicy,
       providers: [
         // NOTE: both KEM providers are registered on every client whatever
@@ -227,7 +242,8 @@ class CryptoConfig {
               cache: cache,
               keyRing: keyRing,
               sealsToKeyAlgorithms: sealsToKeyAlgorithms,
-              ckRotationPolicy: ckRotationPolicy),
+              ckRotationPolicy: ckRotationPolicy,
+              supersededCkGrace: supersededCkGrace),
         ),
       ],
     );

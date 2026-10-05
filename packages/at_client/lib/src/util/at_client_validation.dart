@@ -49,7 +49,7 @@ class AtClientValidation {
     //validate TTR
     if (metadata.ttr != null && metadata.ttr! < -1) {
       throw AtKeyException(
-          'Invalid TTR value: ${metadata.ttr}. valid values for TTR are -1 and greater than or equal to 1',
+          'Invalid TTR value: ${metadata.ttr}. TTR value cannot be less than -1',
           intent: Intent.validateKey,
           exceptionScenario: ExceptionScenario.invalidMetadataProvided);
     }

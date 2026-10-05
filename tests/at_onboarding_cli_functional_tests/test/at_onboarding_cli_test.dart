@@ -236,7 +236,8 @@ void main() {
         'A test to verify atSign is activated and .atKeys file is generated using activate_cli',
         () async {
       List<String> args = [
-        // The CLI infers no command from the options; it must be named.
+        // Named: leaving it out still runs onboard, but with a deprecation
+        // warning.
         'onboard',
         '-a',
         atSign,

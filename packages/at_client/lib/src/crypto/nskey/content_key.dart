@@ -94,6 +94,9 @@ class ContentKeyCache {
     _currentCutAtByNamespace[scope] = cutAt ?? DateTime.now().toUtc();
   }
 
+  /// The ids of every CK that is current in some `(owner, namespace)`.
+  Iterable<String> get currentKids => _currentKidByNamespace.values;
+
   /// When the current CK for `(owner, namespace)` was cut, or null if there is
   /// no current CK.
   DateTime? currentCutAt(String owner, String namespace) =>

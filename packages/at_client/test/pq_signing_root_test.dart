@@ -281,6 +281,20 @@ void main() {
 
     final record = c.published.single;
     expect(record.atKey.toString(), 'public:pq_signing_root@alice');
+    expect(record.buildCommand().split(' ').first,
+        'update:isEncrypted:false:public:pq_signing_root@alice',
+        reason: 'no ttl, or the root every chain anchors to expires; no ttr, '
+            'or a reader\'s atServer may serve its copy after a rotation');
+    expect(
+        c.verbs
+            .whereType<UpdateVerbBuilder>()
+            .singleWhere((v) => v.atKey.key == '_rootlock')
+            .buildCommand()
+            .split(' ')
+            .first,
+        'update:nc:ttl:15000:isEncrypted:false:immutable:true:_rootlock@alice',
+        reason: 'the ttl is what releases the lock, and the atServer\'s '
+            'refusal of a second immutable create is the interlock');
     final body = jsonDecode(record.value!) as Map<String, dynamic>;
     expect(body.keys.toList(), ['v', 'keys'],
         reason: 'no `successor`: it was reserved for a rotation pointer and '

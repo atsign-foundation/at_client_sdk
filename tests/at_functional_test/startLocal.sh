@@ -6,28 +6,38 @@ set -euo pipefail
 # container recycle per attempt — runLocal.sh recycles on every invocation.
 #
 #   ./startLocal.sh          # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
-#   ./startLocal.sh 27000    # base port: root 27000, secondaries 27001-27080, redis 27099
+#   ./startLocal.sh 27000    # base port: root 27000, secondaries 27001-27098, redis 27099
 #
-# A BASE_PORT shifts the virtualenv into a [BASE, BASE+99] range so it can run
-# alongside another virtualenv on a different base port. docker-compose.yaml
-# reads the VE_* vars exported here; with none set it uses the legacy fixed
-# ports.
+# The base port works as in runLocal.sh, passed or exported as
+# VIRTUALENV_BASE_PORT, and this holds the same lock on the pack until the
+# virtualenv is stopped.
 
 cd "$(dirname "$0")"
+source ../lib/rig_lock.sh
 
 if [[ -n "${1:-}" ]]; then
-  BASE_PORT="$1"
-  export VIRTUALENV_BASE_PORT="$BASE_PORT"
+  VIRTUALENV_BASE_PORT="$1"
+fi
+if [[ -n "${VIRTUALENV_BASE_PORT:-}" ]]; then
+  if [[ ! "$VIRTUALENV_BASE_PORT" =~ ^[0-9]+$ ]]; then
+    echo "*** Not a base port: ${VIRTUALENV_BASE_PORT}" >&2
+    exit 2
+  fi
+  BASE_PORT="$VIRTUALENV_BASE_PORT"
+  export VIRTUALENV_BASE_PORT
   export VE_ROOT_PORT="$BASE_PORT"
   export VE_REDIS_PORT=$((BASE_PORT + 99))
   export VE_SECONDARY_LOW=$((BASE_PORT + 1))
   export VE_SECONDARY_HIGH=$((BASE_PORT + 98))
+  export COMPOSE_PROJECT_NAME="at_functional_test-${BASE_PORT}"
   echo "*** Using base port ${BASE_PORT} (range ${BASE_PORT}-$((BASE_PORT + 99)))"
 else
   echo "*** Using legacy fixed ports (64 / 25000-25999 / 6379)"
 fi
 
-echo "*** Getting dependencies" && dart pub get
+lock_pack
+
+echo "*** Getting dependencies" && pub_get_locked
 
 # The virtualenv image, read by docker-compose.yaml. Defaults to the locally
 # built PQ-capable image; set VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or
@@ -47,7 +57,8 @@ cd ..
 
 echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart
 
-echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl start pkamLoad
+echo "*** Executing pkamLoad" \
+  && docker compose -f test/docker-compose.yaml exec -T virtualenv supervisorctl start pkamLoad
 
 echo "*** Checking test environment" && dart run test/check_test_env.dart
 

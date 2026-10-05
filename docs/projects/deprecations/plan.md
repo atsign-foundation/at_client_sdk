@@ -96,7 +96,7 @@ recorded it as having none. Treat an example as a member for counting
 and for compiling, and remember two of them are red for reasons that predate
 this work: `example/` imports three packages its pubspec never declares, and
 its `apkam_example.dart` has omitted a required `signingAlgo` since
-`4.0.0-rc1`. `examples/todos` is a canonical example the tree tells authors to
+`4.0.0-rc1`. `example/todos` is a canonical example the tree tells authors to
 copy, so it is the one that has to end up showing the right thing.
 
 ## 1. Where the debt is

@@ -94,12 +94,13 @@ void main() {
     });
 
     test('the current-CK pointer strips the destination owner\'s @', () {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
       // The emitted segment is 'bob', not '@bob' — easy to mis-pin.
       expect(
           const CurrentCkPointer()
               .keyFor(atClient, '@bob', 'app_1.my_apps')
               .toString(),
-          '__ckcur.bob.app_1.my_apps@alice');
+          '__ckcur.bob.app_1.my_apps.enroll-1.a.__e@alice');
     });
 
     test('a self conveyance is <ckKid>.__ck.<ckNs>@<owner>', () {
@@ -431,6 +432,47 @@ void main() {
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');
       expect(NskeyRecipientKind.nskey, 'nskey');
+    });
+
+    test('a conveyance names the enrollment that cut its key', () async {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
+      final kem = XWingPureDartAlgo.instance;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair('@alice', 'myapp',
+            publicKey: pair.publicKey,
+            privateKey: pair.secretKey,
+            keyAlgo: 'x-wing');
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final atKey = AtKey()
+        ..key = 'ckkid.__ck'
+        ..namespace = 'myapp'
+        ..sharedBy = '@alice';
+
+      final before = DateTime.now().toUtc();
+      await provider.encrypt(
+          CryptoContext(atClient: atClient), atKey, ck.toBase64());
+      final after = DateTime.now().toUtc();
+
+      // NOTE: frozen — only the enrollment named here collects the key once
+      // nothing cites it, so a conveyance without it is never collected, and
+      // the key's grace counts from the cut it records.
+      final json = atKey.metadata.appMetadata!.toJson();
+      expect(json.keys.toList(), [
+        'providerId',
+        'recipientKind',
+        'ckKid',
+        'nskeyKid',
+        'ns',
+        'cutBy',
+        'cutAt'
+      ]);
+      expect(json['cutBy'], 'enroll-1');
+      final cutAt = DateTime.parse(json['cutAt'] as String);
+      expect(json['cutAt'], endsWith('Z'), reason: 'UTC, ISO-8601');
+      expect(cutAt.isBefore(before), isFalse);
+      expect(cutAt.isAfter(after), isFalse);
     });
 
     test('a data value\'s appMetadata, field by field', () async {

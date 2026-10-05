@@ -1071,6 +1071,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   int _notifyGeneration = 0;
   Timer? _heartbeatTimer;
 
+  /// When the last notification arrived, in UTC, or null when none has.
+  DateTime? _lastReceipt;
+
   /// Whether a reconnect is in flight. Visible so a test can assert the loop
   /// is running rather than inferring it from a delay.
   @override
@@ -1186,6 +1189,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // NOTE: a stop or a reconnect while the probe was out owns the
       // heartbeat now; re-arming here would leave a timer nothing cancels.
       if (generation != _notifyGeneration) return;
+      // NOTE: operators read this line; it keeps the wording at_client's
+      // Monitor used.
+      logger.info('Heartbeat OK: lastReceipt $_lastReceipt');
       _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
     } catch (e) {
       if (generation != _notifyGeneration) return;
@@ -1250,6 +1256,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   void _routeNotification(String notification) {
+    _lastReceipt = DateTime.now().toUtc();
     final controller = _notificationController;
     if (controller == null || controller.isClosed) {
       // `warning`, not `finer`. A silently dropped notification is

@@ -444,9 +444,11 @@ void main() {
             'error text rather than on throwing, because a connection failing '
             'for an unrelated reason satisfies a bare throwsA. The control '
             'runs first and is accepted; skip the revoke and the same request '
-            'succeeds, which is what attributes the refusal to revocation. '
-            '⚠️ NOT proven: an enrollment revoked while it holds an already '
-            'open, already authenticated connection — this arm reconnects.',
+            'succeeds, which is what attributes the refusal to revocation. An '
+            'enrollment revoked while it holds an open, authenticated '
+            'connection has that connection closed by the atServer, and the '
+            'test waits for the close before the revoked arm sends, so no '
+            'request races it.',
         clauses: ['the same request against a'],
       );
     });

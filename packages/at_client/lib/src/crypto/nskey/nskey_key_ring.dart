@@ -252,7 +252,8 @@ abstract class NskeyKeyRing {
   /// means exactly one thing: that atSign has never used the namespace. There is
   /// no atSign-level key to fall back to — `public:pq_signing_root@<atSign>` is
   /// a signing root and cannot receive an encapsulation — so the caller has no
-  /// post-quantum target and the write fails unless legacy is opted into.
+  /// post-quantum target and the write fails unless legacy is opted into. A
+  /// failure to learn the answer throws rather than reading as null.
   Future<NskeyAdvertisement?> currentPublic(String owner, String namespace);
 
   /// The [NskeyDecapsulationKey] this client holds for a *named generation*

@@ -1,5 +1,6 @@
 import 'dart:async' show StreamController, TimeoutException, runZonedGuarded;
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -33,8 +34,7 @@ class TestSharer
   final AtSignLogger logger = AtSignLogger('TestSharer');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings = null;
 
   TestSharer(this.atClient);
 }
@@ -1183,6 +1183,9 @@ void main() {
           Secret(namespace: 'myapp', name: '__rk.1.jitter', value: 'KEYBYTES'),
           allowReservedName: true);
       sharerB.requestAnswerJitter = Duration(seconds: 5);
+      // NOTE: seeded, because a draw under the 50ms before the stop answers
+      // first. Seed 0 draws about 4.7s.
+      sharerB.requestAnswerRandom = Random(0);
       await sharerA
           .requestSecretsFromNamespace('myapp', names: ['__rk.1.jitter']);
       final waited = Stopwatch()..start();

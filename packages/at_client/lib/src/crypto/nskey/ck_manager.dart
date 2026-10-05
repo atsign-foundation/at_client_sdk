@@ -1,15 +1,63 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show
+        ckConveyanceMarker,
+        ckSiblingCopyKey,
+        currentCkPointerRecordName,
+        parseCkConveyanceKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('CkManager');
+
+/// How long a superseded content key is kept, by default, once the key that
+/// replaced it was cut: the longest an atServer keeps a notification.
+const Duration defaultSupersededCkGrace = Duration(days: 8);
+
+/// Collects unused content keys once [sync] reports this client caught up,
+/// with whichever manager [manager] names by then, and again at each later
+/// catch-up while a pass is refused because writes arrived in between.
+///
+/// A service that stops first ends the wait, and nothing is collected.
+Future<void> collectUnusedOnceCaughtUp(SyncService sync,
+    CkManager? Function() manager, CryptoContext context) async {
+  while (true) {
+    try {
+      await sync.waitUntilCaughtUp();
+    } on StoppedException {
+      return;
+    }
+    if (await _ranOrGaveUp(manager(), context)) return;
+  }
+}
+
+/// One collection pass: false when it was refused because sync had not caught
+/// up, true when it ran or failed in a way a retry would not change.
+Future<bool> _ranOrGaveUp(CkManager? manager, CryptoContext context) async {
+  if (manager == null) return true;
+  try {
+    return await manager._tryCollect(context) != null;
+  } on StoppedException {
+    return true;
+  } catch (e) {
+    _logger.warning('Could not collect unused content keys; the next start '
+        'tries again: $e');
+    return true;
+  }
+}
 
 /// Keeps a current content key in place for each destination a client writes to.
 ///
@@ -38,6 +86,13 @@ class CkManager {
   /// replaced before anything else is written under it.
   final CkRotationPolicy ckRotationPolicy;
 
+  /// How long a superseded content key is kept after the key that replaced it
+  /// was cut, even when nothing in local storage cites it.
+  ///
+  /// A recipient may still need it for something only the recipient holds: a
+  /// notification it has yet to open, or its cached copy of a shared value.
+  final Duration supersededCkGrace;
+
   /// Asked, before a content key is conveyed to a namespace key this atSign
   /// owns, whether that namespace key should be replaced first.
   ///
@@ -51,6 +106,7 @@ class CkManager {
       NskeyResolver? resolver,
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
       this.ckRotationPolicy = rotateCkAfterOneWeek,
+      this.supersededCkGrace = defaultSupersededCkGrace,
       this.pointer = const CurrentCkPointer()})
       : resolver = resolver ??
             NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
@@ -58,9 +114,11 @@ class CkManager {
   /// Ensure `(destination, namespace)` has a current CK sealed to the
   /// destination's live nskey generation, minting and conveying one if not.
   ///
-  /// The destination's advertised generation is re-fetched on every call: a
-  /// sender never sees a recipient's decapsulation fail, so that check is the
-  /// only way it learns of a rotation.
+  /// The destination's advertised generation is resolved on every call — from
+  /// the key ring's cache while that is fresh — and compared with the one the
+  /// current CK was conveyed to: a sender never sees a recipient's
+  /// decapsulation fail, so that comparison is the only way it learns of a
+  /// rotation.
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
@@ -174,6 +232,19 @@ class CkManager {
     String nskeyKid, {
     required String keyAlgo,
     bool? useRemoteAtServer,
+  }) =>
+      _inTurn(() => _cutAndConveyInTurn(
+          context, valueKey, owner, ckNs, nskeyKid,
+          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer));
+
+  Future<ContentKey> _cutAndConveyInTurn(
+    CryptoContext context,
+    AtKey valueKey,
+    String owner,
+    String ckNs,
+    String nskeyKid, {
+    required String keyAlgo,
+    bool? useRemoteAtServer,
   }) async {
     // NOTE: this must not recurse — the conveyance write routes to at/nskey,
     // which asks for no preparation of its own.
@@ -189,23 +260,284 @@ class CkManager {
         // the recipient before its key does.
         ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
+    await _conveySiblingCopy(context, owner, ckNs, ck,
+        useRemoteAtServer: useRemoteAtServer ?? false);
 
     // NOTE: promoted only once the record is durable — a failed conveyance left
     // as the current key would make every later value cite a CK never sent.
+    final replaced = cache.current(owner, ckNs) != null;
     cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
     await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
+    // NOTE: queued behind this cut and not awaited, so the write it serves is
+    // not held up by a pass over local storage.
+    if (replaced) unawaited(_collectAfterReplacing(context));
     return ck;
   }
 
-  /// Deletes the conveyance record carrying [ckKid] and drops the key from
-  /// this client's cache.
+  /// Collects now, or at the next sync that leaves this client caught up when
+  /// the cut's own writes are still waiting to push.
+  Future<void> _collectAfterReplacing(CryptoContext context) async {
+    if (await _ranOrGaveUp(this, context)) return;
+    final SyncService sync;
+    try {
+      sync = context.atClient.syncService;
+    } on StateError {
+      return;
+    }
+    await collectUnusedOnceCaughtUp(sync, () => this, context);
+  }
+
+  /// Deletes the conveyances of every content key this enrollment cut that is
+  /// neither current nor cited by a record in local storage, and was
+  /// superseded at least [supersededCkGrace] ago, and returns how many keys
+  /// went.
+  ///
+  /// A key is superseded when this enrollment cuts the next key for the same
+  /// destination and namespace; one with no successor counts from its own cut.
+  /// Each conveyance records when its key was cut (`cutAt`); one written before
+  /// it did counts from when this client stored it. A key still inside its
+  /// grace goes at a later start or replacement.
+  ///
+  /// Asks local storage only where it answers completely — the client keeps
+  /// one, no `syncRegex` narrows it, and sync has caught up — and otherwise
+  /// deletes nothing; the passes the SDK runs itself, at a start and after a
+  /// replacement, try again at the next sync that catches up. A client with no
+  /// enrollment id names no cutter on what it conveys, so it deletes nothing.
+  Future<int> collectUnused(CryptoContext context) async =>
+      await _tryCollect(context) ?? 0;
+
+  /// [collectUnused], answering null when it was refused because sync had not
+  /// caught up, the one refusal a later pass can overcome.
+  Future<int?> _tryCollect(CryptoContext context) =>
+      _inTurn(() => _collectUnused(context));
+
+  Future<int?> _collectUnused(CryptoContext context) async {
+    final atClient = context.atClient;
+    final me = atClient.getCurrentAtSign()?.toLowerCase();
+    final enrollmentId = atClient.enrollmentId;
+    final store = atClient.getLocalSecondary()?.keyStore;
+    if (me == null || enrollmentId == null || store == null) return 0;
+    final partial = await _whyLocalStorageIsPartial(atClient);
+    if (partial != null) {
+      _logger.info('Not collecting unused content keys for $me: '
+          '${partial.why}');
+      return partial.transient ? null : 0;
+    }
+
+    final now = DateTime.now();
+    final cut = <String, List<({String key, Map<String, dynamic> about})>>{};
+    final cutAt = <String, DateTime>{};
+    final current = <String>{...cache.currentKids};
+    final cited = <String>{};
+    final ownPointer =
+        '.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}$me';
+    await for (final key in await store.getKeys()) {
+      final lower = key.toLowerCase();
+      if (!lower.endsWith(me)) continue;
+      if (lower.startsWith('$currentCkPointerRecordName.')) {
+        if (lower.endsWith(ownPointer)) {
+          final ckKid = _ckKidIn((await store.get(key))?.data);
+          if (ckKid != null) current.add(ckKid);
+        }
+        continue;
+      }
+      final meta = await store.getMeta(key);
+      final about = meta?.appMetadata?.additional;
+      final ckKid = about?['ckKid'];
+      if (ckKid is! String) continue;
+      if (!key.contains(ckConveyanceMarker)) {
+        cited.add(ckKid);
+      } else if (about!['cutBy'] == enrollmentId) {
+        (cut[ckKid] ??= []).add((key: key, about: about));
+        final at = _cutAtOf(about) ?? meta!.createdAt ?? now;
+        final earliest = cutAt[ckKid];
+        if (earliest == null || at.isBefore(earliest)) cutAt[ckKid] = at;
+      }
+    }
+    final supersededAt = _supersededAt(cut, cutAt);
+    cut.removeWhere((ckKid, _) =>
+        current.contains(ckKid) ||
+        cited.contains(ckKid) ||
+        now.difference(supersededAt[ckKid]!) < supersededCkGrace);
+
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      for (final record in records) {
+        await context.atClient.delete(AtKey.fromString(record.key));
+        final scope = _scopeOf(record.key, record.about);
+        if (scope != null) cache.evict(scope.owner, scope.ckNs, ckKid);
+      }
+    }
+    if (cut.isNotEmpty) {
+      _logger.info('Collected ${cut.length} content key(s) $enrollmentId cut '
+          'and nothing cites any more: ${cut.keys.join(', ')}');
+    }
+    return cut.length;
+  }
+
+  /// Why local storage cannot answer "does any record cite this key?"
+  /// completely, and whether a later pass might, or null when it can.
+  static Future<({String why, bool transient})?> _whyLocalStorageIsPartial(
+      AtClient atClient) async {
+    final preference = atClient.getPreferences();
+    if (preference == null || !preference.isLocalStoreRequired) {
+      return (why: 'this client keeps no local store', transient: false);
+    }
+    final syncRegex = preference.syncRegex;
+    if (syncRegex != null && syncRegex.isNotEmpty) {
+      return (
+        why: 'syncRegex "$syncRegex" narrows what local storage holds',
+        transient: false
+      );
+    }
+    try {
+      if (!await atClient.syncService.isInSync()) {
+        return (why: 'sync has not caught up', transient: true);
+      }
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      return (
+        why: 'could not ask whether sync has caught up: $e',
+        transient: true
+      );
+    }
+    return null;
+  }
+
+  static String? _ckKidIn(String? pointer) {
+    if (pointer == null) return null;
+    try {
+      final ckKid = jsonDecode(pointer)['ckKid'];
+      return ckKid is String ? ckKid : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// When a conveyance says its key was cut, or null when it does not say.
+  static DateTime? _cutAtOf(Map<String, dynamic> about) {
+    final cutAt = about['cutAt'];
+    return cutAt is String ? DateTime.tryParse(cutAt) : null;
+  }
+
+  /// When each of [cut] was superseded: the cut of the next key for the same
+  /// scope, or its own cut when it has no successor.
+  static Map<String, DateTime> _supersededAt(
+      Map<String, List<({String key, Map<String, dynamic> about})>> cut,
+      Map<String, DateTime> cutAt) {
+    final byScope = <String, List<String>>{};
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      final record = records.first;
+      final scope = _scopeOf(record.key, record.about);
+      final scopeId = scope == null ? ckKid : '${scope.owner}|${scope.ckNs}';
+      (byScope[scopeId] ??= []).add(ckKid);
+    }
+    final supersededAt = <String, DateTime>{};
+    for (final kids in byScope.values) {
+      kids.sort((a, b) => cutAt[a]!.compareTo(cutAt[b]!));
+      for (var i = 0; i < kids.length; i++) {
+        supersededAt[kids[i]] = cutAt[kids[i < kids.length - 1 ? i + 1 : i]]!;
+      }
+    }
+    return supersededAt;
+  }
+
+  /// The CK cache scope a conveyance record filed its key under.
+  static ({String owner, String ckNs})? _scopeOf(
+      String key, Map<String, dynamic> about) {
+    final destination = about['destination'];
+    final ckNs = about['ckNs'];
+    if (destination is String && ckNs is String) {
+      return (owner: destination, ckNs: ckNs);
+    }
+    final parsed = parseCkConveyanceKey(key);
+    return parsed == null
+        ? null
+        : (owner: parsed.nskeyOwner, ckNs: parsed.ckNs);
+  }
+
+  Future<void> _turn = Future<void>.value();
+
+  /// Completes once every cut and collection begun here so far has finished.
+  @visibleForTesting
+  Future<void> get idle => _turn;
+
+  /// Runs [work] once every cut and collection already begun here has
+  /// finished, so a collection never sees a key conveyed but not yet current.
+  Future<T> _inTurn<T>(Future<T> Function() work) {
+    final result = _turn.then((_) => work());
+    _turn = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  /// Conveys [ck], shared with [destination], a second time — to this atSign's
+  /// own key covering [ckNs] — so its other enrollments, and this one after a
+  /// restart, can open it.
+  ///
+  /// Sealed here and written as it is, because the put pipeline replaces the
+  /// `appMetadata` that names the recipient. An atSign holding no key covering
+  /// [ckNs] mints one there first, at the recipient's level rather than the
+  /// value's own; where it makes none, the share goes without a copy.
+  Future<void> _conveySiblingCopy(
+      CryptoContext context, String destination, String ckNs, ContentKey ck,
+      {required bool useRemoteAtServer}) async {
+    final sender = context.atClient.getCurrentAtSign();
+    if (sender == null || destination == sender) return;
+    var own = await resolver.resolve(sender, ckNs);
+    if (own == null) {
+      final reached = await context.atClient.ensureReachable(ckNs);
+      if (reached.isReachable) own = await resolver.resolve(sender, ckNs);
+      if (own == null) {
+        _logger.warning('$sender holds no namespace key covering $ckNs and '
+            'made none, because ${_whyNoKey(reached, ckNs)}, so the content '
+            'key ${ck.ckKid} shared with $destination has no sibling copy: '
+            'no other enrollment of $sender can open what it shares, and this '
+            'one cuts a fresh key after a restart');
+        return;
+      }
+    }
+    final key = ckSiblingCopyKey(sender: sender, ckKid: ck.ckKid, ckNs: ckNs)
+      ..metadata.appMetadata = AppMetadata(
+          providerId: nskeyProviderIdFor(own.alg) ?? nskeyCryptoProviderId,
+          additional: {'destination': destination, 'ns': own.namespace});
+    final sealed =
+        await CryptoRuntime(context.atClient).encryptForPut(key, ck.toBase64());
+    await context.atClient.put(key, sealed,
+        putRequestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..useRemoteAtServer = useRemoteAtServer);
+  }
+
+  static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>
+      switch (reached.outcome) {
+        AtReachability.postureDoesNotSeed => 'seedNamespaceKeys is off',
+        AtReachability.noKeySource =>
+          'this client has no key source to file one in',
+        AtReachability.notAuthorised => '$ckNs can never hold a key',
+        AtReachability.timedOut => 'minting one timed out',
+        AtReachability.failed => 'minting one failed: ${reached.error}',
+        AtReachability.alreadyReachable ||
+        AtReachability.published =>
+          'a key is published there that this client could not resolve',
+      };
+
+  /// Deletes the conveyance records carrying [ckKid] — for a shared key, the
+  /// recipient's and the sibling copy — and drops the key from this client's
+  /// cache.
   ///
   /// Neither half is sufficient alone: the deletion stops anyone unwrapping the
   /// CK again, the eviction stops this client using the copy it already has.
+  /// Another enrollment of this atSign evicts when it syncs the recipient's
+  /// record going, whose name carries the recipient's scope.
   Future<void> _deleteConveyance(CryptoContext context, AtKey valueKey,
       String owner, String ckNs, String ckKid) async {
     await context.atClient.delete(
         SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
+    final sender = context.atClient.getCurrentAtSign();
+    if (sender != null && owner != sender) {
+      await context.atClient
+          .delete(ckSiblingCopyKey(sender: sender, ckKid: ckKid, ckNs: ckNs));
+    }
     cache.evict(owner, ckNs, ckKid);
   }
 
@@ -220,20 +552,28 @@ class CkManager {
     if (remembered == null || remembered.nskeyKid != nskeyKid) return false;
 
     // NOTE: reading the conveyance record routes back through the at/nskey
-    // provider, which decapsulates and caches the CK as a side effect.
+    // provider, which decapsulates and caches the CK as a side effect. The
+    // atServer is asked when local storage has nothing, which is all an
+    // ephemeral store ever has.
+    final record = SymmetricAesGcmProvider.openableConveyanceKeyFor(
+        valueKey, remembered.ckKid, ckNs, context.atClient.getCurrentAtSign());
     DateTime? conveyedAt;
-    try {
-      final record = await context.atClient.get(
-          SymmetricAesGcmProvider.conveyanceKeyFor(
-              valueKey, remembered.ckKid, ckNs));
-      conveyedAt = record.metadata?.createdAt?.toUtc();
-    } on StoppedException {
-      rethrow;
-    } catch (e) {
-      _logger.info('Could not resume content key ${remembered.ckKid} for '
-          '$owner:$ckNs, so cutting a fresh one: $e');
-      return false;
+    var opened = false;
+    for (final remote in const [false, true]) {
+      try {
+        final read = await context.atClient.get(record,
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
+        conveyedAt = read.metadata?.createdAt?.toUtc();
+        opened = true;
+        break;
+      } on StoppedException {
+        rethrow;
+      } catch (e) {
+        _logger.info('Could not open $record to resume content key '
+            '${remembered.ckKid} for $owner:$ckNs (remote: $remote): $e');
+      }
     }
+    if (!opened) return false;
 
     final resumed = cache.get(owner, ckNs, remembered.ckKid);
     if (resumed == null) return false;

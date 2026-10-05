@@ -429,6 +429,23 @@ void main() {
     test(
         'UC-G2.7 · a retired entry stops being offered and still opens history',
         () {
+      provenIn('packages/at_client/test/envelope_signing_test.dart',
+          'to .r.__e is refused as revoked or superseded',
+          proves: 'a signature whose signer\'s _apsk the atServer moved to '
+              '.r.__e is refused with that reason, typed so a caller can tell '
+              'it from a key that was never published — the control, a key at '
+              'none of the three locations, still fails as not found. The '
+              'chain arm, "a link whose signer was revoked reads revoked", '
+              'reports the same standing as a verdict. The move itself is the '
+              'atServer\'s');
+      provenIn('tests/at_functional_test/test/apsk_server_side_test.dart',
+          'a revoked enrollment\'s signature is refused as revoked',
+          proves: 'the server half, live: an enrollment signs, a peer atSign '
+              'and a sibling enrollment both verify it, the approver revokes '
+              'it, and both are then refused with a '
+              'WithdrawnSigningKeyException at .r.__e — so the atServer moved '
+              'the record on the revoke and serves the moved record to a '
+              'reader of either kind');
       provenIn('packages/at_client/test/signing_key_minting_test.dart',
           'a re-minted algorithm is advertised beside the key it replaced',
           proves: 'the clause as written, on the shape that discriminates: a '

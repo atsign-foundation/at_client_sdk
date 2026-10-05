@@ -89,11 +89,12 @@ void main() {
             'control that makes it a discriminator',
         clauses: ['discards whatever was bound to its old value']);
     provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'a republish silently leaves the enrollment unsigned',
-        proves: 'the DISCARD, which nothing asserted: from a record carrying a '
-            'conveyed chain link, a republish whose value differs rewrites the '
-            'record and readLink then returns null, with the matching-value '
-            'call as the control that leaves the link intact',
+        'clears the chain link, so the chain reads unsigned, not broken',
+        proves: 'the DISCARD: from a record carrying a conveyed chain link, a '
+            'republish under a different value removes the link bound to the '
+            'old one, against a fixture that merges metadata as the atServer '
+            'does; "a republish restoring the key a link describes keeps the '
+            'link" is the control',
         clauses: ['discards whatever was bound to its old value']);
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'an rsa2048 APKAM key with a key package is spelled BARE',
@@ -159,11 +160,26 @@ void main() {
             'a bool to its caller rather than a reason to an operator, and '
             'therefore the one no message-matching test could have found');
     provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'the child publishes the link onto its own key, value untouched',
-        proves: 'that a link rides the record\'s appMetadata while the value '
-            'stays as published — which is what makes a plain value-only '
-            'write drop it',
+        'clears the chain link, so the chain reads unsigned, not broken',
+        proves: 'a republish under a new key removes the chain link it no '
+            'longer vouches for, against a fixture that merges metadata as '
+            'the atServer does, so the walk reads unsigned; its sibling drops '
+            'a root link the client cannot re-sign',
         clauses: ['the break is not recoverable by the record alone']);
+    provenIn('packages/at_client/test/chain_sweep_test.dart',
+        'an enrollment whose key changed is re-anchored by the next sweep',
+        proves: 'anchored, then re-keyed: the republish leaves it unsigned, '
+            'the sweep counts it as unanchored and conveys a root link over '
+            'the new key, and once stamped the walk ends anchored. With the '
+            'republish keeping the stale link the walk reads broken and the '
+            'sweep skips it',
+        clauses: ['sweep conveys a root link over the new value']);
+    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
+        'a holder\'s republish under a new key re-anchors in the same write',
+        proves: 'one put to the record carries the new key and a root link '
+            'over it, and the walk ends anchored; the control shows a '
+            'republish anchors nothing that was not anchored',
+        clauses: ['re-anchored over the new value in the same write']);
   });
 
   test(

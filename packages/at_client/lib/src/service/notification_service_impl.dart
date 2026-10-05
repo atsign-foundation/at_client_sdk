@@ -32,6 +32,8 @@ import 'package:at_client/src/signing/resolved_signing_algo.dart'
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show parseCkConveyanceKey;
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_auth/at_auth.dart' show authenticatorForChops;
@@ -172,8 +174,11 @@ class NotificationServiceImpl extends NotificationService {
       NotificationConfig config,
       StreamController controller,
       Map<bool, Future<AtNotification>> transforms) async {
+    // NOTE: a content key's conveyance is the SDK's own, and one delivered to
+    // a subscriber asking to decrypt would hand it the key in plain text.
     bool matches(String key) =>
-        config.regex == emptyRegex || hasRegexMatch(key, config.regex);
+        parseCkConveyanceKey(key) == null &&
+        (config.regex == emptyRegex || hasRegexMatch(key, config.regex));
 
     final keyIsCiphertext = NotificationResponseTransformer.decryptsKey(n);
     if (!keyIsCiphertext && !matches(n.key)) return;
