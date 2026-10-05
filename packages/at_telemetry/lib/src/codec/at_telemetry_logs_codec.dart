@@ -6,10 +6,11 @@ import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
     as common;
 import 'package:dartastic_opentelemetry/proto/logs/v1/logs.pb.dart' as logs;
 import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
-    as resource;
+    as otel_resource;
 import 'package:fixnum/fixnum.dart';
 
 import '../at_telemetry_log_record.dart';
+import '../at_telemetry_resource.dart';
 import '../at_telemetry_severity.dart';
 
 final class AtTelemetryLogsCodec {
@@ -25,7 +26,7 @@ final class AtTelemetryLogsCodec {
   // any record without one. It defaults to now.
   List<int> encodeExportRequest(
     Iterable<AtTelemetryLogRecord> records, {
-    String? serviceName,
+    AtTelemetryResource? resource,
     DateTime? observedAt,
   }) {
     final DateTime observed = (observedAt ?? DateTime.now()).toUtc();
@@ -40,15 +41,10 @@ final class AtTelemetryLogsCodec {
     return collector.ExportLogsServiceRequest(
       resourceLogs: <logs.ResourceLogs>[
         logs.ResourceLogs(
-          resource: resource.Resource(
-            attributes: serviceName == null
+          resource: otel_resource.Resource(
+            attributes: resource == null
                 ? const <common.KeyValue>[]
-                : <common.KeyValue>[
-                    common.KeyValue(
-                      key: 'service.name',
-                      value: common.AnyValue(stringValue: serviceName),
-                    ),
-                  ],
+                : _encodeAttributes(resource.attributes),
           ),
           scopeLogs: <logs.ScopeLogs>[
             logs.ScopeLogs(

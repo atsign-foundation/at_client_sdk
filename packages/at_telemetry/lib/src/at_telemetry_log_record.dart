@@ -1,12 +1,9 @@
-import 'dart:typed_data';
-
+import 'at_telemetry_any_value.dart';
 import 'at_telemetry_severity.dart';
 
 // An OpenTelemetry LogRecord. A record with a non-empty eventName is an
-// Event; without one it is a plain log.
-//
-// body and attribute values must be OTel AnyValues: null, String, bool, int,
-// finite double, Uint8List, List of AnyValues, or Map<String, AnyValue>.
+// Event; without one it is a plain log. body and attribute values must be
+// AnyValues (see AtTelemetryAnyValue).
 final class AtTelemetryLogRecord {
   final String? eventName;
   final Object? body;
@@ -24,9 +21,9 @@ final class AtTelemetryLogRecord {
     Map<String, Object?> attributes = const <String, Object?>{},
   })  : timestamp = timestamp?.toUtc(),
         attributes = Map<String, Object?>.unmodifiable(attributes) {
-    _checkValue(body, 'body');
+    AtTelemetryAnyValue.check(body, 'body');
     for (final MapEntry<String, Object?> entry in attributes.entries) {
-      _checkValue(entry.value, 'attributes.${entry.key}');
+      AtTelemetryAnyValue.check(entry.value, 'attributes.${entry.key}');
     }
   }
 
@@ -85,31 +82,5 @@ final class AtTelemetryLogRecord {
       if (severityText != null) 'severityText': severityText,
       'attributes': attributes,
     };
-  }
-
-  static void _checkValue(Object? value, String path) {
-    switch (value) {
-      case null || String() || bool() || int() || Uint8List():
-        return;
-      case final double value:
-        if (!value.isFinite) {
-          throw ArgumentError.value(value, path, 'must be a finite double');
-        }
-      case final List<Object?> values:
-        for (int index = 0; index < values.length; index++) {
-          _checkValue(values[index], '$path[$index]');
-        }
-      case final Map<String, Object?> values:
-        for (final MapEntry<String, Object?> entry in values.entries) {
-          _checkValue(entry.value, '$path.${entry.key}');
-        }
-      default:
-        throw ArgumentError.value(
-          value,
-          path,
-          'must be null, String, bool, int, double, Uint8List, '
-          'List, or Map<String, Object?>',
-        );
-    }
   }
 }

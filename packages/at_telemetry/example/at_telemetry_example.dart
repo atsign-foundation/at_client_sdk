@@ -4,36 +4,36 @@ import 'package:at_telemetry/at_telemetry.dart';
 
 // Run with: dart run example/at_telemetry_example.dart
 Future<void> main() async {
-  final AtTelemetryLogRecord event = AtTelemetryLogRecord(
-    eventName: 'atsign.app.started',
-    timestamp: DateTime.now().toUtc(),
+  final AtTelemetry telemetry = AtTelemetry(
+    serviceName: 'my_app',
+    resourceAttributes: const <String, Object?>{'app.version': '1.2.3'},
+    exporter: ConsoleExporter(),
+    onError: (Object error, StackTrace _) => print('Telemetry failed: $error'),
+  );
+
+  telemetry.event(
+    'atsign.app.started',
     attributes: const <String, Object?>{
-      'app.version': '1.2.3',
       'app.debug': false,
       'app.retries': 2,
       'app.tags': <Object?>['cli', 'demo'],
       'app.device': <String, Object?>{'os': 'linux'},
     },
   );
+  telemetry.log('Reconnecting to the atServer',
+      severity: AtTelemetrySeverity.warn);
 
-  // Any exporter can be used behind the AtTelemetryExporter interface
-  final AtTelemetryLogRecordExporter exporter = ConsoleExporter();
-  await exporter.export(event);
-  await exporter.flush();
-  await exporter.shutdown();
-
-  // Events round-trip through JSON
-  final String json = jsonEncode(event.toJson());
-  final AtTelemetryLogRecord fromJson = AtTelemetryLogRecord.fromJson(
-    jsonDecode(json) as Map<String, Object?>,
-  );
-  print('JSON round trip: ${fromJson.eventName} at ${fromJson.timestamp}');
+  await telemetry.shutdown();
 }
 
 final class ConsoleExporter implements AtTelemetryLogRecordExporter {
   @override
-  Future<void> export(AtTelemetryLogRecord event) async {
-    print('Exported: ${jsonEncode(event.toJson())}');
+  Future<void> export(
+    AtTelemetryLogRecord logRecord,
+    AtTelemetryResource resource,
+  ) async {
+    print('Exported from ${resource.serviceName}: '
+        '${jsonEncode(logRecord.toJson())}');
   }
 
   @override

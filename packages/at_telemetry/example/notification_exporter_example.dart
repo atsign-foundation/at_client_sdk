@@ -7,25 +7,21 @@ Future<void> main() async {
   final StreamController<(String, String)> notifications =
       StreamController<(String, String)>();
   final Future<void> received = _monitor(notifications.stream);
-  final AtTelemetryNotificationExporter exporter =
-      AtTelemetryNotificationExporter(
+  final AtTelemetry telemetry = AtTelemetry(
     serviceName: 'my_app',
-    notify: (String idAndNamespace, String payload) async {
-      notifications.add((idAndNamespace, payload));
-    },
+    exporter: AtTelemetryNotificationExporter(
+      notify: (String idAndNamespace, String payload) async {
+        notifications.add((idAndNamespace, payload));
+      },
+    ),
+    onError: (Object error, StackTrace _) => print('Telemetry failed: $error'),
   );
-  final DateTime timestamp = DateTime.now().toUtc();
-  await exporter.export(AtTelemetryLogRecord(
-    eventName: 'app.started',
-    timestamp: timestamp,
-  ));
-  await exporter.export(AtTelemetryLogRecord(
-    eventName: 'app.connected',
-    timestamp: timestamp,
-    attributes: <String, Object?>{'app.connections': 2},
-  ));
-  await exporter.flush();
-  await exporter.shutdown();
+  telemetry.event('app.started');
+  telemetry.event(
+    'app.connected',
+    attributes: const <String, Object?>{'app.connections': 2},
+  );
+  await telemetry.shutdown();
   await notifications.close();
   await received;
 }

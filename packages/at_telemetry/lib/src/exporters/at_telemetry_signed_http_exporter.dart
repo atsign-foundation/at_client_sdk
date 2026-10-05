@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:http/http.dart' as http;
 
 import '../at_telemetry_log_record.dart';
+import '../at_telemetry_resource.dart';
 import '../codec/at_telemetry_logs_codec.dart';
 import '../security/at_telemetry_http_signature.dart';
 import '../security/at_telemetry_signer.dart';
@@ -15,13 +16,11 @@ final class AtTelemetrySignedHttpExporter
   static const int defaultMaxQueuedExports = 1000;
 
   final Uri _logsEndpoint;
-  final String _serviceName;
   final String _keyId;
   final String _audience;
   final AtTelemetrySigner _signer;
   final http.Client _client;
   final bool _ownsClient;
-  final void Function(Object)? _onError;
   final int _maxQueuedExports;
   final ListQueue<(Uri, List<int>, Completer<void>)> _queue =
       ListQueue<(Uri, List<int>, Completer<void>)>();
@@ -31,21 +30,17 @@ final class AtTelemetrySignedHttpExporter
 
   AtTelemetrySignedHttpExporter({
     required Uri endpoint,
-    required String serviceName,
     required String keyId,
     required String audience,
     required AtTelemetrySigner signer,
     http.Client? client,
-    void Function(Object)? onError,
     int maxQueuedExports = defaultMaxQueuedExports,
   })  : _logsEndpoint = _logsEndpointFor(endpoint),
-        _serviceName = serviceName,
         _keyId = keyId,
         _audience = audience,
         _signer = signer,
         _client = client ?? http.Client(),
         _ownsClient = client == null,
-        _onError = onError,
         _maxQueuedExports = maxQueuedExports {
     if (maxQueuedExports < 1) {
       throw RangeError.value(maxQueuedExports, 'maxQueuedExports');
@@ -66,24 +61,21 @@ final class AtTelemetrySignedHttpExporter
   }
 
   @override
-  Future<void> export(AtTelemetryLogRecord event) {
-    final (Future<void> _, Future<void> handled) = _enqueueLogRecord(event);
-    return handled;
-  }
-
-  Future<void> sendConfirmed(AtTelemetryLogRecord event) {
-    final (Future<void> sent, Future<void> _) = _enqueueLogRecord(event);
-    return sent;
+  Future<void> export(
+    AtTelemetryLogRecord logRecord,
+    AtTelemetryResource resource,
+  ) {
+    return _enqueue(
+      () => const AtTelemetryLogsCodec().encodeExportRequest(
+        <AtTelemetryLogRecord>[logRecord],
+        resource: resource,
+      ),
+    );
   }
 
   Future<void> sendEncodedLogs(List<int> body) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
     final List<int> payload = List<int>.unmodifiable(body);
-    final (Future<void> sent, Future<void> _) =
-        _enqueue(_logsEndpoint, () => payload);
-    return sent;
+    return _enqueue(() => payload);
   }
 
   @override
@@ -96,36 +88,22 @@ final class AtTelemetrySignedHttpExporter
     if (_ownsClient) _client.close();
   }
 
-  (Future<void>, Future<void>) _enqueueLogRecord(AtTelemetryLogRecord event) {
+  Future<void> _enqueue(List<int> Function() encode) {
     if (_closed) {
-      throw StateError('Exporter is closed');
+      return Future<void>.error(StateError('Exporter is closed'));
     }
-    return _enqueue(
-        _logsEndpoint,
-        () => const AtTelemetryLogsCodec().encodeExportRequest(
-              <AtTelemetryLogRecord>[event],
-              serviceName: _serviceName,
-            ));
-  }
 
-  (Future<void>, Future<void>) _enqueue(
-    Uri endpoint,
-    List<int> Function() encode,
-  ) {
-    final Completer<void> done = Completer<void>();
-    final Future<void> handled = done.future.catchError((Object error) {
-      _onError?.call(error);
-    });
     final List<int> body;
     try {
       body = encode();
     } on Object catch (error, stackTrace) {
-      done.completeError(error, stackTrace);
-      return (done.future, handled);
+      return Future<void>.error(error, stackTrace);
     }
 
-    _queue.add((endpoint, body, done));
-    _last = handled;
+    final Completer<void> done = Completer<void>();
+    // flush only waits; the failure is reported through the returned Future
+    _last = done.future.then<void>((void _) {}, onError: (Object _) {});
+    _queue.add((_logsEndpoint, body, done));
     if (_queue.length > _maxQueuedExports) {
       final (Uri _, List<int> _, Completer<void> dropped) =
           _queue.removeFirst();
@@ -136,7 +114,7 @@ final class AtTelemetrySignedHttpExporter
     if (!_sending) {
       unawaited(_drain());
     }
-    return (done.future, handled);
+    return done.future;
   }
 
   Future<void> _drain() async {

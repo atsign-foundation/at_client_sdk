@@ -28,24 +28,24 @@ Future<void> main() async {
     (HttpRequest request) => _handle(request, publicKeys, seenNonces),
   );
 
-  final AtTelemetrySignedHttpExporter exporter = AtTelemetrySignedHttpExporter(
-    endpoint: Uri.parse('http://127.0.0.1:${server.port}'),
+  final AtTelemetry telemetry = AtTelemetry(
     serviceName: 'my_app',
-    keyId: producer,
-    audience: collector,
-    signer: AtTelemetryRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
-    // Send failures are only reported here, export() does not throw them
-    onError: (Object error) => print('Telemetry failed: $error'),
+    exporter: AtTelemetrySignedHttpExporter(
+      endpoint: Uri.parse('http://127.0.0.1:${server.port}'),
+      keyId: producer,
+      audience: collector,
+      signer: AtTelemetryRsaSigner.fromBase64(keys.atPrivateKey.privateKey),
+    ),
+    onError: (Object error, StackTrace _) => print('Telemetry failed: $error'),
   );
 
-  await exporter.export(AtTelemetryLogRecord(
-    eventName: 'atsign.server.heartbeat',
-    timestamp: DateTime.now().toUtc(),
+  telemetry.event(
+    'atsign.server.heartbeat',
     attributes: const <String, Object?>{
       AtTelemetryHttpSignature.serverIdAttribute: producer,
     },
-  ));
-  await exporter.shutdown();
+  );
+  await telemetry.shutdown();
   await server.close(force: true);
 }
 

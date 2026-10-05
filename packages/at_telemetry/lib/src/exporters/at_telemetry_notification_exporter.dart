@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import '../at_telemetry_log_record.dart';
+import '../at_telemetry_resource.dart';
 import 'at_telemetry_log_record_exporter.dart';
 
 typedef AtTelemetryNotify = Future<void> Function(
@@ -17,7 +18,6 @@ final class AtTelemetryNotificationExporter
   static const int defaultMaxPayloadCharacters = 4 * ((1024 * 1024 + 2) ~/ 3);
 
   final AtTelemetryNotify _notify;
-  final String _serviceName;
   final int _maxQueuedExports;
   final int _maxPayloadCharacters;
   final ListQueue<(String, String, Completer<void>)> _queue =
@@ -25,21 +25,14 @@ final class AtTelemetryNotificationExporter
   Future<void> _last = Future<void>.value();
   bool _sending = false;
   bool _closed = false;
-  (Object, StackTrace)? _failure;
 
   AtTelemetryNotificationExporter({
     required AtTelemetryNotify notify,
-    required String serviceName,
     int maxQueuedExports = defaultMaxQueuedExports,
     int maxPayloadCharacters = defaultMaxPayloadCharacters,
   })  : _notify = notify,
-        _serviceName = serviceName,
         _maxQueuedExports = maxQueuedExports,
         _maxPayloadCharacters = maxPayloadCharacters {
-    if (serviceName.trim().isEmpty) {
-      throw ArgumentError.value(
-          serviceName, 'serviceName', 'must not be empty');
-    }
     if (maxQueuedExports < 1) {
       throw RangeError.value(maxQueuedExports, 'maxQueuedExports');
     }
@@ -49,19 +42,15 @@ final class AtTelemetryNotificationExporter
   }
 
   @override
-  Future<void> export(AtTelemetryLogRecord logRecord) {
-    return _enqueue(idAndNamespace, () => _encode(logRecord));
+  Future<void> export(
+    AtTelemetryLogRecord logRecord,
+    AtTelemetryResource resource,
+  ) {
+    return _enqueue(idAndNamespace, () => _encode(logRecord, resource));
   }
 
   @override
-  Future<void> flush() async {
-    await _last;
-    final (Object, StackTrace)? failure = _failure;
-    _failure = null;
-    if (failure != null) {
-      Error.throwWithStackTrace(failure.$1, failure.$2);
-    }
-  }
+  Future<void> flush() => _last;
 
   @override
   Future<void> shutdown() {
@@ -69,7 +58,9 @@ final class AtTelemetryNotificationExporter
     return flush();
   }
 
-  String _encode(AtTelemetryLogRecord logRecord) {
+  // The JSON payload has no separate resource, so the resource attributes are
+  // merged into the record's attributes. The resource wins on a clash.
+  String _encode(AtTelemetryLogRecord logRecord, AtTelemetryResource resource) {
     return jsonEncode(AtTelemetryLogRecord(
       eventName: logRecord.eventName,
       body: logRecord.body,
@@ -77,8 +68,8 @@ final class AtTelemetryNotificationExporter
       severityNumber: logRecord.severityNumber,
       severityText: logRecord.severityText,
       attributes: <String, Object?>{
-        'service.name': _serviceName,
         ...logRecord.attributes,
+        ...resource.attributes,
       },
     ).toJson());
   }
@@ -99,9 +90,8 @@ final class AtTelemetryNotificationExporter
     }
 
     final Completer<void> done = Completer<void>();
-    _last = done.future.catchError((Object error, StackTrace stackTrace) {
-      _failure ??= (error, stackTrace);
-    });
+    // flush only waits; the failure is reported through the returned Future
+    _last = done.future.then<void>((void _) {}, onError: (Object _) {});
     _queue.add((idAndNamespace, payload, done));
     if (_queue.length > _maxQueuedExports) {
       final (String _, String _, Completer<void> dropped) =
