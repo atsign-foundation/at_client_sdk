@@ -14932,3 +14932,23 @@ notification in the scheme it arrived in" test of
 `test/notification_service_test.dart`, live in
 `tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
 UC-A4.1 and UC-A4.4.
+
+## 150. The startup seeds the namespace the client was built with (2026-10-05)
+
+**Decided by gkc on 2026-10-05.** NoPorts' `sshnp` builds its client in
+`sshnp`, then points the live preference at `<device>.sshnp` for its own
+records. The post-quantum startup runs unawaited and read the preference
+namespace only when it reached the seed, several round trips later, so a client
+on the atSign's own credential or a `*` grant would have published a key at
+`<device>.sshnp` for every device it reached. That was read from the code, not
+observed in a run.
+
+The startup seeds the `preference.namespace` the client had when its seeding
+was built, which for the startup is when the client was built. A namespace the
+application sets afterwards changes where its own records go and nothing about
+what the startup seeds; `ensureReachable(namespace)` stays the way to be
+reachable anywhere else. The key-package check and the signing-root requests
+still read the live preference.
+
+Pinned by "it seeds the namespace the client had when seeding was built" in
+`test/nskey_seeding_test.dart`.

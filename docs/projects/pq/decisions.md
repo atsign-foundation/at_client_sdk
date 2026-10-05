@@ -207,6 +207,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [147] | An nskey reaches every enrollment with access: at its mint, and at approval                  | 2026-10-04 | LIVE               |
 | [148] | An approver's envelopes go where the enrollment may read and the approver may write          | 2026-10-05 | LIVE               |
 | [149] | How a shared value was protected is read from metadata, and replies go in kind               | 2026-10-05 | LIVE               |
+| [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -358,3 +359,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [147]: detail/decisions.md#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04
 [148]: detail/decisions.md#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05
 [149]: detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05
+[150]: detail/decisions.md#150-the-startup-seeds-the-namespace-the-client-was-built-with-2026-10-05
