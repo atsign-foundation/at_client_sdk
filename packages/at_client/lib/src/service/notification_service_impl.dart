@@ -3,6 +3,8 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/at_server_features.dart'
+    show notificationLifetimeFor;
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart'
     show
@@ -742,10 +744,15 @@ class NotificationServiceImpl extends NotificationService {
     bool cacheAtRecipient = false,
     String? cryptoProviderId,
     DateTime? recipientCacheExpiration,
+    bool ephemeral = false,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
       throw ArgumentError(
           'You must supply recipientCacheExpiration when cacheAtRecipient is true');
+    }
+    if (ephemeral && cacheAtRecipient) {
+      throw ArgumentError('An ephemeral notification cannot be cached at the '
+          'recipient: caching persists a copy there');
     }
     // ignore: deprecated_member_use_from_same_package
     final String name = _requireOneName(idAndNamespace, namespace);
@@ -805,9 +812,13 @@ class NotificationServiceImpl extends NotificationService {
     // The field-by-field form writes only the key, and the name here is split
     // across `key` and `namespace`, so the namespace would never reach the
     // wire.
+    final lifetime = await notificationLifetimeFor(atClient,
+        expiration: expiration, ephemeral: ephemeral);
     final builder = NotifyVerbBuilder()
       ..atKey = atKey
-      ..ttln = expiration.inMilliseconds
+      ..ttln = lifetime.ttln
+      ..notificationExpiresAt = lifetime.expiresAt
+      ..ephemeral = lifetime.ephemeral
       ..value = notifPayload.isEmpty ? null : notifPayload
       ..useAtKeyToString = true;
 
