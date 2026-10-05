@@ -487,6 +487,31 @@ void main() {
               'the control that this is a dot-suffix match');
     });
 
+    test('a namespace the approver may not write does not stop the others',
+        () async {
+      final held = await filing();
+      for (final ns in ['shared', namespace, 'sshnp']) {
+        await held.store(
+            namespace: ns,
+            nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+            seed: NskeySeed(pair.privateKeyBytes));
+      }
+      final atClient = client();
+      final sharing = _RecordingShares(refusedIn: {'shared'});
+      final sent = await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              sharing: sharing,
+              privateFiling: held)
+          .conveyHeldPrivatesTo(joinerPackage(), const {'*': 'rw'});
+
+      expect(sharing.sharedNamespaces, unorderedEquals([namespace, 'sshnp']),
+          reason: 'an approver granted only `r` on shared holds its private '
+              'but cannot write an envelope into it, and the first refusal '
+              'must not strand the privates after it in keyfile order');
+      expect(sent, 2, reason: 'the refused private was not conveyed');
+    });
+
     test('a grant that is only a prefix of a held namespace conveys nothing',
         () async {
       expect(await conveyedFor(const {'app_1': 'rw'}, [namespace]), isEmpty,
@@ -747,12 +772,21 @@ class _RecordingShares extends Fake implements PairwiseSecretSharing {
   final List<String> sharedNames = [];
   final List<String> sharedNamespaces = [];
 
+  /// Namespaces whose writes the atServer refuses, as it does for an approver
+  /// holding only `r` on them.
+  final Set<String> refusedIn;
+
+  _RecordingShares({this.refusedIn = const {}});
+
   @override
   final SecretStore secretStore = SecretStore();
 
   @override
   Future<void> shareSecretWith(KeyPackage to, Secret secret,
       {required String inReplyTo}) async {
+    if (refusedIn.contains(secret.namespace)) {
+      throw AtClientException.message('write to ${secret.namespace} refused');
+    }
     sharedNames.add(secret.name);
     sharedNamespaces.add(secret.namespace);
   }

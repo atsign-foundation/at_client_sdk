@@ -470,6 +470,11 @@ class NskeySeeding {
   /// than the secret store, which is in-memory by design and holds nothing
   /// after a restart — an approver relying on it would convey a new enrollment
   /// **nothing**.
+  ///
+  /// An approver holds privates for namespaces it may only read, and the
+  /// atServer refuses its write of an envelope into one, so a refused private
+  /// is logged and skipped rather than ending the loop. Returns how many were
+  /// sent.
   Future<int> conveyHeldPrivatesTo(
       KeyPackage keyPackage, Map<String, dynamic> grants) async {
     final sharing = this.sharing;
@@ -481,15 +486,21 @@ class NskeySeeding {
     int sent = 0;
     for (final MapEntry(key: namespace, value: privates) in held.entries) {
       for (final MapEntry(key: kid, value: seed) in privates.entries) {
-        await sharing.shareSecretWith(
-            keyPackage,
-            Secret(
-              namespace: namespace,
-              name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-              value: base64Encode(seed.bytes),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-        sent++;
+        try {
+          await sharing.shareSecretWith(
+              keyPackage,
+              Secret(
+                namespace: namespace,
+                name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+                value: base64Encode(seed.bytes),
+              ),
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          sent++;
+        } catch (e) {
+          if (e is StoppedException) rethrow;
+          _logger.warning('Could not convey the nskey private $namespace:$kid '
+              'to the new enrollment, going on with the rest: $e');
+        }
       }
     }
     return sent;
