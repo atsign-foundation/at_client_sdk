@@ -49,10 +49,12 @@ example app. Read these rather than copying snippets from here:
 Smaller copy/paste snippets live under
 [`example/lib/snippets`](example/lib/snippets):
 
-- [`example/lib/snippets/at_invitation.dart`](example/lib/snippets/at_invitation.dart)
-  — replacement for the deprecated `at_invitation_flutter` package. It keeps
-  the SMS/email invite flow as app-owned code instead of a separate Flutter
-  package.
+- [`example/lib/snippets/at_backup_key.dart`](example/lib/snippets/at_backup_key.dart)
+  — replacement for the deprecated `at_backupkey_flutter` package.
+
+Invitations, which replace the deprecated `at_invitation_flutter` package, are
+`AtClientInvitations` in `at_client`; the app at
+[`example/invitations`](example/invitations) shows them end to end.
 
 For a **full Flutter app** using `at_client_flutter` in anger, see
 the two flagship examples — deliberately positioned side-by-side
@@ -228,8 +230,8 @@ atKeysIo.write(atSign, atKeys);
 
 ## Migrating from 1.x
 
-2.0 removes the two services that orchestrated at_auth for an app and stops
-re-exporting at_auth. The dialogs take the atSign, the keys store and the
+2.0 removes the two services that orchestrated at_auth for an app, and an app
+no longer imports at_auth. The dialogs take the atSign, the keys store and the
 `AtClientPreference`, and hand back the `AtClient` they opened; an app with
 its own UI calls the `Atsign` verbs directly. Nothing an app reads after
 login changes.

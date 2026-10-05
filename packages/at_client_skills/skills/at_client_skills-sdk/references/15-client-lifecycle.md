@@ -162,8 +162,8 @@ runs on its own from the moment the client is built:
   fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
   round;
-- `isInSync()` asks the atServer fresh and answers whether the local store has
-  everything the atServer has and nothing is left to push;
+- `isInSync()` asks the atServer fresh and answers whether nothing is left to
+  push and the local store has everything the client's sync filter admits;
 - `isSyncInProgress`, and `addProgressListener(SyncProgressListener)` for
   `SyncProgress` events (`inProgress`, `success`, `failure`, with
   `localCommitId`, `serverCommitId`, `keyInfoList`).

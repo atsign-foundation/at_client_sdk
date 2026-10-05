@@ -7,7 +7,7 @@ import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey;
+    show ckConveyanceKey, ckSiblingCopyKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -17,9 +17,10 @@ final _logger = AtSignLogger('SymmetricAesGcmProvider');
 
 /// The value cites a CK this client cannot resolve *yet*.
 ///
-/// Retry the read once the conveyance record syncs, where a plain
-/// [AtDecryptionException] means give up; a CK deleted for forward secrecy
-/// surfaces here too and never resolves.
+/// Retry the read once the conveyance record — for a shared value, the
+/// recipient's cached copy of it — syncs, where a plain [AtDecryptionException]
+/// means give up; a CK deleted for forward secrecy surfaces here too and never
+/// resolves.
 class ContentKeyUnavailableException extends AtDecryptionException {
   /// The kid the value cited, as it appears in `appMetadata`.
   final String ckKid;
@@ -33,7 +34,7 @@ class ContentKeyUnavailableException extends AtDecryptionException {
 /// A value carries its ciphertext and *cites* a CK by `ckKid` rather than
 /// carrying a sealed key inline; the CK is resolved from the [ContentKeyCache],
 /// which the `at/nskey` provider populates when the matching conveyance record
-/// syncs.
+/// — for a shared value, the recipient's cached copy of it — syncs.
 class SymmetricAesGcmProvider
     implements
         CryptoProvider,
@@ -206,7 +207,16 @@ class SymmetricAesGcmProvider
   /// `at/nskey` provider decapsulates and caches it as a side effect, then
   /// look the CK up again rather than taking it from the read.
   ///
-  /// **Local storage first, then the atServer.** The remote leg is not an
+  /// **For a value this atSign shared, its sibling copy**, the only record of
+  /// that key sealed to this atSign; the recipient's conveyance is never read.
+  ///
+  /// **For a shared value, the recipient's cached copy first**, which its
+  /// atServer made from the conveyance's notification: a restarted recipient
+  /// opens what was shared with it while the sender's atServer is unreachable.
+  /// The conveyance itself is read after it, since one written before shares
+  /// carried a `ttr` has no cached copy.
+  ///
+  /// **Each from local storage first, then the atServer.** The remote leg is not an
   /// optimisation: a value delivered remote-only — which every notification is
   /// — cites a conveyance its sender wrote remote-first, so the record is on
   /// the atServer before the value arrives and may not reach local storage
@@ -226,11 +236,12 @@ class SymmetricAesGcmProvider
     String namespace,
     String ckKid,
   ) async {
-    final conveyance = conveyanceKeyFor(value, ckKid, namespace);
+    final conveyance = openableConveyanceKeyFor(
+        value, ckKid, namespace, context.atClient.getCurrentAtSign());
 
     /// Returns true when the record was read and opened. A read that finds
     /// nothing returns false; a record that will not open still throws.
-    Future<bool> read({required bool remote}) async {
+    Future<bool> read(AtKey conveyance, {required bool remote}) async {
       try {
         await context.atClient.get(conveyance,
             getRequestOptions: remote
@@ -246,6 +257,10 @@ class SymmetricAesGcmProvider
         // NOTE: the record is there and will not open — reporting it as absent
         // would send the caller to wait for a sync that has already happened.
         rethrow;
+      } on AtKeyNotFoundException {
+        return false;
+      } on KeyNotFoundException {
+        return false;
       } catch (e) {
         if (e is StoppedException) rethrow;
         // NOTE: an unexpected failure lands here as well and is reported to
@@ -259,11 +274,28 @@ class SymmetricAesGcmProvider
       }
     }
 
-    if (await read(remote: false)) {
+    final sharedWith = conveyance.sharedWith;
+    if (sharedWith != null &&
+        conveyance.sharedBy != context.atClient.getCurrentAtSign()) {
+      final cachedCopy = AtKey()
+        ..key = conveyance.key
+        ..namespace = conveyance.namespace
+        ..sharedBy = conveyance.sharedBy
+        ..sharedWith = sharedWith
+        ..metadata = (Metadata()..isCached = true);
+      for (final remote in const [false, true]) {
+        if (await read(cachedCopy, remote: remote)) {
+          final hit = cache.get(owner, namespace, ckKid);
+          if (hit != null) return hit;
+        }
+      }
+    }
+
+    if (await read(conveyance, remote: false)) {
       final local = cache.get(owner, namespace, ckKid);
       if (local != null) return local;
     }
-    if (await read(remote: true)) {
+    if (await read(conveyance, remote: true)) {
       return cache.get(owner, namespace, ckKid);
     }
     return null;
@@ -273,6 +305,21 @@ class SymmetricAesGcmProvider
   /// which owns the format.
   static AtKey conveyanceKeyFor(AtKey value, String ckKid, String ckNs) =>
       ckConveyanceKey(value, ckKid, ckNs);
+
+  /// The record [me] opens the CK for [value] from: the sibling copy when [me]
+  /// shared the value, else the record the CK was conveyed under.
+  static AtKey openableConveyanceKeyFor(
+      AtKey value, String ckKid, String ckNs, String? me) {
+    final sharedWith = value.sharedWith;
+    final sharedOut = me != null &&
+        value.sharedBy == me &&
+        sharedWith != null &&
+        sharedWith.isNotEmpty &&
+        sharedWith != me;
+    return sharedOut
+        ? ckSiblingCopyKey(sender: me, ckKid: ckKid, ckNs: ckNs)
+        : conveyanceKeyFor(value, ckKid, ckNs);
+  }
 
   /// The CK cache's scope: whose nskey the CK was conveyed under. On an inbound
   /// value this is the recipient, matching how the conveyance was cached.

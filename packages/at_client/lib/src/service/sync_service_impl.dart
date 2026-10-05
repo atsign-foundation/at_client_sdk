@@ -1324,9 +1324,6 @@ class SyncServiceImpl implements SyncService {
     return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
   }
 
-  ///Verifies if local secondary are cloud secondary are in sync.
-  ///Returns true if local secondary and cloud secondary are in sync; else false.
-  ///Throws [AtClientException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
     try {
@@ -1346,7 +1343,7 @@ class SyncServiceImpl implements SyncService {
       // — kept aligned so app-level `isInSync()` callers see the
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
-          lastReceivedServerCommitId == serverCommitId;
+          serverCommitId <= lastReceivedServerCommitId;
     } on StoppedException {
       rethrow;
     } on Exception catch (e) {
@@ -1379,7 +1376,7 @@ class SyncServiceImpl implements SyncService {
     // client-side push backlog lives in `LocalSecondary`'s sync
     // queue.
     return pendingPushCount == 0 &&
-        lastReceivedServerCommitId == serverCommitId;
+        serverCommitId <= lastReceivedServerCommitId;
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
@@ -1467,10 +1464,8 @@ class SyncServiceImpl implements SyncService {
   ///
   /// Push and pull bookkeeping are kept in separate fields, but
   /// the externally observed `localCommitId` (in `SyncProgress`
-  /// events) is their union — the test harnesses
-  /// (`FunctionalTestSyncService`, `E2ESyncService`) check
-  /// `localCommitId == serverCommitId` as their "in sync" signal,
-  /// which only holds with the union.
+  /// events) is their union: `waitUntilCaughtUp` compares it with the
+  /// server's commit id, which only holds with the union.
   ///
   /// Reads the cursor key inline rather than via
   /// [getLastReceivedServerCommitId] to keep the dependency one-way

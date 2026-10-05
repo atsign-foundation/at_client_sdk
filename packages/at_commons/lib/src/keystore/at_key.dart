@@ -392,8 +392,9 @@ class Metadata {
   /// Time in milliseconds after which the [AtKey] becomes active.
   int? ttb;
 
-  /// Represents the time frequency in seconds when the cached key gets refreshed
-  /// Time in **seconds** after which a cached copy of this [AtKey] should be refreshed.
+  /// Time in **seconds** another atServer may serve its cached copy of this
+  /// [AtKey] before refreshing it: `-1` means indefinitely, and null or `0`
+  /// means the record is not to be cached.
   int? ttr;
 
   /// CCD (Cascade Delete) means if a shared key is deleted, then the corresponding cached key will also be deleted

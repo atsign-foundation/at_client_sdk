@@ -8,14 +8,15 @@
 /// intended change (there should be none) edits the pin in the same commit,
 /// and that edit is the review.
 ///
-/// | record             | shape                                          |
-/// |--------------------|------------------------------------------------|
-/// | advertisement      | `public:__nskey.<ns>@<owner>`                  |
-/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                      |
-/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`  |
-/// | current-CK pointer | `__ckcur.<destination>.<ckNs>@<atSign>`        |
-/// | signing root       | `public:pq_signing_root@<atSign>`              |
-/// | root mint lock     | `_rootlock@<atSign>`                           |
+/// | record             | shape                                                        |
+/// |--------------------|--------------------------------------------------------------|
+/// | advertisement      | `public:__nskey.<ns>@<owner>`                                |
+/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                                    |
+/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`                |
+/// | CK sibling copy    | `<ckKid>.__ck.<ckNs>@<sender>`, naming its recipient         |
+/// | current-CK pointer | `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>` |
+/// | signing root       | `public:pq_signing_root@<atSign>`                            |
+/// | root mint lock     | `_rootlock@<atSign>`                                         |
 ///
 /// At-rest ids freeze the same way — existing keyfiles hold them and scans
 /// match on them: the `nskey.<ns>.<kid>` AtKeys id and the `__nskey.<kid>`
@@ -29,7 +30,8 @@
 /// shared constant would move them in lockstep.
 library;
 
-import 'package:at_commons/at_commons.dart' show AtKey, Metadata;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, EnrollmentConstants, Metadata;
 
 /// The record name an nskey advertisement is published under, in the
 /// namespace the key serves: `public:__nskey.<ns>@<owner>`.
@@ -108,22 +110,27 @@ const Duration mintLockTtl = Duration(minutes: 2);
 const Duration signingRootMintLockTtl = Duration(seconds: 15);
 
 /// The leading segment of the current-CK pointer record:
-/// `__ckcur.<destination>.<ckNs>@<atSign>`.
+/// `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>`.
 const String currentCkPointerRecordName = '__ckcur';
 
-/// The at-key remembering which CK [sharedBy] is currently writing under for
-/// [destination], namespaced by the namespace the nskey resolved to — matching
-/// the CK's own scope.
+/// The at-key remembering which CK [enrollmentId] of [sharedBy] is currently
+/// writing under for [destination] in [ckNs], the namespace the destination's
+/// nskey resolved to.
 ///
-/// The destination's `@` is stripped — the emitted segment is `bob`, not
-/// `@bob` — and the double underscore hides the record from an ordinary scan.
+/// It lives in the enrollment's own reserved namespace, which the atServer
+/// lets that enrollment alone read and write, and moves aside when the
+/// enrollment is revoked. The destination's `@` is stripped — the emitted
+/// segment is `bob`, not `@bob` — and the double underscore hides the record
+/// from an ordinary scan.
 AtKey currentCkPointerKey(
         {required String? sharedBy,
+        required String enrollmentId,
         required String destination,
         required String ckNs}) =>
     AtKey()
       ..key = '$currentCkPointerRecordName.${destination.replaceAll('@', '')}'
-      ..namespace = ckNs
+          '.$ckNs'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       ..sharedBy = sharedBy
       ..metadata = Metadata();
 
@@ -182,6 +189,9 @@ const String ckConveyanceMarker = '.$ckConveyanceRecordName.';
 /// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
 /// the value rather than from the nskey owner alone is what keeps the inbound
 /// case addressable, since there sender and recipient are different atSigns.
+/// A share's conveyance carries `ttr -1` and `ccd: true`, so its recipient's
+/// atServer caches it from the notification and drops the copy when the
+/// original goes.
 ///
 /// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
 /// conveyance therefore serves every namespace beneath it — which is what
@@ -192,7 +202,34 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
   ..namespace = ckNs
   ..sharedBy = value.sharedBy
   ..sharedWith = value.sharedWith
-  ..metadata = Metadata();
+  ..metadata = _isShare(value)
+      ? (Metadata()
+        ..ttr = -1
+        ..ccd = true)
+      : Metadata();
+
+/// The at-key of a shared CK's **sibling copy**: `<ckKid>.__ck.<ckNs>@<sender>`,
+/// the sender's own record of a key it conveyed to a recipient.
+///
+/// Addressed like a self conveyance in the recipient's CK scope, so a reader
+/// finds it from the shared value alone; the record's `appMetadata` names the
+/// recipient, and the level of the sender's key that sealed it.
+AtKey ckSiblingCopyKey(
+        {required String sender,
+        required String ckKid,
+        required String ckNs}) =>
+    AtKey()
+      ..key = '$ckKid.$ckConveyanceRecordName'
+      ..namespace = ckNs
+      ..sharedBy = sender
+      ..metadata = Metadata();
+
+bool _isShare(AtKey value) {
+  final sharedWith = value.sharedWith;
+  return sharedWith != null &&
+      sharedWith.isNotEmpty &&
+      sharedWith != value.sharedBy;
+}
 
 /// Splits a conveyance key string into the CK it carries, the namespace that
 /// CK lives in, and the nskey owner whose cache scope it belongs to — or

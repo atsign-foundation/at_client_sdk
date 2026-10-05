@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -121,6 +120,32 @@ Future<int> main(List<String> arguments) async {
   }
 }
 
+/// [arguments] as the command line to run, with `onboard` inserted when they
+/// name no command, and the deprecation warning to print when it was.
+///
+/// A command line that starts with an option other than `-h`, `--help` or
+/// `--version` names no command. The warning never repeats the arguments,
+/// since they can carry a CRAM secret.
+({List<String> arguments, String? warning}) withImplicitOnboard(
+    List<String> arguments) {
+  if (arguments.isEmpty) {
+    return (arguments: arguments, warning: null);
+  }
+  final first = arguments.first;
+  if (!first.startsWith('-') ||
+      first == '-h' ||
+      first == '--help' ||
+      first == '--version') {
+    return (arguments: arguments, warning: null);
+  }
+  return (
+    arguments: ['onboard', ...arguments],
+    warning: 'Deprecated: no command was given, so this runs "onboard". '
+        'Name the command, as in "at_activate onboard -a <atSign>", because '
+        'at_activate 3.0 will refuse an invocation with no command.',
+  );
+}
+
 Future<int> wrappedMain(List<String> arguments) async {
   if (arguments.isEmpty) {
     stderr.writeln('Version: $packageVersion');
@@ -132,20 +157,11 @@ Future<int> wrappedMain(List<String> arguments) async {
     return 1;
   }
 
-  final first = arguments.first;
-  if (first.startsWith('-') &&
-      first != '-h' &&
-      first != '--help' &&
-      first != '--version') {
-    stderr.writeln('Version: $packageVersion');
-    stderr.writeln('No command was given. "$first" is an option, not a '
-        'command — an invocation with no command used to be treated as '
-        '"onboard", and no longer is. Name the command you want:');
-    aca.parser.printAllCommandsUsage(showSubCommandParams: false);
-    stderr.writeln('\nFor an activation that is "onboard": '
-        'auth onboard -a <atSign> -c <cram secret>\n');
-    return 1;
+  final implicit = withImplicitOnboard(arguments);
+  if (implicit.warning != null) {
+    stderr.writeln(implicit.warning);
   }
+  arguments = implicit.arguments;
 
   final ArgResults topLevelResults;
   try {
@@ -773,10 +789,20 @@ Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
 /// All commands available same as the CLI as a whole, except for
 /// 'onboard' and 'enroll'
 Future<void> interactive(ArgResults argResults, AtClient atClient) async {
+  const String exitHint =
+      'Type "exit" or "quit" to end the interactive session.';
+  stderr.writeln(exitHint);
   // TODO Factor out code which is shared between here and main()
   while (true) {
     stderr.write(r'$ ');
-    List<String> arguments = stdin.readLineSync()!.split(RegExp(r'\s'));
+    final String? line = stdin.readLineSync()?.trim();
+    if (line == null || line == 'exit' || line == 'quit') {
+      return;
+    }
+    if (line.isEmpty) {
+      continue;
+    }
+    final List<String> arguments = line.split(RegExp(r'\s+'));
 
     final AuthCliCommand cliCommand;
     try {
@@ -823,6 +849,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
       switch (cliCommand) {
         case AuthCliCommand.help:
           aca.parser.printAllCommandsUsage(showSubCommandParams: true);
+          stderr.writeln(exitHint);
 
         case AuthCliCommand.onboard:
         case AuthCliCommand.interactive:
@@ -1219,9 +1246,7 @@ AtOnboardingPreference onboardingPreferenceFrom(ArgResults ar) {
     ..atKeysFilePath =
         ar[AuthCliArgs.argNameAtKeys] ?? HomeDirectoryUtil.getAtKeysPath(atSign)
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
-    ..storagePath = HomeDirectoryUtil.getHiveStoragePath(atSign)
-    ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+    ..storagePath = HomeDirectoryUtil.getHiveStoragePath(atSign);
 }
 
 String _lastProgressGroup = '';

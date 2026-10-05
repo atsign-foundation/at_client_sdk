@@ -76,17 +76,19 @@ abstract class AtClient {
   /// caller that must not exit until it is reachable; nothing calls it for
   /// you, and it is idempotent and cheap when there is nothing to do.
   ///
-  /// ⚠️ **Must NOT run concurrently with this client's own PQ startup, or with
-  /// itself.** The mint lock's holder token is the enrolment id, so a second
-  /// concurrent mint by the same enrolment reads the lock back, sees its own
-  /// id and mints anyway; the two advertisements carry different key material,
-  /// and a peer that fetched in between holds a generation the owner may no
-  /// longer be able to open.
+  /// A concurrent call in this process, or this client's own PQ startup,
+  /// waits for a mint already in flight and adopts what it published.
+  /// ⚠️ **Two processes of one enrollment are not excluded**: the mint lock's
+  /// holder token is the enrollment id, so each reads the lock back as its own
+  /// and mints; the two advertisements carry different key material, and a
+  /// peer that fetched in between holds a generation the owner may no longer
+  /// be able to open.
   ///
-  /// Answers rather than throws for the two cases that are configuration and
-  /// not failure — a posture that does not seed, and a namespace this
-  /// enrollment cannot hold a key for. Read
-  /// [AtReachabilityResult.isReachable] rather than comparing the outcome.
+  /// Answers rather than throws for the three cases that are configuration and
+  /// not failure — a posture that does not seed, a namespace this enrollment
+  /// cannot hold a key for, and a client with no key source to file a private
+  /// half in. Read [AtReachabilityResult.isReachable] rather than comparing the
+  /// outcome.
   ///
   /// Nothing is left in flight when this returns [AtReachability.published]:
   /// the advertisement is an awaited remote write rather than a local-first

@@ -79,9 +79,6 @@ void main() {
       (invocation) async {
         final key = invocation.positionalArguments[0] as AtKey;
         final value = invocation.positionalArguments[1] as String;
-        // NOTE: the current-CK pointer arrives with no request options at all,
-        // so it has to return before the cast below.
-        if (key.key.startsWith('__ckcur')) return true;
         final options =
             invocation.namedArguments[#putRequestOptions] as PutRequestOptions;
         final provider = config.lookup(options.cryptoProviderId!)!;

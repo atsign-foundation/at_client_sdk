@@ -199,7 +199,10 @@ Cross-atSign mirrors this with `@bob` as owner of the values he writes for
 Alice — e.g. the data value `@alice:<key>.app_1.my_apps@bob` and the CK conveyance
 `@alice:<ckKid>.__ck.app_1.my_apps@bob`, both sealed to Alice's **nskey** (fetched
 from `public:__nskey.app_1.my_apps@alice`, which exists from the moment she minted
-it) and synced to Alice as cached replicas. (This ownership is why cross-atSign
+it) and synced to Alice as cached replicas: the conveyance carries `ttr -1` and
+`ccd: true`, so Alice's atServer caches it and deleting it cascades to her copy
+([ruling 142.1](detail/decisions.md#1421-a-shared-conveyance-is-cached-at-its-recipient)).
+(This ownership is why cross-atSign
 FS is bilateral — [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 
 **Two atSigns, never one.** Every operation resolves both the **record owner**
@@ -303,8 +306,8 @@ the envelope, verified against `_apsk`. What immutability *was* doing is stoppin
 of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
 since no one else can write the owner's records. Take the lock, **re-read**, mint,
-write the advertisement, convey the private, release (or let the ttl expire). The
-loser of the race backs off and re-reads.
+write the advertisement, convey the private; nothing deletes the lock, and its ttl
+releases it. The loser of the race backs off and re-reads.
 
 Both re-reads go to the **atServer**, never to local storage or a cache: a sibling
 enrollment's publication is not in local storage until sync catches up, and reading
@@ -321,7 +324,12 @@ where a second election is wanted inside the window is the winner having failed,
 which is what the ttl bounds. It has one operational consequence worth stating,
 because `revokeEnrollmentAndRotate` **revokes first**: a rotation the cooldown
 refuses leaves that enrollment cut off from the atServer while still holding the
-live generation, until the caller retries after the ttl. The root `public:pq_signing_root@<atSign>` now follows
+live generation, until the caller retries after the ttl. Release at expiry needs an
+atServer carrying at_server `00c2f9a6` (c3.16.2 or later), which deletes an expired
+immutable record on the next write; an older one refuses a new create until its expiry
+sweep, up to about 10.5 minutes, and the client does not check
+([ruling 143.7](detail/decisions.md#1437-minting-needs-at_server-c3162-or-later)).
+The root `public:pq_signing_root@<atSign>` now follows
 exactly the same pattern, behind `_rootlock@<atSign>`
 ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)):
 it is an ordinary signing key, and advertising a successor beside a retired
@@ -427,9 +435,13 @@ namespace it lands on is `ckNs`, and cold start is the whole walk coming up empt
 walk mirrors the atServer's own suffix authorisation, so the crypto gate never widens
 past the transport gate, and it is what makes AtCollection viable: sub-collection
 namespaces embed a per-**item** id, so an exact-match rule would need a keypair and a
-per-enrollment conveyance per item. Senders remember which namespaces an owner holds
-levels it has found **empty**, so a repeated write re-probes nothing; a namespace never seen
-before still probes its own levels once, which is the irreducible cost. Remembering *hits*
+per-enrollment conveyance per item. Senders remember the levels of an owner's namespaces
+they have found **empty**, so a repeated write re-probes nothing; a namespace never seen
+before still probes its own levels once, which is the irreducible cost. Only a not-found
+makes a level empty: a level whose advertisement cannot be fetched stops the walk, and the
+write uses that level's cached advertisement within its grace or fails, rather than
+sealing to a broader key the deeper one was minted to exclude
+([ruling 143.5](detail/decisions.md#1435-only-a-not-found-lets-the-resolver-walk-up)). Remembering *hits*
 instead is unsafe and was rejected: it lets a resolution skip the deeper probes entirely, so
 a key at `medical.notes` goes unseen because some earlier write warmed `notes`. Full ruling,
 its cost floor and its accepted exposure: [`decisions.md`](decisions.md) [section 19](detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03).
@@ -443,6 +455,18 @@ marks it **current**: an arriving conveyance is cached but never promoted, becau
 sync is unordered and an older record would otherwise roll new writes back onto a
 superseded key.
 
+**The current CK is per enrollment.** Each writing enrollment keeps its own current
+CK per destination, named by a pointer on the atServer in the enrollment's own
+reserved namespace, `<enrollmentId>.a.__e`, which holds only ids and is written
+unencrypted. After a restart it resumes by opening the sibling copy
+([§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)), so an
+ephemeral local store does not force a fresh CK
+([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
+Conveyance records and their notifications are kept from application code: no
+subscriber is handed a conveyance notification, and a scan lists conveyances only
+when it asks for hidden keys with `showHiddenKeys`
+([ruling 142.5](detail/decisions.md#1425-conveyances-are-kept-from-application-code)).
+
 **Key discovery, and how a sender learns of a rotation.** A sender obtains a
 recipient's `public:__nskey.<ns>@<recipient>` via an exact `plookup` and verifies the
 envelope against the publisher's `_apsk`. There is **no feedback path from a failed
@@ -453,11 +477,21 @@ it when stale, and compares the advertised `nskeyKid` against the one its curren
 was conveyed under; a mismatch forces a fresh CK sealed to the new generation. The
 cache is what keeps this off the write path — `ensureCurrent` runs on every `put`, so
 fetching each time would make a write depend on the recipient's atServer being
-reachable and break offline writes. Exposure is **the TTL plus one CK lifetime**. Without this, a sender
-keeps sealing to a pre-rotation generation that a revoked enrollment can still open,
-and **B6 revocation silently fails for inbound cross-atSign data**; with it, exposure
-is bounded by one CK lifetime. The owner's **own nskey is never looked up** for self
-data — her clients hold it from the substrate
+reachable and break offline writes. The cache holds an advertisement for
+`advertisementTtl` (15 minutes); any other failure keeps serving it for up to
+`advertisementStaleGrace` (15 more), while a not-found ends sealing to that peer at
+once, so the worst-case exposure after a rotation is the TTL plus the grace
+([ruling 143](detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30)).
+Without this, a sender keeps sealing to a pre-rotation generation that a revoked
+enrollment can still open, and **B6 revocation silently fails for inbound
+cross-atSign data**. The advertisement carries no `ttr`, and the client fetches it
+with `bypassCache`, so a reader's atServer never serves a cached copy of it
+([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)).
+For self data the owner's own advertisement is read
+local-first, which sync keeps current, through the same cache, cleared early when sync
+pulls a change, and a re-read of bytes already verified is not verified again, so her
+writes do not need the network while nothing changed; the privates her clients hold
+come from the substrate
 ([§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)).
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
@@ -471,18 +505,26 @@ crypto:
 1. `ensureCurrent(destination, ns)` — re-`plookup` the destination's advertised nskey,
    and if there is no current CK for that destination, or the advertised `nskeyKid`
    has moved, cut a fresh **CK** (cadence is otherwise the sender's policy). A CK is
-   **per recipient**, so writing to Bob and writing the self-copy use different keys
+   **per recipient**, so writing to Bob and writing alice's own data use different keys
    ([`decisions.md`](decisions.md) [section 14](detail/decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)).
 2. **Convey the CK once** (`at/nskey`): `X-Wing-seal(CK)` to that destination's
    nskey — the owner's **own** nskey for self data; the recipient's published nskey
    for shared — written as a `<ckKid>.__ck.<ns>@<owner>` record stamping `nskeyKid`.
-   (Skip if the CK is already conveyed to that generation.)
+   (Skip if the CK is already conveyed to that generation.) For shared data the
+   same CK is conveyed a second time, to the sender's **own** nskey — the
+   **sibling copy**, `<ckKid>.__ck.<ckNs>@<sender>`, sealed to the sender's key
+   covering `ckNs` and naming the recipient in its `appMetadata` — so the
+   sender's other enrollments, and the sender after a restart, can open it; a
+   sender holding no nskey covering `ckNs` mints one first, at the level the
+   recipient's key was found, unless the application turned
+   `seedNamespaceKeys` off
+   ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
 3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
    `ckKid` (+ `iv`) in `appMetadata`.
 
-A cross-atSign share runs this twice — once for the recipient, once for the sender's
-own scope so her other clients can read what she sent — producing two conveyances and
-two ciphertexts.
+A cross-atSign share therefore writes one ciphertext and two conveyances, the
+recipient's and the sibling copy. An application that wants a separate self-copy
+of the value, as AtCollection writes, still puts one.
 
 **Read** (recipient = an authorised client):
 1. On syncing a `…__ck…` record, `at/nskey` **decapsulates the CK** with the private
@@ -535,9 +577,15 @@ was never embedded in data values). It rides **ordinary sync, not the substrate*
 Conveying the new CK is O(1) — one record, every client unwraps with the shared
 nskey private.
 
-- **Retention knob.** Default: **retain** the `__ck` records (no ttl) → a
-  late-joining APKAM keypair reads history (legacy-like; no FS). **Delete** on
-  rotation → coarse FS. An offline / never-resynced client that retains a cached
+- **Retention knob.** Default: **retain** a superseded `__ck` record (no ttl)
+  while any record cites its CK → a late-joining APKAM keypair reads history
+  (legacy-like; no FS); once none does and its grace is over
+  (`supersededCkGrace`, 8 days by default from the cut of its successor, or of
+  the key itself when nothing replaced it, as each conveyance records in
+  `cutAt`, so a recipient can still open a notification sent under it), the
+  enrollment that cut it deletes it
+  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it-and-its-grace-is-over)).
+  **Delete** on rotation → coarse FS. An offline / never-resynced client that retains a cached
   CK is the residual: coarse FS is bounded by eviction *reachability*, not only by
   record deletion. Deletion discipline is the FS trusted-computing base.
 
@@ -559,10 +607,11 @@ device that never reads back never pays.
 
 **Senders must notice.** Rotation is the revocation lever, so a peer still sealing to
 the superseded generation hands the revoked enrollment a key it can still open. There
-is no failure signal back to a sender, so the sender re-`plookup`s at every
-`ensureCurrent` and re-cuts its CK on an `nskeyKid` change
+is no failure signal back to a sender, so the sender re-resolves the advertisement at
+every `ensureCurrent`, from its cache while that is fresh, and re-cuts its CK on an
+`nskeyKid` change
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)). Exposure is bounded by
-one CK lifetime.
+`advertisementTtl` plus `advertisementStaleGrace`.
 
 Rotation buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation
@@ -1185,8 +1234,10 @@ existing `enroll:revoke`; per-APKAM future-data revocation is nskey-keypair rota
 excluding it, [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 
 **`pq_signing_root` lifecycle.** **Mutable, minted under a lock**: the interlock is
-`_rootlock@<atSign>`, a short-ttl immutable self key (`Metadata.immutable` — a
-long-standing atServer feature, already live; no server change), and minting is
+`_rootlock@<atSign>`, a short-ttl immutable self key (`Metadata.immutable`, whose
+refusal of a second create is a long-standing atServer feature; release by ttl
+expiry needs an atServer carrying at_server `00c2f9a6`, c3.16.2 or later, and
+the client does not check), and minting is
 restricted to a fully privileged enrollment (`rw` on `*` **and** `__manage`). The
 winner of the lock re-reads the record under it, generates the ML-DSA-65 keypair,
 stores the private half in its own `.atKeys`, seeds it as the conveyable root secret,
@@ -1775,8 +1826,8 @@ Given/When/Then test plan + harness mapping is in [`acceptance.md`](acceptance.m
 This section records the confidentiality trust boundary honestly, so nothing elsewhere
 in the doc set overclaims what the advertised-key signing ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
 [decisions.md §12](decisions.md)) achieves. The headline: **the operator of an atSign's
-atServer is in the confidentiality TCB for all data destined to that atSign**, and the
-signing does not, by itself, change that. The last subsection sketches the key-transparency
+atServer is in the confidentiality TCB for all data destined to that atSign, and for the
+data that atSign sends to others**, and the signing does not, by itself, change that. The last subsection sketches the key-transparency
 direction that would.
 
 ### 7.1 The anchor problem: an atServer is the de-facto CA for its own atSign
@@ -1812,14 +1863,18 @@ The signing gives the sender **zero** protection here, because the sender's only
 for the `_apsk` it verifies against is the same server that forged the signature — the
 trust is circular for any party whose sole path to @alice's keys is @alice's atServer.
 
+The same applies to what @alice sends *out*. Her clients fetch a peer's keys only through
+her atServer, which proxies the lookup to the peer's
+([section 7.1](#71-the-anchor-problem-an-atserver-is-the-de-facto-ca-for-its-own-atsign)),
+so the keys @alice seals to are also only as trustworthy as her atServer.
+
 ### 7.3 Impact scope — precisely what an operator can and cannot do
 
 - **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
   — inbound cross-atSign shares, and self-data where the client relies on server-served
-  keys rather than locally-held ones — by substituting the *recipient* key. The power is
-  **per-inbound and symmetric**: @alice's operator owns inbound-to-@alice; @bob's operator
-  owns inbound-to-@bob. @alice's operator cannot read what @alice sends *out* to @bob (that
-  is sealed to @bob's key, from @bob's atServer).
+  keys rather than locally-held ones — by substituting the *recipient* key. The same holds
+  for data those atSigns send out, since their clients fetch every peer key through it,
+  so the trust covers both directions of an atSign's traffic.
 - **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
   read is a pass-through re-seal, so any *sender* signature inside the payload survives
   unchanged and still verifies. To silently **modify**, the operator must also defeat that
@@ -1833,7 +1888,7 @@ trust is circular for any party whose sole path to @alice's keys is @alice's atS
 - **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
   substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
   (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
-  break); or MITM traffic to atSigns it does not host.
+  break); or MITM traffic between atSigns it does not host.
 - **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
   the matching public and should seal self-data to the **locally-held** key, never a
   server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD
@@ -2388,9 +2443,12 @@ reason — the latter is false in general and stood here as the justification
 until 2026-09-08.** What makes the premise hold is that a posture move
 **replaces** the enrollment: a credential whose posture wants a stronger
 authentication algorithm retrofits into a new enrollment owning a data signing
-key from birth, and the superseded enrollment keeps its own `_apsk` record, so
-what its authentication key signed goes on verifying
-([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)). Naming an algorithm this build
+key from birth
+([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)).
+A fully privileged predecessor keeps its `_apsk` where verifiers read it; a
+non-root predecessor's moves to `.r.__e` when its successor first authenticates,
+and what it signed is then refused with that reason
+([ruling 144.3](detail/decisions.md#1443-every-move-of-_apsk-stands-and-verification-tells-the-locations-apart)). Naming an algorithm this build
 produces no envelope signature for is refused at construction rather than
 skipped. The reasoning for each of those is in
 [`decisions.md` 91.3](detail/decisions.md#913-the-rulings) ruling 16.
@@ -2611,10 +2669,15 @@ so renaming it changes what verifies.
 **Every verification of it is a whole-string comparison** — five of them in
 `PqSigningChain`. Any republish that changes the `_apsk` value therefore
 invalidates a link signed over the old one, and the publish does not merely
-invalidate it: `publishPublicSigningKey` writes the record value alone, so the
-link riding its `appMetadata` is not carried over and the enrollment goes from
-`chained` to `unsigned` with nothing re-conveying it. This is why the mint must
-be inert at first start, and why 9.8.2's two composers must agree.
+invalidate it: a republish removes the link fields from the record's
+`appMetadata`, which the atServer would otherwise keep, so the enrollment goes
+from `chained` to `unsigned` rather than `broken`
+([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
+An enrollment holding the signing root re-anchors in the same write; any other
+is re-conveyed by the next fully privileged start's sweep, as a root link over
+the new value. A link that still vouches for the value being published is kept.
+This is why the mint must be inert at first start, and
+why 9.8.2's two composers must agree.
 
 #### 9.8.4 What the approver conveys is a three-way branch
 
@@ -2724,8 +2787,11 @@ The three rules are complementary, not redundant:
 
 A mint files before it publishes, and `serialiseApskWrite` holds the filing,
 the publish and the retirement, so no other **writer** composing from the
-keyfile republishes part way. A stop between the filing and the publish leaves
-a key held that the advertisement does not name yet, which the next start's
+keyfile republishes part way. A link write, which re-sends the record value it
+read, holds the same lock from that read through its put, so it can never put
+back a value a republish has just replaced. A stop between the filing and the
+publish leaves a key held that the advertisement does not name yet, which the
+next start's
 `_apsk` republish, composed from the keyfile, puts right; publishing first could
 leave a key advertised that nothing holds. The window left open is against a
 **reader**: a signer calling `ApkamSigning.signingKeys` between the two writes

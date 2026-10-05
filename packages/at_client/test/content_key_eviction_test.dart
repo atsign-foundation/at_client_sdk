@@ -49,7 +49,7 @@ void main() {
       for (final key in [
         '@alice:treaty.$namespace@bob',
         'public:__nskey.$namespace$atSign',
-        '__ckcur.alice.$namespace$atSign',
+        '__ckcur.alice.$namespace.enr-1.a.__e$atSign',
         'abc123.__ck.$namespace',
         '.__ck.$namespace$atSign',
         'abc123.__ck.$atSign',

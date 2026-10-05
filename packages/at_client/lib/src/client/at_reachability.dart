@@ -1,8 +1,8 @@
 /// Why `AtClient.ensureReachable` answered as it did.
 ///
-/// An outcome, not a completion: a posture that does not seed and a namespace
-/// that can never hold a key are configuration, so they are reported as values
-/// here rather than thrown.
+/// An outcome, not a completion: a posture that does not seed, a namespace
+/// that can never hold a key and a client with no key source are
+/// configuration, so they are reported as values here rather than thrown.
 enum AtReachability {
   /// A key was already published for the namespace; this call did nothing.
   alreadyReachable,
@@ -26,6 +26,11 @@ enum AtReachability {
   /// Not "this enrollment was not granted that namespace": that arrives as
   /// [failed], carrying the atServer's refusal of the write.
   notAuthorised,
+
+  /// This client has no key source (`AtKeysIo`) to file a private half in, so
+  /// it mints nothing: a key published with its private held only in memory
+  /// is one peers seal to and nobody can open once the process ends.
+  noKeySource,
 
   /// The work did not finish inside the timeout. Nothing is known about
   /// whether it eventually will: a mint that was in flight may still land.
