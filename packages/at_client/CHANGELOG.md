@@ -19,6 +19,8 @@
   server answers each request in the scheme it arrived in.
 - fix: the namespace key a client publishes at start is for the namespace it
   was built with, not one the app switches it to straight afterwards.
+- fix: concurrent `AtRpc` requests, from one client or several, no longer
+  share a request id, which could drop one or hand a caller another's response.
 
 ## 3.15.0-rc3
 
