@@ -23,7 +23,8 @@ void main() {
         },
       ];
       for (final Object? value in values) {
-        expect(() => AtTelemetryAnyValue.check(value, 'value'), returnsNormally);
+        expect(
+            () => AtTelemetryAnyValue.check(value, 'value'), returnsNormally);
       }
     });
 
