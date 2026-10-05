@@ -7,7 +7,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/authorised_namespaces.dart'
-    show accessIn, isSeedableNamespace;
+    show accessIn, isSeedableNamespace, mayWriteIn;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver, isFullyPrivileged;
@@ -221,7 +221,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
           sharing: sharing,
           privateFiling: filing,
-        ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {});
+        ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {},
+            ownGrants: await _ownGrants());
         if (sent > 0) {
           _logger.info('Conveyed $sent held nskey private(s) to enrollment '
               '${enrollment.enrollmentId}');
@@ -340,9 +341,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     ].where(isSeedableNamespace);
     for (final namespace in candidates) {
       if (accessIn(granted, namespace) == null) continue;
-      if (own != null && !(accessIn(own, namespace)?.contains('w') ?? false)) {
-        continue;
-      }
+      if (!mayWriteIn(own, namespace)) continue;
       return namespace;
     }
     throw AtEnrollmentException(
