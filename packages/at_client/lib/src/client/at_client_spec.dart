@@ -20,16 +20,9 @@ import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  @experimental
-  set telemetry(AtTelemetryService? telemetryService);
-
-  @experimental
-  AtTelemetryService? get telemetry;
-
   /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
   RemoteSecondary? getRemoteSecondary();
 
