@@ -47,6 +47,13 @@ enum Poll {
   /// No amount of waiting turns this into an approval.
   refused,
 
+  /// The atServer answered: the enrollment was denied.
+  denied,
+
+  /// The atServer answered: the enrollment has expired, or it holds none by
+  /// this id.
+  expired,
+
   /// The atServer answered: PKAM succeeded, so the enrollment was approved.
   approved,
 }
@@ -101,6 +108,14 @@ void main() {
         case Poll.refused:
           throw UnAuthenticatedException(
               'error:AT0027:enrollment_id: 123 is revoked');
+        // These two are the atServer's PKAM replies verbatim, as at_lookup
+        // wraps them: callers match on the code and show the atServer's text.
+        case Poll.denied:
+          throw UnAuthenticatedException(
+              'Failed connecting to $atSign. error:AT0025:enrollment_id: 123 is denied');
+        case Poll.expired:
+          throw UnAuthenticatedException(
+              'Failed connecting to $atSign. error:AT0028:enrollment_id: 123 is expired or invalid');
         case Poll.approved:
           return true;
       }
@@ -240,6 +255,35 @@ void main() {
       expect(response.atAuthKeys!.defaultEncryptionPrivateKey!.toString(),
           encryptionPrivateKeyMap[atSign]!,
           reason: 'the wait completed and unwrapped the keys');
+    });
+  });
+
+  group('an answer no amount of waiting changes', () {
+    test('an expired or unknown enrollment ends the wait on its first poll',
+        () async {
+      final (response, lookup, polled) =
+          await rig(List.filled(9, Poll.expired));
+
+      await expectLater(
+          waitFor(response, lookup, 2),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', allOf(contains('AT0028'), contains('123 is expired')))),
+          reason: 'callers recognise expiry by its code, and the atServer '
+              'said why');
+
+      expect(polled.length, 1,
+          reason: 'an expired enrollment can never be approved, so nothing '
+              'is spent waiting on it');
+    });
+
+    test('a denied enrollment ends the wait on its first poll', () async {
+      final (response, lookup, polled) =
+          await rig(List.filled(9, Poll.denied));
+
+      await expectLater(waitFor(response, lookup, 2),
+          throwsA(isA<AtEnrollmentException>()));
+
+      expect(polled.length, 1);
     });
   });
 
