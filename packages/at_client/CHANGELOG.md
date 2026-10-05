@@ -1,3 +1,19 @@
+## 3.15.0-rc4
+
+- fix: a content key that has been replaced is kept for 8 days
+  (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
+  can still open a notification sent under it just before the rotation.
+
+## 3.15.0-rc3
+
+- build: requires `at_auth` ^4.0.0-rc3, which releases a keyfile lock left
+  behind by a process that stopped mid-write within 5 seconds.
+- build: requires `at_lookup` ^3.7.0-rc3, whose notification connection logs
+  `Heartbeat OK: lastReceipt <time>` on each answered heartbeat again.
+- fix: `isInSync()` answers true once a client with a sync regex, or on an
+  enrollment limited to some namespaces, has pulled everything its filter
+  admits, rather than staying false until the next write the filter admits.
+
 ## 3.15.0-rc2
 
 - feat (experimental): invitations, including to someone with no atSign yet:
@@ -20,8 +36,8 @@
   device.
 - feat (experimental): a signature from a revoked or deleted enrollment is
   refused with `WithdrawnSigningKeyException`, which says which.
-  `EnvelopeSigning.publicKeyCacheSettings` no longer takes `resetOnLookup`: a
-  fetched key is kept for a fixed time.
+- BREAKING (experimental): `EnvelopeSigning.publicKeyCacheSettings` no longer
+  takes `resetOnLookup`; a fetched key is kept for a fixed time.
 - fix: application scans and notification subscriptions no longer see the
   SDK's content-key records; a scan with `showHiddenKeys` lists them.
 - fix: a read of a record whose name ends in the app's namespace no longer

@@ -268,7 +268,9 @@ void main() {
           'a rotation collects the key it superseded, which nothing cites',
           proves: 'and deletes both conveyances of one nothing cites, which '
               'only the enrollment that cut it may do',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
       provenIn(
           'tests/at_functional_test/test/content_key_rotation_live_test.dart',
           'a superseded key is kept while a record cites it, and collected '
@@ -277,7 +279,9 @@ void main() {
               'rotation while a record cites it, and once that record is '
               'deleted the collection removes its conveyance from the '
               'atServer and keeps the current one',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
       provenIn(
           'tests/at_functional_test/test/content_key_rotation_live_test.dart',
           'a key the policy replaces is collected at the next caught-up sync',
@@ -285,7 +289,35 @@ void main() {
               'says yes replaces the key, the replacement\'s collection is '
               'refused while its own writes push, and at the next sync that '
               'catches up the uncited key leaves the atServer',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'defaults to 8 days',
+          proves: 'the default grace as a raw-literal pin on the config an '
+              'application builds without naming one',
+          clauses: ['8 days by default']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'counts from the cut of its successor, not its own',
+          proves: 'the grace runs from the replacement, not the key\'s age: a '
+              'key cut a month ago and replaced yesterday is kept, and goes '
+              'once its successor is 9 days old',
+          clauses: ['after the cut of the key that replaced it']);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'by default, a superseded key nothing cites is kept for its grace',
+          proves: 'live, with the default config: an uncited superseded key '
+              'stays on the atServer, and the same key goes at once under no '
+              'grace, so it was the grace that kept it',
+          clauses: ['8 days by default']);
+      provenIn('tests/at_functional_test/test/content_key_grace_live_test.dart',
+          'a notification sent under a key that is then replaced still opens',
+          proves: 'why the grace exists, end to end: a recipient offline while '
+              'its key was replaced opens the notification afterwards, and '
+              'with no grace the same open fails',
+          clauses: [
+            'so a recipient can still open a notification sent under it'
+          ]);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'the period is SEVEN days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '
