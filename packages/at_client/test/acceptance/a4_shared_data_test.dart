@@ -315,6 +315,15 @@ void main() {
             'with cryptoProviderId goes out under it',
         clauses: ['can answer in the scheme the notification arrived in'],
       );
+      provenIn(
+        'packages/at_client/test/notification_service_test.dart',
+        'send answers a notification in the scheme it arrived in',
+        proves: 'that a reply through NotificationService.send, given the '
+            'request\'s receivedUnder, goes out on the wire under the '
+            'provider the request arrived under rather than the client\'s '
+            'default',
+        clauses: ['can answer in the scheme the notification arrived in'],
+      );
     });
 
     test('UC-A4.5 · the sender follows the recipient, not its own preference',

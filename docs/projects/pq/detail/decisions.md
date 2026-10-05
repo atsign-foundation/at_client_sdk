@@ -14922,9 +14922,13 @@ which were shared as legacy / pq / which pq suite".
   read under: `legacy` when the sender stamped none, the same rule decryption
   uses to pick a provider.
 - Answering in kind is passing that as the reply's `cryptoProviderId`, which
-  `NotificationParams.forUpdate` already took and `AtClientBindings.notify` now
-  takes too.
+  `NotificationService.send` and `NotificationParams.forUpdate` already took
+  and `AtClientBindings.notify` now takes too. A class that overrides
+  `AtClientBindings.notify` must add the parameter; NoPorts' two test stubs
+  were the only overrides in the repositories checked.
 
-Pinned in `test/received_scheme_test.dart`, live in
+Pinned in `test/received_scheme_test.dart` and the "send answers a
+notification in the scheme it arrived in" test of
+`test/notification_service_test.dart`, live in
 `tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
 UC-A4.1 and UC-A4.4.
