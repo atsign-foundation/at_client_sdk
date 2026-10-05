@@ -15,6 +15,8 @@
   `NotificationService.send` or `AtClientBindings.notify` (new there), lets an
   app answer in the scheme it was asked in. A class that overrides
   `AtClientBindings.notify` must add the parameter.
+- feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
+  server answers each request in the scheme it arrived in.
 - fix: the namespace key a client publishes at start is for the namespace it
   was built with, not one the app switches it to straight afterwards.
 

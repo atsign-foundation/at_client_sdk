@@ -14926,9 +14926,14 @@ which were shared as legacy / pq / which pq suite".
   and `AtClientBindings.notify` now takes too. A class that overrides
   `AtClientBindings.notify` must add the parameter; NoPorts' two test stubs
   were the only overrides in the repositories checked.
+- `AtRpc` does it for its callers: `sendRequest` and `AtRpcClient.call` take a
+  `cryptoProviderId`, and a response goes out under the request's
+  `receivedUnder`. Where the server cannot write that scheme (legacy under a
+  posture that refuses it, or a provider it has not configured) the response
+  goes out under the server's default instead, so the answer is not lost.
 
-Pinned in `test/received_scheme_test.dart` and the "send answers a
-notification in the scheme it arrived in" test of
+Pinned in `test/received_scheme_test.dart`, `test/rpc/at_rpc_scheme_test.dart`
+and the "send answers a notification in the scheme it arrived in" test of
 `test/notification_service_test.dart`, live in
 `tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
 UC-A4.1 and UC-A4.4.
