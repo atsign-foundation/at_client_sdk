@@ -476,26 +476,51 @@ class NskeySeeding {
   /// than the secret store, which is in-memory by design and holds nothing
   /// after a restart — an approver relying on it would convey a new enrollment
   /// **nothing**.
+  ///
+  /// An approver holds privates for namespaces it may only read, and cannot
+  /// write an envelope into one. [ownGrants] is the approver's own grants, and
+  /// a namespace it may not write is skipped up front, with a warning naming
+  /// it; null means no recorded limit. Where the atServer still refuses a
+  /// write, that private is logged and skipped rather than ending the loop.
+  /// Returns how many were sent.
   Future<int> conveyHeldPrivatesTo(
-      KeyPackage keyPackage, Map<String, dynamic> grants) async {
+      KeyPackage keyPackage, Map<String, dynamic> grants,
+      {required Map<String, dynamic>? ownGrants}) async {
     final sharing = this.sharing;
     final filing = privateFiling;
     if (sharing == null || filing == null) return 0;
 
-    final held = await filing.readAllWhere(
-        (namespace) => SecretStore.namespaceAuthorizes(grants, namespace));
+    final unwritable = <String>{};
+    final held = await filing.readAllWhere((namespace) {
+      if (!SecretStore.namespaceAuthorizes(grants, namespace)) return false;
+      if (mayWriteIn(ownGrants, namespace)) return true;
+      unwritable.add(namespace);
+      return false;
+    });
+    if (unwritable.isNotEmpty) {
+      _logger.warning('Not conveying the nskey privates held for '
+          '${unwritable.join(', ')} to enrollment ${keyPackage.enrollmentId}: '
+          'this approver may not write there, so that enrollment is left to '
+          'pull them from another holder');
+    }
     int sent = 0;
     for (final MapEntry(key: namespace, value: privates) in held.entries) {
       for (final MapEntry(key: kid, value: seed) in privates.entries) {
-        await sharing.shareSecretWith(
-            keyPackage,
-            Secret(
-              namespace: namespace,
-              name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-              value: base64Encode(seed.bytes),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-        sent++;
+        try {
+          await sharing.shareSecretWith(
+              keyPackage,
+              Secret(
+                namespace: namespace,
+                name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+                value: base64Encode(seed.bytes),
+              ),
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          sent++;
+        } on Exception catch (e) {
+          if (e is StoppedException) rethrow;
+          _logger.warning('Could not convey the nskey private $namespace:$kid '
+              'to the new enrollment, going on with the rest: $e');
+        }
       }
     }
     return sent;

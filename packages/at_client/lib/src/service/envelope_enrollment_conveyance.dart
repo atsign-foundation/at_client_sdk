@@ -7,7 +7,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/authorised_namespaces.dart'
-    show accessIn, isSeedableNamespace;
+    show accessIn, isSeedableNamespace, mayWriteIn;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver, isFullyPrivileged;
@@ -88,7 +88,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     await sharing.shareSecretWith(
         package,
         Secret(
-          namespace: await _conveyanceNamespaceFor(pending),
+          namespace: _conveyanceNamespaceFor(pending, await _ownGrants()),
           name: enrollmentApkamSymmetricKeySecretName,
           value: apkamSymmetricKey,
         ),
@@ -132,7 +132,9 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final KeyPackage package = keyPackage;
 
     final sharing = AtClientSecretSharing.forClient(_atClient);
-    late final envelopeNamespace = _conveyanceNamespaceFor(enrollment);
+    final ownGrants = await _ownGrants();
+    late final envelopeNamespace =
+        _conveyanceNamespaceFor(enrollment, ownGrants);
 
     // NOTE: the link vouching for this enrollment is conveyed rather than
     // published, because `_apsk` accepts writes only from its own
@@ -154,7 +156,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             package,
             Secret(
-              namespace: await envelopeNamespace,
+              namespace: envelopeNamespace,
               name: PqSigningChain.linkSecretName,
               value: PqSigningChain.encodeLink(link.toJson()),
             ),
@@ -172,7 +174,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           await sharing.shareSecretWith(
               package,
               Secret(
-                namespace: await envelopeNamespace,
+                namespace: envelopeNamespace,
                 name: PqSigningChain.rootLinkSecretName,
                 value: PqSigningChain.encodeLink(link),
               ),
@@ -200,7 +202,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             package,
             Secret(
-              namespace: await envelopeNamespace,
+              namespace: envelopeNamespace,
               name: PqSigningRoot.secretName,
               value: base64Encode(private),
             ),
@@ -221,7 +223,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
           sharing: sharing,
           privateFiling: filing,
-        ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {});
+        ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {},
+            ownGrants: ownGrants);
         if (sent > 0) {
           _logger.info('Conveyed $sent held nskey private(s) to enrollment '
               '${enrollment.enrollmentId}');
@@ -235,7 +238,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     }
 
     await sharing.shareAllSecretsWith(package,
-        approvedNamespaces: enrollment.namespace);
+        approvedNamespaces: enrollment.namespace,
+        senderMayWrite: (namespace) => mayWriteIn(ownGrants, namespace));
 
     return status;
   }
@@ -302,7 +306,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             keyPackage,
             Secret(
-              namespace: await _conveyanceNamespaceFor(enrollment),
+              namespace:
+                  _conveyanceNamespaceFor(enrollment, await _ownGrants()),
               name: PqSigningChain.rootLinkSecretName,
               value: PqSigningChain.encodeLink(link),
             ),
@@ -320,8 +325,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     return conveyed;
   }
 
-  /// A namespace [enrollment] may read and this approver may write, for an
-  /// envelope addressed to it.
+  /// A namespace [enrollment] may read and this approver, granted [own], may
+  /// write, for an envelope addressed to it.
   ///
   /// The envelope is a key in an ordinary namespace, so the atServer's
   /// namespace gating decides both who may write it and who may fetch it.
@@ -329,9 +334,9 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   /// `preference.namespace`, then the namespaces this client was granted — so
   /// an enrollment granted only `*` fetches it from the approver's namespace.
   /// Throws when none qualifies.
-  Future<String> _conveyanceNamespaceFor(Enrollment enrollment) async {
+  String _conveyanceNamespaceFor(
+      Enrollment enrollment, Map<String, dynamic>? own) {
     final granted = enrollment.namespace ?? const <String, dynamic>{};
-    final own = await _ownGrants();
     final preferred = _atClient.getPreferences()?.namespace;
     final candidates = [
       ...granted.keys,
@@ -340,9 +345,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     ].where(isSeedableNamespace);
     for (final namespace in candidates) {
       if (accessIn(granted, namespace) == null) continue;
-      if (own != null && !(accessIn(own, namespace)?.contains('w') ?? false)) {
-        continue;
-      }
+      if (!mayWriteIn(own, namespace)) continue;
       return namespace;
     }
     throw AtEnrollmentException(

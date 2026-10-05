@@ -3,12 +3,21 @@
 - fix: a content key that has been replaced is kept for 8 days
   (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
   can still open a notification sent under it just before the rotation.
+- feat: a notification can be ephemeral (`NotificationParams.forUpdate(...,
+  ephemeral: true)`, `send(..., ephemeral: true)`): an atServer that supports
+  it delivers it without storing it, for at most 2 minutes. It cannot carry a
+  `ttr` or be cached at the recipient.
+- feat: where the atServer supports it, a notification carries its exact
+  expiry rather than a relative `ttln`, so it no longer drifts at each hop.
+- build: requires `at_commons` ^5.19.0.
 - feat: `ensureReachable`'s result says whether this client can open what
   peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
 - fix: an approver whose client has only just started still hands a new
   enrollment every namespace key it may read, under a `*` grant too.
 - fix: a post-quantum enrollment granted only `*` can be approved; it was
   refused for having no namespace to be sent its keys in.
+- fix: approving no longer throws when the approver may only read a namespace
+  it holds a key for; the new enrollment gets that key from another holder.
 - feat: `atClient.schemeOf(key)` tells how a value another atSign shared was
   protected: legacy or post-quantum, and under which KEM.
   `AtNotification.receivedUnder`, passed as the `cryptoProviderId` of

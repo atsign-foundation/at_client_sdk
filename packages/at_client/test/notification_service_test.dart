@@ -115,6 +115,10 @@ class RecordingProvider extends CryptoProvider {
       value.substring(4);
 }
 
+// NOTE: send() asks the atServer's info before it notifies; the notify
+// command is what these tests are about.
+bool _isNotify(dynamic command) => '$command'.startsWith('notify:');
+
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   final mockAtChops = MockAtChops();
@@ -593,6 +597,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // The send routed encryption to the override provider, so the wire
       // appMetadata carries that providerId (not the preference default).
@@ -641,6 +646,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // With no override, the send routed encryption to the preference default
       // provider, so the wire appMetadata carries that providerId.
@@ -690,6 +696,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       expect(
         command,
@@ -744,6 +751,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // NOTE: the wire name is frozen — the recipient derives the ciphertext's
       // binding from this string, so moving it computes different bytes.
@@ -757,6 +765,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
 
       // NOTE: a frozen wire shape, with only the generated id substituted out
