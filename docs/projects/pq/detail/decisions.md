@@ -14899,3 +14899,32 @@ Pinned in the "the namespace the envelopes go in" group of
 `test/enrollment_conveyance_guard_test.dart`, live in
 `tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, and
 cited by UC-A2.1.
+
+## 149. How a shared value was protected is read from its metadata, and a reply goes in kind (2026-10-05)
+
+**Decided by gkc on 2026-10-05**, while working out how NoPorts runs on a fleet
+of old and new daemons: a program that receives a legacy request has to know it
+did, and answer in legacy. gkc widened it past notifications: "a client might
+like to be able to scan their set of data shared with them by others, and see
+which were shared as legacy / pq / which pq suite".
+
+- `ReceivedScheme` names the provider a value was sealed under, whether that
+  provider is post-quantum, and, for a post-quantum value, the KEM
+  (`keyAlgorithm`) and sealing suite its content key was conveyed under.
+- `atClient.schemeOf(key)`, from the `ReceivedSchemes` extension, reads it from
+  metadata and never from the value. It uses the key's own `appMetadata` when
+  the key carries it, as a received notification's does; otherwise the
+  record's, from local storage first and then with `lookup:meta` on the
+  sharer's atServer. The KEM is read the same way off the record that conveyed
+  the content key, the recipient's cached copy first. When that record cannot
+  be read, the KEM and suite are null rather than guessed.
+- `AtNotification.receivedUnder` is the provider a notification's value was
+  read under: `legacy` when the sender stamped none, the same rule decryption
+  uses to pick a provider.
+- Answering in kind is passing that as the reply's `cryptoProviderId`, which
+  `NotificationParams.forUpdate` already took and `AtClientBindings.notify` now
+  takes too.
+
+Pinned in `test/received_scheme_test.dart`, live in
+`tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
+UC-A4.1 and UC-A4.4.

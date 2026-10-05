@@ -9,6 +9,10 @@
   enrollment every namespace key it may read, under a `*` grant too.
 - fix: a post-quantum enrollment granted only `*` can be approved; it was
   refused for having no namespace to be sent its keys in.
+- feat: `atClient.schemeOf(key)` tells how a value another atSign shared was
+  protected: legacy or post-quantum, and under which KEM.
+  `AtNotification.receivedUnder` and a `cryptoProviderId` on
+  `AtClientBindings.notify` let an app answer in the scheme it was asked in.
 
 ## 3.15.0-rc3
 
