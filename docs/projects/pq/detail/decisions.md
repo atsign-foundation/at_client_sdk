@@ -14868,7 +14868,14 @@ anyway. The new enrollment asks for a skipped private itself: at its next start
 for a namespace it seeds, otherwise at the first read that misses it. Pinned in
 the late joiner group of `test/nskey_self_heal_test.dart` and the
 "a namespace the approver may not write" group of
-`test/enrollment_conveyance_guard_test.dart`, and cited by UC-A5.1(b).
+`test/enrollment_conveyance_guard_test.dart`, and live in
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, where an
+approver granted `r` on a namespace it holds a key for approves a `*`
+enrollment. With the secret-store route's skip and catch removed, that approval
+fails with the atServer's `UnAuthorized client in request` refusal of the
+envelope, so the refusal is observed, not inferred; with the skip alone
+removed, the catch logs the same refusal and the approval completes. Cited by
+UC-A5.1(b).
 
 **Both, live, for a `*` enrollment.**
 `tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart` proves

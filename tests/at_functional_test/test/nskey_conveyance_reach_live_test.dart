@@ -190,4 +190,36 @@ void main() {
         reason: 'the control: approved by the same approver, holding the '
             'same keys, an enrollment without access is conveyed none');
   }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'an approver that may only read a namespace it holds a key for still '
+      'approves, and conveys the keys it may write', () async {
+    final readOnly = 'readonly$runId';
+    final writable = 'writable$runId';
+    final approver = await holder(
+        'ro-approver', {readOnly: 'r', '*': 'rw', '__manage': 'rw'});
+    final writer = await holder('ro-writer', {readOnly: 'rw'});
+
+    final readOnlyKid = await mint(writer, readOnly);
+    expect(await received(approver, readOnly, readOnlyKid), isTrue,
+        reason: 'the precondition: read access is access, so the mint '
+            'reaches the approver, which now holds a key for a namespace the '
+            'atServer will not let it write');
+    final writableKid = await mint(approver, writable);
+
+    // NOTE: the approval itself is the assertion. The atServer refuses an
+    // envelope this approver writes in the read-only namespace, and an
+    // approval that let that refusal escape would throw here, after the
+    // approval had landed.
+    final star = await holder('ro-star', const {'*': 'rw'},
+        approver: approver.enrolled.client);
+
+    expect(await received(star, writable, writableKid), isTrue,
+        reason: 'the approver may write $writable, so the approval conveys '
+            'its key');
+    expect(await received(star, readOnly, readOnlyKid), isFalse,
+        reason: 'nothing this approver may write is in $readOnly, so the '
+            'approval cannot convey that key; the enrollment asks a holder '
+            'that may');
+  }, timeout: Timeout(Duration(minutes: 3)));
 }

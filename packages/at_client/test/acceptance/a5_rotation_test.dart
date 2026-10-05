@@ -173,6 +173,30 @@ void main() {
             'neither',
         clauses: ['in every namespace its grant covers'],
       );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approver that may only read a namespace it holds a key for still '
+            'approves, and conveys the keys it may write',
+        proves: 'an approver granted `r` on a namespace, holding its key from '
+            'a mint, approves an enrollment granted only `*` against a live '
+            'atServer: the approval completes, the key it may write is '
+            'conveyed and the read-only one is not. With the secret-store '
+            'route\'s skip and catch removed, the same test fails with the '
+            'atServer\'s refusal of the envelope, thrown out of the approval',
+        clauses: ['the approval still completes'],
+      );
+      provenIn(
+        'packages/at_client/test/enrollment_conveyance_guard_test.dart',
+        'is tried by neither route when its grants say so',
+        proves: 'in an approval through the real conveyance, neither the '
+            'keyfile route nor the secret-store route tries a write in a '
+            'namespace the approver holds only `r` on, and the approval '
+            'completes. Its sibling leaves the grants unknown, so the write '
+            'is tried and refused, and the secrets after it still go. '
+            'Mutation-proven: dropping either route\'s grants, or the '
+            'per-secret catch, reddens them',
+        clauses: ['the approval still completes'],
+      );
     });
 
     test('UC-A5.2 · per-enrollment auth revocation', () {
