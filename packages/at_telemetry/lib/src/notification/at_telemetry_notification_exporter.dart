@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:collection';
+
 import '../codec/at_telemetry_notification_codec.dart';
 import '../exporters/at_telemetry_log_record_exporter.dart';
 import '../exporters/at_telemetry_metric_exporter.dart';
@@ -16,16 +19,18 @@ final class AtTelemetryNotificationExporter
         AtTelemetryLogRecordExporter,
         AtTelemetryMetricExporter,
         AtTelemetrySpanExporter {
-  static const int defaultMaxPendingExports = 1000;
+  static const int defaultMaxQueuedExports = 1000;
   static const int defaultMaxPayloadCharacters = 4 * ((1024 * 1024 + 2) ~/ 3);
 
   final AtTelemetryNotify _notify;
   final String _serviceName;
   final AtTelemetryNotificationCodec _codec;
-  final int _maxPendingExports;
+  final int _maxQueuedExports;
   final int _maxPayloadCharacters;
-  Future<void> _pending = Future<void>.value();
-  int _pendingCount = 0;
+  final ListQueue<(String, String, Completer<void>)> _queue =
+      ListQueue<(String, String, Completer<void>)>();
+  Future<void> _last = Future<void>.value();
+  bool _sending = false;
   bool _closed = false;
   (Object, StackTrace)? _failure;
 
@@ -33,19 +38,19 @@ final class AtTelemetryNotificationExporter
     required AtTelemetryNotify notify,
     required String serviceName,
     AtTelemetryNotificationCodec codec = const AtTelemetryNotificationCodec(),
-    int maxPendingExports = defaultMaxPendingExports,
+    int maxQueuedExports = defaultMaxQueuedExports,
     int maxPayloadCharacters = defaultMaxPayloadCharacters,
   })  : _notify = notify,
         _serviceName = serviceName,
         _codec = codec,
-        _maxPendingExports = maxPendingExports,
+        _maxQueuedExports = maxQueuedExports,
         _maxPayloadCharacters = maxPayloadCharacters {
     if (serviceName.trim().isEmpty) {
       throw ArgumentError.value(
           serviceName, 'serviceName', 'must not be empty');
     }
-    if (maxPendingExports < 1) {
-      throw RangeError.value(maxPendingExports, 'maxPendingExports');
+    if (maxQueuedExports < 1) {
+      throw RangeError.value(maxQueuedExports, 'maxQueuedExports');
     }
     if (maxPayloadCharacters < 1) {
       throw RangeError.value(maxPayloadCharacters, 'maxPayloadCharacters');
@@ -79,7 +84,7 @@ final class AtTelemetryNotificationExporter
 
   @override
   Future<void> flush() async {
-    await _pending;
+    await _last;
     final (Object, StackTrace)? failure = _failure;
     _failure = null;
     if (failure != null) {
@@ -97,9 +102,6 @@ final class AtTelemetryNotificationExporter
     if (_closed) {
       return Future<void>.error(StateError('Exporter is closed'));
     }
-    if (_pendingCount >= _maxPendingExports) {
-      return Future<void>.error(StateError('Telemetry backlog is full'));
-    }
 
     final String payload;
     try {
@@ -111,17 +113,36 @@ final class AtTelemetryNotificationExporter
       return Future<void>.error(error, stackTrace);
     }
 
-    _pendingCount++;
-    final Future<void> sent = _pending.then(
-      (_) => _notify(idAndNamespace, payload),
-    );
-    _pending = sent.then<void>(
-      (_) => _pendingCount--,
-      onError: (Object error, StackTrace stackTrace) {
-        _pendingCount--;
-        _failure ??= (error, stackTrace);
-      },
-    );
-    return sent;
+    final Completer<void> done = Completer<void>();
+    _last = done.future.catchError((Object error, StackTrace stackTrace) {
+      _failure ??= (error, stackTrace);
+    });
+    _queue.add((idAndNamespace, payload, done));
+    if (_queue.length > _maxQueuedExports) {
+      final (String _, String _, Completer<void> dropped) =
+          _queue.removeFirst();
+      dropped.completeError(
+        StateError('Telemetry backlog is full, dropped the oldest export'),
+      );
+    }
+    if (!_sending) {
+      unawaited(_drain());
+    }
+    return done.future;
+  }
+
+  Future<void> _drain() async {
+    _sending = true;
+    while (_queue.isNotEmpty) {
+      final (String idAndNamespace, String payload, Completer<void> done) =
+          _queue.removeFirst();
+      try {
+        await _notify(idAndNamespace, payload);
+        done.complete();
+      } on Object catch (error, stackTrace) {
+        done.completeError(error, stackTrace);
+      }
+    }
+    _sending = false;
   }
 }

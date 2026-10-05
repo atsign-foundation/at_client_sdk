@@ -161,7 +161,8 @@ void main() {
     expect(notifications, isEmpty);
   });
 
-  test('bounds notification size and pending sends', () async {
+  test('bounds notification size and discards the oldest queued sends',
+      () async {
     exporter = AtTelemetryNotificationExporter(
       serviceName: 'my_app',
       maxPayloadCharacters: 1,
@@ -173,17 +174,31 @@ void main() {
     await exporter.shutdown();
 
     final Completer<void> release = Completer<void>();
+    final List<String> delivered = <String>[];
     exporter = AtTelemetryNotificationExporter(
       serviceName: 'my_app',
-      maxPendingExports: 1,
-      notify: (String key, String payload) => release.future,
+      maxQueuedExports: 1,
+      notify: (String key, String payload) async {
+        await release.future;
+        delivered.add(codec.decode(payload).single.name);
+      },
     );
-    final Future<void> sent = exporter.export(log);
-    await expectLater(exporter.export(log), throwsStateError);
+    AtTelemetryLogRecord named(String name) =>
+        AtTelemetryLogRecord(name: name, timestamp: timestamp);
+
+    final Future<void> inFlight = exporter.export(named('in.flight'));
+    final Future<void> oldest = exporter.export(named('oldest'));
+    final Future<void> newest = exporter.export(named('newest'));
+
+    await expectLater(oldest, throwsStateError);
     release.complete();
-    await sent;
+    await Future.wait<void>(<Future<void>>[inFlight, newest]);
+    await expectLater(exporter.flush(), throwsStateError);
+    expect(delivered, <String>['in.flight', 'newest']);
+
+    await exporter.export(named('after.drain'));
     await exporter.flush();
-    await exporter.export(log);
+    expect(delivered.last, 'after.drain');
   });
 
   test('validates configuration', () {
@@ -195,7 +210,7 @@ void main() {
       expect(
         () => AtTelemetryNotificationExporter(
           serviceName: configuration.$1,
-          maxPendingExports: configuration.$2,
+          maxQueuedExports: configuration.$2,
           maxPayloadCharacters: configuration.$3,
           notify: (String key, String payload) async {},
         ),
