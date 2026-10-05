@@ -16,11 +16,11 @@ Future<void> main() async {
   );
   final DateTime timestamp = DateTime.now().toUtc();
   await exporter.export(AtTelemetryLogRecord(
-    name: 'app.started',
+    eventName: 'app.started',
     timestamp: timestamp,
   ));
   await exporter.export(AtTelemetryLogRecord(
-    name: 'app.connected',
+    eventName: 'app.connected',
     timestamp: timestamp,
     attributes: <String, Object?>{'app.connections': 2},
   ));
@@ -36,7 +36,7 @@ Future<void> _monitor(Stream<(String, String)> notifications) async {
       final AtTelemetryLogRecord logRecord = AtTelemetryLogRecord.fromJson(
         jsonDecode(payload) as Map<String, Object?>,
       );
-      print('$key: ${logRecord.name}');
+      print('$key: ${logRecord.eventName}');
     }
   }
 }

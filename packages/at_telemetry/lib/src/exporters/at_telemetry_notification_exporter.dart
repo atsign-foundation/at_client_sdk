@@ -70,13 +70,12 @@ final class AtTelemetryNotificationExporter
   }
 
   String _encode(AtTelemetryLogRecord logRecord) {
-    if (logRecord.name.trim().isEmpty) {
-      throw ArgumentError.value(
-          logRecord.name, 'logRecord.name', 'must not be empty');
-    }
     return jsonEncode(AtTelemetryLogRecord(
-      name: logRecord.name,
-      timestamp: logRecord.timestamp,
+      eventName: logRecord.eventName,
+      body: logRecord.body,
+      timestamp: logRecord.timestamp ?? DateTime.now(),
+      severityNumber: logRecord.severityNumber,
+      severityText: logRecord.severityText,
       attributes: <String, Object?>{
         'service.name': _serviceName,
         ...logRecord.attributes,

@@ -39,7 +39,7 @@ Future<void> main() async {
   );
 
   await exporter.export(AtTelemetryLogRecord(
-    name: 'atsign.server.heartbeat',
+    eventName: 'atsign.server.heartbeat',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
       AtTelemetryHttpSignature.serverIdAttribute: producer,
@@ -91,7 +91,7 @@ Future<void> _handle(
   const AtTelemetryLogsCodec codec = AtTelemetryLogsCodec();
   for (final AtTelemetryLogRecord event in codec.decodeExportRequest(body)) {
     print('Verified event from ${signature.keyId}: '
-        '${event.name} ${event.attributes}');
+        '${event.eventName} ${event.attributes}');
   }
   return _reply(request, HttpStatus.ok, codec.encodeExportResponse());
 }

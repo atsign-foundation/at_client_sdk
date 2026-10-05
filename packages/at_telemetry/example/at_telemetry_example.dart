@@ -5,7 +5,7 @@ import 'package:at_telemetry/at_telemetry.dart';
 // Run with: dart run example/at_telemetry_example.dart
 Future<void> main() async {
   final AtTelemetryLogRecord event = AtTelemetryLogRecord(
-    name: 'atsign.app.started',
+    eventName: 'atsign.app.started',
     timestamp: DateTime.now().toUtc(),
     attributes: const <String, Object?>{
       'app.version': '1.2.3',
@@ -27,7 +27,7 @@ Future<void> main() async {
   final AtTelemetryLogRecord fromJson = AtTelemetryLogRecord.fromJson(
     jsonDecode(json) as Map<String, Object?>,
   );
-  print('JSON round trip: ${fromJson.name} at ${fromJson.timestamp}');
+  print('JSON round trip: ${fromJson.eventName} at ${fromJson.timestamp}');
 }
 
 final class ConsoleExporter implements AtTelemetryLogRecordExporter {
