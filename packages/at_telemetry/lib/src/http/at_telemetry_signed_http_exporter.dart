@@ -3,30 +3,17 @@ import 'dart:collection';
 
 import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
 import 'package:at_telemetry/src/exporters/at_telemetry_log_record_exporter.dart';
-import 'package:at_telemetry/src/models/metrics/at_telemetry_metric.dart';
-import 'package:at_telemetry/src/exporters/at_telemetry_metric_exporter.dart';
-import 'package:at_telemetry/src/models/traces/at_telemetry_span.dart';
-import 'package:at_telemetry/src/exporters/at_telemetry_span_exporter.dart';
 import 'package:at_telemetry/src/security/at_telemetry_signer.dart';
 import 'package:at_telemetry/src/security/at_telemetry_http_signature.dart';
 import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_metrics_codec.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_traces_codec.dart';
 import 'package:http/http.dart' as http;
 
 final class AtTelemetrySignedHttpExporter
-    implements
-        AtTelemetryLogRecordExporter,
-        AtTelemetryMetricExporter,
-        AtTelemetrySpanExporter {
+    implements AtTelemetryLogRecordExporter {
   static const String logsPath = '/v1/logs';
-  static const String metricsPath = '/v1/metrics';
-  static const String tracesPath = '/v1/traces';
   static const int defaultMaxQueuedExports = 1000;
 
   final Uri _logsEndpoint;
-  final Uri _metricsEndpoint;
-  final Uri _tracesEndpoint;
   final String _serviceName;
   final String _keyId;
   final String _audience;
@@ -50,9 +37,7 @@ final class AtTelemetrySignedHttpExporter
     http.Client? client,
     void Function(Object)? onError,
     int maxQueuedExports = defaultMaxQueuedExports,
-  })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
-        _metricsEndpoint = _signalEndpoint(endpoint, metricsPath),
-        _tracesEndpoint = _signalEndpoint(endpoint, tracesPath),
+  })  : _logsEndpoint = _logsEndpointFor(endpoint),
         _serviceName = serviceName,
         _keyId = keyId,
         _audience = audience,
@@ -66,19 +51,17 @@ final class AtTelemetrySignedHttpExporter
     }
   }
 
-  static Uri _signalEndpoint(Uri endpoint, String path) {
+  static Uri _logsEndpointFor(Uri endpoint) {
     if (!endpoint.hasAuthority ||
         (endpoint.scheme != 'http' && endpoint.scheme != 'https') ||
         endpoint.hasQuery ||
         endpoint.hasFragment ||
         (endpoint.path.isNotEmpty &&
             endpoint.path != '/' &&
-            !endpoint.path.endsWith(logsPath) &&
-            !endpoint.path.endsWith(metricsPath) &&
-            !endpoint.path.endsWith(tracesPath))) {
+            !endpoint.path.endsWith(logsPath))) {
       throw ArgumentError.value(endpoint, 'endpoint', 'invalid OTLP endpoint');
     }
-    return endpoint.replace(path: path);
+    return endpoint.replace(path: logsPath);
   }
 
   @override
@@ -90,34 +73,6 @@ final class AtTelemetrySignedHttpExporter
   Future<void> sendConfirmed(AtTelemetryLogRecord event) {
     final (Future<void> sent, Future<void> _) = _enqueueLogRecord(event);
     return sent;
-  }
-
-  @override
-  Future<void> exportMetrics(Iterable<AtTelemetryMetric> measurements) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final (Future<void> _, Future<void> handled) = _enqueue(
-        _metricsEndpoint,
-        () => const AtTelemetryMetricsCodec().encodeExportRequest(
-              measurements,
-              serviceName: _serviceName,
-            ));
-    return handled;
-  }
-
-  @override
-  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final (Future<void> _, Future<void> handled) = _enqueue(
-        _tracesEndpoint,
-        () => const AtTelemetryTracesCodec().encodeExportRequest(
-              spans,
-              serviceName: _serviceName,
-            ));
-    return handled;
   }
 
   Future<void> sendEncodedLogs(List<int> body) {

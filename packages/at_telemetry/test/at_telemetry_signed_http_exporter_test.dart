@@ -51,61 +51,10 @@ void main() {
     expect(requests, 2);
   });
 
-  test('sends a signed OTLP gauge to /v1/metrics', () async {
+  test('exports logs in order with signed requests', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
-    final AtTelemetrySignedHttpExporter exporter =
-        AtTelemetrySignedHttpExporter(
-      endpoint: Uri.parse('http://localhost:4318'),
-      serviceName: 'at_secondary_server',
-      keyId: '@producer1',
-      audience: 'localhost',
-      signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
-      client: MockClient((http.Request request) async {
-        expect(request.url.path, '/v1/metrics');
-        final AtTelemetryHttpSignature signed = AtTelemetryHttpSignature.parse(
-          input: request.headers['signature-input']!,
-          signature: request.headers['signature']!,
-          digest: request.headers['content-digest']!,
-          audience: request.headers['at-telemetry-audience']!,
-        );
-        expect(signed.matchesBody(request.bodyBytes), isTrue);
-        expect(
-          await signed.verify(
-            path: request.url.path,
-            publicKey: keys.publicKey.toString(),
-          ),
-          isTrue,
-        );
-        final AtTelemetryGauge gauge = const AtTelemetryMetricsCodec()
-            .decodeExportRequest(request.bodyBytes)
-            .single as AtTelemetryGauge;
-        expect(gauge.name, 'atsign.atserver.uptime');
-        expect(gauge.unit, 's');
-        expect(gauge.value, 42);
-        return http.Response('', 200);
-      }),
-    );
-
-    await exporter.exportMetrics(<AtTelemetryGauge>[
-      AtTelemetryGauge(
-        name: 'atsign.atserver.uptime',
-        value: 42,
-        unit: 's',
-        timestamp: DateTime.now().toUtc(),
-        attributes: const <String, Object?>{
-          'atsign.atserver.id': '@producer1',
-        },
-      ),
-    ]);
-    await exporter.shutdown();
-  });
-
-  test('exports logs, sums, histograms and spans in order with signed requests',
-      () async {
-    final RSAKeypair keys = RSAKeypair.fromRandom();
-    final List<String> paths = <String>[];
+    final List<String> names = <String>[];
     final DateTime start = DateTime.utc(2026, 9, 29);
-    final DateTime end = start.add(const Duration(seconds: 1));
     final AtTelemetrySignedHttpExporter exporter =
         AtTelemetrySignedHttpExporter(
       endpoint: Uri.parse('http://localhost:4318'),
@@ -114,7 +63,7 @@ void main() {
       audience: 'localhost',
       signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
       client: MockClient((http.Request request) async {
-        paths.add(request.url.path);
+        expect(request.url.path, '/v1/logs');
         expect(request.followRedirects, isFalse);
         expect(request.headers, isNot(contains('authorization')));
         final AtTelemetryHttpSignature signature =
@@ -129,63 +78,29 @@ void main() {
             await signature.verify(
                 path: request.url.path, publicKey: keys.publicKey.toString()),
             isTrue);
-        if (request.url.path == '/v1/metrics') {
-          final List<AtTelemetryMetric> decoded =
-              const AtTelemetryMetricsCodec()
-                  .decodeExportRequest(request.bodyBytes);
-          expect(decoded[0], isA<AtTelemetrySum>());
-          expect(decoded[1], isA<AtTelemetryHistogram>());
-          expect(decoded.first.attributes['service.name'], 'application');
-        }
-        if (request.url.path == '/v1/traces') {
-          final AtTelemetrySpan span = const AtTelemetryTracesCodec()
-              .decodeExportRequest(request.bodyBytes)
-              .single;
-          expect(span.name, 'lookup');
-          expect(span.startTimestamp, start);
-          expect(span.endTimestamp, end);
-          expect(span.attributes['atsign.atserver.id'], '@producer1');
-          expect(span.attributes['service.name'], 'application');
-          expect(
-              await signature.verify(
-                  path: '/v1/metrics', publicKey: keys.publicKey.toString()),
-              isFalse);
-        }
+        final AtTelemetryLogRecord log = const AtTelemetryLogsCodec()
+            .decodeExportRequest(request.bodyBytes)
+            .single;
+        expect(log.attributes['service.name'], 'application');
+        names.add(log.name);
         return http.Response('', 200);
       }),
     );
 
-    final Future<void> logs = exporter
-        .export(AtTelemetryLogRecord(name: 'started', timestamp: start));
-    final Future<void> metrics = exporter.exportMetrics(<AtTelemetryMetric>[
-      AtTelemetrySum(
-          name: 'requests', value: 1, timestamp: end, startTimestamp: start),
-      AtTelemetryHistogram(
-          name: 'duration',
-          count: 1,
-          sum: 1,
-          bucketCounts: const <int>[1],
-          timestamp: end),
-    ]);
-    final Future<void> traces = exporter.exportSpans(<AtTelemetrySpan>[
-      AtTelemetrySpan(
-          name: 'lookup',
-          traceId: '0123456789abcdef0123456789abcdef',
-          spanId: '0123456789abcdef',
-          startTimestamp: start,
-          endTimestamp: end,
-          attributes: const <String, Object?>{
-            'atsign.atserver.id': '@producer1'
-          }),
-    ]);
+    final List<Future<void>> exports = <Future<void>>[
+      for (final String name in <String>['started', 'connected', 'stopped'])
+        exporter.export(AtTelemetryLogRecord(name: name, timestamp: start)),
+    ];
     await exporter.flush();
-    await Future.wait<void>(<Future<void>>[logs, metrics, traces]);
+    await Future.wait<void>(exports);
     await exporter.shutdown();
 
-    expect(paths, <String>['/v1/logs', '/v1/metrics', '/v1/traces']);
+    expect(names, <String>['started', 'connected', 'stopped']);
     expect(
-        () => exporter.exportMetrics(<AtTelemetryMetric>[]), throwsStateError);
-    expect(() => exporter.exportSpans(<AtTelemetrySpan>[]), throwsStateError);
+      () =>
+          exporter.export(AtTelemetryLogRecord(name: 'late', timestamp: start)),
+      throwsStateError,
+    );
   });
 
   test('encodes telemetry at export time so later changes are not sent',
@@ -218,40 +133,6 @@ void main() {
       ..clear()
       ..['when'] = DateTime.utc(2026);
 
-    final Map<String, Object?> metricAttributes = <String, Object?>{
-      'room': 'lab',
-    };
-    final List<int> bucketCounts = <int>[1, 1];
-    exporter.exportMetrics(<AtTelemetryMetric>[
-      AtTelemetryGauge(
-          name: 'temperature',
-          value: 20,
-          timestamp: timestamp,
-          attributes: metricAttributes),
-      AtTelemetryHistogram(
-          name: 'duration',
-          count: 2,
-          timestamp: timestamp,
-          bucketCounts: bucketCounts,
-          explicitBounds: const <double>[1]),
-    ]);
-    metricAttributes['room'] = 'office';
-    bucketCounts[0] = 5;
-
-    final List<AtTelemetrySpanEvent> events = <AtTelemetrySpanEvent>[
-      AtTelemetrySpanEvent(name: 'started', timestamp: timestamp),
-    ];
-    exporter.exportSpans(<AtTelemetrySpan>[
-      AtTelemetrySpan(
-          name: 'lookup',
-          traceId: '0123456789abcdef0123456789abcdef',
-          spanId: '0123456789abcdef',
-          startTimestamp: timestamp,
-          endTimestamp: timestamp,
-          events: events),
-    ]);
-    events.add(AtTelemetrySpanEvent(name: 'added.later', timestamp: timestamp));
-
     await exporter.shutdown();
 
     expect(errors, isEmpty);
@@ -259,8 +140,6 @@ void main() {
       '/v1/logs',
       '/v1/logs',
       '/v1/logs',
-      '/v1/metrics',
-      '/v1/traces',
     ]);
     expect(<Object?>[
       for (final http.Request request in requests.take(3))
@@ -273,15 +152,6 @@ void main() {
       1,
       2
     ]);
-    final List<AtTelemetryMetric> metrics = const AtTelemetryMetricsCodec()
-        .decodeExportRequest(requests[3].bodyBytes);
-    expect(metrics[0].attributes['room'], 'lab');
-    expect((metrics[1] as AtTelemetryHistogram).bucketCounts, <int>[1, 1]);
-    final AtTelemetrySpan span = const AtTelemetryTracesCodec()
-        .decodeExportRequest(requests[4].bodyBytes)
-        .single;
-    expect(span.events.map((AtTelemetrySpanEvent event) => event.name),
-        <String>['started']);
   });
 
   test('discards the oldest queued exports when the backlog is full', () async {
@@ -344,14 +214,11 @@ void main() {
     );
   });
 
-  test('accepts any OTLP signal endpoint and routes spans to traces', () async {
+  test('accepts a base or logs endpoint and always sends to /v1/logs',
+      () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final DateTime timestamp = DateTime.utc(2026, 9, 29);
-    for (final String path in <String>[
-      '/v1/logs',
-      '/v1/metrics',
-      '/v1/traces'
-    ]) {
+    for (final String path in <String>['', '/', '/v1/logs']) {
       final List<String> delivered = <String>[];
       final AtTelemetrySignedHttpExporter exporter =
           AtTelemetrySignedHttpExporter(
@@ -365,21 +232,33 @@ void main() {
           return http.Response('', 200);
         }),
       );
-      await exporter.exportSpans(<AtTelemetrySpan>[
-        AtTelemetrySpan(
-            name: 'lookup',
-            traceId: '0123456789abcdef0123456789abcdef',
-            spanId: '0123456789abcdef',
-            startTimestamp: timestamp,
-            endTimestamp: timestamp),
-      ]);
+      await exporter
+          .export(AtTelemetryLogRecord(name: 'lookup', timestamp: timestamp));
       await exporter.shutdown();
-      expect(delivered, <String>['/v1/traces']);
+      expect(delivered, <String>['/v1/logs'], reason: path);
     }
   });
 
-  test('invalid metric and span payloads are reported without sending HTTP',
-      () async {
+  test('rejects metrics and traces endpoints', () {
+    final RSAKeypair keys = RSAKeypair.fromRandom();
+    for (final String path in <String>['/v1/metrics', '/v1/traces']) {
+      expect(
+        () => AtTelemetrySignedHttpExporter(
+          endpoint: Uri.parse('http://localhost:4318$path'),
+          serviceName: 'application',
+          keyId: '@producer1',
+          audience: 'localhost',
+          signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+          client: MockClient(
+              (http.Request request) async => http.Response('', 200)),
+        ),
+        throwsArgumentError,
+        reason: path,
+      );
+    }
+  });
+
+  test('invalid log records are reported without sending HTTP', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final List<Object> errors = <Object>[];
     int requests = 0;
@@ -396,19 +275,18 @@ void main() {
         return http.Response('', 200);
       }),
     );
-    await exporter.exportMetrics(<AtTelemetryMetric>[]);
-    await exporter.exportSpans(<AtTelemetrySpan>[]);
+    await exporter.export(
+        AtTelemetryLogRecord(name: ' ', timestamp: DateTime.utc(2026, 9, 29)));
     await exporter.shutdown();
-    expect(errors, hasLength(2));
+    expect(errors, hasLength(1));
     expect(errors, everyElement(isA<ArgumentError>()));
     expect(requests, 0);
   });
 
-  test('span rejection is best effort and does not block subsequent metrics',
-      () async {
+  test('a rejected log is best effort and does not block later logs', () async {
     final RSAKeypair keys = RSAKeypair.fromRandom();
     final List<Object> errors = <Object>[];
-    final List<String> paths = <String>[];
+    final List<String> names = <String>[];
     final DateTime timestamp = DateTime.utc(2026, 9, 29);
     final AtTelemetrySignedHttpExporter exporter =
         AtTelemetrySignedHttpExporter(
@@ -419,24 +297,21 @@ void main() {
       signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
       onError: errors.add,
       client: MockClient((http.Request request) async {
-        paths.add(request.url.path);
-        return http.Response('', request.url.path == '/v1/traces' ? 401 : 200);
+        final String name = const AtTelemetryLogsCodec()
+            .decodeExportRequest(request.bodyBytes)
+            .single
+            .name;
+        names.add(name);
+        return http.Response('', name == 'rejected' ? 401 : 200);
       }),
     );
-    await exporter.exportSpans(<AtTelemetrySpan>[
-      AtTelemetrySpan(
-          name: 'lookup',
-          traceId: '0123456789abcdef0123456789abcdef',
-          spanId: '0123456789abcdef',
-          startTimestamp: timestamp,
-          endTimestamp: timestamp),
-    ]);
-    await exporter.exportMetrics(<AtTelemetryMetric>[
-      AtTelemetrySum(name: 'requests', value: 1, timestamp: timestamp)
-    ]);
+    await exporter
+        .export(AtTelemetryLogRecord(name: 'rejected', timestamp: timestamp));
+    await exporter
+        .export(AtTelemetryLogRecord(name: 'accepted', timestamp: timestamp));
     await exporter.shutdown();
     expect(errors, hasLength(1));
-    expect(paths, <String>['/v1/traces', '/v1/metrics']);
+    expect(names, <String>['rejected', 'accepted']);
   });
 
   test('best-effort export reports rejection through onError', () async {

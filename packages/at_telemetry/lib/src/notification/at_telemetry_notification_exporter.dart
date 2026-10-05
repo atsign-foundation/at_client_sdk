@@ -3,11 +3,7 @@ import 'dart:collection';
 
 import '../codec/at_telemetry_notification_codec.dart';
 import '../exporters/at_telemetry_log_record_exporter.dart';
-import '../exporters/at_telemetry_metric_exporter.dart';
-import '../exporters/at_telemetry_span_exporter.dart';
 import '../models/logs/at_telemetry_log_record.dart';
-import '../models/metrics/at_telemetry_metric.dart';
-import '../models/traces/at_telemetry_span.dart';
 
 typedef AtTelemetryNotify = Future<void> Function(
   String idAndNamespace,
@@ -15,10 +11,7 @@ typedef AtTelemetryNotify = Future<void> Function(
 );
 
 final class AtTelemetryNotificationExporter
-    implements
-        AtTelemetryLogRecordExporter,
-        AtTelemetryMetricExporter,
-        AtTelemetrySpanExporter {
+    implements AtTelemetryLogRecordExporter {
   static const int defaultMaxQueuedExports = 1000;
   static const int defaultMaxPayloadCharacters = 4 * ((1024 * 1024 + 2) ~/ 3);
 
@@ -63,22 +56,6 @@ final class AtTelemetryNotificationExporter
       AtTelemetryNotificationCodec.idAndNamespace,
       () => _codec
           .encode(<AtTelemetryLogRecord>[logRecord], serviceName: _serviceName),
-    );
-  }
-
-  @override
-  Future<void> exportMetrics(Iterable<AtTelemetryMetric> measurements) {
-    return _enqueue(
-      AtTelemetryNotificationCodec.metricsIdAndNamespace,
-      () => _codec.encodeMetrics(measurements, serviceName: _serviceName),
-    );
-  }
-
-  @override
-  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans) {
-    return _enqueue(
-      AtTelemetryNotificationCodec.tracesIdAndNamespace,
-      () => _codec.encodeSpans(spans, serviceName: _serviceName),
     );
   }
 

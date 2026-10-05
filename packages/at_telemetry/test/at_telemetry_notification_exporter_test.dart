@@ -11,17 +11,10 @@ void main() {
     timestamp: timestamp,
     attributes: const <String, Object?>{'version': '1.2.3'},
   );
-  final AtTelemetryGauge metric = AtTelemetryGauge(
-    name: 'app.connections',
-    value: 2,
+  final AtTelemetryLogRecord connected = AtTelemetryLogRecord(
+    name: 'app.connected',
     timestamp: timestamp,
-  );
-  final AtTelemetrySpan span = AtTelemetrySpan(
-    name: 'app.connect',
-    traceId: '0123456789abcdef0123456789abcdef',
-    spanId: '0123456789abcdef',
-    startTimestamp: timestamp,
-    endTimestamp: timestamp.add(const Duration(milliseconds: 10)),
+    attributes: const <String, Object?>{'app.connections': 2},
   );
 
   late List<(String, String)> notifications;
@@ -41,36 +34,29 @@ void main() {
     await exporter.shutdown();
   });
 
-  test('exports all three signals as base64 OTLP notifications', () async {
+  test('exports logs as base64 OTLP notifications', () async {
     await exporter.export(log);
-    await exporter.exportMetrics(<AtTelemetryMetric>[metric]);
-    await exporter.exportSpans(<AtTelemetrySpan>[span]);
+    await exporter.export(connected);
     await exporter.flush();
 
     expect(notifications.map(((String, String) item) => item.$1), <String>[
       'logs.at_telemetry',
-      'metrics.at_telemetry',
-      'traces.at_telemetry',
+      'logs.at_telemetry',
     ]);
     final AtTelemetryLogRecord actualLog =
         codec.decode(notifications[0].$2).single;
-    final AtTelemetryGauge actualMetric =
-        codec.decodeMetrics(notifications[1].$2).single as AtTelemetryGauge;
-    final AtTelemetrySpan actualSpan =
-        codec.decodeSpans(notifications[2].$2).single;
+    final AtTelemetryLogRecord actualConnected =
+        codec.decode(notifications[1].$2).single;
     expect(actualLog.name, log.name);
     expect(actualLog.timestamp, timestamp);
     expect(actualLog.attributes['version'], '1.2.3');
-    expect(actualMetric.name, metric.name);
-    expect(actualMetric.value, 2);
-    expect(actualSpan.traceId, span.traceId);
-    expect(actualSpan.spanId, span.spanId);
-    for (final Map<String, Object?> attributes in <Map<String, Object?>>[
-      actualLog.attributes,
-      actualMetric.attributes,
-      actualSpan.attributes,
+    expect(actualConnected.name, 'app.connected');
+    expect(actualConnected.attributes['app.connections'], 2);
+    for (final AtTelemetryLogRecord record in <AtTelemetryLogRecord>[
+      actualLog,
+      actualConnected,
     ]) {
-      expect(attributes['service.name'], 'my_app');
+      expect(record.attributes['service.name'], 'my_app');
     }
   });
 
@@ -88,8 +74,7 @@ void main() {
       },
     );
     final Future<void> first = exporter.export(log);
-    final Future<void> second =
-        exporter.exportMetrics(<AtTelemetryMetric>[metric]);
+    final Future<void> second = exporter.export(connected);
     bool flushed = false;
     final Future<void> flush = exporter.flush().then((_) => flushed = true);
     await started.future;
@@ -101,21 +86,16 @@ void main() {
     expect(flushed, isTrue);
   });
 
-  test('snapshots queued measurements and their attributes', () async {
+  test('snapshots queued log attributes', () async {
     final Map<String, Object?> attributes = <String, Object?>{'room': 'lab'};
-    final List<AtTelemetryMetric> measurements = <AtTelemetryMetric>[
-      AtTelemetryGauge(
-        name: 'temperature',
-        value: 20,
-        timestamp: timestamp,
-        attributes: attributes,
-      ),
-    ];
-    final Future<void> sent = exporter.exportMetrics(measurements);
-    measurements.clear();
+    final Future<void> sent = exporter.export(AtTelemetryLogRecord(
+      name: 'temperature.read',
+      timestamp: timestamp,
+      attributes: attributes,
+    ));
     attributes['room'] = 'office';
     await sent;
-    expect(codec.decodeMetrics(notifications.single.$2).single.attributes,
+    expect(codec.decode(notifications.single.$2).single.attributes,
         <String, Object?>{'room': 'lab', 'service.name': 'my_app'});
   });
 
@@ -132,7 +112,7 @@ void main() {
     );
     await expectLater(exporter.export(log), throwsStateError);
     await expectLater(exporter.flush(), throwsStateError);
-    await exporter.exportMetrics(<AtTelemetryMetric>[metric]);
+    await exporter.export(connected);
     await exporter.flush();
     expect(notifications, hasLength(1));
   });
@@ -141,20 +121,13 @@ void main() {
     final Future<void> sent = exporter.export(log);
     final Future<void> shutdown = exporter.shutdown();
     await expectLater(exporter.export(log), throwsStateError);
-    await expectLater(
-        exporter.exportMetrics(<AtTelemetryMetric>[metric]), throwsStateError);
-    await expectLater(
-        exporter.exportSpans(<AtTelemetrySpan>[span]), throwsStateError);
+    await expectLater(exporter.export(connected), throwsStateError);
     await Future.wait<void>(<Future<void>>[sent, shutdown]);
     expect(notifications, hasLength(1));
     await exporter.shutdown();
   });
 
-  test('rejects empty batches and invalid logs before sending', () async {
-    await expectLater(
-        exporter.exportMetrics(<AtTelemetryMetric>[]), throwsArgumentError);
-    await expectLater(
-        exporter.exportSpans(<AtTelemetrySpan>[]), throwsArgumentError);
+  test('rejects invalid logs before sending', () async {
     await expectLater(
         exporter.export(AtTelemetryLogRecord(name: '', timestamp: timestamp)),
         throwsArgumentError);

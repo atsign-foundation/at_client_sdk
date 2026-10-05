@@ -18,18 +18,11 @@ Future<void> main() async {
     name: 'app.started',
     timestamp: timestamp,
   ));
-  await exporter.exportMetrics(<AtTelemetryMetric>[
-    AtTelemetryGauge(name: 'app.connections', value: 2, timestamp: timestamp),
-  ]);
-  await exporter.exportSpans(<AtTelemetrySpan>[
-    AtTelemetrySpan(
-      name: 'app.connect',
-      traceId: '0123456789abcdef0123456789abcdef',
-      spanId: '0123456789abcdef',
-      startTimestamp: timestamp,
-      endTimestamp: timestamp.add(const Duration(milliseconds: 10)),
-    ),
-  ]);
+  await exporter.export(AtTelemetryLogRecord(
+    name: 'app.connected',
+    timestamp: timestamp,
+    attributes: <String, Object?>{'app.connections': 2},
+  ));
   await exporter.flush();
   await exporter.shutdown();
   await notifications.close();
@@ -39,13 +32,8 @@ Future<void> main() async {
 Future<void> _monitor(Stream<(String, String)> notifications) async {
   const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
   await for (final (String key, String payload) in notifications) {
-    switch (key) {
-      case AtTelemetryNotificationCodec.idAndNamespace:
-        print('$key: ${codec.decode(payload).single.name}');
-      case AtTelemetryNotificationCodec.metricsIdAndNamespace:
-        print('$key: ${codec.decodeMetrics(payload).single.name}');
-      case AtTelemetryNotificationCodec.tracesIdAndNamespace:
-        print('$key: ${codec.decodeSpans(payload).single.name}');
+    if (key == AtTelemetryNotificationCodec.idAndNamespace) {
+      print('$key: ${codec.decode(payload).single.name}');
     }
   }
 }
