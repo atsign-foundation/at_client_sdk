@@ -512,6 +512,31 @@ void main() {
       expect(sent, 2, reason: 'the refused private was not conveyed');
     });
 
+    test('a namespace the approver holds only `r` on is not even attempted',
+        () async {
+      final held = await filing();
+      for (final ns in ['shared', namespace]) {
+        await held.store(
+            namespace: ns,
+            nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+            seed: NskeySeed(pair.privateKeyBytes));
+      }
+      final atClient = client();
+      final sharing = _RecordingShares();
+      final sent = await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              sharing: sharing,
+              privateFiling: held)
+          .conveyHeldPrivatesTo(joinerPackage(), const {'*': 'rw'},
+              ownGrants: const {'shared': 'r', '*': 'rw'});
+
+      expect(sharing.sharedNamespaces, [namespace],
+          reason: 'the fake accepts every write, so shared appearing here '
+              'means the approver\'s own grants were not consulted');
+      expect(sent, 1);
+    });
+
     test('a grant that is only a prefix of a held namespace conveys nothing',
         () async {
       expect(await conveyedFor(const {'app_1': 'rw'}, [namespace]), isEmpty,

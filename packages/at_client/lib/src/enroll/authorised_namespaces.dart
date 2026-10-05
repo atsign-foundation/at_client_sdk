@@ -51,3 +51,9 @@ String? accessIn(Map<String, dynamic> grants, String namespace) {
   final all = grants[EnrollmentConstants.allNamespaces];
   return all == null ? null : '$all';
 }
+
+/// Whether a client granted [own] may write to [namespace].
+///
+/// A null [own] is a client with no recorded limit, and may write anywhere.
+bool mayWriteIn(Map<String, dynamic>? own, String namespace) =>
+    own == null || (accessIn(own, namespace)?.contains('w') ?? false);
