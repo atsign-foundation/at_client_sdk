@@ -39,9 +39,17 @@ bool isSeedableNamespace(String namespace) =>
 
 /// The access [grants] give to [namespace], or null when they give none.
 ///
-/// A grant on [namespace] itself or on a namespace above it wins, and `*`
-/// answers only for a namespace no such grant covers.
+/// Resolved as the atServer resolves a key, which reads its namespace as the
+/// last dot segment: a grant on that segment wins, then the first grant on
+/// [namespace] itself or on a namespace above it, and `*` answers only for a
+/// namespace no such grant covers.
 String? accessIn(Map<String, dynamic> grants, String namespace) {
+  final lastSegment = namespace.substring(namespace.lastIndexOf('.') + 1);
+  final onLastSegment = grants[lastSegment];
+  if (lastSegment != EnrollmentConstants.allNamespaces &&
+      onLastSegment != null) {
+    return '$onLastSegment';
+  }
   for (final MapEntry(key: granted, value: access) in grants.entries) {
     if (granted == EnrollmentConstants.allNamespaces) continue;
     if (granted == namespace || namespace.endsWith('.$granted')) {

@@ -222,4 +222,44 @@ void main() {
             'approval cannot convey that key; the enrollment asks a holder '
             'that may');
   }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'an approver conveys what the atServer lets it write in a dotted '
+      'namespace, which its grant on the last segment decides', () async {
+    final base = 'base$runId';
+    final narrowReadOnly = 'sub$runId.$base';
+    final otherBase = 'otherbase$runId';
+    final narrowWritable = 'sub$runId.$otherBase';
+    // NOTE: each narrower grant listed first, so a client that takes the first
+    // grant matching the namespace reads it, not the grant the atServer reads.
+    final approver = await holder('seg-approver', {
+      narrowReadOnly: 'r',
+      base: 'rw',
+      narrowWritable: 'rw',
+      otherBase: 'r',
+      '*': 'rw',
+      '__manage': 'rw',
+    });
+    final writer = await holder(
+        'seg-writer', {narrowReadOnly: 'rw', narrowWritable: 'rw'});
+
+    final readOnlyKid = await mint(writer, narrowReadOnly);
+    final writableKid = await mint(writer, narrowWritable);
+    expect(await received(approver, narrowReadOnly, readOnlyKid), isTrue,
+        reason: 'the precondition: the mint reaches the approver');
+    expect(await received(approver, narrowWritable, writableKid), isTrue,
+        reason: 'the precondition: the mint reaches the approver');
+
+    final star = await holder('seg-star', const {'*': 'rw'},
+        approver: approver.enrolled.client);
+
+    expect(await received(star, narrowReadOnly, readOnlyKid), isTrue,
+        reason: 'the atServer reads $narrowReadOnly as $base, where this '
+            'approver holds rw, so it accepts the envelope and the approval '
+            'conveys the key, whatever the narrower r grant says');
+    expect(await received(star, narrowWritable, writableKid), isFalse,
+        reason: 'the converse: $otherBase is r for this approver, so the '
+            'atServer refuses an envelope in $narrowWritable whatever the '
+            'narrower rw grant says, and the approval cannot convey it');
+  }, timeout: Timeout(Duration(minutes: 3)));
 }

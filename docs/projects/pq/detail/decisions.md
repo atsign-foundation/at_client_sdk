@@ -14877,6 +14877,19 @@ envelope, so the refusal is observed, not inferred; with the skip alone
 removed, the catch logs the same refusal and the approval completes. Cited by
 UC-A5.1(b).
 
+Which grant decides whether the approver may write is the atServer's. It reads a
+key's namespace as its last dot segment and resolves a grant on that segment
+before any narrower one, so an approver granted `r` on `app.wavi` and `rw` on
+`wavi` may write in `app.wavi`, and one granted the reverse may not, in whatever
+order the grants are listed. `accessIn` took the first grant listed instead, so
+in the first case both routes skipped a key the atServer would have accepted, and
+in the second both tried a write it refused. It now resolves the last segment
+first. Pinned in `test/authorised_namespaces_test.dart`, and live in
+`nskey_conveyance_reach_live_test.dart`, where an approver holding each pair of
+grants, the narrower one listed first, conveys the first key and not the second.
+On the previous `accessIn` that live test fails on the first key. Cited by
+UC-A5.1(b).
+
 **Both, live, for a `*` enrollment.**
 `tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart` proves
 each half against an atServer: an enrollment granted only `*` is conveyed a key

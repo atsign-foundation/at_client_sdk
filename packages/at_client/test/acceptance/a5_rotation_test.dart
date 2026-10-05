@@ -197,6 +197,26 @@ void main() {
             'per-secret catch, reddens them',
         clauses: ['the approval still completes'],
       );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approver conveys what the atServer lets it write in a dotted '
+            'namespace, which its grant on the last segment decides',
+        proves: 'against a live atServer, an approver granted `r` on a dotted '
+            'namespace and `rw` on its last segment conveys that namespace\'s '
+            'key to a `*` enrollment, and one granted the reverse does not, '
+            'each narrower grant listed first. On the previous rule, which '
+            'took the first grant listed, the first of those keys is skipped '
+            'and the test fails',
+        clauses: ['its approver may write'],
+      );
+      provenIn(
+        'packages/at_client/test/authorised_namespaces_test.dart',
+        'a grant on the last segment wins over a narrower one',
+        proves: 'the approver resolves where it may write as the atServer '
+            'does, by the grant on a namespace\'s last segment first, '
+            'whatever order the grants are listed in',
+        clauses: ['its approver may write'],
+      );
     });
 
     test('UC-A5.2 · per-enrollment auth revocation', () {
