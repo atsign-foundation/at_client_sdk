@@ -404,7 +404,8 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), {namespace: 'rw'});
+          .conveyHeldPrivatesTo(joinerPackage(), {namespace: 'rw'},
+              ownGrants: null);
 
       expect(sent, 2,
           reason: 'one conveyance per held generation — an approver that sent '
@@ -435,7 +436,8 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), const {'app_2.my_apps': 'rw'});
+          .conveyHeldPrivatesTo(joinerPackage(), const {'app_2.my_apps': 'rw'},
+              ownGrants: null);
 
       expect(sent, 0);
       expect(sharing.sharedNames, isEmpty,
@@ -462,7 +464,7 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), grants);
+          .conveyHeldPrivatesTo(joinerPackage(), grants, ownGrants: null);
       return sharing.sharedNamespaces;
     }
 
@@ -503,7 +505,8 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), const {'*': 'rw'});
+          .conveyHeldPrivatesTo(joinerPackage(), const {'*': 'rw'},
+              ownGrants: null);
 
       expect(sharing.sharedNamespaces, unorderedEquals([namespace, 'sshnp']),
           reason: 'an approver granted only `r` on shared holds its private '

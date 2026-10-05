@@ -6,8 +6,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show XWingKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver;
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -402,6 +405,104 @@ void main() {
       expect(enrollment.approvals, isEmpty,
           reason: 'an approval spent on a device that can be sent nothing '
               'cannot be taken back');
+    });
+  });
+
+  group('a namespace the approver may not write', () {
+    /// Refuses every envelope [approver] writes in [namespace], as the
+    /// atServer does for an approver granted only `r` there, and answers the
+    /// envelope keys it tried to write, in order.
+    List<String> refuseEnvelopesIn(MockAtClient approver, String namespace) {
+      final attempted = <String>[];
+      when(() => approver.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0].toString();
+        if (key.contains('.__ssenv.')) attempted.add(key);
+        if (key.contains('.__ssenv.$namespace@')) {
+          throw AtClientException.message('write to $key refused');
+        }
+        remoteData[key] = inv.positionalArguments[1];
+        return true;
+      });
+      return attempted;
+    }
+
+    MockAtClient approverInAtActivate() {
+      final approver = buildMockClient('approver-ns');
+      approver.getPreferences().namespace = 'at_activate';
+      return approver;
+    }
+
+    test('is tried by neither route when its grants say so', () async {
+      final approver = approverInAtActivate();
+      final sharing = AtClientSecretSharing.forClient(approver);
+      await sharing.register();
+      final filing =
+          NskeyPrivateFiling(keysIo: approver.atKeysIo!, atSign: atSign);
+      final pair = await XWingKeyPair.generate();
+      for (final namespace in ['shared', 'at_activate']) {
+        await filing.store(
+            namespace: namespace,
+            nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+            seed: NskeySeed(pair.privateKeyBytes));
+      }
+      await NskeySeeding(
+              atClient: approver,
+              ring: PublishedNskeyKeyRing(approver, privateFiling: filing),
+              sharing: sharing,
+              privateFiling: filing)
+          .hydrateStoreFromFiling(sharing);
+      expect(sharing.secretStore.listSecrets(namespace: 'shared'), isNotEmpty,
+          reason: 'the control: the approver holds the shared private in its '
+              'secret store as well as its keyfile, so each route has it');
+
+      final attempted = refuseEnvelopesIn(approver, 'shared');
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson(),
+          grants: const {'*': 'rw'},
+          approverGrants: const {'shared': 'r', '*': 'rw', '__manage': 'rw'});
+
+      await expectLater(approveWith(approver), completes,
+          reason: 'an approval has already landed when the secrets are '
+              'conveyed, so a write the atServer refuses must not fail it');
+      expect(attempted.where((k) => k.contains('.__ssenv.shared@')), isEmpty,
+          reason: 'the approver holds only r on shared, so neither the '
+              'keyfile route nor the secret-store route may try a write '
+              'there');
+      expect(attempted.where((k) => k.contains('.__ssenv.at_activate@')),
+          isNotEmpty,
+          reason: 'the control: the approver still conveys in at_activate');
+    });
+
+    test('refused by the atServer does not stop the secrets after it',
+        () async {
+      final approver = approverInAtActivate();
+      final sharing = AtClientSecretSharing.forClient(approver);
+      await sharing.register();
+      await sharing.secretStore.putIfNewer(
+          Secret(namespace: 'shared', name: '__nskey.kid1', value: 'c2VlZA=='));
+      await sharing.secretStore.putIfNewer(
+          Secret(namespace: 'at_activate', name: 'app-secret', value: 'v'));
+
+      final attempted = refuseEnvelopesIn(approver, 'shared');
+      // NOTE: no record of the approver's own, so its grants are unknown and
+      // nothing is skipped up front: the atServer's refusal is what it meets.
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson(),
+          grants: const {'*': 'rw'});
+
+      await expectLater(approveWith(approver), completes,
+          reason: 'an approval has already landed when the secrets are '
+              'conveyed, so a write the atServer refuses must not fail it');
+      final refusedAt =
+          attempted.indexWhere((k) => k.contains('.__ssenv.shared@'));
+      expect(refusedAt, isNot(-1),
+          reason: 'the control: the shared secret was tried, and refused');
+      expect(
+          attempted
+              .skip(refusedAt + 1)
+              .where((k) => k.contains('.__ssenv.at_activate@')),
+          isNotEmpty,
+          reason: 'the secret queued after the refused one still goes');
     });
   });
 

@@ -1148,18 +1148,20 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   cheap**, and **distinct** from CK rotation.
 - **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed
   **every generation its approver holds**, not only the live one, in every namespace its
-  grant covers — `*` covers all of them, and a grant covers the namespaces below it, read
-  access included — so retained history opens immediately, with no pull round trip and
-  no dependence on a holder being online at that moment. `requestSecret` remains the
-  backstop for a joiner the push missed: on meeting a retained `__ck` naming an
-  `nskeyKid` it does not hold, it pulls that generation and opens it.
+  grant covers and its approver may write — `*` covers all of them, and a grant covers the
+  namespaces below it, read access included — so retained history opens immediately,
+  with no pull round trip and no dependence on a holder being online at that moment. An
+  approver granted only `r` on a namespace cannot write an envelope there, so it skips
+  that namespace and the approval still completes. `requestSecret` remains the backstop
+  for a joiner the push missed: on meeting a retained `__ck` naming an `nskeyKid` it
+  does not hold, it pulls that generation and opens it.
 
   ⚠️ **Forward secrecy for a namespace's past is the CK lever in *When (a)* above**,
   where deleting the old conveyance record is what makes old-CK-era
   data unreadable. Once that record is gone an old nskey private opens nothing, so
   withholding it from a joiner would cost a round trip and buy no secrecy;
   `conveyHeldPrivatesTo` reads every private `NskeyPrivateFiling` holds in a namespace
-  the grant covers and sends every entry.
+  the grant covers and the approver may write, and sends every entry.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 

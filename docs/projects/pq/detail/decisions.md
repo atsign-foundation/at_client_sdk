@@ -14842,9 +14842,9 @@ enrollment it missed asks for the private itself: at its next start for a
 namespace it seeds, otherwise at the first read that misses it.
 
 **At approval.** An approver conveys every nskey private it holds in a
-namespace the new enrollment's grant covers, by the same rule
-(`SecretStore.namespaceAuthorizes`): `*` covers every namespace, and a grant
-covers the namespaces below it, read access included. Two routes carry them.
+namespace the new enrollment's grant covers and it may write itself, by the same
+rule (`SecretStore.namespaceAuthorizes`): `*` covers every namespace, and a
+grant covers the namespaces below it, read access included. Two routes carry them.
 `shareAllSecretsWith` sends what the approver's in-memory secret store holds,
 which the client's startup fills from its keyfile, and already applied this
 rule. `conveyHeldPrivatesTo` reads the keyfile itself, so an approver whose
@@ -14856,8 +14856,19 @@ matching `app_1.my_apps`. It now applies the same rule, reading the keyfile with
 approval warns rather than conveying nothing in silence. An enrollment granted
 only `*` was refused before either route ran;
 [ruling 148](#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05)
-fixes that. Pinned in the late joiner group of `test/nskey_self_heal_test.dart` and cited by
-UC-A5.1(b).
+fixes that.
+
+Review then found that both routes tried every covered namespace, including one
+the approver was granted only `r` on, where it holds the private but the
+atServer refuses its envelope. The first refusal stopped the route, and from
+`shareAllSecretsWith` it failed an approval that had already landed. Both
+routes now skip a namespace the approver's own grants do not let it write, with
+a warning naming it, and log and go on past a write the atServer refuses
+anyway. The new enrollment asks for a skipped private itself: at its next start
+for a namespace it seeds, otherwise at the first read that misses it. Pinned in
+the late joiner group of `test/nskey_self_heal_test.dart` and the
+"a namespace the approver may not write" group of
+`test/enrollment_conveyance_guard_test.dart`, and cited by UC-A5.1(b).
 
 **Both, live, for a `*` enrollment.**
 `tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart` proves
