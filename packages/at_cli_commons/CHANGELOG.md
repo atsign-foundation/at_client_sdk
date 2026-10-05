@@ -1,8 +1,11 @@
+## 3.1.2-rc3
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 3.1.2-rc2
 
 - build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
   post-quantum sharing and keyfile lock fixes.
-- chore(deps): at_utils ^4.0.0-rc1
 
 ## 3.1.2-rc1
 

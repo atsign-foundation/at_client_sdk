@@ -1,3 +1,7 @@
+## 3.7.0-rc4
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 3.7.0-rc3
 
 - feat: while notifications are on, each heartbeat the atServer answers logs

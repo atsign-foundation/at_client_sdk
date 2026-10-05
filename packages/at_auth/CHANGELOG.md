@@ -3,6 +3,7 @@
 - fix: waiting for an enrollment's approval ends at once, with the atServer's
   reason, when the enrollment has expired or the atServer has no record of it
   (`AT0028`), instead of after the whole retry budget.
+- chore(deps): at_utils ^4.0.0-rc1
 
 ## 4.0.0-rc3
 
