@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
 import 'package:at_telemetry/src/exporters/at_telemetry_log_record_exporter.dart';
@@ -21,6 +22,7 @@ final class AtTelemetrySignedHttpExporter
   static const String logsPath = '/v1/logs';
   static const String metricsPath = '/v1/metrics';
   static const String tracesPath = '/v1/traces';
+  static const int defaultMaxQueuedExports = 1000;
 
   final Uri _logsEndpoint;
   final Uri _metricsEndpoint;
@@ -32,7 +34,11 @@ final class AtTelemetrySignedHttpExporter
   final http.Client _client;
   final bool _ownsClient;
   final void Function(Object)? _onError;
-  Future<void> _pending = Future<void>.value();
+  final int _maxQueuedExports;
+  final ListQueue<(Uri, List<int>, Completer<void>)> _queue =
+      ListQueue<(Uri, List<int>, Completer<void>)>();
+  Future<void> _last = Future<void>.value();
+  bool _sending = false;
   bool _closed = false;
 
   AtTelemetrySignedHttpExporter({
@@ -43,6 +49,7 @@ final class AtTelemetrySignedHttpExporter
     required AtTelemetrySigner signer,
     http.Client? client,
     void Function(Object)? onError,
+    int maxQueuedExports = defaultMaxQueuedExports,
   })  : _logsEndpoint = _signalEndpoint(endpoint, logsPath),
         _metricsEndpoint = _signalEndpoint(endpoint, metricsPath),
         _tracesEndpoint = _signalEndpoint(endpoint, tracesPath),
@@ -52,7 +59,12 @@ final class AtTelemetrySignedHttpExporter
         _signer = signer,
         _client = client ?? http.Client(),
         _ownsClient = client == null,
-        _onError = onError;
+        _onError = onError,
+        _maxQueuedExports = maxQueuedExports {
+    if (maxQueuedExports < 1) {
+      throw RangeError.value(maxQueuedExports, 'maxQueuedExports');
+    }
+  }
 
   static Uri _signalEndpoint(Uri endpoint, String path) {
     if (!endpoint.hasAuthority ||
@@ -71,11 +83,64 @@ final class AtTelemetrySignedHttpExporter
 
   @override
   Future<void> export(AtTelemetryLogRecord event) {
-    sendConfirmed(event);
-    return _pending;
+    final (Future<void> _, Future<void> handled) = _enqueueLogRecord(event);
+    return handled;
   }
 
   Future<void> sendConfirmed(AtTelemetryLogRecord event) {
+    final (Future<void> sent, Future<void> _) = _enqueueLogRecord(event);
+    return sent;
+  }
+
+  @override
+  Future<void> exportMetrics(Iterable<AtTelemetryMetric> measurements) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final (Future<void> _, Future<void> handled) = _enqueue(
+        _metricsEndpoint,
+        () => const AtTelemetryMetricsCodec().encodeExportRequest(
+              measurements,
+              serviceName: _serviceName,
+            ));
+    return handled;
+  }
+
+  @override
+  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final (Future<void> _, Future<void> handled) = _enqueue(
+        _tracesEndpoint,
+        () => const AtTelemetryTracesCodec().encodeExportRequest(
+              spans,
+              serviceName: _serviceName,
+            ));
+    return handled;
+  }
+
+  Future<void> sendEncodedLogs(List<int> body) {
+    if (_closed) {
+      throw StateError('Exporter is closed');
+    }
+    final List<int> payload = List<int>.unmodifiable(body);
+    final (Future<void> sent, Future<void> _) =
+        _enqueue(_logsEndpoint, () => payload);
+    return sent;
+  }
+
+  @override
+  Future<void> flush() => _last;
+
+  @override
+  Future<void> shutdown() async {
+    _closed = true;
+    await _last;
+    if (_ownsClient) _client.close();
+  }
+
+  (Future<void>, Future<void>) _enqueueLogRecord(AtTelemetryLogRecord event) {
     if (_closed) {
       throw StateError('Exporter is closed');
     }
@@ -87,61 +152,50 @@ final class AtTelemetrySignedHttpExporter
             ));
   }
 
-  @override
-  Future<void> exportMetrics(Iterable<AtTelemetryMetric> measurements) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final List<AtTelemetryMetric> snapshot =
-        List<AtTelemetryMetric>.of(measurements);
-    _enqueue(
-        _metricsEndpoint,
-        () => const AtTelemetryMetricsCodec().encodeExportRequest(
-              snapshot,
-              serviceName: _serviceName,
-            ));
-    return _pending;
-  }
-
-  @override
-  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final List<AtTelemetrySpan> snapshot = List<AtTelemetrySpan>.of(spans);
-    _enqueue(
-        _tracesEndpoint,
-        () => const AtTelemetryTracesCodec().encodeExportRequest(
-              snapshot,
-              serviceName: _serviceName,
-            ));
-    return _pending;
-  }
-
-  Future<void> sendEncodedLogs(List<int> body) {
-    if (_closed) {
-      throw StateError('Exporter is closed');
-    }
-    final List<int> payload = List<int>.unmodifiable(body);
-    return _enqueue(_logsEndpoint, () => payload);
-  }
-
-  @override
-  Future<void> flush() => _pending;
-
-  @override
-  Future<void> shutdown() async {
-    _closed = true;
-    await _pending;
-    if (_ownsClient) _client.close();
-  }
-
-  Future<void> _enqueue(Uri endpoint, List<int> Function() encode) {
-    final Future<void> sent = _pending.then((_) => _send(endpoint, encode()));
-    _pending = sent.catchError((Object error) {
+  (Future<void>, Future<void>) _enqueue(
+    Uri endpoint,
+    List<int> Function() encode,
+  ) {
+    final Completer<void> done = Completer<void>();
+    final Future<void> handled = done.future.catchError((Object error) {
       _onError?.call(error);
     });
-    return sent;
+    final List<int> body;
+    try {
+      body = encode();
+    } on Object catch (error, stackTrace) {
+      done.completeError(error, stackTrace);
+      return (done.future, handled);
+    }
+
+    _queue.add((endpoint, body, done));
+    _last = handled;
+    if (_queue.length > _maxQueuedExports) {
+      final (Uri _, List<int> _, Completer<void> dropped) =
+          _queue.removeFirst();
+      dropped.completeError(
+        StateError('Telemetry backlog is full, dropped the oldest export'),
+      );
+    }
+    if (!_sending) {
+      unawaited(_drain());
+    }
+    return (done.future, handled);
+  }
+
+  Future<void> _drain() async {
+    _sending = true;
+    while (_queue.isNotEmpty) {
+      final (Uri endpoint, List<int> body, Completer<void> done) =
+          _queue.removeFirst();
+      try {
+        await _send(endpoint, body);
+        done.complete();
+      } on Object catch (error, stackTrace) {
+        done.completeError(error, stackTrace);
+      }
+    }
+    _sending = false;
   }
 
   Future<void> _send(Uri endpoint, List<int> body) async {

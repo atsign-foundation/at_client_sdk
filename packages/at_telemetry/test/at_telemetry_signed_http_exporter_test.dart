@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:crypton/crypton.dart';
 import 'package:http/http.dart' as http;
@@ -184,6 +186,162 @@ void main() {
     expect(
         () => exporter.exportMetrics(<AtTelemetryMetric>[]), throwsStateError);
     expect(() => exporter.exportSpans(<AtTelemetrySpan>[]), throwsStateError);
+  });
+
+  test('encodes telemetry at export time so later changes are not sent',
+      () async {
+    final RSAKeypair keys = RSAKeypair.fromRandom();
+    final DateTime timestamp = DateTime.utc(2026, 9, 29);
+    final List<http.Request> requests = <http.Request>[];
+    final List<Object> errors = <Object>[];
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
+      endpoint: Uri.parse('http://localhost:4318'),
+      serviceName: 'application',
+      keyId: '@producer1',
+      audience: 'localhost',
+      signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+      onError: errors.add,
+      client: MockClient((http.Request request) async {
+        requests.add(request);
+        return http.Response('', 200);
+      }),
+    );
+
+    final Map<String, Object?> logAttributes = <String, Object?>{};
+    for (int index = 0; index < 3; index++) {
+      logAttributes['index'] = index;
+      exporter.export(AtTelemetryLogRecord(
+          name: 'loop', timestamp: timestamp, attributes: logAttributes));
+    }
+    logAttributes
+      ..clear()
+      ..['when'] = DateTime.utc(2026);
+
+    final Map<String, Object?> metricAttributes = <String, Object?>{
+      'room': 'lab',
+    };
+    final List<int> bucketCounts = <int>[1, 1];
+    exporter.exportMetrics(<AtTelemetryMetric>[
+      AtTelemetryGauge(
+          name: 'temperature',
+          value: 20,
+          timestamp: timestamp,
+          attributes: metricAttributes),
+      AtTelemetryHistogram(
+          name: 'duration',
+          count: 2,
+          timestamp: timestamp,
+          bucketCounts: bucketCounts,
+          explicitBounds: const <double>[1]),
+    ]);
+    metricAttributes['room'] = 'office';
+    bucketCounts[0] = 5;
+
+    final List<AtTelemetrySpanEvent> events = <AtTelemetrySpanEvent>[
+      AtTelemetrySpanEvent(name: 'started', timestamp: timestamp),
+    ];
+    exporter.exportSpans(<AtTelemetrySpan>[
+      AtTelemetrySpan(
+          name: 'lookup',
+          traceId: '0123456789abcdef0123456789abcdef',
+          spanId: '0123456789abcdef',
+          startTimestamp: timestamp,
+          endTimestamp: timestamp,
+          events: events),
+    ]);
+    events.add(AtTelemetrySpanEvent(name: 'added.later', timestamp: timestamp));
+
+    await exporter.shutdown();
+
+    expect(errors, isEmpty);
+    expect(requests.map((http.Request request) => request.url.path), <String>[
+      '/v1/logs',
+      '/v1/logs',
+      '/v1/logs',
+      '/v1/metrics',
+      '/v1/traces',
+    ]);
+    expect(<Object?>[
+      for (final http.Request request in requests.take(3))
+        const AtTelemetryLogsCodec()
+            .decodeExportRequest(request.bodyBytes)
+            .single
+            .attributes['index'],
+    ], <Object?>[
+      0,
+      1,
+      2
+    ]);
+    final List<AtTelemetryMetric> metrics = const AtTelemetryMetricsCodec()
+        .decodeExportRequest(requests[3].bodyBytes);
+    expect(metrics[0].attributes['room'], 'lab');
+    expect((metrics[1] as AtTelemetryHistogram).bucketCounts, <int>[1, 1]);
+    final AtTelemetrySpan span = const AtTelemetryTracesCodec()
+        .decodeExportRequest(requests[4].bodyBytes)
+        .single;
+    expect(span.events.map((AtTelemetrySpanEvent event) => event.name),
+        <String>['started']);
+  });
+
+  test('discards the oldest queued exports when the backlog is full', () async {
+    final RSAKeypair keys = RSAKeypair.fromRandom();
+    final DateTime timestamp = DateTime.utc(2026, 9, 29);
+    final Completer<void> release = Completer<void>();
+    final List<String> delivered = <String>[];
+    final List<Object> errors = <Object>[];
+    final AtTelemetrySignedHttpExporter exporter =
+        AtTelemetrySignedHttpExporter(
+      endpoint: Uri.parse('http://localhost:4318'),
+      serviceName: 'application',
+      keyId: '@producer1',
+      audience: 'localhost',
+      signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+      onError: errors.add,
+      maxQueuedExports: 2,
+      client: MockClient((http.Request request) async {
+        await release.future;
+        delivered.add(const AtTelemetryLogsCodec()
+            .decodeExportRequest(request.bodyBytes)
+            .single
+            .name);
+        return http.Response('', 200);
+      }),
+    );
+    AtTelemetryLogRecord log(String name) =>
+        AtTelemetryLogRecord(name: name, timestamp: timestamp);
+
+    final Future<void> inFlight = exporter.export(log('in.flight'));
+    final Future<void> oldest = exporter.sendConfirmed(log('oldest'));
+    final Future<void> older = exporter.export(log('older'));
+    final Future<void> newer = exporter.export(log('newer'));
+    final Future<void> newest = exporter.export(log('newest'));
+
+    await expectLater(oldest, throwsStateError);
+    release.complete();
+    await Future.wait<void>(<Future<void>>[inFlight, older, newer, newest]);
+    await exporter.shutdown();
+
+    expect(delivered, <String>['in.flight', 'newer', 'newest']);
+    expect(errors, hasLength(2));
+    expect(errors, everyElement(isA<StateError>()));
+  });
+
+  test('rejects a backlog limit below one', () {
+    final RSAKeypair keys = RSAKeypair.fromRandom();
+    expect(
+      () => AtTelemetrySignedHttpExporter(
+        endpoint: Uri.parse('http://localhost:4318'),
+        serviceName: 'application',
+        keyId: '@producer1',
+        audience: 'localhost',
+        signer: AtTelemetryRsaSigner.fromBase64(keys.privateKey.toString()),
+        maxQueuedExports: 0,
+        client:
+            MockClient((http.Request request) async => http.Response('', 200)),
+      ),
+      throwsRangeError,
+    );
   });
 
   test('accepts any OTLP signal endpoint and routes spans to traces', () async {
