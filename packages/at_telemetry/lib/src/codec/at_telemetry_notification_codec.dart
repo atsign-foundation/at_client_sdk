@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
+import '../at_telemetry_log_record.dart';
+import 'at_telemetry_logs_codec.dart';
 
 final class AtTelemetryNotificationCodec {
   static const String namespace = 'at_telemetry';

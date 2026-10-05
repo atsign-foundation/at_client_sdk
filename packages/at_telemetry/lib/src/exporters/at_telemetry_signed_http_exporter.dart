@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/exporters/at_telemetry_log_record_exporter.dart';
-import 'package:at_telemetry/src/security/at_telemetry_signer.dart';
-import 'package:at_telemetry/src/security/at_telemetry_http_signature.dart';
-import 'package:at_telemetry/src/codec/at_telemetry_logs_codec.dart';
 import 'package:http/http.dart' as http;
+
+import '../at_telemetry_log_record.dart';
+import '../codec/at_telemetry_logs_codec.dart';
+import '../security/at_telemetry_http_signature.dart';
+import '../security/at_telemetry_signer.dart';
+import 'at_telemetry_log_record_exporter.dart';
 
 final class AtTelemetrySignedHttpExporter
     implements AtTelemetryLogRecordExporter {

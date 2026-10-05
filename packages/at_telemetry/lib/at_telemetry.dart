@@ -1,9 +1,9 @@
+export 'src/at_telemetry_log_record.dart';
 export 'src/codec/at_telemetry_logs_codec.dart';
 export 'src/codec/at_telemetry_notification_codec.dart';
 export 'src/exporters/at_telemetry_log_record_exporter.dart';
-export 'src/http/at_telemetry_signed_http_exporter.dart';
-export 'src/models/logs/at_telemetry_log_record.dart';
-export 'src/notification/at_telemetry_notification_exporter.dart';
+export 'src/exporters/at_telemetry_notification_exporter.dart';
+export 'src/exporters/at_telemetry_signed_http_exporter.dart';
 export 'src/security/at_telemetry_http_signature.dart';
 export 'src/security/at_telemetry_rsa_signer.dart';
 export 'src/security/at_telemetry_signer.dart';

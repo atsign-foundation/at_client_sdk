@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 
 import '../codec/at_telemetry_notification_codec.dart';
-import '../exporters/at_telemetry_log_record_exporter.dart';
-import '../models/logs/at_telemetry_log_record.dart';
+import '../at_telemetry_log_record.dart';
+import 'at_telemetry_log_record_exporter.dart';
 
 typedef AtTelemetryNotify = Future<void> Function(
   String idAndNamespace,

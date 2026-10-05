@@ -1,5 +1,5 @@
-import '../internal/opentelemetry/dartastic_logs_codec.dart';
-import '../models/logs/at_telemetry_log_record.dart';
+import '../at_telemetry_log_record.dart';
+import '../internal/dartastic_logs_codec.dart';
 
 final class AtTelemetryLogsCodec {
   static const String scopeName = DartasticLogsCodec.scopeName;

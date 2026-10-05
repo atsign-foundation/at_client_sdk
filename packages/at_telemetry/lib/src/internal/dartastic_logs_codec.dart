@@ -1,5 +1,3 @@
-import 'package:at_telemetry/src/models/logs/at_telemetry_log_record.dart';
-import 'package:at_telemetry/src/internal/opentelemetry/dartastic_attributes_codec.dart';
 import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
     as collector;
 import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
@@ -8,6 +6,9 @@ import 'package:dartastic_opentelemetry/proto/logs/v1/logs.pb.dart' as logs;
 import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
     as resource;
 import 'package:fixnum/fixnum.dart';
+
+import '../at_telemetry_log_record.dart';
+import 'dartastic_attributes_codec.dart';
 
 final class DartasticLogsCodec {
   static const String scopeName = 'at_telemetry';

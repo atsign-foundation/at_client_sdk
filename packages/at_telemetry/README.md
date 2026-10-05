@@ -8,13 +8,25 @@
 
 ## Introduction
 
-at_telemetry defines the telemetry models, contracts and exporters shared by
-Atsign applications and atServers. Producers describe what happened as an
-`AtTelemetryLogRecord`, `AtTelemetryGauge`/`AtTelemetrySum`/`AtTelemetryHistogram`,
-or `AtTelemetrySpan`, and hand it to an exporter, which delivers it as
-[OpenTelemetry](https://opentelemetry.io/) OTLP requests. The public API is a
-single library, `package:at_telemetry/at_telemetry.dart`; the
-[dartastic_opentelemetry](https://pub.dev/packages/dartastic_opentelemetry)
+at_telemetry defines the telemetry model, contracts and exporters shared by
+Atsign applications and Atsign Servers. Producers describe what happened as an
+`AtTelemetryLogRecord` and hand it to an exporter, which delivers it as an
+[OpenTelemetry](https://opentelemetry.io/) OTLP logs request.
+
+at_telemetry supports OpenTelemetry **logs only**. There are no metric or
+trace (span) models. To report a measurement, put it in a log record
+attribute, for example an uptime heartbeat:
+
+```dart
+AtTelemetryLogRecord(
+  name: 'atsign.atserver.heartbeat',
+  timestamp: DateTime.now().toUtc(),
+  attributes: const <String, Object?>{'atsign.atserver.uptime_seconds': 60.0},
+);
+```
+
+The public API is a single library, `package:at_telemetry/at_telemetry.dart`.
+The [dartastic_opentelemetry](https://pub.dev/packages/dartastic_opentelemetry)
 dependency used to build OTLP payloads stays internal to the package.
 
 ## Getting started
@@ -25,17 +37,11 @@ dart pub add at_telemetry
 
 ## Usage
 
-### Models
+### Log records
 
-- `AtTelemetryLogRecord` has a name, a timestamp and optional attributes, and
-  round-trips through JSON with `toJson()`/`fromJson()`.
-- `AtTelemetryMetric` (abstract) - name, unit, timestamp, and attributes
-  - `AtTelemetryGauge`
-  - `AtTelemetrySum`
-  - `AtTelemetryHistogram`
-- `AtTelemetrySpan` has a name, trace/span ids, start/end timestamps, a
-  `AtTelemetrySpanKind`, a `AtTelemetrySpanStatus`, and optional events and
-  links.
+An `AtTelemetryLogRecord` has a name, a timestamp and optional attributes, and
+round-trips through JSON with `toJson()`/`fromJson()`. When exported, the name
+becomes the OTLP log body and the severity is always `INFO`.
 
 Attribute values must be `String`, `bool`, `int`, finite `double`, `List` or
 `Map` (nested values follow the same rules). Attributes with a `null` value
@@ -59,10 +65,9 @@ final AtTelemetryLogRecord copy = AtTelemetryLogRecord.fromJson(json);
 
 ### Exporters
 
-Each telemetry kind has its own exporter interface (all three are
-`abstract interface class`, meant to be implemented rather than instantiated
-directly), so code that produces telemetry does not need to know where it
-goes:
+Code that produces telemetry depends only on the
+`AtTelemetryLogRecordExporter` interface, so it does not need to know where
+the telemetry goes:
 
 ```dart
 abstract interface class AtTelemetryLogRecordExporter {
@@ -70,28 +75,26 @@ abstract interface class AtTelemetryLogRecordExporter {
   Future<void> flush();
   Future<void> shutdown();
 }
-
-abstract interface class AtTelemetryMetricExporter {
-  Future<void> exportMetrics(Iterable<AtTelemetryMetric> metrics);
-  Future<void> flush();
-  Future<void> shutdown();
-}
-
-abstract interface class AtTelemetrySpanExporter {
-  Future<void> exportSpans(Iterable<AtTelemetrySpan> spans);
-  Future<void> flush();
-  Future<void> shutdown();
-}
 ```
 
 Call `flush()` to wait for pending sends, and `shutdown()` once you are
-finished with the exporter.
+finished with the exporter. The package ships two implementations.
+
+| Exporter | Delivers telemetry as | Use it from |
+| --- | --- | --- |
+| `AtTelemetrySignedHttpExporter` | A signed OTLP/HTTP request to `/v1/logs` | Atsign Servers |
+| `AtTelemetryNotificationExporter` | The value of an Atsign Protocol notification | Applications with an `AtClient` |
+
+Both exporters send one record at a time, in the order they were exported.
+Each keeps at most 1000 queued exports by default (`maxQueuedExports`). When
+the queue is full, the oldest queued export is dropped and fails with a
+`StateError`.
 
 ### Signed HTTP exporter
 
-`AtTelemetrySignedHttpExporter` implements all three exporter interfaces. It
-signs every request with the producer's RSA private key, so the collector can
-check which atSign sent the telemetry and that nobody changed it on the way.
+`AtTelemetrySignedHttpExporter` signs every request with the producer's RSA
+private key, so the receiving service can check which Atsign sent the
+telemetry and that nobody changed it on the way.
 
 ```dart
 import 'package:at_telemetry/at_telemetry.dart';
@@ -106,36 +109,35 @@ final AtTelemetrySignedHttpExporter exporter = AtTelemetrySignedHttpExporter(
 );
 
 await exporter.export(event);
-await exporter.exportMetrics(<AtTelemetryMetric>[gauge]);
-await exporter.exportSpans(<AtTelemetrySpan>[span]);
 await exporter.shutdown();
 ```
 
-`AtTelemetryRsaSigner` is one implementation of the abstract interface
-`AtTelemetrySigner`. Both `AtTelemetrySignedHttpExporter` and
-`AtTelemetryHttpSignature.sign()` accept any `AtTelemetrySigner`, so a
-different key source or a different signing algorithm can be swapped in by
-implementing `AtTelemetrySigner` directly, without changing the exporter.
+`AtTelemetryRsaSigner` is one implementation of the `AtTelemetrySigner`
+interface. Both `AtTelemetrySignedHttpExporter` and
+`AtTelemetryHttpSignature.sign()` accept any `AtTelemetrySigner`, so you can
+swap in a different key source or signing algorithm by implementing
+`AtTelemetrySigner` yourself, without changing the exporter.
 
 How it behaves:
 
-- Logs, metrics and spans are each sent to their own path on the endpoint's
-  host: `/v1/logs`, `/v1/metrics` and `/v1/traces`. Requests are sent one at a
-  time, in the order they were exported.
-- A request is retried up to 3 times when the collector returns HTTP 429 or
-  5xx, when the connection fails, or when it takes longer than 10 seconds.
-  Other non-200 responses are not retried.
-- `export()`, `exportMetrics()` and `exportSpans()` are best effort: they do
-  not throw when the send ultimately fails, they only report the failure to
-  `onError`. Use `sendConfirmed()` to await a `AtTelemetryLogRecord` send and
-  have delivery failures thrown back to the caller instead.
+- Every request goes to `/v1/logs` on the endpoint's host. The endpoint may be
+  a bare origin or end in `/v1/logs`. Any other path, including `/v1/metrics`
+  and `/v1/traces`, throws an `ArgumentError`.
+- Each send makes up to 3 attempts. It tries again when the server returns
+  HTTP 429 or 5xx, when the connection fails, or when a request takes longer
+  than 10 seconds. Other non-200 responses, including redirects, fail
+  immediately.
+- `export()` is best effort. Its `Future` completes normally even when the
+  send fails, and the failure is only reported to `onError`.
+- `sendConfirmed()` sends a record and fails its `Future` when delivery
+  fails. `sendEncodedLogs()` does the same for bytes that are already an
+  encoded OTLP logs request, which is useful for retrying stored telemetry.
 
 ### Notification exporter
 
-`AtTelemetryNotificationExporter` implements the same three interfaces but
-delivers telemetry as the value of an atProtocol notification instead of an
-HTTP request, using whatever `notify` callback (for example
-`AtClient.notificationService`) you provide:
+`AtTelemetryNotificationExporter` delivers telemetry as the value of an
+Atsign Protocol notification, using the `notify` callback you provide (for
+example one that calls `AtClient.notificationService.send`):
 
 ```dart
 import 'package:at_telemetry/at_telemetry.dart';
@@ -143,33 +145,38 @@ import 'package:at_telemetry/at_telemetry.dart';
 final AtTelemetryNotificationExporter exporter = AtTelemetryNotificationExporter(
   serviceName: 'my_app',
   notify: (String idAndNamespace, String payload) async {
-    // send payload as the value of a notification keyed by idAndNamespace
+    // Send payload to the collector Atsign as the value of a notification
+    // keyed by idAndNamespace, which is always 'logs.at_telemetry'
   },
 );
 
 await exporter.export(event);
-await exporter.exportMetrics(<AtTelemetryMetric>[gauge]);
-await exporter.exportSpans(<AtTelemetrySpan>[span]);
 await exporter.shutdown();
 ```
 
-Each call is queued and delivered in order. `flush()` waits for the queue to
-drain and rethrows the first delivery failure it finds; `export()` and
-friends do not throw on their own.
+How it behaves:
 
-### Verifying signed requests on the collector
+- Unlike the signed HTTP exporter, the `Future` returned by `export()` fails
+  when delivery fails. `flush()` also rethrows the first failure since the
+  previous `flush()`.
+- A payload longer than `maxPayloadCharacters` (base64 of 1 MiB by default)
+  fails with an `ArgumentError` before anything is sent.
+- After `shutdown()`, `export()` returns a failed `Future` with a
+  `StateError`.
+
+### Verifying signed requests on the receiving service
 
 Each signed request carries these headers:
 
 | Header | Value |
 | --- | --- |
 | `content-digest` | SHA-256 digest of the request body |
-| `at-telemetry-audience` | The atSign the request is meant for |
-| `signature-input` | Signed components, `created` and `expires` times, a random `nonce`, the producer atSign as `keyid`, and the algorithm |
+| `at-telemetry-audience` | The Atsign the request is meant for |
+| `signature-input` | Signed components, `created` and `expires` times, a random `nonce`, the producer Atsign as `keyid`, and the algorithm |
 | `signature` | RSA PKCS#1 v1.5 SHA-256 signature over the method, path, content type, digest and audience |
 
-A signature is valid for at most 5 minutes. A collector should accept a
-request only when all of these checks pass:
+A signature is valid for at most 5 minutes. Accept a request only when all of
+these checks pass:
 
 ```dart
 final AtTelemetryHttpSignature signature = AtTelemetryHttpSignature.parse(
@@ -188,24 +195,22 @@ final bool accepted =
 ```
 
 - `parse` throws when a header is malformed. Reject the request with HTTP 400.
-- `signature.keyId` is the producer atSign. Use it to look up the producer's
+- `signature.keyId` is the producer Atsign. Use it to look up the producer's
   public key.
 - Remember nonces for at least as long as a signature stays fresh, so a
   captured request cannot be replayed.
 
-Once the request is accepted, decode the body with the matching codec, for
-example `AtTelemetryLogsCodec().decodeExportRequest(body)`, and reply with
+Once the request is accepted, decode the body with
+`AtTelemetryLogsCodec().decodeExportRequest(body)` and reply with
 `encodeExportResponse()`.
 
 ### Codecs
 
-- `AtTelemetryLogsCodec`, `AtTelemetryMetricsCodec` and `AtTelemetryTracesCodec`
-  convert log records, metrics and spans to and from the matching OTLP
-  `Export*ServiceRequest` in Protobuf bytes.
+- `AtTelemetryLogsCodec` converts log records to and from an OTLP
+  `ExportLogsServiceRequest` in Protobuf bytes.
 - `AtTelemetryNotificationCodec` wraps the same bytes in base64 so telemetry
-  can travel as the value of an atProtocol notification. Its
-  `idAndNamespace`, `metricsIdAndNamespace` and `tracesIdAndNamespace` are
-  `logs.at_telemetry`, `metrics.at_telemetry` and `traces.at_telemetry`.
+  can travel as the value of a notification. Its `idAndNamespace` is
+  `logs.at_telemetry`.
 
 ```dart
 const AtTelemetryNotificationCodec codec = AtTelemetryNotificationCodec();
@@ -216,15 +221,32 @@ final List<AtTelemetryLogRecord> events = codec.decode(payload);
 When decoding, resource and scope attributes (such as `service.name`) are
 merged into each record's attributes.
 
+## Package layout
+
+```
+lib/
+  at_telemetry.dart                      The only public entry point
+  src/
+    at_telemetry_log_record.dart         The log record model
+    codec/                               OTLP and notification codecs
+    exporters/                           The exporter interface and both exporters
+    internal/                            dartastic_opentelemetry adapters, not exported
+    security/                            Request signing and verification
+```
+
+`test/at_telemetry_boundary_test.dart` checks that nothing outside
+`src/internal/` imports dartastic_opentelemetry or fixnum, and that the public
+entry point exports nothing from `src/internal/`.
+
 ## Examples
 
-Every example runs on its own, using a local server in place of a real
-collector:
+Every example runs on its own, using a local server or callback in place of a
+real collector:
 
 | Example | Shows |
 | --- | --- |
 | [at_telemetry_example.dart](example/at_telemetry_example.dart) | A custom log exporter, JSON round trip and the notification codec |
-| [notification_exporter_example.dart](example/notification_exporter_example.dart) | Delivering logs, metrics and spans through `AtTelemetryNotificationExporter` |
+| [notification_exporter_example.dart](example/notification_exporter_example.dart) | Delivering logs through `AtTelemetryNotificationExporter` |
 | [otel_signed_http_exporter_example.dart](example/otel_signed_http_exporter_example.dart) | Signing requests as a producer and verifying them as a collector |
 
 ```sh
@@ -234,19 +256,18 @@ dart run example/at_telemetry_example.dart
 ## Things to know
 
 - The signed exporter only supports RSA 2048 keys.
-- `AtTelemetrySignedHttpExporter` accepts an endpoint with any OTLP signal
-  path (for example `https://host/otel/v1/traces`) but always replaces the
-  path with `/v1/logs`, `/v1/metrics` or `/v1/traces` depending on what is
-  being sent, so a custom path prefix is not preserved.
+- `AtTelemetrySignedHttpExporter` always replaces the endpoint path with
+  `/v1/logs`, so a custom path prefix such as `https://host/otel/v1/logs` is
+  not preserved.
 
 ## Known issues
 
 These are known bugs in the current release:
 
-- **Best-effort sends are silent without `onError`.** `export()`,
-  `exportMetrics()` and `exportSpans()` complete normally even when the
-  collector rejects the request; only `sendConfirmed()` reports the failure
-  back to the caller.
+- **Best-effort sends are silent without `onError`.**
+  `AtTelemetrySignedHttpExporter.export()` completes normally even when the
+  receiving service rejects the request. Only `sendConfirmed()` reports the
+  failure back to the caller.
 - **`AtTelemetryHttpSignature.parse` can throw `ArgumentError`.** A header
   with an invalid percent encoding, such as `keyid="%zz"`, throws
   `ArgumentError` instead of `FormatException`. Catch both.
