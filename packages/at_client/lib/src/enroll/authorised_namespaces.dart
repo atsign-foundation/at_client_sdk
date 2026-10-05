@@ -36,3 +36,18 @@ bool isSeedableNamespace(String namespace) =>
     namespace != EnrollmentConstants.allNamespaces &&
     namespace != '__manage' &&
     namespace.isNotEmpty;
+
+/// The access [grants] give to [namespace], or null when they give none.
+///
+/// A grant on [namespace] itself or on a namespace above it wins, and `*`
+/// answers only for a namespace no such grant covers.
+String? accessIn(Map<String, dynamic> grants, String namespace) {
+  for (final MapEntry(key: granted, value: access) in grants.entries) {
+    if (granted == EnrollmentConstants.allNamespaces) continue;
+    if (granted == namespace || namespace.endsWith('.$granted')) {
+      return '$access';
+    }
+  }
+  final all = grants[EnrollmentConstants.allNamespaces];
+  return all == null ? null : '$all';
+}

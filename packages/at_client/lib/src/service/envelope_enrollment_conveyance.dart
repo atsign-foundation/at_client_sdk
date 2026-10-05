@@ -5,6 +5,9 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show accessIn, isSeedableNamespace;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver, isFullyPrivileged;
@@ -85,7 +88,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     await sharing.shareSecretWith(
         package,
         Secret(
-          namespace: _conveyanceNamespaceFor(pending),
+          namespace: await _conveyanceNamespaceFor(pending),
           name: enrollmentApkamSymmetricKeySecretName,
           value: apkamSymmetricKey,
         ),
@@ -129,6 +132,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final KeyPackage package = keyPackage;
 
     final sharing = AtClientSecretSharing.forClient(_atClient);
+    late final envelopeNamespace = _conveyanceNamespaceFor(enrollment);
 
     // NOTE: the link vouching for this enrollment is conveyed rather than
     // published, because `_apsk` accepts writes only from its own
@@ -150,7 +154,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             package,
             Secret(
-              namespace: _conveyanceNamespaceFor(enrollment),
+              namespace: await envelopeNamespace,
               name: PqSigningChain.linkSecretName,
               value: PqSigningChain.encodeLink(link.toJson()),
             ),
@@ -168,7 +172,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           await sharing.shareSecretWith(
               package,
               Secret(
-                namespace: _conveyanceNamespaceFor(enrollment),
+                namespace: await envelopeNamespace,
                 name: PqSigningChain.rootLinkSecretName,
                 value: PqSigningChain.encodeLink(link),
               ),
@@ -196,7 +200,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             package,
             Secret(
-              namespace: _conveyanceNamespaceFor(enrollment),
+              namespace: await envelopeNamespace,
               name: PqSigningRoot.secretName,
               value: base64Encode(private),
             ),
@@ -217,7 +221,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
           sharing: sharing,
           privateFiling: filing,
-        ).conveyHeldPrivatesTo(package, enrollment.namespace?.keys ?? const []);
+        ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {});
         if (sent > 0) {
           _logger.info('Conveyed $sent held nskey private(s) to enrollment '
               '${enrollment.enrollmentId}');
@@ -298,7 +302,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         await sharing.shareSecretWith(
             keyPackage,
             Secret(
-              namespace: _conveyanceNamespaceFor(enrollment),
+              namespace: await _conveyanceNamespaceFor(enrollment),
               name: PqSigningChain.rootLinkSecretName,
               value: PqSigningChain.encodeLink(link),
             ),
@@ -316,22 +320,55 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     return conveyed;
   }
 
-  /// A namespace this enrollment is authorised to read, for the envelope
-  /// carrying its symmetric key.
+  /// A namespace [enrollment] may read and this approver may write, for an
+  /// envelope addressed to it.
   ///
-  /// The envelope is a self key in an app namespace, so the atServer's
-  /// namespace gating decides whether the enrollment can fetch it at all —
-  /// which rules out `__manage` and `*`. Throws when the enrollment is
-  /// authorised for no ordinary namespace.
-  String _conveyanceNamespaceFor(Enrollment enrollment) {
-    final granted = (enrollment.namespace?.keys ?? const <String>[])
-        .where((ns) => ns != '*' && ns != '__manage');
-    if (granted.isEmpty) {
-      throw AtEnrollmentException(
-          'Enrollment ${enrollment.enrollmentId} is authorised for no ordinary '
-          'namespace, so there is nowhere to put the envelope carrying its '
-          'symmetric key that it would be allowed to read.');
+  /// The envelope is a key in an ordinary namespace, so the atServer's
+  /// namespace gating decides both who may write it and who may fetch it.
+  /// Tried in order: the namespaces [enrollment] was granted, this client's
+  /// `preference.namespace`, then the namespaces this client was granted — so
+  /// an enrollment granted only `*` fetches it from the approver's namespace.
+  /// Throws when none qualifies.
+  Future<String> _conveyanceNamespaceFor(Enrollment enrollment) async {
+    final granted = enrollment.namespace ?? const <String, dynamic>{};
+    final own = await _ownGrants();
+    final preferred = _atClient.getPreferences()?.namespace;
+    final candidates = [
+      ...granted.keys,
+      if (preferred != null) preferred,
+      ...?own?.keys,
+    ].where(isSeedableNamespace);
+    for (final namespace in candidates) {
+      if (accessIn(granted, namespace) == null) continue;
+      if (own != null && !(accessIn(own, namespace)?.contains('w') ?? false)) {
+        continue;
+      }
+      return namespace;
     }
-    return granted.first;
+    throw AtEnrollmentException(
+        'Enrollment ${enrollment.enrollmentId} may read no namespace this '
+        'approver may write, so there is nowhere to put the envelopes '
+        'addressed to it. Give this approver a preference.namespace the '
+        'enrollment is granted.');
+  }
+
+  /// The namespaces this client's own enrollment was granted, or null when it
+  /// may write anywhere or its record cannot be found.
+  ///
+  /// The atSign's own credential has no record and no limit; for a record the
+  /// list does not carry, the atServer's refusal of the write is what reports
+  /// a namespace this client may not write.
+  Future<Map<String, dynamic>?> _ownGrants() async {
+    final enrollmentId = _atClient.enrollmentId;
+    if (isAtSignCredential(enrollmentId)) return null;
+    final approved = await _listEnrollments(
+        enrollmentListParams: EnrollmentListRequestParam()
+          ..enrollmentListFilter = [EnrollmentStatus.approved]);
+    for (final enrollment in approved) {
+      if (enrollment.enrollmentId == enrollmentId) {
+        return enrollment.namespace ?? const {};
+      }
+    }
+    return null;
   }
 }

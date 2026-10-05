@@ -404,7 +404,7 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), [namespace]);
+          .conveyHeldPrivatesTo(joinerPackage(), {namespace: 'rw'});
 
       expect(sent, 2,
           reason: 'one conveyance per held generation — an approver that sent '
@@ -435,13 +435,64 @@ void main() {
               ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
               sharing: sharing,
               privateFiling: held)
-          .conveyHeldPrivatesTo(joinerPackage(), const ['app_2.my_apps']);
+          .conveyHeldPrivatesTo(joinerPackage(), const {'app_2.my_apps': 'rw'});
 
       expect(sent, 0);
       expect(sharing.sharedNames, isEmpty,
           reason: 'the approver holds a private it must not hand over — so '
               '"every generation" is scoped by the approval and the test '
               'above is not simply sending whatever is in the keyfile');
+    });
+
+    /// Approves a joiner granted [grants] by an approver holding one private
+    /// in each of [heldIn], and returns the namespaces conveyed.
+    Future<List<String>> conveyedFor(
+        Map<String, String> grants, List<String> heldIn) async {
+      final held = await filing();
+      for (final ns in heldIn) {
+        await held.store(
+            namespace: ns,
+            nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+            seed: NskeySeed(pair.privateKeyBytes));
+      }
+      final atClient = client();
+      final sharing = _RecordingShares();
+      await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              sharing: sharing,
+              privateFiling: held)
+          .conveyHeldPrivatesTo(joinerPackage(), grants);
+      return sharing.sharedNamespaces;
+    }
+
+    test('a * grant is conveyed every private its approver holds', () async {
+      expect(
+          await conveyedFor(
+              const {'*': 'rw', '__manage': 'rw'}, [namespace, 'sshnp']),
+          unorderedEquals([namespace, 'sshnp']),
+          reason: 'a * enrollment may read every namespace, and `*` and '
+              '`__manage` name no namespace a key is filed under, so looking '
+              'the grant\'s names up conveyed it nothing');
+    });
+
+    test('a grant is conveyed the namespaces below it, read access included',
+        () async {
+      expect(
+          await conveyedFor(
+              const {'sshnp': 'r'}, ['sshnp', 'dev1.sshnp', 'notsshnp']),
+          unorderedEquals(['sshnp', 'dev1.sshnp']),
+          reason: 'an enrollment granted sshnp reads dev1.sshnp, so it needs '
+              'that key too; notsshnp only ends in the same letters, and is '
+              'the control that this is a dot-suffix match');
+    });
+
+    test('a grant that is only a prefix of a held namespace conveys nothing',
+        () async {
+      expect(await conveyedFor(const {'app_1': 'rw'}, [namespace]), isEmpty,
+          reason: '$namespace is not below app_1. A lookup of the grant as a '
+              'key-id prefix matched it, and sent its private under a kid '
+              'carrying the rest of the namespace');
     });
   });
 
@@ -691,9 +742,10 @@ class _RecordingStoreSharing extends Fake implements PairwiseSecretSharing {
   final SecretStore secretStore = SecretStore();
 }
 
-/// Records which secrets were conveyed, by name.
+/// Records which secrets were conveyed, by name and by namespace.
 class _RecordingShares extends Fake implements PairwiseSecretSharing {
   final List<String> sharedNames = [];
+  final List<String> sharedNamespaces = [];
 
   @override
   final SecretStore secretStore = SecretStore();
@@ -702,5 +754,6 @@ class _RecordingShares extends Fake implements PairwiseSecretSharing {
   Future<void> shareSecretWith(KeyPackage to, Secret secret,
       {required String inReplyTo}) async {
     sharedNames.add(secret.name);
+    sharedNamespaces.add(secret.namespace);
   }
 }

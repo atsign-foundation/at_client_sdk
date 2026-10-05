@@ -18,7 +18,8 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
-import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_client/src/secret_sharing/secret_store.dart'
+    show Secret, SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -460,28 +461,32 @@ class NskeySeeding {
     return offered > 0;
   }
 
-  /// Sends every nskey private this client holds for [approvedNamespaces] to
-  /// one newly approved enrollment.
+  /// Sends every nskey private this client holds, in every namespace [grants]
+  /// covers, to one newly approved enrollment.
   ///
-  /// Read from `AtKeys` rather than the secret store, which is in-memory by
-  /// design and holds nothing after a restart — an approver relying on it would
-  /// convey a new enrollment **nothing**.
+  /// [grants] is the enrollment's namespace-to-access map, and covers a
+  /// namespace as [SecretStore.namespaceAuthorizes] says: `*`, the namespace
+  /// itself, or any namespace it is a dot-suffix of. Read from `AtKeys` rather
+  /// than the secret store, which is in-memory by design and holds nothing
+  /// after a restart — an approver relying on it would convey a new enrollment
+  /// **nothing**.
   Future<int> conveyHeldPrivatesTo(
-      KeyPackage keyPackage, Iterable<String> approvedNamespaces) async {
+      KeyPackage keyPackage, Map<String, dynamic> grants) async {
     final sharing = this.sharing;
     final filing = privateFiling;
     if (sharing == null || filing == null) return 0;
 
+    final held = await filing.readAllWhere(
+        (namespace) => SecretStore.namespaceAuthorizes(grants, namespace));
     int sent = 0;
-    for (final namespace in approvedNamespaces.where(isSeedable)) {
-      final held = await filing.readAllFor(namespace);
-      for (final entry in held.entries) {
+    for (final MapEntry(key: namespace, value: privates) in held.entries) {
+      for (final MapEntry(key: kid, value: seed) in privates.entries) {
         await sharing.shareSecretWith(
             keyPackage,
             Secret(
               namespace: namespace,
-              name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
-              value: base64Encode(entry.value.bytes),
+              name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+              value: base64Encode(seed.bytes),
             ),
             inReplyTo: EnvelopeAddressing.unsolicited);
         sent++;

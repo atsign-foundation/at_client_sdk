@@ -5,6 +5,10 @@
   can still open a notification sent under it just before the rotation.
 - feat: `ensureReachable`'s result says whether this client can open what
   peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
+- fix: an approver whose client has only just started still hands a new
+  enrollment every namespace key it may read, under a `*` grant too.
+- fix: a post-quantum enrollment granted only `*` can be approved; it was
+  refused for having no namespace to be sent its keys in.
 
 ## 3.15.0-rc3
 

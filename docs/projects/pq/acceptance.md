@@ -574,6 +574,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
+  - An E2 granted only `*` is approved too. Every envelope addressed to E2 goes
+    in a namespace E2 may read and `alice1` may write: the namespaces E2 was
+    granted first, then `alice1`'s `preference.namespace`, then the namespaces
+    `alice1` was granted. When none qualifies, `alice1` refuses before
+    approving.
 
 ### 3.2 UC-A2.2 — Second host using the *same* keyfile (copied keyfile, E1)
 
@@ -787,6 +792,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:**
   - `public:__nskey.app_1.my_apps@alice` exists and resolves on a `plookup`, and
     `alice2` obtains the nskey private and reads.
+  - The push reaches every enrollment with at least `r` on the namespace, a `*`
+    enrollment and one granted a namespace above it included, and no enrollment
+    granted only another namespace.
   - **The namespace is not enumerable**: an unauthenticated `scan` of `@alice`, with
     and without `showhidden`, returns no `public:__nskey.…` key. A guaranteed protocol
     property, covered here as a regression guard.
@@ -1139,8 +1147,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   heavier, O(n)-per-enrollment revocation + post-compromise-security lever — **not
   cheap**, and **distinct** from CK rotation.
 - **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed
-  **every generation its approver holds** for the namespaces it was approved for, not
-  only the live one — so retained history opens immediately, with no pull round trip and
+  **every generation its approver holds**, not only the live one, in every namespace its
+  grant covers — `*` covers all of them, and a grant covers the namespaces below it, read
+  access included — so retained history opens immediately, with no pull round trip and
   no dependence on a holder being online at that moment. `requestSecret` remains the
   backstop for a joiner the push missed: on meeting a retained `__ck` naming an
   `nskeyKid` it does not hold, it pulls that generation and opens it.
@@ -1149,8 +1158,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   where deleting the old conveyance record is what makes old-CK-era
   data unreadable. Once that record is gone an old nskey private opens nothing, so
   withholding it from a joiner would cost a round trip and buy no secrecy;
-  `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and sends
-  every entry.
+  `conveyHeldPrivatesTo` reads every private `NskeyPrivateFiling` holds in a namespace
+  the grant covers and sends every entry.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 

@@ -70,10 +70,13 @@ void main() {
     return atClient;
   }
 
-  /// Stubs `enroll:list` to return one pending enrollment carrying [keyPackage]
-  /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
-  /// approver to mint and convey.
-  void stubPendingEnrollment(AtClient approver, Object keyPackage) {
+  /// Stubs `enroll:list` to return one pending enrollment granted [grants] and
+  /// carrying [keyPackage] and **no** `encryptedAPKAMSymmetricKey` — the shape
+  /// that asks this approver to mint and convey — and, given [approverGrants],
+  /// the approver's own record.
+  void stubPendingEnrollment(AtClient approver, Object keyPackage,
+      {Map<String, String> grants = const {'buzz': 'rw'},
+      Map<String, String>? approverGrants}) {
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     // NOTE: resolve the secondary first — nesting the call inside `when`
     // would register the stub against getRemoteSecondary itself.
@@ -84,9 +87,15 @@ void main() {
               key: {
                 'appName': 'buzz',
                 'deviceName': 'pixel',
-                'namespace': {'buzz': 'rw'},
+                'namespace': grants,
                 'metadata': {'keyPackage': keyPackage},
-              }
+              },
+              if (approverGrants != null)
+                '${approver.enrollmentId}.new.enrollments.__manage$atSign': {
+                  'appName': 'at_activate',
+                  'deviceName': 'cli',
+                  'namespace': approverGrants,
+                },
             })}');
   }
 
@@ -324,6 +333,76 @@ void main() {
         reason: 'the approver cannot convey the key the approval would '
             'encrypt under, so the error has to name the fix rather than '
             'surface a Bad state from inside the substrate');
+  });
+
+  group('the namespace the envelopes go in', () {
+    /// Approves an enrollee granted [grants] as an approver granted
+    /// [approverGrants] whose preference namespace is `at_activate`, and
+    /// answers the namespaces the envelopes were written in.
+    Future<Set<String>> envelopeNamespaces(Map<String, String> grants,
+        {required Map<String, String> approverGrants,
+        _RecordingAtEnrollment? enrollment}) async {
+      final approver = buildMockClient('approver-ns');
+      approver.getPreferences().namespace = 'at_activate';
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson(),
+          grants: grants, approverGrants: approverGrants);
+
+      await approveWith(approver, enrollment: enrollment);
+
+      return {
+        for (final key in remoteData.keys)
+          if (key.contains('.__ssenv.'))
+            key.split('.__ssenv.').last.split('@').first
+      };
+    }
+
+    test(
+        'an enrollment granted only * is conveyed in the approver\'s namespace',
+        () async {
+      expect(
+          await envelopeNamespaces(const {'*': 'rw'},
+              approverGrants: const {'*': 'rw', '__manage': 'rw'}),
+          {'at_activate'},
+          reason: 'a * enrollment may read any namespace, and * itself names '
+              'no namespace an envelope can be written in');
+    });
+
+    test('an enrollment\'s own namespace comes first', () async {
+      expect(
+          await envelopeNamespaces(const {'*': 'rw', 'buzz': 'rw'},
+              approverGrants: const {'*': 'rw', '__manage': 'rw'}),
+          {'buzz'},
+          reason: 'the control: the same approver, for an enrollment that '
+              'could read at_activate too, writes in the namespace the grant '
+              'names rather than in its own');
+    });
+
+    test(
+        'an approver that may not write its own namespace uses one it was '
+        'granted', () async {
+      expect(
+          await envelopeNamespaces(const {'*': 'rw'},
+              approverGrants: const {'__manage': 'rw', 'my_app': 'rw'}),
+          {'my_app'},
+          reason: 'at_activate is not this approver\'s to write, and the '
+              'atServer would refuse the envelope there');
+    });
+
+    test(
+        'a grant sharing no namespace with the approver is refused before '
+        'the approval', () async {
+      final enrollment = _RecordingAtEnrollment();
+      await expectLater(
+          envelopeNamespaces(const {'other': 'rw'},
+              approverGrants: const {'__manage': 'rw', 'my_app': 'rw'},
+              enrollment: enrollment),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('may read no namespace this approver'))));
+      expect(enrollment.approvals, isEmpty,
+          reason: 'an approval spent on a device that can be sent nothing '
+              'cannot be taken back');
+    });
   });
 
   test('an approver that has registered conveys the key', () async {
