@@ -17,6 +17,13 @@ on:
 permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
+# A newer push to a pull request cancels the run it supersedes. Every other
+# event gets a group of its own, so trunk and dispatched runs never wait on or
+# cancel one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   unit_at_client:
     runs-on: ubuntu-latest

@@ -2540,9 +2540,10 @@ unit sources and renders, or `--with-live` runs the three live packs as well.
 `packages/at_client/test/acceptance_ledger_wiring_test.dart`, across **both**
 workflows: each emitting job still carries its reporter flag, `unit_at_client`
 still sets `ACCEPTANCE_LEDGER`, every emitter still uploads with
-`if: ${{ always() }}`, at_libraries' matrix upload still names
-`matrix.package` so its eight legs cannot overwrite one another, and each
-runner still gates the reporter on `ACCEPTANCE_REPORT`.
+`if: ${{ always() }}`, at_libraries' matrix upload still names its leg's
+index so its legs cannot overwrite one another and still takes the report of
+every package the leg ran, and each runner still gates the reporter on
+`ACCEPTANCE_REPORT`.
 ⚠️ **The rail's predicates read the workflow with comments stripped**, which is
 not a detail: an upload step is preceded by a comment explaining it, that
 comment names the very strings the predicates look for — this section's own
