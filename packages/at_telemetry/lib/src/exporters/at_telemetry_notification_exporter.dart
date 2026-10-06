@@ -27,7 +27,7 @@ typedef AtTelemetryIdSource = String? Function();
 // that atServer retries delivery to the collector atSign itself.
 final class AtTelemetryNotificationExporter
     implements AtTelemetryLogRecordExporter {
-  static const String key = 'otlp-json.logs';
+  static const String key = 'logs';
   static const String namespace = 'at_telemetry';
   static const String idAndNamespace = '$key.$namespace';
   static const int defaultMaxBatchRecords = 50;

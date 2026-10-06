@@ -50,10 +50,10 @@ void main() {
       notify = (String key, String value) async => sent.add((key, value));
     });
 
-    test('names its encoding in the key', () {
+    test('sends under the logs.at_telemetry key', () {
       expect(
         AtTelemetryNotificationExporter.idAndNamespace,
-        'otlp-json.logs.at_telemetry',
+        'logs.at_telemetry',
       );
     });
 
