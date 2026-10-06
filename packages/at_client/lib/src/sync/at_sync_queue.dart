@@ -265,6 +265,43 @@ class AtSyncQueue {
     return true;
   }
 
+  /// Takes in the entries of [stray], another box of this atSign's queue that
+  /// lies outside this queue's directory, then deletes [stray] from disk;
+  /// returns how many it took.
+  ///
+  /// Only the entries [keep] accepts are taken, and an entry this queue
+  /// already holds for the same atKey stays when it is at least as recent.
+  /// [stray] is left on disk if taking an entry fails.
+  Future<int> adopt(Box<String> stray,
+      {required Future<bool> Function(SyncQueueEntry entry) keep}) async {
+    _ensureOpen();
+    var taken = 0;
+    try {
+      for (final atKey in stray.keys.cast<String>().toList()) {
+        final raw = stray.get(atKey);
+        if (raw == null) continue;
+        final SyncQueueEntry entry;
+        try {
+          entry = SyncQueueEntry._deserialise(atKey, raw);
+        } on FormatException catch (e) {
+          _logger.warning('skipping malformed stray sync queue entry $atKey: '
+              '$e');
+          continue;
+        }
+        final held = readEntry(atKey);
+        if (held != null && held.ts >= entry.ts) continue;
+        if (!await keep(entry)) continue;
+        await enqueue(atKey, entry.op, ts: entry.ts);
+        taken++;
+      }
+    } catch (_) {
+      await stray.close();
+      rethrow;
+    }
+    await stray.deleteFromDisk();
+    return taken;
+  }
+
   /// Drops every entry, keeping the box open.
   Future<void> clear() async {
     _ensureOpen();
