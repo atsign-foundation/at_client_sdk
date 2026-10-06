@@ -393,7 +393,8 @@ first lines: at_auth's `at_authenticator_test`, `auth_wiring_test` and
 `enrollment_handshake_test`; at_client's `apkam_signing_keys_test`,
 `apkam_signing_deprecated_pair_test`, `signing_algo_threading_test`,
 `no_atkeysio_inertness_test`, `nskey_minting_test`, `nskey_rotation_test`,
-`startup_call_order_test` and `seeding_files_private_test`; and the three
+`startup_call_order_test`, `seeding_files_private_test` and
+`injected_atchops_keys_test`; and the three
 fixtures that hand the client a placeholder signer because the bridge that
 builds a client's AtChops from a keyfile insists on a credential
 (`legacy_encryption_decryption_test`, `legacy_client_refusal_test`,

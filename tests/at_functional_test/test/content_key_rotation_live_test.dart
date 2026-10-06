@@ -265,9 +265,10 @@ void main() {
     expect(await atClient.delete(value), true);
     await sync('ck-grace-uncited');
     expect(await managerOf(atClient).tryCollect(context), isNotNull,
-        reason: 'the pass ran over a caught-up store rather than being '
-            'refused, so "kept" below is its decision and not a pass that '
-            'never looked');
+        reason: 'the pass answered rather than being refused for sync not '
+            'having caught up; with the zero-grace control below collecting '
+            'this same key, "kept" is its decision and not a pass that never '
+            'looked');
     await sync('ck-grace-kept');
     expect(await served(superseded), isTrue,
         reason: 'superseded just now, so it is kept although nothing cites it');

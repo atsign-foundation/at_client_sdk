@@ -2,7 +2,8 @@
 
 - fix: a storage path set on the preference after `AtOnboardingServiceImpl`
   is built is used again, as in 1.x, rather than an empty store opening in
-  the default directory.
+  the default directory. Building the service no longer fills in the
+  preference's `storagePath`.
 
 ## 2.0.0-rc3
 

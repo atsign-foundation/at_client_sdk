@@ -170,7 +170,8 @@ void main() {
     /// Leaves [atSign]'s store at the test's path as at_client 3.14.0 left it
     /// after a sync, plus anything in [alsoStored].
     Future<void> storeAsSynced(String atSign, AtClientPreference pref,
-        {Map<String, String> alsoStored = const {}}) async {
+        {Map<String, String> alsoStored = const {},
+        bool withCursor = true}) async {
       final client = await buildAtClient(
           atSign: atSign,
           namespace: 'lifecycle',
@@ -179,8 +180,10 @@ void main() {
       final local = client.getLocalSecondary()!;
       // NOTE: the at-rest name 3.14.0 gave its sync cursor, which it built
       // with no namespace and its put stored under the preference's.
-      await local.putValue(
-          'local:lastreceivedservercommitid.lifecycle$atSign', '42');
+      if (withCursor) {
+        await local.putValue(
+            'local:lastreceivedservercommitid.lifecycle$atSign', '42');
+      }
       for (final entry in alsoStored.entries) {
         await local.putValue(entry.key, entry.value);
       }
@@ -210,6 +213,22 @@ void main() {
           .get('local:lifecycle.online$atSign');
       expect(marker?.data, contains('"enrollmentId":"primary"'),
           reason: 'the store is now this principal\'s, as a marker says');
+    });
+
+    test('a store with records but no cursor is still refused', () async {
+      const atSign = '@refusednocursor';
+      final pref = await preference();
+      await storeAsSynced(atSign, pref, withCursor: false);
+
+      await expectLater(
+          () async => Atsign(atSign).open(
+              keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+              preference: pref,
+              atLookUp: revoked(atSign)),
+          throwsA(isA<AtOpenRefusedException>()),
+          reason: 'the control: the records a client leaves say nothing about '
+              'having been online, the cursor does, so the test above passes '
+              'on the cursor and not on the store being non-empty');
     });
 
     test('a marker naming another enrollment still decides', () async {

@@ -174,9 +174,11 @@ void main() {
           ..atKey = testKey()
           ..value = 'v1',
         sync: true);
+    var batches = 0;
     when(() =>
             remote.executeCommand(any(that: startsWith('batch:')), auth: true))
         .thenAnswer((_) async {
+      batches++;
       await duringBatch?.call();
       return response;
     });
@@ -184,6 +186,9 @@ void main() {
     service.sync();
     await Future.delayed(Duration.zero);
     await Future.delayed(const Duration(milliseconds: 300));
+    expect(batches, 1,
+        reason: 'the premise: the round ran and sent its one batch inside '
+            'the wait, so what follows is about that round');
   }
 
   test('a write landing mid-push is not warned about', () async {

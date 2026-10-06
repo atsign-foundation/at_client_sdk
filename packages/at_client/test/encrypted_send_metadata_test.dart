@@ -5,6 +5,8 @@ import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/declared_fields.dart';
+
 /// Every [Metadata] field is either one the caller of an encrypting send
 /// decides, which [metadataForEncryptedSend] carries, or one an encryption or
 /// the atServer produces, which it leaves out. A field at_commons adds turns the
@@ -74,51 +76,6 @@ void main() {
     'createdAt': (m) => m.createdAt,
     'updatedAt': (m) => m.updatedAt,
   };
-
-  /// The instance fields a class body declares, in every shape a field can
-  /// take: with or without a default, `late`, `final`, a generic type with
-  /// commas, a default on the next line. Getters, operators, methods and
-  /// statics are not fields. `declarationShapes` below pins the reach, and
-  /// the operator there is `==`, whose `=` must not read as a default.
-  Set<String> fieldsDeclaredIn(String body) => RegExp(
-          r'^  (?!static |return )(?![^;=]*\b(?:get|operator)\s)'
-          r'(?:late\s+|final\s+)*[A-Za-z_][\w<>,? ]*?\s+([a-zA-Z_]\w*)'
-          r'(?:\s*=(?!=)\s*[^;]+)?;$',
-          multiLine: true)
-      .allMatches(body)
-      .map((m) => m.group(1)!)
-      .toSet();
-
-  /// A class body declaring a field in every shape, beside members that are
-  /// not fields.
-  const declarationShapes = '''
-  bool plain = false;
-  String? nullable;
-  Map<String, dynamic>? generic;
-  late String? lateField;
-  final String? finalField = null;
-  Duration? splitDefault =
-      const Duration(days: 8);
-  int get notAField => 0;
-  static const String notOne = 'x';
-  bool operator ==(Object other) => true;
-  Map<String, dynamic> toJson() => {};
-  String toString() => 'x';
-''';
-
-  test('the parse finds a field in every shape it can be declared in', () {
-    expect(
-        fieldsDeclaredIn(declarationShapes),
-        {
-          'plain',
-          'nullable',
-          'generic',
-          'lateField',
-          'finalField',
-          'splitDefault',
-        },
-        reason: 'a shape missing here is one a new field could hide in');
-  });
 
   /// The instance fields `class Metadata` declares in the at_commons this
   /// package resolves, read from its source.

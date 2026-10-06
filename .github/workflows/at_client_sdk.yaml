@@ -206,6 +206,7 @@ jobs:
       # enroll:request shape, so every post-quantum test in the pack fails
       # under both backends for reasons that have nothing to do with storage.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
+      RIG_COMPOSE_FILE: test/docker-compose.yaml
     strategy:
       fail-fast: false
       matrix:

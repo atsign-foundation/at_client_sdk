@@ -7,8 +7,9 @@
   app's own `local:` value shaped like ciphertext (base64 of a multiple of 16
   bytes), which the app has to write again.
 - fix: after an upgrade from 3.14.0, writes not yet synced reach the atServer
-  in an app that switched between atSigns stored in separate directories, or
-  that called `Hive.init` itself.
+  once the app opens a store in the directory their queue was left in: as it
+  switches back to the other atSign when atSigns have separate directories,
+  or at once when the app had called `Hive.init` itself.
 - fix: after an upgrade from 3.14.0, `Atsign.open` refused by the atServer on
   a device that has synced returns a client in the refused state rather than
   throwing.
@@ -59,8 +60,8 @@
 - fix: an `AtKey` reused for several puts or notifications carries nothing
   over from one to the next.
 - BREAKING: a value an app encrypts itself and puts with `shouldEncrypt: false`
-  is stored as plain: the put drops `isEncrypted`, `ivNonce` and the other
-  encryption fields an app sets on the key's metadata.
+  is stored as given and treated as plain: the put drops `isEncrypted`,
+  `ivNonce` and the other encryption fields an app sets on the key's metadata.
 - BREAKING: a provider id set in a key's `appMetadata` no longer chooses the
   provider for a notification the SDK encrypts; pass `cryptoProviderId`.
 - fix: a `noCommit` put that falls back to legacy encryption still asks the

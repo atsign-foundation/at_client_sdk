@@ -307,10 +307,10 @@ class CkManager {
       await tryCollect(context) ?? 0;
 
   /// [collectUnused], answering null when it was refused because sync had not
-  /// caught up, the one refusal a later pass can overcome.
+  /// caught up, the one refusal a later pass can overcome; a pass that does not
+  /// look for another reason answers 0, as [collectUnused] does.
   ///
-  /// Visible so a test can tell a pass that ran and kept a key from one that
-  /// never looked.
+  /// Visible so a test can tell a pass sync refused from one that answered.
   @visibleForTesting
   Future<int?> tryCollect(CryptoContext context) =>
       _inTurn(() => _collectUnused(context));

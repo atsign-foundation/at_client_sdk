@@ -81,8 +81,8 @@ void main() {
     await AtClientManager.getInstance().atClient.stop();
     final loader = AtEncryptionKeysLoader.getInstance();
     final other = '${namespace}other';
-    // The demo keys are this atSign's credential and hold none of the nskey
-    // privates the first client filed in its own key source.
+    // NOTE: the demo keys hold this atSign's credential and none of the nskey
+    // privates the first client filed, which is what makes this the false arm.
     final second = await Atsign(atSign).open(
         keys: InMemoryAtKeysIo.holding(
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
@@ -104,5 +104,13 @@ void main() {
             'conveyed to nobody, so peers can seal here and this client '
             'cannot open what they seal: the arm the two assertions above '
             'cannot show, and the one a constant true would hide');
+    final ring = PublishedNskeyKeyRing(second);
+    final offered = (await ring.publishedAdvertisement(atSign, namespace))!;
+    for (final entry in offered.keys) {
+      expect(await ring.heldPrivateHalf(atSign, namespace, entry.kid), isNull,
+          reason: 'the control: the advertisement reads and the private is '
+              'absent, so the false above is "not held" and not a check that '
+              'could not tell');
+    }
   }, timeout: Timeout(Duration(minutes: 3)));
 }

@@ -90,8 +90,9 @@ void main() {
   test('control: with no key source the read falls through to the keystore',
       () async {
     // The keystore is empty, so every tier misses and the keystore's exception
-    // comes back — which is what the legacy self-key path catches. Without this arm the
-    // tests above would pass on a getter that answered from anywhere at all.
+    // comes back — which is what the legacy self-key path catches. Without
+    // this arm the tests above would pass on a getter that answered from
+    // anywhere at all.
     final local = (await clientWith(keySource: null)).getLocalSecondary()!;
 
     await expectLater(() => local.getEncryptionSelfKey(),
