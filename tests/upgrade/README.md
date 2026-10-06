@@ -15,6 +15,9 @@ Every arm writes a Hive store, so the test skips itself when
 
 ## What one arm does
 
+CI runs it in its own job, `functional_tests_upgrade`, on the stable channel,
+and the functional legs exclude its `upgrade` tag.
+
 An arm is one version of at_client that writes a store. For each, the test:
 
 1. **Seeds** a store with that version: one record of each kind (self, shared,
