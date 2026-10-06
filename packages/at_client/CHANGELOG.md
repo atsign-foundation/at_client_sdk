@@ -10,6 +10,14 @@
 - feat: where the atServer supports it, a notification carries its exact
   expiry rather than a relative `ttln`, so it no longer drifts at each hop.
 - build: requires `at_commons` ^5.19.0.
+- feat: `ensureReachable`'s result says whether this client can open what
+  peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
+- fix: an approver whose client has only just started still hands a new
+  enrollment every namespace key it may read, under a `*` grant too.
+- fix: a post-quantum enrollment granted only `*` can be approved; it was
+  refused for having no namespace to be sent its keys in.
+- fix: approving no longer throws when the approver may only read a namespace
+  it holds a key for; the new enrollment gets that key from another holder.
 
 ## 3.15.0-rc3
 

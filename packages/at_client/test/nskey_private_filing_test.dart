@@ -230,7 +230,8 @@ void main() {
             'only its own private opens it — a client given the current '
             'generation alone could read nothing written before the last '
             'rotation');
-    expect(await filer.readAllFor(namespace), hasLength(2));
+    expect((await filer.readAllWhere((ns) => ns == namespace))[namespace],
+        hasLength(2));
   });
 
   test('re-draining the same store files nothing twice', () async {
@@ -279,7 +280,7 @@ void main() {
       expect(await filing.read(namespace, 'kid1'), isNull);
       expect(await filing.readSeed(namespace, 'kid1'), isNull);
       expect(await filing.readAll(), isEmpty);
-      expect(await filing.readAllFor(namespace), isEmpty);
+      expect(await filing.readAllWhere((_) => true), isEmpty);
     });
 
     test('a readable source missing that entry also reads as absence',
@@ -291,7 +292,7 @@ void main() {
       expect(await filing.read(namespace, 'kid1'), isNull);
       expect(await filing.readSeed(namespace, 'kid1'), isNull);
       expect(await filing.readAll(), isEmpty);
-      expect(await filing.readAllFor(namespace), isEmpty);
+      expect(await filing.readAllWhere((_) => true), isEmpty);
     });
 
     test('an unreadable source is raised, not reported as absence', () async {
@@ -302,8 +303,8 @@ void main() {
           filing.read(namespace, 'kid1'), throwsA(isA<AtKeysParseException>()));
       await expectLater(filing.readSeed(namespace, 'kid1'),
           throwsA(isA<AtKeysParseException>()));
-      await expectLater(
-          filing.readAllFor(namespace), throwsA(isA<AtKeysParseException>()));
+      await expectLater(filing.readAllWhere((_) => true),
+          throwsA(isA<AtKeysParseException>()));
     });
 
     test('readAll alone tolerates it, because a client is built through it',

@@ -36,3 +36,32 @@ bool isSeedableNamespace(String namespace) =>
     namespace != EnrollmentConstants.allNamespaces &&
     namespace != '__manage' &&
     namespace.isNotEmpty;
+
+/// The access [grants] give to [namespace], or null when they give none.
+///
+/// Resolved as the atServer resolves a key, which reads its namespace as the
+/// last dot segment: a grant on that segment wins, then the first grant on
+/// [namespace] itself or on a namespace above it, and `*` answers only for a
+/// namespace no such grant covers.
+String? accessIn(Map<String, dynamic> grants, String namespace) {
+  final lastSegment = namespace.substring(namespace.lastIndexOf('.') + 1);
+  final onLastSegment = grants[lastSegment];
+  if (lastSegment != EnrollmentConstants.allNamespaces &&
+      onLastSegment != null) {
+    return '$onLastSegment';
+  }
+  for (final MapEntry(key: granted, value: access) in grants.entries) {
+    if (granted == EnrollmentConstants.allNamespaces) continue;
+    if (granted == namespace || namespace.endsWith('.$granted')) {
+      return '$access';
+    }
+  }
+  final all = grants[EnrollmentConstants.allNamespaces];
+  return all == null ? null : '$all';
+}
+
+/// Whether a client granted [own] may write to [namespace].
+///
+/// A null [own] is a client with no recorded limit, and may write anywhere.
+bool mayWriteIn(Map<String, dynamic>? own, String namespace) =>
+    own == null || (accessIn(own, namespace)?.contains('w') ?? false);

@@ -214,9 +214,12 @@ class AtClientImpl implements AtClient {
       // enrollment published a moment ago is absent locally until sync catches
       // up, and reading that absence as a cold start publishes a second key
       // over the first.
-      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
-          null) {
-        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      final published =
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      if (published != null) {
+        return AtReachabilityResult(AtReachability.alreadyReachable,
+            holdsPrivate:
+                await _holdsPrivates(bootstrap, atSign, namespace, published));
       }
 
       if (_preference?.seedNamespaceKeys != true) {
@@ -232,7 +235,10 @@ class AtClientImpl implements AtClient {
       // both see their own id, and both mint.
       await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
-      return const AtReachabilityResult(AtReachability.published);
+      // NOTE: checked rather than assumed — the mint adopts, rather than
+      // replaces, a key a sibling enrollment published after the read above.
+      return AtReachabilityResult(AtReachability.published,
+          holdsPrivate: await _holdsPrivates(bootstrap, atSign, namespace));
     } catch (e) {
       if (e is StoppedException) {
         _logger.warning('Stopped making $atSign reachable for $namespace: the '
@@ -241,6 +247,27 @@ class AtClientImpl implements AtClient {
         _logger.warning('Could not make $atSign reachable for $namespace: $e');
       }
       return AtReachabilityResult(AtReachability.failed, error: e);
+    }
+  }
+
+  /// Whether this client holds the privates [published] offers, re-reading the
+  /// advertisement when none is given.
+  ///
+  /// Answers false rather than throwing: the namespace is already reachable by
+  /// now, and a failure to tell must not report it as failed.
+  Future<bool> _holdsPrivates(
+      PqClientBootstrap bootstrap, String atSign, String namespace,
+      [NskeyAdvertisement? published]) async {
+    try {
+      final advertisement = published ??
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      return advertisement != null &&
+          await bootstrap.seeding
+              .holdsPrivatesFor(atSign, namespace, advertisement);
+    } catch (e) {
+      _logger.warning('Could not tell whether this client holds the private '
+          'for $atSign:$namespace, so it reports that it does not: $e');
+      return false;
     }
   }
 
