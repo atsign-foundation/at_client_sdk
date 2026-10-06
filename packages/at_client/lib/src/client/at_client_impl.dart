@@ -2003,7 +2003,7 @@ class AtClientImpl implements AtClient {
         if (!mayFallBackToLegacy(_preference)) rethrow;
         _logger.warning(
             'falling back to legacy encryption for ${atKey.key}: ${e.message}');
-        options = _copyOptionsForLegacyFallback(options);
+        options = copyOptionsForLegacyFallback(options);
       }
     } else if (!atKey.metadata.isPublic &&
         !options.shouldEncrypt &&
@@ -2429,12 +2429,18 @@ class AtClientImpl implements AtClient {
   /// [options] with the crypto provider pinned to legacy, leaving the caller's
   /// object untouched — it may be a shared instance, and one write's fallback
   /// must not become every later write's default.
-  static PutRequestOptions _copyOptionsForLegacyFallback(
+  ///
+  /// Every other field is carried: one left out is reset to its default on
+  /// exactly the writes that fell back. `legacy_fallback_options_test.dart`
+  /// fails until a field added to [PutRequestOptions] is placed.
+  @visibleForTesting
+  static PutRequestOptions copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
         ..alreadyEncrypted = options.alreadyEncrypted
+        ..noCommit = options.noCommit
         ..cryptoProviderId = legacyCryptoProviderId;
 
   /// Fails fast at construction if the configured default provider id can't be
