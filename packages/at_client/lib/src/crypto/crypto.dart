@@ -103,7 +103,8 @@ abstract interface class SignalsPrivateFiling {
 
 /// Selects and configures the crypto providers for an [AtClient].
 class CryptoConfig {
-  /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
+  /// The provider a put or notification the SDK encrypts uses when it names no
+  /// `cryptoProviderId`.
   final String defaultProviderId;
 
   /// The provider instances the SDK resolves against, in addition to the

@@ -23,6 +23,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -36,7 +37,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -1998,7 +1998,6 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
 
-    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey
@@ -2033,6 +2032,7 @@ class AtClientImpl implements AtClient {
     // post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
