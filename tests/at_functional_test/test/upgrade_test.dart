@@ -134,8 +134,10 @@ void main() {
                 'looks for it');
 
         seeded = await arm.seed(spec, peer);
+        final facts = Map.of(seeded!['facts'] as Map);
+        final cursors = facts.remove('syncCursors');
         expect(
-            seeded!['facts'],
+            facts,
             {
               'syncedBeforeReceipt': true,
               'peerItemSeen': true,
@@ -144,6 +146,10 @@ void main() {
             },
             reason: 'every later check reads what the seed wrote; one that '
                 'did not run makes them meaningless');
+        expect(cursors, ['local:lastreceivedservercommitid.$namespace$me'],
+            reason: 'a store with no lifecycle marker counts as having been '
+                'online when it holds a sync cursor by this name, which '
+                '`open_test.dart` seeds as ${arm.label} would have written it');
       });
 
       test('observes what the seeding version observed', () async {

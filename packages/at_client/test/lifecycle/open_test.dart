@@ -166,6 +166,70 @@ void main() {
     expect(state.error, isA<UnAuthenticatedException>());
   });
 
+  group('a store an older client synced, holding no marker', () {
+    /// Leaves [atSign]'s store at the test's path as at_client 3.14.0 left it
+    /// after a sync, plus anything in [alsoStored].
+    Future<void> storeAsSynced(String atSign, AtClientPreference pref,
+        {Map<String, String> alsoStored = const {}}) async {
+      final client = await buildAtClient(
+          atSign: atSign,
+          namespace: 'lifecycle',
+          preference: pref,
+          atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+      final local = client.getLocalSecondary()!;
+      // NOTE: the at-rest name 3.14.0 gave its sync cursor, which it built
+      // with no namespace and its put stored under the preference's.
+      await local.putValue(
+          'local:lastreceivedservercommitid.lifecycle$atSign', '42');
+      for (final entry in alsoStored.entries) {
+        await local.putValue(entry.key, entry.value);
+      }
+      await client.stop();
+    }
+
+    MockAtLookupImpl revoked(String atSign) =>
+        lookUpAnswering(() async => throw UnAuthenticatedException(
+            'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+
+    test('comes back as a client in the refused state, and is marked',
+        () async {
+      const atSign = '@refusedupgraded';
+      final pref = await preference();
+      final keys = await typedKeyfile(atSign, enrollmentId: 'primary');
+      await storeAsSynced(atSign, pref);
+
+      final client = await Atsign(atSign)
+          .open(keys: keys, preference: pref, atLookUp: revoked(atSign));
+
+      expect(client.connection.current.isRefused, isTrue,
+          reason: 'the store holds what this principal synced before the '
+              'upgrade, as much as one a marker vouches for');
+      final marker = await client
+          .getLocalSecondary()!
+          .keyStore!
+          .get('local:lifecycle.online$atSign');
+      expect(marker?.data, contains('"enrollmentId":"primary"'),
+          reason: 'the store is now this principal\'s, as a marker says');
+    });
+
+    test('a marker naming another enrollment still decides', () async {
+      const atSign = '@refusedotherenrollment';
+      final pref = await preference();
+      await storeAsSynced(atSign, pref, alsoStored: {
+        'local:lifecycle.online$atSign': '{"enrollmentId":"another"}',
+      });
+
+      await expectLater(
+          () async => Atsign(atSign).open(
+              keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+              preference: pref,
+              atLookUp: revoked(atSign)),
+          throwsA(isA<AtOpenRefusedException>()),
+          reason: 'a store this release has marked was online as the '
+              'enrollment it names, and the cursor says nothing about which');
+    });
+  });
+
   test(
       'a verb that comes back moves the state to online, and changes '
       'reports it', () async {
