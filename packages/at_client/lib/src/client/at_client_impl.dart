@@ -2053,6 +2053,10 @@ class AtClientImpl implements AtClient {
             'falling back to legacy encryption for ${atKey.key}: ${e.message}');
         options = _copyOptionsForLegacyFallback(options);
       }
+    } else if (!atKey.metadata.isPublic &&
+        !options.shouldEncrypt &&
+        !options.alreadyEncrypted) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -2478,6 +2482,7 @@ class AtClientImpl implements AtClient {
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
+        ..alreadyEncrypted = options.alreadyEncrypted
         ..cryptoProviderId = legacyCryptoProviderId;
 
   /// Fails fast at construction if the configured default provider id can't be
