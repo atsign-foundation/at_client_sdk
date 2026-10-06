@@ -465,8 +465,8 @@ class NotificationServiceImpl extends NotificationService {
         // Treat read failures as "needs seeding" — the legacy
         // forms become the source of truth.
         logger.warning('Could not read $canonicalStr; the monitor resumes '
-            'from a legacy watermark if one exists, else from now, which '
-            'skips notifications sent while offline: $e');
+            'from a legacy watermark if one exists, else from when this '
+            'service was created, so nothing sent before then is fetched: $e');
       }
     }
 

@@ -131,12 +131,20 @@ class SyncServiceImpl implements SyncService {
   /// for every read and write: a read copies the stored metadata onto the key
   /// it is given, and a write must not store it back.
   AtKey get _lastReceivedServerCommitIdAtKey =>
-      AtKey.local('lastreceivedservercommitid', currentAtSign).build();
+      AtKey.local('lastreceivedservercommitid', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
 
   /// A local AtKey to store skipDeletesUntil value, built afresh like
   /// [_lastReceivedServerCommitIdAtKey].
   AtKey get _skipDeletesUntilCommitId =>
-      AtKey.local('skipdeletesuntil', currentAtSign).build();
+      AtKey.local('skipdeletesuntil', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
+
+  /// The namespace both keys above are kept under: the preference's when this
+  /// service was built, so a preference replaced later does not move them.
+  final String? _watermarkNamespace;
 
   /// How both sync watermarks above are written.
   ///
@@ -217,7 +225,8 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary,
       {required bool ownsRemoteSecondary})
-      : _ownsRemoteSecondary = ownsRemoteSecondary {
+      : _ownsRemoteSecondary = ownsRemoteSecondary,
+        _watermarkNamespace = _atClient.getPreferences()?.namespace {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';

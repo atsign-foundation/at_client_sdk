@@ -3252,7 +3252,8 @@ interface class AtCollection<T> {
   /// the self-key write and the unshare-others diff. Used by
   /// [CItem.markReadByMe] — read receipts are pure outbound
   /// notifications, so a self copy at the writer would be storage
-  /// waste (the writer never queries their own receipt back).
+  /// waste: the writer counts its own receipt from the recipient
+  /// copy's key, never its value.
   ///
   /// Still emits the same local [CItemUpdated] on this collection's
   /// stream and [CSubItemUpdated] on ancestors as [_put] does, so

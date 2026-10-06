@@ -73,15 +73,23 @@ void main() {
 
   /// What a 3.15.0 prerelease left after reading a 3.14.0 record and writing
   /// back through the same `AtKey`: the plain value under the old flags.
-  Future<void> seedAsMislabelled(String key, String plaintext) async {
+  /// [stamped] false is a record from a client old enough to write no
+  /// provider id; [encoded] is a value stored base64-encoded, as one with a
+  /// newline is.
+  Future<void> seedAsMislabelled(String key, String plaintext,
+      {bool stamped = true, bool encoded = false}) async {
     await store.putAll(
         key,
-        AtData()..data = plaintext,
+        AtData()
+          ..data = encoded ? base64Encode(utf8.encode(plaintext)) : plaintext,
         AtMetaData.fromCommonsMetadata(
             Metadata()
               ..isEncrypted = true
               ..ivNonce = EncryptionUtil.generateIV()
-              ..appMetadata = AppMetadata(providerId: legacyCryptoProviderId),
+              ..encoding = encoded ? 'base64' : null
+              ..appMetadata = stamped
+                  ? AppMetadata(providerId: legacyCryptoProviderId)
+                  : null,
             atSign));
   }
 
@@ -146,6 +154,23 @@ void main() {
           (await atClient.get(AtKey.local(cursorName, atSign).build())).value,
           '593700');
     });
+
+    test('reads back after a write without encryption through that AtKey',
+        () async {
+      await seedAsEncrypted(cursor, '593639');
+      final key = AtKey.local(cursorName, atSign).build();
+
+      await atClient.get(key);
+      await atClient.put(key, '593700',
+          putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
+
+      expect((await stored(cursor)).metaData!.isEncrypted, isFalse,
+          reason: 'the SDK never encrypts a local value, so opting out of '
+              'encryption cannot leave one sealed');
+      expect(
+          (await atClient.get(AtKey.local(cursorName, atSign).build())).value,
+          '593700');
+    });
   });
 
   test('a value written back over a multi-line one reads back', () async {
@@ -188,15 +213,40 @@ void main() {
           json);
     });
 
+    test('is returned as stored when it is encoded', () async {
+      // Sixteen bytes, so its base64 is shaped like legacy ciphertext.
+      const lines = 'sixteen chars\nXY';
+      await seedAsMislabelled(cursor, lines, encoded: true);
+
+      expect(
+          (await atClient.get(AtKey.local(cursorName, atSign).build())).value,
+          lines,
+          reason: 'the SDK never encodes a value it encrypts, so an encoded '
+              'value is a plain one, whatever its length');
+    });
+
+    test('is returned as stored when it carries no provider id', () async {
+      await seedAsMislabelled(cursor, '593639', stamped: false);
+
+      expect(
+          (await atClient.get(AtKey.local(cursorName, atSign).build())).value,
+          '593639',
+          reason: 'a client before provider ids existed wrote no stamp, and '
+              'its legacy records route the same way');
+    });
+
     test('is refused when the record is not local', () async {
       const selfKey = 'phone.$namespace$atSign';
       await seedAsMislabelled(selfKey, '593639');
 
       await expectLater(
-          atClient.get(AtKey.self('phone', namespace: namespace).build()),
-          throwsA(anything),
+          atClient.get(
+              AtKey.self('phone', namespace: namespace, sharedBy: atSign)
+                  .build()),
+          throwsA(isA<FormatException>()),
           reason: 'only local records were ever written plain under a stale '
-              'flag; a synced record carries the flag its writer set');
+              'flag; a synced record carries the flag its writer set, so it '
+              'is decrypted, and plain digits are not base64');
       await store.remove(selfKey);
     });
   });

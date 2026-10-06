@@ -117,15 +117,17 @@ class GetResponseTransformer
   ///
   /// A local record is stored as given, so a write through a key read back
   /// from an encrypted record could store a plain value under
-  /// `isEncrypted: true`. Legacy ciphertext is AES with PKCS7 padding, base64
-  /// encoded: a value that does not decode to a positive multiple of 16 bytes
-  /// cannot be one.
+  /// `isEncrypted: true`. The SDK never encodes a value it encrypts, so an
+  /// encoded value is plain. Legacy ciphertext is AES with PKCS7 padding,
+  /// base64 encoded: a value that does not decode to a positive multiple of 16
+  /// bytes cannot be one.
   static bool _isPlainLocalValue(AtKey atKey, dynamic value) {
     if (!atKey.isLocal || value is! String) return false;
     final providerId = atKey.metadata.appMetadata?.providerId;
     if (providerId != null && providerId != legacyCryptoProviderId) {
       return false;
     }
+    if (atKey.metadata.encoding != null) return true;
     try {
       final bytes = base64Decode(value);
       return bytes.isEmpty || bytes.length % 16 != 0;
