@@ -33,6 +33,8 @@ void main() {
               as SymmetricAesGcmProvider)
           .ckManager!;
 
+  CryptoContext context() => CryptoContext(atClient: atClient);
+
   /// Whether the atServer still serves the self conveyance carrying [ckKid].
   Future<bool> served(String ckKid) async {
     try {
@@ -49,6 +51,20 @@ void main() {
 
   Future<void> sync(String label) => FunctionalTestSyncService.getInstance()
       .syncData(syncSvc: atClient.syncService, label: label);
+
+  /// One collection pass that answered, syncing and asking again while the
+  /// collector refuses because sync has not caught up: a round pushes after
+  /// it pulls, so right after one the atServer can be ahead of the pull
+  /// watermark until the next, and the SDK's own passes wait for that too.
+  Future<int> collectOnce(String label) async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final answer = await managerOf(atClient).tryCollect(context());
+      if (answer != null) return answer;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await sync('$label-$attempt');
+    }
+    fail('no collection pass answered in 20 attempts: sync never caught up');
+  }
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -177,14 +193,14 @@ void main() {
     final successor = await ckManager.rotateContentKey(context, first);
     await ckManager.idle;
     await sync('ck-collect-rotated');
-    await ckManager.collectUnused(context);
+    await collectOnce('ck-collect-cited-retry');
     await sync('ck-collect-cited');
     expect(await served(superseded), isTrue,
         reason: 'a collection over a key a record cites keeps it');
 
     expect(await atClient.delete(first), true);
     await sync('ck-collect-uncited');
-    await ckManager.collectUnused(context);
+    await collectOnce('ck-collect-uncited-retry');
     await sync('ck-collect-deleted');
 
     expect(await served(superseded), isFalse,
@@ -264,11 +280,9 @@ void main() {
     await managerOf(atClient).rotateContentKey(context, value);
     expect(await atClient.delete(value), true);
     await sync('ck-grace-uncited');
-    expect(await managerOf(atClient).tryCollect(context), isNotNull,
-        reason: 'the pass answered rather than being refused for sync not '
-            'having caught up; with the zero-grace control below collecting '
-            'this same key, "kept" is its decision and not a pass that never '
-            'looked');
+    // NOTE: a pass that answered, so "kept" below is its decision and not a
+    // pass that never looked; the zero-grace control collects this same key.
+    await collectOnce('ck-grace-retry');
     await sync('ck-grace-kept');
     expect(await served(superseded), isTrue,
         reason: 'superseded just now, so it is kept although nothing cites it');
@@ -279,7 +293,7 @@ void main() {
         CryptoConfig.nskey(keyRing: ring, supersededCkGrace: Duration.zero);
     var collected = false;
     for (var attempt = 0; attempt < 20 && !collected; attempt++) {
-      await managerOf(atClient).collectUnused(context);
+      await collectOnce('ck-grace-none-$attempt');
       await sync('ck-grace-none-$attempt');
       collected = !await served(superseded);
       if (!collected) {

@@ -84,16 +84,28 @@ void main() {
     Future<void> sync(String label) => FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: aliceClient.syncService, label: label);
 
+    /// One collection pass that answered, syncing and asking again while the
+    /// collector refuses because sync has not caught up: a round pushes after
+    /// it pulls, so right after one the atServer can be ahead of the pull
+    /// watermark until the next, and the SDK's own passes wait for that too.
+    Future<int> collectOnce(String label) async {
+      for (var attempt = 0; attempt < 20; attempt++) {
+        final answer = await managerOf(aliceClient).tryCollect(context);
+        if (answer != null) return answer;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await sync('$label-$attempt');
+      }
+      fail('no collection pass answered in 20 attempts: sync never caught up');
+    }
+
     await managerOf(aliceClient).rotateContentKey(context, valueKey(nsRotate));
     await managerOf(aliceClient).idle;
     // NOTE: a collection deletes locally and sync pushes it, so a pass is run
     // over a caught-up store and pushed before the atServer is asked.
     await sync('ck-grace-rotated');
-    expect(await managerOf(aliceClient).tryCollect(context), isNotNull,
-        reason: 'the pass answered rather than being refused for sync not '
-            'having caught up; with the zero-grace control below collecting '
-            'this same key, "kept" is its decision and not a pass that never '
-            'looked');
+    // NOTE: a pass that answered, so "kept" below is its decision and not a
+    // pass that never looked; the zero-grace control collects this same key.
+    await collectOnce('ck-grace-retry');
     await sync('ck-grace-collected');
 
     final conveyance = '$bob:$superseded.__ck.$nsRotate$alice';
@@ -145,7 +157,7 @@ void main() {
         supersededCkGrace: Duration.zero);
     var collected = false;
     for (var attempt = 0; attempt < 20 && !collected; attempt++) {
-      await managerOf(aliceClient).collectUnused(context);
+      await collectOnce('ck-grace-none-$attempt');
       await sync('ck-grace-none-$attempt');
       collected = !await served();
       if (!collected) {
