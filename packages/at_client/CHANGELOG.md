@@ -6,6 +6,22 @@
   read. A device a 3.15.0 prerelease left in that state recovers, except for an
   app's own `local:` value shaped like ciphertext (base64 of a multiple of 16
   bytes), which the app has to write again.
+- fix: after an upgrade from 3.14.0, writes not yet synced reach the atServer
+  once the app opens a store in the directory their queue was left in: as it
+  switches back to the other atSign when atSigns have separate directories,
+  or at once when the app had called `Hive.init` itself.
+- fix: after an upgrade from 3.14.0, `Atsign.open` refused by the atServer on
+  a device that has synced returns a client in the refused state rather than
+  throwing.
+- fix: a client built with an `AtChops` and no key source, as
+  at_onboarding_cli 1.x builds one, uses the keys that `AtChops` holds again.
+- fix: an enrolled client starting offline with no grants in its keyfile
+  authorises from the grants at_onboarding_cli 1.x stored, as 3.14.0 did,
+  rather than refusing the write.
+- fix: writing a record again while its previous value is being pushed no
+  longer logs a warning.
+- note: a write that had not synced when an app moves from at_client 3.11 or
+  earlier is not pushed, and has to be written again.
 - fix: `readBy` and `wasMarkedReadByMe` count a read receipt this client sent
   before a restart, so `markReadByMe` no longer sends it a second time.
 - fix: a content key that has been replaced is kept for 8 days
@@ -34,14 +50,22 @@
   `AtClientBindings.notify` must add the parameter.
 - feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
   server answers each request in the scheme it arrived in.
+- fix: an `AtRpc` reply to a requester that cannot open a post-quantum answer
+  goes out under the server's default scheme, and a reply that could not be
+  sent is retried rather than dropped.
 - fix: the namespace key a client publishes at start is for the namespace it
   was built with, not one the app switches it to straight afterwards.
 - fix: concurrent `AtRpc` requests, from one client or several, no longer
   share a request id, which could drop one or hand a caller another's response.
 - fix: an `AtKey` reused for several puts or notifications carries nothing
   over from one to the next.
+- BREAKING: a value an app encrypts itself and puts with `shouldEncrypt: false`
+  is stored as given and treated as plain: the put drops `isEncrypted`,
+  `ivNonce` and the other encryption fields an app sets on the key's metadata.
 - BREAKING: a provider id set in a key's `appMetadata` no longer chooses the
   provider for a notification the SDK encrypts; pass `cryptoProviderId`.
+- fix: a `noCommit` put that falls back to legacy encryption still asks the
+  atServer not to record a commit.
 
 ## 3.15.0-rc3
 

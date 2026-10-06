@@ -35,15 +35,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     String? enrollmentId,
     @visibleForTesting AtLookUp? atLookUp,
   })  : _atSign = atsign.toAtsign(),
-        _atLookUp = atLookUp {
-    atOnboardingPreference.storagePath ??=
-        // ignore: deprecated_member_use
-        atOnboardingPreference.hiveStoragePath ??
-            HomeDirectoryUtil.getHiveStoragePath(_atSign,
-                enrollmentId: enrollmentId);
+        _atLookUp = atLookUp,
+        _defaultStoragePath = HomeDirectoryUtil.getHiveStoragePath(
+            atsign.toAtsign(),
+            enrollmentId: enrollmentId) {
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
+
+  /// Where the client's local storage goes when the preference names no
+  /// storage path by the time the client opens.
+  final String _defaultStoragePath;
 
   /// The keyfile the preference names, as the store the client opens on.
   FileAtKeysIo get keyfile => FileAtKeysIo(
@@ -68,7 +70,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       client = await _atSign.open(
           keys: keyfile,
           preference: atOnboardingPreference,
-          storage: atOnboardingPreference.storageFor(_atSign),
+          storage: atOnboardingPreference.storageFor(_atSign,
+              defaultPath: _defaultStoragePath),
           serviceFactory: atServiceFactory,
           atLookUp: _atLookUp,
           lookUps: atOnboardingPreference.lookUps);

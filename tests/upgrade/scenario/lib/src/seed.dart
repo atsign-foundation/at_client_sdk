@@ -10,7 +10,8 @@ import 'lifecycle.dart';
 /// synced.
 ///
 /// Returns the preconditions this run met, for the caller to check before it
-/// trusts anything read from the store afterwards.
+/// trusts anything read from the store afterwards, and the keys this version
+/// keeps its sync cursor under.
 Future<Map<String, Object?>> seed(AtClient client,
     {required String me,
     required String peer,
@@ -39,6 +40,11 @@ Future<Map<String, Object?>> seed(AtClient client,
   facts['notificationReceived'] =
       await notifySelfAndWait(client, me: me, namespace: namespace);
   facts['synced'] = await syncUntilInSync(client);
+  facts['syncCursors'] = await (await client
+          .getLocalSecondary()!
+          .keyStore!
+          .getKeys(regex: 'lastreceivedservercommitid'))
+      .toList();
   return facts;
 }
 
