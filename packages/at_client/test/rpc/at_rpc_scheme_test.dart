@@ -53,8 +53,10 @@ void main() {
   late List<NotificationParams> sent;
 
   /// How many of the next notifies come back undelivered, as notify() reports
-  /// a value it could not seal or send.
+  /// a value it could not seal or send, and the failure each carries.
   var undelivered = 0;
+  AtClientException Function() undeliveredWith =
+      () => AtClientException.message('could not send the value');
 
   setUpAll(() => registerFallbackValue(NotificationParams()));
 
@@ -65,6 +67,8 @@ void main() {
     final notifications = _MockNotificationService();
     sent = [];
     undelivered = 0;
+    undeliveredWith =
+        () => AtClientException.message('could not send the value');
     when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => atClient.getPreferences()).thenReturn(preference);
     when(() => atClient.notificationService).thenReturn(notifications);
@@ -87,8 +91,7 @@ void main() {
       final result = NotificationResult();
       if (undelivered > 0) {
         undelivered--;
-        result.atClientException =
-            AtClientException.message('could not seal the value');
+        result.atClientException = undeliveredWith();
       }
       return Future.value(result);
     });
@@ -234,11 +237,13 @@ void main() {
             'not allowed is not taken for it');
   });
 
-  test('with the legacy fallback allowed, the retry answers under the default',
-      () async {
+  test(
+      'with the legacy fallback allowed, a reply that could not be sealed is '
+      'retried under the default', () async {
     final rpc = rpcWith(configuredFor(['default-provider', 'pq-provider'])
       ..allowLegacyCryptoFallback = true);
     undelivered = 1;
+    undeliveredWith = () => AtEncryptionException('could not seal the value');
 
     await rpc.sendResponse(
         requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
@@ -246,6 +251,20 @@ void main() {
     expect(sent.map((p) => p.cryptoProviderId), ['pq-provider', null],
         reason: 'the client said a reply that cannot go out in its scheme may '
             'go out legacy, and the response is not lost');
+  });
+
+  test('but one that failed for any other reason keeps its scheme', () async {
+    final rpc = rpcWith(configuredFor(['default-provider', 'pq-provider'])
+      ..allowLegacyCryptoFallback = true);
+    undelivered = 1;
+
+    await rpc.sendResponse(
+        requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
+
+    expect(sent.map((p) => p.cryptoProviderId), ['pq-provider', 'pq-provider'],
+        reason: 'the control: a timeout or a refusal says nothing about the '
+            'scheme, so a reply the requester could have opened is not '
+            'downgraded for it');
   });
 
   test('a call goes out under the provider it is given', () async {

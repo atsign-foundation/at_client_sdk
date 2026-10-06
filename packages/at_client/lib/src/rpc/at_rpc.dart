@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart'
-    show CryptoConfig, CryptoContext, ReportsReadiness, legacyCryptoProviderId;
+    show CryptoConfig, legacyCryptoProviderId;
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
@@ -646,8 +646,10 @@ class AtRpc {
   /// client can seal it to the requester with it, and under this client's
   /// default otherwise. A response the notification service could not seal
   /// counts as an attempt that failed, and is retried like one the atServer
-  /// refused; where the client's preference allows a legacy fallback, the
-  /// retry goes out under the default.
+  /// refused; where the failure was in sealing it and the client's preference
+  /// allows a legacy fallback, the retry goes out under the default. That
+  /// flag is the one place a client says reaching a peer outranks keeping the
+  /// scheme, so it gates this downgrade as it gates every other write's.
   @visibleForTesting
   Future<void> sendResponse(
       AtNotification notification, AtRpcReq request, AtRpcResp response) async {
@@ -683,12 +685,14 @@ class AtRpc {
                 cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
-        // NOTE: notify() reports a failure to seal or send in its result
-        // rather than throwing, so a response it could not send would
-        // otherwise count as sent.
+        // NOTE: notify() reports a failure to seal or send in its result, not
+        // by throwing.
         final failure = result.atClientException;
         if (failure != null) {
+          // NOTE: only a failure to seal says the scheme is the problem; a
+          // timeout or a refusal from the atServer is retried as it is.
           if (cryptoProviderId != null &&
+              failure is AtEncryptionException &&
               CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
             logger.warning('Could not seal response $response under '
                 '$cryptoProviderId, the scheme its request arrived in; the '
@@ -733,13 +737,9 @@ class AtRpc {
           ? null
           : scheme;
     }
-    final provider = CryptoConfig.forClient(atClient).lookup(scheme);
-    if (provider == null) return null;
-    if (provider is ReportsReadiness &&
-        !await (provider as ReportsReadiness).isReadyFor(
-            CryptoContext(atClient: atClient, atKeysIo: atClient.atKeysIo),
-            request.from,
-            baseNameSpace)) {
+    if (CryptoConfig.forClient(atClient).lookup(scheme) == null) return null;
+    if (!await CryptoRuntime(atClient)
+        .isReadyUnder(scheme, request.from, baseNameSpace)) {
       logger.warning('Answering ${request.from} under this client\'s default '
           'rather than $scheme, the scheme its request arrived in: it has '
           'published no key for $baseNameSpace to seal the response to');
