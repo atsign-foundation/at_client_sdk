@@ -98,6 +98,20 @@ void main() {
     expect(sent.map((p) => p.cryptoProviderId), ['chosen', null]);
   });
 
+  test('a send is not routed by the provider an earlier send was sealed under',
+      () async {
+    final rpc = rpcWith(configuredFor(['default-provider', 'sealed']));
+
+    await rpc.sendRequest(
+        toAtSign: '@bob', request: request, cryptoProviderId: 'sealed');
+    sent.single.atKey.metadata.appMetadata = AppMetadata(providerId: 'sealed');
+    await rpc.sendResponse(
+        requestUnder(null), request, AtRpcResp.ack(request: request));
+
+    expect(sent.last.atKey.metadata.appMetadata, isNull,
+        reason: 'the provider an encryption stamps must not outlive its send');
+  });
+
   test('a response answers in the scheme its request arrived in', () async {
     final rpc =
         rpcWith(configuredFor(['default-provider', 'request-provider']));

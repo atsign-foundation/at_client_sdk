@@ -376,7 +376,7 @@ class AtRpc {
       ..sharedBy = atClient.getCurrentAtSign()
       ..sharedWith = AtUtils.fixAtSign(toAtSign)
       ..namespace = baseNameSpace
-      ..metadata = _defaultMetaData;
+      ..metadata = _newMetaData();
 
     // Need to be able to receive responses from the atSigns we're sending requests to
     allowList.add(toAtSign);
@@ -425,7 +425,7 @@ class AtRpc {
   // *** Everything below this point is not part of the public AtRpc API ***
   // ***********************************************************************
 
-  final Metadata _defaultMetaData = Metadata()
+  Metadata _newMetaData() => Metadata()
     ..isPublic = false
     ..isEncrypted = true
     // namespaceAware IS SET TO FALSE FOR A REASON:
@@ -660,7 +660,7 @@ class AtRpc {
           ..sharedBy = atClient.getCurrentAtSign()
           ..sharedWith = notification.from
           ..namespace = baseNameSpace
-          ..metadata = _defaultMetaData;
+          ..metadata = _newMetaData();
 
         var responseJson = jsonEncode(response.toJson());
 
