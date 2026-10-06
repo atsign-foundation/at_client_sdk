@@ -941,6 +941,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
     enrollment cannot fetch the ciphertext (server-gated) nor decrypt.
+  - Bob can tell how each value was shared with him without decrypting it:
+    the provider it names, whether that is post-quantum, and the KEM and suite
+    its CK was conveyed under. A value alice wrote legacy reads as legacy.
 
 ### 5.2 UC-A4.2 — alice → bob where bob has no namespace key → the share fails
 
@@ -997,6 +1000,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Offline-then-online bob still decrypts the queued notification (key held, or
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
+  - Bob can answer in the scheme the notification arrived in: the notification
+    names the provider its value was read under, `legacy` when the sender
+    stamped none, and a reply he sends under that provider goes out in it.
 
 ### 5.5 UC-A4.5 — A sender follows the recipient's advertised algorithm, not its own preference
 

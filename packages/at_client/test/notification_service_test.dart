@@ -658,6 +658,56 @@ void main() {
         ),
       );
     });
+
+    test('send answers a notification in the scheme it arrived in', () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('request-provider'),
+            ],
+          ),
+      );
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+      final notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+      final request = AtNotification.empty()
+        ..from = '@bob'
+        ..metadata = (Metadata()
+          ..appMetadata = AppMetadata(providerId: 'request-provider'));
+
+      await notificationServiceImpl.send(
+        to: request.from.toAtsign(),
+        idAndNamespace: 'reply.wavi',
+        body: 'answer',
+        cryptoProviderId: request.receivedUnder,
+      );
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .where(_isNotify)
+              .single as String;
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'request-provider'))}',
+        ),
+        reason: 'the reply goes out under the provider the request arrived '
+            'under, not this client\'s default',
+      );
+    });
   });
 
   /// `send()`'s name is an id and a namespace joined by a dot, and the split is

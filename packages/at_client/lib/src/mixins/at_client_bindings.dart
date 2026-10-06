@@ -18,11 +18,16 @@ mixin AtClientBindings {
 
     /// maxTries must be a non-zero positive integer
     int maxTries = 3,
+
+    /// The provider to seal [value] under, as `NotificationParams.forUpdate`
+    /// takes it; null for this client's default.
+    String? cryptoProviderId,
   }) async {
     var params = NotificationParams.forUpdate(
       atKey,
       value: value,
       notificationExpiry: ttln,
+      cryptoProviderId: cryptoProviderId,
     );
 
     NotificationResult result;

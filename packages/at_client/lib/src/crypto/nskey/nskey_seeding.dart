@@ -50,19 +50,25 @@ class NskeySeeding {
   /// atSign's namespace key should be replaced.
   final NskeyRotationPolicy rotationPolicy;
 
+  // NOTE: read once, here. The startup that seeds runs unawaited, so a
+  // namespace an application sets on the client after building it would
+  // otherwise redirect the seed to wherever the app's own records go.
+  final String? _ownNamespace;
+
   NskeySeeding({
     required this.atClient,
     required this.ring,
     this.sharing,
     this.privateFiling,
     this.rotationPolicy = neverRotateNskey,
-  });
+  }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
   /// The namespaces this client should hold a key for; see
   /// [authorisedNamespacesOf]. Empty when the enrollment record cannot be read.
   Future<Set<String>> authorisedNamespaces() async {
     try {
-      return await authorisedNamespacesOf(atClient);
+      return await authorisedNamespacesOf(atClient,
+          ownNamespace: _ownNamespace);
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.info('Could not read this enrollment to find its namespaces, so '

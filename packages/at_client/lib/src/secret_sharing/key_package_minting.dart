@@ -237,7 +237,9 @@ class KeyPackageMinting with ApkamSigning {
       final own = atClient.getPreferences()?.namespace;
       final namespace = (own != null && own.isNotEmpty)
           ? own
-          : ((await authorisedNamespacesOf(atClient)).toList()..sort())
+          : ((await authorisedNamespacesOf(atClient, ownNamespace: own))
+                  .toList()
+                ..sort())
               .firstOrNull;
       if (namespace == null) return null;
       final members = await (_directory ?? VerbEnrollmentDirectory(atClient))

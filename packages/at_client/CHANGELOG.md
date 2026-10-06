@@ -18,6 +18,18 @@
   refused for having no namespace to be sent its keys in.
 - fix: approving no longer throws when the approver may only read a namespace
   it holds a key for; the new enrollment gets that key from another holder.
+- feat: `atClient.schemeOf(key)` tells how a value another atSign shared was
+  protected: legacy or post-quantum, and under which KEM.
+  `AtNotification.receivedUnder`, passed as the `cryptoProviderId` of
+  `NotificationService.send` or `AtClientBindings.notify` (new there), lets an
+  app answer in the scheme it was asked in. A class that overrides
+  `AtClientBindings.notify` must add the parameter.
+- feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
+  server answers each request in the scheme it arrived in.
+- fix: the namespace key a client publishes at start is for the namespace it
+  was built with, not one the app switches it to straight afterwards.
+- fix: concurrent `AtRpc` requests, from one client or several, no longer
+  share a request id, which could drop one or hand a caller another's response.
 
 ## 3.15.0-rc3
 
