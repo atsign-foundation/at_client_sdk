@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/converters/decoder/at_decoder.dart';
+import 'package:at_client/src/crypto/crypto.dart' show legacyCryptoProviderId;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
@@ -53,8 +55,15 @@ class GetResponseTransformer
     final Object? wireIsEncrypted = (decodedResponse['metaData']
         as Map<String, dynamic>?)?[AtConstants.isEncrypted];
     if (_shouldDecrypt(atValue.metadata)) {
-      atValue.value =
-          await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
+      if (_isPlainLocalValue(tuple.one, atValue.value)) {
+        if (atValue.metadata!.encoding != null) {
+          atValue.value = AtDecoderImpl()
+              .decodeData(atValue.value, atValue.metadata!.encoding!);
+        }
+      } else {
+        atValue.value =
+            await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
+      }
     } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
       // isEncrypted was explicitly false: the value was deliberately stored
       // unencrypted; return it as-is (decoding if required). Skipping
@@ -102,6 +111,27 @@ class GetResponseTransformer
 
   bool _shouldDecrypt(Metadata? metadata) {
     return metadata != null && metadata.isEncrypted;
+  }
+
+  /// Whether [value], flagged encrypted, is a `local:` record's plain value.
+  ///
+  /// A local record is stored as given, so a write through a key read back
+  /// from an encrypted record could store a plain value under
+  /// `isEncrypted: true`. Legacy ciphertext is AES with PKCS7 padding, base64
+  /// encoded: a value that does not decode to a positive multiple of 16 bytes
+  /// cannot be one.
+  static bool _isPlainLocalValue(AtKey atKey, dynamic value) {
+    if (!atKey.isLocal || value is! String) return false;
+    final providerId = atKey.metadata.appMetadata?.providerId;
+    if (providerId != null && providerId != legacyCryptoProviderId) {
+      return false;
+    }
+    try {
+      final bytes = base64Decode(value);
+      return bytes.isEmpty || bytes.length % 16 != 0;
+    } on FormatException {
+      return true;
+    }
   }
 
   /// Return true if key is a public key or a cached public key

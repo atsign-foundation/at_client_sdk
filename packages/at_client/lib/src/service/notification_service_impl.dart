@@ -71,8 +71,17 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
+  /// The last-received-notification watermark's key, built afresh for every
+  /// read and write: a read copies the stored metadata onto the key it is
+  /// given, and a write must not store it back.
   @visibleForTesting
-  late AtKey lastReceivedNotificationAtKey;
+  AtKey get lastReceivedNotificationAtKey =>
+      AtKey.local(lastReceivedNotificationKey, _watermarkOwner,
+              namespace: _watermarkNamespace)
+          .build();
+
+  final String _watermarkOwner;
+  final String? _watermarkNamespace;
 
   @override
   Atsign get atSign => atClient.atSign;
@@ -314,7 +323,9 @@ class NotificationServiceImpl extends NotificationService {
       SecondaryAddressFinder? secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps})
-      : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
+      : myStatsNotifKey = 'statsNotification.${atClient.atSign}',
+        _watermarkOwner = atClient.getCurrentAtSign()!,
+        _watermarkNamespace = atClient.getPreferences()!.namespace {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
@@ -365,10 +376,6 @@ class NotificationServiceImpl extends NotificationService {
           connection: connection,
         );
 
-    lastReceivedNotificationAtKey = AtKey.local(
-            lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
-            namespace: atClient.getPreferences()!.namespace)
-        .build();
     // NOTE: here, not at the first park — the filing stream is broadcast and
     // not replayed, so subscribing only once a notification has already failed
     // to decrypt could miss the very filing that would release it.
@@ -454,9 +461,12 @@ class NotificationServiceImpl extends NotificationService {
         if (canonicalValue.value == null) canonicalValue = null;
       } on StoppedException {
         rethrow;
-      } on Exception {
+      } on Exception catch (e) {
         // Treat read failures as "needs seeding" — the legacy
         // forms become the source of truth.
+        logger.warning('Could not read $canonicalStr; the monitor resumes '
+            'from a legacy watermark if one exists, else from now, which '
+            'skips notifications sent while offline: $e');
       }
     }
 

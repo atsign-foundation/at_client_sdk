@@ -127,11 +127,16 @@ class SyncServiceImpl implements SyncService {
   /// Returns the currentAtSign associated with the SyncService
   String get currentAtSign => _atClient.getCurrentAtSign()!;
 
-  /// A local AtKey to persist the last received server commitId
-  late final AtKey _lastReceivedServerCommitIdAtKey;
+  /// A local AtKey to persist the last received server commitId, built afresh
+  /// for every read and write: a read copies the stored metadata onto the key
+  /// it is given, and a write must not store it back.
+  AtKey get _lastReceivedServerCommitIdAtKey =>
+      AtKey.local('lastreceivedservercommitid', currentAtSign).build();
 
-  /// A local AtKey to store skipDeletesUntil value
-  late final AtKey _skipDeletesUntilCommitId;
+  /// A local AtKey to store skipDeletesUntil value, built afresh like
+  /// [_lastReceivedServerCommitIdAtKey].
+  AtKey get _skipDeletesUntilCommitId =>
+      AtKey.local('skipdeletesuntil', currentAtSign).build();
 
   /// How both sync watermarks above are written.
   ///
@@ -216,10 +221,6 @@ class SyncServiceImpl implements SyncService {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
-    _lastReceivedServerCommitIdAtKey =
-        AtKey.local('lastreceivedservercommitid', currentAtSign).build();
-    _skipDeletesUntilCommitId =
-        AtKey.local('skipdeletesuntil', currentAtSign).build();
   }
 
   @override
