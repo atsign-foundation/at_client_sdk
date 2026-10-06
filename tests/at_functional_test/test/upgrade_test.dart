@@ -7,6 +7,11 @@ import 'dart:convert' show LineSplitter, base64Decode, jsonDecode, jsonEncode;
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
+import 'package:at_functional_test/src/functional_storage.dart'
+    show FunctionalStorage, FunctionalStorageBackend;
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData;
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
@@ -33,6 +38,13 @@ import 'test_utils.dart';
 /// The arm seeded by this tree is the control: anything it reports is not
 /// about an upgrade.
 void main() {
+  if (FunctionalStorage.backendFromEnvironment() !=
+      FunctionalStorageBackend.hive) {
+    test('the upgrade check', () {},
+        skip: 'every arm writes a Hive store, so the Hive run is the one that '
+            'checks it');
+    return;
+  }
   final logs = _Warnings()..install();
   TestUtils.isolateStorage('upgrade_test');
 
@@ -70,6 +82,9 @@ void main() {
       late DateTime armStarted;
       Map<String, Object?>? seeded;
       AtClient? client;
+      bool? pushedBeforeUpgrade;
+      String keyOf(RecordSpec record) =>
+          record.keyFor(me: me, peer: peer, namespace: namespace).toString();
 
       tearDownAll(() async => client?.stop());
 
@@ -133,10 +148,18 @@ void main() {
 
       test('observes what the seeding version observed', () async {
         expect(seeded, isNotNull, reason: 'the seed did not run');
+        pushedBeforeUpgrade = await _onServer(me, keyOf(pending));
         await notifyMe('gapone');
         final opened = await openExpecting('gapone');
         client = opened.client;
 
+        final local = catalogue.firstWhere((r) => r.kind == RecordKind.local);
+        final asSeeded =
+            await client!.getLocalSecondary()!.keyStore!.get(keyOf(local));
+        expect(asSeeded?.metaData?.isEncrypted, arm.encryptsLocalRecords,
+            reason: 'the store must hold what ${arm.label} writes for a local '
+                'record before anything here rewrites it, or the checks below '
+                'are about some other store');
         await expectObservedAsSeeded();
         expect(await opened.delivered, isTrue,
             reason: 'a notification sent while no client ran is delivered '
@@ -145,6 +168,10 @@ void main() {
 
       test('syncs, and pushes what the seeding client left', () async {
         expect(client, isNotNull, reason: 'the upgraded client did not open');
+        expect(pushedBeforeUpgrade, isFalse,
+            reason: 'the seeding client must stop with its last write still '
+                'unpushed, or the push checked below says nothing about this '
+                'tree');
         for (final round in ['first', 'second']) {
           expect(await syncUntilInSync(client!), isTrue,
               reason: 'the $round sync after the upgrade did not complete');
@@ -153,6 +180,9 @@ void main() {
             pending.keyFor(me: me, peer: peer, namespace: namespace),
             getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
         expect(onServer.value, pending.value);
+        expect(await _onServer(me, keyOf(pending)), isTrue,
+            reason: 'the lookup that found the write missing before the '
+                'upgrade must find it now, or its "missing" meant nothing');
       });
 
       test('reads every record back after writing it through its own key',
@@ -166,8 +196,16 @@ void main() {
           final key = fresh();
           try {
             final original = (await client!.get(key)).value;
-            for (final value in [original, _otherShape(original), original]) {
-              await client!.put(key, value);
+            final writes = [
+              (original, true),
+              (_otherShape(original), true),
+              (original, true),
+              if (record.kind == RecordKind.local) (original, false),
+            ];
+            for (final (value, encrypt) in writes) {
+              await client!.put(key, value,
+                  putRequestOptions: PutRequestOptions()
+                    ..shouldEncrypt = encrypt);
               final read = (await client!.get(fresh())).value;
               if (jsonEncode(read) != jsonEncode(value)) {
                 failures.add('${record.name}: wrote ${jsonEncode(value)}, '
@@ -185,6 +223,15 @@ void main() {
             }
           } catch (e) {
             failures.add('${record.name}: $e');
+          }
+        }
+        final store = client!.getLocalSecondary()!.keyStore!;
+        for (final record
+            in catalogue.where((r) => r.kind == RecordKind.local)) {
+          if ((await store.get(keyOf(record)))?.metaData?.isEncrypted !=
+              false) {
+            failures.add('${record.name}: stored flagged encrypted after a '
+                'write that stores a local value as given');
           }
         }
         expect(failures, isEmpty);
@@ -249,15 +296,27 @@ class _Arm {
   /// spelled as `_differences` reports it, with the reason it is meant.
   final Map<String, String> Function(String me, String peer) expected;
 
-  const _Arm(this.label, this.tag, this.seed, {this.expected = _none});
+  /// Whether this version stores a `local:` record encrypted, as every
+  /// release before 3.15 did.
+  final bool encryptsLocalRecords;
+
+  const _Arm(this.label, this.tag, this.seed,
+      {required this.encryptsLocalRecords, this.expected = _none});
 }
 
 Map<String, String> _none(String me, String peer) => const {};
 
 final _arms = [
-  _Arm('this tree', 'tree', _seedHere),
-  _Arm('at_client 3.14.0', 'v3140', _seedReleased('3.14.0')),
+  _Arm('this tree', 'tree', _seedHere, encryptsLocalRecords: false),
+  _Arm('at_client 3.14.0', 'v3140', _seedReleased('3.14.0'),
+      encryptsLocalRecords: true),
+  // NOTE: the same release over the persistence, crypto and commons versions
+  // it shipped with, so a change in what those store is in the comparison.
+  _Arm('at_client 3.14.0 as built on its release day', 'v3140rd',
+      _seedReleased('3.14.0-release-day'),
+      encryptsLocalRecords: true),
   _Arm('at_client 3.15.0-rc3', 'rc3', _seedReleased('3.15.0-rc3'),
+      encryptsLocalRecords: false,
       expected: (me, peer) => {
             '/items/$peer:$peerItemId/readBy: [] -> ["$me"]':
                 'at_client 3.15.0-rc3 does not count a read receipt its own '
@@ -274,9 +333,9 @@ Future<Map<String, Object?>> _seedHere(ClientSpec spec, String peer) async {
       attach: attachWithoutKeySource);
   final facts = await seed(client,
       me: spec.atSign, peer: peer, namespace: spec.namespace);
-  await writePending(client,
-      me: spec.atSign, peer: peer, namespace: spec.namespace);
   final observed = await snapshot(client,
+      me: spec.atSign, peer: peer, namespace: spec.namespace);
+  await writePending(client,
       me: spec.atSign, peer: peer, namespace: spec.namespace);
   await client.stop();
   return {'facts': facts, 'snapshot': observed};
@@ -324,6 +383,22 @@ Future<Map<String, Object?>> Function(ClientSpec, String) _seedReleased(
       return (jsonDecode(report.single.substring('##UPGRADE##'.length)) as Map)
           .cast<String, Object?>();
     };
+
+/// Whether [atSign]'s atServer holds [key], asked over a connection of its
+/// own rather than through a client that might push the record first.
+Future<bool> _onServer(String atSign, String key) async {
+  final lookUp = TestUtils.lookUpAs(atSign,
+      AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(atSign));
+  try {
+    final answer = await lookUp.executeCommand('llookup:$key\n', auth: true);
+    return answer != null && answer.trim() != 'data:null';
+  } on AtLookUpException catch (e) {
+    if (e.errorCode == 'AT0015') return false;
+    rethrow;
+  } finally {
+    await lookUp.close();
+  }
+}
 
 /// A value of a different shape from [value]: a binary one grows a byte, and
 /// text loses its newlines, which decide whether it is stored encoded.

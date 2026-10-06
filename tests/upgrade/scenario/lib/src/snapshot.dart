@@ -11,19 +11,23 @@ import 'catalogue.dart';
 ///
 /// A read that throws is recorded as the exception's type, so a record one
 /// version reads and another cannot shows up as a difference rather than
-/// stopping the snapshot.
+/// stopping the snapshot. [pending] is left out: the seed writes it after
+/// taking this, and it is checked on the atServer instead.
 Future<Map<String, Object?>> snapshot(AtClient client,
     {required String me,
     required String peer,
     required String namespace}) async {
   final records = <String, Object?>{
-    for (final record in [...catalogue, pending])
+    for (final record in catalogue)
       record.name: await _read(
           client, record.keyFor(me: me, peer: peer, namespace: namespace)),
   };
 
+  final pendingKey =
+      pending.keyFor(me: me, peer: peer, namespace: namespace).toString();
   final keys = (await client.getAtKeys(regex: namespace))
       .map((k) => k.toString())
+      .where((k) => k != pendingKey)
       .toList()
     ..sort();
 

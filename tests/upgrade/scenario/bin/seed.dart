@@ -36,14 +36,15 @@ Future<void> main(List<String> args) async {
       attach: attachWithoutKeySource);
   final facts =
       await seed(client, me: me, peer: peer, namespace: spec.namespace);
-  await writePending(client, me: me, peer: peer, namespace: spec.namespace);
   final observed =
       await snapshot(client, me: me, peer: peer, namespace: spec.namespace);
 
   // NOTE: at_client logs to stdout too, so the report carries a sentinel
-  // prefix for the caller to pick out.
+  // prefix for the caller to pick out. It goes out before the last write so
+  // that nothing stands between that write and the exit for a push to use.
   stdout.writeln(
       '##UPGRADE##${jsonEncode({'facts': facts, 'snapshot': observed})}');
   await stdout.flush();
+  await writePending(client, me: me, peer: peer, namespace: spec.namespace);
   exit(0);
 }

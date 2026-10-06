@@ -10,6 +10,9 @@ cd tests/at_functional_test
 ./runLocal.sh 30000 test/upgrade_test.dart
 ```
 
+Every arm writes a Hive store, so the test skips itself when
+`AT_FUNCTIONAL_STORAGE` names another backend.
+
 ## What one arm does
 
 An arm is one version of at_client that writes a store. For each, the test:
@@ -17,15 +20,21 @@ An arm is one version of at_client that writes a store. For each, the test:
 1. **Seeds** a store with that version: one record of each kind (self, shared,
    public, `local:`), a value with a newline and a binary one, a collection
    item shared with a peer, a read receipt for the peer's item, a received
-   notification and a completed sync. It then reports what that version
-   observes of the store, and leaves one write it does not wait to push.
+   notification and a completed sync. It reports what that version observes
+   of the store, then makes one last write and exits without waiting to push
+   it.
 2. **Upgrades**: this tree opens the same store, with the same app code, while
-   a notification sent in the gap waits on the atServer. It must observe what
-   the seeding version observed, deliver that notification, complete two
-   syncs and push the write left behind.
+   a notification sent in the gap waits on the atServer. Before it does, the
+   test asks the atServer directly whether the last write reached it, and it
+   must not have. Once open, a `local:` record must still be stored the way
+   that version stores one (encrypted before 3.15), or the arm is not testing
+   the store it claims to. Then this tree must observe what the seeding
+   version observed, deliver that notification, complete two syncs and push
+   the write left behind.
 3. **Churns** every record: reads it, writes it back through the same `AtKey`,
    then writes a value of another shape (a newline removed, a byte added) and
-   the original again, reading each back with a fresh key.
+   the original again, reading each back with a fresh key. A `local:` record is
+   written once more without encryption, and must end up stored unflagged.
 4. **Restarts** and repeats the observation, with a second notification
    waiting.
 5. **Inspects the raw store**: no record may be flagged encrypted without a
@@ -38,11 +47,17 @@ about an upgrade; a difference only a released arm reports is.
 
 ## The arms
 
-| Directory              | Resolves at_client         |
-| ---------------------- | -------------------------- |
-| `released/3.14.0/`     | hosted 3.14.0, locked      |
-| `released/3.15.0-rc3/` | hosted 3.15.0-rc3, locked  |
-| (none)                 | this tree, in the test     |
+| Directory                          | Resolves                                  |
+| ---------------------------------- | ----------------------------------------- |
+| `released/3.14.0/`                 | hosted 3.14.0, locked                     |
+| `released/3.14.0-release-day/`     | hosted 3.14.0 over its release-day deps   |
+| `released/3.15.0-rc3/`             | hosted 3.15.0-rc3, locked                 |
+| (none)                             | this tree, in the test                    |
+
+The release-day arm pins the persistence, crypto and commons packages to the
+newest versions on 3.14.0's release day, so a store in the formats an early
+3.14.0 install wrote is in the comparison, not only the formats a build of it
+resolves today.
 
 **None is a workspace member.** Anything inside the workspace resolves
 at_client by path, and an arm has to run what pub.dev ships. Each

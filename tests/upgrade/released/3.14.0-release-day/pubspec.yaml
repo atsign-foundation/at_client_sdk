@@ -1,0 +1,27 @@
+name: upgrade_released_3_14_0_release_day
+publish_to: none
+description: >-
+  The upgrade check's old client: at_client 3.14.0 with the dependencies a
+  build on its release day, 2026-07-17, resolved.
+version: 1.0.0
+
+# Deliberately NOT a workspace member, and deliberately WITHOUT
+# dependency_overrides: anything inside the workspace resolves at_client by
+# path, and this arm has to run what pub.dev ships. pubspec.lock is committed,
+# so a changed result is a finding rather than a different transitive set.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  at_client: 3.14.0
+  # The newest release of each on 2026-07-17. The store this arm writes is in
+  # the formats these define, which a build of 3.14.0 today no longer uses.
+  at_persistence_secondary_server: 5.2.0
+  at_chops: 3.4.0
+  at_commons: 5.13.0
+  at_lookup: 3.6.0
+  at_auth: 3.2.0
+  at_utils: 3.4.0
+  upgrade_scenario:
+    path: ../../scenario
