@@ -60,8 +60,8 @@ Future<String> decryptStringFromBase64(
 /// Unwraps with the atSign's own RSA private key, which is the only half RSA
 /// decryption reads.
 ///
-/// `LocalSecondary` resolves that key across every tier the client has — an
-/// injected `AtChops`, then its key source, then the keystore — so this works
+/// `LocalSecondary` resolves that key across every tier the client has — its
+/// key source, then the keystore, then an injected `AtChops` — so this works
 /// for a client built either way. The public half is deliberately not
 /// fetched: asking for material the operation does not use would refuse a
 /// client that holds a private key and no public one, which is a shape the

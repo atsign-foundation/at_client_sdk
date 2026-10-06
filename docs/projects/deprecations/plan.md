@@ -67,7 +67,7 @@ at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
 the 4 live packs and `tools/wasm_shakedown`. On 2026-09-14 every one of
 them reports no `deprecated_member_use`. The decided floors — at_auth's 16
-uses in `lib` and at_client's 25, named under
+uses in `lib` and at_client's 28, named under
 [step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2) and in the
 status paragraph of [section 4](#4-order-of-work) — each sit under a
 line-level `// ignore: deprecated_member_use`, so the recipe counts them at
@@ -341,8 +341,14 @@ Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
 
 **Where this stands on 2026-09-13.** Steps 0 to 7 are done. Step 4's last
-piece, `LocalSecondary`'s `AtChops` tier, went on 2026-09-13: the key
-getters read the key source and the keystore, the PKAM getters reaching the
+piece, `LocalSecondary`'s `AtChops` tier, went on 2026-09-13 and came back on
+2026-10-06 as the last tier, behind the key source and the keystore:
+at_onboarding_cli 1.16.0 allows at_client 3.15, builds its client from an
+`AtChops` with no key source, and writes the keys to the keystore only after
+the build returns, so the tier is what holds them in between. It counts an
+empty value as absent, because at_auth fills a keypair an `AtChops` was built
+without with empty strings. The key getters read the key source, then the
+keystore, then the `AtChops`, the PKAM getters reaching the
 source through `authenticationKeyPairFor` so a keypair filed under an
 algorithm this build cannot sign with is refused rather than fallen through
 to the keystore, and a public write with no encryption private key anywhere
@@ -368,14 +374,15 @@ approval rather than from the response.
 **What remains in `lib`, and why it is the floor.** at_auth's 16 are step
 3's table: the injected-signer branches and `AtChops` in the signatures
 that carry them, the door a hardware-backed signer comes through. at_client's
-25 are the `AtChops` carrier — `_atChops`, `AtClient.atChops`, the
-preference-only bridge `_createAtChops` builds from a keystore, and
+28 are the `AtChops` carrier — `_atChops`, `AtClient.atChops`, the
+preference-only bridge `_createAtChops` builds from a keystore,
+`LocalSecondary`'s last key tier, which reads an injected `AtChops`, and
 `RemoteSecondary`'s `atChops` plumbing — the four ladder writes and three
 ladder reads in `remote_secondary.dart` that step 5's ruling keeps, and
 `ApkamSigning`'s two reinstated `AtPkamKeyPair` accessors. Every one leaves
 at the major that removes `AtClient.atChops`, and none can be moved before
 it without breaking a published caller. Each carries a line-level
-`// ignore: deprecated_member_use` — 14 lines in at_auth, 23 in at_client,
+`// ignore: deprecated_member_use` — 14 lines in at_auth, 26 in at_client,
 since a line can hold more than one use — and never a file-level one, so a
 new use beside them still reports.
 
@@ -799,8 +806,9 @@ read the field gained infos on purpose: at_onboarding_cli 32 to 33 in `lib`,
 at_functional_test 279 to 283 in `test`, at_end2end_test 45 to 48 in `lib`,
 the two CLI packs and at_client_flutter none. The last piece of step 4, the
 `AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier, went
-on 2026-09-13, and the live packs showed the two things a unit tree could
-not: the onboarding-CLI pack's contract test that a keyfile client answers
+on 2026-09-13 (the tier came back on 2026-10-06 as the last one, for the
+reason in the status paragraph of section 4), and the live packs showed the
+two things a unit tree could not: the onboarding-CLI pack's contract test that a keyfile client answers
 the keyfile's PKAM keys through `LocalSecondary`, which the tier had been
 serving, and the functional pack's opt-out arm, whose public write had been
 refused by the transformer only because the tier handed it an empty key.
