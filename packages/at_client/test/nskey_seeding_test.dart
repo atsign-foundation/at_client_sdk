@@ -210,6 +210,15 @@ void main() {
     final s = seeding(enrollmentId: 'primary', preferenceNamespace: 'wavi');
     expect(await s.authorisedNamespaces(), {'wavi'});
   });
+  test('it seeds the namespace the client had when seeding was built',
+      () async {
+    final s = seeding(enrollmentId: 'primary', preferenceNamespace: 'sshnp');
+    s.atClient.getPreferences()!.namespace = 'device1.sshnp';
+    expect(await s.authorisedNamespaces(), {'sshnp'},
+        reason: 'the startup seeds unawaited, so an app that points the '
+            'client at a narrower namespace once it is built would otherwise '
+            'publish a key there instead');
+  });
 
   group('the rotation question follows the route that asked to seed', () {
     /// The generation a sibling publishes mid-route. Dated far enough back

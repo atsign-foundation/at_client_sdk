@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -75,10 +76,12 @@ void main() {
 
   /// Alice's client: her advertisement fetch succeeds [succeedFor] times and
   /// throws afterwards — the shape of an atServer that goes unreachable — and
-  /// her `_apsk` lookup returns [apskPublicKey].
+  /// her `_apsk` lookup returns [apskPublicKey]. Each fetch answers [payload],
+  /// or the next of [payloads], the last repeating.
   ({MockAtClient atClient, List<int> fetches}) client({
     int succeedFor = 999,
     required String payload,
+    List<String>? payloads,
     String? apskPublicKey,
     Exception Function()? fetchFailure,
     Exception Function()? apskFailure,
@@ -102,7 +105,11 @@ void main() {
         throw fetchFailure?.call() ??
             SecondaryConnectException('atServer unreachable');
       }
-      return AtValue()..value = payload;
+      if (payloads == null) return AtValue()..value = payload;
+      return AtValue()
+        ..value = payloads[fetches.length <= payloads.length
+            ? fetches.length - 1
+            : payloads.length - 1];
     }
 
     when(() => atClient.get(any())).thenAnswer(answer);
@@ -153,6 +160,29 @@ void main() {
           reason: 'an ordinary blip must not cost a working key');
     });
 
+    test('an atServer error keeps serving the known key inside the grace too',
+        () async {
+      // NOTE: the shape AtClient.get delivers. Every failure but a not-found
+      // arrives as a plain AtClientException carrying only the message, and
+      // at_server reports a peer's unreachable atServer as AT0011.
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => AtClientException.message(
+              'Internal server exception : Outbound connection invalid'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      final first = await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(
+          (await ring.currentPublic(bob, namespace))?.nskeyKid, first?.nskeyKid,
+          reason: 'a peer\'s atServer being down reaches the client as this, '
+              'so only a not-found may end sealing at once');
+    });
+
     test('a failed re-fetch stops serving the known key past the grace',
         () async {
       final c = client(succeedFor: 1, payload: await signedPayloadFor(bobKey));
@@ -163,10 +193,81 @@ void main() {
       expect(await ring.currentPublic(bob, namespace), isNotNull);
       await Future.delayed(const Duration(milliseconds: 30));
 
-      expect(await ring.currentPublic(bob, namespace), isNull,
+      await expectLater(ring.currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
           reason: 'serving a stale generation indefinitely makes the stated '
-              '"TTL plus one content key" exposure unbounded — and a peer that '
-              'rotated because of a revocation is the one to stop sealing to');
+              'TTL-plus-grace exposure unbounded, and a peer that rotated '
+              'because of a revocation is the one to stop sealing to. It '
+              'throws rather than answering none, because none reads as an '
+              'unpublished namespace and sends the resolver to a broader key');
+    });
+
+    test('a not-found on re-fetch ends sealing at once, inside the grace',
+        () async {
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => AtKeyNotFoundException('withdrawn'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      expect(await ring.currentPublic(bob, namespace), isNotNull);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(await ring.currentPublic(bob, namespace), isNull,
+          reason: 'the owner\'s atServer says the record is gone — withdrawn, '
+              'or lost in a reset — so sealing to the cached generation for '
+              'another grace period writes data nobody can open, or that a '
+              'compromised key can');
+    });
+
+    test('a failed fetch after a not-found does not bring the key back',
+        () async {
+      var failures = 0;
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => ++failures == 1
+              ? KeyNotFoundException('withdrawn')
+              : SecondaryConnectException('atServer unreachable'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(await ring.currentPublic(bob, namespace), isNull);
+
+      await expectLater(ring.currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'the not-found dropped the cached generation, so the grace '
+              'has nothing to serve');
+    });
+
+    test('an unreachable atServer with nothing cached throws, not none',
+        () async {
+      final c = client(succeedFor: 0, payload: await signedPayloadFor(bobKey));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'none is a cold start, which a caller reports as the peer '
+              'not having enabled the namespace');
+    });
+
+    test('a peer\'s miss costs one lookup, not two', () async {
+      final c = client(
+          succeedFor: 0,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => KeyNotFoundException('no such key'));
+
+      expect(
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          isNull);
+      expect(c.fetches, hasLength(1),
+          reason: 'another atSign\'s public record is never read locally, so '
+              'a local-first read of it is the same plookup sent twice');
     });
 
     test('a stop during a re-fetch is not read as nothing published', () async {
@@ -268,7 +369,11 @@ void main() {
         final remote = options?.useRemoteAtServer ?? false;
         askedRemote.add(remote);
         if (!remote) throw AtKeyNotFoundException('$key');
-        return AtValue()..value = payload;
+        return AtValue()
+          ..value = payload
+          ..metadata = (Metadata()
+            ..isPublic = true
+            ..updatedAt = DateTime.utc(2026, 3, 4));
       }
 
       when(() => atClient.get(any())).thenAnswer(answer);
@@ -276,14 +381,14 @@ void main() {
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenAnswer(answer);
 
-      when(() => localSecondary.executeVerb(any(),
+      when(() => localSecondary.putIfAbsent(any(),
           cameFromServer: any(named: 'cameFromServer'))).thenAnswer((i) async {
         filedLocally.add((
           command:
               (i.positionalArguments.first as UpdateVerbBuilder).buildCommand(),
           cameFromServer: i.namedArguments[#cameFromServer] as bool,
         ));
-        return 'data:1';
+        return true;
       });
 
       return (
@@ -311,8 +416,9 @@ void main() {
               'atServer only once local storage has nothing');
     });
 
-    test('what the atServer answered is filed locally, and not offered back',
-        () async {
+    test(
+        'what the atServer answered is filed locally only if absent, and not '
+        'offered back', () async {
       final c = clientMissingLocally(await signedPayloadFor(bobKey));
 
       await PublishedNskeyKeyRing(c.atClient).currentPublic(alice, namespace);
@@ -322,6 +428,11 @@ void main() {
               'the round trip on every read');
       expect(c.filedLocally.single.command,
           contains('public:__nskey.$namespace$alice'));
+      expect(c.filedLocally.single.command,
+          contains(':uAt:2026-03-04T00:00:00.000000Z:'),
+          reason: 'filed with the metadata of the value the atServer answered, '
+              'not with whatever the key object passed to the read carries '
+              'afterwards');
       expect(c.filedLocally.single.cameFromServer, isTrue,
           reason: 'an ordinary local write queues the key NAME for a '
               'client→server push, and the push sends whatever local storage '
@@ -363,6 +474,164 @@ void main() {
       expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
           nskeyKidOf(bobKey.publicKeyBytes));
       expect(c.fetches, isEmpty, reason: 'the common case stays free');
+    });
+  });
+
+  group('a failed fetch is not a miss', () {
+    test('it stops the resolver\'s walk rather than sealing to a broader key',
+        () async {
+      final deepKey = await XWingKeyPair.generate();
+      final broad = await signedPayloadFor(bobKey);
+      final deep = await signedPayloadFor(deepKey);
+      var deepReachable = false;
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.atKeysIo).thenReturn(
+          keysHoldingApkam(alice, null, pkamKeyPairFor(alice, null)));
+      Future<AtValue> answer(Invocation invocation) async {
+        final key = invocation.positionalArguments.first as AtKey;
+        if (key.key != '__nskey') return AtValue()..value = bobsApskPublicKey();
+        if (key.namespace != 'medical.notes') return AtValue()..value = broad;
+        if (!deepReachable) {
+          throw SecondaryConnectException('atServer unreachable');
+        }
+        return AtValue()..value = deep;
+      }
+
+      when(() => atClient.get(any())).thenAnswer(answer);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer(answer);
+      final resolver = NskeyResolver(PublishedNskeyKeyRing(atClient));
+
+      await expectLater(resolver.resolve(bob, 'medical.notes'),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'the deeper key exists to exclude enrollments approved only '
+              'for the broader namespace, so sealing to the broader key on a '
+              'failed fetch hands them the data');
+
+      deepReachable = true;
+      expect((await resolver.resolve(bob, 'medical.notes'))?.namespace,
+          'medical.notes',
+          reason: 'the failure was not remembered as an empty level, so the '
+              'deeper key is found as soon as the atServer answers');
+    });
+  });
+
+  group('the client\'s own advertisement', () {
+    test('is re-read once the TTL has passed, like a peer\'s', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1));
+      // Stand in for mintAndPublish, which needs a remote secondary.
+      ring.rememberOwn(
+          alice,
+          namespace,
+          NskeyAdvertisement.single(
+            publicKey: bobKey.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing,
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
+          ));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      await ring.currentPublic(alice, namespace);
+
+      expect(c.fetches, hasLength(1),
+          reason: 'a sibling that rotated to cut off a revoked enrollment is '
+              'noticed within the TTL, not at this client\'s next start');
+    });
+
+    test('an unchanged re-read is not verified again', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final verifier = _CountingVerifier(ApkamSignedAdvertisedKeys(c.atClient));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          verifier: verifier,
+          advertisementTtl: const Duration(milliseconds: 1));
+
+      await ring.currentPublic(alice, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      await ring.currentPublic(alice, namespace);
+
+      expect(c.fetches, hasLength(2), reason: 'the premise: it was re-read');
+      expect(verifier.verified, 1,
+          reason: 'the bytes are the ones already verified, and verifying '
+              'again fetches _apsk from the atServer, so a client offline for '
+              'longer than the TTL could no longer write its own data');
+    });
+
+    test('a changed one is verified again — the control', () async {
+      final deepKey = await XWingKeyPair.generate();
+      final c = client(payload: '', payloads: [
+        await signedPayloadFor(bobKey),
+        await signedPayloadFor(deepKey),
+      ]);
+      final verifier = _CountingVerifier(ApkamSignedAdvertisedKeys(c.atClient));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          verifier: verifier,
+          advertisementTtl: const Duration(milliseconds: 1));
+
+      await ring.currentPublic(alice, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      final second = await ring.currentPublic(alice, namespace);
+
+      expect(verifier.verified, 2);
+      expect(second?.nskeyKid, nskeyKidOf(deepKey.publicKeyBytes));
+    });
+
+    test('a peer\'s is verified at every re-read', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final verifier = _CountingVerifier(ApkamSignedAdvertisedKeys(c.atClient));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          verifier: verifier,
+          advertisementTtl: const Duration(milliseconds: 1));
+
+      await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      await ring.currentPublic(bob, namespace);
+
+      expect(verifier.verified, 2,
+          reason: 'a peer\'s re-read needs the network anyway, and re-checking '
+              'its signer is what notices one revoked since');
+    });
+
+    test('a change sync lands is read at once, inside the TTL', () async {
+      final deepKey = await XWingKeyPair.generate();
+      final changes = StreamController<DataEvent>.broadcast();
+      addTearDown(changes.close);
+      final c = client(payload: '', payloads: [
+        await signedPayloadFor(bobKey),
+        await signedPayloadFor(deepKey),
+      ]);
+      final ring =
+          PublishedNskeyKeyRing(c.atClient, ownChanges: () => changes.stream);
+
+      await ring.currentPublic(alice, namespace);
+      changes.add(DataUpdated(nskeyAdvertisementKey(alice, namespace)));
+      await Future<void>.delayed(Duration.zero);
+
+      expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
+          nskeyKidOf(deepKey.publicKeyBytes),
+          reason: 'a sibling\'s rotation is sealed to as soon as sync brings '
+              'it, rather than up to fifteen minutes later');
+    });
+
+    test('a change to another record does not — the control', () async {
+      final changes = StreamController<DataEvent>.broadcast();
+      addTearDown(changes.close);
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final ring =
+          PublishedNskeyKeyRing(c.atClient, ownChanges: () => changes.stream);
+
+      await ring.currentPublic(alice, namespace);
+      changes
+        ..add(DataUpdated(nskeyAdvertisementKey(alice, 'other.my_apps')))
+        ..add(DataUpdated(nskeyAdvertisementKey(bob, namespace)))
+        ..add(DataUpdated(AtKey.fromString('public:phone.$namespace$alice')));
+      await Future<void>.delayed(Duration.zero);
+      await ring.currentPublic(alice, namespace);
+
+      expect(c.fetches, hasLength(1));
     });
   });
 
@@ -718,4 +987,18 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
   });
+}
+
+/// Counts what it verifies, delegating the verification itself.
+class _CountingVerifier implements AdvertisedKeyVerifier {
+  _CountingVerifier(this._inner);
+
+  final AdvertisedKeyVerifier _inner;
+  int verified = 0;
+
+  @override
+  Future<NskeyAdvertisement> verify(String owner, String payload) {
+    verified++;
+    return _inner.verify(owner, payload);
+  }
 }

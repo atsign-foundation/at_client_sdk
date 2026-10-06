@@ -159,7 +159,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtKeyException &&
               e.message ==
-                  'Invalid TTR value: -2. valid values for TTR are -1 and greater than or equal to 1')));
+                  'Invalid TTR value: -2. TTR value cannot be less than -1')));
     });
   });
 

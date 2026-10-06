@@ -1,5 +1,6 @@
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,12 +10,14 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/test_keypairs.dart';
 import 'test_utils/recorded_logs.dart';
 
 /// [envelope] with its signature replaced by one that cannot verify.
@@ -119,7 +122,8 @@ void main() {
     expect(read!.signerEnrollmentId, 'parent-1');
   });
 
-  test('a republish silently leaves the enrollment unsigned', () async {
+  test('a republish restoring the key a link describes keeps the link',
+      () async {
     final parentClient = client('parent-1');
     final parent = await registered(parentClient);
     final childClient = client('child-1');
@@ -152,10 +156,106 @@ void main() {
     expect(remoteData[uri], published,
         reason: 'the republish is what happened: the record carries what '
             'this client holds again');
-    expect(await PqSigningChain(childClient).readLink('child-1'), isNull,
-        reason: 'and the link went with it. Nothing about the approval '
-            'changed, but the enrollment now reads to every verifier as one '
-            'nobody ever vouched for');
+    expect(await PqSigningChain(childClient).readLink('child-1'), isNotNull,
+        reason: 'the link vouches for the key the record publishes again, so '
+            'clearing it would leave an enrollment nobody had stopped '
+            'vouching for reading as unsigned');
+  });
+
+  group('a republish under a new key', () {
+    /// A registered enrollment of [atSign] other than the ones under test,
+    /// whose published `_apsk` value serves as the new key.
+    Future<String> anotherKey() async {
+      await registered(client('donor-1'));
+      return remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
+    }
+
+    test('sends no ttl and no ttr — raw literal', () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final newKey = await anotherKey();
+
+      clearInteractions(childClient);
+      await child.publishPublicSigningKey(value: newKey);
+
+      final key = verify(() => childClient.put(captureAny(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .cast<AtKey>()
+          .singleWhere((k) => k.toString() == uri);
+      final command = (await PutRequestTransformer().transform(
+              Tuple<AtKey, dynamic>()
+                ..one = key
+                ..two = newKey,
+              encryptionPrivateKey:
+                  pkamKeyPairFor(atSign, 'signer').atPrivateKey.privateKey,
+              requestOptions: PutRequestOptions()..shouldEncrypt = false))
+          .buildCommand();
+      expect(
+          command.split(' ').first,
+          matches(RegExp(r'^update:dataSignature:[^:]+:isEncrypted:false:'
+              r'public:_apsk\.child-1\.a\.__e@alice$')),
+          reason: 'a ttl, ttb, ttr or ccd would come before the signature; no '
+              'ttl, or the key every verifier resolves expires, and no ttr, or '
+              'a reader\'s atServer may serve its copy after a rotation');
+    });
+
+    test('clears the chain link, so the chain reads unsigned, not broken',
+        () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', link!);
+      expect(
+          (await PqSigningChain(childClient).verifyChain(child, 'child-1'))
+              .verdict,
+          ChainVerdict.chained,
+          reason: 'the premise: a real, holding link on the record');
+
+      await child.publishPublicSigningKey(value: await anotherKey());
+
+      expect(await PqSigningChain(childClient).readLink('child-1'), isNull);
+      expect(
+          (await PqSigningChain(childClient).verifyChain(child, 'child-1'))
+              .verdict,
+          ChainVerdict.unsigned,
+          reason: 'a link signed over the old key riding the new one reads '
+              'broken, a claim that does not hold; a key change is a '
+              'changeover, which reads unsigned');
+    });
+
+    test('drops a root link this client cannot re-sign', () async {
+      final holderClient = client('holder-1');
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      await registered(holderClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      writeRootLink(
+          remoteMetadata,
+          atSign,
+          'child-1',
+          (await PqSigningChain(holderClient)
+              .signRootLinkFor('child-1', rootPrivate: pair.secretKey))!);
+
+      await child.publishPublicSigningKey(value: await anotherKey());
+
+      expect(await PqSigningChain(childClient).readRootLink('child-1'), isNull,
+          reason: 'it holds no root private, so the link over its old key '
+              'can only go');
+      expect(
+          (await PqSigningChain(childClient).verifyChain(child, 'child-1'))
+              .verdict,
+          ChainVerdict.unsigned);
+    });
   });
 
   test('a published link verifies against the parent it names', () async {
@@ -434,6 +534,52 @@ void main() {
           reason: 'the key vouched for, the existing-link check and the '
               'value republished must come from ONE snapshot — separate '
               'reads let the record change between them');
+    });
+
+    test('a holder\'s republish under a new key re-anchors in the same write',
+        () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c =
+          await rootHolder('priv-1', pair.secretKey, published: pair.publicKey);
+      await PqSigningChain(c).publishOwnRootLink(
+          isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
+      await registered(client('donor-1'));
+      final newKey = remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
+      final uri = PqSigningChain.apskUri(atSign, 'priv-1');
+
+      clearInteractions(c);
+      await AtClientSecretSharing.forClient(c)
+          .publishPublicSigningKey(value: newKey);
+
+      final writes = verify(() => c.put(captureAny(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .where((k) => k.toString() == uri);
+      expect(writes, hasLength(1),
+          reason: 'the new key and its anchor land together, so no verifier '
+              'reads the record between them');
+      final link = await PqSigningChain(c).readRootLink('priv-1');
+      expect((link?['payload'] as Map?)?['apkamPublicKey'], newKey);
+      expect(
+          (await PqSigningChain(c)
+                  .verifyChain(AtClientSecretSharing.forClient(c), 'priv-1'))
+              .verdict,
+          ChainVerdict.anchored);
+    });
+
+    test('a republish anchors nothing that was not anchored — the control',
+        () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c =
+          await rootHolder('priv-1', pair.secretKey, published: pair.publicKey);
+      await registered(client('donor-1'));
+
+      await AtClientSecretSharing.forClient(c).publishPublicSigningKey(
+          value: remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!);
+
+      expect(await PqSigningChain(c).readRootLink('priv-1'), isNull,
+          reason: 'first anchoring is the startup step\'s, behind the '
+              'fully-privileged check; a republish only keeps an anchor');
     });
 
     test('a root link and a chain link coexist on one record', () async {
@@ -766,6 +912,81 @@ void main() {
 
       expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
       expect(await PqSigningChain(childClient).readRootLink('child-1'), second);
+    });
+  });
+
+  group('a key the atServer moved', () {
+    /// Moves [enrollmentId]'s `_apsk` record to [location], as the atServer
+    /// does on revocation or supersession (`r.__e`) and on deletion or expiry
+    /// (`d.__e`).
+    void move(String enrollmentId, String location) {
+      final from = PqSigningChain.apskUri(atSign, enrollmentId);
+      final to = from.replaceFirst('.a.__e@', '.$location@');
+      remoteData[to] = remoteData.remove(from)!;
+      final meta = remoteMetadata.remove(from);
+      if (meta != null) remoteMetadata[to] = meta;
+    }
+
+    /// A child carrying a link its parent signed.
+    Future<({MockAtClient client, AtClientSecretSharing sharing})>
+        linkedChild() async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', link!);
+      return (client: childClient, sharing: child);
+    }
+
+    test('an enrollment whose own key was revoked reads revoked', () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      move('child-1', 'r.__e');
+
+      final result =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+
+      expect(result.verdict, ChainVerdict.revoked,
+          reason: 'its record is gone from .a.__e because it was revoked or '
+              'superseded, which is not the same as never having been vouched '
+              'for');
+      expect(result.reason, contains('child-1'));
+    });
+
+    test('a link whose signer was revoked reads revoked', () async {
+      final child = await linkedChild();
+      move('parent-1', 'r.__e');
+
+      final result = await PqSigningChain(child.client)
+          .verifyChain(child.sharing, 'child-1');
+
+      expect(result.verdict, ChainVerdict.revoked,
+          reason: 'the link does not fail to verify; its signer\'s key was '
+              'withdrawn, and the walk says which');
+      expect(result.reason, contains('parent-1'));
+    });
+
+    test('a link whose signer was deleted reads deleted', () async {
+      final child = await linkedChild();
+      move('parent-1', 'd.__e');
+
+      final result = await PqSigningChain(child.client)
+          .verifyChain(child.sharing, 'child-1');
+
+      expect(result.verdict, ChainVerdict.deleted);
+    });
+
+    test('an enrollment that never published reads unsigned — the control',
+        () async {
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final result = await PqSigningChain(childClient)
+          .verifyChain(child, 'never-published');
+
+      expect(result.verdict, ChainVerdict.unsigned);
     });
   });
 
@@ -1262,6 +1483,158 @@ void main() {
         reason: 'a claimed parent is checked against that parent\'s own '
             'published key, and the claim is under the signature besides — '
             'otherwise any enrollment could name any other as its approver');
+  });
+
+  group('a link write and a republish of the same record', () {
+    /// Starts [linkWrite], parks it on its first remote read of [uri], starts
+    /// a republish of [value] by [sharing], then lets the link write go on.
+    ///
+    /// A link write re-sends the value it read, so a republish landing
+    /// between that read and its put is reverted unless the two are
+    /// serialised.
+    Future<void> republishDuring(
+      MockAtClient c,
+      AtClientSecretSharing sharing,
+      String uri,
+      String value,
+      Future<Object?> Function() linkWrite,
+    ) async {
+      final gate = Completer<void>();
+      var parked = false;
+      when(() =>
+              c.get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0].toString();
+        final stored = remoteData[key];
+        if (stored == null) throw AtKeyNotFoundException('$key not found');
+        final snapshot = AtValue()
+          ..value = stored
+          ..metadata = remoteMetadata[key];
+        if (key == uri && !parked) {
+          parked = true;
+          await gate.future;
+        }
+        return snapshot;
+      });
+
+      final writing = linkWrite();
+      await pumpEventQueue();
+      expect(parked, isTrue,
+          reason: 'the link write has to be parked on its read, or the '
+              'republish below runs outside the window and proves nothing');
+
+      final republishing = sharing.publishPublicSigningKey(value: value);
+      await pumpEventQueue();
+      gate.complete();
+      await Future.wait([writing, republishing]);
+    }
+
+    /// A value different from [enrollmentId]'s own `_apsk`, which a republish
+    /// can write over it.
+    Future<String> anotherValue(String enrollmentId) async {
+      await registered(client('donor-1'));
+      final value = remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
+      expect(value,
+          isNot(remoteData[PqSigningChain.apskUri(atSign, enrollmentId)]),
+          reason: 'a republish of the value already there writes nothing, '
+              'and there would be nothing for the link write to revert');
+      return value;
+    }
+
+    const reverted = 'the republish landed while the link write held a '
+        'snapshot, and the link write then put the old value back: the '
+        'advertisement loses the keys just published';
+
+    test('publishLink', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishLink('child-1', link!));
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishOwnRootLink', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      final c = client('priv-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, pair.secretKey);
+      when(() => c.atKeysIo).thenReturn(io);
+      final sharing = await registered(c);
+      final uri = PqSigningChain.apskUri(atSign, 'priv-1');
+      final republished = await anotherValue('priv-1');
+
+      await republishDuring(
+          c,
+          sharing,
+          uri,
+          republished,
+          () => PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io));
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishPendingLink stamping a conveyed root link', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link = await PqSigningChain(client('priv-1'))
+          .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.rootLinkSecretName,
+              value: PqSigningChain.encodeLink(link!)),
+          allowReservedName: true);
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishPendingLink());
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
+
+    test('publishPendingLink stamping a conveyed chain link', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+      final uri = PqSigningChain.apskUri(atSign, 'child-1');
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link!.toJson())),
+          allowReservedName: true);
+      final republished = await anotherValue('child-1');
+
+      await republishDuring(childClient, child, uri, republished,
+          () => PqSigningChain(childClient).publishPendingLink());
+
+      expect(remoteData[uri], republished, reason: reverted);
+    });
   });
 }
 

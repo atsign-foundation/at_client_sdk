@@ -334,6 +334,10 @@ const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:){0,2}';
 interface class AtCollection<T> {
   static const String _rr = '__rr';
 
+  /// The id of every read receipt: one per (reader, item), told apart by the
+  /// reader's atSign as the receipt's owner.
+  static const String _rrId = 'r';
+
   // Random-id alphabet and RNG (for auto-generated item ids).
   static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   static final Random _rng = Random.secure();
@@ -1186,9 +1190,29 @@ interface class AtCollection<T> {
   Future<List<AtKey>> _getKeysInternal({String? id, Atsign? owner}) async {
     final regex =
         _directKeyRegex(id: id, ownerSuffix: owner?.toString() ?? '@');
-    return (await atClient.getAtKeys(regex: regex))
-      ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
+    return (await atClient.getAtKeys(regex: regex))..sort(_byItemThenOwnCopy);
   }
+
+  /// Groups every copy of an item together, with this atSign's own copy first:
+  /// the one copy of an item it owns that it can always open.
+  int _byItemThenOwnCopy(AtKey a, AtKey b) {
+    final byItem = a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner);
+    if (byItem != 0) return byItem;
+    return (_isOutboundCopy(a) ? 1 : 0) - (_isOutboundCopy(b) ? 1 : 0);
+  }
+
+  /// Whether [k] is the copy of one of this atSign's items that it shared
+  /// with someone else. A post-quantum share seals that copy to the
+  /// recipient, so the owner reads its own copy instead.
+  bool _isOutboundCopy(AtKey k) =>
+      k.sharedWith != null && k.sharedBy?.toAtsign() == atSign;
+
+  /// Whether this atSign has sent [owner] a read receipt in this `__rr`
+  /// sub-collection, judged by the key alone: the receipt is a copy shared
+  /// out, which the read loop never opens.
+  Future<bool> _sentReceiptTo(Atsign owner) async =>
+      (await _getKeysInternal(id: _rrId, owner: atSign))
+          .any((k) => k.sharedWith?.toAtsign() == owner);
 
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
@@ -1389,6 +1413,8 @@ interface class AtCollection<T> {
           // and placeholder paths set `pending` again before any yield.
           pending = null;
           pendingKey = k.fullKeyAndOwner;
+          // NOTE: only when the owner's own copy is gone, which sorts first.
+          if (_isOutboundCopy(k)) continue;
           final v = await atClient.get(k);
           // An item that is not yet available (`availableAt` in the
           // future) or whose value the keystore won't return for any
@@ -3226,7 +3252,8 @@ interface class AtCollection<T> {
   /// the self-key write and the unshare-others diff. Used by
   /// [CItem.markReadByMe] — read receipts are pure outbound
   /// notifications, so a self copy at the writer would be storage
-  /// waste (the writer never queries their own receipt back).
+  /// waste: the writer counts its own receipt from the recipient
+  /// copy's key, never its value.
   ///
   /// Still emits the same local [CItemUpdated] on this collection's
   /// stream and [CSubItemUpdated] on ancestors as [_put] does, so
@@ -4966,8 +4993,8 @@ final class CItem<T> {
   ///
   /// Works regardless of who owns the item — if I own it, receipts
   /// from readers (who shared with me) populate the set; if I'm a
-  /// reader of someone else's item, my own receipt populates the set
-  /// (since my own `__rr` self-copy is on my atServer).
+  /// reader of someone else's item, my own receipt populates the set,
+  /// found by the key of the copy I shared with the item's owner.
   ///
   /// For synchronous UI rendering after an `await readBy` prime, see
   /// [readBySnapshot].
@@ -5004,6 +5031,7 @@ final class CItem<T> {
       await for (final receipt in tolerant) {
         readers.add(receipt.owner);
       }
+      if (owner != self && await rr._sentReceiptTo(owner)) readers.add(self);
     });
     return UnmodifiableSetView(_readers!);
   }
@@ -5034,9 +5062,8 @@ final class CItem<T> {
   ///   - deliver the receipt to the item's owner via the
   ///     standard sharedWith propagation, and
   ///   - keep [wasMarkedReadByMe] returning true on subsequent
-  ///     calls, because [AtCollection.getItemsAsStream]'s key regex
-  ///     matches the recipient form too and surfaces the writer
-  ///     (this atSign) as a reader.
+  ///     calls, because [readBy] counts this atSign as a reader
+  ///     from that key, without opening it.
   ///
   /// Concurrent callers on the same [CItem] instance serialise via
   /// [_markReadByMeMutex]; once one call has written the receipt,
@@ -5061,7 +5088,7 @@ final class CItem<T> {
       // budget that deeply-nested subCollection chains share.
       final receipt = rr.draft(
         obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
-        id: 'r',
+        id: AtCollection._rrId,
         sharedWith: {owner},
       );
       final results = await rr._putRecipientsOnly(receipt);

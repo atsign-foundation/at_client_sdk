@@ -62,14 +62,14 @@ tutorials or blog posts:
   - [`../at_client_flutter/example/`](../at_client_flutter/example) —
     onboarding + auth UI walkthroughs (CRAM, .atKeys-file, keychain,
     APKAM).
-  - [`../at_client_flutter/examples/todos/README.md`](../at_client_flutter/examples/todos/README.md)
+  - [`../at_client_flutter/example/todos/README.md`](../at_client_flutter/example/todos/README.md)
     — full shared-todos Flutter app. The **idiomatic** Flutter
     consumer of `AtCollection<T>` — every common collection pattern
     (typed `AtCollection`, sub-collections, queries, watches, read
     receipts, sharing, schedule-via-`availableAt`) wired up the way
     a real app would. Wire-compatible with the CLI sibling so the
     two apps can share data live.
-  - [`../at_client_flutter/examples/dockerstats/README.md`](../at_client_flutter/examples/dockerstats/README.md)
+  - [`../at_client_flutter/example/dockerstats/README.md`](../at_client_flutter/example/dockerstats/README.md)
     — live telemetry dashboard. The deliberate counterpart to
     `todos`, `dockerstats` is the canonical worked example of a pattern the
     SDK supports but doesn't impose: **deliver via short-lived notifications,
@@ -365,7 +365,7 @@ Worked examples (Dart / CLI):
   (full interactive TUI)
 
 For Flutter, the canonical reference app is
-[`../at_client_flutter/examples/todos`](../at_client_flutter/examples/todos)
+[`../at_client_flutter/example/todos`](../at_client_flutter/example/todos)
 — same feature set as `collections_todos.dart` above, rendered
 through the mobile / desktop widget stack the way a shipping app
 would use it.
@@ -557,6 +557,13 @@ What each posture switches on:
   is carried in a signed envelope and verified before use; the signing keys
   chain to a per-atSign signing root that only fully privileged
   enrollments hold.
+
+**atServer version.** Minting a namespace key or a signing root needs
+atServer 3.16.2 or later. Each mint takes a lock that its ttl releases: two
+minutes for a namespace key, 15 seconds for the root. An older atServer
+keeps the lock until its expiry sweep, up to about ten and a half minutes,
+and refuses another mint or rotation of the same key until then. The client
+doesn't check the version.
 
 `pqActive` is for a deployment that controls every client of its
 namespaces and has seeded them: a destination with no published namespace

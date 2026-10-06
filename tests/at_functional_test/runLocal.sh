@@ -3,29 +3,55 @@ set -euo pipefail
 
 # Run the functional suite locally.
 #
-#   ./runLocal.sh            # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
-#   ./runLocal.sh 27000      # base port: root 27000, secondaries 27001-27080, redis 27099
+#   ./runLocal.sh [BASE_PORT] [TEST_PATHS...]
 #
-# Pass a BASE_PORT to shift the virtualenv into a [BASE, BASE+99] range so it
-# can run alongside another virtualenv (e.g. the e2e suite via its own
-# runLocal.sh) on a different base port. The docker-compose.yaml reads the VE_*
-# vars exported here; with none set it uses the legacy fixed ports.
+#   ./runLocal.sh            # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
+#   ./runLocal.sh 27000      # base port: root 27000, secondaries 27001-27098, redis 27099
+#   ./runLocal.sh 27000 test/upgrade_test.dart   # only the named tests
+#
+# A BASE_PORT, passed or exported as VIRTUALENV_BASE_PORT, shifts the
+# virtualenv into a [BASE, BASE+99] range so it can run alongside another
+# virtualenv on a different base port, and names the compose project after it
+# so a run in another checkout never takes this one's container down. The
+# docker-compose.yaml reads the VE_* vars exported here; with none set it uses
+# the legacy fixed ports.
+#
+# A second run of this pack in this checkout waits for the first to finish.
 
 cd "$(dirname "$0")"
+source ../lib/rig_lock.sh
 
-if [[ -n "${1:-}" ]]; then
-  BASE_PORT="$1"
-  export VIRTUALENV_BASE_PORT="$BASE_PORT"
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+  VIRTUALENV_BASE_PORT="$1"
+  shift
+fi
+TEST_PATHS=("$@")
+if [[ -n "${VIRTUALENV_BASE_PORT:-}" ]]; then
+  if [[ ! "$VIRTUALENV_BASE_PORT" =~ ^[0-9]+$ ]]; then
+    echo "*** Not a base port: ${VIRTUALENV_BASE_PORT}" >&2
+    exit 2
+  fi
+  BASE_PORT="$VIRTUALENV_BASE_PORT"
+  export VIRTUALENV_BASE_PORT
   export VE_ROOT_PORT="$BASE_PORT"
   export VE_REDIS_PORT=$((BASE_PORT + 99))
   export VE_SECONDARY_LOW=$((BASE_PORT + 1))
   export VE_SECONDARY_HIGH=$((BASE_PORT + 98))
+  export COMPOSE_PROJECT_NAME="at_functional_test-${BASE_PORT}"
   echo "*** Using base port ${BASE_PORT} (range ${BASE_PORT}-$((BASE_PORT + 99)))"
 else
   echo "*** Using legacy fixed ports (64 / 25000-25999 / 6379)"
 fi
 
-echo "*** Getting dependencies" && dart pub get
+lock_pack
+
+echo "*** Getting dependencies" && pub_get_locked
+
+# The one virtualenv service, addressed through compose so the container's
+# name, which depends on the project name, never has to be spelled out.
+ve() {
+  docker compose -f test/docker-compose.yaml exec -T virtualenv "$@"
+}
 
 # The virtualenv image, read by docker-compose.yaml. Defaults to the locally
 # built PQ-capable image; set VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or
@@ -45,7 +71,7 @@ cd ..
 
 echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart
 
-echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl start pkamLoad
+echo "*** Executing pkamLoad" && ve supervisorctl start pkamLoad
 
 # Wait for pkamLoad to have actually installed the PKAM public keys.
 #
@@ -65,7 +91,7 @@ for attempt in $(seq 1 60); do
   # A failed exec yields a non-empty result on purpose, so a container that
   # went away keeps us waiting and then fails loudly rather than reading as
   # "nothing missing".
-  if ! missing=$(docker exec test-virtualenv-1 sh -c '
+  if ! missing=$(ve sh -c '
       for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise"; do
         grep -q "cramAndPkamAuth successful for $a" /apps/logs/pkam.log \
           2>/dev/null || printf "%s " "$a"
@@ -83,7 +109,7 @@ for attempt in $(seq 1 60); do
     echo "!!! Refusing to run the suite: every test authenticating as one of"
     echo "!!! those would fail with 'at_pkam_publickey does not exist in"
     echo "!!! keystore', in tests that have nothing to do with the cause."
-    docker exec test-virtualenv-1 tail -20 /apps/logs/pkam.log || true
+    ve tail -20 /apps/logs/pkam.log || true
     exit 1
   fi
   sleep 2
@@ -107,7 +133,7 @@ if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
   REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
   echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
 fi
-dart test --concurrency=1 -r expanded ${REPORT_ARG}
+dart test --concurrency=1 -r expanded ${REPORT_ARG} ${TEST_PATHS[@]+"${TEST_PATHS[@]}"}
 TEST_EXIT=$?
 set -e
 
@@ -116,7 +142,8 @@ set -e
 # wall-clock bound is killed HERE, after the suite has already finished and
 # reported, and the exit code returned is the timeout's rather than the
 # suite's. Read the test output before concluding a bounded run failed, and
-# clear a stuck container with `docker rm -f test-virtualenv-1`.
+# clear a stuck container with `docker rm -f test-virtualenv-1`, or
+# `at_functional_test-<BASE>-virtualenv-1` after a base-port run.
 echo "*** docker compose down" && (cd test && docker compose down)
 
 exit "$TEST_EXIT"

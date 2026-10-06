@@ -211,6 +211,7 @@ class PqClientBootstrap {
     ring = PublishedNskeyKeyRing(
       _atClient,
       privateFiling: filing,
+      ownChanges: () => _atClient.dataEvents,
       // NOTE: the read-miss hook must file what it receives, not merely ask.
       // An answer left in the in-memory secret store is not filed again until
       // the next start, so a hook that only broadcast would heal the client
@@ -530,7 +531,7 @@ class PqClientBootstrap {
   /// not — an enrollment that was offline when it was approved has no other
   /// way to get it, since the root carries no namespace and so never rides
   /// the enroll:listns fan-out. The call broadcasts and returns; the answer
-  /// is filed by the collection step at this or a later start.
+  /// is filed by the `collectConveyedKeys` step at this or a later start.
   ///
   /// Placed before anchoring, which needs the private, so on a start where an
   /// answer is already waiting both succeed in one pass.

@@ -9,9 +9,9 @@ import 'test_utils/mocks.dart';
 
 /// `_apsk` writes made by one process for one client are serialised.
 ///
-/// A minter publishes its new signing key before it files it, so in that gap
-/// another writer composing from the keyfile sees no signing key, takes the
-/// authentication-key fallback, and publishes that over the advertisement.
+/// Each writer re-sends a whole record composed from what it read first, so
+/// one landing between another's read and its put would be lost. The link
+/// writers' use of this lock is pinned in `pq_signing_chain_test.dart`.
 void main() {
   late List<String> log;
 

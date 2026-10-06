@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:example/apkam_example.dart';
-import 'package:example/invitation_example.dart';
 import 'package:example/walkthrough.dart';
 import 'package:flutter/material.dart';
 
@@ -514,25 +513,6 @@ class HomePage extends StatelessWidget {
               },
               icon: const Icon(Icons.download),
               label: Text('Export AtSign Keys'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const InvitationExamplePage(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.mail_outline),
-              label: const Text('Invitation Snippet'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,

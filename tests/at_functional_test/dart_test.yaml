@@ -10,3 +10,6 @@ tags:
   # Every file exercising a post-quantum mechanism. `pq_tag_test.dart`
   # re-derives which files should carry the tag and fails when one does not.
   pq:
+  # The upgrade check: a store written by a released at_client, then opened
+  # by this tree. See tests/upgrade/README.md.
+  upgrade:

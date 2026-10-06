@@ -13,6 +13,7 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart' show DataEvent;
 import 'package:at_client/src/preference/at_client_preference.dart'
     show AtClientPreference;
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
@@ -84,6 +85,8 @@ void main() {
     when(() => client.getPreferences()).thenReturn(null);
     final syncService = MockSyncService();
     when(() => client.syncService).thenReturn(syncService);
+    when(() => client.dataEvents)
+        .thenAnswer((_) => const Stream<DataEvent>.empty());
 
     // NOTE: the startup steps read the atSign's own records and watch for
     // envelopes. Answering an empty scan is what a fresh atSign looks like -
@@ -643,5 +646,25 @@ void main() {
       // delay a step that heals key material, never enable one.
       'reconcileEnrollmentSnapshot',
     ]);
+  });
+
+  group('the key ring and local storage', () {
+    test(
+        'the ring listens for local changes once it reads its own advertisement',
+        () async {
+      final changes = StreamController<DataEvent>.broadcast();
+      addTearDown(changes.close);
+      when(() => client.dataEvents).thenAnswer((_) => changes.stream);
+      final bootstrap = build();
+
+      expect(changes.hasListener, isFalse,
+          reason: 'a client that never reads its own advertisement - every '
+              'legacy client - subscribes to nothing');
+      await bootstrap.ring.currentPublic('@bootstrap🛠', 'app_1.my_apps');
+
+      expect(changes.hasListener, isTrue,
+          reason: 'otherwise a sibling\'s rotation that sync lands waits out '
+              'the whole advertisement TTL');
+    });
   });
 }

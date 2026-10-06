@@ -142,6 +142,7 @@ class MockAtClient extends Mock implements AtClient {
             keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
           ..namespace = 'wavi' {
     _answerReadsAsMissing();
+    _answerReachabilityAsUnminted();
   }
 
   // A stable, mutable preference (matching the real getPreferences(), which
@@ -161,6 +162,18 @@ class MockAtClient extends Mock implements AtClient {
             throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
     when(() => get(any())).thenAnswer((inv) async =>
         throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+  }
+
+  /// A mock has no startup to mint with, so it answers as a real client does
+  /// before its startup exists. Left unstubbed it answered null into a
+  /// non-nullable `Future`, which a share reaches whenever the sender holds no
+  /// namespace key of its own.
+  void _answerReachabilityAsUnminted() {
+    registerFallbackValue(Duration.zero);
+    when(() => ensureReachable(any(), timeout: any(named: 'timeout')))
+        .thenAnswer((_) async => AtReachabilityResult(AtReachability.failed,
+            error: StateError('a MockAtClient mints nothing; stub '
+                'ensureReachable for a test that needs a key published')));
   }
 
   @override

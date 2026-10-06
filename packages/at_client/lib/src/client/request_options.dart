@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart' show internal;
+
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
 abstract class RequestOptions {}
@@ -7,6 +9,9 @@ abstract class RequestOptions {}
 class GetRequestOptions extends RequestOptions {
   /// Whether the `get` request should bypass this atSign's cache of data owned
   /// by another atSign
+  ///
+  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
+  /// it whatever this says.
   bool bypassCache = false;
 
   /// Whether to send this get request directly to the remote atServer.
@@ -39,6 +44,15 @@ class PutRequestOptions extends RequestOptions {
   /// to false.
   bool shouldEncrypt = true;
 
+  /// Whether the value was encrypted before this put, under the metadata its
+  /// key carries; read only when [shouldEncrypt] is false.
+  ///
+  /// The put then sends the key's metadata as it is. Any other put the SDK
+  /// does not encrypt sends it rebuilt, so what a read or an earlier put left
+  /// on a reused key cannot mark a plain value encrypted.
+  @internal
+  bool alreadyEncrypted = false;
+
   /// Overrides the configured crypto provider for this put request.
   ///
   /// Leave null to use [AtClientPreference.crypto]'s default provider.
@@ -48,11 +62,12 @@ class PutRequestOptions extends RequestOptions {
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }
 
@@ -70,10 +85,11 @@ class DeleteRequestOptions extends RequestOptions {
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }

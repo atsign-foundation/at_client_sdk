@@ -992,7 +992,8 @@ the atServer that serves it. So the signing separates two adversaries sharply:
 
 So the operator of an atSign's atServer is in the **confidentiality TCB for all data
 destined to that atSign** (inbound cross-atSign shares, and self-data where the client
-relies on server-served keys) — a transparent, split-view MITM that this signing does
+relies on server-served keys) and for the data that atSign sends out, since its
+clients fetch every peer's keys through it — a transparent, split-view MITM that this signing does
 not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
 classical Atsign has the same property (a sender fetches `public:publickey@alice` from
 @alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
@@ -1115,6 +1116,13 @@ advertisement for a bounded **TTL** and re-fetches when it is stale. Total expos
 path costs no network. The original wording chose the tightest bound without costing
 it; this is the same mechanism with a lever on it.
 
+⚠️ **AMENDED 2026-09-30 by
+[ruling 143.2](#1432-a-not-found-is-final-any-other-failure-gets-the-grace):**
+the worst-case exposure is the TTL plus `advertisementStaleGrace`, not "TTL + one
+CK lifetime". A sender re-cuts on the first write after it sees the new
+generation, so the CK term was loose, and the grace a failed re-fetch gets was
+missing from the bound.
+
 **Generation retention — current on join, older pulled on demand.** A new enrollment is
 pushed the **current** generation only, so join cost stays O(1). When a reader meets a
 `__ck` tagged with an `nskeyKid` it does not hold, it issues `requestSecret` for that
@@ -1191,6 +1199,12 @@ paid only by a genuine multi-recipient write.
 
 **Implementation status.** The cache re-scope is **B-1a**; the per-destination mint
 trigger is **B-1**'s routing work.
+
+⚠️ **AMENDED 2026-09-30 by
+[ruling 142.2](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30):**
+a share's content key is also conveyed to the sender's own namespace key, so
+the sender's sibling enrollments can open it. Scoping per recipient otherwise
+stands: carol still cannot open what alice sends bob.
 
 ---
 
@@ -1702,6 +1716,10 @@ Stating the lifetimes once, because they are easy to conflate:
 There is **no TTL on the published record**: `nskeyAdvertisementKey` sets only
 `isPublic = true`, so `public:__nskey.<ns>@<owner>` lives on the atServer until overwritten.
 The only record-level ttl in the design is on `_nskeylock`, a different key.
+⚠️ **AMENDED 2026-09-30: no longer the only one.** `_rootlock@<atSign>` carries
+15 seconds since
+[ruling 124](#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28),
+and the substrate's envelopes carry `envelopeTtl`, 7 days.
 
 **The accepted exposure.** A level probed and found empty stays empty to that sender for one
 `missMemory` window, so a key minted at that level inside the window is missed and the write
@@ -1712,6 +1730,12 @@ a signalling flag on the parent advertisement, on the grounds that deeper keys a
 the window is short. Note this is strictly narrower than the exposure the rejected
 remember-hits design carried, which had no bound at all for a namespace whose deeper level
 was never probed.
+
+⚠️ **AMENDED 2026-09-30 by
+[ruling 143.5](#1435-only-a-not-found-lets-the-resolver-walk-up):** only an
+authoritative not-found counts as "found empty". The implementation also recorded a
+failed fetch as a miss, extending this exposure to every network failure at a deeper
+level; any other failure now stops the walk instead.
 
 ### 19.5 The wire
 
@@ -3469,8 +3493,8 @@ against it, and mint-once reuse.
   `signingAlgo:mldsa65` → on `approved`, persist into the SAME keyfile.
   The whole check → mint → submit → persist span is serialised per keyfile by
   its own advisory lock (`<keyfile>.retrofit.lock`, staleness sized for a
-  network round trip — the keyfile lock's milliseconds-scale settings still
-  guard the flush inside). Mint-once is the check inside that lock: an
+  network round trip — the keyfile lock's own shorter settings still guard
+  the flush inside). Mint-once is the check inside that lock: an
   existing active ML-DSA signing material under any enrollment id is reused,
   never re-minted — [design.md's "if the keyfile already carries a PQ APKAM
   keypair use it"](../design.md), now code. Accepted crash window: dying between
@@ -6089,7 +6113,7 @@ distinct extension types in `nskey_key_ring.dart` (zero runtime cost;
 the swap is a compile error): `NskeyKeyRing.privateHalf` returns
 `NskeyDecapsulationKey`, `NskeyPrivateFiling.store` takes an `NskeySeed`,
 `read()` expands, the new `readSeed()` answers with the durable form,
-and the bulk reads (`readAll`/`readAllFor`) are typed as the seeds they
+and the bulk reads (`readAll`/`readAllWhere`) are typed as the seeds they
 return.
 
 **Retyping the flow immediately surfaced two real data-loss bugs**, both
@@ -9712,6 +9736,17 @@ holds it across **publish, file and retire together** — one critical section,
 not three steps that happen to run in order. A writer arriving mid-mint composes
 after the filing and finds nothing to change.
 
+⚠️ **AMENDED 2026-09-30, in the commit that did it: "every `_apsk` write" was
+not true until then.** `PqSigningChain`'s link writes (`publishLink`,
+`publishOwnRootLink`, and both halves of `publishPendingLink`) took no lock, and
+each re-sends the record value it read. A republish landing between that read
+and the link's put was put back to the old value, so the advertisement lost the
+keys just published; a unit test parking the link write on its read reproduced
+it for all four. No in-process caller reached it: the only writer that changes
+the value is startup's `mintInUseSigningKeys`, which runs before both link
+steps. Each link write now holds the lock from its read of the record through
+its put.
+
 **It says only what it can keep.** 102 rejected serialising because "both
 triggers are publicly exported, so it would read as a guarantee it could not
 give". That objection is about a *cross-process* guarantee and it still stands:
@@ -10412,6 +10447,10 @@ well as to the mint election. Two things follow, both built:
 - **`mintLockTtl` is injectable** — `PublishedNskeyKeyRing.lockTtl` and
   `PqSigningRoot.lockTtl`, defaulting to the constant. Without it every live
   rotation test would wait two minutes between its mint and its rotation.
+  ⚠️ **AMENDED 2026-09-30:** since
+  [ruling 124](#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28),
+  `PqSigningRoot.lockTtl` defaults to `signingRootMintLockTtl`, 15 seconds; only
+  the nskey ring defaults to `mintLockTtl`.
 - **`revokeEnrollmentAndRotate`'s partial state is documented rather than
   retried.** It revokes first, so a rotation refused by the cooldown leaves the
   enrollment cut off from the atServer while still holding the live generation.
@@ -13977,6 +14016,16 @@ references are the four publish call sites and the composer. So the record
 outlives revocation, supersession and the expired-key sweep, which takes only
 keys carrying an expiry.
 
+⚠️ **AMENDED 2026-09-30 by
+[ruling 144.3](#1443-every-move-of-_apsk-stands-and-verification-tells-the-locations-apart):**
+the measurement counted `_apsk` references and missed the generic mover. The
+atServer's `movePerEnrollmentDataFor` moves every per-enrollment key, `_apsk`
+included, to `.r.__e` on revocation and on supersession of a non-root
+predecessor, and to `.d.__e` on deletion and at the expiry sweep. Only a fully
+privileged predecessor keeps its record at `.a.__e`. A superseded non-root
+enrollment's signatures therefore stop verifying, and 144.3 keeps it that way,
+refusing with the reason.
+
 **Consequently the authentication key is never retained, and the reason is the
 replacement, not a claim about birth.** The composer's *"an enrollment that
 holds signing keys held them from birth"* is false in general — the ledger says
@@ -14341,3 +14390,621 @@ carries an empty top-level keys array"* compares the written array as raw JSON,
 and its control, *"a document holding no typed material carries neither version
 nor keys"*, stays green when the writer is removed and goes red when the array
 is stamped onto the legacy shape.
+
+## 142. Content keys: recipients cache shared conveyances, siblings open every key, and a key goes once nothing cites it and its grace is over (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
+work-through (the P0 row *PQ key writing and fetching* in
+[`implementation-plan.md`](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+items 1–6, which record the behaviour each part replaces). 142.1 is built in
+`ckConveyanceKey` and `SymmetricAesGcmProvider._resolveFromConveyance`, and
+proven live: the recipient's atServer caches the conveyance with its
+`appMetadata` and the recipient opens the copy. All of 142 is built on
+`gkc-pq-key-caching` and proven live; 142.2 and 142.3 were amended while they
+were built, and 142.3 again on 2026-10-04 to add a grace.
+
+### 142.1 A shared conveyance is cached at its recipient
+
+**Decision.** A conveyance for a share, `@bob:<ckKid>.__ck.<ckNs>@alice`, carries
+`ttr -1` and `ccd: true`. The sender's atServer passes the stored `ttr` on in
+its automatic notification, so the recipient's atServer caches
+`cached:@bob:<ckKid>.__ck.<ckNs>@alice` and serves it from cache, and the copy
+syncs to the recipient's clients. Deleting the conveyance cascades to the cached
+copy, whose synced DELETE evicts the key through `ContentKeyEviction`.
+`_resolveFromConveyance` reads the cached copy.
+
+**Why.** With no `ttr`, the recipient's atServer never caches the conveyance.
+A restarted recipient then cannot decrypt anything shared with it — a value its
+own atServer cached with `ttr -1` included — while the sender's atServer is
+unreachable, and a deletion never reaches a recipient's memory by sync. `-1`
+because a conveyance never changes after its one write. `design.md` already
+described this ("synced to Alice as cached replicas", eviction "via sync").
+
+### 142.2 Each enrollment keeps its own key, and its siblings can open it
+
+**Decision.** gkc: "I don't want isolation; siblings who have namespace access
+should be able to see what was written by their siblings."
+
+- A writing enrollment keeps its own current content key per destination. Its
+  pointer lives on the atServer in the enrollment's own reserved namespace,
+  `<enrollmentId>.a.__e`: read-write for that enrollment only, refused to its
+  siblings, and moved aside when it is revoked. The pointer holds only ids
+  (`ckKid` and the generation), so it is written unencrypted and remote-first,
+  and an ephemeral local store no longer forces a fresh key.
+- Every content key is also conveyed to the sender's own namespace key — the
+  **sibling copy** — so the sender's other enrollments with that namespace, and
+  the sender itself after a restart, can open it. Resuming is reading the
+  pointer and opening the sibling copy.
+- A sender holding no namespace key of its own where it is sharing mints one on
+  demand, at the level where the recipient's key was found, never at the value's
+  own namespace, which for an AtCollection sub-collection carries an item id. An
+  application that turned `seedNamespaceKeys` off gets no mint: the share goes
+  without the sibling copy, and a warning names why.
+- Deleting a content key deletes both of its conveyances.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** the sibling copy is
+`<ckKid>.__ck.<ckNs>@<sender>`, a self record in the recipient's content-key
+scope, so a reader finds it from the shared value alone. It is sealed to the
+sender's key covering `ckNs`, the key the sender's own data there uses, which
+can sit above the level the recipient's key was found at; its `appMetadata`
+names the recipient as `destination` and the scope as `ckNs`, beside the level
+it was sealed at as `ns`. "Holding no namespace key where it is sharing" means
+holding none covering `ckNs`, so a sender with a key only at a higher level
+mints nothing.
+
+A consequence, set out before the ruling: a forward-secrecy rotation
+(`rotateContentKey`) replaces only the calling enrollment's key for that
+destination, and each sibling's key goes on to its own rotation policy.
+
+**Why.** A shared conveyance sealed only to the recipient leaves the sender
+unable to re-read its own outbound shares after a restart, and its siblings
+never able to; every restart that writes to a peer cuts another key and leaves
+another conveyance. Legacy encryption keeps `shared_key.<bob>@alice` for the
+sender, so the sibling copy restores parity. It crosses no new trust boundary:
+every enrollment holding the sender's namespace key already reads the sender's
+self data there, and separation between recipients — the reason for
+[ruling 14](#14-content-keys-are-scoped-per-recipient-2026-08-02) — is unchanged.
+
+**What it reverses and settles.** It reverses the reasoning under UC-A4.1's
+"This `put` writes no self-copy", that alice must not hold the key she shares
+with bob, though `put` still writes no copy of the value; and
+`nskey_cross_atsign_test`'s assertion that alice cannot open the conveyance she
+wrote. It settles *content keys per scope* as intended behaviour
+(one key per writing enrollment per destination, readable by every sibling),
+takes the pointer off the nskey provider's path, and settles *a wildcard
+enrolment seeds nothing* for every namespace a client shares into.
+
+### 142.3 A superseded key goes once no record cites it and its grace is over
+
+**Decision.** A superseded content key's conveyances are deleted once no record
+on the sender's atServer cites it. Only the enrollment that cut the key deletes
+it, from a list of its superseded keys kept beside its pointer, at each start
+and after each rotation. The check reads local storage, and runs only when sync
+is on, caught up, and not narrowed by an application's `syncRegex`; otherwise
+it waits for a later start.
+
+**Why.** Every record citing a key was written by the enrollment that cut it —
+siblings write under their own keys, and nothing writes under a superseded
+one — and sync carries `appMetadata`, `ckKid` included, into local storage, so
+a caught-up local store answers completely. Siblings cannot read each other's
+pointers, and a key's conveyance lands just before its first value, so any
+other enrollment checking would delete keys about to be cited.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** no list is kept. Every
+conveyance names the enrollment that cut its key, as `cutBy` in its
+`appMetadata`, and that enrollment derives what to delete: the conveyances it
+cut, less the keys its pointers or its memory name as current, less those a
+record in local storage cites. Deleting waits for any cut in progress in its
+process. Unlike a list, this also deletes a key whose cut stopped before its
+pointer was written. And a pass refused because sync had not caught up does not
+wait for a later start: it tries again at each later sync that catches up,
+until one pass runs, since live an active client is almost always mid-push at
+the moment a start or a replacement asks.
+
+⚠️ **AMENDED 2026-10-04 by gkc:** a superseded key is also kept for a grace,
+`supersededCkGrace` on `CryptoConfig`, 8 days by default: the longest an atServer
+keeps a notification. The grace counts from the cut of the key that replaced it,
+or from the key's own cut when nothing replaced it, as each conveyance records it
+in `cutAt` beside `cutBy`, so a record that reached a client by sync still counts
+from the cut. gkc: "This is not just a
+notifications issue, it's a general issue re overly eager CK cleanup." Until
+then a key went at the first pass after nothing cited it, which is in practice
+its rotation. A live probe on 2026-10-04 sent a notification to an offline
+recipient, rotated, and the recipient's open failed with
+`ContentKeyUnavailableException`; `content_key_grace_live_test.dart` now proves
+it opens.
+
+**Accepted cost.** A value that exists only on the recipient's side loses its
+key once the grace is over: a notification-delivered value, including a
+`cacheAtRecipient` copy, or a recipient's cached copy of a `ccd: false` record
+that outlives the sender's. This said "loses its key" with no grace until the
+2026-10-04 amendment.
+Keys cut by an enrollment later revoked or removed are never collected. The
+forward-secrecy lever — `deleteSuperseded`, UC-A5.1(a) — is unchanged; this
+replaces only the default of keeping every conveyance forever.
+
+### 142.4 The recipient's content-key cache stays as it is
+
+Once 142.1 and 142.3 are built it has an eviction path. An expiry would buy
+nothing, because the client re-derives any key from its synced conveyance and
+the namespace-key privates it keeps. The sender missing from the cache key is
+harmless: ids are content hashes, and a collision throws rather than
+overwriting. A client told its own enrollment is revoked (AT0027) reports it, as
+today; a wipe on revocation can be a feature of its own.
+
+### 142.5 Conveyances are kept from application code
+
+The notification service never hands a conveyance notification to an
+application subscriber, and conveyance records are hidden from application scans
+and key streams like other reserved records — which also stops
+`AtCollection._updateLocal` filing a plaintext content key. An application can
+opt in to scan and view them (gkc: "provide a way for an application to
+explicitly scan and view them if it wishes to"); the proposed switch is
+`showHiddenKeys`.
+
+## 143. Namespace-key advertisements: no ttr, a not-found is final, and a client's own advertisement refreshes (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the advertisement area of the key-caching
+work-through (items 7–13 of the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+which record the behaviour each part replaces). 143.1 is pinned: the command
+every mint, rotation and add sends is asserted raw in
+`test/nskey_minting_test.dart`. 143.2, 143.4 and 143.5 are built in
+`PublishedNskeyKeyRing.currentPublic` and `_getLocalThenRemote`: a not-found
+answers none and drops the cached generation, and any other failure serves the
+cached one within the grace or throws, which is what stops the resolver's walk.
+143.3 is built in the ring's cache, its `ownChanges` listener and `_mint`'s
+local filing; 143.6 in `_fileFetched` and `LocalSecondary.putIfAbsent`. 143.7
+is documented in the at_client README.
+
+### 143.1 The advertisement carries no ttr
+
+`public:__nskey.<ns>@<owner>` carries no `ttr`, so the sender's
+`advertisementTtl` cache (15 minutes) stays the only cache: a rotation is seen
+within 15 minutes, at about one round trip to the owner per client, destination
+and 15 minutes. A positive `ttr` would let the reader's atServer serve its copy
+to every client of that atSign, but would add up to one `ttr` of staleness on
+top, and rotation is the revocation lever. Revisit with a measurement if fetch
+volume becomes a problem.
+
+### 143.2 A not-found is final; any other failure gets the grace
+
+An authoritative not-found from the owner's atServer ends sealing to that peer
+at once: the record is gone, withdrawn or lost in an atServer reset, and sealing
+to it for another 15 minutes writes data nobody can open, or a compromised key
+can. Any other failure keeps serving the cached advertisement, for
+`advertisementStaleGrace` (15 minutes) — the blip the grace was written for — and
+past that is thrown to the caller.
+`CryptoRuntime.isReadyFor` throws for an unreachable atServer, as its dartdoc
+says, rather than answering false. A miss sends one `plookup`, not the two
+`_getLocalThenRemote` sends today. The worst-case exposure after a rotation is
+`advertisementTtl` plus `advertisementStaleGrace` — the "plus one content-key
+lifetime" of [ruling 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+was loose, because a sender re-cuts on the first write after it sees the new
+generation, and it omitted the grace.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** this read "only a transport
+failure keeps serving the cached advertisement", and 143.5 read "a transport
+failure is not a miss". at_server reports a peer's atServer being unreachable as
+`AT0011` (`Internal server exception`), because its outbound client's connection
+exceptions have no code of their own, and `AtClient.get` hands the ring every
+failure but a not-found as a plain `AtClientException` carrying only the message.
+Telling a transport failure apart would mean matching another program's error
+text, so every failure other than a not-found gets the grace instead; a genuine
+atServer error seals to the cached generation for at most the same 15 minutes.
+
+### 143.3 A client's own advertisement refreshes like a peer's, and on sync
+
+`_ownCurrent` no longer pins, for the life of the process, the generation this
+ring minted. The own advertisement goes through the same 15-minute cache as a
+peer's, re-read local-first, and is also cleared as soon as sync pulls a changed
+own advertisement, whichever comes first. The ring files what it mints locally
+(with `cameFromServer`, as `_fileFetched` does), so it never reads back an older
+copy. This closes the gap in which a running client kept sealing self data —
+and, after ruling 142, sibling copies — to a generation a sibling had rotated
+away from to cut off a revoked enrollment.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** a re-read of the client's
+own advertisement whose bytes are the ones it already verified is not verified
+again. Verifying fetches the signer's `_apsk` from the atServer, so re-verifying
+every 15 minutes would have stopped a client writing its own data once it had
+been offline that long, where the pinned generation had let it carry on. A
+changed advertisement is verified as before, and a peer's always is. The cost:
+a signing enrollment revoked since the first check is not re-checked until the
+advertisement changes, which a revocation that rotates does.
+
+### 143.4 A peer's advertisement stays in memory
+
+No durable copy of a peer's advertisement: a restarted client needs the network
+before its first write to each peer, and `_getLocalThenRemote`'s "local first …
+would break offline writes" is corrected to say it covers the client's own
+atSign. gkc: "another item we need to address once #2117 has been implemented.
+(Intent in this case would be, I want to seal to $peer but I'm offline)" —
+[#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117) is the
+issue for intent-based client operations.
+
+### 143.5 Only a not-found lets the resolver walk up
+
+A not-found at a namespace level is a miss: the walk goes broader and
+`missMemory` remembers the miss for 15 minutes, which is the exposure
+[ruling 19.4](#194-cost-and-the-three-lifetimes) accepted. Any other failure
+is not a miss: it stops the walk, and the write uses that level's cached
+advertisement within its grace, or fails. Before this, every network failure at
+a deeper level sealed to the broader key — letting exactly the enrollments the
+deeper key was minted to exclude read the data — and hid the deeper level for 15
+minutes after the network recovered.
+
+### 143.6 The own-advertisement filing is explicit, and only if absent
+
+`_fileFetched` files from the fetched value's own metadata, not from the key
+object `GetResponseTransformer` happens to mutate, and never over a copy sync
+has landed: an atomic put-if-absent in the local keystore, added if the keystore
+lacks one. Otherwise a sync landing a newer generation between the local miss
+and the filing could be overwritten with the older one, and 143.3's local-first
+re-read would then seal to it.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** the put-if-absent is
+`LocalSecondary.putIfAbsent`, not a new keystore operation. The keystore is
+`at_persistence_secondary_server`'s `AtKeyValueStore`, published from the at_server
+repo, and its `create` upserts on SQLite, so adding one meant an at_server release
+before at_client could use it. Every write of this record — sync's pull, the
+filing, an application's put — goes through `LocalSecondary`, which now runs the
+writes to one record name one at a time, so the check and the write cannot be
+split by another of them.
+
+### 143.7 Minting needs at_server c3.16.2 or later
+
+Post-quantum minting needs an atServer carrying at_server `00c2f9a6` (c3.16.2 or
+later), which deletes an expired immutable record on the next write; this is
+documented rather than checked. An older atServer refuses a new create until its
+expiry sweep, up to about 10.5 minutes, instead of the lock's 2 minutes (a
+namespace key) or 15 seconds (the signing root). That is a delay, not a safety
+failure: mutual exclusion holds, and the delay ends on its own.
+
+## 144. The _apsk record: a fixed verifier cache, links cleared on republish, and refusals that say why (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
+work-through (items 14–17 of the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
+144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
+after a cached key fails, and one cache per AtClient. 144.2 is built in
+`PqSigningChain.republishedAppMetadata`, which `publishPublicSigningKey` sends.
+144.3 is built in `EnvelopeSigning.getApkamPublicKey` and the chain walk: a key
+found only at `.r.__e` or `.d.__e` is refused with a `WithdrawnSigningKeyException`
+naming why, and the walk reports `ChainVerdict.revoked` or `ChainVerdict.deleted`
+(gkc chose a verdict over a reason string, 2026-09-30); it needed no at_server
+change: a revoke moves `_apsk` to `.r.__e` and the atServer serves it to any
+reader, proven live against the published `vip` image by
+`apsk_server_side_test` (a peer atSign and a sibling enrollment both refused as
+revoked). 144.4 is at_server work and not built yet.
+
+### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
+
+An `_apsk` value a verifier fetched expires five minutes after the fetch,
+whatever its hits: `resetOnLookup` sliding goes. A failed verification evicts
+the entry and re-fetches once before failing, so a rotation is picked up at the
+first mismatch. One AtClient holds one such cache, instead of three
+uncoordinated ones (the secret-sharing instance, its enrollment directory and
+the advertisement verifier) plus a fresh signer per conveyance call. A revoked
+enrollment's signatures are then accepted for at most five minutes after the
+last fetch. Before this, the expiry was reset before each verification and a
+failure never evicted, while the envelope sweep retried every minute, so a stale
+entry was kept alive by its own failures — measured with shortened timings.
+
+### 144.2 A republish clears the links; a root holder re-anchors
+
+A republish of an enrollment's `_apsk` value removes the link fields from the
+record's `appMetadata` explicitly. The atServer otherwise keeps the stored
+`appMetadata` (`appMetadata ??= existing?.appMetadata`), so a link signed over
+the old value rode the new one and the chain read `broken` — "something claimed
+to and the claim does not hold" — where a routine key change should read
+`unsigned`, which is tolerated during the changeover. An enrollment holding the
+signing root re-anchors in the same step. A chain-linked enrollment stays
+unsigned until something re-conveys its link, which nothing does yet. The
+unit-test fake learns the atServer's field merge; it replaced metadata
+wholesale, which is what hid this.
+
+⚠️ **AMENDED 2026-09-30 by gkc, while it was built.** A link that still vouches
+for the value being published is kept, and only one over another value is
+removed: a republish restoring the value a link names would otherwise leave an
+enrollment nobody had stopped vouching for reading as `unsigned`. A root holder
+re-anchors by keeping an existing anchor — its client re-signs a root link the
+record carried when it holds the signing root, and adds none where there was
+none — so the republish needs no privilege check; first anchoring stays with
+the startup step. And "nothing re-conveys yet" was wrong: the fully privileged
+sweep (`sweepUnanchoredEnrollments`) conveys a root link to any approved
+enrollment without one, so once the stale link is cleared the next privileged
+start re-anchors the enrollment over its new value. Before, a stale root link
+made the sweep skip it for good.
+
+### 144.3 Every move of _apsk stands, and verification tells the locations apart
+
+Revocation, and supersession of a non-root predecessor at its successor's first
+authentication, move `_apsk` to `.r.__e`; deletion and the expiry sweep move it
+to `.d.__e`. Every move stands, and
+[ruling 22.2c](#222c-revocation-the-chain-inherits-what-the-atserver-already-does)
+with them. gkc: "Verification needs to be extended so it knows about, and
+understands the difference between, .a.__e and .r.__e and .d.__e" (he wrote
+`.e.__e` and confirmed he meant `.d.__e`; expired and deleted stay one
+location).
+
+- Verification looks in `.a.__e`, then `.r.__e` and `.d.__e`. A key found only
+  in `.r.__e` or `.d.__e` is **refused, with the reason** — revoked or
+  superseded, deleted or expired — instead of a bare lookup failure, and chain
+  verification reports such a link with that standing. The moved locations are
+  read to say why a key is refused, never to verify with it, which is the
+  rescue 22.2c rejected.
+- A superseded non-root enrollment's signatures, chain links it signed
+  included, therefore stop verifying. That amends
+  [ruling 134](#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)
+  and UC-G2.7, which said it "keeps its own `_apsk` record — published with no
+  TTL and deleted by nothing — so what its authentication key signed goes on
+  verifying".
+
+### 144.4 The atServer moves an expired enrollment's data on first sight
+
+An at_server change: when a lookup of a per-enrollment key finds its enrollment
+expired, the atServer moves that enrollment's data to `.d.__e` then, as the
+lookup handlers' comment — the fetch "ensures that expired enrollment keys are in
+the right place" — already claims; the expiry sweep stays as the backstop. This
+closes the window, 10 seconds to about 10.5 minutes, in which an expired
+enrollment's `_apsk` was still accepted at `.a.__e`.
+
+## 145. A reader's atServer caches no post-quantum key records, and the client bypasses its cache for them (2026-09-30)
+
+**Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
+(the P0 row's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
+The client half is built: `LookUpBuilderManager.get` sets `bypassCache` on every
+lookup of either record, pinned in `test/verb_builder_test.dart`. The atServer
+half lands in at_server.
+
+**The atServer (at_server).** A reader's atServer writes no `cached:public:`
+copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at
+every lookup — "for backwards compatibility, we will temporarily cache other
+public data with a ttl of 24 hours" — committed it and synced it to the reader's
+clients, yet never served it, because a lookup serves a cached copy only with
+`ttr -1` or before its `refreshAt`, and nothing on the client reads those
+records by their cached name. The 24-hour copy stays for other public data with
+no `ttr`, which an application may read by asking for the `cached:public:` key
+explicitly. Three defects are fixed with it:
+
+- a lookup miss commits a DELETE of the cached name only when a cached copy
+  existed, rather than every time;
+- a cache refresh that finds a changed value keeps the copy's ttl, rather than
+  re-putting it with none, which left it expiring only when the next lookup
+  re-stamped it;
+- `runRefreshJobHour` is honoured when set; the random start hour, which spreads
+  the refresh load across atServers, stays the default.
+
+**The client, in the interim (gkc).** The client sets `bypassCache` on every
+`_apsk` and `__nskey` fetch. That does not stop the copies being written: a
+bypassed lookup still calls `remoteLookUp(..., maintainCache: true)`. What it
+buys is freshness — if any other writer ever gives such a record a `ttr`, a
+reader still fetches from the owner rather than being served a stale copy, which
+guards [ruling 143.1](#1431-the-advertisement-carries-no-ttr) against owners
+that do not follow it.
+
+## 146. Keys an app publishes below its grants are its own, and ensureReachable reports holding them (2026-10-04)
+
+**Decided by gkc on 2026-10-04**, working out how NoPorts can tell a
+post-quantum-capable daemon in a fleet where some daemons are not. What NoPorts
+owes is the P3 row *NoPorts: a device-level nskey as the PQ-capable signal* in
+the plan's [TODO](../implementation-plan.md#todo).
+
+**What a client seeds is unchanged.** It seeds every namespace its enrollment
+grants, and its `preference.namespace` only on the atSign's own credential or
+under a `*` grant (`authorisedNamespacesOf`). Two widenings were proposed and
+withdrawn the same day:
+
+- seeding the preference namespace whenever a grant covers it — NoPorts clients
+  set `<device>.sshnp` as theirs, so each would advertise a key for every device
+  it connects to;
+- a start-up pull covering every key published below a grant — one request goes
+  to every enrollment holding the namespace, so a daemon joining N others on one
+  atSign would send about N² (estimated from the code, not measured).
+
+**A key published below a grant is the app's.** A NoPorts daemon publishes
+`<device>.sshnp` with `ensureReachable` while granted only `sshnp`. The SDK
+does not fetch that key's private for an enrollment at start, nor replace it
+after a revocation: both run over the seeded namespaces only. Three routes do
+reach it: the push at its mint and the push at each later approval, both in
+[ruling 147](#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04),
+and a decryption that misses an own key's private asking the other enrollments
+for it. None reaches a client on the atSign's own credential, which is not an
+enrollment and cannot list them.
+
+**`ensureReachable` says whether this client holds the private.**
+`AtReachabilityResult.holdsPrivate` is checked on both reachable outcomes,
+after a mint too, since a mint adopts a key a sibling enrollment published in
+its window. It is true only when this client holds the private of every key the
+advertisement offers, since a peer seals under its own algorithm list. The check
+asks no other enrollment for anything, and a failure to make it reports false
+without changing the outcome. Pinned in `test/nskey_self_heal_test.dart` and
+`tests/at_functional_test/test/ensure_reachable_live_test.dart`.
+
+## 147. An nskey reaches every enrollment with access to its namespace, when it is minted and when that enrollment is approved (2026-10-04)
+
+**Decided by gkc on 2026-10-04**, as two points that "can't be missed".
+
+**At the mint.** An enrollment that mints and advertises an nskey conveys its
+private to every other enrollment with access to the namespace. Every client
+path that publishes a new key does so: the first mint and an added algorithm
+through `NskeySeeding._convey`, and a rotation through
+`NskeyRotation.rotateNamespaceKey`, each by `pushSecretToNamespaceMembers` to
+whatever `enroll:listns` returns. The atServer answers that with every approved
+enrollment whose grant covers the namespace — the namespace itself, one it is
+below, or `*` — in p3.16.5, c3.16.6 and trunk. Two are not reached: an
+enrollment with no key package in an algorithm both sides support, and every
+enrollment when the minter is on the atSign's own credential, since
+`enroll:listns` requires APKAM. A push that fails is logged, and the
+enrollment it missed asks for the private itself: at its next start for a
+namespace it seeds, otherwise at the first read that misses it.
+
+**At approval.** An approver conveys every nskey private it holds in a
+namespace the new enrollment's grant covers and it may write itself, by the same
+rule (`SecretStore.namespaceAuthorizes`): `*` covers every namespace, and a
+grant covers the namespaces below it, read access included. Two routes carry them.
+`shareAllSecretsWith` sends what the approver's in-memory secret store holds,
+which the client's startup fills from its keyfile, and already applied this
+rule. `conveyHeldPrivatesTo` reads the keyfile itself, so an approver whose
+startup has not filled the store still conveys; it looked up the grant's own
+names instead, so it missed `*` and the namespaces below a grant, and its key-id
+prefix match returned a namespace the grant is only a prefix of, `app_1`
+matching `app_1.my_apps`. It now applies the same rule, reading the keyfile with
+`NskeyPrivateFiling.readAllWhere`, which raises on an unreadable keyfile, so the
+approval warns rather than conveying nothing in silence. An enrollment granted
+only `*` was refused before either route ran;
+[ruling 148](#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05)
+fixes that.
+
+Review then found that both routes tried every covered namespace, including one
+the approver was granted only `r` on, where it holds the private but the
+atServer refuses its envelope. The first refusal stopped the route, and from
+`shareAllSecretsWith` it failed an approval that had already landed. Both
+routes now skip a namespace the approver's own grants do not let it write, with
+a warning naming it, and log and go on past a write the atServer refuses
+anyway. The new enrollment asks for a skipped private itself: at its next start
+for a namespace it seeds, otherwise at the first read that misses it. Pinned in
+the late joiner group of `test/nskey_self_heal_test.dart` and the
+"a namespace the approver may not write" group of
+`test/enrollment_conveyance_guard_test.dart`, and live in
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, where an
+approver granted `r` on a namespace it holds a key for approves a `*`
+enrollment. With the secret-store route's skip and catch removed, that approval
+fails with the atServer's `UnAuthorized client in request` refusal of the
+envelope, so the refusal is observed, not inferred; with the skip alone
+removed, the catch logs the same refusal and the approval completes. Cited by
+UC-A5.1(b).
+
+Which grant decides whether the approver may write is the atServer's. It reads a
+key's namespace as its last dot segment and resolves a grant on that segment
+before any narrower one, so an approver granted `r` on `app.wavi` and `rw` on
+`wavi` may write in `app.wavi`, and one granted the reverse may not, in whatever
+order the grants are listed. `accessIn` took the first grant listed instead, so
+in the first case both routes skipped a key the atServer would have accepted, and
+in the second both tried a write it refused. It now resolves the last segment
+first. Pinned in `test/authorised_namespaces_test.dart`, and live in
+`nskey_conveyance_reach_live_test.dart`, where an approver holding each pair of
+grants, the narrower one listed first, conveys the first key and not the second.
+On the previous `accessIn` that live test fails on the first key. Cited by
+UC-A5.1(b).
+
+**Both, live, for a `*` enrollment.**
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart` proves
+each half against an atServer: an enrollment granted only `*` is conveyed a key
+another enrollment mints, at the namespace and below it, and is conveyed at its
+approval every key its approver holds; an enrollment granted read on the
+namespace above is conveyed the same, and one granted another namespace
+neither. UC-A3.2 and UC-A5.1(b) cite it. At approval either route alone
+delivers these keys, since the approver minted them in the same process: the
+test went red only with both routes cut, so the keyfile route on its own is
+pinned by the unit tests.
+
+## 148. An approver's envelopes go in a namespace the enrollment may read and the approver may write (2026-10-05)
+
+**Decided by gkc on 2026-10-05**, after the live test of
+[ruling 147](#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04)
+found that an enrollment granted only `*` could not be approved at all.
+
+The envelopes an approver addresses to a new enrollment (its symmetric key, its
+approval-chain link, the signing-root private) are keys in an ordinary
+namespace, so the atServer's namespace gating decides who may write them and who
+may fetch them. The approver put them in the first namespace the new grant named
+other than `*` and `__manage`, and refused when there was none, so a grant of
+`*` alone was refused at approval even though a `*` enrollment may read every
+ordinary namespace.
+
+**The namespace is the first that the new enrollment may read and the approver
+may write**, tried in this order: the namespaces the new grant names; the
+approver's `preference.namespace`; the namespaces the approver was granted. The
+approval is refused, before it is spent, only when none qualifies. The atSign's
+own credential may write anywhere; an approver whose own record the enrollment
+list does not carry is checked for the enrollee's side only, and the atServer's
+refusal of the write reports the rest. Applications are taken to set a
+`preference.namespace`; auth_cli sets `at_activate` for every command, so it
+works as a `*` approver, and an auth_cli approver granted only `my_app` falls
+through to `my_app`.
+
+Pinned in the "the namespace the envelopes go in" group of
+`test/enrollment_conveyance_guard_test.dart`, live in
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, and
+cited by UC-A2.1.
+
+## 149. How a shared value was protected is read from its metadata, and a reply goes in kind (2026-10-05)
+
+**Decided by gkc on 2026-10-05**, while working out how NoPorts runs on a fleet
+of old and new daemons: a program that receives a legacy request has to know it
+did, and answer in legacy. gkc widened it past notifications: "a client might
+like to be able to scan their set of data shared with them by others, and see
+which were shared as legacy / pq / which pq suite".
+
+- `ReceivedScheme` names the provider a value was sealed under, whether that
+  provider is post-quantum, and, for a post-quantum value, the KEM
+  (`keyAlgorithm`) and sealing suite its content key was conveyed under.
+- `atClient.schemeOf(key)`, from the `ReceivedSchemes` extension, reads it from
+  metadata and never from the value. It uses the key's own `appMetadata` when
+  the key carries it, as a received notification's does; otherwise the
+  record's, from local storage first and then with `lookup:meta` on the
+  sharer's atServer. The KEM is read the same way off the record that conveyed
+  the content key, the recipient's cached copy first. When that record cannot
+  be read, the KEM and suite are null rather than guessed.
+- `AtNotification.receivedUnder` is the provider a notification's value was
+  read under: `legacy` when the sender stamped none, the same rule decryption
+  uses to pick a provider.
+- Answering in kind is passing that as the reply's `cryptoProviderId`, which
+  `NotificationService.send` and `NotificationParams.forUpdate` already took
+  and `AtClientBindings.notify` now takes too. A class that overrides
+  `AtClientBindings.notify` must add the parameter; NoPorts' two test stubs
+  were the only overrides in the repositories checked.
+- `AtRpc` does it for its callers: `sendRequest` and `AtRpcClient.call` take a
+  `cryptoProviderId`, and a response goes out under the request's
+  `receivedUnder`. Where the server cannot write that scheme (legacy under a
+  posture that refuses it, or a provider it has not configured) the response
+  goes out under the server's default instead, so the answer is not lost.
+
+Pinned in `test/received_scheme_test.dart`, `test/rpc/at_rpc_scheme_test.dart`
+and the "send answers a notification in the scheme it arrived in" test of
+`test/notification_service_test.dart`, live in
+`tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
+UC-A4.1 and UC-A4.4.
+
+## 150. The startup seeds the namespace the client was built with (2026-10-05)
+
+**Decided by gkc on 2026-10-05.** NoPorts' `sshnp` builds its client in
+`sshnp`, then points the live preference at `<device>.sshnp` for its own
+records. The post-quantum startup runs unawaited and read the preference
+namespace only when it reached the seed, several round trips later, so a client
+on the atSign's own credential or a `*` grant would have published a key at
+`<device>.sshnp` for every device it reached. That was read from the code, not
+observed in a run.
+
+The startup seeds the `preference.namespace` the client had when its seeding
+was built, which for the startup is when the client was built. A namespace the
+application sets afterwards changes where its own records go and nothing about
+what the startup seeds; `ensureReachable(namespace)` stays the way to be
+reachable anywhere else. The key-package check and the signing-root requests
+still read the live preference.
+
+Pinned by "it seeds the namespace the client had when seeding was built" in
+`test/nskey_seeding_test.dart`.
+
+## 151. AtRpc request ids are random 53-bit integers (2026-10-05)
+
+**Decided by gkc on 2026-10-05**: "change the requestId that is generated by
+AtRpc clients so it is a sufficiently random integer to prevent potential
+collisions with concurrent requests fro this or other clients".
+
+`AtRpcReq.create` minted `reqId` from `microsecondsSinceEpoch`, so ids made
+back to back repeated: 10,000 made in a loop gave 1,116 distinct ids. A shared
+id crosses responses between the clients of one atSign, which all receive every
+response, and under `enableRequestMutex` the second request loses the
+responder's per-id lock and is dropped.
+
+The id is now 53 bits from `Random.secure()`. It is still an integer, so the
+wire does not change and no responder has to be updated first; it is never
+negative, so the request key's `\d+` matches it; and it is exact in any
+language's JSON reader. Whether ids become strings at a major release is not
+decided here.
+
+Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.

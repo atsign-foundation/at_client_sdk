@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show CryptoConfig, legacyCryptoProviderId;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -65,11 +67,14 @@ class AtRpcClient implements AtRpcCallbacks {
     }));
   }
 
-  /// Sends [payload] to the server atSign and completes with its response.
+  /// Sends [payload] to the server atSign and completes with its response,
+  /// sealing the request under [cryptoProviderId], or this client's default
+  /// when it is null.
   ///
   /// Throws [StoppedException] when the client is stopped, or stops before the
   /// response arrives.
-  Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> call(Map<String, dynamic> payload,
+      {String? cryptoProviderId}) async {
     if (rpc.atClient.isStopped) {
       throw StoppedException('the client for '
           '${rpc.atClient.getCurrentAtSign()} has stopped');
@@ -80,7 +85,10 @@ class AtRpcClient implements AtRpcCallbacks {
     completer.future.ignore();
     logger.info('Sending request to $serverAtsign : $request');
     try {
-      await rpc.sendRequest(toAtSign: serverAtsign, request: request);
+      await rpc.sendRequest(
+          toAtSign: serverAtsign,
+          request: request,
+          cryptoProviderId: cryptoProviderId);
     } catch (_) {
       completerMap.remove(request.reqId);
       rethrow;
@@ -350,9 +358,13 @@ class AtRpc {
   /// to [toAtSign]
   ///
   /// Waits for [ready] first when [isClient], so the response cannot arrive
-  /// before there is anything subscribed to receive it.
+  /// before there is anything subscribed to receive it. The request is sealed
+  /// under [cryptoProviderId], or this client's default when it is null; the
+  /// server answers in the same scheme.
   Future<void> sendRequest(
-      {required String toAtSign, required AtRpcReq request}) async {
+      {required String toAtSign,
+      required AtRpcReq request,
+      String? cryptoProviderId}) async {
     if (isClient) {
       await ready();
     }
@@ -364,7 +376,7 @@ class AtRpc {
       ..sharedBy = atClient.getCurrentAtSign()
       ..sharedWith = AtUtils.fixAtSign(toAtSign)
       ..namespace = baseNameSpace
-      ..metadata = _defaultMetaData;
+      ..metadata = _newMetaData();
 
     // Need to be able to receive responses from the atSigns we're sending requests to
     allowList.add(toAtSign);
@@ -381,7 +393,8 @@ class AtRpc {
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(requestRecordID,
                 value: requestJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -412,7 +425,7 @@ class AtRpc {
   // *** Everything below this point is not part of the public AtRpc API ***
   // ***********************************************************************
 
-  final Metadata _defaultMetaData = Metadata()
+  Metadata _newMetaData() => Metadata()
     ..isPublic = false
     ..isEncrypted = true
     // namespaceAware IS SET TO FALSE FOR A REASON:
@@ -627,9 +640,13 @@ class AtRpc {
   /// Sends a response. Note that this is marked as `@visibleForTesting` as it
   /// is only called by [handleRequestNotification] and is not intended to be
   /// used directly by [AtRpc] users.
+  ///
+  /// The response goes out in the scheme [notification] arrived in, when this
+  /// client can write with it, and under this client's default otherwise.
   @visibleForTesting
   Future<void> sendResponse(
       AtNotification notification, AtRpcReq request, AtRpcResp response) async {
+    final cryptoProviderId = _answerUnder(notification);
     bool sent = false;
     int delayMillis = 200;
     for (int attemptNumber = 1;
@@ -643,7 +660,7 @@ class AtRpc {
           ..sharedBy = atClient.getCurrentAtSign()
           ..sharedWith = notification.from
           ..namespace = baseNameSpace
-          ..metadata = _defaultMetaData;
+          ..metadata = _newMetaData();
 
         var responseJson = jsonEncode(response.toJson());
 
@@ -652,7 +669,8 @@ class AtRpc {
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
                 value: responseJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -674,6 +692,21 @@ class AtRpc {
         }
       }
     }
+  }
+
+  /// The provider [request] arrived under, or null when this client cannot
+  /// write with it: legacy under a posture that refuses legacy, or a provider
+  /// this client has not configured.
+  String? _answerUnder(AtNotification request) {
+    final scheme = request.receivedUnder;
+    if (scheme == legacyCryptoProviderId) {
+      return atClient.getPreferences()?.disallowLegacyEncryption == true
+          ? null
+          : scheme;
+    }
+    return CryptoConfig.forClient(atClient).lookup(scheme) == null
+        ? null
+        : scheme;
   }
 }
 

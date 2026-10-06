@@ -23,6 +23,11 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
+import 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    show collectUnusedOnceCaughtUp;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show parseCkConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -32,7 +37,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -210,13 +214,19 @@ class AtClientImpl implements AtClient {
       // enrollment published a moment ago is absent locally until sync catches
       // up, and reading that absence as a cold start publishes a second key
       // over the first.
-      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
-          null) {
-        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      final published =
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      if (published != null) {
+        return AtReachabilityResult(AtReachability.alreadyReachable,
+            holdsPrivate:
+                await _holdsPrivates(bootstrap, atSign, namespace, published));
       }
 
       if (_preference?.seedNamespaceKeys != true) {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
+      }
+      if (_atKeysIo == null) {
+        return const AtReachabilityResult(AtReachability.noKeySource);
       }
 
       // NOTE: safe here only because `MintLock` holds an in-flight guard for
@@ -225,7 +235,10 @@ class AtClientImpl implements AtClient {
       // both see their own id, and both mint.
       await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
-      return const AtReachabilityResult(AtReachability.published);
+      // NOTE: checked rather than assumed — the mint adopts, rather than
+      // replaces, a key a sibling enrollment published after the read above.
+      return AtReachabilityResult(AtReachability.published,
+          holdsPrivate: await _holdsPrivates(bootstrap, atSign, namespace));
     } catch (e) {
       if (e is StoppedException) {
         _logger.warning('Stopped making $atSign reachable for $namespace: the '
@@ -234,6 +247,27 @@ class AtClientImpl implements AtClient {
         _logger.warning('Could not make $atSign reachable for $namespace: $e');
       }
       return AtReachabilityResult(AtReachability.failed, error: e);
+    }
+  }
+
+  /// Whether this client holds the privates [published] offers, re-reading the
+  /// advertisement when none is given.
+  ///
+  /// Answers false rather than throwing: the namespace is already reachable by
+  /// now, and a failure to tell must not report it as failed.
+  Future<bool> _holdsPrivates(
+      PqClientBootstrap bootstrap, String atSign, String namespace,
+      [NskeyAdvertisement? published]) async {
+    try {
+      final advertisement = published ??
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      return advertisement != null &&
+          await bootstrap.seeding
+              .holdsPrivatesFor(atSign, namespace, advertisement);
+    } catch (e) {
+      _logger.warning('Could not tell whether this client holds the private '
+          'for $atSign:$namespace, so it reports that it does not: $e');
+      return false;
     }
   }
 
@@ -335,6 +369,12 @@ class AtClientImpl implements AtClient {
     if (cache != null) {
       syncService.addProgressListener(ContentKeyEviction(cache));
     }
+    // NOTE: the manager is looked up once sync has caught up rather than now,
+    // since an application may name its crypto configuration after this runs.
+    unawaited(collectUnusedOnceCaughtUp(
+        syncService,
+        () => CryptoConfig.forClient(this).ckManager,
+        CryptoContext(atClient: this)));
     _pqBootstrap?.sharing.attachToServices();
   }
 
@@ -689,8 +729,9 @@ class AtClientImpl implements AtClient {
   /// bundle refuses a second open at a location already open, but on a cache
   /// hit nothing opens, so the path is dropped.
   ///
-  /// One mismatch is **refused** rather than ignored: a preference naming
-  /// different rollout axes — see [refuseChangedRolloutAxes]. A test or an app
+  /// Two mismatches are **refused** rather than ignored: a [storage] the cached
+  /// client does not hold, and a preference naming different rollout axes —
+  /// see [refuseChangedRolloutAxes]. A test or an app
   /// that needs a genuinely different client must not rely on passing
   /// different arguments here.
   ///
@@ -767,6 +808,14 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
+      if (storage != null && !storage.isHeldBy(atClientImpl!)) {
+        throw ArgumentError.value(
+            storage,
+            'storage',
+            'the client already built for $currentAtSign does not hold this '
+                'storage, and a built client never changes storage. Pass the '
+                'storage it holds, or none');
+      }
       refuseChangedRolloutAxes(
           running: atClientImpl!.getPreferences(),
           asked: preferences,
@@ -1796,11 +1845,16 @@ class AtClientImpl implements AtClient {
 
     var scanResult = await secondary.executeVerb(scanBuilder);
     scanResult = _formatResult(scanResult);
-    var result = [];
+    var result = <String>[];
     if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
-    return result as FutureOr<List<String>>;
+    // NOTE: a content key's conveyance is the SDK's own record, kept from an
+    // application like the other reserved ones unless it asks for them.
+    if (!showHiddenKeys) {
+      result.removeWhere((key) => parseCkConveyanceKey(key) != null);
+    }
+    return result;
   }
 
   @override
@@ -1944,7 +1998,6 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
 
-    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey
@@ -1979,13 +2032,16 @@ class AtClientImpl implements AtClient {
     // post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
           requestedProviderId: options.cryptoProviderId,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer: options.useRemoteAtServer,
+          useRemoteAtServer:
+              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
+                  RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.
@@ -1997,6 +2053,10 @@ class AtClientImpl implements AtClient {
             'falling back to legacy encryption for ${atKey.key}: ${e.message}');
         options = _copyOptionsForLegacyFallback(options);
       }
+    } else if (!atKey.metadata.isPublic &&
+        !options.shouldEncrypt &&
+        !options.alreadyEncrypted) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -2422,6 +2482,7 @@ class AtClientImpl implements AtClient {
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
+        ..alreadyEncrypted = options.alreadyEncrypted
         ..cryptoProviderId = legacyCryptoProviderId;
 
   /// Fails fast at construction if the configured default provider id can't be

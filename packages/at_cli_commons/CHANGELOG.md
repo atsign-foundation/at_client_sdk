@@ -1,24 +1,18 @@
-## 3.1.2
+## 3.1.2-rc2
 
-- feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
-  `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
-  preference's, which is the proxy factory when the root domain names a
-  proxy and TLS on TCP otherwise.
-- feat: `CLIBase` opens its client through at_client's `Atsign.open` and
-  waits for the connection to come online with a budget of
-  `maxConnectAttempts` tries, three seconds apart, instead of
-  re-authenticating in a loop. A refusal by the atServer is thrown as
-  `AtOpenRefusedException` at once; a connection still offline when the
-  budget is spent is `SecondaryServerConnectivityException`, as before.
-- build: require `at_onboarding_cli` ^2.0.0-rc1 and `at_auth` ^4.0.0-rc2.
-- chore: set `AtOnboardingPreference.storagePath` rather than the now-deprecated
-  `AtClientPreference.hiveStoragePath`. The store lands in the same place; the
-  bundle is built by at_onboarding_cli and closed by the client, so `CLIBase`
-  still has nothing to tear down.
-- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
-  nowhere, so the value had no effect. No behaviour changes.
-- build: require `at_onboarding_cli` ^1.17.0-rc1, the first version carrying
-  `AtOnboardingPreference.storagePath`.
+- build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
+  post-quantum sharing and keyfile lock fixes.
+
+## 3.1.2-rc1
+
+- feat: `CLIBase` waits up to `maxConnectAttempts` tries, 3 seconds apart, for
+  its client to come online, rather than re-authenticating in a loop. A device
+  that has never held the atSign online gets `AtOpenRefusedException`; any
+  other failure to connect still throws `SecondaryServerConnectivityException`.
+- feat: `lookUps` on `CLIBase` and `fromCommandLineArgs` chooses the
+  transport: by default the proxy when the root domain names one, else TLS.
+- build: requires `at_onboarding_cli` ^2.0.0-rc1, `at_client` ^3.15.0-rc1 and
+  `at_auth` ^4.0.0-rc2.
 
 ## 3.1.1
 

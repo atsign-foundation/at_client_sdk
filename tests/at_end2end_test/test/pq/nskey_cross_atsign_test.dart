@@ -95,8 +95,8 @@ void main() {
         symmetricAesGcmCryptoProviderId);
     expect(ckKid, isNotNull);
 
-    // Alice cannot open the conveyance she just wrote: it is sealed to BOB's
-    // nskey and she holds no private for it.
+    // Bob's conveyance is sealed to BOB's nskey, so alice cannot open it. Her
+    // own record of the key is its sibling copy, sealed to her namespace key.
     await expectLater(
       aliceSide.client.get(AtKey()
         ..key = '$ckKid.__ck'
@@ -104,9 +104,16 @@ void main() {
         ..sharedWith = bob
         ..sharedBy = alice),
       throwsA(isA<AtException>()),
-      reason: 'the sender must not be able to decapsulate a CK she sealed to '
-          'the recipient — only bob can',
+      reason: 'only bob holds the private his conveyance is sealed to',
     );
+    final siblingCopy = await aliceSide.client.get(AtKey()
+      ..key = '$ckKid.__ck'
+      ..namespace = namespace
+      ..sharedBy = alice);
+    expect(siblingCopy.value, isNotNull,
+        reason: 'the sibling copy opens with alice\'s own namespace key');
+    expect(siblingCopy.metadata?.appMetadata?.additional?['destination'], bob,
+        reason: 'and names the recipient whose scope its key is filed under');
 
     // Bob reads: the record is alice-owned, so a reader keying its ring by
     // sharedBy would look up ALICE's private and fail. It resolves because the
@@ -125,6 +132,181 @@ void main() {
     // alice discovered by plookup rather than being told.
     expect(received.metadata?.appMetadata?.additional?['ckKid'], ckKid);
   });
+
+  test('bob tells how alice shared each value with him, down to the KEM',
+      () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+
+    AtKey sharedWithBob(String name) => AtKey()
+      ..key = name
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    final sealedPq = uniqueKey('schemepq');
+    final sealedLegacy = uniqueKey('schemelegacy');
+    expect(await aliceSide.client.put(sharedWithBob(sealedPq), 'post-quantum'),
+        true);
+    expect(
+        await aliceSide.client.put(sharedWithBob(sealedLegacy), 'legacy',
+            putRequestOptions: PutRequestOptions()
+              ..cryptoProviderId = legacyCryptoProviderId),
+        true);
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+    await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
+
+    // NOTE: the keys as getAtKeys hands them over, so the scheme is read from
+    // the records themselves rather than from what this test wrote.
+    final listed = await bobSide.client.getAtKeys(sharedBy: alice);
+    AtKey listedAs(String name) =>
+        listed.singleWhere((k) => k.toString().contains(name));
+
+    final pq = await bobSide.client.schemeOf(listedAs(sealedPq));
+    expect(pq.providerId, symmetricAesGcmCryptoProviderId);
+    expect(pq.isPostQuantum, isTrue);
+    final advertised = await bobSide.ring.currentPublic(bob, namespace);
+    expect(advertised!.keys.map((k) => k.alg), contains(pq.keyAlgorithm),
+        reason: 'the KEM is read off the conveyance alice sealed to bob, so '
+            'it is one bob advertises; null here means it was never read');
+    expect(pq.suite, SecretSharingAlgos.suiteForKeyAlgo(pq.keyAlgorithm!));
+
+    final legacy = await bobSide.client.schemeOf(listedAs(sealedLegacy));
+    expect(legacy, const ReceivedScheme(providerId: legacyCryptoProviderId),
+        reason: 'the control: the same two atSigns and namespace, with the '
+            'sender choosing legacy, read back as legacy');
+  });
+
+  test(
+      'a restarted sender resumes the key it shares, and reads what it '
+      'shared, from the sibling copy', () async {
+    await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    expect(aliceSide.client.enrollmentId, isNotNull,
+        reason: 'the current-key pointer lives in the enrollment\'s own '
+            'namespace, so a client with no enrollment id keeps none');
+    AtKey toBob(String name) => AtKey()
+      ..key = name
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    String? ckKidOf(AtValue value) =>
+        value.metadata?.appMetadata?.additional?['ckKid'] as String?;
+
+    final first = uniqueKey('before');
+    expect(
+        await aliceSide.client.put(toBob(first), 'before the restart'), true);
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+    final cut = ckKidOf(await aliceSide.client.get(toBob(first)));
+    expect(cut, isNotNull);
+
+    // A restart, as far as content keys go: a fresh config holds none.
+    aliceSide.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: aliceSide.ring);
+    final second = uniqueKey('after');
+    expect(
+        await aliceSide.client.put(toBob(second), 'after the restart'), true);
+    expect(ckKidOf(await aliceSide.client.get(toBob(second))), cut,
+        reason: 'the pointer on the atServer names the key and the sibling '
+            'copy opens it, so the restart writes under the key it had rather '
+            'than cutting another');
+
+    aliceSide.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: aliceSide.ring);
+    expect(
+        (await aliceSide.client.get(toBob(first))).value, 'before the restart',
+        reason: 'and it reads what it shared before the restart, opening the '
+            'key from the sibling copy rather than from bob\'s conveyance');
+  });
+
+  test(
+      'a shared conveyance is cached on the recipient\'s atServer, and opens '
+      'from there', () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    final shared = AtKey()
+      ..key = uniqueKey('cached')
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    expect(await aliceSide.client.put(shared, 'kept for bob'), true);
+    final cites =
+        (await aliceSide.client.get(shared)).metadata?.appMetadata?.additional;
+    final cachedCopy = AtKey()
+      ..key = '${cites?['ckKid']}.__ck'
+      ..namespace = cites?['ckNs'] as String
+      ..sharedBy = alice
+      ..sharedWith = bob
+      ..metadata = (Metadata()..isCached = true);
+
+    // NOTE: the copy is made when alice's atServer notifies bob's, which does
+    // not finish with the put.
+    AtValue? copy;
+    for (var attempt = 0; attempt < 20 && copy == null; attempt++) {
+      try {
+        copy = await bobSide.client.get(cachedCopy,
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+      } on AtKeyNotFoundException {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    expect(copy?.value, isNotNull,
+        reason: 'the conveyance carries ttr -1, so alice\'s atServer passes it '
+            'on in its notification and bob\'s caches it; a copy that did not '
+            'open would have thrown rather than read as absent');
+    expect(copy!.metadata?.ttr, -1);
+    expect(copy.metadata?.appMetadata?.providerId, startsWith('at/nskey'),
+        reason: 'the copy keeps the appMetadata naming the provider that '
+            'opens it');
+  });
+
+  test('bob hears the value alice shares, and never its conveyance', () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    final heard = <String>[];
+    final subscription = bobSide.client.notificationService
+        .subscribe(regex: '.*')
+        .listen((n) => heard.add(n.key));
+    final keyName = uniqueKey('heard');
+    final shared = AtKey()
+      ..key = keyName
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    // A fresh cut, so this share has a conveyance of its own to notify: an
+    // earlier test in this file left alice a current key for bob.
+    final manager = (CryptoConfig.forClient(aliceSide.client)
+            .lookup(symmetricAesGcmCryptoProviderId) as SymmetricAesGcmProvider)
+        .ckManager!;
+    final cut = await manager.rotateContentKey(
+        CryptoContext(atClient: aliceSide.client), shared,
+        useRemoteAtServer: true);
+    expect(
+        await aliceSide.client.put(shared, 'for bob',
+            putRequestOptions: PutRequestOptions()..useRemoteAtServer = true),
+        true);
+    expect(
+        (await aliceSide.client.get(shared,
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .metadata
+            ?.appMetadata
+            ?.additional?['ckKid'],
+        cut.ckKid,
+        reason: 'the control: the value cites the key just conveyed to bob');
+    for (var attempt = 0;
+        attempt < 40 && !heard.any((k) => k.contains(keyName));
+        attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    await subscription.cancel();
+
+    expect(heard.where((k) => k.contains(keyName)), isNotEmpty,
+        reason: 'the control: bob\'s subscription hears the value');
+    expect(heard.where((k) => k.contains('.__ck.')), isEmpty,
+        reason: 'its conveyance was notified first, and is the SDK\'s own');
+  }, timeout: Timeout(const Duration(minutes: 2)));
 
   /// Notify, on the nskey path, across two atSigns.
   ///
@@ -266,31 +448,38 @@ void main() {
       () async {
     final bobSide = await nskeyClient(bob);
     final aliceSide = await nskeyClient(alice);
-
-    final before = AtKey()
-      ..key = uniqueKey('before')
-      ..namespace = namespace
+    // A namespace of its own, with a short mint lock: the lock a mint takes is
+    // what refuses a rotation, until it lapses.
+    final rotating = 'rotating${DateTime.now().microsecondsSinceEpoch}';
+    const mintLock = Duration(seconds: 5);
+    final bobRing = PublishedNskeyKeyRing(bobSide.client, lockTtl: mintLock);
+    final first = await bobRing.mintAndPublish(rotating);
+    AtKey toBob(String name) => AtKey()
+      ..key = name
+      ..namespace = rotating
       ..sharedWith = bob
       ..sharedBy = alice;
+
+    final before = toBob(uniqueKey('before'));
     expect(await aliceSide.client.put(before, 'first'), true);
     final firstCk =
         (await aliceSide.client.get(before)).metadata?.appMetadata?.additional;
 
     // Bob rotates. Alice is told nothing — the whole point.
-    final rotated = await bobSide.ring.mintAndPublish(namespace);
-    expect(rotated.nskeyKid, isNotNull);
+    await Future<void>.delayed(mintLock + const Duration(seconds: 1));
+    final rotated = (await bobRing.rotate(rotating)).rotated;
+    expect(rotated.nskeyKid, isNot(first.nskeyKid),
+        reason: 'the control: bob really is on a new generation');
 
-    // Alice writes again with a ring that has never seen the new generation.
-    final aliceAfter = await nskeyClient(alice);
-    final after = AtKey()
-      ..key = uniqueKey('after')
-      ..namespace = namespace
-      ..sharedWith = bob
-      ..sharedBy = alice;
-    expect(await aliceAfter.client.put(after, 'second'), true);
+    // Alice writes again with a ring that has never seen the new generation,
+    // and nothing in memory, so the pointer she left is what she resumes from.
+    aliceSide.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: PublishedNskeyKeyRing(aliceSide.client));
+    final after = toBob(uniqueKey('after'));
+    expect(await aliceSide.client.put(after, 'second'), true);
 
     final secondCk =
-        (await aliceAfter.client.get(after)).metadata?.appMetadata?.additional;
+        (await aliceSide.client.get(after)).metadata?.appMetadata?.additional;
     expect(secondCk?['ckKid'], isNot(firstCk?['ckKid']),
         reason: 'the advertised generation moved, so a fresh content key must '
             'be cut and conveyed — reusing the old one would keep handing the '
