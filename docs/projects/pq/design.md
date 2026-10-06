@@ -579,8 +579,12 @@ nskey private.
 
 - **Retention knob.** Default: **retain** a superseded `__ck` record (no ttl)
   while any record cites its CK → a late-joining APKAM keypair reads history
-  (legacy-like; no FS); once none does, the enrollment that cut it deletes it
-  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it)).
+  (legacy-like; no FS); once none does and its grace is over
+  (`supersededCkGrace`, 8 days by default from the cut of its successor, or of
+  the key itself when nothing replaced it, as each conveyance records in
+  `cutAt`, so a recipient can still open a notification sent under it), the
+  enrollment that cut it deletes it
+  ([ruling 142.3](detail/decisions.md#1423-a-superseded-key-goes-once-no-record-cites-it-and-its-grace-is-over)).
   **Delete** on rotation → coarse FS. An offline / never-resynced client that retains a cached
   CK is the residual: coarse FS is bounded by eviction *reachability*, not only by
   record deletion. Deletion discipline is the FS trusted-computing base.
@@ -1450,6 +1454,11 @@ CryptoProvider { id; encrypt(CryptoContext, AtKey, String) → String; decrypt(C
 - An unknown scheme throws `CryptoProviderNotRegistered`.
 - `PutRequestOptions.cryptoProviderId` overrides per operation (the per-destination
   gate the NoPorts walkthrough uses, [§5](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)).
+- A reader tells what a value was sealed under from its metadata alone:
+  `atClient.schemeOf(key)` gives the provider and, for a post-quantum value, the
+  KEM its content key was conveyed under; `AtNotification.receivedUnder` gives a
+  notification's provider, which a reply passes as its `cryptoProviderId` to
+  answer in kind ([ruling 149](detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05)).
 - **Cached-client reuse adopts the new `preference.crypto`**: a
   same-atSign re-set with a new provider config re-applies it — no
   `CryptoProviderNotRegistered` flake.

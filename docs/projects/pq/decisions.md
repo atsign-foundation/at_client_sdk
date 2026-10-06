@@ -199,10 +199,16 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
-| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-09-30 |
+| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-10-04 |
 | [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
 | [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-09-30 |
 | [145] | A reader's atServer caches no PQ key records; the client bypasses its cache                  | 2026-09-30 | LIVE               |
+| [146] | Keys an app publishes below its grants are its own; ensureReachable reports holding          | 2026-10-04 | LIVE               |
+| [147] | An nskey reaches every enrollment with access: at its mint, and at approval                  | 2026-10-04 | LIVE               |
+| [148] | An approver's envelopes go where the enrollment may read and the approver may write          | 2026-10-05 | LIVE               |
+| [149] | How a shared value was protected is read from metadata, and replies go in kind               | 2026-10-05 | LIVE               |
+| [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
+| [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -346,7 +352,13 @@ first, `enroll:updateMetadata`, and they still resolve.
 [139]: detail/decisions.md#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09
 [140]: detail/decisions.md#140-2161s-deferral-note-stays-as-written-2026-09-01
 [141]: detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14
-[142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-2026-09-30
+[142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30
 [143]: detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30
 [144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30
 [145]: detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30
+[146]: detail/decisions.md#146-keys-an-app-publishes-below-its-grants-are-its-own-and-ensurereachable-reports-holding-them-2026-10-04
+[147]: detail/decisions.md#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04
+[148]: detail/decisions.md#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05
+[149]: detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05
+[150]: detail/decisions.md#150-the-startup-seeds-the-namespace-the-client-was-built-with-2026-10-05
+[151]: detail/decisions.md#151-atrpc-request-ids-are-random-53-bit-integers-2026-10-05

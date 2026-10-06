@@ -127,11 +127,24 @@ class SyncServiceImpl implements SyncService {
   /// Returns the currentAtSign associated with the SyncService
   String get currentAtSign => _atClient.getCurrentAtSign()!;
 
-  /// A local AtKey to persist the last received server commitId
-  late final AtKey _lastReceivedServerCommitIdAtKey;
+  /// A local AtKey to persist the last received server commitId, built afresh
+  /// for every read and write: a read copies the stored metadata onto the key
+  /// it is given, and a write must not store it back.
+  AtKey get _lastReceivedServerCommitIdAtKey =>
+      AtKey.local('lastreceivedservercommitid', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
 
-  /// A local AtKey to store skipDeletesUntil value
-  late final AtKey _skipDeletesUntilCommitId;
+  /// A local AtKey to store skipDeletesUntil value, built afresh like
+  /// [_lastReceivedServerCommitIdAtKey].
+  AtKey get _skipDeletesUntilCommitId =>
+      AtKey.local('skipdeletesuntil', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
+
+  /// The namespace both keys above are kept under: the preference's when this
+  /// service was built, so a preference replaced later does not move them.
+  final String? _watermarkNamespace;
 
   /// How both sync watermarks above are written.
   ///
@@ -212,14 +225,11 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary,
       {required bool ownsRemoteSecondary})
-      : _ownsRemoteSecondary = ownsRemoteSecondary {
+      : _ownsRemoteSecondary = ownsRemoteSecondary,
+        _watermarkNamespace = _atClient.getPreferences()?.namespace {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
-    _lastReceivedServerCommitIdAtKey =
-        AtKey.local('lastreceivedservercommitid', currentAtSign).build();
-    _skipDeletesUntilCommitId =
-        AtKey.local('skipdeletesuntil', currentAtSign).build();
   }
 
   @override
@@ -1324,9 +1334,6 @@ class SyncServiceImpl implements SyncService {
     return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
   }
 
-  ///Verifies if local secondary are cloud secondary are in sync.
-  ///Returns true if local secondary and cloud secondary are in sync; else false.
-  ///Throws [AtClientException] if cloud secondary is not reachable
   @override
   Future<bool> isInSync() async {
     try {
@@ -1346,7 +1353,7 @@ class SyncServiceImpl implements SyncService {
       // — kept aligned so app-level `isInSync()` callers see the
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
-          lastReceivedServerCommitId == serverCommitId;
+          serverCommitId <= lastReceivedServerCommitId;
     } on StoppedException {
       rethrow;
     } on Exception catch (e) {
@@ -1379,7 +1386,7 @@ class SyncServiceImpl implements SyncService {
     // client-side push backlog lives in `LocalSecondary`'s sync
     // queue.
     return pendingPushCount == 0 &&
-        lastReceivedServerCommitId == serverCommitId;
+        serverCommitId <= lastReceivedServerCommitId;
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
@@ -1467,10 +1474,8 @@ class SyncServiceImpl implements SyncService {
   ///
   /// Push and pull bookkeeping are kept in separate fields, but
   /// the externally observed `localCommitId` (in `SyncProgress`
-  /// events) is their union — the test harnesses
-  /// (`FunctionalTestSyncService`, `E2ESyncService`) check
-  /// `localCommitId == serverCommitId` as their "in sync" signal,
-  /// which only holds with the union.
+  /// events) is their union: `waitUntilCaughtUp` compares it with the
+  /// server's commit id, which only holds with the union.
   ///
   /// Reads the cursor key inline rather than via
   /// [getLastReceivedServerCommitId] to keep the dependency one-way

@@ -55,7 +55,7 @@ void main() {
       //       cannot reach an answer keeps the cached generation for at most
       //       advertisementStaleGrace; a not-found drops it at once. A joiner
       //       approved after the rotation is pushed EVERY generation its
-      //       approver holds for the namespaces it was approved for, with
+      //       approver holds in every namespace its grant covers, with
       //       requestSecret as the backstop for one the push missed. Heavy,
       //       O(n)-per-enrollment, DISTINCT from CK rotation.
       provenIn(
@@ -138,8 +138,8 @@ void main() {
         'is pushed EVERY generation its approver holds, not just the live one',
         proves: 'the late-joiner clause, which said "the current generation '
             'only" until 2026-08-27 and which the approval path has never '
-            'done. `conveyHeldPrivatesTo` reads every held generation for the '
-            'approved namespaces and conveys each under its own nskeyKid, '
+            'done. `conveyHeldPrivatesTo` reads every held generation in the '
+            'namespaces the grant covers and conveys each under its own nskeyKid, '
             'which is what a retained conveyance names — so retained history '
             'opens without a pull round trip. Two DISTINCT generations are '
             'asserted distinct first, or "both were sent" is satisfied by '
@@ -149,6 +149,73 @@ void main() {
             'twice: conveying only the first generation reddens the count, '
             'and dropping the approval filter reddens the pair',
         clauses: ['pushed **every generation its approver holds**'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_self_heal_test.dart',
+        'a grant is conveyed the namespaces below it, read access included',
+        proves: 'an approver holding sshnp, dev1.sshnp and notsshnp conveys '
+            'the first two to a joiner granted sshnp:r, so a grant covers the '
+            'namespaces below it and read access is enough; notsshnp is the '
+            'control that the match is a dot-suffix. Its siblings show a * '
+            'grant is conveyed every namespace held, and a grant that is only '
+            'a prefix of a held namespace is conveyed nothing',
+        clauses: ['in every namespace its grant covers'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approval conveys every key its approver holds that the new '
+            'enrollment may read, all of them under *',
+        proves: 'the same rule against a live atServer, where approval is the '
+            'only route the keys have: an approver mints a namespace and one '
+            'below it, then approves an enrollment granted only `*`, one '
+            'granted read on the namespace above, and one granted another '
+            'namespace. The first two are conveyed both keys and the third '
+            'neither',
+        clauses: ['in every namespace its grant covers'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approver that may only read a namespace it holds a key for still '
+            'approves, and conveys the keys it may write',
+        proves: 'an approver granted `r` on a namespace, holding its key from '
+            'a mint, approves an enrollment granted only `*` against a live '
+            'atServer: the approval completes, the key it may write is '
+            'conveyed and the read-only one is not. With the secret-store '
+            'route\'s skip and catch removed, the same test fails with the '
+            'atServer\'s refusal of the envelope, thrown out of the approval',
+        clauses: ['the approval still completes'],
+      );
+      provenIn(
+        'packages/at_client/test/enrollment_conveyance_guard_test.dart',
+        'is tried by neither route when its grants say so',
+        proves: 'in an approval through the real conveyance, neither the '
+            'keyfile route nor the secret-store route tries a write in a '
+            'namespace the approver holds only `r` on, and the approval '
+            'completes. Its sibling leaves the grants unknown, so the write '
+            'is tried and refused, and the secrets after it still go. '
+            'Mutation-proven: dropping either route\'s grants, or the '
+            'per-secret catch, reddens them',
+        clauses: ['the approval still completes'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approver conveys what the atServer lets it write in a dotted '
+            'namespace, which its grant on the last segment decides',
+        proves: 'against a live atServer, an approver granted `r` on a dotted '
+            'namespace and `rw` on its last segment conveys that namespace\'s '
+            'key to a `*` enrollment, and one granted the reverse does not, '
+            'each narrower grant listed first. On the previous rule, which '
+            'took the first grant listed, the first of those keys is skipped '
+            'and the test fails',
+        clauses: ['its approver may write'],
+      );
+      provenIn(
+        'packages/at_client/test/authorised_namespaces_test.dart',
+        'a grant on the last segment wins over a narrower one',
+        proves: 'the approver resolves where it may write as the atServer '
+            'does, by the grant on a namespace\'s last segment first, '
+            'whatever order the grants are listed in',
+        clauses: ['its approver may write'],
       );
     });
 
@@ -268,7 +335,9 @@ void main() {
           'a rotation collects the key it superseded, which nothing cites',
           proves: 'and deletes both conveyances of one nothing cites, which '
               'only the enrollment that cut it may do',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
       provenIn(
           'tests/at_functional_test/test/content_key_rotation_live_test.dart',
           'a superseded key is kept while a record cites it, and collected '
@@ -277,7 +346,9 @@ void main() {
               'rotation while a record cites it, and once that record is '
               'deleted the collection removes its conveyance from the '
               'atServer and keeps the current one',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
       provenIn(
           'tests/at_functional_test/test/content_key_rotation_live_test.dart',
           'a key the policy replaces is collected at the next caught-up sync',
@@ -285,7 +356,35 @@ void main() {
               'says yes replaces the key, the replacement\'s collection is '
               'refused while its own writes push, and at the next sync that '
               'catches up the uncited key leaves the atServer',
-          clauses: ['deleted by the enrollment that cut it once none does']);
+          clauses: [
+            'deleted by the enrollment that cut it once neither holds'
+          ]);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'defaults to 8 days',
+          proves: 'the default grace as a raw-literal pin on the config an '
+              'application builds without naming one',
+          clauses: ['8 days by default']);
+      provenIn('packages/at_client/test/ck_collection_test.dart',
+          'counts from the cut of its successor, not its own',
+          proves: 'the grace runs from the replacement, not the key\'s age: a '
+              'key cut a month ago and replaced yesterday is kept, and goes '
+              'once its successor is 9 days old',
+          clauses: ['after the cut of the key that replaced it']);
+      provenIn(
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'by default, a superseded key nothing cites is kept for its grace',
+          proves: 'live, with the default config: an uncited superseded key '
+              'stays on the atServer, and the same key goes at once under no '
+              'grace, so it was the grace that kept it',
+          clauses: ['8 days by default']);
+      provenIn('tests/at_functional_test/test/content_key_grace_live_test.dart',
+          'a notification sent under a key that is then replaced still opens',
+          proves: 'why the grace exists, end to end: a recipient offline while '
+              'its key was replaced opens the notification afterwards, and '
+              'with no grace the same open fails',
+          clauses: [
+            'so a recipient can still open a notification sent under it'
+          ]);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'the period is SEVEN days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '

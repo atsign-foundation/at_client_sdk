@@ -574,6 +574,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
+  - An E2 granted only `*` is approved too. Every envelope addressed to E2 goes
+    in a namespace E2 may read and `alice1` may write: the namespaces E2 was
+    granted first, then `alice1`'s `preference.namespace`, then the namespaces
+    `alice1` was granted. When none qualifies, `alice1` refuses before
+    approving.
 
 ### 3.2 UC-A2.2 — Second host using the *same* keyfile (copied keyfile, E1)
 
@@ -787,6 +792,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:**
   - `public:__nskey.app_1.my_apps@alice` exists and resolves on a `plookup`, and
     `alice2` obtains the nskey private and reads.
+  - The push reaches every enrollment with at least `r` on the namespace, a `*`
+    enrollment and one granted a namespace above it included, and no enrollment
+    granted only another namespace.
   - **The namespace is not enumerable**: an unauthenticated `scan` of `@alice`, with
     and without `showhidden`, returns no `public:__nskey.…` key. A guaranteed protocol
     property, covered here as a regression guard.
@@ -933,6 +941,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
     enrollment cannot fetch the ciphertext (server-gated) nor decrypt.
+  - Bob can tell how each value was shared with him without decrypting it:
+    the provider it names, whether that is post-quantum, and the KEM and suite
+    its CK was conveyed under. A value alice wrote legacy reads as legacy.
 
 ### 5.2 UC-A4.2 — alice → bob where bob has no namespace key → the share fails
 
@@ -989,6 +1000,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Offline-then-online bob still decrypts the queued notification (key held, or
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
+  - Bob can answer in the scheme the notification arrived in: the notification
+    names the provider its value was read under, `legacy` when the sender
+    stamped none, and a reply he sends under that provider goes out in it.
 
 ### 5.5 UC-A4.5 — A sender follows the recipient's advertised algorithm, not its own preference
 
@@ -1139,18 +1153,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   heavier, O(n)-per-enrollment revocation + post-compromise-security lever — **not
   cheap**, and **distinct** from CK rotation.
 - **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed
-  **every generation its approver holds** for the namespaces it was approved for, not
-  only the live one — so retained history opens immediately, with no pull round trip and
-  no dependence on a holder being online at that moment. `requestSecret` remains the
-  backstop for a joiner the push missed: on meeting a retained `__ck` naming an
-  `nskeyKid` it does not hold, it pulls that generation and opens it.
+  **every generation its approver holds**, not only the live one, in every namespace its
+  grant covers and its approver may write — `*` covers all of them, and a grant covers the
+  namespaces below it, read access included — so retained history opens immediately,
+  with no pull round trip and no dependence on a holder being online at that moment. An
+  approver granted only `r` on a namespace cannot write an envelope there, so it skips
+  that namespace and the approval still completes. `requestSecret` remains the backstop
+  for a joiner the push missed: on meeting a retained `__ck` naming an `nskeyKid` it
+  does not hold, it pulls that generation and opens it.
 
   ⚠️ **Forward secrecy for a namespace's past is the CK lever in *When (a)* above**,
   where deleting the old conveyance record is what makes old-CK-era
   data unreadable. Once that record is gone an old nskey private opens nothing, so
   withholding it from a joiner would cost a round trip and buy no secrecy;
-  `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and sends
-  every entry.
+  `conveyHeldPrivatesTo` reads every private `NskeyPrivateFiling` holds in a namespace
+  the grant covers and the approver may write, and sends every entry.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 
@@ -1329,9 +1346,12 @@ knows which is which. Design in
 - **Then, what a yes does:** a fresh content key is cut and conveyed, and the
   superseded key's conveyances are **kept while any record cites it** — which
   is what lets an enrollment that joins later read what was written before it
-  — and deleted by the enrollment that cut it once none does. Deleting a key
-  that records still cite is UC-A5.1's lever (a), which the SDK never pulls on
-  the application's behalf.
+  — and for **`supersededCkGrace`** after the cut of the key that replaced it,
+  or after its own cut when nothing replaced it, 8 days by default, so a
+  recipient can still open a notification sent under it; they are deleted by
+  the enrollment that cut it once neither holds. Deleting a key that records
+  still cite is UC-A5.1's lever (a), which the SDK never pulls on the
+  application's behalf.
 - **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
   week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
   than a day because each replacement adds a conveyance that is kept as long

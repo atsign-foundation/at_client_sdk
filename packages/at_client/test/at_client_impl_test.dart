@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/sqlite.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -477,6 +478,92 @@ void main() {
               e is AtClientException &&
               e.message ==
                   'Key length exceeds maximum permissible length of 248 characters')));
+    });
+  });
+
+  group('a reused AtKey put without encryption', () {
+    final remote = MockRemoteSecondary();
+    setUp(() async {
+      await _dropCachedClients('@alice');
+      registerFallbackValue(FakeLookupVerbBuilder());
+      when(() => remote.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:1'));
+    });
+    tearDown(() async {
+      await _dropCachedClients('@alice');
+    });
+
+    test('is written with none of the encryption an earlier put left on it',
+        () async {
+      final client = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: remote,
+        atKeysIo: await typedKeyfile('@alice'),
+      );
+      final atKey = (AtKey.shared('phone',
+              namespace: 'buzz', sharedBy: '@alice')
+            ..sharedWith('@bob'))
+          .build()
+        ..metadata.isEncrypted = true
+        ..metadata.ivNonce = 'ivFromAnEarlierPut'
+        ..metadata.appMetadata = AppMetadata(providerId: 'earlier-provider');
+
+      await client.put(atKey, 'plain',
+          putRequestOptions: PutRequestOptions()
+            ..shouldEncrypt = false
+            ..useRemoteAtServer = true);
+
+      final sent = verify(() => remote.executeVerb(captureAny())).captured;
+      final update = sent.whereType<UpdateVerbBuilder>().single;
+      expect(update.value, 'plain');
+      expect(update.atKey.metadata.isEncrypted, isFalse,
+          reason: 'a plaintext record marked encrypted is read back through '
+              'a decryption it never had');
+      expect(update.atKey.metadata.ivNonce, isNull);
+      expect(update.atKey.metadata.appMetadata, isNull);
+    });
+
+    test('keeps the metadata a value its caller encrypted was sealed under',
+        () async {
+      final client = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: remote,
+        atKeysIo: await typedKeyfile('@alice'),
+      );
+      final atKey =
+          (AtKey.shared('phone', namespace: 'buzz', sharedBy: '@alice')
+                ..sharedWith('@bob'))
+              .build()
+            ..metadata.isEncrypted = true
+            ..metadata.ivNonce = 'ivItWasSealedUnder'
+            ..metadata.appMetadata = AppMetadata(
+                providerId: 'sealing-provider',
+                additional: {'destination': '@bob'});
+
+      await client.put(atKey, 'sealed',
+          putRequestOptions: PutRequestOptions()
+            ..shouldEncrypt = false
+            ..alreadyEncrypted = true
+            ..useRemoteAtServer = true);
+
+      final sent = verify(() => remote.executeVerb(captureAny())).captured;
+      final metadata =
+          sent.whereType<UpdateVerbBuilder>().single.atKey.metadata;
+      expect(metadata.isEncrypted, isTrue,
+          reason: 'a reader decrypts only a value flagged encrypted');
+      expect(metadata.ivNonce, 'ivItWasSealedUnder');
+      expect(metadata.appMetadata?.providerId, 'sealing-provider',
+          reason: 'the provider id routes the decrypt, and the content key '
+              'sibling copy names its recipient in the same record');
+      expect(metadata.appMetadata?.additional, {'destination': '@bob'});
     });
   });
 

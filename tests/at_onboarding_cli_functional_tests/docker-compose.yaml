@@ -2,12 +2,11 @@
 # that needs a build the registry does not carry opts in with
 # VIRTUALENV_IMAGE=at_virtual_env:local. The post-quantum activation test needs
 # an atServer that verifies ML-DSA PKAM: at_server p3.16.5 or later.
-# A distinct project and container name, plus base-port templating, let this run
-# alongside the functional and e2e virtualenvs. Unset, the legacy ports stand.
+# A distinct project name, plus base-port templating, let this run alongside
+# the functional and e2e virtualenvs. Unset, the legacy ports stand.
 name: at_onboarding_cli_functional_tests
 services:
   virtualenv:
-    container_name: cli_virtualenv
     image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
     # The image's CMD ignores VIRTUALENV_BASE_PORT; entrypoint.sh does the shift.
     entrypoint: ["/atsign/entrypoint.sh"]

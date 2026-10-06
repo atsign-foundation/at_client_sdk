@@ -2990,9 +2990,15 @@ its own. None blocks anything.
 5. ~~**One bad peer aborts a whole secret broadcast.**~~ **FIXED 2026-08-13.**
    ⚠️ **The blast radius was two methods, not one:**
    `pushSecretToNamespaceMembers` has the identical unguarded loop and was
-   fixed with it. `shareAllSecretsWith` was deliberately left alone — it loops
-   *secrets* for one recipient, so a throw there means that recipient is
-   unreachable rather than the broadcast dying early. **Left unruled:**
+   fixed with it. `shareAllSecretsWith` was left alone at first, on the
+   reasoning that it loops *secrets* for one recipient, so a throw there meant
+   that recipient was unreachable rather than the broadcast dying early. That
+   missed a refusal scoped to one namespace: an approver granted only `r` on a
+   namespace has its envelope there refused while the rest go through. It now
+   skips a namespace its own grants do not let it write, and catches an
+   `Exception` per secret; an `Error`, such as a recipient advertising no key
+   this client seals to, still ends the loop, since every secret meets it.
+   **Left unruled:**
    `shareAllSecretsWithEnrollment` loops one enrollment's several packages and
    aborts on the first failure; that is the same shape for addresses rather
    than principals, and wants a decision rather than a copied guard.

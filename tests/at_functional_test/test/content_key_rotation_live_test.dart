@@ -58,9 +58,11 @@ void main() {
           privateKey: nskeyPair.privateKeyBytes);
 
     // NOTE: the era default writes with the legacy provider, so the value this
-    // scenario rotates needs the PQ providers named explicitly.
+    // scenario rotates needs the PQ providers named explicitly. No grace, so a
+    // collection deletes a superseded key the moment nothing cites it.
     preference = TestUtils.getPreference(atSign, posture: legacyPlusPqProviders)
-      ..crypto = CryptoConfig.nskey(keyRing: ring);
+      ..crypto =
+          CryptoConfig.nskey(keyRing: ring, supersededCkGrace: Duration.zero);
 
     atClientManager = await TestUtils.initAtClient(atSign, namespace,
         preference: preference, posture: legacyPlusPqProviders);
@@ -220,7 +222,8 @@ void main() {
     // configuration holding nothing in memory, so only the synced pointer
     // names the current key.
     await atClient.stop();
-    preference.crypto = CryptoConfig.nskey(keyRing: ring);
+    preference.crypto =
+        CryptoConfig.nskey(keyRing: ring, supersededCkGrace: Duration.zero);
     atClientManager = await TestUtils.initAtClient(atSign, namespace,
         preference: preference, posture: legacyPlusPqProviders);
     atClient = atClientManager.atClient;
@@ -243,12 +246,52 @@ void main() {
     }
   });
 
+  test('by default, a superseded key nothing cites is kept for its grace',
+      () async {
+    preference.crypto = CryptoConfig.nskey(keyRing: ring);
+    final value = AtKey()
+      ..key = 'treaty-grace'
+      ..namespace = namespace
+      ..sharedBy = atSign;
+    expect(await atClient.put(value, 'cites the key in use'), true);
+    final superseded = (await atClient.get(value))
+        .metadata
+        ?.appMetadata
+        ?.additional?['ckKid'] as String;
+    final context = CryptoContext(atClient: atClient);
+    await managerOf(atClient).rotateContentKey(context, value);
+    expect(await atClient.delete(value), true);
+    await sync('ck-grace-uncited');
+    await managerOf(atClient).collectUnused(context);
+    await sync('ck-grace-kept');
+    expect(await served(superseded), isTrue,
+        reason: 'superseded just now, so it is kept although nothing cites it');
+
+    // NOTE: the control: the same key, at the same moment, with no grace. It
+    // going proves a pass could run, so the key above was kept by its grace.
+    preference.crypto =
+        CryptoConfig.nskey(keyRing: ring, supersededCkGrace: Duration.zero);
+    var collected = false;
+    for (var attempt = 0; attempt < 20 && !collected; attempt++) {
+      await managerOf(atClient).collectUnused(context);
+      await sync('ck-grace-none-$attempt');
+      collected = !await served(superseded);
+      if (!collected) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    expect(collected, isTrue,
+        reason: 'with no grace, the same key nothing cites is collected');
+  });
+
   // NOTE: last in the file, since it leaves a policy that replaces the key at
   // every write.
   test('a key the policy replaces is collected at the next caught-up sync',
       () async {
-    preference.crypto =
-        CryptoConfig.nskey(keyRing: ring, ckRotationPolicy: (_) async => true);
+    preference.crypto = CryptoConfig.nskey(
+        keyRing: ring,
+        ckRotationPolicy: (_) async => true,
+        supersededCkGrace: Duration.zero);
     String ckKidOf(AtValue value) =>
         value.metadata!.appMetadata!.additional!['ckKid'] as String;
 

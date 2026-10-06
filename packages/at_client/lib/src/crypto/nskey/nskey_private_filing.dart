@@ -361,7 +361,6 @@ class NskeyPrivateFiling {
   /// enrollment lookup needs exist. What a holder can *answer* with is what it
   /// holds, not what it is authorised for.
   Future<Map<String, Map<String, NskeySeed>>> readAll() async {
-    const prefix = nskeyKeyfileIdPrefix;
     final AtKeys? keys;
     try {
       keys = await _readSourceOrNull('every held private');
@@ -373,7 +372,25 @@ class NskeyPrivateFiling {
       _logger.finer('No nskey privates held ($e)');
       return const {};
     }
-    if (keys == null) return const {};
+    return keys == null ? const {} : _heldIn(keys, (_) => true);
+  }
+
+  /// Every private this client holds in a namespace [include] accepts, grouped
+  /// as [readAll] groups them.
+  ///
+  /// All generations, not just the current one: data written under a
+  /// superseded key is still readable, and only its own private opens it. A
+  /// client given the current generation alone could read nothing written
+  /// before the last rotation.
+  Future<Map<String, Map<String, NskeySeed>>> readAllWhere(
+      bool Function(String namespace) include) async {
+    final keys = await _readSourceOrNull('every held private');
+    return keys == null ? const {} : _heldIn(keys, include);
+  }
+
+  static Map<String, Map<String, NskeySeed>> _heldIn(
+      AtKeys keys, bool Function(String namespace) include) {
+    const prefix = nskeyKeyfileIdPrefix;
     final held = <String, Map<String, NskeySeed>>{};
     for (final material in keys.atSignKeys) {
       if (material.role != CryptographicMaterialRole.privateDecapsulation ||
@@ -386,36 +403,12 @@ class NskeyPrivateFiling {
       final rest = material.keyId.substring(prefix.length);
       final cut = rest.lastIndexOf('.');
       if (cut <= 0) continue;
-      held.putIfAbsent(
-              rest.substring(0, cut), () => {})[rest.substring(cut + 1)] =
+      final namespace = rest.substring(0, cut);
+      if (!include(namespace)) continue;
+      held.putIfAbsent(namespace, () => {})[rest.substring(cut + 1)] =
           NskeySeed(Uint8List.fromList(material.bytes.bytes));
     }
     return held;
-  }
-
-  /// Every nskey private this client holds for [namespace], keyed by its
-  /// `nskeyKid`.
-  ///
-  /// All generations, not just the current one: data written under a
-  /// superseded key is still readable, and only its own private opens it. A
-  /// client given the current generation alone could read nothing written
-  /// before the last rotation.
-  Future<Map<String, NskeySeed>> readAllFor(String namespace) async {
-    final prefix = keyIdFor(namespace, '');
-    final keys = await _readSourceOrNull(namespace);
-    if (keys == null) return const {};
-    try {
-      return {
-        for (final material in keys.atSignKeys)
-          if (material.role == CryptographicMaterialRole.privateDecapsulation &&
-              material.keyId.startsWith(prefix))
-            material.keyId.substring(prefix.length):
-                NskeySeed(Uint8List.fromList(material.bytes.bytes))
-      };
-    } catch (e) {
-      _logger.finer('No nskey privates for $namespace ($e)');
-      return const {};
-    }
   }
 
   /// Stores an nskey **seed** this client either minted or was conveyed.

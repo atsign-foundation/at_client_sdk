@@ -141,7 +141,8 @@ jobs:
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
-        run: docker exec test-virtualenv-1 supervisorctl start pkamLoad
+        working-directory: tests/at_functional_test/test
+        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -156,7 +157,7 @@ jobs:
       # and the container does not outlive the job.
       - name: Capture atServer logs
         if: ${{ failure() }}
-        run: docker cp test-virtualenv-1:/apps/logs ve-logs
+        run: docker compose -f tests/at_functional_test/test/docker-compose.yaml cp virtualenv:/apps/logs ve-logs
 
       - name: Upload atServer logs
         if: ${{ failure() }}
@@ -222,7 +223,8 @@ jobs:
         run: dart run test/check_docker_readiness.dart
 
       - name: Run PKAM
-        run: docker exec test-virtualenv-1 supervisorctl start pkamLoad
+        working-directory: tests/at_functional_test/test
+        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -238,7 +240,7 @@ jobs:
       # answered a request, and the container does not outlive the job.
       - name: Capture atServer logs
         if: ${{ failure() }}
-        run: docker cp test-virtualenv-1:/apps/logs ve-logs
+        run: docker compose -f tests/at_functional_test/test/docker-compose.yaml cp virtualenv:/apps/logs ve-logs
 
       - name: Upload atServer logs
         if: ${{ failure() }}
@@ -431,6 +433,7 @@ jobs:
         run: docker compose pull && docker compose up -d
 
       - name: Wait for supervisor
+        working-directory: tests/at_end2end_test/test
         run: |
           # `supervisorctl status` exits non-zero whenever ANY program is not
           # RUNNING, and pkamLoad is deliberately STOPPED until a later step
@@ -444,7 +447,7 @@ jobs:
             # Captured, not piped: `supervisorctl status` exits non-zero here
             # by design, and under pipefail a pipeline would take that exit
             # code and discard the match.
-            status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+            status=$(docker compose exec -T virtualenv supervisorctl status 2>/dev/null || true)
             if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
               ready=1
               break
@@ -453,16 +456,17 @@ jobs:
           done
           # Informational only. It must not decide the step, for the reason
           # above, so its exit code is discarded deliberately.
-          docker exec e2e_virtualenv supervisorctl status || true
+          docker compose exec -T virtualenv supervisorctl status || true
           if [ -z "$ready" ]; then
             echo "atDirectory did not reach RUNNING within 60s"
             exit 1
           fi
 
       - name: Run PKAM
+        working-directory: tests/at_end2end_test/test
         run: |
           for i in $(seq 1 30); do
-            docker exec e2e_virtualenv supervisorctl start pkamLoad >/dev/null 2>&1 && break
+            docker compose exec -T virtualenv supervisorctl start pkamLoad >/dev/null 2>&1 && break
             sleep 2
           done
 
@@ -553,6 +557,7 @@ jobs:
         run: docker compose pull && docker compose up -d
 
       - name: Wait for supervisor
+        working-directory: tests/at_end2end_test/test
         run: |
           # `supervisorctl status` exits non-zero whenever ANY program is not
           # RUNNING, and pkamLoad is deliberately STOPPED until a later step
@@ -566,7 +571,7 @@ jobs:
             # Captured, not piped: `supervisorctl status` exits non-zero here
             # by design, and under pipefail a pipeline would take that exit
             # code and discard the match.
-            status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+            status=$(docker compose exec -T virtualenv supervisorctl status 2>/dev/null || true)
             if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
               ready=1
               break
@@ -575,16 +580,17 @@ jobs:
           done
           # Informational only. It must not decide the step, for the reason
           # above, so its exit code is discarded deliberately.
-          docker exec e2e_virtualenv supervisorctl status || true
+          docker compose exec -T virtualenv supervisorctl status || true
           if [ -z "$ready" ]; then
             echo "atDirectory did not reach RUNNING within 60s"
             exit 1
           fi
 
       - name: Run PKAM
+        working-directory: tests/at_end2end_test/test
         run: |
           for i in $(seq 1 30); do
-            docker exec e2e_virtualenv supervisorctl start pkamLoad >/dev/null 2>&1 && break
+            docker compose exec -T virtualenv supervisorctl start pkamLoad >/dev/null 2>&1 && break
             sleep 2
           done
 

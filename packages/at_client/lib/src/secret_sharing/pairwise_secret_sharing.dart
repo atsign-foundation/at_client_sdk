@@ -1059,6 +1059,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// atServer would refuse to deliver an envelope to an enrollment that
   /// lacks the namespace. With it, the material never leaves this client.
   ///
+  /// [senderMayWrite] says which namespaces this client may write an envelope
+  /// into; a secret held in any other is skipped, with a warning naming the
+  /// namespace, and null skips none. A write the atServer refuses anyway is
+  /// logged and skipped, so one namespace cannot stop the rest reaching [to].
+  ///
   /// [excludeEnrollmentIds] is a revocation guard: if [to] belongs to an
   /// excluded enrollment, nothing is shared (returns 0).
   ///
@@ -1066,12 +1071,14 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   Future<int> shareAllSecretsWith(
     KeyPackage to, {
     Map<String, dynamic>? approvedNamespaces,
+    bool Function(String namespace)? senderMayWrite,
     Set<String>? excludeEnrollmentIds,
   }) async {
     if (excludeEnrollmentIds?.contains(to.enrollmentId) ?? false) {
       return 0;
     }
     int shared = 0;
+    final unwritable = <String>{};
     for (final secret in secretStore.listSecrets()) {
       if (isPerEnrollmentSecretName(secret.name)) {
         continue;
@@ -1081,9 +1088,26 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               approvedNamespaces, secret.namespace)) {
         continue;
       }
-      await shareSecretWith(to, secret,
-          inReplyTo: EnvelopeAddressing.unsolicited);
-      shared++;
+      if (senderMayWrite != null && !senderMayWrite(secret.namespace)) {
+        unwritable.add(secret.namespace);
+        continue;
+      }
+      try {
+        await shareSecretWith(to, secret,
+            inReplyTo: EnvelopeAddressing.unsolicited);
+        shared++;
+      } on Exception catch (e) {
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
+        logger.warning('Could not share "${secret.name}" in '
+            '${secret.namespace} with enrollment ${to.enrollmentId}: $e. The '
+            'remaining secrets are still being shared.');
+      }
+    }
+    if (unwritable.isNotEmpty) {
+      logger.warning('Not sharing the secrets held in '
+          '${unwritable.join(', ')} with enrollment ${to.enrollmentId}: this '
+          'client may not write there');
     }
     return shared;
   }

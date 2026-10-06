@@ -1,6 +1,5 @@
 services:
   at_virtualenv:
-    container_name: at_virtualenv
     # Overridable, so a run can pick the atServer build it needs; CI sets
     # VIRTUALENV_IMAGE. The default stays the published release so a bare
     # `docker compose up` here behaves as it always has.
@@ -29,7 +28,6 @@ services:
     # the proxy has no way to resolve the atDirectory it was told to bridge to.
     hostname: vip.ve.atsign.zone
   at_proxyserver:
-    container_name: at_proxyserver
     # https://hub.docker.com/layers/atsigncompany/at_proxyserver/gha41/images/sha256-de7f513db35a3046ef25bd2195113f48b276800c9921c1eec81ced55a597cd0b
     image: atsigncompany/at_proxyserver
     command: "vip.ve.atsign.zone:${VE_PROXY_PORT:-443} vip.ve.atsign.zone:${VE_ROOT_PORT:-64} ${VE_PROXY_PORT:-1443}"
