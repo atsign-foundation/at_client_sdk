@@ -49,6 +49,9 @@
   `AtClientBindings.notify` must add the parameter.
 - feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
   server answers each request in the scheme it arrived in.
+- fix: an `AtRpc` reply to a requester that cannot open a post-quantum answer
+  goes out under the server's default scheme, and a reply that could not be
+  sent is retried rather than dropped.
 - fix: the namespace key a client publishes at start is for the namespace it
   was built with, not one the app switches it to straight afterwards.
 - fix: concurrent `AtRpc` requests, from one client or several, no longer

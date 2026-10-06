@@ -17,6 +17,25 @@ class _NamedProvider extends Fake implements CryptoProvider {
   final String id;
 }
 
+/// A provider that says whether it can seal to a recipient in a namespace,
+/// and records what it was asked about.
+class _ReadinessProvider extends Fake
+    implements CryptoProvider, ReportsReadiness {
+  _ReadinessProvider(this.id, {required this.ready});
+
+  @override
+  final String id;
+  final bool ready;
+  final List<(String, String)> asked = [];
+
+  @override
+  Future<bool> isReadyFor(
+      CryptoContext context, String atSign, String namespace) async {
+    asked.add((atSign, namespace));
+    return ready;
+  }
+}
+
 class _Callbacks implements AtRpcCallbacks {
   @override
   Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign) async =>
@@ -33,6 +52,10 @@ void main() {
   late AtClient atClient;
   late List<NotificationParams> sent;
 
+  /// How many of the next notifies come back undelivered, as notify() reports
+  /// a value it could not seal or send.
+  var undelivered = 0;
+
   setUpAll(() => registerFallbackValue(NotificationParams()));
 
   /// An RPC on a client configured with [preference], whose notifications are
@@ -41,6 +64,7 @@ void main() {
     atClient = _MockAtClient();
     final notifications = _MockNotificationService();
     sent = [];
+    undelivered = 0;
     when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => atClient.getPreferences()).thenReturn(preference);
     when(() => atClient.notificationService).thenReturn(notifications);
@@ -60,7 +84,13 @@ void main() {
         onError: any(named: 'onError'),
         onSentToSecondary: any(named: 'onSentToSecondary'))).thenAnswer((inv) {
       sent.add(inv.positionalArguments[0] as NotificationParams);
-      return Future.value(NotificationResult());
+      final result = NotificationResult();
+      if (undelivered > 0) {
+        undelivered--;
+        result.atClientException =
+            AtClientException.message('could not seal the value');
+      }
+      return Future.value(result);
     });
     return AtRpc(
         atClient: atClient,
@@ -72,12 +102,16 @@ void main() {
         isServer: true);
   }
 
-  AtClientPreference configuredFor(List<String> providerIds,
+  AtClientPreference configuredWith(List<CryptoProvider> providers,
           {PqPosture posture = PqPosture.legacy}) =>
       AtClientPreference(posture: posture)
         ..crypto = CryptoConfig(
-            defaultProviderId: providerIds.first,
-            providers: [for (final id in providerIds) _NamedProvider(id)]);
+            defaultProviderId: providers.first.id, providers: providers);
+
+  AtClientPreference configuredFor(List<String> providerIds,
+          {PqPosture posture = PqPosture.legacy}) =>
+      configuredWith([for (final id in providerIds) _NamedProvider(id)],
+          posture: posture);
 
   AtNotification requestUnder(String? providerId) => AtNotification.empty()
     ..from = '@bob'
@@ -150,6 +184,68 @@ void main() {
     expect(sent.single.cryptoProviderId, isNull,
         reason: 'a provider this client does not have cannot seal the '
             'answer');
+  });
+
+  test(
+      'a request from a requester its scheme cannot seal to is answered under '
+      'the default', () async {
+    final unready = _ReadinessProvider('pq-provider', ready: false);
+    final rpc =
+        rpcWith(configuredWith([_NamedProvider('default-provider'), unready]));
+
+    await rpc.sendResponse(
+        requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
+
+    expect(unready.asked, [('@bob', 'testing')],
+        reason: 'asked about the requester in this RPC\'s namespace, which '
+            'is what the response is sealed to');
+    expect(sent.single.cryptoProviderId, isNull,
+        reason: 'a post-quantum response to a requester with no key there '
+            'fails to seal and never arrives; the default is the one it can '
+            'open');
+  });
+
+  test('and one its scheme can seal to is answered in that scheme', () async {
+    final ready = _ReadinessProvider('pq-provider', ready: true);
+    final rpc =
+        rpcWith(configuredWith([_NamedProvider('default-provider'), ready]));
+
+    await rpc.sendResponse(
+        requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
+
+    expect(ready.asked, hasLength(1),
+        reason: 'the control: readiness was asked here too, so the default '
+            'above is the no and not a provider never consulted');
+    expect(sent.single.cryptoProviderId, 'pq-provider');
+  });
+
+  test(
+      'a response the notification service could not send is retried, not '
+      'counted as sent', () async {
+    final rpc = rpcWith(configuredFor(['default-provider', 'pq-provider']));
+    undelivered = 1;
+
+    await rpc.sendResponse(
+        requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
+
+    expect(sent.map((p) => p.cryptoProviderId), ['pq-provider', 'pq-provider'],
+        reason: 'the first attempt came back undelivered, so a second went '
+            'out, and in the same scheme: a legacy fallback this client has '
+            'not allowed is not taken for it');
+  });
+
+  test('with the legacy fallback allowed, the retry answers under the default',
+      () async {
+    final rpc = rpcWith(configuredFor(['default-provider', 'pq-provider'])
+      ..allowLegacyCryptoFallback = true);
+    undelivered = 1;
+
+    await rpc.sendResponse(
+        requestUnder('pq-provider'), request, AtRpcResp.ack(request: request));
+
+    expect(sent.map((p) => p.cryptoProviderId), ['pq-provider', null],
+        reason: 'the client said a reply that cannot go out in its scheme may '
+            'go out legacy, and the response is not lost');
   });
 
   test('a call goes out under the provider it is given', () async {

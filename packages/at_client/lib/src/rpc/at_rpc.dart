@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart'
-    show CryptoConfig, legacyCryptoProviderId;
+    show CryptoConfig, CryptoContext, ReportsReadiness, legacyCryptoProviderId;
+import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -642,17 +643,26 @@ class AtRpc {
   /// used directly by [AtRpc] users.
   ///
   /// The response goes out in the scheme [notification] arrived in, when this
-  /// client can write with it, and under this client's default otherwise.
+  /// client can seal it to the requester with it, and under this client's
+  /// default otherwise. A response the notification service could not seal
+  /// counts as an attempt that failed, and is retried like one the atServer
+  /// refused; where the client's preference allows a legacy fallback, the
+  /// retry goes out under the default.
   @visibleForTesting
   Future<void> sendResponse(
       AtNotification notification, AtRpcReq request, AtRpcResp response) async {
-    final cryptoProviderId = _answerUnder(notification);
+    String? cryptoProviderId;
+    var schemeChosen = false;
     bool sent = false;
     int delayMillis = 200;
     for (int attemptNumber = 1;
         attemptNumber <= maxSendAttempts && !sent;
         attemptNumber++) {
       try {
+        if (!schemeChosen) {
+          cryptoProviderId = await _answerUnder(notification);
+          schemeChosen = true;
+        }
         String responseAtID =
             '${response.respType.name}.${request.reqId}.$domainNameSpace.$rpcsNameSpace';
         var responseAtKey = AtKey()
@@ -666,13 +676,27 @@ class AtRpc {
 
         logger.info(
             "Sending notification $responseAtKey with payload $responseJson");
-        await atClient.notificationService.notify(
+        final result = await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
                 value: responseJson,
                 notificationExpiry: defaultNotificationExpiry,
                 cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
+        // NOTE: notify() reports a failure to seal or send in its result
+        // rather than throwing, so a response it could not send would
+        // otherwise count as sent.
+        final failure = result.atClientException;
+        if (failure != null) {
+          if (cryptoProviderId != null &&
+              CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
+            logger.warning('Could not seal response $response under '
+                '$cryptoProviderId, the scheme its request arrived in; the '
+                'next attempt answers under this client\'s default');
+            cryptoProviderId = null;
+          }
+          throw failure;
+        }
         sent = true;
       } catch (e) {
         if (atClient.isStopped) {
@@ -695,18 +719,33 @@ class AtRpc {
   }
 
   /// The provider [request] arrived under, or null when this client cannot
-  /// write with it: legacy under a posture that refuses legacy, or a provider
-  /// this client has not configured.
-  String? _answerUnder(AtNotification request) {
+  /// answer with it: legacy under a posture that refuses legacy, a provider
+  /// this client has not configured, or one that cannot seal to the requester
+  /// in [baseNameSpace], as a post-quantum provider cannot when the requester
+  /// has published no key there.
+  ///
+  /// Throws when the requester's readiness cannot be established, as the
+  /// provider does; the caller's retry covers that.
+  Future<String?> _answerUnder(AtNotification request) async {
     final scheme = request.receivedUnder;
     if (scheme == legacyCryptoProviderId) {
       return atClient.getPreferences()?.disallowLegacyEncryption == true
           ? null
           : scheme;
     }
-    return CryptoConfig.forClient(atClient).lookup(scheme) == null
-        ? null
-        : scheme;
+    final provider = CryptoConfig.forClient(atClient).lookup(scheme);
+    if (provider == null) return null;
+    if (provider is ReportsReadiness &&
+        !await (provider as ReportsReadiness).isReadyFor(
+            CryptoContext(atClient: atClient, atKeysIo: atClient.atKeysIo),
+            request.from,
+            baseNameSpace)) {
+      logger.warning('Answering ${request.from} under this client\'s default '
+          'rather than $scheme, the scheme its request arrived in: it has '
+          'published no key for $baseNameSpace to seal the response to');
+      return null;
+    }
+    return scheme;
   }
 }
 
