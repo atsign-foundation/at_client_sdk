@@ -10,15 +10,22 @@
 
 - `RegistrarService.registerAtSign` — checks availability and/or activates an
   atSign in a single v4 registrar call (`/register-atsign/`), returning a
-  cramkey when `operation: 'register'`.
-- `RegistrarService.generateAtSignDeleteToken` and `.deleteAtSigns` — the two
-  steps of the v4 `/manage-atsigns` delete flow (Super API key required).
+  cramkey when `operation: RegisterOperation.register`.
+- `RegistrarAdminService.generateAtSignDeleteToken` and `.deleteAtSigns` — the
+  two steps of the v4 `/manage-atsigns/` delete flow, split into their own
+  Super-API-key service so a client app's `RegistrarService` is never built
+  with a privileged key.
 
 ### Changed
 
 - `Registrar.registrarApiRequest`'s `data` parameter is now
   `Map<String, dynamic>` (was `Map<String, String?>`), so list-valued fields
   (e.g. `atSigns`) can be sent without bypassing the shared request method.
+
+### Fixed
+
+- a keyfile lock left behind by a process that stopped mid-write is
+  released within 5 seconds, instead of blocking every other writer for 30.
 
 ### Removed
 

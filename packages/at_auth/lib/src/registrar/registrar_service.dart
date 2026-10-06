@@ -47,23 +47,13 @@ class RegistrarService implements Registrar {
       headers['Authorization'] = apiKey;
     }
 
-    // Handle GET vs POST requests
-    if (endpoint.method == HttpMethod.get) {
-      if (data.isNotEmpty) {
-        url = url.replace(queryParameters: data);
-      }
-      final response = await _http.get(url, headers: headers);
-      _throwIfAuthFailure(response, endpoint, requiresAuth);
-      return response;
-    } else {
-      final response = await _http.post(
-        url,
-        body: jsonEncode(data),
-        headers: headers,
-      );
-      _throwIfAuthFailure(response, endpoint, requiresAuth);
-      return response;
-    }
+    final response = await _http.post(
+      url,
+      body: jsonEncode(data),
+      headers: headers,
+    );
+    _throwIfAuthFailure(response, endpoint, requiresAuth);
+    return response;
   }
 
   void _throwIfAuthFailure(
@@ -126,14 +116,16 @@ class RegistrarService implements Registrar {
 
   // AtSign Registration/Activation Methods (v4, hybrid/custom atSigns)
   @override
-  Future<Map<String, dynamic>> registerAtSign({
+  Future<RegisterAtSignResult> registerAtSign({
     String? atSign,
-    required String operation,
-    String? startAtServer,
+    required RegisterOperation operation,
+    bool? startAtServer,
   }) async {
-    Map<String, dynamic> data = {'operation': operation};
+    Map<String, dynamic> data = {'operation': operation.wireValue};
     if (atSign != null) data['atSign'] = atSign;
-    if (startAtServer != null) data['startatServer'] = startAtServer;
+    if (startAtServer != null) {
+      data['startatServer'] = startAtServer.toString();
+    }
 
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.registerAtsign,
@@ -148,59 +140,19 @@ class RegistrarService implements Registrar {
       throw Exception(
           'Failed to register atSign: ${payload["message"] ?? "Unknown error"}');
     }
-    return {
-      if (payload["cramkey"] != null)
-        'cramkey': payload["cramkey"]?.split(':').last,
-      if (payload["atSign"] != null) 'atSign': payload["atSign"],
-      if (payload["message"] != null) 'message': payload["message"],
-    };
-  }
 
-  // AtSign Deletion Methods (Super API key)
-  @override
-  Future<Map<String, dynamic>> generateAtSignDeleteToken(
-      List<String> atSigns) async {
-    var res = await registrarApiRequest(
-      RegistrarApiEndpoint.manageAtsigns,
-      {'atSigns': atSigns, 'operation': 'deletetoken'},
-    );
-    if (res.statusCode != 200) {
+    String? cramKey = payload["cramkey"]?.split(':').last;
+    if (operation == RegisterOperation.register &&
+        startAtServer != false &&
+        cramKey == null) {
       throw Exception(
-          'Failed to generate delete token: ${res.reasonPhrase} - ${res.body}');
+          'Failed to register atSign: cramKey missing from payload');
     }
-    var payload = jsonDecode(res.body);
-    if (payload["status"] != "success" || payload["data"] == null) {
-      throw Exception(
-          'Failed to generate delete token: ${payload["message"] ?? "Unknown error"}');
-    }
-    return {
-      'token': payload["data"]["token"],
-      'atSigns': payload["data"]["atSigns"],
-      'skippedAtSigns': payload["data"]["skippedatSigns"] ?? [],
-    };
-  }
 
-  @override
-  Future<Map<String, dynamic>> deleteAtSigns({
-    required String token,
-    required List<String> atSigns,
-  }) async {
-    var res = await registrarApiRequest(
-      RegistrarApiEndpoint.manageAtsigns,
-      {'token': token, 'atSigns': atSigns, 'operation': 'delete'},
+    return RegisterAtSignResult(
+      cramKey: cramKey,
+      atSign: payload["atSign"],
+      message: payload["message"],
     );
-    if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to delete atSigns: ${res.reasonPhrase} - ${res.body}');
-    }
-    var payload = jsonDecode(res.body);
-    if (payload["status"] != "success" || payload["data"] == null) {
-      throw Exception(
-          'Failed to delete atSigns: ${payload["message"] ?? "Unknown error"}');
-    }
-    return {
-      'deleted': payload["data"]["deleted"],
-      'failed': payload["data"]["failed"] ?? [],
-    };
   }
 }

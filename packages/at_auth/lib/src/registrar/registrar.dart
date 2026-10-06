@@ -1,7 +1,5 @@
 import 'package:http/http.dart';
 
-enum HttpMethod { get, post }
-
 enum RegistrarApiEndpoint {
   // Atsign authentication
   requestOtp('/authenticate/atsign', HttpMethod.post),
@@ -11,11 +9,36 @@ enum RegistrarApiEndpoint {
   registerAtsign('/register-atsign/', HttpMethod.post),
 
   // AtSign deletion (Super API key)
-  manageAtsigns('/manage-atsigns', HttpMethod.post);
+  manageAtsigns('/manage-atsigns/', HttpMethod.post);
 
   final String path;
   final HttpMethod method;
   const RegistrarApiEndpoint(this.path, this.method);
+}
+
+enum HttpMethod { post }
+
+/// What [Registrar.registerAtSign] asks the server to do: just check whether
+/// [atSign] is available, or check and activate it in the same call.
+enum RegisterOperation {
+  lookup,
+  register;
+
+  String get wireValue => name;
+}
+
+/// The result of [Registrar.registerAtSign].
+///
+/// [cramKey] is set only when [RegisterOperation.register] succeeds and the
+/// server started a secondary (i.e. `startAtServer` was not `false`).
+/// [atSign] and [message] are set for a lookup, or alongside [cramKey] when
+/// the server echoes them back on a register.
+class RegisterAtSignResult {
+  final String? cramKey;
+  final String? atSign;
+  final String? message;
+
+  const RegisterAtSignResult({this.cramKey, this.atSign, this.message});
 }
 
 abstract interface class Registrar {
@@ -25,7 +48,7 @@ abstract interface class Registrar {
   /// Core API request method that handles HTTP communication with the registrar
   ///
   /// [endpoint] - The API endpoint to call
-  /// [data] - Request body data (for POST) or query parameters (for GET)
+  /// [data] - Request body data
   /// [requiresAuth] - Whether to include the Authorization header (default: true)
   Future<Response> registrarApiRequest(
     RegistrarApiEndpoint endpoint,
@@ -53,34 +76,13 @@ abstract interface class Registrar {
   /// Checks availability and/or activates an atSign in one call.
   ///
   /// [atSign] - Optional. If omitted, the server generates one.
-  /// [operation] - 'lookup' (check availability only) or 'register' (check +
-  /// activate, returning a cramkey).
-  /// [startAtServer] - Optional; pass 'false' to skip secondary creation on
+  /// [operation] - [RegisterOperation.lookup] (check availability only) or
+  /// [RegisterOperation.register] (check + activate, returning a cramkey).
+  /// [startAtServer] - Optional; pass `false` to skip secondary creation on
   /// registration (no cramkey will be returned in that case).
-  ///
-  /// Returns a map that may contain 'cramkey' (register), or 'atSign' +
-  /// 'message' (lookup / availability confirmation).
-  Future<Map<String, dynamic>> registerAtSign({
+  Future<RegisterAtSignResult> registerAtSign({
     String? atSign,
-    required String operation,
-    String? startAtServer,
-  });
-
-  // ===========================================================================
-  // AtSign Deletion Methods (Super API key)
-  // ===========================================================================
-
-  /// Generates a one-time delete token for [atSigns].
-  ///
-  /// Returns { 'token': String, 'atSigns': List, 'skippedAtSigns': List }
-  Future<Map<String, dynamic>> generateAtSignDeleteToken(
-      List<String> atSigns);
-
-  /// Deletes [atSigns] using a previously generated delete [token].
-  ///
-  /// Returns { 'deleted': List, 'failed': List }
-  Future<Map<String, dynamic>> deleteAtSigns({
-    required String token,
-    required List<String> atSigns,
+    required RegisterOperation operation,
+    bool? startAtServer,
   });
 }
