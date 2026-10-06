@@ -1,4 +1,5 @@
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/util/open_reporting_once.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 
@@ -46,10 +47,10 @@ class StorageManager {
     if (storagePath == null) {
       throw Exception('Please set local storage path');
     }
-    _bundle = await _factory.initialize(
-      currentAtSign,
-      HivePersistenceConfig.clientDefaults(storagePath: storagePath),
-    );
+    _bundle = await openReportingOnce(() => _factory.initialize(
+          currentAtSign,
+          HivePersistenceConfig.clientDefaults(storagePath: storagePath),
+        ));
     isStorageInitialized = true;
   }
 }

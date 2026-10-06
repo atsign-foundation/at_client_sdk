@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/sync/sync_queue_store.dart';
+import 'package:at_client/src/util/open_reporting_once.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
@@ -147,8 +148,8 @@ class AtSyncQueue {
     } else {
       final path = _storagePath;
       final hive = path == null ? Hive : HiveInstances.forPath(path);
-      _store = HiveBoxSyncQueueStore(
-          await hive.openBox<String>(boxNameForAtSign(_atSign)));
+      _store = HiveBoxSyncQueueStore(await openReportingOnce(
+          () => hive.openBox<String>(boxNameForAtSign(_atSign))));
     }
     _replayIntoMemory();
     _opened = true;

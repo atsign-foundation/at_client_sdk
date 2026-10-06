@@ -77,6 +77,29 @@ void main() {
       expect(q.peek(), ['ok.demo@alice']);
       await q.close();
     });
+
+    test('a queue box that cannot be read fails the open once, to the caller',
+        () async {
+      if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+        markTestSkipped('root reads a file whatever its mode says');
+        return;
+      }
+      final first = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await first.open();
+      await first.close();
+      final file =
+          File('${tmp.path}/${AtSyncQueue.boxNameForAtSign('@alice')}.hive');
+      expect(Process.runSync('chmod', ['000', file.path]).exitCode, 0);
+      addTearDown(() => Process.runSync('chmod', ['600', file.path]));
+
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await expectLater(q.open(), throwsA(isA<FileSystemException>()));
+      // NOTE: an unhandled second report would arrive after the caller's,
+      // and fails this test only if it lands before the test ends.
+      await pumpEventQueue();
+
+      expect(q.isOpen, isFalse);
+    });
   });
 
   group('AtSyncQueue.enqueue', () {
