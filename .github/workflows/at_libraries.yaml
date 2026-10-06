@@ -302,7 +302,3 @@ jobs:
       - name: run tests
         working-directory: tests/${{ matrix.package }}
         run: dart test --concurrency=1
-
-      - name: kill docker image
-        working-directory: tests/${{ matrix.package }}
-        run: docker compose down
