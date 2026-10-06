@@ -1,252 +1,363 @@
+import 'dart:convert';
 import 'dart:typed_data';
-
-import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
-    as collector;
-import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
-    as common;
-import 'package:dartastic_opentelemetry/proto/logs/v1/logs.pb.dart' as logs;
-import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
-    as otel_resource;
-import 'package:fixnum/fixnum.dart';
 
 import '../at_telemetry_log_record.dart';
 import '../at_telemetry_resource.dart';
 import '../at_telemetry_severity.dart';
+import 'at_telemetry_resource_logs.dart';
 
+// Encodes and decodes OTLP/JSON ExportLogsServiceRequest bodies, built
+// directly from maps. It follows the OTLP JSON Protobuf encoding:
+// lowerCamelCase field names, 64-bit integers as decimal strings, enums as
+// integers and bytes as base64. Decoding ignores fields it does not know.
 final class AtTelemetryLogsCodec {
+  static const String contentType = 'application/json';
   static const String scopeName = 'at_telemetry';
-
-  // The OTLP Protobuf types in dartastic_opentelemetry 0.11.0 have no
-  // event_name field, so eventName travels as this attribute instead
-  static const String eventNameAttribute = 'event.name';
+  static final RegExp _unsignedPattern = RegExp(r'^[0-9]{1,20}$');
+  static final RegExp _signedPattern = RegExp(r'^-?[0-9]{1,19}$');
+  static final RegExp _zeroPattern = RegExp(r'^0+$');
 
   const AtTelemetryLogsCodec();
 
-  // observedAt becomes every record's observedTimestamp, and the timestamp of
-  // any record without one. It defaults to now.
-  List<int> encodeExportRequest(
+  String encodeExportRequest(
     Iterable<AtTelemetryLogRecord> records, {
     AtTelemetryResource? resource,
     DateTime? observedAt,
   }) {
-    final DateTime observed = (observedAt ?? DateTime.now()).toUtc();
-    final List<logs.LogRecord> logRecords = <logs.LogRecord>[
-      for (final AtTelemetryLogRecord record in records)
-        _encodeLogRecord(record, observed),
-    ];
-    if (logRecords.isEmpty) {
-      throw ArgumentError.value(records, 'records', 'must not be empty');
-    }
-
-    return collector.ExportLogsServiceRequest(
-      resourceLogs: <logs.ResourceLogs>[
-        logs.ResourceLogs(
-          resource: otel_resource.Resource(
-            attributes: resource == null
-                ? const <common.KeyValue>[]
-                : _encodeAttributes(resource.attributes),
-          ),
-          scopeLogs: <logs.ScopeLogs>[
-            logs.ScopeLogs(
-              scope: common.InstrumentationScope(name: scopeName),
-              logRecords: logRecords,
-            ),
-          ],
+    return encode(
+      <AtTelemetryResourceLogs>[
+        AtTelemetryResourceLogs(
+          resourceAttributes: resource?.attributes ?? const <String, Object?>{},
+          scopeName: scopeName,
+          records: records.toList(),
         ),
       ],
-    ).writeToBuffer();
+      observedAt: observedAt,
+    );
   }
 
-  List<AtTelemetryLogRecord> decodeExportRequest(List<int> payload) {
-    final collector.ExportLogsServiceRequest request;
+  // observedAt becomes the observedTimestamp of every record without one,
+  // and the timestamp of every record without either. It defaults to now.
+  String encode(
+    Iterable<AtTelemetryResourceLogs> resourceLogs, {
+    DateTime? observedAt,
+  }) {
+    final DateTime observed = (observedAt ?? DateTime.now()).toUtc();
+    if (observed.isBefore(AtTelemetryLogRecord.minTimestamp) ||
+        observed.isAfter(AtTelemetryLogRecord.maxTimestamp)) {
+      throw ArgumentError.value(observedAt, 'observedAt', 'is out of range');
+    }
+    final List<Map<String, Object?>> encoded = <Map<String, Object?>>[
+      for (final AtTelemetryResourceLogs logs in resourceLogs)
+        if (logs.records.isNotEmpty) _encodeResourceLogs(logs, observed),
+    ];
+    if (encoded.isEmpty) {
+      throw ArgumentError.value(
+        resourceLogs,
+        'resourceLogs',
+        'must contain at least one log record',
+      );
+    }
+    return jsonEncode(<String, Object?>{'resourceLogs': encoded});
+  }
+
+  List<AtTelemetryResourceLogs> decode(String payload) {
+    final Object? decoded;
     try {
-      request = collector.ExportLogsServiceRequest.fromBuffer(payload);
-    } on Object catch (error) {
-      throw FormatException('Invalid OTLP logs Protobuf payload', error);
+      decoded = jsonDecode(payload);
+    } on FormatException catch (error) {
+      throw FormatException('Invalid OTLP/JSON logs payload', error.message);
     }
 
-    final List<AtTelemetryLogRecord> records = <AtTelemetryLogRecord>[];
-    for (final logs.ResourceLogs resourceLogs in request.resourceLogs) {
-      final Map<String, Object?> resourceAttributes = resourceLogs.hasResource()
-          ? _decodeAttributes(resourceLogs.resource.attributes)
-          : const <String, Object?>{};
+    final List<AtTelemetryResourceLogs> result = <AtTelemetryResourceLogs>[];
+    final Map<String, Object?> request = _object(decoded, 'request');
+    for (final Object? item in _list(request['resourceLogs'], 'resourceLogs')) {
+      final Map<String, Object?> resourceLogs = _object(item, 'resourceLogs');
+      final Object? resource = resourceLogs['resource'];
+      final Map<String, Object?> resourceAttributes = resource == null
+          ? const <String, Object?>{}
+          : _decodeAttributes(_object(resource, 'resource')['attributes']);
 
-      for (final logs.ScopeLogs scopeLogs in resourceLogs.scopeLogs) {
-        final Map<String, Object?> scopeAttributes = scopeLogs.hasScope()
-            ? _decodeAttributes(scopeLogs.scope.attributes)
-            : const <String, Object?>{};
-
-        for (final logs.LogRecord logRecord in scopeLogs.logRecords) {
-          records.add(
-            _decodeLogRecord(
-              logRecord,
-              resourceAttributes: resourceAttributes,
-              scopeAttributes: scopeAttributes,
-            ),
-          );
+      for (final Object? scopeItem
+          in _list(resourceLogs['scopeLogs'], 'scopeLogs')) {
+        final Map<String, Object?> scopeLogs = _object(scopeItem, 'scopeLogs');
+        final Object? scope = scopeLogs['scope'];
+        final Object? name =
+            scope == null ? null : _object(scope, 'scope')['name'];
+        if (name != null && name is! String) {
+          throw const FormatException('scope.name must be a string');
+        }
+        final List<AtTelemetryLogRecord> records = <AtTelemetryLogRecord>[
+          for (final Object? record
+              in _list(scopeLogs['logRecords'], 'logRecords'))
+            _decodeLogRecord(_object(record, 'logRecords')),
+        ];
+        if (records.isEmpty) {
+          continue;
+        }
+        try {
+          result.add(AtTelemetryResourceLogs(
+            resourceAttributes: resourceAttributes,
+            scopeName: (name as String?) ?? '',
+            records: records,
+          ));
+        } on ArgumentError catch (error) {
+          throw FormatException('Invalid OTLP resource: ${error.message}');
         }
       }
     }
 
-    if (records.isEmpty) {
+    if (result.isEmpty) {
       throw const FormatException(
         'OTLP logs request must contain at least one log record',
       );
     }
-    return List<AtTelemetryLogRecord>.unmodifiable(records);
+    return List<AtTelemetryResourceLogs>.unmodifiable(result);
   }
 
-  List<int> encodeExportResponse() {
-    return collector.ExportLogsServiceResponse().writeToBuffer();
+  // The OTLP/JSON ExportLogsServiceResponse for a fully accepted request
+  String encodeExportResponse() => '{}';
+
+  Map<String, Object?> _encodeResourceLogs(
+    AtTelemetryResourceLogs logs,
+    DateTime observedAt,
+  ) {
+    return <String, Object?>{
+      'resource': <String, Object?>{
+        'attributes': _encodeAttributes(logs.resourceAttributes),
+      },
+      'scopeLogs': <Map<String, Object?>>[
+        <String, Object?>{
+          'scope': <String, Object?>{'name': logs.scopeName},
+          'logRecords': <Map<String, Object?>>[
+            for (final AtTelemetryLogRecord record in logs.records)
+              _encodeLogRecord(record, observedAt),
+          ],
+        },
+      ],
+    };
   }
 
-  logs.LogRecord _encodeLogRecord(
+  Map<String, Object?> _encodeLogRecord(
     AtTelemetryLogRecord record,
     DateTime observedAt,
   ) {
+    final DateTime observed = record.observedTimestamp ?? observedAt;
     final AtTelemetrySeverity? severity = record.severityNumber;
-    return logs.LogRecord(
-      timeUnixNano: _nanoseconds(record.timestamp ?? observedAt),
-      observedTimeUnixNano: _nanoseconds(observedAt),
-      severityNumber: severity == null
-          ? null
-          : logs.SeverityNumber.valueOf(severity.number),
-      severityText: record.severityText,
-      body: record.body == null ? null : _encodeValue(record.body),
-      attributes: <common.KeyValue>[
-        if (record.isEvent)
-          common.KeyValue(
-            key: eventNameAttribute,
-            value: common.AnyValue(stringValue: record.eventName),
-          ),
-        // eventName wins over an event.name attribute on an Event
-        for (final common.KeyValue attribute
-            in _encodeAttributes(record.attributes))
-          if (!record.isEvent || attribute.key != eventNameAttribute) attribute,
-      ],
-    );
+    return <String, Object?>{
+      'timeUnixNano': _nanoseconds(record.timestamp ?? observed),
+      'observedTimeUnixNano': _nanoseconds(observed),
+      if (severity != null) 'severityNumber': severity.number,
+      if (record.severityText != null) 'severityText': record.severityText,
+      if (record.body != null) 'body': _encodeValue(record.body),
+      'attributes': _encodeAttributes(record.attributes),
+      if (record.isEvent) 'eventName': record.eventName,
+    };
   }
 
-  AtTelemetryLogRecord _decodeLogRecord(
-    logs.LogRecord logRecord, {
-    required Map<String, Object?> resourceAttributes,
-    required Map<String, Object?> scopeAttributes,
-  }) {
-    // Use timestamp when present, otherwise observedTimestamp, as the OTel
-    // logs data model recommends for receivers with a single timestamp
-    DateTime? timestamp;
-    if (logRecord.timeUnixNano.toInt() > 0) {
-      timestamp = _dateTime(logRecord.timeUnixNano);
-    } else if (logRecord.observedTimeUnixNano.toInt() > 0) {
-      timestamp = _dateTime(logRecord.observedTimeUnixNano);
-    }
-
+  AtTelemetryLogRecord _decodeLogRecord(Map<String, Object?> json) {
+    final Object? severityNumber = json['severityNumber'];
     AtTelemetrySeverity? severity;
-    final int severityNumber = logRecord.severityNumber.value;
-    if (severityNumber != 0) {
+    if (severityNumber != null && severityNumber != 0) {
+      if (severityNumber is! int) {
+        throw const FormatException('severityNumber must be an integer');
+      }
       severity = AtTelemetrySeverity.fromNumber(severityNumber);
       if (severity == null) {
-        throw const FormatException(
-          'OTLP log record severity number must be from 0 to 24',
-        );
+        throw const FormatException('severityNumber must be from 0 to 24');
       }
     }
 
-    final Map<String, Object?> attributes = <String, Object?>{
-      ...resourceAttributes,
-      ...scopeAttributes,
-      ..._decodeAttributes(logRecord.attributes),
-    };
-    final Object? eventName = attributes.remove(eventNameAttribute);
-    if (eventName != null && eventName is! String) {
-      throw const FormatException(
-        'OTLP $eventNameAttribute attribute must be a string',
-      );
+    final Object? severityText = json['severityText'];
+    if (severityText != null && severityText is! String) {
+      throw const FormatException('severityText must be a string');
     }
+    final Object? eventName = json['eventName'];
+    if (eventName != null && eventName is! String) {
+      throw const FormatException('eventName must be a string');
+    }
+    final String? name = eventName as String?;
+    final String? text = severityText as String?;
 
     try {
       return AtTelemetryLogRecord(
-        eventName: eventName as String?,
-        body: logRecord.hasBody() ? _decodeValue(logRecord.body) : null,
-        timestamp: timestamp,
+        eventName: name == null || name.isEmpty ? null : name,
+        body: json['body'] == null ? null : _decodeValue(json['body'], 'body'),
+        timestamp: _decodeTime(json['timeUnixNano'], 'timeUnixNano'),
+        observedTimestamp: _decodeTime(
+          json['observedTimeUnixNano'],
+          'observedTimeUnixNano',
+        ),
         severityNumber: severity,
-        severityText:
-            logRecord.severityText.isEmpty ? null : logRecord.severityText,
-        attributes: attributes,
+        severityText: text == null || text.isEmpty ? null : text,
+        attributes: _decodeAttributes(json['attributes']),
       );
     } on ArgumentError catch (error) {
       throw FormatException('Invalid OTLP log record: ${error.message}');
     }
   }
 
-  List<common.KeyValue> _encodeAttributes(Map<String, Object?> attributes) {
-    return <common.KeyValue>[
+  List<Map<String, Object?>> _encodeAttributes(
+    Map<String, Object?> attributes,
+  ) {
+    return <Map<String, Object?>>[
       for (final MapEntry<String, Object?> entry in attributes.entries)
         if (entry.value != null)
-          common.KeyValue(
-            key: entry.key,
-            value: _encodeValue(entry.value),
-          ),
+          <String, Object?>{
+            'key': entry.key,
+            'value': _encodeValue(entry.value),
+          },
     ];
   }
 
-  Map<String, Object?> _decodeAttributes(Iterable<common.KeyValue> attributes) {
-    return <String, Object?>{
-      for (final common.KeyValue attribute in attributes)
-        attribute.key: _decodeValue(attribute.value),
-    };
+  Map<String, Object?> _decodeAttributes(Object? json) {
+    final Map<String, Object?> attributes = <String, Object?>{};
+    for (final Object? item in _list(json, 'attributes')) {
+      final Map<String, Object?> keyValue = _object(item, 'attributes');
+      final Object? key = keyValue['key'];
+      if (key is! String) {
+        throw const FormatException('attribute key must be a string');
+      }
+      final Object? value = keyValue['value'];
+      attributes[key] = value == null ? null : _decodeValue(value, key);
+    }
+    return attributes;
   }
 
-  // AtTelemetryLogRecord has already checked that value is an AnyValue
-  common.AnyValue _encodeValue(Object? value) {
+  // The record has already checked that value is an AnyValue
+  Map<String, Object?> _encodeValue(Object? value) {
     return switch (value) {
-      null => common.AnyValue(),
-      final String value => common.AnyValue(stringValue: value),
-      final bool value => common.AnyValue(boolValue: value),
-      final int value => common.AnyValue(intValue: Int64(value)),
-      final double value => common.AnyValue(doubleValue: value),
+      null => const <String, Object?>{},
+      final String value => <String, Object?>{'stringValue': value},
+      final bool value => <String, Object?>{'boolValue': value},
+      final int value => <String, Object?>{'intValue': '$value'},
+      final double value => <String, Object?>{'doubleValue': value},
       // Uint8List is also a List<int>, so it must be matched before List
-      final Uint8List value => common.AnyValue(bytesValue: value),
-      final List<Object?> values => common.AnyValue(
-          arrayValue: common.ArrayValue(
-            values: values.map<common.AnyValue>(_encodeValue),
-          ),
-        ),
-      final Map<String, Object?> values => common.AnyValue(
-          kvlistValue: common.KeyValueList(values: _encodeAttributes(values)),
-        ),
+      final Uint8List value => <String, Object?>{
+          'bytesValue': base64Encode(value),
+        },
+      final List<Object?> values => <String, Object?>{
+          'arrayValue': <String, Object?>{
+            'values': <Map<String, Object?>>[
+              for (final Object? item in values) _encodeValue(item),
+            ],
+          },
+        },
+      final Map<String, Object?> values => <String, Object?>{
+          'kvlistValue': <String, Object?>{
+            'values': _encodeAttributes(values),
+          },
+        },
       _ => throw ArgumentError.value(value, 'value', 'is not an AnyValue'),
     };
   }
 
-  Object? _decodeValue(common.AnyValue value) {
-    return switch (value.whichValue()) {
-      common.AnyValue_Value.stringValue => value.stringValue,
-      common.AnyValue_Value.boolValue => value.boolValue,
-      common.AnyValue_Value.intValue => value.intValue.toInt(),
-      common.AnyValue_Value.doubleValue => value.doubleValue,
-      common.AnyValue_Value.arrayValue => List<Object?>.unmodifiable(
-          value.arrayValue.values.map<Object?>(_decodeValue),
-        ),
-      common.AnyValue_Value.kvlistValue => Map<String, Object?>.unmodifiable(
-          _decodeAttributes(value.kvlistValue.values),
-        ),
-      common.AnyValue_Value.bytesValue => Uint8List.fromList(value.bytesValue),
-      common.AnyValue_Value.notSet => null,
-    };
+  Object? _decodeValue(Object? json, String path) {
+    final Map<String, Object?> value = _object(json, path);
+    if (value.containsKey('stringValue')) {
+      final Object? string = value['stringValue'];
+      if (string is! String) {
+        throw FormatException('$path.stringValue must be a string');
+      }
+      return string;
+    }
+    if (value.containsKey('boolValue')) {
+      final Object? boolean = value['boolValue'];
+      if (boolean is! bool) {
+        throw FormatException('$path.boolValue must be a boolean');
+      }
+      return boolean;
+    }
+    if (value.containsKey('intValue')) {
+      final Object? integer = value['intValue'];
+      if (integer is int) {
+        return integer;
+      }
+      if (integer is! String || !_signedPattern.hasMatch(integer)) {
+        throw FormatException('$path.intValue must be a 64-bit integer');
+      }
+      final int? parsed = int.tryParse(integer);
+      if (parsed == null) {
+        throw FormatException('$path.intValue must be a 64-bit integer');
+      }
+      return parsed;
+    }
+    if (value.containsKey('doubleValue')) {
+      final Object? number = value['doubleValue'];
+      if (number is! num || !number.isFinite) {
+        throw FormatException('$path.doubleValue must be a finite number');
+      }
+      return number.toDouble();
+    }
+    if (value.containsKey('bytesValue')) {
+      final Object? bytes = value['bytesValue'];
+      if (bytes is! String) {
+        throw FormatException('$path.bytesValue must be base64');
+      }
+      try {
+        return base64Decode(bytes);
+      } on FormatException {
+        throw FormatException('$path.bytesValue must be base64');
+      }
+    }
+    if (value.containsKey('arrayValue')) {
+      final Map<String, Object?> array =
+          _object(value['arrayValue'], '$path.arrayValue');
+      final List<Object?> items = _list(array['values'], '$path.arrayValue');
+      return List<Object?>.unmodifiable(<Object?>[
+        for (int index = 0; index < items.length; index++)
+          _decodeValue(items[index], '$path[$index]'),
+      ]);
+    }
+    if (value.containsKey('kvlistValue')) {
+      final Map<String, Object?> kvlist =
+          _object(value['kvlistValue'], '$path.kvlistValue');
+      return Map<String, Object?>.unmodifiable(
+        _decodeAttributes(kvlist['values']),
+      );
+    }
+    return null;
   }
 
-  Int64 _nanoseconds(DateTime time) =>
-      Int64(time.microsecondsSinceEpoch) * 1000;
+  // Built as text so that neither JavaScript's 53-bit numbers nor a signed
+  // 64-bit nanosecond count limits the range
+  String _nanoseconds(DateTime time) {
+    final int microseconds = time.microsecondsSinceEpoch;
+    return microseconds == 0 ? '0' : '${microseconds}000';
+  }
 
-  DateTime _dateTime(Int64 nanoseconds) {
-    try {
-      return DateTime.fromMicrosecondsSinceEpoch(
-        nanoseconds.toInt() ~/ 1000,
-        isUtc: true,
-      );
-    } on ArgumentError catch (error) {
-      throw FormatException('Invalid OTLP log record timestamp', error);
+  DateTime? _decodeTime(Object? json, String path) {
+    if (json == null) {
+      return null;
     }
+    final String text = json is int ? '$json' : (json is String ? json : '');
+    if (!_unsignedPattern.hasMatch(text)) {
+      throw FormatException('$path must be unsigned 64-bit nanoseconds');
+    }
+    // Zero means the time is unknown
+    if (_zeroPattern.hasMatch(text)) {
+      return null;
+    }
+    final int microseconds =
+        text.length > 3 ? int.parse(text.substring(0, text.length - 3)) : 0;
+    return DateTime.fromMicrosecondsSinceEpoch(microseconds, isUtc: true);
+  }
+
+  Map<String, Object?> _object(Object? json, String path) {
+    if (json is! Map<String, Object?>) {
+      throw FormatException('$path must be a JSON object');
+    }
+    return json;
+  }
+
+  // Proto3 JSON leaves empty repeated fields out
+  List<Object?> _list(Object? json, String path) {
+    if (json == null) {
+      return const <Object?>[];
+    }
+    if (json is! List<Object?>) {
+      throw FormatException('$path must be a JSON array');
+    }
+    return json;
   }
 }

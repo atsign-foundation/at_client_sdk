@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:at_telemetry/at_telemetry.dart';
 
 // Run with: dart run example/at_telemetry_example.dart
@@ -28,12 +26,15 @@ Future<void> main() async {
 
 final class ConsoleExporter implements AtTelemetryLogRecordExporter {
   @override
-  Future<void> export(
+  Future<bool> export(
     AtTelemetryLogRecord logRecord,
     AtTelemetryResource resource,
   ) async {
-    print('Exported from ${resource.serviceName}: '
-        '${jsonEncode(logRecord.toJson())}');
+    print(const AtTelemetryLogsCodec().encodeExportRequest(
+      <AtTelemetryLogRecord>[logRecord],
+      resource: resource,
+    ));
+    return true;
   }
 
   @override

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:at_utils/at_logger.dart';
 
+import 'at_telemetry_attributes.dart';
+import 'at_telemetry_dropped_exception.dart';
 import 'at_telemetry_log_record.dart';
 import 'at_telemetry_resource.dart';
 import 'at_telemetry_severity.dart';
@@ -18,6 +20,8 @@ typedef AtTelemetryErrorHandler = void Function(
 // Invalid values, such as an attribute that is not an AnyValue, throw
 // ArgumentError.
 final class AtTelemetry {
+  static const Duration defaultFlushTimeout = Duration(seconds: 30);
+  static const Duration defaultShutdownTimeout = Duration(seconds: 10);
   static final AtSignLogger _logger = AtSignLogger('AtTelemetry');
 
   final AtTelemetryResource resource;
@@ -43,12 +47,16 @@ final class AtTelemetry {
     _logger.warning('Telemetry failed: $error');
   }
 
+  // notificationIds and keys name the protocol objects this event produced,
+  // so it can be lined up with the atServer's own events for them
   void event(
     String name, {
     Map<String, Object?> attributes = const <String, Object?>{},
     Object? body,
     AtTelemetrySeverity? severity,
     DateTime? timestamp,
+    List<String> notificationIds = const <String>[],
+    List<String> keys = const <String>[],
     AtTelemetryErrorHandler? onError,
   }) {
     if (name.trim().isEmpty) {
@@ -60,7 +68,14 @@ final class AtTelemetry {
         body: body,
         timestamp: timestamp ?? DateTime.now(),
         severityNumber: severity,
-        attributes: attributes,
+        attributes: <String, Object?>{
+          ...attributes,
+          if (notificationIds.isNotEmpty)
+            AtTelemetryAttributes.notificationIds:
+                List<String>.of(notificationIds),
+          if (keys.isNotEmpty)
+            AtTelemetryAttributes.keys: List<String>.of(keys),
+        },
       ),
       onError ?? _onError,
     );
@@ -86,27 +101,43 @@ final class AtTelemetry {
     );
   }
 
-  // Returns once every record so far is delivered or reported to its onError
-  Future<void> flush() async {
+  // Asks the exporter to send what it holds and returns when that attempt
+  // ends, or after timeout. Records it could not send stay with the exporter.
+  Future<void> flush({Duration timeout = defaultFlushTimeout}) async {
     try {
-      await _exporter.flush();
+      await _exporter.flush().timeout(timeout);
+    } on TimeoutException {
+      _report(
+        _onError,
+        TimeoutException('Telemetry flush timed out', timeout),
+        StackTrace.current,
+      );
     } on Object catch (error, stackTrace) {
       _report(_onError, error, stackTrace);
     }
-    await Future.wait(_pending.toList());
   }
 
-  Future<void> shutdown() async {
+  // Shuts the exporter down and waits for every record's outcome, but never
+  // for longer than timeout
+  Future<void> shutdown({Duration timeout = defaultShutdownTimeout}) async {
     if (_closed) {
       return;
     }
     _closed = true;
     try {
-      await _exporter.shutdown();
+      await Future.wait(<Future<void>>[
+        _exporter.shutdown(),
+        ..._pending,
+      ]).timeout(timeout);
+    } on TimeoutException {
+      _report(
+        _onError,
+        TimeoutException('Telemetry shutdown timed out', timeout),
+        StackTrace.current,
+      );
     } on Object catch (error, stackTrace) {
       _report(_onError, error, stackTrace);
     }
-    await Future.wait(_pending.toList());
   }
 
   void _emit(AtTelemetryLogRecord logRecord, AtTelemetryErrorHandler onError) {
@@ -118,16 +149,24 @@ final class AtTelemetry {
       );
       return;
     }
-    final Future<void> delivery;
+    final Future<bool> delivery;
     try {
       delivery = _exporter.export(logRecord, resource);
     } on Object catch (error, stackTrace) {
       _report(onError, error, stackTrace);
       return;
     }
-    // reported never fails, so flush can wait on it safely
+    // reported never fails, so shutdown can wait on it safely
     final Future<void> reported = delivery.then<void>(
-      (void _) {},
+      (bool delivered) {
+        if (!delivered) {
+          _report(
+            onError,
+            AtTelemetryDroppedException(logRecord),
+            StackTrace.current,
+          );
+        }
+      },
       onError: (Object error, StackTrace stackTrace) =>
           _report(onError, error, stackTrace),
     );

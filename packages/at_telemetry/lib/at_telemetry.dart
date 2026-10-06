@@ -1,11 +1,15 @@
 export 'src/at_telemetry.dart';
+export 'src/at_telemetry_attributes.dart';
+export 'src/at_telemetry_dropped_exception.dart';
 export 'src/at_telemetry_log_record.dart';
 export 'src/at_telemetry_resource.dart';
 export 'src/at_telemetry_severity.dart';
 export 'src/codec/at_telemetry_logs_codec.dart';
+export 'src/codec/at_telemetry_resource_logs.dart';
 export 'src/exporters/at_telemetry_log_record_exporter.dart';
 export 'src/exporters/at_telemetry_notification_exporter.dart';
-export 'src/exporters/at_telemetry_signed_http_exporter.dart';
+export 'src/security/at_telemetry_ed25519_signer.dart';
 export 'src/security/at_telemetry_http_signature.dart';
-export 'src/security/at_telemetry_rsa_signer.dart';
+export 'src/security/at_telemetry_public_key_record.dart';
+export 'src/security/at_telemetry_sequence.dart';
 export 'src/security/at_telemetry_signer.dart';

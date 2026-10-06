@@ -1,425 +1,340 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_telemetry/at_telemetry.dart';
-import 'package:dartastic_opentelemetry/proto/collector/logs/v1/logs_service.pb.dart'
-    as collector;
-import 'package:dartastic_opentelemetry/proto/common/v1/common.pb.dart'
-    as common;
-import 'package:dartastic_opentelemetry/proto/logs/v1/logs.pb.dart' as logs;
-import 'package:dartastic_opentelemetry/proto/resource/v1/resource.pb.dart'
-    as otel_resource;
-import 'package:fixnum/fixnum.dart';
 import 'package:test/test.dart';
 
+// Pinned with raw OTLP/JSON literals rather than generated classes, so a
+// change to the encoding shows up as a diff against the specification's
+// shape: lowerCamelCase names, 64-bit integers as decimal strings, enums as
+// integers and bytes as base64.
 void main() {
   const AtTelemetryLogsCodec codec = AtTelemetryLogsCodec();
-  final DateTime observedAt = DateTime.utc(2024, 6, 1, 12);
 
-  AtTelemetryLogRecord roundTrip(
-    AtTelemetryLogRecord record, {
-    AtTelemetryResource? resource,
-  }) {
-    return codec
-        .decodeExportRequest(codec.encodeExportRequest(
-          <AtTelemetryLogRecord>[record],
-          resource: resource,
-          observedAt: observedAt,
-        ))
-        .single;
-  }
-
-  common.KeyValue stringAttribute(String key, String value) {
-    return common.KeyValue(
-      key: key,
-      value: common.AnyValue(stringValue: value),
-    );
-  }
-
-  List<int> rawRequest({
-    List<common.KeyValue> resourceAttributes = const <common.KeyValue>[],
-    List<common.KeyValue> scopeAttributes = const <common.KeyValue>[],
-    required List<logs.LogRecord> logRecords,
-  }) {
-    return collector.ExportLogsServiceRequest(
-      resourceLogs: <logs.ResourceLogs>[
-        logs.ResourceLogs(
-          resource: otel_resource.Resource(attributes: resourceAttributes),
-          scopeLogs: <logs.ScopeLogs>[
-            logs.ScopeLogs(
-              scope: common.InstrumentationScope(
-                name: 'scope',
-                attributes: scopeAttributes,
-              ),
-              logRecords: logRecords,
-            ),
-          ],
-        ),
-      ],
-    ).writeToBuffer();
-  }
-
-  group('AtTelemetryLogsCodec', () {
-    group('round trip', () {
-      test('keeps every field of an Event', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
+  group('AtTelemetryLogsCodec.encodeExportRequest', () {
+    test('writes every field as the OTLP JSON encoding specifies', () {
+      final String encoded = codec.encodeExportRequest(
+        <AtTelemetryLogRecord>[
           AtTelemetryLogRecord(
             eventName: 'login',
             body: 'hello',
             timestamp: DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 7),
-            severityNumber: AtTelemetrySeverity.warn2,
-            severityText: 'WARN2',
-            attributes: const <String, Object?>{'method': 'pkam'},
-          ),
-        );
-
-        expect(decoded.eventName, 'login');
-        expect(decoded.body, 'hello');
-        expect(decoded.timestamp, DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 7));
-        expect(decoded.severityNumber, AtTelemetrySeverity.warn2);
-        expect(decoded.severityText, 'WARN2');
-        expect(decoded.attributes, <String, Object?>{'method': 'pkam'});
-      });
-
-      test('keeps every AnyValue type', () {
-        final Map<String, Object?> attributes = <String, Object?>{
-          'string': 'a',
-          'bool': true,
-          'int': 42,
-          'negative': -7,
-          'max int': 0x7fffffffffffffff,
-          'double': 1.5,
-          'list': <Object?>[1, 'a', false],
-          'map': <String, Object?>{
-            'nested': <String, Object?>{'deep': 2.5},
-          },
-        };
-
-        final AtTelemetryLogRecord decoded =
-            roundTrip(AtTelemetryLogRecord(attributes: attributes));
-
-        expect(decoded.attributes, attributes);
-      });
-
-      test('keeps a Uint8List as a Uint8List', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(body: Uint8List.fromList(<int>[0, 1, 255])),
-        );
-
-        expect(decoded.body, isA<Uint8List>());
-        expect(decoded.body, <int>[0, 1, 255]);
-      });
-
-      test('keeps null inside a list but drops null attributes', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(
-            attributes: const <String, Object?>{
-              'missing': null,
-              'list': <Object?>[1, null],
-              'map': <String, Object?>{'missing': null, 'kept': 1},
+            severityNumber: AtTelemetrySeverity.warn,
+            severityText: 'WARN',
+            attributes: <String, Object?>{
+              's': 'x',
+              'b': true,
+              'i': 42,
+              'd': 1.5,
+              'bytes': Uint8List.fromList(<int>[1, 2, 3]),
+              'list': <Object?>[1, 'a', null],
+              'map': <String, Object?>{'k': 'v', 'n': null},
+              'skipped': null,
             },
           ),
-        );
-
-        expect(decoded.attributes, <String, Object?>{
-          'list': <Object?>[1, null],
-          'map': <String, Object?>{'kept': 1},
-        });
-      });
-
-      test('keeps every severity level', () {
-        for (final AtTelemetrySeverity severity in AtTelemetrySeverity.values) {
-          expect(
-            roundTrip(AtTelemetryLogRecord(severityNumber: severity))
-                .severityNumber,
-            severity,
-          );
-        }
-      });
-
-      test('decodes nested lists and maps as unmodifiable', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(
-            body: <String, Object?>{
-              'list': <Object?>[1],
-            },
-          ),
-        );
-        final Map<String, Object?> body = decoded.body! as Map<String, Object?>;
-
-        expect(() => body['x'] = 1, throwsUnsupportedError);
-        expect(
-          () => (body['list']! as List<Object?>).add(2),
-          throwsUnsupportedError,
-        );
-      });
-
-      test('keeps the order of several records', () {
-        final List<AtTelemetryLogRecord> decoded = codec.decodeExportRequest(
-          codec.encodeExportRequest(<AtTelemetryLogRecord>[
-            AtTelemetryLogRecord(body: 'first'),
-            AtTelemetryLogRecord(body: 'second'),
-            AtTelemetryLogRecord(body: 'third'),
-          ]),
-        );
-
-        expect(
-          decoded.map((AtTelemetryLogRecord record) => record.body),
-          <Object?>['first', 'second', 'third'],
-        );
-      });
-
-      test('merges resource attributes into each record', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(
-            attributes: const <String, Object?>{'shared': 'record'},
-          ),
-          resource: AtTelemetryResource(
-            serviceName: 'svc',
-            attributes: const <String, Object?>{
-              'shared': 'resource',
-              'atsign': '@alice',
-            },
-          ),
-        );
-
-        expect(decoded.attributes, <String, Object?>{
-          'shared': 'record',
-          'atsign': '@alice',
-          AtTelemetryResource.serviceNameAttribute: 'svc',
-        });
-      });
-    });
-
-    group('event name', () {
-      test('travels as the event.name attribute', () {
-        final collector.ExportLogsServiceRequest request =
-            collector.ExportLogsServiceRequest.fromBuffer(
-          codec.encodeExportRequest(<AtTelemetryLogRecord>[
-            AtTelemetryLogRecord(eventName: 'login'),
-          ]),
-        );
-        final logs.LogRecord logRecord =
-            request.resourceLogs.single.scopeLogs.single.logRecords.single;
-
-        expect(logRecord.attributes.single.key,
-            AtTelemetryLogsCodec.eventNameAttribute);
-        expect(logRecord.attributes.single.value.stringValue, 'login');
-      });
-
-      test('eventName wins over an event.name attribute on an Event', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(
-            eventName: 'login',
-            attributes: const <String, Object?>{
-              AtTelemetryLogsCodec.eventNameAttribute: 'other',
-            },
-          ),
-        );
-
-        expect(decoded.eventName, 'login');
-        expect(decoded.attributes, isEmpty);
-      });
-
-      test('an empty eventName decodes as a plain log', () {
-        final AtTelemetryLogRecord decoded =
-            roundTrip(AtTelemetryLogRecord(eventName: '', body: 'x'));
-
-        expect(decoded.eventName, isNull);
-        expect(decoded.isEvent, isFalse);
-      });
-
-      test('a plain log with an event.name attribute decodes as an Event', () {
-        final AtTelemetryLogRecord decoded = roundTrip(
-          AtTelemetryLogRecord(
-            attributes: const <String, Object?>{
-              AtTelemetryLogsCodec.eventNameAttribute: 'login',
-            },
-          ),
-        );
-
-        expect(decoded.eventName, 'login');
-        expect(decoded.attributes, isEmpty);
-      });
-
-      test('throws FormatException for a non-string event.name', () {
-        expect(
-          () => codec.decodeExportRequest(rawRequest(
-            logRecords: <logs.LogRecord>[
-              logs.LogRecord(attributes: <common.KeyValue>[
-                common.KeyValue(
-                  key: AtTelemetryLogsCodec.eventNameAttribute,
-                  value: common.AnyValue(intValue: Int64(1)),
-                ),
-              ]),
-            ],
-          )),
-          throwsFormatException,
-        );
-      });
-    });
-
-    group('timestamps', () {
-      test('uses observedAt for a record without a timestamp', () {
-        final collector.ExportLogsServiceRequest request =
-            collector.ExportLogsServiceRequest.fromBuffer(
-          codec.encodeExportRequest(
-            <AtTelemetryLogRecord>[AtTelemetryLogRecord()],
-            observedAt: observedAt,
-          ),
-        );
-        final logs.LogRecord logRecord =
-            request.resourceLogs.single.scopeLogs.single.logRecords.single;
-        final Int64 nanoseconds =
-            Int64(observedAt.microsecondsSinceEpoch) * 1000;
-
-        expect(logRecord.timeUnixNano, nanoseconds);
-        expect(logRecord.observedTimeUnixNano, nanoseconds);
-      });
-
-      test('decodes observedTimeUnixNano when timeUnixNano is 0', () {
-        final AtTelemetryLogRecord decoded = codec
-            .decodeExportRequest(rawRequest(
-              logRecords: <logs.LogRecord>[
-                logs.LogRecord(
-                  observedTimeUnixNano:
-                      Int64(observedAt.microsecondsSinceEpoch) * 1000,
-                ),
-              ],
-            ))
-            .single;
-
-        expect(decoded.timestamp, observedAt);
-      });
-
-      test('decodes a null timestamp when both are 0', () {
-        final AtTelemetryLogRecord decoded = codec
-            .decodeExportRequest(rawRequest(
-              logRecords: <logs.LogRecord>[logs.LogRecord()],
-            ))
-            .single;
-
-        expect(decoded.timestamp, isNull);
-      });
-    });
-
-    group('decodeExportRequest', () {
-      test('merges resource, scope and record attributes in that order', () {
-        final AtTelemetryLogRecord decoded = codec
-            .decodeExportRequest(rawRequest(
-              resourceAttributes: <common.KeyValue>[
-                stringAttribute('shared', 'resource'),
-                stringAttribute('resource', 'r'),
-              ],
-              scopeAttributes: <common.KeyValue>[
-                stringAttribute('shared', 'scope'),
-                stringAttribute('scope', 's'),
-              ],
-              logRecords: <logs.LogRecord>[
-                logs.LogRecord(attributes: <common.KeyValue>[
-                  stringAttribute('shared', 'record'),
-                ]),
-              ],
-            ))
-            .single;
-
-        expect(decoded.attributes, <String, Object?>{
-          'shared': 'record',
-          'resource': 'r',
-          'scope': 's',
-        });
-      });
-
-      test('decodes an unspecified severity as null', () {
-        final AtTelemetryLogRecord decoded = codec
-            .decodeExportRequest(rawRequest(
-              logRecords: <logs.LogRecord>[
-                logs.LogRecord(
-                  severityNumber:
-                      logs.SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED,
-                ),
-              ],
-            ))
-            .single;
-
-        expect(decoded.severityNumber, isNull);
-        expect(decoded.severityText, isNull);
-      });
-
-      test('decodes an unknown severity number as null', () {
-        // resourceLogs { scopeLogs { logRecords { severityNumber: 25 } } }
-        final List<int> payload = <int>[
-          0x0a, 0x06, 0x12, 0x04, 0x12, 0x02, 0x10, 0x19, //
-        ];
-
-        expect(
-          codec.decodeExportRequest(payload).single.severityNumber,
-          isNull,
-        );
-      });
-
-      test('throws FormatException for bytes that are not Protobuf', () {
-        expect(
-          () => codec.decodeExportRequest(<int>[0xff, 0xff, 0xff]),
-          throwsFormatException,
-        );
-      });
-
-      test('throws FormatException for a request with no records', () {
-        expect(() => codec.decodeExportRequest(<int>[]), throwsFormatException);
-        expect(
-          () => codec.decodeExportRequest(
-            rawRequest(logRecords: const <logs.LogRecord>[]),
-          ),
-          throwsFormatException,
-        );
-      });
-    });
-
-    group('encodeExportRequest', () {
-      test('throws ArgumentError for no records', () {
-        expect(
-          () => codec.encodeExportRequest(const <AtTelemetryLogRecord>[]),
-          throwsArgumentError,
-        );
-      });
-
-      test('names the instrumentation scope at_telemetry', () {
-        final collector.ExportLogsServiceRequest request =
-            collector.ExportLogsServiceRequest.fromBuffer(
-          codec.encodeExportRequest(
-            <AtTelemetryLogRecord>[AtTelemetryLogRecord()],
-          ),
-        );
-        final logs.ResourceLogs resourceLogs = request.resourceLogs.single;
-
-        expect(resourceLogs.scopeLogs.single.scope.name,
-            AtTelemetryLogsCodec.scopeName);
-        expect(resourceLogs.resource.attributes, isEmpty);
-      });
-
-      test('writes the resource attributes on the resource', () {
-        final collector.ExportLogsServiceRequest request =
-            collector.ExportLogsServiceRequest.fromBuffer(
-          codec.encodeExportRequest(
-            <AtTelemetryLogRecord>[AtTelemetryLogRecord()],
-            resource: AtTelemetryResource(serviceName: 'svc'),
-          ),
-        );
-        final common.KeyValue attribute =
-            request.resourceLogs.single.resource.attributes.single;
-
-        expect(attribute.key, AtTelemetryResource.serviceNameAttribute);
-        expect(attribute.value.stringValue, 'svc');
-      });
-    });
-
-    test('encodeExportResponse is a valid empty response', () {
-      final collector.ExportLogsServiceResponse response =
-          collector.ExportLogsServiceResponse.fromBuffer(
-        codec.encodeExportResponse(),
+        ],
+        resource: AtTelemetryResource(
+          serviceName: 'svc',
+          attributes: const <String, Object?>{'atsign.atserver.id': '@alice'},
+        ),
+        observedAt: DateTime.utc(2024, 1, 2, 3, 4, 6),
       );
 
-      expect(response.hasPartialSuccess(), isFalse);
+      expect(jsonDecode(encoded), jsonDecode('''
+{"resourceLogs":[{
+  "resource":{"attributes":[
+    {"key":"atsign.atserver.id","value":{"stringValue":"@alice"}},
+    {"key":"service.name","value":{"stringValue":"svc"}}]},
+  "scopeLogs":[{
+    "scope":{"name":"at_telemetry"},
+    "logRecords":[{
+      "timeUnixNano":"1704164645006007000",
+      "observedTimeUnixNano":"1704164646000000000",
+      "severityNumber":13,
+      "severityText":"WARN",
+      "body":{"stringValue":"hello"},
+      "attributes":[
+        {"key":"s","value":{"stringValue":"x"}},
+        {"key":"b","value":{"boolValue":true}},
+        {"key":"i","value":{"intValue":"42"}},
+        {"key":"d","value":{"doubleValue":1.5}},
+        {"key":"bytes","value":{"bytesValue":"AQID"}},
+        {"key":"list","value":{"arrayValue":{"values":[
+          {"intValue":"1"},{"stringValue":"a"},{}]}}},
+        {"key":"map","value":{"kvlistValue":{"values":[
+          {"key":"k","value":{"stringValue":"v"}}]}}}],
+      "eventName":"login"}]}]}]}
+'''));
+    });
+
+    test('a plain log has no eventName, and omits unset fields', () {
+      final String encoded = codec.encodeExportRequest(
+        <AtTelemetryLogRecord>[AtTelemetryLogRecord(body: 'line')],
+        observedAt: DateTime.utc(2024, 1, 2, 3, 4, 6),
+      );
+
+      expect(jsonDecode(encoded), jsonDecode('''
+{"resourceLogs":[{
+  "resource":{"attributes":[]},
+  "scopeLogs":[{
+    "scope":{"name":"at_telemetry"},
+    "logRecords":[{
+      "timeUnixNano":"1704164646000000000",
+      "observedTimeUnixNano":"1704164646000000000",
+      "body":{"stringValue":"line"},
+      "attributes":[]}]}]}]}
+'''));
+    });
+
+    test('keeps a record\'s own observedTimestamp', () {
+      final String encoded = codec.encodeExportRequest(
+        <AtTelemetryLogRecord>[
+          AtTelemetryLogRecord(
+            body: 'line',
+            observedTimestamp: DateTime.utc(2024, 1, 2, 3, 4, 5),
+          ),
+        ],
+        observedAt: DateTime.utc(2024, 1, 2, 3, 4, 6),
+      );
+
+      final Map<String, Object?> record = _onlyRecord(encoded);
+      expect(record['observedTimeUnixNano'], '1704164645000000000');
+      expect(record['timeUnixNano'], '1704164645000000000');
+    });
+
+    test('writes times past 2262 without overflowing', () {
+      final String encoded = codec.encodeExportRequest(
+        <AtTelemetryLogRecord>[
+          AtTelemetryLogRecord(body: 'x', timestamp: DateTime.utc(2300)),
+        ],
+        observedAt: DateTime.utc(2024),
+      );
+
+      expect(_onlyRecord(encoded)['timeUnixNano'], '10413792000000000000');
+    });
+
+    test('writes the largest 64-bit integer as a string', () {
+      final String encoded = codec.encodeExportRequest(
+        <AtTelemetryLogRecord>[
+          AtTelemetryLogRecord(
+            attributes: const <String, Object?>{'max': 9223372036854775807},
+          ),
+        ],
+      );
+
+      expect(
+        (_onlyRecord(encoded)['attributes']! as List<Object?>).single,
+        <String, Object?>{
+          'key': 'max',
+          'value': <String, Object?>{'intValue': '9223372036854775807'},
+        },
+      );
+    });
+
+    test('throws ArgumentError when there are no records', () {
+      expect(
+        () => codec.encodeExportRequest(const <AtTelemetryLogRecord>[]),
+        throwsArgumentError,
+      );
     });
   });
+
+  group('AtTelemetryLogsCodec.decode', () {
+    // The logs example from opentelemetry-proto's examples/logs.json, plus an
+    // eventName as in examples/events.json
+    const String specExample = '''
+{
+  "resourceLogs": [{
+    "resource": {"attributes": [
+      {"key": "service.name", "value": {"stringValue": "my.service"}}]},
+    "scopeLogs": [{
+      "scope": {"name": "my.library", "version": "1.0.0", "attributes": [
+        {"key": "my.scope.attribute",
+         "value": {"stringValue": "some scope attribute"}}]},
+      "logRecords": [{
+        "timeUnixNano": "1544712660300000000",
+        "observedTimeUnixNano": "1544712660300000000",
+        "severityNumber": 10,
+        "severityText": "Information",
+        "traceId": "5B8EFFF798038103D269B633813FC60C",
+        "spanId": "EEE19B7EC3C1B174",
+        "eventName": "browser.page_view",
+        "body": {"stringValue": "Example log record"},
+        "attributes": [
+          {"key": "string.attribute", "value": {"stringValue": "some string"}},
+          {"key": "boolean.attribute", "value": {"boolValue": true}},
+          {"key": "int.attribute", "value": {"intValue": "10"}},
+          {"key": "double.attribute", "value": {"doubleValue": 637.704}},
+          {"key": "array.attribute", "value": {"arrayValue": {"values": [
+            {"stringValue": "many"}, {"stringValue": "values"}]}}},
+          {"key": "map.attribute", "value": {"kvlistValue": {"values": [
+            {"key": "some.map.key",
+             "value": {"stringValue": "some value"}}]}}}]
+      }]
+    }]
+  }]
+}
+''';
+
+    test('reads the specification\'s example', () {
+      final List<AtTelemetryResourceLogs> decoded = codec.decode(specExample);
+
+      expect(decoded, hasLength(1));
+      final AtTelemetryResourceLogs logs = decoded.single;
+      expect(logs.resourceAttributes, <String, Object?>{
+        'service.name': 'my.service',
+      });
+      expect(logs.scopeName, 'my.library');
+      final AtTelemetryLogRecord record = logs.records.single;
+      expect(record.timestamp, DateTime.utc(2018, 12, 13, 14, 51, 0, 300));
+      expect(record.observedTimestamp, record.timestamp);
+      expect(record.severityNumber, AtTelemetrySeverity.info2);
+      expect(record.severityText, 'Information');
+      expect(record.eventName, 'browser.page_view');
+      expect(record.body, 'Example log record');
+      expect(record.attributes, <String, Object?>{
+        'string.attribute': 'some string',
+        'boolean.attribute': true,
+        'int.attribute': 10,
+        'double.attribute': 637.704,
+        'array.attribute': <Object?>['many', 'values'],
+        'map.attribute': <String, Object?>{'some.map.key': 'some value'},
+      });
+    });
+
+    test('round trips what it encodes', () {
+      final AtTelemetryLogRecord original = AtTelemetryLogRecord(
+        eventName: 'login',
+        body: <String, Object?>{
+          'list': <Object?>[1, 'a', null, 2.5],
+        },
+        timestamp: DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 7),
+        observedTimestamp: DateTime.utc(2024, 1, 2, 3, 4, 6),
+        severityNumber: AtTelemetrySeverity.error,
+        severityText: 'ERROR',
+        attributes: <String, Object?>{
+          'a': 1,
+          'b': 2.5,
+          'c': true,
+          'bytes': Uint8List.fromList(<int>[0, 255]),
+        },
+      );
+      final AtTelemetryLogRecord decoded = codec
+          .decode(codec.encodeExportRequest(<AtTelemetryLogRecord>[original]))
+          .single
+          .records
+          .single;
+
+      expect(decoded.eventName, original.eventName);
+      expect(decoded.body, original.body);
+      expect(decoded.timestamp, original.timestamp);
+      expect(decoded.observedTimestamp, original.observedTimestamp);
+      expect(decoded.severityNumber, original.severityNumber);
+      expect(decoded.severityText, original.severityText);
+      expect(decoded.attributes, original.attributes);
+      expect(decoded.attributes['bytes'], isA<Uint8List>());
+    });
+
+    test('accepts JSON numbers where strings are expected', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"timeUnixNano":1544712660300000000,'
+              '"attributes":[{"key":"i","value":{"intValue":10}}]}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.timestamp, DateTime.utc(2018, 12, 13, 14, 51, 0, 300));
+      expect(record.attributes, <String, Object?>{'i': 10});
+    });
+
+    test('treats a zero or missing time as unknown', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"timeUnixNano":"0","body":{"stringValue":"x"}}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.timestamp, isNull);
+      expect(record.observedTimestamp, isNull);
+    });
+
+    test('reads times past 2262', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"timeUnixNano":"10413792000000000000"}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.timestamp, DateTime.utc(2300));
+    });
+
+    test('splits each ScopeLogs into its own entry', () {
+      final List<AtTelemetryResourceLogs> decoded = codec.decode(
+        '{"resourceLogs":[{"resource":{"attributes":[{"key":"r",'
+        '"value":{"stringValue":"1"}}]},"scopeLogs":['
+        '{"scope":{"name":"a"},"logRecords":[{"eventName":"x"}]},'
+        '{"scope":{"name":"b"},"logRecords":[{"eventName":"y"}]},'
+        '{"scope":{"name":"empty"},"logRecords":[]}]}]}',
+      );
+
+      expect(decoded.map((AtTelemetryResourceLogs logs) => logs.scopeName),
+          <String>['a', 'b']);
+      expect(decoded.first.resourceAttributes, <String, Object?>{'r': '1'});
+      expect(decoded.last.resourceAttributes, <String, Object?>{'r': '1'});
+    });
+
+    final Map<String, String> invalid = <String, String>{
+      'it is not JSON': 'not json',
+      'it is not an object': '[]',
+      'resourceLogs is not an array': '{"resourceLogs":{}}',
+      'there are no records': '{"resourceLogs":[]}',
+      'a record is not an object':
+          '{"resourceLogs":[{"scopeLogs":[{"logRecords":[1]}]}]}',
+      'timeUnixNano is negative': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"timeUnixNano":"-1"}]}]}]}',
+      'timeUnixNano is past uint64': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"timeUnixNano":"99999999999999999999"}]}]}]}',
+      'severityNumber is 25': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"severityNumber":25}]}]}]}',
+      'severityNumber is a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"severityNumber":"9"}]}]}]}',
+      'eventName is not a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"eventName":1}]}]}]}',
+      'intValue is not an integer': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":[{"key":"i",'
+          '"value":{"intValue":"1.5"}}]}]}]}]}',
+      'intValue overflows 64 bits': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":[{"key":"i",'
+          '"value":{"intValue":"9223372036854775808"}}]}]}]}]}',
+      'doubleValue is NaN': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":[{"key":"d",'
+          '"value":{"doubleValue":"NaN"}}]}]}]}]}',
+      'bytesValue is not base64': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":[{"key":"b",'
+          '"value":{"bytesValue":"!!"}}]}]}]}]}',
+      'an attribute key is missing': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":[{"value":{"boolValue":true}}]}]}]}]}',
+    };
+    for (final MapEntry<String, String> entry in invalid.entries) {
+      test('throws FormatException when ${entry.key}', () {
+        expect(() => codec.decode(entry.value), throwsFormatException);
+      });
+    }
+  });
+}
+
+Map<String, Object?> _onlyRecord(String encoded) {
+  final Map<String, Object?> request =
+      jsonDecode(encoded) as Map<String, Object?>;
+  final Map<String, Object?> resourceLogs =
+      (request['resourceLogs']! as List<Object?>).single!
+          as Map<String, Object?>;
+  final Map<String, Object?> scopeLogs =
+      (resourceLogs['scopeLogs']! as List<Object?>).single!
+          as Map<String, Object?>;
+  return (scopeLogs['logRecords']! as List<Object?>).single!
+      as Map<String, Object?>;
 }

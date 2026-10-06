@@ -1,427 +1,312 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:test/test.dart';
 
 import '../helpers/callback_signer.dart';
-import '../helpers/sequence_random.dart';
 
 void main() {
   const String path = '/v1/logs';
-  const String keyId = '@alice';
-  const String audience = '@collector';
-  const int created = 1704067200;
-  const String nonce = 'AAECAwQFBgcICQoLDA0ODw';
-  const String input = 'at=("@method" "@path" "content-type" "content-digest" '
-      '"at-telemetry-audience");created=$created;expires=${created + 300};'
-      'nonce="$nonce";keyid="@alice";alg="rsa-v1_5-sha256";'
-      'tag="at-telemetry-v1"';
-  final List<int> body = utf8.encode('hello');
+  const String audience = 'collector.example.com';
+  const String producer = '@producer1';
+  const int created = 1790380800;
+  final List<int> body = utf8.encode('{"resourceLogs":[]}');
+  final AtTelemetrySequence sequence = AtTelemetrySequence(
+    bootId: 'AAECAwQFBgcICQoLDA0ODw',
+    number: 42,
+  );
 
-  late RsaKeyPair keys;
-  late RsaKeyPair otherKeys;
-  late AtTelemetrySigner signer;
+  late AtTelemetryEd25519Signer signer;
+  late AtTelemetryEd25519Signer otherSigner;
+  late String keyId;
 
-  setUpAll(() {
-    keys = RsaKeyPair.generate();
-    otherKeys = RsaKeyPair.generate();
-    signer = AtTelemetryRsaSigner.fromBase64(keys.atPrivateKey.privateKey);
+  setUpAll(() async {
+    signer = await AtTelemetryEd25519Signer.fromSeed(
+      List<int>.generate(32, (int index) => index),
+    );
+    otherSigner = await AtTelemetryEd25519Signer.fromSeed(
+      List<int>.generate(32, (int index) => 255 - index),
+    );
+    keyId = AtTelemetryPublicKeyRecord.keyIdFor(signer.publicKey);
   });
 
-  Future<AtTelemetryHttpSignature> signHello({
-    String keyId = keyId,
+  DateTime at(int seconds) =>
+      DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+
+  Future<AtTelemetryHttpSignature> signBody({
     String audience = audience,
+    String producer = producer,
+    AtTelemetrySigner? using,
   }) {
     return AtTelemetryHttpSignature.sign(
       body: body,
       path: path,
       keyId: keyId,
       audience: audience,
-      signer: signer,
-      now: () => DateTime.fromMillisecondsSinceEpoch(
-        created * 1000,
-        isUtc: true,
-      ),
-      random: SequenceRandom(),
+      producer: producer,
+      sequence: sequence,
+      signer: using ?? signer,
+      now: () => at(created),
     );
   }
 
-  AtTelemetryHttpSignature parseSigned(
+  AtTelemetryHttpSignature reparse(
     AtTelemetryHttpSignature signed, {
     String? input,
     String? signature,
     String? digest,
     String? audience,
+    String? producer,
+    String? sequence,
   }) {
+    final Map<String, String> headers = signed.headers;
     return AtTelemetryHttpSignature.parse(
-      input: input ?? signed.input,
-      signature: signature ?? signed.signature,
-      digest: digest ?? signed.digest,
-      audience: audience ?? signed.audience,
-    );
-  }
-
-  DateTime secondsAfterCreated(int seconds) {
-    return DateTime.fromMillisecondsSinceEpoch(
-      (created + seconds) * 1000,
-      isUtc: true,
+      input: input ?? headers[AtTelemetryHttpSignature.inputHeader]!,
+      signature:
+          signature ?? headers[AtTelemetryHttpSignature.signatureHeader]!,
+      digest: digest ?? headers[AtTelemetryHttpSignature.digestHeader]!,
+      audience: audience ?? headers[AtTelemetryHttpSignature.audienceHeader]!,
+      producer: producer ?? headers[AtTelemetryHttpSignature.producerHeader]!,
+      sequence: sequence ?? headers[AtTelemetryHttpSignature.sequenceHeader]!,
     );
   }
 
   group('AtTelemetryHttpSignature', () {
     group('sign', () {
-      test('produces the expected headers', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
+      test('writes the at-telemetry profile headers', () async {
+        final AtTelemetryHttpSignature signed = await signBody();
 
-        expect(signed.keyId, keyId);
-        expect(signed.created, created);
-        expect(signed.expires, created + 300);
-        expect(signed.nonce, nonce);
-        expect(signed.input, input);
-        expect(signed.audience, audience);
-        expect(
-          signed.digest,
-          'sha-256=:LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=:',
-        );
-        expect(signed.signature, matches(RegExp(r'^at=:[A-Za-z0-9+/]+=*:$')));
+        expect(signed.headers, <String, String>{
+          'content-type': 'application/json',
+          'content-digest': AtTelemetryHttpSignature.digestOf(body),
+          'at-telemetry-audience': 'collector.example.com',
+          'at-telemetry-producer': '@producer1',
+          'at-telemetry-sequence': 'boot=AAECAwQFBgcICQoLDA0ODw;seq=42',
+          'signature-input': 'at=("@method" "@path" "content-type" '
+              '"content-digest" "at-telemetry-audience" '
+              '"at-telemetry-producer" "at-telemetry-sequence");'
+              'created=1790380800;expires=1790381100;keyid="$keyId";'
+              'alg="ed25519";tag="at-telemetry"',
+          'signature': signed.signature,
+        });
+        expect(signed.signature, matches(r'^at=:[A-Za-z0-9+/]{86}==:$'));
       });
 
-      test('signs the expected signature base', () async {
-        late List<int> message;
-        await AtTelemetryHttpSignature.sign(
-          body: body,
-          path: path,
-          keyId: keyId,
-          audience: audience,
-          signer: CallbackSigner((List<int> signed) async {
-            message = signed;
-            return Uint8List(256);
+      test('signs exactly the RFC 9421 signature base', () async {
+        final List<String> messages = <String>[];
+        await signBody(
+          using: CallbackSigner((List<int> message) async {
+            messages.add(utf8.decode(message));
+            return Uint8List(64);
           }),
-          now: () => secondsAfterCreated(0),
-          random: SequenceRandom(),
         );
 
         expect(
-          utf8.decode(message),
+          messages.single,
           '"@method": POST\n'
           '"@path": /v1/logs\n'
-          '"content-type": application/x-protobuf\n'
-          '"content-digest": '
-          'sha-256=:LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=:\n'
-          '"at-telemetry-audience": @collector\n'
-          '"@signature-params": ${input.substring(3)}',
+          '"content-type": application/json\n'
+          '"content-digest": ${AtTelemetryHttpSignature.digestOf(body)}\n'
+          '"at-telemetry-audience": collector.example.com\n'
+          '"at-telemetry-producer": @producer1\n'
+          '"at-telemetry-sequence": boot=AAECAwQFBgcICQoLDA0ODw;seq=42\n'
+          '"@signature-params": ("@method" "@path" "content-type" '
+          '"content-digest" "at-telemetry-audience" "at-telemetry-producer" '
+          '"at-telemetry-sequence");created=1790380800;expires=1790381100;'
+          'keyid="$keyId";alg="ed25519";tag="at-telemetry"',
         );
       });
 
-      test('uses a new random nonce by default', () async {
-        final AtTelemetryHttpSignature first =
-            await AtTelemetryHttpSignature.sign(
-          body: body,
-          path: path,
-          keyId: keyId,
-          audience: audience,
-          signer: signer,
-        );
-        final AtTelemetryHttpSignature second =
-            await AtTelemetryHttpSignature.sign(
-          body: body,
-          path: path,
-          keyId: keyId,
-          audience: audience,
-          signer: signer,
-        );
-
-        expect(first.nonce, hasLength(22));
-        expect(first.nonce, isNot(second.nonce));
-      });
-
-      test('percent-encodes keyId and audience but keeps @', () async {
+      test('percent-encodes an atSign with emoji in the producer header',
+          () async {
         final AtTelemetryHttpSignature signed =
-            await signHello(keyId: '@alice bob', audience: '@col"lector');
+            await signBody(producer: '@☎️_0002');
 
-        expect(signed.keyId, '@alice bob');
-        expect(signed.input, contains('keyid="@alice%20bob"'));
-        expect(signed.audience, '@col%22lector');
+        expect(
+          signed.headers[AtTelemetryHttpSignature.producerHeader],
+          '@%E2%98%8E%EF%B8%8F_0002',
+        );
+        expect(reparse(signed).producer, '@☎️_0002');
+      });
+
+      test('rejects an audience that is not a host', () async {
+        expect(
+            () => signBody(audience: 'Collector Example'), throwsArgumentError);
+        expect(() => signBody(audience: 'a\nb'), throwsArgumentError);
+      });
+
+      test('rejects a producer that is not an atSign', () async {
+        expect(() => signBody(producer: 'producer1'), throwsArgumentError);
       });
     });
 
     group('verify', () {
-      test('accepts a signature from the matching key', () async {
-        final AtTelemetryHttpSignature parsed = parseSigned(await signHello());
+      test('accepts a signature made with the matching key', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
 
+        expect(parsed.keyId, keyId);
+        expect(parsed.algorithm, 'ed25519');
+        expect(parsed.producer, producer);
+        expect(parsed.sequence, sequence);
+        expect(parsed.audience, audience);
+        expect(parsed.isFresh(at(created)), isTrue);
+        expect(parsed.matchesBody(body), isTrue);
         expect(
-          await parsed.verify(
-            path: path,
-            publicKey: keys.atPublicKey.publicKey,
-          ),
+          await parsed.verify(path: path, publicKey: signer.publicKey),
           isTrue,
         );
       });
 
-      test('rejects the wrong public key', () async {
-        final AtTelemetryHttpSignature parsed = parseSigned(await signHello());
+      test('rejects another key', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
 
         expect(
-          await parsed.verify(
-            path: path,
-            publicKey: otherKeys.atPublicKey.publicKey,
-          ),
+          await parsed.verify(path: path, publicKey: otherSigner.publicKey),
           isFalse,
         );
       });
 
-      test('rejects a public key that is not base64', () async {
-        final AtTelemetryHttpSignature parsed = parseSigned(await signHello());
+      test('rejects another path', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
 
         expect(
-          await parsed.verify(path: path, publicKey: 'not base64!'),
+          await parsed.verify(path: '/v1/metrics', publicKey: signer.publicKey),
           isFalse,
         );
       });
 
-      test('rejects a different path', () async {
-        final AtTelemetryHttpSignature parsed = parseSigned(await signHello());
-
-        expect(
-          await parsed.verify(
-            path: '/v1/other',
-            publicKey: keys.atPublicKey.publicKey,
-          ),
-          isFalse,
-        );
-      });
-
-      test('rejects tampered headers', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
-        final Uint8List signatureBytes = base64Decode(
-          signed.signature.substring(4, signed.signature.length - 1),
-        );
-        signatureBytes[0] ^= 1;
-
-        final Map<String, AtTelemetryHttpSignature> tampered =
-            <String, AtTelemetryHttpSignature>{
-          'audience': parseSigned(signed, audience: '@mallory'),
-          'digest': parseSigned(
+      final Map<String, Map<String, String>> tampered =
+          <String, Map<String, String>>{
+        'audience': <String, String>{'audience': 'other.example.com'},
+        'producer': <String, String>{'producer': '@producer2'},
+        'sequence': <String, String>{
+          'sequence': 'boot=AAECAwQFBgcICQoLDA0ODw;seq=43',
+        },
+        'boot id': <String, String>{
+          'sequence': 'boot=AQECAwQFBgcICQoLDA0ODw;seq=42',
+        },
+        'digest': <String, String>{
+          'digest': AtTelemetryHttpSignature.digestOf(utf8.encode('{}')),
+        },
+      };
+      for (final MapEntry<String, Map<String, String>> entry
+          in tampered.entries) {
+        test('rejects a changed ${entry.key}', () async {
+          final AtTelemetryHttpSignature signed = await signBody();
+          final AtTelemetryHttpSignature parsed = reparse(
             signed,
-            digest: AtTelemetryHttpSignature.digestOf(utf8.encode('bye')),
-          ),
-          'input': parseSigned(
-            signed,
-            input: signed.input.replaceFirst('$created', '${created + 1}'),
-          ),
-          'keyid': parseSigned(
-            signed,
-            input: signed.input.replaceFirst('@alice', '@mallory'),
-          ),
-          'signature': parseSigned(
-            signed,
-            signature: 'at=:${base64Encode(signatureBytes)}:',
-          ),
-        };
-
-        for (final MapEntry<String, AtTelemetryHttpSignature> entry
-            in tampered.entries) {
-          expect(
-            await entry.value.verify(
-              path: path,
-              publicKey: keys.atPublicKey.publicKey,
-            ),
-            isFalse,
-            reason: 'tampered ${entry.key}',
+            audience: entry.value['audience'],
+            producer: entry.value['producer'],
+            sequence: entry.value['sequence'],
+            digest: entry.value['digest'],
           );
-        }
-      });
-    });
 
-    group('parse', () {
-      test('reads back the signed fields', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
-        final AtTelemetryHttpSignature parsed = parseSigned(signed);
+          expect(
+            await parsed.verify(path: path, publicKey: signer.publicKey),
+            isFalse,
+          );
+        });
+      }
 
-        expect(parsed.keyId, keyId);
-        expect(parsed.created, created);
-        expect(parsed.expires, created + 300);
-        expect(parsed.nonce, nonce);
-        expect(parsed.input, signed.input);
-        expect(parsed.audience, signed.audience);
-        expect(parsed.digest, signed.digest);
-        expect(parsed.signature, signed.signature);
-      });
-
-      test('decodes a percent-encoded keyId', () async {
-        final AtTelemetryHttpSignature parsed =
-            parseSigned(await signHello(keyId: '@alice bob'));
-
-        expect(parsed.keyId, '@alice bob');
-      });
-
-      test('throws FormatException for malformed headers', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
-        final String shortDigest =
-            'sha-256=:${base64Encode(List<int>.filled(31, 0))}:';
-        final String shortSignature =
-            'at=:${base64Encode(List<int>.filled(255, 0))}:';
-
-        final Map<String, AtTelemetryHttpSignature Function()> invalid =
-            <String, AtTelemetryHttpSignature Function()>{
-          'wrong alg': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst('rsa-v1_5', 'rsa-pss'),
-              ),
-          'wrong tag': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst('v1"', 'v2"'),
-              ),
-          'short nonce': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst(nonce, nonce.substring(1)),
-              ),
-          'expires equals created': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst(
-                    'expires=${created + 300}', 'expires=$created'),
-              ),
-          'lifetime over 300 seconds': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst(
-                    'expires=${created + 300}', 'expires=${created + 301}'),
-              ),
-          'leading space': () => parseSigned(signed, input: ' ${signed.input}'),
-          'empty input': () => parseSigned(signed, input: ''),
-          'short digest': () => parseSigned(signed, digest: shortDigest),
-          'wrong digest algorithm': () => parseSigned(
-                signed,
-                digest: signed.digest.replaceFirst('sha-256', 'sha-512'),
-              ),
-          'short signature': () =>
-              parseSigned(signed, signature: shortSignature),
-          'noncanonical audience': () =>
-              parseSigned(signed, audience: '%40collector'),
-          'noncanonical keyid': () => parseSigned(
-                signed,
-                input: signed.input.replaceFirst('"@alice"', '"%40alice"'),
-              ),
-        };
-
-        for (final MapEntry<String, AtTelemetryHttpSignature Function()> entry
-            in invalid.entries) {
-          expect(entry.value, throwsFormatException, reason: entry.key);
-        }
-      });
-
-      test('throws ArgumentError for invalid percent-encoding', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
-
-        expect(
-          () => parseSigned(signed, audience: '@col%ZZ'),
-          throwsArgumentError,
+      test('rejects an alg it does not implement', () async {
+        final AtTelemetryHttpSignature signed = await signBody();
+        final AtTelemetryHttpSignature parsed = reparse(
+          signed,
+          input: signed.input.replaceFirst('alg="ed25519"', 'alg="mldsa65"'),
         );
+
+        expect(parsed.algorithm, 'mldsa65');
+        expect(
+          await parsed.verify(path: path, publicKey: signer.publicKey),
+          isFalse,
+        );
+      });
+
+      test('matchesBody rejects a different body', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
+
+        expect(parsed.matchesBody(utf8.encode('{}')), isFalse);
       });
     });
 
     group('isFresh', () {
-      late AtTelemetryHttpSignature signed;
+      test('allows 30 seconds of clock skew and 300 seconds of age', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
 
-      setUp(() async {
-        signed = await signHello();
-      });
-
-      test('allows created up to 30 seconds in the future', () {
-        expect(signed.isFresh(secondsAfterCreated(-30)), isTrue);
-        expect(signed.isFresh(secondsAfterCreated(-31)), isFalse);
-      });
-
-      test('is fresh until expires', () {
-        expect(signed.isFresh(secondsAfterCreated(0)), isTrue);
-        expect(signed.isFresh(secondsAfterCreated(299)), isTrue);
-        expect(signed.isFresh(secondsAfterCreated(300)), isFalse);
-      });
-
-      test('converts a local time to UTC', () {
-        expect(signed.isFresh(secondsAfterCreated(10).toLocal()), isTrue);
+        expect(parsed.isFresh(at(created - 30)), isTrue);
+        expect(parsed.isFresh(at(created - 31)), isFalse);
+        expect(parsed.isFresh(at(created + 299)), isTrue);
+        expect(parsed.isFresh(at(created + 300)), isFalse);
       });
     });
 
-    group('matchesBody', () {
-      test('matches only the signed body', () async {
-        final AtTelemetryHttpSignature signed = await signHello();
-        final List<int> changed = List<int>.of(body)..[0] ^= 1;
+    group('parse', () {
+      final Map<String, String Function(String)> badInputs =
+          <String, String Function(String)>{
+        'the old v1 tag': (String input) =>
+            input.replaceFirst('tag="at-telemetry"', 'tag="at-telemetry-v1"'),
+        'a nonce parameter': (String input) =>
+            input.replaceFirst(';keyid=', ';nonce="abc";keyid='),
+        'a missing covered component': (String input) =>
+            input.replaceFirst(' "at-telemetry-sequence"', ''),
+        'reordered components': (String input) => input.replaceFirst(
+              '"at-telemetry-producer" "at-telemetry-sequence"',
+              '"at-telemetry-sequence" "at-telemetry-producer"',
+            ),
+        'a lifetime over 300 seconds': (String input) =>
+            input.replaceFirst('expires=1790381100', 'expires=1790381101'),
+        'expires before created': (String input) =>
+            input.replaceFirst('expires=1790381100', 'expires=1790380700'),
+        'an atSign as keyid': (String input) =>
+            input.replaceFirst(RegExp(r'keyid="[^"]+"'), 'keyid="@producer1"'),
+      };
+      for (final MapEntry<String, String Function(String)> entry
+          in badInputs.entries) {
+        test('rejects signature-input with ${entry.key}', () async {
+          final AtTelemetryHttpSignature signed = await signBody();
 
-        expect(signed.matchesBody(body), isTrue);
-        expect(signed.matchesBody(changed), isFalse);
-        expect(signed.matchesBody(<int>[]), isFalse);
-      });
-
-      test('matches an empty body', () async {
-        final AtTelemetryHttpSignature signed =
-            await AtTelemetryHttpSignature.sign(
-          body: <int>[],
-          path: path,
-          keyId: keyId,
-          audience: audience,
-          signer: signer,
-        );
-
-        expect(signed.matchesBody(<int>[]), isTrue);
-      });
-    });
-
-    group('digestOf', () {
-      test('is the RFC 9530 sha-256 digest', () {
-        expect(
-          AtTelemetryHttpSignature.digestOf(<int>[]),
-          'sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:',
-        );
-      });
-    });
-
-    group('signatureBase', () {
-      test('rejects an unsafe path', () {
-        for (final String unsafe in <String>[
-          'v1/logs',
-          '/v1/logs\n',
-          '/v1/logs\r',
-        ]) {
           expect(
-            () => AtTelemetryHttpSignature.signatureBase(
-              path: unsafe,
-              digest: 'digest',
-              audience: audience,
-              input: input,
+            () => reparse(signed, input: entry.value(signed.input)),
+            throwsFormatException,
+          );
+        });
+      }
+
+      final Map<String, Map<String, String>> badHeaders =
+          <String, Map<String, String>>{
+        'a short signature': <String, String>{
+          'signature': 'at=:${base64Encode(Uint8List(63))}:',
+        },
+        'a malformed digest': <String, String>{'digest': 'sha-256=:abc:'},
+        'an audience with a space': <String, String>{
+          'audience': 'collector .example.com',
+        },
+        'a producer without @': <String, String>{'producer': 'producer1'},
+        'a noncanonical producer': <String, String>{'producer': '%40producer1'},
+        'a malformed sequence': <String, String>{'sequence': 'seq=42'},
+        'a sequence with a leading zero': <String, String>{
+          'sequence': 'boot=AAECAwQFBgcICQoLDA0ODw;seq=042',
+        },
+      };
+      for (final MapEntry<String, Map<String, String>> entry
+          in badHeaders.entries) {
+        test('rejects ${entry.key}', () async {
+          final AtTelemetryHttpSignature signed = await signBody();
+
+          expect(
+            () => reparse(
+              signed,
+              signature: entry.value['signature'],
+              digest: entry.value['digest'],
+              audience: entry.value['audience'],
+              producer: entry.value['producer'],
+              sequence: entry.value['sequence'],
             ),
             throwsFormatException,
-            reason: unsafe,
           );
-        }
-      });
-    });
-
-    group('Atsign encoding', () {
-      test('round trips Atsigns', () {
-        for (final String atsign in <String>[
-          '@alice',
-          '@alice bob',
-          '@élan',
-          '@🦄',
-        ]) {
-          final String encoded = AtTelemetryHttpSignature.encodeAtsign(atsign);
-          expect(encoded, isNot(contains(' ')));
-          expect(AtTelemetryHttpSignature.decodeAtsign(encoded), atsign);
-        }
-      });
-
-      test('keeps @ unescaped', () {
-        expect(AtTelemetryHttpSignature.encodeAtsign('@alice'), '@alice');
-      });
-
-      test('rejects a noncanonical encoding', () {
-        expect(
-          () => AtTelemetryHttpSignature.decodeAtsign('%40alice'),
-          throwsFormatException,
-        );
-      });
+        });
+      }
     });
   });
 }

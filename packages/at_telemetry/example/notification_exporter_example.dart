@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_telemetry/at_telemetry.dart';
 
+// Run with: dart run example/notification_exporter_example.dart
 Future<void> main() async {
   final StreamController<(String, String)> notifications =
       StreamController<(String, String)>();
@@ -10,16 +10,18 @@ Future<void> main() async {
   final AtTelemetry telemetry = AtTelemetry(
     serviceName: 'my_app',
     exporter: AtTelemetryNotificationExporter(
-      notify: (String idAndNamespace, String payload) async {
-        notifications.add((idAndNamespace, payload));
+      notify: (String idAndNamespace, String value) async {
+        notifications.add((idAndNamespace, value));
       },
+      enrollmentId: () => 'enrollment-1',
+      clientId: () => 'client-1',
     ),
     onError: (Object error, StackTrace _) => print('Telemetry failed: $error'),
   );
-  telemetry.event('app.started');
+  telemetry.event('photos.album.shared', notificationIds: <String>['n7']);
   telemetry.event(
-    'app.connected',
-    attributes: const <String, Object?>{'app.connections': 2},
+    'photos.album.viewed',
+    attributes: const <String, Object?>{'album.photoCount': 12},
   );
   await telemetry.shutdown();
   await notifications.close();
@@ -27,12 +29,15 @@ Future<void> main() async {
 }
 
 Future<void> _monitor(Stream<(String, String)> notifications) async {
-  await for (final (String key, String payload) in notifications) {
-    if (key == AtTelemetryNotificationExporter.idAndNamespace) {
-      final AtTelemetryLogRecord logRecord = AtTelemetryLogRecord.fromJson(
-        jsonDecode(payload) as Map<String, Object?>,
-      );
-      print('$key: ${logRecord.eventName}');
+  await for (final (String key, String value) in notifications) {
+    if (key != AtTelemetryNotificationExporter.idAndNamespace) {
+      continue;
+    }
+    for (final AtTelemetryResourceLogs logs
+        in const AtTelemetryLogsCodec().decode(value)) {
+      for (final AtTelemetryLogRecord record in logs.records) {
+        print('$key: ${record.eventName} ${record.attributes}');
+      }
     }
   }
 }

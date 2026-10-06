@@ -50,6 +50,19 @@ void main() {
         expect(resource, same(telemetry.resource));
       });
 
+      test('carries the notification ids and keys the event produced', () {
+        telemetry.event(
+          'photos.album.shared',
+          notificationIds: <String>['n7'],
+          keys: <String>['@bob:album.photos@alice'],
+        );
+
+        expect(exporter.exports.single.$1.attributes, <String, Object?>{
+          AtTelemetryAttributes.notificationIds: <String>['n7'],
+          AtTelemetryAttributes.keys: <String>['@bob:album.photos@alice'],
+        });
+      });
+
       test('defaults the timestamp to now', () {
         final DateTime before = DateTime.now();
         telemetry.event('login');
@@ -72,6 +85,14 @@ void main() {
             'login',
             attributes: <String, Object?>{'when': DateTime.utc(2024)},
           ),
+          throwsArgumentError,
+        );
+        expect(exporter.exports, isEmpty);
+      });
+
+      test('throws ArgumentError for a timestamp OTLP cannot carry', () {
+        expect(
+          () => telemetry.event('login', timestamp: DateTime.utc(1969)),
           throwsArgumentError,
         );
         expect(exporter.exports, isEmpty);
@@ -107,21 +128,36 @@ void main() {
         expect(errors, <Object>[failure]);
       });
 
-      test('reports an asynchronous export failure to onError', () async {
-        final StateError failure = StateError('async');
-        exporter.onExport =
-            (AtTelemetryLogRecord _) => Future<void>.error(failure);
+      test('reports a dropped record to onError', () async {
+        exporter.onExport = (AtTelemetryLogRecord _) async => false;
 
         telemetry.event('login');
-        await telemetry.flush();
+        await pumpEventQueue();
+
+        expect(
+          errors.single,
+          isA<AtTelemetryDroppedException>().having(
+            (AtTelemetryDroppedException error) => error.logRecord.eventName,
+            'eventName',
+            'login',
+          ),
+        );
+      });
+
+      test('reports an exporter that breaks its contract and fails', () async {
+        final StateError failure = StateError('async');
+        exporter.onExport =
+            (AtTelemetryLogRecord _) => Future<bool>.error(failure);
+
+        telemetry.event('login');
+        await pumpEventQueue();
 
         expect(errors, <Object>[failure]);
       });
 
       test('a per-call onError wins over the constructor onError', () async {
         final List<Object> callErrors = <Object>[];
-        exporter.onExport =
-            (AtTelemetryLogRecord _) => Future<void>.error(StateError('x'));
+        exporter.onExport = (AtTelemetryLogRecord _) async => false;
 
         telemetry.event(
           'login',
@@ -131,7 +167,7 @@ void main() {
           'hello',
           onError: (Object error, StackTrace _) => callErrors.add(error),
         );
-        await telemetry.flush();
+        await pumpEventQueue();
 
         expect(callErrors, hasLength(2));
         expect(errors, isEmpty);
@@ -146,11 +182,11 @@ void main() {
         exporter.onExport = (AtTelemetryLogRecord record) =>
             record.body == 'sync'
                 ? throw StateError('sync')
-                : Future<void>.error(StateError('async'));
+                : Future.value(false);
 
         expect(() => throwing.log('sync'), returnsNormally);
-        throwing.log('async');
-        await throwing.flush();
+        throwing.log('dropped');
+        await pumpEventQueue();
       });
 
       test('defaultOnError does not throw', () {
@@ -162,25 +198,42 @@ void main() {
     });
 
     group('flush', () {
-      test('waits for exports that are still running', () async {
-        final Completer<void> delivery = Completer<void>();
-        exporter.onExport = (AtTelemetryLogRecord _) => delivery.future;
-        telemetry.event('login');
+      test('asks the exporter to send and waits for that attempt', () async {
+        final Completer<void> attempt = Completer<void>();
+        exporter.onFlush = () => attempt.future;
 
         bool flushed = false;
         unawaited(telemetry.flush().then((void _) => flushed = true));
         await pumpEventQueue();
         expect(flushed, isFalse);
 
-        delivery.complete();
+        attempt.complete();
         await pumpEventQueue();
         expect(flushed, isTrue);
         expect(exporter.flushCount, 1);
       });
 
+      test('does not wait for records the exporter still holds', () async {
+        final Completer<bool> delivery = Completer<bool>();
+        exporter.onExport = (AtTelemetryLogRecord _) => delivery.future;
+        telemetry.event('login');
+
+        await telemetry.flush();
+
+        expect(delivery.isCompleted, isFalse);
+      });
+
+      test('gives up after its timeout and reports it', () async {
+        exporter.onFlush = () => Completer<void>().future;
+
+        await telemetry.flush(timeout: const Duration(milliseconds: 10));
+
+        expect(errors.single, isA<TimeoutException>());
+      });
+
       test('reports an exporter flush failure to onError', () async {
         final StateError failure = StateError('flush');
-        exporter.flushError = failure;
+        exporter.onFlush = () async => throw failure;
 
         await telemetry.flush();
 
@@ -189,8 +242,8 @@ void main() {
     });
 
     group('shutdown', () {
-      test('waits for exports that are still running', () async {
-        final Completer<void> delivery = Completer<void>();
+      test('waits for the outcome of records still in flight', () async {
+        final Completer<bool> delivery = Completer<bool>();
         exporter.onExport = (AtTelemetryLogRecord _) => delivery.future;
         telemetry.event('login');
 
@@ -199,9 +252,29 @@ void main() {
         await pumpEventQueue();
         expect(done, isFalse);
 
-        delivery.complete();
+        delivery.complete(true);
         await pumpEventQueue();
         expect(done, isTrue);
+      });
+
+      test('returns at its deadline when the exporter hangs', () async {
+        exporter.onShutdown = () => Completer<void>().future;
+
+        final Stopwatch stopwatch = Stopwatch()..start();
+        await telemetry.shutdown(timeout: const Duration(milliseconds: 50));
+
+        expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+        expect(errors.single, isA<TimeoutException>());
+      });
+
+      test('returns at its deadline when a record never resolves', () async {
+        exporter.onExport =
+            (AtTelemetryLogRecord _) => Completer<bool>().future;
+        telemetry.event('login');
+
+        await telemetry.shutdown(timeout: const Duration(milliseconds: 50));
+
+        expect(errors.single, isA<TimeoutException>());
       });
 
       test('only shuts the exporter down once', () async {
@@ -213,7 +286,7 @@ void main() {
 
       test('reports an exporter shutdown failure to onError', () async {
         final StateError failure = StateError('shutdown');
-        exporter.shutdownError = failure;
+        exporter.onShutdown = () async => throw failure;
 
         await telemetry.shutdown();
 
