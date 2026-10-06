@@ -13,23 +13,19 @@ on:
 permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
+# A newer push to a pull request cancels the run it supersedes. Every other
+# event gets a group of its own, so trunk and dispatched runs never wait on or
+# cancel one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   static_analysis:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        package:
-          - at_chat_flutter
-          - at_contacts_flutter
-          - at_contacts_group_flutter
-          - at_events_flutter
-          - at_follows_flutter
-          - at_location_flutter
-          - at_login_flutter
-          - at_notify_flutter
-          - at_sync_ui_flutter
-          - at_theme_flutter
         flutter-channel:
           - stable
           - beta
@@ -40,9 +36,32 @@ jobs:
         with:
           flutter-channel: ${{ matrix.flutter-channel}}
 
-      - name: Install dependencies and analyze in ${{ matrix.package }}
-        working-directory: packages/${{ matrix.package }}
+      - name: Install dependencies and analyze each package
+        env:
+          PACKAGES: >-
+            at_chat_flutter
+            at_contacts_flutter
+            at_contacts_group_flutter
+            at_events_flutter
+            at_follows_flutter
+            at_location_flutter
+            at_login_flutter
+            at_notify_flutter
+            at_sync_ui_flutter
+            at_theme_flutter
         run: |
-          touch example/.env
-          flutter pub get --no-example
-          flutter analyze --no-fatal-infos lib
+          failed=()
+          for package in $PACKAGES; do
+            echo "::group::$package"
+            if ! (cd "packages/$package" && touch example/.env &&
+                flutter pub get --no-example &&
+                flutter analyze --no-fatal-infos lib); then
+              echo "::error::analysis failed in $package"
+              failed+=("$package")
+            fi
+            echo "::endgroup::"
+          done
+          if (( ${#failed[@]} > 0 )); then
+            echo "::error::analysis failed in: ${failed[*]}"
+            exit 1
+          fi
