@@ -2031,8 +2031,14 @@ class AtClientImpl implements AtClient {
     // atServer, the keystore already encrypts it at rest, and every
     // post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
-    if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+    final isShared = !atKey.metadata.isPublic && !atKey.isLocal;
+    // Rebuilt even when this write is not encrypted: a key reused after an
+    // encrypted put still carries that put's `isEncrypted`, and a plaintext
+    // record marked encrypted is read back through a decryption it never had.
+    if (isShared) {
       atKey.metadata = metadataForEncryptedSend(atKey.metadata);
+    }
+    if (isShared && options.shouldEncrypt) {
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
