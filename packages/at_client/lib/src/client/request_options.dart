@@ -42,6 +42,11 @@ class PutRequestOptions extends RequestOptions {
   /// Except public keys, shared keys and self keys are encrypted by default.
   /// If client prefers not to encrypt a shared key or self key, set this flag
   /// to false.
+  ///
+  /// With this false the value is stored as given, and a value encrypted
+  /// outside the SDK is not supported: the put drops the encryption fields on
+  /// the key's metadata, such as `isEncrypted` and `ivNonce`, so the value is
+  /// treated as plain.
   bool shouldEncrypt = true;
 
   /// Whether the value was encrypted before this put, under the metadata its
