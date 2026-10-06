@@ -6113,7 +6113,7 @@ distinct extension types in `nskey_key_ring.dart` (zero runtime cost;
 the swap is a compile error): `NskeyKeyRing.privateHalf` returns
 `NskeyDecapsulationKey`, `NskeyPrivateFiling.store` takes an `NskeySeed`,
 `read()` expands, the new `readSeed()` answers with the durable form,
-and the bulk reads (`readAll`/`readAllFor`) are typed as the seeds they
+and the bulk reads (`readAll`/`readAllWhere`) are typed as the seeds they
 return.
 
 **Retyping the flow immediately surfaced two real data-loss bugs**, both
@@ -14784,3 +14784,227 @@ buys is freshness — if any other writer ever gives such a record a `ttr`, a
 reader still fetches from the owner rather than being served a stale copy, which
 guards [ruling 143.1](#1431-the-advertisement-carries-no-ttr) against owners
 that do not follow it.
+
+## 146. Keys an app publishes below its grants are its own, and ensureReachable reports holding them (2026-10-04)
+
+**Decided by gkc on 2026-10-04**, working out how NoPorts can tell a
+post-quantum-capable daemon in a fleet where some daemons are not. What NoPorts
+owes is the P3 row *NoPorts: a device-level nskey as the PQ-capable signal* in
+the plan's [TODO](../implementation-plan.md#todo).
+
+**What a client seeds is unchanged.** It seeds every namespace its enrollment
+grants, and its `preference.namespace` only on the atSign's own credential or
+under a `*` grant (`authorisedNamespacesOf`). Two widenings were proposed and
+withdrawn the same day:
+
+- seeding the preference namespace whenever a grant covers it — NoPorts clients
+  set `<device>.sshnp` as theirs, so each would advertise a key for every device
+  it connects to;
+- a start-up pull covering every key published below a grant — one request goes
+  to every enrollment holding the namespace, so a daemon joining N others on one
+  atSign would send about N² (estimated from the code, not measured).
+
+**A key published below a grant is the app's.** A NoPorts daemon publishes
+`<device>.sshnp` with `ensureReachable` while granted only `sshnp`. The SDK
+does not fetch that key's private for an enrollment at start, nor replace it
+after a revocation: both run over the seeded namespaces only. Three routes do
+reach it: the push at its mint and the push at each later approval, both in
+[ruling 147](#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04),
+and a decryption that misses an own key's private asking the other enrollments
+for it. None reaches a client on the atSign's own credential, which is not an
+enrollment and cannot list them.
+
+**`ensureReachable` says whether this client holds the private.**
+`AtReachabilityResult.holdsPrivate` is checked on both reachable outcomes,
+after a mint too, since a mint adopts a key a sibling enrollment published in
+its window. It is true only when this client holds the private of every key the
+advertisement offers, since a peer seals under its own algorithm list. The check
+asks no other enrollment for anything, and a failure to make it reports false
+without changing the outcome. Pinned in `test/nskey_self_heal_test.dart` and
+`tests/at_functional_test/test/ensure_reachable_live_test.dart`.
+
+## 147. An nskey reaches every enrollment with access to its namespace, when it is minted and when that enrollment is approved (2026-10-04)
+
+**Decided by gkc on 2026-10-04**, as two points that "can't be missed".
+
+**At the mint.** An enrollment that mints and advertises an nskey conveys its
+private to every other enrollment with access to the namespace. Every client
+path that publishes a new key does so: the first mint and an added algorithm
+through `NskeySeeding._convey`, and a rotation through
+`NskeyRotation.rotateNamespaceKey`, each by `pushSecretToNamespaceMembers` to
+whatever `enroll:listns` returns. The atServer answers that with every approved
+enrollment whose grant covers the namespace — the namespace itself, one it is
+below, or `*` — in p3.16.5, c3.16.6 and trunk. Two are not reached: an
+enrollment with no key package in an algorithm both sides support, and every
+enrollment when the minter is on the atSign's own credential, since
+`enroll:listns` requires APKAM. A push that fails is logged, and the
+enrollment it missed asks for the private itself: at its next start for a
+namespace it seeds, otherwise at the first read that misses it.
+
+**At approval.** An approver conveys every nskey private it holds in a
+namespace the new enrollment's grant covers and it may write itself, by the same
+rule (`SecretStore.namespaceAuthorizes`): `*` covers every namespace, and a
+grant covers the namespaces below it, read access included. Two routes carry them.
+`shareAllSecretsWith` sends what the approver's in-memory secret store holds,
+which the client's startup fills from its keyfile, and already applied this
+rule. `conveyHeldPrivatesTo` reads the keyfile itself, so an approver whose
+startup has not filled the store still conveys; it looked up the grant's own
+names instead, so it missed `*` and the namespaces below a grant, and its key-id
+prefix match returned a namespace the grant is only a prefix of, `app_1`
+matching `app_1.my_apps`. It now applies the same rule, reading the keyfile with
+`NskeyPrivateFiling.readAllWhere`, which raises on an unreadable keyfile, so the
+approval warns rather than conveying nothing in silence. An enrollment granted
+only `*` was refused before either route ran;
+[ruling 148](#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05)
+fixes that.
+
+Review then found that both routes tried every covered namespace, including one
+the approver was granted only `r` on, where it holds the private but the
+atServer refuses its envelope. The first refusal stopped the route, and from
+`shareAllSecretsWith` it failed an approval that had already landed. Both
+routes now skip a namespace the approver's own grants do not let it write, with
+a warning naming it, and log and go on past a write the atServer refuses
+anyway. The new enrollment asks for a skipped private itself: at its next start
+for a namespace it seeds, otherwise at the first read that misses it. Pinned in
+the late joiner group of `test/nskey_self_heal_test.dart` and the
+"a namespace the approver may not write" group of
+`test/enrollment_conveyance_guard_test.dart`, and live in
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, where an
+approver granted `r` on a namespace it holds a key for approves a `*`
+enrollment. With the secret-store route's skip and catch removed, that approval
+fails with the atServer's `UnAuthorized client in request` refusal of the
+envelope, so the refusal is observed, not inferred; with the skip alone
+removed, the catch logs the same refusal and the approval completes. Cited by
+UC-A5.1(b).
+
+Which grant decides whether the approver may write is the atServer's. It reads a
+key's namespace as its last dot segment and resolves a grant on that segment
+before any narrower one, so an approver granted `r` on `app.wavi` and `rw` on
+`wavi` may write in `app.wavi`, and one granted the reverse may not, in whatever
+order the grants are listed. `accessIn` took the first grant listed instead, so
+in the first case both routes skipped a key the atServer would have accepted, and
+in the second both tried a write it refused. It now resolves the last segment
+first. Pinned in `test/authorised_namespaces_test.dart`, and live in
+`nskey_conveyance_reach_live_test.dart`, where an approver holding each pair of
+grants, the narrower one listed first, conveys the first key and not the second.
+On the previous `accessIn` that live test fails on the first key. Cited by
+UC-A5.1(b).
+
+**Both, live, for a `*` enrollment.**
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart` proves
+each half against an atServer: an enrollment granted only `*` is conveyed a key
+another enrollment mints, at the namespace and below it, and is conveyed at its
+approval every key its approver holds; an enrollment granted read on the
+namespace above is conveyed the same, and one granted another namespace
+neither. UC-A3.2 and UC-A5.1(b) cite it. At approval either route alone
+delivers these keys, since the approver minted them in the same process: the
+test went red only with both routes cut, so the keyfile route on its own is
+pinned by the unit tests.
+
+## 148. An approver's envelopes go in a namespace the enrollment may read and the approver may write (2026-10-05)
+
+**Decided by gkc on 2026-10-05**, after the live test of
+[ruling 147](#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04)
+found that an enrollment granted only `*` could not be approved at all.
+
+The envelopes an approver addresses to a new enrollment (its symmetric key, its
+approval-chain link, the signing-root private) are keys in an ordinary
+namespace, so the atServer's namespace gating decides who may write them and who
+may fetch them. The approver put them in the first namespace the new grant named
+other than `*` and `__manage`, and refused when there was none, so a grant of
+`*` alone was refused at approval even though a `*` enrollment may read every
+ordinary namespace.
+
+**The namespace is the first that the new enrollment may read and the approver
+may write**, tried in this order: the namespaces the new grant names; the
+approver's `preference.namespace`; the namespaces the approver was granted. The
+approval is refused, before it is spent, only when none qualifies. The atSign's
+own credential may write anywhere; an approver whose own record the enrollment
+list does not carry is checked for the enrollee's side only, and the atServer's
+refusal of the write reports the rest. Applications are taken to set a
+`preference.namespace`; auth_cli sets `at_activate` for every command, so it
+works as a `*` approver, and an auth_cli approver granted only `my_app` falls
+through to `my_app`.
+
+Pinned in the "the namespace the envelopes go in" group of
+`test/enrollment_conveyance_guard_test.dart`, live in
+`tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart`, and
+cited by UC-A2.1.
+
+## 149. How a shared value was protected is read from its metadata, and a reply goes in kind (2026-10-05)
+
+**Decided by gkc on 2026-10-05**, while working out how NoPorts runs on a fleet
+of old and new daemons: a program that receives a legacy request has to know it
+did, and answer in legacy. gkc widened it past notifications: "a client might
+like to be able to scan their set of data shared with them by others, and see
+which were shared as legacy / pq / which pq suite".
+
+- `ReceivedScheme` names the provider a value was sealed under, whether that
+  provider is post-quantum, and, for a post-quantum value, the KEM
+  (`keyAlgorithm`) and sealing suite its content key was conveyed under.
+- `atClient.schemeOf(key)`, from the `ReceivedSchemes` extension, reads it from
+  metadata and never from the value. It uses the key's own `appMetadata` when
+  the key carries it, as a received notification's does; otherwise the
+  record's, from local storage first and then with `lookup:meta` on the
+  sharer's atServer. The KEM is read the same way off the record that conveyed
+  the content key, the recipient's cached copy first. When that record cannot
+  be read, the KEM and suite are null rather than guessed.
+- `AtNotification.receivedUnder` is the provider a notification's value was
+  read under: `legacy` when the sender stamped none, the same rule decryption
+  uses to pick a provider.
+- Answering in kind is passing that as the reply's `cryptoProviderId`, which
+  `NotificationService.send` and `NotificationParams.forUpdate` already took
+  and `AtClientBindings.notify` now takes too. A class that overrides
+  `AtClientBindings.notify` must add the parameter; NoPorts' two test stubs
+  were the only overrides in the repositories checked.
+- `AtRpc` does it for its callers: `sendRequest` and `AtRpcClient.call` take a
+  `cryptoProviderId`, and a response goes out under the request's
+  `receivedUnder`. Where the server cannot write that scheme (legacy under a
+  posture that refuses it, or a provider it has not configured) the response
+  goes out under the server's default instead, so the answer is not lost.
+
+Pinned in `test/received_scheme_test.dart`, `test/rpc/at_rpc_scheme_test.dart`
+and the "send answers a notification in the scheme it arrived in" test of
+`test/notification_service_test.dart`, live in
+`tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart`, and cited by
+UC-A4.1 and UC-A4.4.
+
+## 150. The startup seeds the namespace the client was built with (2026-10-05)
+
+**Decided by gkc on 2026-10-05.** NoPorts' `sshnp` builds its client in
+`sshnp`, then points the live preference at `<device>.sshnp` for its own
+records. The post-quantum startup runs unawaited and read the preference
+namespace only when it reached the seed, several round trips later, so a client
+on the atSign's own credential or a `*` grant would have published a key at
+`<device>.sshnp` for every device it reached. That was read from the code, not
+observed in a run.
+
+The startup seeds the `preference.namespace` the client had when its seeding
+was built, which for the startup is when the client was built. A namespace the
+application sets afterwards changes where its own records go and nothing about
+what the startup seeds; `ensureReachable(namespace)` stays the way to be
+reachable anywhere else. The key-package check and the signing-root requests
+still read the live preference.
+
+Pinned by "it seeds the namespace the client had when seeding was built" in
+`test/nskey_seeding_test.dart`.
+
+## 151. AtRpc request ids are random 53-bit integers (2026-10-05)
+
+**Decided by gkc on 2026-10-05**: "change the requestId that is generated by
+AtRpc clients so it is a sufficiently random integer to prevent potential
+collisions with concurrent requests fro this or other clients".
+
+`AtRpcReq.create` minted `reqId` from `microsecondsSinceEpoch`, so ids made
+back to back repeated: 10,000 made in a loop gave 1,116 distinct ids. A shared
+id crosses responses between the clients of one atSign, which all receive every
+response, and under `enableRequestMutex` the second request loses the
+responder's per-id lock and is dropped.
+
+The id is now 53 bits from `Random.secure()`. It is still an integer, so the
+wire does not change and no responder has to be updated first; it is never
+negative, so the request key's `\d+` matches it; and it is exact in any
+language's JSON reader. Whether ids become strings at a major release is not
+decided here.
+
+Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.

@@ -3,6 +3,8 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/at_server_features.dart'
+    show notificationLifetimeFor;
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart'
     show
@@ -21,7 +23,6 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -69,8 +70,17 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
+  /// The last-received-notification watermark's key, built afresh for every
+  /// read and write: a read copies the stored metadata onto the key it is
+  /// given, and a write must not store it back.
   @visibleForTesting
-  late AtKey lastReceivedNotificationAtKey;
+  AtKey get lastReceivedNotificationAtKey =>
+      AtKey.local(lastReceivedNotificationKey, _watermarkOwner,
+              namespace: _watermarkNamespace)
+          .build();
+
+  final String _watermarkOwner;
+  final String? _watermarkNamespace;
 
   @override
   Atsign get atSign => atClient.atSign;
@@ -312,7 +322,9 @@ class NotificationServiceImpl extends NotificationService {
       SecondaryAddressFinder? secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps})
-      : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
+      : myStatsNotifKey = 'statsNotification.${atClient.atSign}',
+        _watermarkOwner = atClient.getCurrentAtSign()!,
+        _watermarkNamespace = atClient.getPreferences()!.namespace {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
@@ -363,10 +375,6 @@ class NotificationServiceImpl extends NotificationService {
           connection: connection,
         );
 
-    lastReceivedNotificationAtKey = AtKey.local(
-            lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
-            namespace: atClient.getPreferences()!.namespace)
-        .build();
     // NOTE: here, not at the first park — the filing stream is broadcast and
     // not replayed, so subscribing only once a notification has already failed
     // to decrypt could miss the very filing that would release it.
@@ -452,9 +460,12 @@ class NotificationServiceImpl extends NotificationService {
         if (canonicalValue.value == null) canonicalValue = null;
       } on StoppedException {
         rethrow;
-      } on Exception {
+      } on Exception catch (e) {
         // Treat read failures as "needs seeding" — the legacy
         // forms become the source of truth.
+        logger.warning('Could not read $canonicalStr; the monitor resumes '
+            'from a legacy watermark if one exists, else from when this '
+            'service was created, so nothing sent before then is fetched: $e');
       }
     }
 
@@ -742,10 +753,15 @@ class NotificationServiceImpl extends NotificationService {
     bool cacheAtRecipient = false,
     String? cryptoProviderId,
     DateTime? recipientCacheExpiration,
+    bool ephemeral = false,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
       throw ArgumentError(
           'You must supply recipientCacheExpiration when cacheAtRecipient is true');
+    }
+    if (ephemeral && cacheAtRecipient) {
+      throw ArgumentError('An ephemeral notification cannot be cached at the '
+          'recipient: caching persists a copy there');
     }
     // ignore: deprecated_member_use_from_same_package
     final String name = _requireOneName(idAndNamespace, namespace);
@@ -805,9 +821,13 @@ class NotificationServiceImpl extends NotificationService {
     // The field-by-field form writes only the key, and the name here is split
     // across `key` and `namespace`, so the namespace would never reach the
     // wire.
+    final lifetime = await notificationLifetimeFor(atClient,
+        expiration: expiration, ephemeral: ephemeral);
     final builder = NotifyVerbBuilder()
       ..atKey = atKey
-      ..ttln = expiration.inMilliseconds
+      ..ttln = lifetime.ttln
+      ..notificationExpiresAt = lifetime.expiresAt
+      ..ephemeral = lifetime.ephemeral
       ..value = notifPayload.isEmpty ? null : notifPayload
       ..useAtKeyToString = true;
 
@@ -875,8 +895,6 @@ class NotificationServiceImpl extends NotificationService {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
-
-    notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
 
     try {
       notificationParams.atKey.metadata.isEncrypted = encryptValue;

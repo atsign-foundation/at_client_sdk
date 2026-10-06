@@ -2,8 +2,11 @@
 
 import 'dart:async';
 
+import 'package:at_client/src/client/at_server_features.dart'
+    show notificationLifetimeFor;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
     show NamespaceKeyUnavailableException;
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -34,6 +37,9 @@ class NotificationRequestTransformer
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
+      notificationParams.atKey.metadata =
+          metadataForEncryptedSend(notificationParams.atKey.metadata)
+            ..isEncrypted = true;
       // NOTE: the provider id is stamped only once routing has settled — the
       // catch below may re-route to legacy, and a key stamped with a provider
       // that then declined would claim a scheme its value was never sealed
@@ -55,7 +61,7 @@ class NotificationRequestTransformer
             useRemoteAtServer: true,
             stampProviderId: false);
       }
-      notificationParams.atKey.metadata.appMetadata ??=
+      notificationParams.atKey.metadata.appMetadata =
           AppMetadata(providerId: providerId);
     }
     // prepares notification builder
@@ -112,6 +118,15 @@ class NotificationRequestTransformer
         ak = AtKey.fromString(ak.toString());
       }
 
+      final metadata = notificationParams.atKey.metadata;
+      if (notificationParams.ephemeral &&
+          (metadata.ttr != null || metadata.ccd != null)) {
+        throw ArgumentError('An ephemeral notification cannot carry a ttr or '
+            'ccd: either would persist a cached copy at the recipient');
+      }
+      final lifetime = await notificationLifetimeFor(_atClient,
+          expiration: notificationParams.notificationExpiry,
+          ephemeral: notificationParams.ephemeral);
       return NotifyVerbBuilder()
         ..useAtKeyToString = true
         ..id = notificationParams.id
@@ -122,7 +137,9 @@ class NotificationRequestTransformer
         ..strategy = notificationParams.strategy
         ..latestN = notificationParams.latestN
         ..notifier = notificationParams.notifier
-        ..ttln = notificationParams.notificationExpiry.inMilliseconds;
+        ..ttln = lifetime.ttln
+        ..notificationExpiresAt = lifetime.expiresAt
+        ..ephemeral = lifetime.ephemeral;
     }
   }
 

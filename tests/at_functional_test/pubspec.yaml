@@ -25,3 +25,7 @@ dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0
   coverage: ^1.5.0
+  # The upgrade check's seed and snapshot, compiled here against this tree and
+  # by each released arm under tests/upgrade/released against its own.
+  upgrade_scenario:
+    path: ../upgrade/scenario
