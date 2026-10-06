@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/src/manager/storage_manager.dart';
@@ -20,7 +21,8 @@ import 'package:hive/src/hive_impl.dart';
 /// stray queue is found in a directory this process has opened a store in,
 /// or the one Hive's global instance pointed at before this store opened; a
 /// store that opens holding another atSign's stray queue hands it to that
-/// atSign's open store.
+/// atSign's open store. One that cannot be read is left where it is, with a
+/// warning, and the store opens without it.
 class HiveAtClientStorage extends AtClientStorageBase {
   HiveAtClientStorage(
       {required this.atSign, required this.storagePath, super.closedByClient});
@@ -108,17 +110,49 @@ class HiveAtClientStorage extends AtClientStorageBase {
       !File('$directory/$sha.hive').existsSync();
 
   /// Takes in this atSign's stray queue in [directory], if there is one.
+  ///
+  /// A stray that cannot be opened or read is left where it is: the store
+  /// opening is worth more than the writes it might hold, and the next open
+  /// tries again.
   Future<void> _adoptStrayQueueIn(String directory) async {
     if (!_holdsStrayQueue(directory, _sha)) return;
-    final name = AtSyncQueue.boxNameForAtSign(atSign);
-    final HiveInterface hive = _directoriesOpened.contains(directory)
-        ? HiveInstances.forPath(directory)
-        : (HiveImpl()..init(directory));
-    if (hive.isBoxOpen(name)) return;
-    final taken = await syncQueue.adopt(await hive.openBox<String>(name),
-        keep: _agreesWithKeyStore);
-    _logger.info('$atSign: took $taken pending write(s) from a sync queue an '
-        'earlier release left in $directory');
+    try {
+      final name = AtSyncQueue.boxNameForAtSign(atSign);
+      final HiveInterface hive = _directoriesOpened.contains(directory)
+          ? HiveInstances.forPath(directory)
+          : (HiveImpl()..init(directory));
+      if (hive.isBoxOpen(name)) return;
+      final taken = await syncQueue.adopt(await _openStray(hive, name),
+          keep: _agreesWithKeyStore);
+      _logger.info('$atSign: took $taken pending write(s) from a sync queue '
+          'an earlier release left in $directory');
+    } catch (e) {
+      // NOTE: hive's own failures are Errors, so this catches everything.
+      _logger.warning('$atSign: could not take in the sync queue an earlier '
+          'release left in $directory, so it stays there: $e');
+    }
+  }
+
+  /// Opens the box [name] on [hive], reporting a failure once, to the caller.
+  ///
+  /// NOTE: hive completes the future it parks concurrent openers on with the
+  /// same error it throws, and nothing listens to that future, so a failed
+  /// open is also an unhandled asynchronous error, which ends a command-line
+  /// isolate. The zone here takes that second report.
+  static Future<Box<String>> _openStray(HiveInterface hive, String name) {
+    final opened = Completer<Box<String>>();
+    void fail(Object e, StackTrace st) {
+      if (!opened.isCompleted) opened.completeError(e, st);
+    }
+
+    runZonedGuarded(() async {
+      try {
+        opened.complete(await hive.openBox<String>(name));
+      } catch (e, st) {
+        fail(e, st);
+      }
+    }, fail);
+    return opened.future;
   }
 
   /// Hands each stray queue in [directory] to the open store of the atSign it

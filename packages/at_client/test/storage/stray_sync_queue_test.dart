@@ -8,6 +8,7 @@ import 'package:hive/hive.dart';
 import 'package:hive/src/hive_impl.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/recorded_logs.dart';
 import 'storage_contract.dart' show FakeClient;
 
 /// A sync queue an earlier release opened on Hive's global instance can sit in
@@ -16,6 +17,9 @@ import 'storage_contract.dart' show FakeClient;
 void main() {
   late Directory root;
   final opened = <HiveAtClientStorage>[];
+  final logs = RecordedLogs();
+
+  setUpAll(() => logs.installOn());
 
   setUp(() => root = Directory.systemTemp.createTempSync('stray_queue_'));
 
@@ -159,6 +163,36 @@ void main() {
             'since written again, would each push a state this store no '
             'longer has');
     expect(File(queueFile(alice, theirs)).existsSync(), isFalse);
+  });
+
+  test('a stray queue that cannot be read is left alone, and the store opens',
+      () async {
+    if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+      markTestSkipped('root reads a file whatever its mode says');
+      return;
+    }
+    const alice = '@straycorruptalice';
+    final mine = dirFor('alice');
+    final theirs = dirFor('bob');
+    await close(await open('@straycorruptbob', theirs));
+    await storeHolding(alice, mine, ['phone.wavi$alice']);
+    await leaveStrayQueue(alice, theirs, {'phone.wavi$alice': updateWritten});
+    final stray = File(queueFile(alice, theirs));
+    // NOTE: unreadable rather than malformed: hive's crash recovery opens a
+    // malformed box as far as it parses, and that is the handled path.
+    expect(Process.runSync('chmod', ['000', stray.path]).exitCode, 0);
+    addTearDown(() => Process.runSync('chmod', ['600', stray.path]));
+    logs.records.clear();
+
+    final store = await open(alice, mine);
+
+    expect(store.syncQueue.peek(), isEmpty,
+        reason: 'nothing could be read, so nothing was taken');
+    expect(stray.existsSync(), isTrue,
+        reason: 'left for a later open rather than deleted unread');
+    expect(logs.at('WARNING').where((m) => m.contains('could not take in')),
+        hasLength(1),
+        reason: 'the store opened, and said what it left behind');
   });
 
   test('a newer entry already queued here stays', () async {

@@ -97,7 +97,8 @@ the queue in another directory. This tree takes such a queue in when the
 atSign's store opens, from a directory this process has opened a store in or
 the one Hive's global instance pointed at
 (`packages/at_client/test/storage/stray_sync_queue_test.dart`); one in a
-directory neither names stays where it is. Every arm seeds its store from one
+directory neither names stays where it is, and so does one that cannot be
+read, with a warning, while the store opens without it. Every arm seeds its store from one
 client that writes before anything else touches Hive, so none strands its
 queue.
 
