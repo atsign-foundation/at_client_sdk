@@ -122,7 +122,7 @@ CI emits the stream from five jobs across two workflows
 (`grep -n 'file-reporter json' .github/workflows/*.yaml`): `unit_at_client`,
 `functional_tests`, `pqe2e_tests` and `legacy_server_tests` in `at_client_sdk.yaml`
 and the `build_and_test` matrix in `at_libraries.yaml`. The CLI pack's job
-(`functional_tests_at_onboarding_cli`, `at_libraries.yaml:303`) runs with no
+(`functional_tests_at_onboarding_cli` in `at_libraries.yaml`) runs with no
 reporter and no upload, although it is a declared live pack with 3 citations, so a
 CI-rendered ledger can never show those rows exercised. Rendering is a local step
 (`tools/acceptance_ledger.sh`), by decision.
