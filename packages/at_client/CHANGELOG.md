@@ -1,5 +1,13 @@
 ## 3.15.0-rc4
 
+- fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart
+  no longer skips the notifications sent while the client was not running, and
+  a `local:` record put back through the `AtKey` that read it can still be
+  read. A device a 3.15.0 prerelease left in that state recovers, except for an
+  app's own `local:` value shaped like ciphertext (base64 of a multiple of 16
+  bytes), which the app has to write again.
+- fix: `readBy` and `wasMarkedReadByMe` count a read receipt this client sent
+  before a restart, so `markReadByMe` no longer sends it a second time.
 - fix: a content key that has been replaced is kept for 8 days
   (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
   can still open a notification sent under it just before the rotation.
