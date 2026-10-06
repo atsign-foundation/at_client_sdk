@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-import '../codec/at_telemetry_logs_codec.dart';
 import 'at_telemetry_ed25519_signer.dart';
 import 'at_telemetry_sequence.dart';
 import 'at_telemetry_signer.dart';
+import 'codecs/at_telemetry_logs_codec.dart';
 
 // The at-telemetry profile of an RFC 9421 HTTP message signature. It covers
 // the method, path, content type, body digest, audience, producer and

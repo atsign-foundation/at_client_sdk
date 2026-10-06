@@ -4,7 +4,7 @@ import 'package:at_telemetry/at_telemetry.dart';
 Future<void> main() async {
   final AtTelemetry telemetry = AtTelemetry(
     serviceName: 'my_app',
-    resourceAttributes: const <String, Object?>{'app.version': '1.2.3'},
+    resourceAttributes: AtTelemetryResource.app(serviceVersion: '1.2.3'),
     exporter: ConsoleExporter(),
     onError: (Object error, StackTrace _) => print('Telemetry failed: $error'),
   );

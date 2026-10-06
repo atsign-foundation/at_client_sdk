@@ -1,5 +1,5 @@
 import '../at_telemetry_any_value.dart';
-import '../at_telemetry_log_record.dart';
+import 'at_telemetry_log_record.dart';
 
 // One OTLP ResourceLogs with a single ScopeLogs: the records one resource
 // produced under one instrumentation scope

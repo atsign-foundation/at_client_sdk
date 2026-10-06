@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:at_utils/at_logger.dart';
 
 import 'at_telemetry_attributes.dart';
-import 'at_telemetry_dropped_exception.dart';
-import 'at_telemetry_log_record.dart';
-import 'at_telemetry_resource.dart';
-import 'at_telemetry_severity.dart';
+import 'exceptions/at_telemetry_dropped_exception.dart';
 import 'exporters/at_telemetry_log_record_exporter.dart';
+import 'models/at_telemetry_log_record.dart';
+import 'models/at_telemetry_resource.dart';
+import 'models/at_telemetry_severity.dart';
 
 typedef AtTelemetryErrorHandler = void Function(
   Object error,

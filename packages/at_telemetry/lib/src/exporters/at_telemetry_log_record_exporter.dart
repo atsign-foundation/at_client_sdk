@@ -1,5 +1,5 @@
-import '../at_telemetry_log_record.dart';
-import '../at_telemetry_resource.dart';
+import '../models/at_telemetry_log_record.dart';
+import '../models/at_telemetry_resource.dart';
 
 // Something a program uses to send telemetry to a collector. None of these
 // Futures ever completes with an error, and flush and shutdown each return

@@ -4,9 +4,9 @@ import 'dart:collection';
 import 'package:at_utils/at_logger.dart';
 
 import '../at_telemetry_attributes.dart';
-import '../at_telemetry_log_record.dart';
-import '../at_telemetry_resource.dart';
-import '../codec/at_telemetry_logs_codec.dart';
+import '../codecs/at_telemetry_logs_codec.dart';
+import '../models/at_telemetry_log_record.dart';
+import '../models/at_telemetry_resource.dart';
 import 'at_telemetry_log_record_exporter.dart';
 import 'at_telemetry_notification_batch.dart';
 

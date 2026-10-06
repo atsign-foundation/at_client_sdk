@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../at_telemetry_log_record.dart';
-import '../at_telemetry_resource.dart';
-import '../at_telemetry_severity.dart';
-import 'at_telemetry_resource_logs.dart';
+import '../models/at_telemetry_log_record.dart';
+import '../models/at_telemetry_resource.dart';
+import '../models/at_telemetry_resource_logs.dart';
+import '../models/at_telemetry_severity.dart';
 
 // Encodes and decodes OTLP/JSON ExportLogsServiceRequest bodies, built
 // directly from maps. It follows the OTLP JSON Protobuf encoding:

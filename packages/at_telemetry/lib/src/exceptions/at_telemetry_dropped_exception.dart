@@ -1,4 +1,4 @@
-import 'at_telemetry_log_record.dart';
+import '../models/at_telemetry_log_record.dart';
 
 // An exporter gave up on a record without delivering it
 final class AtTelemetryDroppedException implements Exception {

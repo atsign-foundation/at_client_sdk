@@ -1,4 +1,4 @@
-import 'at_telemetry_any_value.dart';
+import '../at_telemetry_any_value.dart';
 import 'at_telemetry_severity.dart';
 
 // An OpenTelemetry LogRecord. A record with a non-empty eventName is an
