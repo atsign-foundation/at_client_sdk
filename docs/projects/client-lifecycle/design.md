@@ -472,7 +472,9 @@ answers it differently: the types those families annotate are removed with
 it, so there is nothing to hold and no caller to migrate one field at a
 time. The plan's rows for B, C and D point here. Its own work closed on
 2026-09-13: every consumer moved, `LocalSecondary` reads its keys from the
-key source and the keystore, and family F's seven fields stay deprecated
+key source and the keystore, then an injected `AtChops` as the last tier
+(restored 2026-10-06 for at_onboarding_cli 1.x, which builds a client from one
+and files its keys only afterwards), and family F's seven fields stay deprecated
 with a legacy writer and two readers as their replacement. What the plan
 still lists is the majors' removals, a P1 row blocked on them.
 

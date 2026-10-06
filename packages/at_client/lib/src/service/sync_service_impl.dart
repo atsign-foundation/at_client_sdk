@@ -824,6 +824,7 @@ class SyncServiceImpl implements SyncService {
         // the next batch (the queue may still have more).
         continue;
       }
+      var rewrittenMidPush = 0;
       List<dynamic> batchResponse;
       try {
         batchResponse = await sendBatch(batchRequests);
@@ -875,6 +876,7 @@ class SyncServiceImpl implements SyncService {
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
             // the entry unconditionally here would lose it.
+            rewrittenMidPush++;
             _logger.finer('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
@@ -934,9 +936,15 @@ class SyncServiceImpl implements SyncService {
       if (pendingNow > 0 &&
           pendingNow >= queueSizeBefore &&
           allBatchKeysStillPresent) {
-        _logger.warning('sync queue: $pendingNow pending after batch (was '
-            '$queueSizeBefore); none of the in-batch entries were '
-            'removed — bailing out, will retry next round');
+        if (rewrittenMidPush == batchSources.length) {
+          _logger.finer('sync queue: every in-batch entry reached the '
+              'atServer and was rewritten meanwhile; the newer writes push '
+              'next round');
+        } else {
+          _logger.warning('sync queue: $pendingNow pending after batch (was '
+              '$queueSizeBefore); none of the in-batch entries were '
+              'removed — bailing out, will retry next round');
+        }
         break;
       }
     }

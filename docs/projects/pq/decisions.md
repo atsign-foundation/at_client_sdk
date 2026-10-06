@@ -206,7 +206,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [146] | Keys an app publishes below its grants are its own; ensureReachable reports holding          | 2026-10-04 | LIVE               |
 | [147] | An nskey reaches every enrollment with access: at its mint, and at approval                  | 2026-10-04 | LIVE               |
 | [148] | An approver's envelopes go where the enrollment may read and the approver may write          | 2026-10-05 | LIVE               |
-| [149] | How a shared value was protected is read from metadata, and replies go in kind               | 2026-10-05 | LIVE               |
+| [149] | How a shared value was protected is read from metadata, and replies go in kind               | 2026-10-05 | AMENDED 2026-10-06 |
 | [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
 | [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
 

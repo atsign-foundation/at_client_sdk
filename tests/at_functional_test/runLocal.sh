@@ -48,9 +48,12 @@ lock_pack
 echo "*** Getting dependencies" && pub_get_locked
 
 # The one virtualenv service, addressed through compose so the container's
-# name, which depends on the project name, never has to be spelled out.
+# name, which depends on the project name, never has to be spelled out. A test
+# that has to restart an atServer addresses it the same way, through the file
+# named here.
+export RIG_COMPOSE_FILE="test/docker-compose.yaml"
 ve() {
-  docker compose -f test/docker-compose.yaml exec -T virtualenv "$@"
+  docker compose -f "$RIG_COMPOSE_FILE" exec -T virtualenv "$@"
 }
 
 # The virtualenv image, read by docker-compose.yaml. Defaults to the locally
