@@ -130,11 +130,6 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      # Install dependencies in at_functional_test
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -143,13 +138,26 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -209,10 +217,6 @@ jobs:
         with:
           dart-channel: beta
 
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -220,13 +224,25 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
