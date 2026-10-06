@@ -60,6 +60,8 @@
   encryption fields an app sets on the key's metadata.
 - BREAKING: a provider id set in a key's `appMetadata` no longer chooses the
   provider for a notification the SDK encrypts; pass `cryptoProviderId`.
+- fix: a `noCommit` put that falls back to legacy encryption still asks the
+  atServer not to record a commit.
 
 ## 3.15.0-rc3
 

@@ -50,11 +50,13 @@ class PutRequestOptions extends RequestOptions {
   bool shouldEncrypt = true;
 
   /// Whether the value was encrypted before this put, under the metadata its
-  /// key carries; read only when [shouldEncrypt] is false.
+  /// key carries; read by every put the SDK does not encrypt itself — one
+  /// with [shouldEncrypt] false, or of a public or `local:` key.
   ///
-  /// The put then sends the key's metadata as it is. Any other put the SDK
-  /// does not encrypt sends it rebuilt, so what a read or an earlier put left
-  /// on a reused key cannot mark a plain value encrypted.
+  /// The put then sends the key's metadata as it is. Without it, such a put
+  /// clears `isEncrypted` and `encoding`, and one with [shouldEncrypt] false
+  /// that is not public has its metadata rebuilt as well, so what a read or an
+  /// earlier put left on a reused key cannot mark a plain value encrypted.
   @internal
   bool alreadyEncrypted = false;
 
