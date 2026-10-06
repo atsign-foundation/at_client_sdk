@@ -271,7 +271,10 @@ class AtSyncQueue {
   ///
   /// Only the entries [keep] accepts are taken, and an entry this queue
   /// already holds for the same atKey stays when it is at least as recent.
-  /// [stray] is left on disk if taking an entry fails.
+  /// Each entry leaves [stray] as it is taken, so a [stray] left on disk by a
+  /// failure holds only what was not taken, and no write is pushed twice.
+  /// Called by the Hive store as it opens, for a queue an earlier release
+  /// left elsewhere; not for application code.
   Future<int> adopt(Box<String> stray,
       {required Future<bool> Function(SyncQueueEntry entry) keep}) async {
     _ensureOpen();
@@ -292,6 +295,7 @@ class AtSyncQueue {
         if (held != null && held.ts >= entry.ts) continue;
         if (!await keep(entry)) continue;
         await enqueue(atKey, entry.op, ts: entry.ts);
+        await stray.delete(atKey);
         taken++;
       }
     } catch (_) {
