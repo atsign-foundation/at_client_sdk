@@ -40,7 +40,9 @@ void main() {
           'llookup:$ckKid.__ck.$namespace$atSign\n',
           auth: true);
       return true;
-    } catch (_) {
+    } on KeyNotFoundException {
+      // NOTE: only a key the atServer does not hold reads as collected; an
+      // outage or a refusal is this test's failure, not a collection.
       return false;
     }
   }
@@ -262,7 +264,10 @@ void main() {
     await managerOf(atClient).rotateContentKey(context, value);
     expect(await atClient.delete(value), true);
     await sync('ck-grace-uncited');
-    await managerOf(atClient).collectUnused(context);
+    expect(await managerOf(atClient).tryCollect(context), isNotNull,
+        reason: 'the pass ran over a caught-up store rather than being '
+            'refused, so "kept" below is its decision and not a pass that '
+            'never looked');
     await sync('ck-grace-kept');
     expect(await served(superseded), isTrue,
         reason: 'superseded just now, so it is kept although nothing cites it');

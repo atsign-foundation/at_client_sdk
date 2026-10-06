@@ -351,10 +351,12 @@ Future<Map<String, Object?>> Function(ClientSpec, String) _seedReleased(
         String version) =>
     (ClientSpec spec, String peer) async {
       final dir = '${Directory.current.path}/../upgrade/released/$version';
-      // NOTE: the lockfile is committed and the pin exact, so this resolves
-      // the released build rather than whatever is newest.
-      final pubGet =
-          await Process.run('dart', ['pub', 'get'], workingDirectory: dir);
+      // NOTE: the lockfile is committed and the pin exact, and the flag makes
+      // pub fail rather than re-resolve when the lock no longer satisfies the
+      // pubspec or this SDK, so the arm runs the released build or not at all.
+      final pubGet = await Process.run(
+          'dart', ['pub', 'get', '--enforce-lockfile'],
+          workingDirectory: dir);
       expect(pubGet.exitCode, 0,
           reason:
               'pub get failed in $dir:\n${pubGet.stdout}\n${pubGet.stderr}');

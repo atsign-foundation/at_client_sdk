@@ -5,6 +5,8 @@
 library;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
@@ -70,5 +72,37 @@ void main() {
     expect(again.holdsPrivate, isTrue,
         reason: 'the client that minted the key holds its private, so it can '
             'open what peers seal here');
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'a client of the same atSign that was never conveyed the private does '
+      'not hold it', () async {
+    // NOTE: one live client per principal; the one above has done its work.
+    await AtClientManager.getInstance().atClient.stop();
+    final loader = AtEncryptionKeysLoader.getInstance();
+    final other = '${namespace}other';
+    // The demo keys are this atSign's credential and hold none of the nskey
+    // privates the first client filed in its own key source.
+    final second = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.pqActive)
+          ..namespace = other,
+        namespace: other,
+        storage: TestUtils.storageForPrincipal(atSign, 'unheld'));
+    addTearDown(second.stop);
+    await loader.setEncryptionKeys(second, atSign);
+    await (second as AtClientImpl).pqBootstrap!.startupComplete;
+
+    final result = await second.ensureReachable(namespace);
+
+    expect(result.outcome, AtReachability.alreadyReachable,
+        reason: 'the first client published the key for this namespace');
+    expect(result.isReachable, isTrue);
+    expect(result.holdsPrivate, isFalse,
+        reason: 'the private was filed by the client that minted it and '
+            'conveyed to nobody, so peers can seal here and this client '
+            'cannot open what they seal: the arm the two assertions above '
+            'cannot show, and the one a constant true would hide');
   }, timeout: Timeout(Duration(minutes: 3)));
 }

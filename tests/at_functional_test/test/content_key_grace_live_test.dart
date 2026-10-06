@@ -89,7 +89,10 @@ void main() {
     // NOTE: a collection deletes locally and sync pushes it, so a pass is run
     // over a caught-up store and pushed before the atServer is asked.
     await sync('ck-grace-rotated');
-    await managerOf(aliceClient).collectUnused(context);
+    expect(await managerOf(aliceClient).tryCollect(context), isNotNull,
+        reason: 'the pass ran over a caught-up store rather than being '
+            'refused, so "kept" below is its decision and not a pass that '
+            'never looked');
     await sync('ck-grace-collected');
 
     final conveyance = '$bob:$superseded.__ck.$nsRotate$alice';
@@ -99,7 +102,9 @@ void main() {
             .getRemoteSecondary()!
             .executeCommand('llookup:$conveyance\n', auth: true);
         return true;
-      } catch (_) {
+      } on KeyNotFoundException {
+        // NOTE: only a key the atServer does not hold reads as collected; an
+        // outage or a refusal is this test's failure, not a collection.
         return false;
       }
     }
