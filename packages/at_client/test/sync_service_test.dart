@@ -25,6 +25,14 @@ class MockAtClient extends Mock implements AtClient {
   AtClientPreference getPreferences() => AtClientPreference();
 }
 
+/// A client whose preference a test can replace, as `setPreferences` does.
+class _ReplaceablePreferenceClient extends MockAtClient {
+  AtClientPreference preference = AtClientPreference()..namespace = 'wavi';
+
+  @override
+  AtClientPreference getPreferences() => preference;
+}
+
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
   @override
@@ -185,6 +193,30 @@ void main() async {
       expect((captured[0] as AtKey).toString(), pullCursor().toString());
       expect(captured[1], '42');
       expect((captured[2] as PutRequestOptions).shouldEncrypt, isFalse);
+    });
+
+    test('keeps the namespace the service was built with', () async {
+      final client = _ReplaceablePreferenceClient();
+      when(() => client.notificationService)
+          .thenReturn(mockNotificationService);
+      when(() => client.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      final service = await SyncServiceImpl.create(client,
+          remoteSecondary: mockRemoteSecondary,
+          warmStartSync: false) as SyncServiceImpl;
+
+      client.preference = AtClientPreference()..namespace = 'other';
+      await service.persistPullCursor(42);
+
+      final written = verify(() => client.put(captureAny(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .single as AtKey;
+      expect(written.toString(), 'local:lastreceivedservercommitid.wavi@alice',
+          reason: 'a cursor that moved with the preference would be lost, and '
+              'the next sync would start over from the beginning');
+      await service.stop();
     });
 
     test('swallows a write failure instead of replacing the sync error',

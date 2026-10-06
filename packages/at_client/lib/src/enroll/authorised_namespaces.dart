@@ -6,16 +6,18 @@ import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 ///
 /// An APKAM client is told by its own enrollment record, all the atServer
 /// returns without `__manage`, while a legacy PKAM client has no enrollment
-/// and names exactly one — its `preference.namespace`, which is also what a
-/// grant of `*` stands for, `__manage` being skipped either way.
+/// and names exactly one — [ownNamespace], its `preference.namespace`, which
+/// is also what a grant of `*` stands for, `__manage` being skipped either way.
 ///
 /// Throws when the enrollment record cannot be read; the caller decides what
 /// an unknown answer means for it.
-Future<Set<String>> authorisedNamespacesOf(AtClient atClient) async {
-  final own = atClient.getPreferences()?.namespace;
-  final ownNamespace = (own == null || own.isEmpty) ? const <String>{} : {own};
+Future<Set<String>> authorisedNamespacesOf(AtClient atClient,
+    {required String? ownNamespace}) async {
+  final own = (ownNamespace == null || ownNamespace.isEmpty)
+      ? const <String>{}
+      : {ownNamespace};
   final enrollmentId = atClient.enrollmentId;
-  if (isAtSignCredential(enrollmentId)) return ownNamespace;
+  if (isAtSignCredential(enrollmentId)) return own;
 
   final mine = (await atClient.enrollmentService!.fetchEnrollmentRequests())
       .where((e) => e.enrollmentId == enrollmentId);
@@ -24,7 +26,7 @@ Future<Set<String>> authorisedNamespacesOf(AtClient atClient) async {
   };
   return {
     ...granted.where(isSeedableNamespace),
-    if (granted.contains(EnrollmentConstants.allNamespaces)) ...ownNamespace,
+    if (granted.contains(EnrollmentConstants.allNamespaces)) ...own,
   };
 }
 
@@ -36,3 +38,32 @@ bool isSeedableNamespace(String namespace) =>
     namespace != EnrollmentConstants.allNamespaces &&
     namespace != '__manage' &&
     namespace.isNotEmpty;
+
+/// The access [grants] give to [namespace], or null when they give none.
+///
+/// Resolved as the atServer resolves a key, which reads its namespace as the
+/// last dot segment: a grant on that segment wins, then the first grant on
+/// [namespace] itself or on a namespace above it, and `*` answers only for a
+/// namespace no such grant covers.
+String? accessIn(Map<String, dynamic> grants, String namespace) {
+  final lastSegment = namespace.substring(namespace.lastIndexOf('.') + 1);
+  final onLastSegment = grants[lastSegment];
+  if (lastSegment != EnrollmentConstants.allNamespaces &&
+      onLastSegment != null) {
+    return '$onLastSegment';
+  }
+  for (final MapEntry(key: granted, value: access) in grants.entries) {
+    if (granted == EnrollmentConstants.allNamespaces) continue;
+    if (granted == namespace || namespace.endsWith('.$granted')) {
+      return '$access';
+    }
+  }
+  final all = grants[EnrollmentConstants.allNamespaces];
+  return all == null ? null : '$all';
+}
+
+/// Whether a client granted [own] may write to [namespace].
+///
+/// A null [own] is a client with no recorded limit, and may write anywhere.
+bool mayWriteIn(Map<String, dynamic>? own, String namespace) =>
+    own == null || (accessIn(own, namespace)?.contains('w') ?? false);

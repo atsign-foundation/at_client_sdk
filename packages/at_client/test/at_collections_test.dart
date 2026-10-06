@@ -1691,6 +1691,55 @@ void main() {
       ).called(1);
     });
 
+    /// Every key a test below fetched with `get`.
+    final opened = <String>[];
+
+    /// Bob's item `idr`, read from a store that also holds [receipt], a key
+    /// this atSign wrote; each scan is answered by its own regex.
+    Future<CItem<String>> bobsItemBeside(String receipt) async {
+      final keys = [
+        AtKey.fromString('idr.$namespace$bobStr'),
+        AtKey.fromString(receipt),
+      ];
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((invocation) async {
+        final regex = RegExp(invocation.namedArguments[#regex] as String);
+        return keys.where((k) => regex.hasMatch(k.toString())).toList();
+      });
+      opened.clear();
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        opened.add((invocation.positionalArguments.first as AtKey).toString());
+        return AtValue()
+          ..value = jsonEncode({'type': 'n/a', 'obj': 'v'})
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      return (await buildCollection<String>().getItems()).single;
+    }
+
+    test('a receipt this atSign sent still counts on a fresh CItem', () async {
+      final fromBob =
+          await bobsItemBeside('$bobStr:r.__rr.idr.$namespace$selfAtSignStr');
+
+      expect(await fromBob.wasMarkedReadByMe(), isTrue,
+          reason: 'the receipt is in the local store; a CItem built after a '
+              'restart must find it, or markReadByMe sends it again');
+      expect(opened.where((k) => k.contains('__rr')), isEmpty,
+          reason: 'a copy shared out can be sealed to its recipient, so it '
+              'is counted by its key and never opened');
+    });
+
+    test('a receipt for another owner\'s item of the same id does not count',
+        () async {
+      final fromBob =
+          await bobsItemBeside('@carol:r.__rr.idr.$namespace$selfAtSignStr');
+
+      expect(await fromBob.wasMarkedReadByMe(), isFalse,
+          reason: "identity is (owner, id): reading carol's idr says nothing "
+              "about bob's");
+    });
+
     test('markReadByMe writes ONLY the recipient copy, no self copy', () async {
       // AtKey lowercases ids → 'idm'.
       final bobKey = AtKey.fromString('idm.$namespace$bobStr');

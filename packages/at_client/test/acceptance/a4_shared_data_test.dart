@@ -94,6 +94,27 @@ void main() {
           'cannot fetch the ciphertext (server-gated) nor decrypt',
         ],
       );
+      provenIn(
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
+        'bob tells how alice shared each value with him, down to the KEM',
+        proves: 'against two live atSigns: alice shares one value '
+            'post-quantum and one legacy, and bob, given the keys his '
+            'getAtKeys lists, reads the first as at/symmetric/AES/GCM '
+            'under a KEM his own advertisement offers, with that KEM\'s suite, '
+            'and the second as legacy. Bob holds neither value locally, so '
+            'both are read with lookup:meta; the KEM comes from his cached '
+            'copy of the conveyance alice sealed to him, and a reading that '
+            'never reached it leaves the KEM null and fails',
+        clauses: ['tell how each value was shared with him'],
+      );
+      provenIn(
+        'packages/at_client/test/received_scheme_test.dart',
+        'a value only the atServer holds is told from its metadata alone',
+        proves: 'the "without decrypting it": a value and a conveyance only '
+            'the atServer holds are each read with one lookup:meta, and a '
+            'read of either value (getMeta, which is a get) fails the test',
+        clauses: ['tell how each value was shared with him'],
+      );
     });
 
     test('UC-A4.2 · alice to bob where bob has no namespace key, share fails',
@@ -284,6 +305,24 @@ void main() {
           'is present on the notification frame; signal-only '
               'notifications are unaffected'
         ],
+      );
+      provenIn(
+        'packages/at_client/test/received_scheme_test.dart',
+        'is the provider the sender stamped',
+        proves: 'that receivedUnder names the provider the value was read '
+            'under, and its sibling that an unstamped notification reads as '
+            'legacy; AtClientBindings.notify\'s own test shows a reply sent '
+            'with cryptoProviderId goes out under it',
+        clauses: ['can answer in the scheme the notification arrived in'],
+      );
+      provenIn(
+        'packages/at_client/test/notification_service_test.dart',
+        'send answers a notification in the scheme it arrived in',
+        proves: 'that a reply through NotificationService.send, given the '
+            'request\'s receivedUnder, goes out on the wire under the '
+            'provider the request arrived under rather than the client\'s '
+            'default',
+        clauses: ['can answer in the scheme the notification arrived in'],
       );
     });
 

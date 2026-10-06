@@ -19,6 +19,9 @@ pubspec_overrides.yaml
 # different at_commons, with no way to tell which. Its lockfile is the pin.
 # See docs/projects/pq/decisions.md 96 ruling 2.
 !/tests/pq_matrix/published/pubspec.lock
+# The upgrade check's released arms are pinned the same way, for the same
+# reason.
+!/tests/upgrade/released/*/pubspec.lock
 
 # Avoid committing generated Javascript files:
 *.dart.js

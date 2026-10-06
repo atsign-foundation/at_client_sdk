@@ -1,8 +1,43 @@
 ## 3.15.0-rc4
 
+- fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart
+  no longer skips the notifications sent while the client was not running, and
+  a `local:` record put back through the `AtKey` that read it can still be
+  read. A device a 3.15.0 prerelease left in that state recovers, except for an
+  app's own `local:` value shaped like ciphertext (base64 of a multiple of 16
+  bytes), which the app has to write again.
+- fix: `readBy` and `wasMarkedReadByMe` count a read receipt this client sent
+  before a restart, so `markReadByMe` no longer sends it a second time.
 - fix: a content key that has been replaced is kept for 8 days
   (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
   can still open a notification sent under it just before the rotation.
+- feat: a notification can be ephemeral (`NotificationParams.forUpdate(...,
+  ephemeral: true)`, `send(..., ephemeral: true)`): an atServer that supports
+  it delivers it without storing it, for at most 2 minutes. It cannot carry a
+  `ttr` or be cached at the recipient.
+- feat: where the atServer supports it, a notification carries its exact
+  expiry rather than a relative `ttln`, so it no longer drifts at each hop.
+- build: requires `at_commons` ^5.19.0.
+- feat: `ensureReachable`'s result says whether this client can open what
+  peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
+- fix: an approver whose client has only just started still hands a new
+  enrollment every namespace key it may read, under a `*` grant too.
+- fix: a post-quantum enrollment granted only `*` can be approved; it was
+  refused for having no namespace to be sent its keys in.
+- fix: approving no longer throws when the approver may only read a namespace
+  it holds a key for; the new enrollment gets that key from another holder.
+- feat: `atClient.schemeOf(key)` tells how a value another atSign shared was
+  protected: legacy or post-quantum, and under which KEM.
+  `AtNotification.receivedUnder`, passed as the `cryptoProviderId` of
+  `NotificationService.send` or `AtClientBindings.notify` (new there), lets an
+  app answer in the scheme it was asked in. A class that overrides
+  `AtClientBindings.notify` must add the parameter.
+- feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
+  server answers each request in the scheme it arrived in.
+- fix: the namespace key a client publishes at start is for the namespace it
+  was built with, not one the app switches it to straight afterwards.
+- fix: concurrent `AtRpc` requests, from one client or several, no longer
+  share a request id, which could drop one or hand a caller another's response.
 
 ## 3.15.0-rc3
 

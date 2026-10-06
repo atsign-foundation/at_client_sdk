@@ -52,6 +52,9 @@ void main() {
             'the distinction: this call did the work, and a caller that wants '
             'to log or meter its first run can tell');
     expect(rescued.isReachable, isTrue);
+    expect(rescued.holdsPrivate, isTrue,
+        reason: 'checked against the advertisement the atServer now serves, '
+            'not assumed from having minted it');
     expect(
         await PublishedNskeyKeyRing(atClient).currentPublic(atSign, namespace),
         isNotNull,
@@ -64,5 +67,8 @@ void main() {
             'call this on every start without rotating its own namespace key '
             'each time');
     expect(again.isReachable, isTrue);
+    expect(again.holdsPrivate, isTrue,
+        reason: 'the client that minted the key holds its private, so it can '
+            'open what peers seal here');
   }, timeout: Timeout(Duration(minutes: 3)));
 }
