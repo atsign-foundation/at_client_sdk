@@ -65,15 +65,28 @@ void main() {
             .build();
     final remote = PutRequestOptions()..useRemoteAtServer = true;
 
+    /// The IV the atServer holds for [key] now: what went on the wire, not
+    /// what the put left on the caller's key.
+    Future<String?> servedIv() async {
+      final response = await client
+          .getRemoteSecondary()!
+          .executeCommand('llookup:all:$key\n', auth: true);
+      final record = jsonDecode(response!.substring('data:'.length)) as Map;
+      return (record['metaData'] as Map)['ivNonce'] as String?;
+    }
+
     await client.put(key, first, putRequestOptions: remote);
-    final firstIv = key.metadata.ivNonce;
+    final firstIv = await servedIv();
     await client.put(key, second, putRequestOptions: remote);
-    final secondIv = key.metadata.ivNonce;
+    final secondIv = await servedIv();
 
     expect(firstIv, isNotNull);
     expect(secondIv, isNot(firstIv),
-        reason: 'the second put must not reuse the IV the first left on the '
-            'key');
+        reason: 'the second put must not reuse the IV the first sent, read '
+            'back from the record the atServer holds');
+    expect(key.metadata.ivNonce, secondIv,
+        reason: 'the control: the key carries the IV of its last send, so the '
+            'two above are the sends\' own');
     final read = await client.get(key,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
     expect(read.value, second,

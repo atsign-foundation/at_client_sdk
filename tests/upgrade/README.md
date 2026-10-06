@@ -15,14 +15,18 @@ Every arm writes a Hive store, so the test skips itself when
 
 ## What one arm does
 
+CI runs it in its own job, `functional_tests_upgrade`, on the stable channel,
+and the functional legs exclude its `upgrade` tag.
+
 An arm is one version of at_client that writes a store. For each, the test:
 
 1. **Seeds** a store with that version: one record of each kind (self, shared,
    public, `local:`), a value with a newline and a binary one, a collection
    item shared with a peer, a read receipt for the peer's item, a received
    notification and a completed sync. It reports what that version observes
-   of the store, then makes one last write and exits without waiting to push
-   it.
+   of the store and the key it keeps its sync cursor under, which a store with
+   no lifecycle marker is judged by, then makes one last write and exits
+   without waiting to push it.
 2. **Upgrades**: this tree opens the same store, with the same app code, while
    a notification sent in the gap waits on the atServer. Before it does, the
    test asks the atServer directly whether the last write reached it, and it
@@ -87,3 +91,21 @@ the same library against this tree.
 
 Only what the seed writes and the snapshot reads. Downgrades, the atServer's
 own store, and API that one of the arms lacks are outside it.
+
+Nor a queue a seed left outside its store. 3.14.0 opens its sync queue lazily
+on Hive's global instance, whose directory is the last one any store, or the
+app, gave Hive: switching back to an atSign whose queue had not opened yet,
+when atSigns keep separate directories, or an app's own `Hive.init`, leaves
+the queue in another directory. This tree takes such a queue in when the
+atSign's store opens, from a directory this process has opened a store in or
+the one Hive's global instance pointed at
+(`packages/at_client/test/storage/stray_sync_queue_test.dart`); one in a
+directory neither names stays where it is, and so does one that cannot be
+read, with a warning, while the store opens without it. Every arm seeds its store from one
+client that writes before anything else touches Hive, so none strands its
+queue.
+
+Nor a store older than its oldest arm. at_client 3.11 and earlier kept unsynced
+writes in a commit log, which no release since 3.12 reads: this tree opens
+such a store's keystore and leaves those writes unpushed, as a 3.11.0 seed at
+sshnoports v5.17.0's resolution showed.

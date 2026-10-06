@@ -5,6 +5,8 @@ import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/declared_fields.dart';
+
 /// Every [Metadata] field is either one the caller of an encrypting send
 /// decides, which [metadataForEncryptedSend] carries, or one an encryption or
 /// the atServer produces, which it leaves out. A field at_commons adds turns the
@@ -86,13 +88,7 @@ void main() {
         RegExp(r'^class Metadata \{\n(.*?)^\}', multiLine: true, dotAll: true)
             .firstMatch(source)!
             .group(1)!;
-    return RegExp(
-            r'^  (?!static |return )[A-Za-z_][\w<>?]*\s+([a-zA-Z_]\w*)'
-            r'(?:\s*=\s*[^;()]+)?;$',
-            multiLine: true)
-        .allMatches(body)
-        .map((m) => m.group(1)!)
-        .toSet();
+    return fieldsDeclaredIn(body);
   }
 
   test('every Metadata field is classified exactly once', () async {

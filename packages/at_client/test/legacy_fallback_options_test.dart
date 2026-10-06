@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/declared_fields.dart';
+
 /// A put that falls back to legacy encryption goes out under a copy of its
 /// [PutRequestOptions] with the provider pinned to legacy. Every other field is
 /// the caller's request and travels with the copy: one the copy leaves out
@@ -40,13 +42,7 @@ void main() {
             dotAll: true)
         .firstMatch(source)!
         .group(1)!;
-    return RegExp(
-            r'^  (?!static |return )[A-Za-z_][\w<>?]*\s+([a-zA-Z_]\w*)'
-            r'(?:\s*=\s*[^;()]+)?;$',
-            multiLine: true)
-        .allMatches(body)
-        .map((m) => m.group(1)!)
-        .toSet();
+    return fieldsDeclaredIn(body);
   }
 
   test('every PutRequestOptions field is classified exactly once', () {
