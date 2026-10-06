@@ -448,12 +448,9 @@ void main() {
         notifier: 'test-notifier',
         latestN: 2,
         notificationExpiry: Duration(minutes: 1),
+        cryptoProviderId: 'test_provider',
       );
       notificationParams.atKey.metadata.isEncrypted = true;
-      notificationParams.atKey.metadata.appMetadata =
-          AppMetadata(providerId: 'test_provider');
-      // The key pins providerId 'test_provider'; register a CipherProvider
-      // under that id so the runtime routes encryption to it.
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
@@ -522,6 +519,77 @@ void main() {
       expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
           'override-provider');
+    });
+
+    group('a send the SDK encrypts takes nothing an earlier send left', () {
+      void configureTwoProviders() =>
+          when(() => mockAtClientImpl.getPreferences()).thenReturn(
+            AtClientPreference()
+              ..namespace = 'wavi'
+              ..crypto = CryptoConfig(
+                defaultProviderId: 'default-provider',
+                providers: [
+                  CipherProvider('default-provider'),
+                  CipherProvider('override-provider'),
+                ],
+              ),
+          );
+
+      AtKey toBob() =>
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build();
+
+      Future<String?> providerOfSend(
+          AtKey atKey, String? cryptoProviderId) async {
+        final params = NotificationParams.forUpdate(atKey,
+            value: value, cryptoProviderId: cryptoProviderId);
+        params.atKey.metadata.isEncrypted = true;
+        final builder = await NotificationRequestTransformer(mockAtClientImpl)
+            .transform(params);
+        return builder.atKey.metadata.appMetadata?.providerId;
+      }
+
+      test('a provider id written on the key does not choose the provider',
+          () async {
+        configureTwoProviders();
+        final atKey = toBob()
+          ..metadata.appMetadata = AppMetadata(providerId: 'override-provider');
+
+        expect(await providerOfSend(atKey, null), 'default-provider',
+            reason: 'only cryptoProviderId, or else the default, chooses the '
+                'provider of a send the SDK encrypts');
+      });
+
+      test('a reused key follows each send\'s own cryptoProviderId', () async {
+        configureTwoProviders();
+        final atKey = toBob();
+
+        expect(await providerOfSend(atKey, 'override-provider'),
+            'override-provider');
+        expect(
+            await providerOfSend(atKey, 'default-provider'), 'default-provider',
+            reason: 'the provider the first send stamped on the key must not '
+                'outrank the second send\'s explicit request');
+        expect(await providerOfSend(atKey, null), 'default-provider',
+            reason: 'nor stand in for the default');
+      });
+
+      test('keys sharing one Metadata do not inherit each other\'s provider',
+          () async {
+        configureTwoProviders();
+        final shared = Metadata();
+        final first = toBob()..metadata = shared;
+        final second = (AtKey.shared('phone', namespace: 'wavi')
+              ..sharedWith('@carol'))
+            .build()
+          ..metadata = shared;
+
+        expect(await providerOfSend(first, 'override-provider'),
+            'override-provider');
+        expect(await providerOfSend(second, null), 'default-provider',
+            reason: 'one Metadata object reused across keys is how AtRpc '
+                'sent; the first send\'s stamp must not route the second');
+      });
     });
     test(
         'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',

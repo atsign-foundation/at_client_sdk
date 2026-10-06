@@ -54,10 +54,9 @@ class PutRequestTransformer
     } else {
       // NOTE: the value is stored as given, encoded below only if it has a
       // newline. A key read back from a stored record carries that record's
-      // `isEncrypted` and `encoding`; only a self or shared value whose caller
-      // opted out of encryption can have been sealed or encoded by that
-      // caller, since the SDK never encrypts a public or `local:` one.
-      if (options.shouldEncrypt || atKey.isLocal || _isPublicKey(metadata)) {
+      // `isEncrypted` and `encoding`; only a caller declaring
+      // [PutRequestOptions.alreadyEncrypted] sealed the value itself.
+      if (!options.alreadyEncrypted) {
         metadata.isEncrypted = false;
         metadata.encoding = null;
       }

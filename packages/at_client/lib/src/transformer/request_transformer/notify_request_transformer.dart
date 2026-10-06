@@ -6,6 +6,7 @@ import 'package:at_client/src/client/at_server_features.dart'
     show notificationLifetimeFor;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
     show NamespaceKeyUnavailableException;
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -36,6 +37,9 @@ class NotificationRequestTransformer
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
+      notificationParams.atKey.metadata =
+          metadataForEncryptedSend(notificationParams.atKey.metadata)
+            ..isEncrypted = true;
       // NOTE: the provider id is stamped only once routing has settled — the
       // catch below may re-route to legacy, and a key stamped with a provider
       // that then declined would claim a scheme its value was never sealed
@@ -57,7 +61,7 @@ class NotificationRequestTransformer
             useRemoteAtServer: true,
             stampProviderId: false);
       }
-      notificationParams.atKey.metadata.appMetadata ??=
+      notificationParams.atKey.metadata.appMetadata =
           AppMetadata(providerId: providerId);
     }
     // prepares notification builder

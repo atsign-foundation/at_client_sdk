@@ -505,6 +505,7 @@ class CkManager {
     await context.atClient.put(key, sealed,
         putRequestOptions: PutRequestOptions()
           ..shouldEncrypt = false
+          ..alreadyEncrypted = true
           ..useRemoteAtServer = useRemoteAtServer);
   }
 

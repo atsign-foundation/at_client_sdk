@@ -23,7 +23,6 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -896,8 +895,6 @@ class NotificationServiceImpl extends NotificationService {
     var notificationResult = NotificationResult()
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
-
-    notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
 
     try {
       notificationParams.atKey.metadata.isEncrypted = encryptValue;

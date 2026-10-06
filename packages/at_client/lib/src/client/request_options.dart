@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart' show internal;
+
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
 abstract class RequestOptions {}
@@ -41,6 +43,15 @@ class PutRequestOptions extends RequestOptions {
   /// If client prefers not to encrypt a shared key or self key, set this flag
   /// to false.
   bool shouldEncrypt = true;
+
+  /// Whether the value was encrypted before this put, under the metadata its
+  /// key carries; read only when [shouldEncrypt] is false.
+  ///
+  /// The put then sends the key's metadata as it is. Any other put the SDK
+  /// does not encrypt sends it rebuilt, so what a read or an earlier put left
+  /// on a reused key cannot mark a plain value encrypted.
+  @internal
+  bool alreadyEncrypted = false;
 
   /// Overrides the configured crypto provider for this put request.
   ///
