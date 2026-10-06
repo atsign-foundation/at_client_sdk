@@ -38,6 +38,10 @@
   was built with, not one the app switches it to straight afterwards.
 - fix: concurrent `AtRpc` requests, from one client or several, no longer
   share a request id, which could drop one or hand a caller another's response.
+- fix: an `AtKey` reused for several puts or notifications carries nothing
+  over from one to the next.
+- BREAKING: a provider id set in a key's `appMetadata` no longer chooses the
+  provider for a notification the SDK encrypts; pass `cryptoProviderId`.
 
 ## 3.15.0-rc3
 

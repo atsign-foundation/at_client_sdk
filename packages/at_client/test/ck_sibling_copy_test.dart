@@ -256,6 +256,9 @@ void main() {
       expect(sibling.options?.shouldEncrypt, isFalse,
           reason: 'sealed before the put, since the pipeline would overwrite '
               'the appMetadata naming the recipient');
+      expect(sibling.options?.alreadyEncrypted, isTrue,
+          reason: 'a put the SDK does not encrypt otherwise rebuilds the '
+              'metadata, dropping the flag and the recipient this copy names');
       expect(sibling.options?.useRemoteAtServer, isTrue);
       expect(recipients.options?.useRemoteAtServer, isTrue);
 
