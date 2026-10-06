@@ -110,8 +110,13 @@ void main() {
     final written = record('legacy_stamped');
     final ciphertext =
         await CryptoRuntime(legacyOnly).encryptForPut(written, plaintext);
-    records[written.toString()] =
-        (value: ciphertext, metaData: wireMeta(legacyProviderId));
+    records[written.toString()] = (
+      value: ciphertext,
+      metaData: {
+        ...wireMeta(legacyProviderId),
+        'ivNonce': written.metadata.ivNonce,
+      }
+    );
   });
 
   tearDownAll(() async {

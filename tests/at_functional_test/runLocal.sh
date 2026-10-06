@@ -3,8 +3,11 @@ set -euo pipefail
 
 # Run the functional suite locally.
 #
+#   ./runLocal.sh [BASE_PORT] [TEST_PATHS...]
+#
 #   ./runLocal.sh            # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
 #   ./runLocal.sh 27000      # base port: root 27000, secondaries 27001-27098, redis 27099
+#   ./runLocal.sh 27000 test/upgrade_test.dart   # only the named tests
 #
 # A BASE_PORT, passed or exported as VIRTUALENV_BASE_PORT, shifts the
 # virtualenv into a [BASE, BASE+99] range so it can run alongside another
@@ -18,9 +21,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 source ../lib/rig_lock.sh
 
-if [[ -n "${1:-}" ]]; then
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
   VIRTUALENV_BASE_PORT="$1"
+  shift
 fi
+TEST_PATHS=("$@")
 if [[ -n "${VIRTUALENV_BASE_PORT:-}" ]]; then
   if [[ ! "$VIRTUALENV_BASE_PORT" =~ ^[0-9]+$ ]]; then
     echo "*** Not a base port: ${VIRTUALENV_BASE_PORT}" >&2
@@ -128,7 +133,7 @@ if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
   REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
   echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
 fi
-dart test --concurrency=1 -r expanded ${REPORT_ARG}
+dart test --concurrency=1 -r expanded ${REPORT_ARG} ${TEST_PATHS[@]+"${TEST_PATHS[@]}"}
 TEST_EXIT=$?
 set -e
 
