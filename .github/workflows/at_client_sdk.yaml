@@ -119,6 +119,9 @@ jobs:
       # looks like: it carries the same digest as the last `canary-<release>`
       # tag, so it IS a release build.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
+      # The compose file the suite's atServer-restart test addresses the
+      # virtualenv through, relative to the pack directory the tests run in.
+      RIG_COMPOSE_FILE: test/docker-compose.yaml
     strategy:
       fail-fast: false
       matrix:
