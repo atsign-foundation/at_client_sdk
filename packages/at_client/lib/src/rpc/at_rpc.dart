@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show CryptoConfig, legacyCryptoProviderId;
+import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -65,11 +68,14 @@ class AtRpcClient implements AtRpcCallbacks {
     }));
   }
 
-  /// Sends [payload] to the server atSign and completes with its response.
+  /// Sends [payload] to the server atSign and completes with its response,
+  /// sealing the request under [cryptoProviderId], or this client's default
+  /// when it is null.
   ///
   /// Throws [StoppedException] when the client is stopped, or stops before the
   /// response arrives.
-  Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> call(Map<String, dynamic> payload,
+      {String? cryptoProviderId}) async {
     if (rpc.atClient.isStopped) {
       throw StoppedException('the client for '
           '${rpc.atClient.getCurrentAtSign()} has stopped');
@@ -80,7 +86,10 @@ class AtRpcClient implements AtRpcCallbacks {
     completer.future.ignore();
     logger.info('Sending request to $serverAtsign : $request');
     try {
-      await rpc.sendRequest(toAtSign: serverAtsign, request: request);
+      await rpc.sendRequest(
+          toAtSign: serverAtsign,
+          request: request,
+          cryptoProviderId: cryptoProviderId);
     } catch (_) {
       completerMap.remove(request.reqId);
       rethrow;
@@ -350,9 +359,13 @@ class AtRpc {
   /// to [toAtSign]
   ///
   /// Waits for [ready] first when [isClient], so the response cannot arrive
-  /// before there is anything subscribed to receive it.
+  /// before there is anything subscribed to receive it. The request is sealed
+  /// under [cryptoProviderId], or this client's default when it is null; the
+  /// server answers in the same scheme.
   Future<void> sendRequest(
-      {required String toAtSign, required AtRpcReq request}) async {
+      {required String toAtSign,
+      required AtRpcReq request,
+      String? cryptoProviderId}) async {
     if (isClient) {
       await ready();
     }
@@ -364,7 +377,7 @@ class AtRpc {
       ..sharedBy = atClient.getCurrentAtSign()
       ..sharedWith = AtUtils.fixAtSign(toAtSign)
       ..namespace = baseNameSpace
-      ..metadata = _defaultMetaData;
+      ..metadata = _newMetaData();
 
     // Need to be able to receive responses from the atSigns we're sending requests to
     allowList.add(toAtSign);
@@ -381,7 +394,8 @@ class AtRpc {
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(requestRecordID,
                 value: requestJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -412,7 +426,7 @@ class AtRpc {
   // *** Everything below this point is not part of the public AtRpc API ***
   // ***********************************************************************
 
-  final Metadata _defaultMetaData = Metadata()
+  Metadata _newMetaData() => Metadata()
     ..isPublic = false
     ..isEncrypted = true
     // namespaceAware IS SET TO FALSE FOR A REASON:
@@ -627,15 +641,30 @@ class AtRpc {
   /// Sends a response. Note that this is marked as `@visibleForTesting` as it
   /// is only called by [handleRequestNotification] and is not intended to be
   /// used directly by [AtRpc] users.
+  ///
+  /// The response goes out in the scheme [notification] arrived in, when this
+  /// client can seal it to the requester with it, and under this client's
+  /// default otherwise. A response the notification service could not seal
+  /// counts as an attempt that failed, and is retried like one the atServer
+  /// refused; where the failure was in sealing it and the client's preference
+  /// allows a legacy fallback, the retry goes out under the default. That
+  /// flag is the one place a client says reaching a peer outranks keeping the
+  /// scheme, so it gates this downgrade as it gates every other write's.
   @visibleForTesting
   Future<void> sendResponse(
       AtNotification notification, AtRpcReq request, AtRpcResp response) async {
+    String? cryptoProviderId;
+    var schemeChosen = false;
     bool sent = false;
     int delayMillis = 200;
     for (int attemptNumber = 1;
         attemptNumber <= maxSendAttempts && !sent;
         attemptNumber++) {
       try {
+        if (!schemeChosen) {
+          cryptoProviderId = await _answerUnder(notification);
+          schemeChosen = true;
+        }
         String responseAtID =
             '${response.respType.name}.${request.reqId}.$domainNameSpace.$rpcsNameSpace';
         var responseAtKey = AtKey()
@@ -643,18 +672,35 @@ class AtRpc {
           ..sharedBy = atClient.getCurrentAtSign()
           ..sharedWith = notification.from
           ..namespace = baseNameSpace
-          ..metadata = _defaultMetaData;
+          ..metadata = _newMetaData();
 
         var responseJson = jsonEncode(response.toJson());
 
         logger.info(
             "Sending notification $responseAtKey with payload $responseJson");
-        await atClient.notificationService.notify(
+        final result = await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
                 value: responseJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
+        // NOTE: notify() reports a failure to seal or send in its result, not
+        // by throwing.
+        final failure = result.atClientException;
+        if (failure != null) {
+          // NOTE: only a failure to seal says the scheme is the problem; a
+          // timeout or a refusal from the atServer is retried as it is.
+          if (cryptoProviderId != null &&
+              failure is AtEncryptionException &&
+              CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
+            logger.warning('Could not seal response $response under '
+                '$cryptoProviderId, the scheme its request arrived in; the '
+                'next attempt answers under this client\'s default');
+            cryptoProviderId = null;
+          }
+          throw failure;
+        }
         sent = true;
       } catch (e) {
         if (atClient.isStopped) {
@@ -674,6 +720,32 @@ class AtRpc {
         }
       }
     }
+  }
+
+  /// The provider [request] arrived under, or null when this client cannot
+  /// answer with it: legacy under a posture that refuses legacy, a provider
+  /// this client has not configured, or one that cannot seal to the requester
+  /// in [baseNameSpace], as a post-quantum provider cannot when the requester
+  /// has published no key there.
+  ///
+  /// Throws when the requester's readiness cannot be established, as the
+  /// provider does; the caller's retry covers that.
+  Future<String?> _answerUnder(AtNotification request) async {
+    final scheme = request.receivedUnder;
+    if (scheme == legacyCryptoProviderId) {
+      return atClient.getPreferences()?.disallowLegacyEncryption == true
+          ? null
+          : scheme;
+    }
+    if (CryptoConfig.forClient(atClient).lookup(scheme) == null) return null;
+    if (!await CryptoRuntime(atClient)
+        .isReadyUnder(scheme, request.from, baseNameSpace)) {
+      logger.warning('Answering ${request.from} under this client\'s default '
+          'rather than $scheme, the scheme its request arrived in: it has '
+          'published no key for $baseNameSpace to seal the response to');
+      return null;
+    }
+    return scheme;
   }
 }
 

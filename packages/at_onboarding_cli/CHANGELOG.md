@@ -1,3 +1,10 @@
+## 2.0.0-rc4
+
+- fix: a storage path set on the preference after `AtOnboardingServiceImpl`
+  is built is used again, as in 1.x, rather than an empty store opening in
+  the default directory. Building the service no longer fills in the
+  preference's `storagePath`.
+
 ## 2.0.0-rc3
 
 - build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their

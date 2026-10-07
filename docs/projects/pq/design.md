@@ -1454,6 +1454,11 @@ CryptoProvider { id; encrypt(CryptoContext, AtKey, String) → String; decrypt(C
 - An unknown scheme throws `CryptoProviderNotRegistered`.
 - `PutRequestOptions.cryptoProviderId` overrides per operation (the per-destination
   gate the NoPorts walkthrough uses, [§5](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)).
+- A reader tells what a value was sealed under from its metadata alone:
+  `atClient.schemeOf(key)` gives the provider and, for a post-quantum value, the
+  KEM its content key was conveyed under; `AtNotification.receivedUnder` gives a
+  notification's provider, which a reply passes as its `cryptoProviderId` to
+  answer in kind ([ruling 149](detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05)).
 - **Cached-client reuse adopts the new `preference.crypto`**: a
   same-atSign re-set with a new provider config re-applies it — no
   `CryptoProviderNotRegistered` flake.

@@ -25,3 +25,11 @@ dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0
   coverage: ^1.5.0
+  # The upgrade check's seed and snapshot, compiled here against this tree and
+  # by each released arm under tests/upgrade/released against its own.
+  upgrade_scenario:
+    path: ../upgrade/scenario
+  # The released arm's reader, compiled here so it cannot stop compiling
+  # against this tree unnoticed.
+  pq_matrix_scenario:
+    path: ../pq_matrix/scenario

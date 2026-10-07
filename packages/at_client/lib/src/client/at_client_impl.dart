@@ -23,6 +23,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -36,7 +37,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -214,9 +214,12 @@ class AtClientImpl implements AtClient {
       // enrollment published a moment ago is absent locally until sync catches
       // up, and reading that absence as a cold start publishes a second key
       // over the first.
-      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
-          null) {
-        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      final published =
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      if (published != null) {
+        return AtReachabilityResult(AtReachability.alreadyReachable,
+            holdsPrivate:
+                await _holdsPrivates(bootstrap, atSign, namespace, published));
       }
 
       if (_preference?.seedNamespaceKeys != true) {
@@ -232,7 +235,10 @@ class AtClientImpl implements AtClient {
       // both see their own id, and both mint.
       await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
-      return const AtReachabilityResult(AtReachability.published);
+      // NOTE: checked rather than assumed — the mint adopts, rather than
+      // replaces, a key a sibling enrollment published after the read above.
+      return AtReachabilityResult(AtReachability.published,
+          holdsPrivate: await _holdsPrivates(bootstrap, atSign, namespace));
     } catch (e) {
       if (e is StoppedException) {
         _logger.warning('Stopped making $atSign reachable for $namespace: the '
@@ -241,6 +247,27 @@ class AtClientImpl implements AtClient {
         _logger.warning('Could not make $atSign reachable for $namespace: $e');
       }
       return AtReachabilityResult(AtReachability.failed, error: e);
+    }
+  }
+
+  /// Whether this client holds the privates [published] offers, re-reading the
+  /// advertisement when none is given.
+  ///
+  /// Answers false rather than throwing: the namespace is already reachable by
+  /// now, and a failure to tell must not report it as failed.
+  Future<bool> _holdsPrivates(
+      PqClientBootstrap bootstrap, String atSign, String namespace,
+      [NskeyAdvertisement? published]) async {
+    try {
+      final advertisement = published ??
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      return advertisement != null &&
+          await bootstrap.seeding
+              .holdsPrivatesFor(atSign, namespace, advertisement);
+    } catch (e) {
+      _logger.warning('Could not tell whether this client holds the private '
+          'for $atSign:$namespace, so it reports that it does not: $e');
+      return false;
     }
   }
 
@@ -952,6 +979,10 @@ class AtClientImpl implements AtClient {
           });
 
   /// Whether this client's principal has ever been online over this storage.
+  ///
+  /// A store with no marker at all but a sync cursor was online under a
+  /// release that wrote no marker; it counts, and is marked as this
+  /// principal's.
   Future<bool> hasBeenOnline() async {
     final store = localSecondary?.keyStore;
     if (store == null) return false;
@@ -962,7 +993,12 @@ class AtClientImpl implements AtClient {
           recorded['enrollmentId'] ==
               (enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
     } on KeyNotFoundException {
-      return false;
+      final cursors = await store.getKeys(
+          regex: '^local:lastreceivedservercommitid(\\..+)?'
+              '${RegExp.escape(_atSign)}\$');
+      if (await cursors.isEmpty) return false;
+      await _recordOnline();
+      return true;
     }
   }
 
@@ -1971,7 +2007,6 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
 
-    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey
@@ -2006,6 +2041,7 @@ class AtClientImpl implements AtClient {
     // post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
@@ -2024,8 +2060,12 @@ class AtClientImpl implements AtClient {
         if (!mayFallBackToLegacy(_preference)) rethrow;
         _logger.warning(
             'falling back to legacy encryption for ${atKey.key}: ${e.message}');
-        options = _copyOptionsForLegacyFallback(options);
+        options = copyOptionsForLegacyFallback(options);
       }
+    } else if (!atKey.metadata.isPublic &&
+        !options.shouldEncrypt &&
+        !options.alreadyEncrypted) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -2446,11 +2486,18 @@ class AtClientImpl implements AtClient {
   /// [options] with the crypto provider pinned to legacy, leaving the caller's
   /// object untouched — it may be a shared instance, and one write's fallback
   /// must not become every later write's default.
-  static PutRequestOptions _copyOptionsForLegacyFallback(
+  ///
+  /// Every other field is carried: one left out is reset to its default on
+  /// exactly the writes that fell back. `legacy_fallback_options_test.dart`
+  /// fails until a field added to [PutRequestOptions] is placed.
+  @visibleForTesting
+  static PutRequestOptions copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
+        ..alreadyEncrypted = options.alreadyEncrypted
+        ..noCommit = options.noCommit
         ..cryptoProviderId = legacyCryptoProviderId;
 
   /// Fails fast at construction if the configured default provider id can't be
