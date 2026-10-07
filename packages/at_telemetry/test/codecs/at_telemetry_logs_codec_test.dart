@@ -137,6 +137,176 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('throws ArgumentError for an observedAt OTLP cannot carry', () {
+      final List<AtTelemetryLogRecord> records = <AtTelemetryLogRecord>[
+        AtTelemetryLogRecord(eventName: 'a'),
+      ];
+
+      expect(
+        () => codec.encodeExportRequest(
+          records,
+          observedAt: DateTime.utc(1969, 12, 31),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => codec.encodeExportRequest(
+          records,
+          observedAt: DateTime.utc(2554, 7, 22),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('defaults observedAt to now', () {
+      final DateTime before = DateTime.now().toUtc();
+      final Map<String, Object?> record = _onlyRecord(
+        codec.encodeExportRequest(
+          <AtTelemetryLogRecord>[AtTelemetryLogRecord(eventName: 'a')],
+        ),
+      );
+      final DateTime after = DateTime.now().toUtc();
+
+      final int observed =
+          int.parse(record['observedTimeUnixNano']! as String) ~/ 1000;
+      expect(observed, greaterThanOrEqualTo(before.microsecondsSinceEpoch));
+      expect(observed, lessThanOrEqualTo(after.microsecondsSinceEpoch));
+      expect(record['timeUnixNano'], record['observedTimeUnixNano']);
+    });
+
+    test('writes the epoch as 0', () {
+      final Map<String, Object?> record = _onlyRecord(
+        codec.encodeExportRequest(
+          <AtTelemetryLogRecord>[
+            AtTelemetryLogRecord(eventName: 'a', timestamp: DateTime.utc(1970)),
+          ],
+          observedAt: DateTime.utc(1970),
+        ),
+      );
+
+      expect(record['timeUnixNano'], '0');
+      expect(record['observedTimeUnixNano'], '0');
+    });
+
+    test('leaves out null attributes but keeps nulls inside a list', () {
+      final Map<String, Object?> record = _onlyRecord(
+        codec.encodeExportRequest(
+          <AtTelemetryLogRecord>[
+            AtTelemetryLogRecord(
+              eventName: 'a',
+              attributes: const <String, Object?>{
+                'gone': null,
+                'list': <Object?>[null],
+              },
+            ),
+          ],
+          observedAt: DateTime.utc(2024),
+        ),
+      );
+
+      expect(record['attributes'], <Object?>[
+        <String, Object?>{
+          'key': 'list',
+          'value': <String, Object?>{
+            'arrayValue': <String, Object?>{
+              'values': <Object?>[<String, Object?>{}],
+            },
+          },
+        },
+      ]);
+    });
+
+    test('writes an empty list and an empty map', () {
+      final Map<String, Object?> record = _onlyRecord(
+        codec.encodeExportRequest(
+          <AtTelemetryLogRecord>[
+            AtTelemetryLogRecord(
+              eventName: 'a',
+              attributes: const <String, Object?>{
+                'list': <Object?>[],
+                'map': <String, Object?>{},
+              },
+            ),
+          ],
+          observedAt: DateTime.utc(2024),
+        ),
+      );
+
+      expect(record['attributes'], <Object?>[
+        <String, Object?>{
+          'key': 'list',
+          'value': <String, Object?>{
+            'arrayValue': <String, Object?>{'values': <Object?>[]},
+          },
+        },
+        <String, Object?>{
+          'key': 'map',
+          'value': <String, Object?>{
+            'kvlistValue': <String, Object?>{'values': <Object?>[]},
+          },
+        },
+      ]);
+    });
+  });
+
+  group('AtTelemetryLogsCodec.encode', () {
+    test('writes one ResourceLogs per entry and skips empty ones', () {
+      final String encoded = codec.encode(
+        <AtTelemetryResourceLogs>[
+          AtTelemetryResourceLogs(
+            resourceAttributes: const <String, Object?>{'r': 'one'},
+            scopeName: 'a',
+            records: <AtTelemetryLogRecord>[
+              AtTelemetryLogRecord(eventName: 'x'),
+            ],
+          ),
+          AtTelemetryResourceLogs(
+            scopeName: 'empty',
+            records: const <AtTelemetryLogRecord>[],
+          ),
+          AtTelemetryResourceLogs(
+            resourceAttributes: const <String, Object?>{'r': 'two'},
+            scopeName: 'b',
+            records: <AtTelemetryLogRecord>[
+              AtTelemetryLogRecord(eventName: 'y'),
+            ],
+          ),
+        ],
+        observedAt: DateTime.utc(2024),
+      );
+      final List<AtTelemetryResourceLogs> decoded = codec.decode(encoded);
+
+      expect(
+        decoded.map((AtTelemetryResourceLogs logs) => logs.scopeName),
+        <String>['a', 'b'],
+      );
+      expect(
+        decoded.map(
+          (AtTelemetryResourceLogs logs) => logs.resourceAttributes['r'],
+        ),
+        <String>['one', 'two'],
+      );
+    });
+
+    test('throws ArgumentError when every entry is empty', () {
+      expect(
+        () => codec.encode(<AtTelemetryResourceLogs>[
+          AtTelemetryResourceLogs(
+            scopeName: 'empty',
+            records: const <AtTelemetryLogRecord>[],
+          ),
+        ]),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('AtTelemetryLogsCodec.encodeExportResponse', () {
+    test('is an empty ExportLogsServiceResponse', () {
+      expect(codec.encodeExportResponse(), '{}');
+      expect(jsonDecode(codec.encodeExportResponse()), isEmpty);
+    });
   });
 
   group('AtTelemetryLogsCodec.decode', () {
@@ -286,6 +456,113 @@ void main() {
       expect(decoded.last.resourceAttributes, <String, Object?>{'r': '1'});
     });
 
+    test('calls a ScopeLogs without a scope the empty scope', () {
+      final AtTelemetryResourceLogs logs = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{}]}]}]}')
+          .single;
+
+      expect(logs.scopeName, '');
+      expect(logs.resourceAttributes, isEmpty);
+    });
+
+    test('reads severityNumber 0 and empty strings as unset', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"severityNumber":0,"severityText":"","eventName":""}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.severityNumber, isNull);
+      expect(record.severityText, isNull);
+      expect(record.eventName, isNull);
+      expect(record.isEvent, isFalse);
+    });
+
+    test('reads an empty AnyValue, or one of an unknown kind, as null', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"body":{},"attributes":['
+              '{"key":"empty","value":{}},'
+              '{"key":"unknown","value":{"futureValue":1}},'
+              '{"key":"missing"}]}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.body, isNull);
+      expect(record.attributes, <String, Object?>{
+        'empty': null,
+        'unknown': null,
+        'missing': null,
+      });
+    });
+
+    test('reads an integer doubleValue as a double', () {
+      final Object? value = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"attributes":[{"key":"d","value":{"doubleValue":5}}]}]}]}]}')
+          .single
+          .records
+          .single
+          .attributes['d'];
+
+      expect(value, isA<double>());
+      expect(value, 5.0);
+    });
+
+    test('reads the smallest and largest 64-bit integers', () {
+      final Map<String, Object?> attributes = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"attributes":['
+              '{"key":"min","value":{"intValue":"-9223372036854775808"}},'
+              '{"key":"max","value":{"intValue":"9223372036854775807"}}'
+              ']}]}]}]}')
+          .single
+          .records
+          .single
+          .attributes;
+
+      expect(attributes['min'], -9223372036854775807 - 1);
+      expect(attributes['max'], 9223372036854775807);
+    });
+
+    test('drops nanoseconds below a microsecond', () {
+      final AtTelemetryLogRecord record = codec
+          .decode('{"resourceLogs":[{"scopeLogs":[{"logRecords":[{'
+              '"timeUnixNano":"1544712660300000999"}]}]}]}')
+          .single
+          .records
+          .single;
+
+      expect(record.timestamp, DateTime.utc(2018, 12, 13, 14, 51, 0, 300));
+    });
+
+    test('returns lists and maps that cannot be modified', () {
+      final AtTelemetryResourceLogs logs = codec
+          .decode(
+            '{"resourceLogs":[{"scopeLogs":[{"logRecords":[{"attributes":['
+            '{"key":"l","value":{"arrayValue":{"values":[]}}},'
+            '{"key":"m","value":{"kvlistValue":{"values":[]}}}]}]}]}]}',
+          )
+          .single;
+      final Map<String, Object?> attributes = logs.records.single.attributes;
+
+      expect(
+        () => (attributes['l']! as List<Object?>).add(1),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => (attributes['m']! as Map<String, Object?>)['k'] = 1,
+        throwsUnsupportedError,
+      );
+      expect(() => attributes['x'] = 1, throwsUnsupportedError);
+      expect(
+        () => logs.records.add(AtTelemetryLogRecord()),
+        throwsUnsupportedError,
+      );
+    });
+
     final Map<String, String> invalid = <String, String>{
       'it is not JSON': 'not json',
       'it is not an object': '[]',
@@ -317,6 +594,47 @@ void main() {
           '"value":{"bytesValue":"!!"}}]}]}]}]}',
       'an attribute key is missing': '{"resourceLogs":[{"scopeLogs":[{'
           '"logRecords":[{"attributes":[{"value":{"boolValue":true}}]}]}]}]}',
+      'resource is not an object':
+          '{"resourceLogs":[{"resource":1,"scopeLogs":[{"logRecords":[{}]}]}]}',
+      'scopeLogs is not an array':
+          '{"resourceLogs":[{"scopeLogs":{"logRecords":[{}]}}]}',
+      'logRecords is not an array':
+          '{"resourceLogs":[{"scopeLogs":[{"logRecords":{}}]}]}',
+      'attributes is not an array': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"attributes":{}}]}]}]}',
+      'scope.name is not a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"scope":{"name":1},"logRecords":[{}]}]}]}',
+      'severityText is not a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"severityText":1}]}]}]}',
+      'severityNumber is negative': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"severityNumber":-1}]}]}]}',
+      'timeUnixNano is a boolean': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"timeUnixNano":true}]}]}]}',
+      'timeUnixNano is past 2554': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"timeUnixNano":"18446744073709551615"}]}]}]}',
+      'stringValue is not a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"stringValue":1}}]}]}]}',
+      'boolValue is not a boolean': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"boolValue":"true"}}]}]}]}',
+      'intValue is a boolean': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"intValue":true}}]}]}]}',
+      'intValue underflows 64 bits': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"intValue":"-9223372036854775809"}}]}]}]}',
+      'doubleValue is a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"doubleValue":"1.5"}}]}]}]}',
+      'bytesValue is not a string': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"bytesValue":[1]}}]}]}]}',
+      'arrayValue is not an object': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"arrayValue":[]}}]}]}]}',
+      'an arrayValue item is not an object': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"arrayValue":{"values":[1]}}}]}]}]}',
+      'kvlistValue is not an object': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"kvlistValue":[]}}]}]}]}',
+      'a kvlistValue key is missing': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":{"kvlistValue":{"values":['
+          '{"value":{}}]}}}]}]}]}',
+      'a body is not an object': '{"resourceLogs":[{"scopeLogs":[{'
+          '"logRecords":[{"body":"text"}]}]}]}',
     };
     for (final MapEntry<String, String> entry in invalid.entries) {
       test('throws FormatException when ${entry.key}', () {

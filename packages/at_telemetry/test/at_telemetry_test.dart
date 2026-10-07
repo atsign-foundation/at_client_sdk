@@ -27,6 +27,13 @@ void main() {
       expect(telemetry.resource.attributes, containsPair('atsign', '@alice'));
     });
 
+    test('throws ArgumentError for a blank serviceName', () {
+      expect(
+        () => AtTelemetry(serviceName: ' ', exporter: exporter),
+        throwsArgumentError,
+      );
+    });
+
     group('event', () {
       test('exports an Event with the given fields and the resource', () {
         final DateTime timestamp = DateTime.utc(2024, 1, 2);
@@ -61,6 +68,35 @@ void main() {
           AtTelemetryAttributes.notificationIds: <String>['n7'],
           AtTelemetryAttributes.keys: <String>['@bob:album.photos@alice'],
         });
+      });
+
+      test('copies the notification ids and keys it is given', () {
+        final List<String> notificationIds = <String>['n1'];
+        final List<String> keys = <String>['k1'];
+        telemetry.event('a', notificationIds: notificationIds, keys: keys);
+
+        notificationIds.add('n2');
+        keys.add('k2');
+
+        expect(exporter.exports.single.$1.attributes, <String, Object?>{
+          AtTelemetryAttributes.notificationIds: <String>['n1'],
+          AtTelemetryAttributes.keys: <String>['k1'],
+        });
+      });
+
+      test('the produced ids win over attributes with the same name', () {
+        telemetry.event(
+          'a',
+          attributes: const <String, Object?>{
+            AtTelemetryAttributes.keys: 'mine',
+          },
+          keys: <String>['k1'],
+        );
+
+        expect(
+          exporter.exports.single.$1.attributes[AtTelemetryAttributes.keys],
+          <String>['k1'],
+        );
       });
 
       test('defaults the timestamp to now', () {
@@ -116,6 +152,28 @@ void main() {
         expect(record.severityText, 'WARN');
         expect(record.attributes, <String, Object?>{'a': 1});
         expect(record.timestamp, isNotNull);
+      });
+
+      test('accepts a structured or null body', () {
+        telemetry.log(<String, Object?>{'n': 1});
+        telemetry.log(null);
+
+        expect(exporter.exports.first.$1.body, <String, Object?>{'n': 1});
+        expect(exporter.exports.last.$1.body, isNull);
+      });
+
+      test('throws ArgumentError for a body that is not an AnyValue', () {
+        expect(() => telemetry.log(Object()), throwsArgumentError);
+        expect(exporter.exports, isEmpty);
+      });
+
+      test('reports a dropped log to onError', () async {
+        exporter.onExport = (AtTelemetryLogRecord _) async => false;
+
+        telemetry.log('hello');
+        await pumpEventQueue();
+
+        expect(errors.single, isA<AtTelemetryDroppedException>());
       });
     });
 
@@ -275,6 +333,37 @@ void main() {
         await telemetry.shutdown(timeout: const Duration(milliseconds: 50));
 
         expect(errors.single, isA<TimeoutException>());
+      });
+
+      test('does not report records that were delivered', () async {
+        telemetry.event('a');
+        telemetry.log('b');
+
+        await telemetry.shutdown();
+
+        expect(errors, isEmpty);
+      });
+
+      test('waits for every record still in flight', () async {
+        final List<Completer<bool>> deliveries = <Completer<bool>>[];
+        exporter.onExport = (AtTelemetryLogRecord _) {
+          final Completer<bool> delivery = Completer<bool>();
+          deliveries.add(delivery);
+          return delivery.future;
+        };
+        telemetry.event('a');
+        telemetry.event('b');
+
+        bool done = false;
+        unawaited(telemetry.shutdown().then((void _) => done = true));
+        deliveries.first.complete(true);
+        await pumpEventQueue();
+        expect(done, isFalse);
+
+        deliveries.last.complete(false);
+        await pumpEventQueue();
+        expect(done, isTrue);
+        expect(errors.single, isA<AtTelemetryDroppedException>());
       });
 
       test('only shuts the exporter down once', () async {

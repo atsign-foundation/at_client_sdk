@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:test/test.dart';
@@ -68,7 +69,59 @@ void main() {
       );
     });
 
+    test('a seeded Random gives a repeatable key', () async {
+      final AtTelemetryEd25519Signer first =
+          await AtTelemetryEd25519Signer.generate(random: Random(3));
+      final AtTelemetryEd25519Signer second =
+          await AtTelemetryEd25519Signer.generate(random: Random(3));
+
+      expect(first.seed, second.seed);
+      expect(first.publicKey, second.publicKey);
+      expect(first.seed, hasLength(AtTelemetryEd25519Signer.seedLength));
+      expect(
+        first.publicKey,
+        hasLength(AtTelemetryEd25519Signer.publicKeyLength),
+      );
+    });
+
+    test('is not affected by later changes to the seed it was given', () async {
+      final List<int> seed = List<int>.filled(32, 1);
+      final AtTelemetryEd25519Signer signer =
+          await AtTelemetryEd25519Signer.fromSeed(seed);
+
+      seed[0] = 2;
+
+      expect(signer.seed.first, 1);
+    });
+
+    test('names its algorithm ed25519', () async {
+      final AtTelemetryEd25519Signer signer =
+          await AtTelemetryEd25519Signer.fromSeed(List<int>.filled(32, 0));
+
+      expect(signer.algorithm, 'ed25519');
+    });
+
+    test('verify returns false for a public key of the wrong length', () async {
+      final AtTelemetryEd25519Signer signer =
+          await AtTelemetryEd25519Signer.fromSeed(List<int>.filled(32, 0));
+      final List<int> message = utf8.encode('hello');
+      final List<int> signature = await signer.sign(message);
+
+      expect(
+        await AtTelemetryEd25519Signer.verify(
+          message: message,
+          signature: signature,
+          publicKey: signer.publicKey.sublist(1),
+        ),
+        isFalse,
+      );
+    });
+
     test('rejects a seed of the wrong length', () {
+      expect(
+        () => AtTelemetryEd25519Signer.fromSeed(List<int>.filled(33, 0)),
+        throwsArgumentError,
+      );
       expect(
         () => AtTelemetryEd25519Signer.fromSeed(List<int>.filled(31, 0)),
         throwsArgumentError,

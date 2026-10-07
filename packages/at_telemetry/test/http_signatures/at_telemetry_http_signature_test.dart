@@ -138,6 +138,144 @@ void main() {
 
       test('rejects a producer that is not an atSign', () async {
         expect(() => signBody(producer: 'producer1'), throwsArgumentError);
+        expect(() => signBody(producer: '@'), throwsArgumentError);
+      });
+
+      test('accepts an audience with a port', () async {
+        final AtTelemetryHttpSignature signed =
+            await signBody(audience: 'localhost:8443');
+
+        expect(reparse(signed).audience, 'localhost:8443');
+      });
+
+      test('rejects a key id that is not a telemetry key id', () async {
+        for (final String badKeyId in <String>[
+          '@producer1',
+          'short',
+          'AAAAAAAAAAAAAAAAA',
+          'AAAAAAAA"AAAAAAA',
+        ]) {
+          await expectLater(
+            AtTelemetryHttpSignature.sign(
+              body: body,
+              path: path,
+              keyId: badKeyId,
+              audience: audience,
+              producer: producer,
+              sequence: sequence,
+              signer: signer,
+              now: () => at(created),
+            ),
+            throwsArgumentError,
+            reason: badKeyId,
+          );
+        }
+      });
+
+      test('rejects a path that is not an absolute path', () async {
+        for (final String badPath in <String>['v1/logs', '/v1/ logs', '']) {
+          await expectLater(
+            AtTelemetryHttpSignature.sign(
+              body: body,
+              path: badPath,
+              keyId: keyId,
+              audience: audience,
+              producer: producer,
+              sequence: sequence,
+              signer: signer,
+              now: () => at(created),
+            ),
+            throwsFormatException,
+            reason: badPath,
+          );
+        }
+      });
+
+      test('passes on a signer failure', () async {
+        await expectLater(
+          signBody(
+            using: CallbackSigner(
+              (List<int> _) async => throw StateError('no key'),
+            ),
+          ),
+          throwsStateError,
+        );
+      });
+
+      test('uses the time from now, in seconds', () async {
+        final AtTelemetryHttpSignature signed =
+            await AtTelemetryHttpSignature.sign(
+          body: body,
+          path: path,
+          keyId: keyId,
+          audience: audience,
+          producer: producer,
+          sequence: sequence,
+          signer: signer,
+          now: () => at(created).add(const Duration(milliseconds: 999)),
+        );
+
+        expect(signed.created, created);
+        expect(signed.expires, created + 300);
+      });
+    });
+
+    group('encodeAtsign and decodeAtsign', () {
+      test('round trip a plain and an emoji atSign', () {
+        for (final String atsign in <String>['@alice', '@☎️_0002', '@a b']) {
+          expect(
+            AtTelemetryHttpSignature.decodeAtsign(
+              AtTelemetryHttpSignature.encodeAtsign(atsign),
+            ),
+            atsign,
+          );
+        }
+      });
+
+      test('leaves the @ unencoded', () {
+        expect(AtTelemetryHttpSignature.encodeAtsign('@alice'), '@alice');
+      });
+
+      final Map<String, String> invalid = <String, String>{
+        'a broken percent escape': '@%E2',
+        'a lone @': '@',
+        'an empty string': '',
+        'lower case hex': '@%e2%98%8e',
+        'an encoded character that need not be': '@%61lice',
+      };
+      for (final MapEntry<String, String> entry in invalid.entries) {
+        test('decodeAtsign rejects ${entry.key}', () {
+          expect(
+            () => AtTelemetryHttpSignature.decodeAtsign(entry.value),
+            throwsFormatException,
+          );
+        });
+      }
+    });
+
+    group('signatureBase', () {
+      test('rejects an input that does not start with at=', () {
+        expect(
+          () => AtTelemetryHttpSignature.signatureBase(
+            path: path,
+            digest: AtTelemetryHttpSignature.digestOf(body),
+            audience: audience,
+            producer: producer,
+            sequence: sequence,
+            input: 'sig1=("@method")',
+          ),
+          throwsFormatException,
+        );
+      });
+    });
+
+    group('digestOf', () {
+      test('is the RFC 9530 sha-256 digest', () {
+        // SHA-256 of the empty string
+        expect(
+          AtTelemetryHttpSignature.digestOf(<int>[]),
+          'sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:',
+        );
       });
     });
 
@@ -227,6 +365,60 @@ void main() {
         final AtTelemetryHttpSignature parsed = reparse(await signBody());
 
         expect(parsed.matchesBody(utf8.encode('{}')), isFalse);
+        expect(parsed.matchesBody(<int>[]), isFalse);
+      });
+
+      test('returns false rather than throwing for a bad path', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
+
+        expect(
+          await parsed.verify(path: 'v1/logs', publicKey: signer.publicKey),
+          isFalse,
+        );
+      });
+
+      test('returns false for a public key of the wrong length', () async {
+        final AtTelemetryHttpSignature parsed = reparse(await signBody());
+
+        expect(
+          await parsed.verify(
+            path: path,
+            publicKey: signer.publicKey.sublist(1),
+          ),
+          isFalse,
+        );
+      });
+
+      test('rejects a changed keyid', () async {
+        final AtTelemetryHttpSignature signed = await signBody();
+        final String otherKeyId =
+            AtTelemetryPublicKeyRecord.keyIdFor(otherSigner.publicKey);
+        final AtTelemetryHttpSignature parsed = reparse(
+          signed,
+          input: signed.input.replaceFirst(keyId, otherKeyId),
+        );
+
+        expect(parsed.keyId, otherKeyId);
+        expect(
+          await parsed.verify(path: path, publicKey: signer.publicKey),
+          isFalse,
+        );
+      });
+
+      test('rejects a changed created time', () async {
+        final AtTelemetryHttpSignature signed = await signBody();
+        final AtTelemetryHttpSignature parsed = reparse(
+          signed,
+          input: signed.input.replaceFirst(
+            'created=$created',
+            'created=${created + 1}',
+          ),
+        );
+
+        expect(
+          await parsed.verify(path: path, publicKey: signer.publicKey),
+          isFalse,
+        );
       });
     });
 
@@ -288,7 +480,39 @@ void main() {
         'a sequence with a leading zero': <String, String>{
           'sequence': 'boot=AAECAwQFBgcICQoLDA0ODw;seq=042',
         },
+        'a long signature': <String, String>{
+          'signature': 'at=:${base64Encode(Uint8List(65))}:',
+        },
+        'a signature that is not base64': <String, String>{
+          'signature': 'at=:AAAAA:',
+        },
+        'a signature under another label': <String, String>{
+          'signature': 'sig1=:${base64Encode(Uint8List(64))}:',
+        },
+        'a digest of another algorithm': <String, String>{
+          'digest': 'sha-512=:${base64Encode(Uint8List(32))}:',
+        },
+        'an upper case audience': <String, String>{
+          'audience': 'Collector.example.com',
+        },
+        'a producer with a broken escape': <String, String>{
+          'producer': '@%E2',
+        },
       };
+      test('allows any signature size for an alg it does not implement',
+          () async {
+        final AtTelemetryHttpSignature signed = await signBody(
+          using: CallbackSigner(
+            (List<int> _) async => Uint8List(3309),
+            algorithm: 'mldsa65',
+          ),
+        );
+        final AtTelemetryHttpSignature parsed = reparse(signed);
+
+        expect(parsed.algorithm, 'mldsa65');
+        expect(parsed.signature, signed.signature);
+      });
+
       for (final MapEntry<String, Map<String, String>> entry
           in badHeaders.entries) {
         test('rejects ${entry.key}', () async {

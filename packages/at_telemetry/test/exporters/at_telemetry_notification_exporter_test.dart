@@ -110,6 +110,82 @@ void main() {
       expect(sent, hasLength(2));
     });
 
+    test('keeps records with the same resource in one batch', () async {
+      final AtTelemetryNotificationExporter subject = exporter();
+      unawaited(subject.export(event('a'), resource));
+      unawaited(subject.export(event('b'), resource));
+
+      await subject.flush();
+
+      expect(sent, hasLength(1));
+      expect(eventNames(sent.single.$2), <String>['a', 'b']);
+    });
+
+    test('flush with nothing batched sends nothing', () async {
+      final AtTelemetryNotificationExporter subject = exporter();
+
+      await subject.flush();
+
+      expect(sent, isEmpty);
+      expect(subject.unsentBatches, 0);
+    });
+
+    test('a full batch cancels the flush timer', () async {
+      final AtTelemetryNotificationExporter subject = exporter(
+        maxBatchRecords: 2,
+        flushInterval: const Duration(milliseconds: 20),
+      );
+      unawaited(subject.export(event('a'), resource));
+      await subject.export(event('b'), resource);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(sent, hasLength(1));
+    });
+
+    test('starts a new flush timer for the next batch', () async {
+      final AtTelemetryNotificationExporter subject =
+          exporter(flushInterval: const Duration(milliseconds: 20));
+
+      expect(await subject.export(event('a'), resource), isTrue);
+      expect(await subject.export(event('b'), resource), isTrue);
+
+      expect(
+        sent.map(((String, String) item) => eventNames(item.$2).single),
+        <String>['a', 'b'],
+      );
+    });
+
+    test('sends a batch closed during a send in the same order', () async {
+      final Completer<void> firstSend = Completer<void>();
+      int calls = 0;
+      notify = (String key, String value) async {
+        calls++;
+        if (calls == 1) {
+          await firstSend.future;
+        }
+        sent.add((key, value));
+      };
+      final AtTelemetryNotificationExporter subject = exporter();
+      unawaited(subject.export(event('a'), resource));
+      final Future<void> firstFlush = subject.flush();
+      await pumpEventQueue();
+
+      unawaited(subject.export(event('b'), resource));
+      final Future<void> secondFlush = subject.flush();
+      await pumpEventQueue();
+      expect(calls, 1);
+
+      firstSend.complete();
+      await Future.wait(<Future<void>>[firstFlush, secondFlush]);
+
+      expect(calls, 2);
+      expect(
+        sent.map(((String, String) item) => eventNames(item.$2).single),
+        <String>['a', 'b'],
+      );
+    });
+
     group('correlation ids', () {
       test('stamps the enrollment and client ids on every record', () async {
         final AtTelemetryNotificationExporter subject = exporter(
@@ -236,6 +312,41 @@ void main() {
         );
       });
 
+      test('stops at the first failure and tries nothing after it', () async {
+        int calls = 0;
+        notify = (String key, String value) async {
+          calls++;
+          throw StateError('down');
+        };
+        final AtTelemetryNotificationExporter subject =
+            exporter(maxBatchRecords: 1);
+        for (final String name in <String>['a', 'b', 'c']) {
+          unawaited(subject.export(event(name), resource));
+        }
+        await pumpEventQueue();
+        calls = 0;
+
+        await subject.flush();
+
+        expect(calls, 1);
+        expect(subject.unsentBatches, 3);
+      });
+
+      test('handles a notify that throws synchronously', () async {
+        notify = (String key, String value) => throw StateError('sync');
+        final AtTelemetryNotificationExporter subject = exporter();
+        bool? delivered;
+        unawaited(subject
+            .export(event('a'), resource)
+            .then((bool value) => delivered = value));
+
+        await expectLater(subject.flush(), completes);
+        await pumpEventQueue();
+
+        expect(delivered, isNull);
+        expect(subject.unsentBatches, 1);
+      });
+
       test('times out a notify that hangs, and keeps the batch', () async {
         notify = (String key, String value) => Completer<void>().future;
         final AtTelemetryNotificationExporter subject =
@@ -313,6 +424,42 @@ void main() {
         await subject.shutdown();
         await subject.shutdown();
       });
+
+      test('returns the same future when called twice', () {
+        final AtTelemetryNotificationExporter subject = exporter();
+
+        expect(subject.shutdown(), same(subject.shutdown()));
+      });
+
+      test('drops every unsent batch with false', () async {
+        notify = (String key, String value) async => throw StateError('down');
+        final AtTelemetryNotificationExporter subject =
+            exporter(maxBatchRecords: 2);
+        final List<Future<bool>> deliveries = <Future<bool>>[
+          for (final String name in <String>['a', 'b', 'c', 'd', 'e'])
+            subject.export(event(name), resource),
+        ];
+
+        await subject.shutdown();
+
+        expect(
+          await Future.wait(deliveries),
+          <bool>[false, false, false, false, false],
+        );
+        expect(subject.unsentBatches, 0);
+      });
+
+      test('does not start a flush timer for a refused record', () async {
+        final AtTelemetryNotificationExporter subject =
+            exporter(flushInterval: const Duration(milliseconds: 10));
+        await subject.shutdown();
+
+        expect(await subject.export(event('a'), resource), isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+
+        expect(sent, isEmpty);
+        expect(subject.unsentBatches, 0);
+      });
     });
 
     test('rejects nonsensical limits', () {
@@ -322,6 +469,21 @@ void main() {
       expect(
         () => exporter(notifyTimeout: Duration.zero),
         throwsArgumentError,
+      );
+      expect(
+        () => exporter(flushInterval: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(
+        () => exporter(shutdownTimeout: const Duration(seconds: -1)),
+        throwsArgumentError,
+      );
+    });
+
+    test('the default payload limit fits a 1 MiB notification as base64', () {
+      expect(
+        AtTelemetryNotificationExporter.defaultMaxPayloadCharacters,
+        1398104,
       );
     });
   });

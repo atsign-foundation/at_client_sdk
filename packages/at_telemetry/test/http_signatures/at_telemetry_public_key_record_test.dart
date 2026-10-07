@@ -50,6 +50,37 @@ void main() {
           () => AtTelemetryPublicKeyRecord.parse(value), throwsFormatException);
     });
 
+    test('the constructor rejects an unknown alg or a short key', () {
+      expect(
+        () => AtTelemetryPublicKeyRecord(
+          algorithm: 'rsa2048',
+          publicKey: signer.publicKey,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => AtTelemetryPublicKeyRecord(
+          algorithm: 'ed25519',
+          publicKey: signer.publicKey.sublist(1),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('is not affected by later changes to the key it was given', () {
+      final List<int> publicKey = List<int>.of(signer.publicKey);
+      final AtTelemetryPublicKeyRecord record = AtTelemetryPublicKeyRecord(
+        algorithm: 'ed25519',
+        publicKey: publicKey,
+      );
+
+      publicKey[0] ^= 0xff;
+
+      expect(record.publicKey, signer.publicKey);
+      expect(
+          record.keyId, AtTelemetryPublicKeyRecord.keyIdFor(signer.publicKey));
+    });
+
     final Map<String, String> invalid = <String, String>{
       'not JSON': 'nope',
       'not an object': '[]',
@@ -59,6 +90,12 @@ void main() {
         'alg': 'rsa2048',
         'publicKey': base64Encode(List<int>.filled(32, 1)),
       }),
+      'a key that is not base64': jsonEncode(<String, String>{
+        'keyId': 'AAAAAAAAAAAAAAAA',
+        'alg': 'ed25519',
+        'publicKey': '!!!',
+      }),
+      'non-string fields': '{"keyId":1,"alg":"ed25519","publicKey":"x"}',
       'a short key': jsonEncode(<String, String>{
         'keyId': AtTelemetryPublicKeyRecord.keyIdFor(<int>[1, 2]),
         'alg': 'ed25519',
