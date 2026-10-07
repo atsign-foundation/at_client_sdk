@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 2.0.0-rc2
+version: 2.0.0-rc3
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -21,14 +21,15 @@ dependencies:
   at_lookup: ^3.7.0-rc2
   # WrittenAtKeysIo.update, which the keychain store's flush makes reachable
   # here, needs 4.0.0-rc2; 4.0.0-rc3 also releases a keyfile lock a stopped
-  # process left behind. Resolution in this workspace is by path, so only a
-  # consumer resolving from pub.dev feels a floor set too low.
-  at_auth: ^4.0.0-rc3
+  # process left behind, and 4.0.0-rc4 ends ApkamActivationDialog's wait at
+  # once for an enrollment that has expired. Resolution in this workspace is by
+  # path, so only a consumer resolving from pub.dev feels a floor set too low.
+  at_auth: ^4.0.0-rc4
   # PqPosture and EnrollmentConveyanceException need a 3.15.0 prerelease, and
-  # 3.15.0-rc2 carries the post-quantum sharing fixes. It has to be written as
-  # a prerelease: a caret on a stable lower bound never accepts one, so ^3.14.1
-  # would not resolve 3.15.0-rc2 however it is published.
-  at_client: ^3.15.0-rc2
+  # 3.15.0-rc4 carries the fixes for a device upgrading from 3.14.0. It has to
+  # be written as a prerelease: a caret on a stable lower bound never accepts
+  # one, so ^3.14.1 would not resolve 3.15.0-rc4 however it is published.
+  at_client: ^3.15.0-rc4
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.02
