@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:at_telemetry/at_telemetry.dart';
 import 'package:test/test.dart';
 
-import 'helpers/callback_signer.dart';
+import '../helpers/callback_signer.dart';
 
 void main() {
   const String path = '/v1/logs';
