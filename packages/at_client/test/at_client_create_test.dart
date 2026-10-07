@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -254,7 +255,7 @@ void main() {
     await client.stop();
   });
 
-  test('storage the preference would never open is refused', () async {
+  test('Hive storage the preference would never open is refused', () async {
     final storage =
         HiveAtClientStorage(atSign: '@factorynolocal', storagePath: dir.path);
 
@@ -264,11 +265,30 @@ void main() {
             namespace: 'wavi',
             preference: pref()..isLocalStoreRequired = false,
             storage: storage),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('isLocalStoreRequired'))),
-        reason: 'a caller that named its own backend must not be told it took '
-            'effect when the client opens no local store at all');
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('Hive-backed'))),
+        reason: 'a caller that named a Hive-backed store must not be told it '
+            'took effect when the client opens no local store at all - Hive '
+            'is disk-backed, and nothing would ever read it back');
 
+    await storage.close();
+  });
+
+  test('a non-Hive storage the preference would never open still builds',
+      () async {
+    final storage = InMemoryAtClientStorage(atSign: '@factorynonhive');
+
+    final client = await buildAtClient(
+        atSign: '@factorynonhive',
+        namespace: 'wavi',
+        preference: pref()..isLocalStoreRequired = false,
+        storage: storage) as AtClientImpl;
+
+    expect(storage.isHeldBy(client), isTrue,
+        reason: 'unlike Hive, an in-memory bundle has nothing on disk to '
+            'orphan, so isLocalStoreRequired: false does not disqualify it');
+
+    await client.stop();
     await storage.close();
   });
 

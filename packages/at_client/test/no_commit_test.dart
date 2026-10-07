@@ -155,6 +155,15 @@ void main() {
                 ..noCommit = true),
           completion(isTrue));
     });
+
+    test('chops/crypto setup still runs though this client holds no storage',
+        () async {
+      final atClient = await clientFor('@ncnostorage') as AtClientImpl;
+      expect(atClient.atChops, isNotNull,
+          reason: 'chops/crypto setup is hoisted out of the '
+              'isLocalStoreRequired branch, so a no-storage config gets a '
+              'real (if keyless) AtChops instead of leaving atChops null');
+    });
   });
 
   group('the mint lock asks for no commit', () {
