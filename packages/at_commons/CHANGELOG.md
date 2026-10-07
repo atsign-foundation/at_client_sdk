@@ -1,3 +1,11 @@
+## 5.20.0
+
+- feat: `AtConstants.atTelemetrySigningPrivateKey`
+  (`privatekey:at_telemetry_signing_privatekey`) and
+  `AtConstants.atTelemetrySigningPublicKey`
+  (`public:_at_telemetry_signing_publickey.__atserver`) are reserved keys.
+  Both are marked `@experimental` while telemetry signing is in early stages.
+
 ## 5.19.0
 
 - feat: a notification can carry its own expiry (`eAtn`) instead of `ttln`,
