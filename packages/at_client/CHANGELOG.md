@@ -34,6 +34,8 @@
 - feat: where the atServer supports it, a notification carries its exact
   expiry rather than a relative `ttln`, so it no longer drifts at each hop.
 - build: requires `at_commons` ^5.19.0.
+- build: requires `at_auth` ^4.0.0-rc4: `PendingEnrollment.awaitApproval` on
+  an expired or unknown enrollment fails at once, with the atServer's reason.
 - feat: `ensureReachable`'s result says whether this client can open what
   peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
 - fix: an approver whose client has only just started still hands a new

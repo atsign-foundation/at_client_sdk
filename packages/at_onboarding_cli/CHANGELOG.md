@@ -4,6 +4,9 @@
   is built is used again, as in 1.x, rather than an empty store opening in
   the default directory. Building the service no longer fills in the
   preference's `storagePath`.
+- build: requires `at_client` ^3.15.0-rc4 and `at_auth` ^4.0.0-rc4: waiting
+  for approval of an expired or unknown enrollment fails at once, with the
+  atServer's reason.
 
 ## 2.0.0-rc3
 
