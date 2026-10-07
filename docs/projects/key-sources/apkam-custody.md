@@ -275,7 +275,9 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
 - **No server change.** Trunk already verifies ML-DSA-65 PKAM, and no atServer
   implementation has to verify WebAuthn assertions.
 - **No public record,** so there is no name to leak through `lookup:` or logs.
-- **Revocation** is enrollment revocation, as with any device.
+- **Revocation** is enrollment revocation, as with any device. This closes
+  the unauthenticated-read and revocation threats that gate (a) leaves open
+  ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#open)).
 - **Eviction loses nothing.** IndexedDB becomes a cache: after it is cleared,
   the passkey re-derives the PKAM key and the atServer supplies the document.
 - **The cost:** the PKAM key sits in page memory for the session, the same
@@ -299,6 +301,8 @@ and that is accepted here as the recovery route.
 | Does NCrypt PCP expose HMAC on Windows TPMs, or only ECDH_ZGen? | A Windows probe |
 | Can the atServer update a record conditionally? | Shared with `design.md` section 10; multi-writer rewraps need it |
 | Is the custody tier worth recording in the enrollment record, so policy can require hardware later? | A decision for at_server; not blocking |
+| How is a device secret rotated, and does revocation force it? | Design: new secret, new record name, old record deleted |
+| Is the PRF output stable across UV states on every authenticator? | Pin UV to `required` and probe hmac-secret with and without UV |
 
 ## 11. Changes by package
 

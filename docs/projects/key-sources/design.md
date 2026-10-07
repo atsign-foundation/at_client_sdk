@@ -338,11 +338,14 @@ The first is a record whose name is derived from the passkey, for example
 and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
 keys. So the record can't be listed, and it can only be fetched by someone who
 already knows its 256-bit name. That hides the record's existence, size and
-update times, and denies an attacker the ciphertext. It's a secret that
-travels, though: the name appears in every `lookup:` and in logs that record
-keys, and changing it means moving the record. It's safe only because the
-encryption key is high-entropy. The same scheme with a passphrase-derived key
-would invite offline guessing.
+update times, and denies an attacker the ciphertext. A single-underscore
+`public:_` key gets no commit-log row (`sqlite_at_commit_log.dart`,
+`hive_at_commit_log.dart`), so the name never syncs to the owner's other
+clients, and `lookup:` runs over TLS, so only the atServer sees it. It's safe
+only because the encryption key is high-entropy. The same scheme with a
+passphrase-derived key would invite offline guessing. The full profile,
+derivation and threat table are in
+[`prf-server-keys-blob.md`](prf-server-keys-blob.md).
 
 The second is a trusted device, and the shape suggested here is an enrollment
 whose credential is the passkey. The atServer verifies a WebAuthn assertion
@@ -392,5 +395,5 @@ atSign-wide encryption keys.
 | Does a real TPM bind the seal to the boot state?                                                                       | `systemd-creds` on hardware with a TPM, with a PCR policy                                 |
 | Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice              |
 | Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                              |
-| Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Read the atServer and at_client sync paths                                                |
+| Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Answered: no. `public:_` gets no commit-log row; `public:__` does, and syncs               |
 | Can the atServer update a record conditionally?                                                                        | Read the update verbs on every atServer implementation                                    |
