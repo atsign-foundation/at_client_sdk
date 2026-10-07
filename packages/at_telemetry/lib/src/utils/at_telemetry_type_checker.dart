@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 // OpenTelemetry AnyValues are null, String, bool, int, finite double,
 // Uint8List, List of AnyValues, or Map<String, AnyValue>
-final class AtTelemetryAnyValue {
-  const AtTelemetryAnyValue._();
+final class AtTelemetryTypeChecker {
+  const AtTelemetryTypeChecker._();
 
   static void check(Object? value, String path) {
     switch (value) {
