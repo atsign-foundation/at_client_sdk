@@ -3,7 +3,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
 import '../util/home_directory_util.dart';
