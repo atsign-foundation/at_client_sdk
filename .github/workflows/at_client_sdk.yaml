@@ -133,11 +133,6 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      # Install dependencies in at_functional_test
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -146,13 +141,26 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -189,11 +197,6 @@ jobs:
           path: tests/at_functional_test/acceptance-report.json
           if-no-files-found: warn
 
-      # stop docker containers
-      - name: stop docker containers
-        working-directory: tests/at_functional_test/test
-        run: docker compose down
-
   # The same functional pack again on the two storage backends the default run
   # does not exercise. Beta only: this proves the backends, not the SDK matrix,
   # and the pack above already covers both channels on Hive.
@@ -218,10 +221,6 @@ jobs:
         with:
           dart-channel: beta
 
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -229,13 +228,25 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -261,10 +272,6 @@ jobs:
           path: ve-logs
           if-no-files-found: warn
 
-      - name: stop docker containers
-        working-directory: tests/at_functional_test/test
-        run: docker compose down
-
   # The upgrade check, on its own so the functional legs do not carry its
   # six minutes: a store written by each released at_client, opened by this
   # tree (tests/upgrade/README.md). Stable only: the check is about stores
@@ -283,10 +290,6 @@ jobs:
         with:
           dart-channel: stable
 
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -294,13 +297,25 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -332,10 +347,6 @@ jobs:
           name: acceptance-report-functional-upgrade
           path: tests/at_functional_test/acceptance-report.json
           if-no-files-found: warn
-
-      - name: stop docker containers
-        working-directory: tests/at_functional_test/test
-        run: docker compose down
 
   end2end_tests_prep:
     # Don't run on PRs from a fork as the secrets aren't available
