@@ -1,6 +1,6 @@
 name: at_onboarding_cli
 description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
-version: 2.0.0-rc4
+version: 2.0.0-rc5
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_onboarding_cli
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -24,8 +24,9 @@ dependencies:
   at_chops: ^3.0.0
   # The prerelease lower bound is deliberate: this package uses PqPosture,
   # which no stable at_client carries, and a caret on a stable version does not
-  # accept a prerelease.
-  at_client: ^3.15.0-rc4
+  # accept a prerelease. 3.15.0-rc5 is the first to re-export AtSignLogger,
+  # which this package takes from at_client.
+  at_client: ^3.15.0-rc5
   at_commons: ^5.6.0
   at_lookup: ^3.7.0-rc2
   at_utils: ^3.2.0
