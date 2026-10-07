@@ -8,12 +8,12 @@ import '../signers/at_telemetry_ed25519_signer.dart';
 import '../signers/at_telemetry_signer.dart';
 import 'at_telemetry_sequence.dart';
 
-// The at-telemetry profile of an RFC 9421 HTTP message signature. It covers
+// The at-telemetry-v1 profile of an RFC 9421 HTTP message signature. It covers
 // the method, path, content type, body digest, audience, producer and
 // sequence, so a signature binds the body to one collector, one atServer and
 // one place in that atServer's stream.
 final class AtTelemetryHttpSignature {
-  static const String tag = 'at-telemetry';
+  static const String tag = 'at-telemetry-v1';
   static const String method = 'POST';
   static const String contentType = AtTelemetryLogsCodec.contentType;
   static const String contentTypeHeader = 'content-type';

@@ -74,7 +74,7 @@ void main() {
 
   group('AtTelemetryHttpSignature', () {
     group('sign', () {
-      test('writes the at-telemetry profile headers', () async {
+      test('writes the at-telemetry-v1 profile headers', () async {
         final AtTelemetryHttpSignature signed = await signBody();
 
         expect(signed.headers, <String, String>{
@@ -87,7 +87,7 @@ void main() {
               '"content-digest" "at-telemetry-audience" '
               '"at-telemetry-producer" "at-telemetry-sequence");'
               'created=1790380800;expires=1790381100;keyid="$keyId";'
-              'alg="ed25519";tag="at-telemetry"',
+              'alg="ed25519";tag="at-telemetry-v1"',
           'signature': signed.signature,
         });
         expect(signed.signature, matches(r'^at=:[A-Za-z0-9+/]{86}==:$'));
@@ -114,7 +114,7 @@ void main() {
           '"@signature-params": ("@method" "@path" "content-type" '
           '"content-digest" "at-telemetry-audience" "at-telemetry-producer" '
           '"at-telemetry-sequence");created=1790380800;expires=1790381100;'
-          'keyid="$keyId";alg="ed25519";tag="at-telemetry"',
+          'keyid="$keyId";alg="ed25519";tag="at-telemetry-v1"',
         );
       });
 
@@ -436,8 +436,10 @@ void main() {
     group('parse', () {
       final Map<String, String Function(String)> badInputs =
           <String, String Function(String)>{
-        'the old v1 tag': (String input) =>
-            input.replaceFirst('tag="at-telemetry"', 'tag="at-telemetry-v1"'),
+        'the unversioned tag': (String input) =>
+            input.replaceFirst('tag="at-telemetry-v1"', 'tag="at-telemetry"'),
+        'another version of the tag': (String input) => input.replaceFirst(
+            'tag="at-telemetry-v1"', 'tag="at-telemetry-v2"'),
         'a nonce parameter': (String input) =>
             input.replaceFirst(';keyid=', ';nonce="abc";keyid='),
         'a missing covered component': (String input) =>
