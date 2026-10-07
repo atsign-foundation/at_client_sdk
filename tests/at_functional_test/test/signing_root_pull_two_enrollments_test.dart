@@ -45,7 +45,15 @@ void main() {
   late AtClient approver;
   late String atSign;
   late Uint8List rootPrivate;
-  const namespace = 'buzz';
+  // NOTE: unique per run — the atServer refuses a second enrollment carrying
+  // an (appName, deviceName) pair that already has one approved, so fixed
+  // names pass on a fresh virtualenv and collide on every re-run against it.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'rootpull$runId';
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
@@ -69,11 +77,6 @@ void main() {
             'from the earlier run and the private died with its isolate');
     rootPrivate = held!;
   });
-
-  // NOTE: unique per run — the atServer refuses a second enrollment carrying
-  // an (appName, deviceName) pair that already has one approved, so fixed
-  // names pass on a fresh virtualenv and collide on every re-run against it.
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   /// Fully privileged by default: the root vouches for every enrollment on the
   /// atSign, so only that class may hold it, and a holder refuses to serve it

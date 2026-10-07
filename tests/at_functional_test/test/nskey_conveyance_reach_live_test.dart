@@ -34,7 +34,14 @@ void main() {
   TestUtils.isolateStorage('nskey_conveyance_reach_live_test');
   late AtClient owner;
   late String atSign;
-  const namespace = 'buzz';
+  // NOTE: unique per run — the atServer refuses a second enrollment carrying an
+  // (appName, deviceName) pair that already has one approved.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'reach$runId';
 
   setUpAll(() async {
     // NOTE: the SECOND atSign, as in nskey_rotation_live_test: these tests add
@@ -47,10 +54,6 @@ void main() {
     owner = manager.atClient;
     await AtClientSecretSharing.forClient(owner).register();
   });
-
-  // NOTE: unique per run — the atServer refuses a second enrollment carrying an
-  // (appName, deviceName) pair that already has one approved.
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   /// An enrollment granted [grants] and approved by [approver], with its own
   /// keyfile, key package, filing and ring.
