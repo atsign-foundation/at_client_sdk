@@ -28,7 +28,12 @@ void main() {
   TestUtils.isolateStorage('enroll_update_live_test');
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'enrupdate$runId';
   const rootDomain = 'vip.ve.atsign.zone';
 
   setUpAll(() async {
@@ -39,8 +44,6 @@ void main() {
         atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
   });
-
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   /// The enrolled client's own authenticated connection, which carries the
   /// enrollment id the atServer judges self-only against.
