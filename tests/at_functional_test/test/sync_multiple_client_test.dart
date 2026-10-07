@@ -14,7 +14,6 @@ import 'package:at_functional_test/src/at_keys_initializer.dart'
 import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:version/version.dart';
