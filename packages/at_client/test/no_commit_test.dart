@@ -11,7 +11,6 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
