@@ -49,6 +49,11 @@ abstract class AtClientStorage {
   /// injected `AtChops`, never from the store.
   bool get holdsKeyMaterial;
 
+  /// Whether [keyStore] is a local replica of the atServer that a sync
+  /// service reconciles. False for a backend that writes straight through to
+  /// the atServer, which leaves nothing to sync.
+  bool get replicatesServer;
+
   /// The Hive persistence bundle behind [keyStore], or null for a backend
   /// that has none, or before the first [attach].
   AtPersistenceBundle? get persistenceBundle;
@@ -83,6 +88,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
 
   @override
   bool get holdsKeyMaterial => true;
+
+  @override
+  bool get replicatesServer => true;
 
   @override
   AtPersistenceBundle? get persistenceBundle => null;
