@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-import 'at_telemetry_ed25519_signer.dart';
+import 'signers/at_telemetry_ed25519_signer.dart';
 
 // The value of an atServer's public telemetry key record. The key id is a
 // short hash of the public key, so a record cannot name a key it does not

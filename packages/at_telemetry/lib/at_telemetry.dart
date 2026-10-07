@@ -1,10 +1,8 @@
 export 'src/at_telemetry.dart';
 export 'src/at_telemetry_attributes.dart';
-export 'src/at_telemetry_ed25519_signer.dart';
 export 'src/at_telemetry_http_signature.dart';
 export 'src/at_telemetry_public_key_record.dart';
 export 'src/at_telemetry_sequence.dart';
-export 'src/at_telemetry_signer.dart';
 export 'src/codecs/at_telemetry_logs_codec.dart';
 export 'src/exceptions/at_telemetry_dropped_exception.dart';
 export 'src/exporters/at_telemetry_log_record_exporter.dart';
@@ -13,3 +11,5 @@ export 'src/models/at_telemetry_log_record.dart';
 export 'src/models/at_telemetry_resource.dart';
 export 'src/models/at_telemetry_resource_logs.dart';
 export 'src/models/at_telemetry_severity.dart';
+export 'src/signers/at_telemetry_ed25519_signer.dart';
+export 'src/signers/at_telemetry_signer.dart';
