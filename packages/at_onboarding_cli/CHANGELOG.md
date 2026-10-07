@@ -1,3 +1,8 @@
+## 2.0.0-rc6
+
+- fix: the package no longer includes keyfiles that local test runs leave in
+  the package directory.
+
 ## 2.0.0-rc5
 
 - build: requires `at_client` ^3.15.0-rc5.
