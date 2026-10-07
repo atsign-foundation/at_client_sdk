@@ -5,7 +5,6 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData, AtKeyValueStore, AtMetaData;
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

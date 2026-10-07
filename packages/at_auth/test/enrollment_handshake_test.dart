@@ -266,10 +266,16 @@ void main() {
 
       await expectLater(
           waitFor(response, lookup, 2),
-          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
-              'message', allOf(contains('AT0028'), contains('123 is expired')))),
-          reason: 'callers recognise expiry by its code, and the atServer '
-              'said why');
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('has expired or does not exist'),
+                  contains('AT0028'),
+                  contains('123 is expired')))),
+          reason: 'the AT0028 branch names the cause in its own words and '
+              'carries the atServer\'s reply; the general refusal below '
+              'carries only the reply');
 
       expect(polled.length, 1,
           reason: 'an expired enrollment can never be approved, so nothing '

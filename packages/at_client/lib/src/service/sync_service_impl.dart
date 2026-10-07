@@ -41,12 +41,6 @@ class SyncServiceImpl implements SyncService {
   final bool _ownsRemoteSecondary;
   StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
-  /// utility method to reduce code verbosity in this file
-  /// Does nothing if a telemetryService has not been injected
-  void _sendTelemetry(String name, dynamic value) {
-    _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
-  }
-
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
@@ -824,6 +818,7 @@ class SyncServiceImpl implements SyncService {
         // the next batch (the queue may still have more).
         continue;
       }
+      var rewrittenMidPush = 0;
       List<dynamic> batchResponse;
       try {
         batchResponse = await sendBatch(batchRequests);
@@ -875,6 +870,7 @@ class SyncServiceImpl implements SyncService {
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
             // the entry unconditionally here would lose it.
+            rewrittenMidPush++;
             _logger.finer('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
@@ -934,9 +930,15 @@ class SyncServiceImpl implements SyncService {
       if (pendingNow > 0 &&
           pendingNow >= queueSizeBefore &&
           allBatchKeysStillPresent) {
-        _logger.warning('sync queue: $pendingNow pending after batch (was '
-            '$queueSizeBefore); none of the in-batch entries were '
-            'removed — bailing out, will retry next round');
+        if (rewrittenMidPush == batchSources.length) {
+          _logger.finer('sync queue: every in-batch entry reached the '
+              'atServer and was rewritten meanwhile; the newer writes push '
+              'next round');
+        } else {
+          _logger.warning('sync queue: $pendingNow pending after batch (was '
+              '$queueSizeBefore); none of the in-batch entries were '
+              'removed — bailing out, will retry next round');
+        }
         break;
       }
     }
@@ -1013,10 +1015,6 @@ class SyncServiceImpl implements SyncService {
 
       while (serverCommitId > lastReceivedServerCommitId) {
         _throwIfStopped();
-        _sendTelemetry('_syncFromServer.whileLoop', {
-          "serverCommitId": serverCommitId,
-          "lastReceivedServerCommitId": lastReceivedServerCommitId
-        });
         List<dynamic> listOfCommitEntriesFromServer =
             await _getEntriesToSyncFromServer(
                 lastReceivedServerCommitId, serverCommitId,
@@ -1094,11 +1092,6 @@ class SyncServiceImpl implements SyncService {
             continue;
           }
 
-          _sendTelemetry('_syncFromServer.forEachEntry.start', {
-            "atKey": serverCommitEntry['atKey'],
-            "operation": serverCommitEntry['operation'],
-            "commitId": serverCommitEntry['commitId'],
-          });
           // Convert the commit-id to "int" if in "String" data type.
           lastReceivedServerCommitId =
               _parseToInteger(serverCommitEntry['commitId']);
@@ -1168,18 +1161,12 @@ class SyncServiceImpl implements SyncService {
           convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
       await _syncLocal(serverCommitEntry);
       keyInfoList.add(keyInfo);
-      _sendTelemetry('_syncFromServer.forEachEntry.end', {
-        'atKey': keyInfo.key,
-        'syncDirection': keyInfo.syncDirection,
-        'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
-      });
     } catch (e) {
       if (e is StoppedException || isStopped) {
         _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
             'the service was stopped ($e)');
         throw const _SyncAbandoned();
       }
-      _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
     }

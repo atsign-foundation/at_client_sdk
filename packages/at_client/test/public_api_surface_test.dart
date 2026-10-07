@@ -83,6 +83,16 @@ void main() {
     });
   });
 
+  group('the atServer check and the logger are reachable through the barrel',
+      () {
+    test('an app checks an atSign and logs without at_lookup or at_utils', () {
+      expect(checkAtSignServer, isA<Function>());
+      expect(AtSignServerCheck(AtSignServerState.activated).state,
+          AtSignServerState.activated);
+      expect(AtSignLogger('public_api_surface_test'), isA<AtSignLogger>());
+    });
+  });
+
   // The group above catches a surface REMOVAL; this one catches the opposite,
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates
@@ -159,13 +169,19 @@ const Set<String> _atClientBarrelExports = {
   // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
   // communications leg of the platform bundle, which the verbs take as
   // lookUps:, for the same reason again. From the io-free barrel, so the type
-  // an app implements never reads as io-bound.
+  // an app implements never reads as io-bound. Also checkAtSignServer and
+  // what it answers (AtSignServerCheck, AtSignServerState), which an app asks
+  // before onboarding: is the atSign in the atDirectory, does its atServer
+  // answer, is it activated.
   'package:at_lookup/at_lookup.dart',
   // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
   'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
+  // show-narrowed to AtSignLogger, so an app logs through the SDK's logger
+  // without importing at_utils.
+  'package:at_utils/at_logger.dart',
   'package:at_client/src/response/at_notification.dart',
   'package:at_client/src/response/enrollment.dart',
   // show-narrowed to EnrollmentConveyanceException: approve() throws it after
@@ -177,7 +193,6 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/service/enrollment_service.dart',
   'package:at_client/src/service/notification_service.dart',
   'package:at_client/src/service/sync_service.dart',
-  'package:at_client/src/telemetry/at_client_telemetry.dart',
   'package:at_client/src/util/at_client_util.dart',
   'package:at_client/src/util/encryption_util.dart',
   'package:at_client/src/util/enroll_list_request_param.dart',

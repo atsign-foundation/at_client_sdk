@@ -110,12 +110,15 @@ jobs:
 
       - uses: ./actions/setup-flutter-and-dart
 
+      # NOTE: a cache hit is never saved again, so the key must change whenever
+      # the build's layout or flags do, or every run restores the old build and
+      # then rebuilds over it.
       - name: Cache OpenSSL build
         id: cache-openssl
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.OPENSSL_INSTALL_DIR }}
-          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
+          key: openssl-${{ env.OPENSSL_VERSION }}-libdir-lib-ubuntu-latest
 
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
         # Guard on the actual library file, not the cache-hit flag — a corrupt
@@ -301,7 +304,3 @@ jobs:
       - name: run tests
         working-directory: tests/${{ matrix.package }}
         run: dart test --concurrency=1
-
-      - name: kill docker image
-        working-directory: tests/${{ matrix.package }}
-        run: docker compose down

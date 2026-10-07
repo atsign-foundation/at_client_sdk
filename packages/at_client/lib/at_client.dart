@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 export 'package:at_client/src/client/at_client_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
@@ -33,9 +31,15 @@ export 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 export 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 export 'package:at_lookup/at_lookup.dart'
-    show AtLookUpFactory, AtCommandExecutor;
+    show
+        AtLookUpFactory,
+        AtCommandExecutor,
+        AtSignServerCheck,
+        AtSignServerState,
+        checkAtSignServer;
 export 'package:at_lookup/at_lookup_io.dart' show secureSocketLookUps;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
+export 'package:at_utils/at_logger.dart' show AtSignLogger;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
 export 'package:at_client/src/enroll/enrollment_conveyance.dart'
@@ -46,8 +50,6 @@ export 'package:at_client/src/rpc/at_rpc_types.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync_service.dart';
-@experimental
-export 'package:at_client/src/telemetry/at_client_telemetry.dart';
 export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
