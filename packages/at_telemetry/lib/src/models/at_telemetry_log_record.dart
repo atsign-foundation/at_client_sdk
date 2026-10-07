@@ -1,9 +1,9 @@
-import '../at_telemetry_any_value.dart';
+import '../utils/at_telemetry_type_checker.dart';
 import 'at_telemetry_severity.dart';
 
 // An OpenTelemetry LogRecord. A record with a non-empty eventName is an
 // Event; without one it is a plain log. body and attribute values must be
-// AnyValues (see AtTelemetryAnyValue).
+// AnyValues (see AtTelemetryTypeChecker).
 final class AtTelemetryLogRecord {
   // OTLP carries times as unsigned 64-bit nanoseconds since the Unix epoch,
   // which runs out in July 2554
@@ -31,9 +31,9 @@ final class AtTelemetryLogRecord {
         attributes = Map<String, Object?>.unmodifiable(attributes) {
     _checkTimestamp(this.timestamp, 'timestamp');
     _checkTimestamp(this.observedTimestamp, 'observedTimestamp');
-    AtTelemetryAnyValue.check(body, 'body');
+    AtTelemetryTypeChecker.check(body, 'body');
     for (final MapEntry<String, Object?> entry in attributes.entries) {
-      AtTelemetryAnyValue.check(entry.value, 'attributes.${entry.key}');
+      AtTelemetryTypeChecker.check(entry.value, 'attributes.${entry.key}');
     }
   }
 

@@ -1,5 +1,5 @@
-import '../at_telemetry_any_value.dart';
 import '../at_telemetry_attributes.dart';
+import '../utils/at_telemetry_type_checker.dart';
 
 // Describes who produced the telemetry, for example the service name and the
 // Atsign it runs as. It is the same for every record a program sends.
@@ -20,7 +20,7 @@ final class AtTelemetryResource {
           serviceName, 'serviceName', 'must not be empty');
     }
     for (final MapEntry<String, Object?> entry in this.attributes.entries) {
-      AtTelemetryAnyValue.check(entry.value, 'attributes.${entry.key}');
+      AtTelemetryTypeChecker.check(entry.value, 'attributes.${entry.key}');
     }
   }
 

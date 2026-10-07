@@ -1,4 +1,4 @@
-import '../at_telemetry_any_value.dart';
+import '../utils/at_telemetry_type_checker.dart';
 import 'at_telemetry_log_record.dart';
 
 // One OTLP ResourceLogs with a single ScopeLogs: the records one resource
@@ -16,7 +16,7 @@ final class AtTelemetryResourceLogs {
             Map<String, Object?>.unmodifiable(resourceAttributes),
         records = List<AtTelemetryLogRecord>.unmodifiable(records) {
     for (final MapEntry<String, Object?> entry in resourceAttributes.entries) {
-      AtTelemetryAnyValue.check(
+      AtTelemetryTypeChecker.check(
         entry.value,
         'resourceAttributes.${entry.key}',
       );
