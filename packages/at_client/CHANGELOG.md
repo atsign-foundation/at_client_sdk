@@ -1,3 +1,9 @@
+## 3.15.0-rc5
+
+- feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
+  `AtSignLogger` come through `package:at_client/at_client.dart`, so an app no
+  longer needs at_lookup or at_utils for them.
+
 ## 3.15.0-rc4
 
 - fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart
