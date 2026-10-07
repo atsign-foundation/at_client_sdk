@@ -1,9 +1,8 @@
 // Unit tests for RemoteOnlyAtClientStorage — the AtClientStorage that composes
 // stage2a's NoopSyncQueueStore and stage2b's RemoteWriteThroughKeyStore into
 // the concrete Mode E backend `implementation-plan.md` names as not yet
-// written. Closes X-R1 (constructs with no local database) and X-R2 (proves
-// composition wiring; true cross-client interop against a live atServer is a
-// functional test, not this suite). See plans/wasm/spike/pb3-stage2c-plan.md.
+// written. Closes X-R1 (constructs with no local database) and the
+// composition half of X-R2; cross-client interop is x_r2_interop_test.dart.
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/write_through_sync_service.dart';
