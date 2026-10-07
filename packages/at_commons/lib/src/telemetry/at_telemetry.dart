@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import '../exception/at_exceptions.dart';
 
 @experimental
+@Deprecated('Unused prototype, will be removed in at_commons 6.0.0')
 
 /// Simple software telemetry service. See https://en.wikipedia.org/wiki/Telemetry#Software
 abstract class AtTelemetryService {
@@ -34,6 +35,7 @@ abstract class AtTelemetryService {
 }
 
 @experimental
+@Deprecated('Unused prototype, will be removed in at_commons 6.0.0')
 
 /// Generic telemetry datum
 abstract class AtTelemetryItem {
@@ -58,6 +60,7 @@ abstract class AtTelemetryItem {
 }
 
 @experimental
+@Deprecated('Unused prototype, will be removed in at_commons 6.0.0')
 
 /// Concrete [AtTelemetryItem] subclass for Events - e.g. SyncStarted, NetworkUnavailable, MonitorUnavailable
 class AtTelemetryEvent extends AtTelemetryItem {
@@ -65,6 +68,7 @@ class AtTelemetryEvent extends AtTelemetryItem {
 }
 
 @experimental
+@Deprecated('Unused prototype, will be removed in at_commons 6.0.0')
 
 /// Concrete [AtTelemetryItem] subclass for Samples - e.g. KeyStoreSize, DataReceived, DataTransmitted
 class AtTelemetrySample extends AtTelemetryItem {
