@@ -1,3 +1,7 @@
+## 2.0.0-rc5
+
+- build: requires `at_client` ^3.15.0-rc5.
+
 ## 2.0.0-rc4
 
 - fix: a storage path set on the preference after `AtOnboardingServiceImpl`

@@ -25,11 +25,13 @@ dependencies:
   # once for an enrollment that has expired. Resolution in this workspace is by
   # path, so only a consumer resolving from pub.dev feels a floor set too low.
   at_auth: ^4.0.0-rc4
-  # PqPosture and EnrollmentConveyanceException need a 3.15.0 prerelease, and
-  # 3.15.0-rc4 carries the fixes for a device upgrading from 3.14.0. It has to
-  # be written as a prerelease: a caret on a stable lower bound never accepts
-  # one, so ^3.14.1 would not resolve 3.15.0-rc4 however it is published.
-  at_client: ^3.15.0-rc4
+  # PqPosture and EnrollmentConveyanceException need a 3.15.0 prerelease,
+  # 3.15.0-rc4 carries the fixes for a device upgrading from 3.14.0, and
+  # 3.15.0-rc5 re-exports the atServer check and AtSignLogger that apps reach
+  # through this package. It has to be written as a prerelease: a caret on a
+  # stable lower bound never accepts one, so ^3.14.1 would not resolve
+  # 3.15.0-rc5 however it is published.
+  at_client: ^3.15.0-rc5
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.02
