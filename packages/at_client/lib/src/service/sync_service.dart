@@ -4,7 +4,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
 abstract class SyncService {
@@ -206,11 +205,6 @@ abstract class SyncProgressListener {
   /// Caller has to register the listener using  atClientManager.syncService.addProgressListener(...)
   /// Caller can use [SyncProgress.atSign] to know for which atSign the event was triggered.
   void onSyncProgressEvent(SyncProgress syncProgress);
-}
-
-@experimental
-class SyncTelemetryEvent extends AtTelemetryEvent {
-  SyncTelemetryEvent(super.name, super.value);
 }
 
 /// Adds [waitUntilCaughtUp] to every [SyncService] without forcing
