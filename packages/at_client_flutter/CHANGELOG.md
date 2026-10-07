@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0.0-rc4
+
+- fix: an atSign that an app built on at_client_mobile saved to the keychain
+  signs in again, instead of failing with "PKAM mode requires
+  defaultEncryptionPrivateKey".
+
 ## 2.0.0-rc3
 
 - build: requires `at_client` ^3.15.0-rc5 and `at_auth` ^4.0.0-rc4, for their
