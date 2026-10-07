@@ -23,18 +23,9 @@ final class AtTelemetryAttributes {
   static const String notificationIds = 'atsign.notification.ids';
   static const String keys = 'atsign.keys';
 
-  // Heartbeat event attributes, reporting an atServer's health: how long it
-  // has been running in seconds, and the event classes it has switched on, so
-  // an absent kind of event can be told apart from one that is switched off.
+  // Heartbeat event attribute: how long the atServer has been running, in
+  // seconds.
   static const String atServerUptimeSeconds = 'atsign.atserver.uptime_seconds';
-  static const String telemetryClasses = 'atsign.telemetry.classes';
-
-  // Heartbeat event attributes, reporting the atServer's outbox: the batches
-  // and bytes waiting to be sent, and the batches dropped since boot for
-  // going over its size limit or its maximum age.
-  static const String outboxBatches = 'atsign.telemetry.outbox.batches';
-  static const String outboxBytes = 'atsign.telemetry.outbox.bytes';
-  static const String outboxDropped = 'atsign.telemetry.outbox.dropped';
 
   const AtTelemetryAttributes._();
 }

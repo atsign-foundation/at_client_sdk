@@ -19,26 +19,10 @@ void main() {
       expect(AtTelemetryAttributes.keys, 'atsign.keys');
     });
 
-    test('uses atsign.* names for the heartbeat attributes', () {
+    test('uses an atsign.* name for the heartbeat attribute', () {
       expect(
         AtTelemetryAttributes.atServerUptimeSeconds,
         'atsign.atserver.uptime_seconds',
-      );
-      expect(
-        AtTelemetryAttributes.telemetryClasses,
-        'atsign.telemetry.classes',
-      );
-      expect(
-        AtTelemetryAttributes.outboxBatches,
-        'atsign.telemetry.outbox.batches',
-      );
-      expect(
-        AtTelemetryAttributes.outboxBytes,
-        'atsign.telemetry.outbox.bytes',
-      );
-      expect(
-        AtTelemetryAttributes.outboxDropped,
-        'atsign.telemetry.outbox.dropped',
       );
     });
   });
