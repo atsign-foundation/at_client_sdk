@@ -3,12 +3,12 @@
 - feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
   `AtSignLogger` come through `package:at_client/at_client.dart`, so an app no
   longer needs at_lookup or at_utils for them.
-
-## 3.15.0-rc4
-
 - fix: local storage the client cannot open, such as a file it may not read,
   fails with an exception the app can catch, and no longer also ends a
   command-line program with an unhandled error.
+
+## 3.15.0-rc4
+
 - fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart
   no longer skips the notifications sent while the client was not running, and
   a `local:` record put back through the `AtKey` that read it can still be
