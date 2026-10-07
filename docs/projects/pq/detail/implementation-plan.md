@@ -7774,6 +7774,11 @@ In short:
    `tests/pq_matrix/published/bin/read_apsk.dart`, which imports
    `published/lib/arm.dart`, so `published/` and `scenario/` survive and
    `current/` is what went. Re-derive with `git ls-files tests/pq_matrix`.
+   `scenario/`'s reader is compiled against this tree by
+   `tests/at_functional_test/test/pq_matrix_reader_compiles_test.dart`, since
+   the released arm compiles it against 3.14.0 only. ⚠️ Before that guard
+   (2026-10-06), a mixin member whose shape changed here left the reader
+   compiling against 3.14.0 alone, unnoticed.
 4. **Provisioning is 2 atSigns × 9 enrollments across 2 namespaces**, live
    proven 2026-08-24, each cell holding its own Hive store and its own
    `InMemoryAtKeysIo` — without the latter a minted nskey private is filed

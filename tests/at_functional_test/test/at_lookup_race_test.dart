@@ -7,7 +7,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_lookup/at_lookup_io.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';

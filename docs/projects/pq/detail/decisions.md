@@ -14959,9 +14959,19 @@ which were shared as legacy / pq / which pq suite".
   were the only overrides in the repositories checked.
 - `AtRpc` does it for its callers: `sendRequest` and `AtRpcClient.call` take a
   `cryptoProviderId`, and a response goes out under the request's
-  `receivedUnder`. Where the server cannot write that scheme (legacy under a
-  posture that refuses it, or a provider it has not configured) the response
-  goes out under the server's default instead, so the answer is not lost.
+  `receivedUnder`. Where the server cannot answer in that scheme (legacy under
+  a posture that refuses it, a provider it has not configured, or a
+  post-quantum provider the requester has published no key for in the RPC's
+  namespace, which the server asks the provider before sealing) the response
+  goes out under the server's default instead, so the answer is not lost. A
+  response the notification service could not send counts as a failed attempt
+  and is retried, under the default where the preference allows a legacy
+  fallback. ⚠️ **AMENDED 2026-10-06:** until then the server answered
+  post-quantum whenever the provider was registered and counted a response it
+  could not seal as sent, so a `pqReady` server answering a `pqActive`
+  requester with no key in the RPC's namespace dropped its reply without a
+  retry or a warning; found in the 48-hour review, read from the code and
+  pinned in `test/rpc/at_rpc_scheme_test.dart`.
 
 Pinned in `test/received_scheme_test.dart`, `test/rpc/at_rpc_scheme_test.dart`
 and the "send answers a notification in the scheme it arrived in" test of

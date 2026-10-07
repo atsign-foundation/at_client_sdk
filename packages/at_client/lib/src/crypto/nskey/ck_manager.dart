@@ -49,7 +49,7 @@ Future<void> collectUnusedOnceCaughtUp(SyncService sync,
 Future<bool> _ranOrGaveUp(CkManager? manager, CryptoContext context) async {
   if (manager == null) return true;
   try {
-    return await manager._tryCollect(context) != null;
+    return await manager.tryCollect(context) != null;
   } on StoppedException {
     return true;
   } catch (e) {
@@ -304,11 +304,15 @@ class CkManager {
   /// replacement, try again at the next sync that catches up. A client with no
   /// enrollment id names no cutter on what it conveys, so it deletes nothing.
   Future<int> collectUnused(CryptoContext context) async =>
-      await _tryCollect(context) ?? 0;
+      await tryCollect(context) ?? 0;
 
   /// [collectUnused], answering null when it was refused because sync had not
-  /// caught up, the one refusal a later pass can overcome.
-  Future<int?> _tryCollect(CryptoContext context) =>
+  /// caught up, the one refusal a later pass can overcome; a pass that does not
+  /// look for another reason answers 0, as [collectUnused] does.
+  ///
+  /// Visible so a test can tell a pass sync refused from one that answered.
+  @visibleForTesting
+  Future<int?> tryCollect(CryptoContext context) =>
       _inTurn(() => _collectUnused(context));
 
   Future<int?> _collectUnused(CryptoContext context) async {

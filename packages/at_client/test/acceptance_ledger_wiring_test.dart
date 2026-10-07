@@ -101,6 +101,8 @@ void main() {
     'unit_at_client': 'the 67 citations that point at in-package unit tests, '
         'and the citation record itself',
     'functional_tests': 'the largest live pack',
+    'functional_tests_upgrade': 'the upgrade check, which the functional '
+        'legs exclude by its tag',
     'pqe2e_tests': 'the cross-atSign rows',
     'legacy_server_tests': 'UC-B0.1, which no other job can exercise because '
         'it needs a pinned pre-PQ atServer',
@@ -263,19 +265,19 @@ void main() {
               'thrown away');
     });
 
-    test('its artifact name is per-leg, or eight legs overwrite each other',
-        () {
-      final block = libJobs['build_and_test']!;
-      // NOTE: the job is a matrix over packages sharing one upload step, so a
+    test('its artifact name is per-leg, or the legs overwrite each other', () {
+      final block = codeOnly(libJobs['build_and_test']!);
+      // NOTE: the job is a matrix whose legs share one upload step, so a
       // constant artifact name means every leg but the last is silently
-      // replaced and the rows its report covered read as unexercised.
-      expect(block, contains(r'acceptance-report-lib-${{ matrix.package }}'),
-          reason: 'the upload name must carry matrix.package. A constant name '
-              'across a matrix means the last leg to finish is the only one '
-              'whose report survives');
-      expect(block, contains(r'path: packages/${{ matrix.package }}/'),
-          reason: 'and it must upload the leg\'s OWN file, or every leg '
-              'uploads whichever package happened to be checked out');
+      // replaced and the rows its reports covered read as unexercised.
+      expect(
+          block, contains(r'acceptance-report-lib-${{ strategy.job-index }}'),
+          reason: 'the upload name must carry the leg. A constant name across '
+              'a matrix means the last leg to finish is the only one whose '
+              'reports survive');
+      expect(block, contains(r'path: packages/*/acceptance-report.json'),
+          reason: 'and it must upload the report of every package the leg '
+              'ran, each under its own directory, or all but one are lost');
     });
 
     test('no job in this workflow emits without uploading', () {

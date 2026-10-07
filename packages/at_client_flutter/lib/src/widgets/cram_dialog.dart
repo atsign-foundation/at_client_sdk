@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 

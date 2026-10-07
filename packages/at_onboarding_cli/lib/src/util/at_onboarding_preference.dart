@@ -76,18 +76,19 @@ class AtOnboardingPreference extends AtClientPreference {
 
   /// The store a client for [atSign] opens: [storage] when set, else a fresh
   /// Hive store that the client closes when it stops, under [storagePath],
-  /// the deprecated `hiveStoragePath`, or the per-atSign directory under the
-  /// user's home.
+  /// the deprecated `hiveStoragePath`, [defaultPath], or the per-atSign
+  /// directory under the user's home, as they stand when this is called.
   ///
   /// Fresh each call, because a closed store cannot reopen and every client
   /// this package opens closes the store it was given.
-  AtClientStorage storageFor(String atSign) =>
+  AtClientStorage storageFor(String atSign, {String? defaultPath}) =>
       storage ??
       HiveAtClientStorage(
           atSign: atSign,
           storagePath: storagePath ??
               // ignore: deprecated_member_use
               hiveStoragePath ??
+              defaultPath ??
               HomeDirectoryUtil.getHiveStoragePath(atSign),
           closedByClient: true);
 }
