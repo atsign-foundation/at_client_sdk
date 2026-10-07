@@ -1,6 +1,5 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_utils/at_logger.dart';
 
 /// Two atSigns' clients, live at the same time.
 ///

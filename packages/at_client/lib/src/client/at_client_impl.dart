@@ -965,6 +965,10 @@ class AtClientImpl implements AtClient {
           });
 
   /// Whether this client's principal has ever been online over this storage.
+  ///
+  /// A store with no marker at all but a sync cursor was online under a
+  /// release that wrote no marker; it counts, and is marked as this
+  /// principal's.
   Future<bool> hasBeenOnline() async {
     final store = localSecondary?.keyStore;
     if (store == null) return false;
@@ -975,7 +979,12 @@ class AtClientImpl implements AtClient {
           recorded['enrollmentId'] ==
               (enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
     } on KeyNotFoundException {
-      return false;
+      final cursors = await store.getKeys(
+          regex: '^local:lastreceivedservercommitid(\\..+)?'
+              '${RegExp.escape(_atSign)}\$');
+      if (await cursors.isEmpty) return false;
+      await _recordOnline();
+      return true;
     }
   }
 

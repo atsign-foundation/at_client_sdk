@@ -119,6 +119,9 @@ jobs:
       # looks like: it carries the same digest as the last `canary-<release>`
       # tag, so it IS a release build.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
+      # The compose file the suite's atServer-restart test addresses the
+      # virtualenv through, relative to the pack directory the tests run in.
+      RIG_COMPOSE_FILE: test/docker-compose.yaml
     strategy:
       fail-fast: false
       matrix:
@@ -130,11 +133,6 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      # Install dependencies in at_functional_test
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -143,22 +141,35 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      # Install dependencies in at_functional_test
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_test_env.dart
 
-      # Run functional tests
+      # Run functional tests. The upgrade check runs in its own job below.
       - name: Run functional tests
         working-directory: tests/at_functional_test
-        run: dart test --concurrency=1 --file-reporter json:acceptance-report.json
+        run: dart test --concurrency=1 -x upgrade --file-reporter json:acceptance-report.json
 
       # The atServer's own log is the only record of why it refused a request,
       # and the container does not outlive the job.
@@ -186,11 +197,6 @@ jobs:
           path: tests/at_functional_test/acceptance-report.json
           if-no-files-found: warn
 
-      # stop docker containers
-      - name: stop docker containers
-        working-directory: tests/at_functional_test/test
-        run: docker compose down
-
   # The same functional pack again on the two storage backends the default run
   # does not exercise. Beta only: this proves the backends, not the SDK matrix,
   # and the pack above already covers both channels on Hive.
@@ -203,6 +209,7 @@ jobs:
       # enroll:request shape, so every post-quantum test in the pack fails
       # under both backends for reasons that have nothing to do with storage.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
+      RIG_COMPOSE_FILE: test/docker-compose.yaml
     strategy:
       fail-fast: false
       matrix:
@@ -214,10 +221,6 @@ jobs:
         with:
           dart-channel: beta
 
-      - name: Install dependencies in at_functional_test
-        working-directory: tests/at_functional_test
-        run: dart pub get
-
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
@@ -225,13 +228,25 @@ jobs:
         working-directory: tests/at_functional_test/test
         run: docker compose pull && docker compose up -d
 
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
       - name: Check for docker container readiness
         working-directory: tests/at_functional_test
         run: dart run test/check_docker_readiness.dart
-
-      - name: Run PKAM
-        working-directory: tests/at_functional_test/test
-        run: docker compose exec -T virtualenv supervisorctl start pkamLoad
 
       - name: Check test environment readiness
         working-directory: tests/at_functional_test
@@ -257,9 +272,81 @@ jobs:
           path: ve-logs
           if-no-files-found: warn
 
-      - name: stop docker containers
+  # The upgrade check, on its own so the functional legs do not carry its
+  # six minutes: a store written by each released at_client, opened by this
+  # tree (tests/upgrade/README.md). Stable only: the check is about stores
+  # released clients wrote, and the channel this tree is built with matters
+  # little to it. Its tests cite no acceptance rows today; the report is
+  # emitted so a row cited later is counted.
+  functional_tests_upgrade:
+    runs-on: ubuntu-latest
+    env:
+      # The same trunk-tracking build functional_tests runs — see its note.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: stable
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      - name: Start docker instance
         working-directory: tests/at_functional_test/test
-        run: docker compose down
+        run: docker compose pull && docker compose up -d
+
+      # NOTE: pkamLoad waits 25s before it installs any key, so it starts as
+      # soon as the container is up and the dependencies install meanwhile,
+      # retrying in case the supervisor is not yet listening.
+      - name: Run PKAM
+        working-directory: tests/at_functional_test/test
+        run: |
+          for _ in 1 2 3 4 5; do
+            docker compose exec -T virtualenv supervisorctl start pkamLoad && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Install dependencies in at_functional_test
+        working-directory: tests/at_functional_test
+        run: dart pub get
+
+      - name: Check for docker container readiness
+        working-directory: tests/at_functional_test
+        run: dart run test/check_docker_readiness.dart
+
+      - name: Check test environment readiness
+        working-directory: tests/at_functional_test
+        run: dart run test/check_test_env.dart
+
+      - name: Run the upgrade check
+        working-directory: tests/at_functional_test
+        run: dart test --concurrency=1 --tags upgrade --file-reporter json:acceptance-report.json
+
+      # The atServer's own log is the only record of why it refused a request,
+      # and the container does not outlive the job.
+      - name: Capture atServer logs
+        if: ${{ failure() }}
+        run: docker compose -f tests/at_functional_test/test/docker-compose.yaml cp virtualenv:/apps/logs ve-logs
+
+      - name: Upload atServer logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ve-atserver-logs-upgrade
+          path: ve-logs
+          if-no-files-found: warn
+
+      # `if: always()` for the same reason as the functional job's report.
+      - name: Upload upgrade acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-functional-upgrade
+          path: tests/at_functional_test/acceptance-report.json
+          if-no-files-found: warn
 
   end2end_tests_prep:
     # Don't run on PRs from a fork as the secrets aren't available

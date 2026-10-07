@@ -134,8 +134,10 @@ void main() {
                 'looks for it');
 
         seeded = await arm.seed(spec, peer);
+        final facts = Map.of(seeded!['facts'] as Map);
+        final cursors = facts.remove('syncCursors');
         expect(
-            seeded!['facts'],
+            facts,
             {
               'syncedBeforeReceipt': true,
               'peerItemSeen': true,
@@ -144,6 +146,10 @@ void main() {
             },
             reason: 'every later check reads what the seed wrote; one that '
                 'did not run makes them meaningless');
+        expect(cursors, ['local:lastreceivedservercommitid.$namespace$me'],
+            reason: 'a store with no lifecycle marker counts as having been '
+                'online when it holds a sync cursor by this name, which '
+                '`open_test.dart` seeds as ${arm.label} would have written it');
       });
 
       test('observes what the seeding version observed', () async {
@@ -345,10 +351,12 @@ Future<Map<String, Object?>> Function(ClientSpec, String) _seedReleased(
         String version) =>
     (ClientSpec spec, String peer) async {
       final dir = '${Directory.current.path}/../upgrade/released/$version';
-      // NOTE: the lockfile is committed and the pin exact, so this resolves
-      // the released build rather than whatever is newest.
-      final pubGet =
-          await Process.run('dart', ['pub', 'get'], workingDirectory: dir);
+      // NOTE: the lockfile is committed and the pin exact, and the flag makes
+      // pub fail rather than re-resolve when the lock no longer satisfies the
+      // pubspec or this SDK, so the arm runs the released build or not at all.
+      final pubGet = await Process.run(
+          'dart', ['pub', 'get', '--enforce-lockfile'],
+          workingDirectory: dir);
       expect(pubGet.exitCode, 0,
           reason:
               'pub get failed in $dir:\n${pubGet.stdout}\n${pubGet.stderr}');

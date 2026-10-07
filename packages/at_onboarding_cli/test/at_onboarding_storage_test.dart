@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 
 import 'lifecycle_rig.dart';
@@ -74,6 +73,36 @@ void main() {
             'to tear down');
 
     await service.atClient!.stop();
+  });
+
+  group('a path set after the service is built', () {
+    test('as hiveStoragePath, still decides where the store goes', () async {
+      final pref = await preference();
+      final service = AtOnboardingServiceImpl(atSign, pref,
+          atLookUp: lookUpAnswering(() async => true));
+      // ignore: deprecated_member_use
+      pref.hiveStoragePath = '${dir.path}/set_late';
+
+      expect(await service.authenticate(), isTrue);
+      expect(Directory('${dir.path}/set_late').existsSync(), isTrue,
+          reason: 'at_onboarding_cli 1.x read the path when it authenticated, '
+              'so an app that set it after building the service has its store '
+              'there, and opening anywhere else strands it');
+
+      await service.atClient!.stop();
+    });
+
+    test('as storagePath, decides too', () async {
+      final pref = await preference();
+      final service = AtOnboardingServiceImpl(atSign, pref,
+          atLookUp: lookUpAnswering(() async => true));
+      pref.storagePath = '${dir.path}/set_late_too';
+
+      expect(await service.authenticate(), isTrue);
+      expect(Directory('${dir.path}/set_late_too').existsSync(), isTrue);
+
+      await service.atClient!.stop();
+    });
   });
 
   test('the deprecated hiveStoragePath still decides where the store goes',

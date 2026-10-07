@@ -1,4 +1,5 @@
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+// ignore: deprecated_member_use
+import 'package:at_chops/at_chops.dart' show AtChopsKeys, SigningAlgoType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -942,49 +943,75 @@ class LocalSecondary implements Secondary {
       _keySourceApkam() async => (await _keysFromSource())
           ?.authenticationKeyPairFor(_atClient.enrollmentId);
 
+  /// [key]'s value in the keystore, else what [fromAtChops] finds in the
+  /// client's AtChops.
+  ///
+  /// NOTE: the AtChops is the last tier because a client handed one at build
+  /// may hold its keys nowhere else until its caller writes them to the
+  /// keystore. An empty value there is a placeholder for a keypair the
+  /// AtChops was built without, so it counts as absent. A miss in every tier
+  /// is still the keystore's own exception.
+  Future<String?> _fromKeystoreElseAtChops(
+      String key,
+      // ignore: deprecated_member_use
+      String? Function(AtChopsKeys keys) fromAtChops) async {
+    // ignore: deprecated_member_use
+    final AtChopsKeys? held = _atClient.atChops?.atChopsKeys;
+    final fromChops = held == null ? null : fromAtChops(held);
+    final fallback = fromChops == null || fromChops.isEmpty ? null : fromChops;
+    AtData? stored;
+    try {
+      stored = await keyStore!.get(key);
+    } on KeyNotFoundException {
+      if (fallback != null) return fallback;
+      rethrow;
+    }
+    return stored?.data ?? fallback;
+  }
+
   /// The PKAM private key: the key source's for this enrollment, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getPkamPrivateKey() async =>
       (await _keySourceApkam())?.privateKey ??
-      (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+      await _fromKeystoreElseAtChops(AtConstants.atPkamPrivateKey,
+          (keys) => keys.atPkamKeyPair?.atPrivateKey.privateKey);
 
   /// The atSign's encryption private key: the key source's, else the
-  /// keystore's.
-  Future<String?> getEncryptionPrivateKey() async {
-    String? v =
-        (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
-    return v;
-  }
+  /// keystore's, else the client's AtChops's.
+  Future<String?> getEncryptionPrivateKey() async =>
+      (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey ??
+      await _fromKeystoreElseAtChops(AtConstants.atEncryptionPrivateKey,
+          (keys) => keys.atEncryptionKeyPair?.atPrivateKey.privateKey);
 
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
   /// The PKAM public key: the key source's for this enrollment, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getPkamPublicKey() async =>
       (await _keySourceApkam())?.publicKey ??
-      (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+      await _fromKeystoreElseAtChops(AtConstants.atPkamPublicKey,
+          (keys) => keys.atPkamKeyPair?.atPublicKey.publicKey);
 
   /// [atSign]'s encryption public key: the key source's, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
-    String? v =
-        (await _keysFromSource())?.encryptionKeyPair?.atPublicKey.publicKey;
-    v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
-        ?.data;
-
-    return v;
+    return (await _keysFromSource())
+            ?.encryptionKeyPair
+            ?.atPublicKey
+            .publicKey ??
+        await _fromKeystoreElseAtChops(
+            '${AtConstants.atEncryptionPublicKey}$atSign',
+            (keys) => keys.atEncryptionKeyPair?.atPublicKey.publicKey);
   }
 
   /// The atSign's self-encryption key: the key source's, else the
-  /// keystore's.
-  Future<String?> getEncryptionSelfKey() async {
-    String? v = (await _keysFromSource())?.selfEncryptionKey?.key;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
-    return v;
-  }
+  /// keystore's, else the client's AtChops's.
+  Future<String?> getEncryptionSelfKey() async =>
+      (await _keysFromSource())?.selfEncryptionKey?.key ??
+      await _fromKeystoreElseAtChops(AtConstants.atEncryptionSelfKey,
+          (keys) => keys.selfEncryptionKey?.key);
 
   /// Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
@@ -1087,17 +1114,19 @@ class LocalSecondary implements Secondary {
     }
 
     if (enrollmentInfoFromServer == null) {
-      final fromKeyfile = fetchFailure == null ||
-              classifyConnectionFailure(fetchFailure)?.isOffline != true
-          ? null
-          : await _enrollmentFromKeyfile();
-      if (fromKeyfile != null) {
+      final offline = fetchFailure != null &&
+          classifyConnectionFailure(fetchFailure)?.isOffline == true;
+      final fromKeyfile = offline ? await _enrollmentFromKeyfile() : null;
+      final recorded = fromKeyfile ??
+          (offline ? await _enrollmentFromOnboardingRecord() : null);
+      if (recorded != null) {
         _logger.warning('Could not fetch the enrollment record for '
             '${_atClient.enrollmentId} ($fetchFailure); authorising from the '
-            'grants the keyfile last recorded, ${fromKeyfile.namespace}, until '
-            'the atServer can be reached');
+            'grants ${fromKeyfile != null ? 'the keyfile' : 'local storage'} '
+            'last recorded, ${recorded.namespace}, until the atServer can be '
+            'reached');
         _enrollmentIsFromKeyfile = true;
-        return fromKeyfile;
+        return recorded;
       }
       throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
           '${_atClient.enrollmentId} from the atServer'
@@ -1148,6 +1177,35 @@ class LocalSecondary implements Secondary {
       ..appName = snapshot!.appName
       ..deviceName = snapshot.deviceName
       ..namespace = Map<String, dynamic>.from(grants);
+  }
+
+  /// The grants at_onboarding_cli 1.x recorded in local storage once the
+  /// enrollment it requested was approved, as an [Enrollment], or null when
+  /// there is no such record. A keyfile from that era holds no snapshot until
+  /// an authenticated start records one.
+  Future<Enrollment?> _enrollmentFromOnboardingRecord() async {
+    final enrollmentId = _atClient.enrollmentId;
+    if (enrollmentId == null) return null;
+    final String? value;
+    try {
+      value = (await keyStore
+              ?.get('local:$enrollmentId${_atClient.getCurrentAtSign()}'))
+          ?.data;
+    } on KeyNotFoundException {
+      return null;
+    }
+    if (value == null) return null;
+    try {
+      final record = jsonDecode(value);
+      if (record is! Map<String, dynamic> || record['namespace'] is! Map) {
+        return null;
+      }
+      return Enrollment.fromJSON(record)..enrollmentId = enrollmentId;
+    } on FormatException catch (e) {
+      _logger.warning('The enrollment record in local storage for '
+          '$enrollmentId does not parse, so it cannot authorise: $e');
+      return null;
+    }
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {

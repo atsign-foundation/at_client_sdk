@@ -101,6 +101,8 @@ void main() {
     'unit_at_client': 'the 67 citations that point at in-package unit tests, '
         'and the citation record itself',
     'functional_tests': 'the largest live pack',
+    'functional_tests_upgrade': 'the upgrade check, which the functional '
+        'legs exclude by its tag',
     'pqe2e_tests': 'the cross-atSign rows',
     'legacy_server_tests': 'UC-B0.1, which no other job can exercise because '
         'it needs a pinned pre-PQ atServer',

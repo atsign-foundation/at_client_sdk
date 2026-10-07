@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2.0.0-rc4
+
+- fix: an atSign that an app built on at_client_mobile saved to the keychain
+  signs in again, instead of failing with "PKAM mode requires
+  defaultEncryptionPrivateKey".
+
+## 2.0.0-rc3
+
+- build: requires `at_client` ^3.15.0-rc5 and `at_auth` ^4.0.0-rc4, for their
+  fixes to upgrading from at_client 3.14.0.
+- feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
+  `AtSignLogger` come through this package, so an app no longer needs at_lookup
+  or at_utils for them.
+- fix: `ApkamActivationDialog` fails at once for an expired or unknown
+  enrollment, rather than after its whole retry budget.
+- fix: the package no longer includes Xcode logs from the invitations example.
+
 ## 2.0.0-rc2
 
 - build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
