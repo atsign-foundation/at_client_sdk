@@ -1,3 +1,14 @@
+## 4.0.0-rc1
+
+- BREAKING: `HiveAtClientStorage` is imported from `package:at_client/hive.dart`,
+  and `FileAtKeysIo`/`secureSocketLookUps` from `package:at_client/at_client_io.dart`.
+  `at_client_flutter` re-exports both.
+- BREAKING: `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`,
+  `sendStreamAck`, `ConnectivityListener` and `RemoteSecondary.isAvailable` are removed.
+- BREAKING: `HiveAtClientStorage.bundle` is `persistenceBundle`, a member of
+  `AtClientStorage`; storages extending `AtClientStorageBase` inherit it.
+- feat: on the web, a client built without `storage:` throws a `StateError` naming it.
+
 ## 3.15.0-rc4
 
 - fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart

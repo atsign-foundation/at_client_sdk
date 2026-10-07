@@ -142,7 +142,6 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/lifecycle/enrollments.dart',
   'package:at_client/src/lifecycle/pending_enrollment.dart',
   'package:at_client/src/listener/at_sign_change_listener.dart',
-  'package:at_client/src/listener/connectivity_listener.dart',
   'package:at_client/src/listener/switch_at_sign_event.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
@@ -153,15 +152,11 @@ const Set<String> _atClientBarrelExports = {
   // an app opens, activates and enrols through this package and must not
   // have to import at_auth for what those verbs take and answer.
   'package:at_auth/at_auth.dart',
-  // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
-  'package:at_auth/at_auth_io.dart',
   // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
   // communications leg of the platform bundle, which the verbs take as
   // lookUps:, for the same reason again. From the io-free barrel, so the type
   // an app implements never reads as io-bound.
   'package:at_lookup/at_lookup.dart',
-  // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
-  'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',

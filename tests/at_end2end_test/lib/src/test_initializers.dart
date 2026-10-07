@@ -3,6 +3,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/at_encryption_key_initializers.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
