@@ -3,11 +3,12 @@ import 'package:at_client/remote_only.dart';
 
 /// An [AtClient] for [atSign] holding no local replica: its storage writes
 /// through the client's own authenticated [RemoteSecondary] over [lookUps],
-/// so the client's stop closes the one connection both use.
+/// so the client's stop closes the one connection both use. Returns that
+/// [RemoteSecondary] alongside the client.
 ///
 /// Sets [prefs]' `isLocalStoreRequired` to false, which turns off the
 /// client's expiry and availability timers over a local replica.
-Future<AtClient> remoteOnlyClient({
+Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
   required String atSign,
   required String app,
   required AtClientPreference prefs,
@@ -21,7 +22,7 @@ Future<AtClient> remoteOnlyClient({
       atKeysIo: keysIo,
       lookUps: lookUps,
       enrollmentId: keys.enrollmentToAuthenticateAs());
-  return AtClientImpl.create(
+  final client = await AtClientImpl.create(
     atSign,
     app,
     prefs,
@@ -31,4 +32,5 @@ Future<AtClient> remoteOnlyClient({
     storage: RemoteOnlyAtClientStorage(
         atSign: atSign, remoteSecondary: remote, closedByClient: true),
   );
+  return (client: client, remote: remote);
 }

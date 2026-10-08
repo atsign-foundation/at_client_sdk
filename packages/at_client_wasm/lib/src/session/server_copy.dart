@@ -3,8 +3,13 @@ import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 
-abstract interface class ServerCopy {
+/// Reads the server copy of an atSign's key envelope for an app.
+abstract interface class ServerCopyReader {
   Future<Uint8List?> fetch(String atSign, String app);
+}
+
+/// Reads and writes the server copy of an atSign's key envelope for an app.
+abstract interface class ServerCopy implements ServerCopyReader {
   Future<void> put(String atSign, String app, Uint8List envelope);
 }
 
