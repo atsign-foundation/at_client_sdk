@@ -383,9 +383,8 @@ class NotificationServiceImpl extends NotificationService {
 
   /// How every write of the last-received-notification watermark is routed.
   ///
-  /// The watermark is a `local:` record — never synced, and already encrypted
-  /// at rest by the keystore — so there is nothing for value-level encryption
-  /// to protect. Saying so explicitly keeps these writes off the shared-data
+  /// The watermark is a `local:` record, never synced and holding nothing
+  /// sensitive, so there is nothing for value-level encryption to protect. Saying so explicitly keeps these writes off the shared-data
   /// crypto path, where every post-quantum provider declines a local key and
   /// the fallback from that decline is the legacy provider, which a client that
   /// refuses it then refuses outright.

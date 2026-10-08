@@ -30,6 +30,9 @@ class HiveBoxSyncQueueStore implements SyncQueueStore {
 
 /// [atSign]'s sync queue, open on its box under [storagePath], or on Hive's
 /// global instance when that is null.
+///
+/// The global instance must already be initialised, as the keystore's own
+/// open does; this never calls `Hive.init` itself.
 Future<AtSyncQueue> openHiveSyncQueue(String atSign,
     {required String? storagePath}) async {
   final HiveInterface hive =

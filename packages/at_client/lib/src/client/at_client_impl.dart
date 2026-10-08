@@ -1987,8 +1987,7 @@ class AtClientImpl implements AtClient {
     // starts — minting a content key means writing a conveyance record, and
     // that cannot happen once the transformer is mid-way through building a
     // verb builder. A `local:` record is excluded: it is never synced to the
-    // atServer, the keystore already encrypts it at rest, and every
-    // post-quantum provider declines a local key.
+    // atServer, and every post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
       atKey.metadata = metadataForEncryptedSend(atKey.metadata);

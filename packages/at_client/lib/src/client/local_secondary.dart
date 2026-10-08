@@ -115,16 +115,12 @@ class LocalSecondary implements Secondary {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
   }
 
-  /// Idempotent lazy-open of the sync queue. The first caller wins
-  /// the open; concurrent callers await the same in-flight future so
-  /// we never call `Hive.openBox` twice for the same atSign.
+  /// Opens the sync queue on first use, for a client built around a bare
+  /// keystore, which brings no queue of its own. Concurrent callers share one
+  /// open, so the queue is never opened twice for one atSign.
   ///
-  /// The queue opens on the instance owning the client's
-  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
-  /// halves cannot land in different places. A client configuring no path
-  /// falls back to the package-global instance, which is why this must still
-  /// run after the keystore's initialisation has called `Hive.init(...)`; we
-  /// never call it here ourselves.
+  /// The queue opens through the default storage under the client's
+  /// `hiveStoragePath`, whatever backend the keystore uses.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     if (_released) return Future.error(_stopped());
     final existing = _syncQueue;

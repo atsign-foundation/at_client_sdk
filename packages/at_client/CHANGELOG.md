@@ -4,6 +4,14 @@
   comes from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
   `package:at_client/memory.dart`, no longer from `at_client.dart` and
   `sqlite.dart`.
+- BREAKING: a client with `isLocalStoreRequired` false and no storage is
+  refused; pass one such as `InMemoryAtClientStorage`. Storage an app passes is
+  now always used.
+- deprecated, to be removed in 4.0: `AtClientImpl.create`'s
+  `localSecondaryKeyStore` and `AtClient.persistenceBundle`; pass storage
+  instead.
+- docs: the SQLite storage writes records to disk in clear; Hive encrypts its
+  keystore.
 - fix: local storage the client cannot open, such as a file it may not read,
   fails with an exception the app can catch, and no longer also ends a
   command-line program with an unhandled error.

@@ -155,7 +155,7 @@ Flutter keychain, memory); **`storage:`**, the client's local store, each
 backend from its own import (`HiveAtClientStorage` from
 `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 `package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
-`package:at_client/memory.dart`, or a bundle of your own); and **`lookUps:`**, how
+`package:at_client/memory.dart`); and **`lookUps:`**, how
 the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
 monitor's - so a transport or a proxy convention is chosen once:
@@ -178,6 +178,15 @@ With no `lookUps`, connections are TLS on TCP with the defaults;
 routes on `from:` is what that is for). A factory of your own can hand back
 any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath` are deprecated in favour of the factory's config.
+
+Every client keeps local storage, even if only in memory. A client given none
+opens Hive under `preference.hiveStoragePath` until 4.0, and one whose
+preference sets `isLocalStoreRequired` false is refused. The backends differ
+at rest: Hive encrypts its keystore, SQLite writes records in clear, and the
+in-memory store writes nothing to disk. A backend of your own needs types
+at_client doesn't export, so raise a
+[feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
+for it.
 
 `Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
 enrollment a keys store authenticates as without building a client.

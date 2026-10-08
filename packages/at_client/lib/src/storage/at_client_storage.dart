@@ -4,6 +4,21 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:meta/meta.dart';
 
 /// The local storage one [AtClient] holds: its keystore and its sync queue.
+///
+/// An app chooses a backend from its own import: `HiveAtClientStorage` from
+/// `package:at_client/hive.dart`, `SqliteAtClientStorage` from
+/// `package:at_client/sqlite.dart`, or `InMemoryAtClientStorage` from
+/// `package:at_client/memory.dart`. An app wanting a backend of its own
+/// raises a feature request at
+/// https://github.com/atsign-foundation/at_client_sdk/issues, since the types
+/// a backend is written against are not exported.
+///
+/// What is protected on disk depends on the backend. The Hive storage
+/// encrypts its keystore with a key kept in a `.hash` file beside it, while
+/// its sync queue, which names the records waiting to sync, is not encrypted.
+/// The SQLite storage writes everything in clear. The in-memory storage
+/// writes nothing to disk. The client stores a `local:` value as the app gives
+/// it.
 abstract class AtClientStorage {
   /// Claims this storage for [owner].
   ///

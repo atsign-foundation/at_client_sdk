@@ -200,7 +200,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// such as crypto providers) read and write the same store. Wire persistence
   /// once, when the instance is created (e.g. via
   /// `AtClientSecretSharing.forClient(persistence: ...)`); consumers must not
-  /// re-assign it.
+  /// re-assign it. A client's own start-up creates the instance with none,
+  /// as [SecretStorePersistence] says.
   final SecretStore secretStore = SecretStore();
 
   /// Decrypted, verified payloads addressed to this client.
