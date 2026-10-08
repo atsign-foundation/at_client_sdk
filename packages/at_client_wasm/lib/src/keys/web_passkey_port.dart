@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart';
 
+import 'passkey_ceremony.dart';
 import 'passkey_port.dart';
 
 Uint8List _randomBytes(int length) {
@@ -62,7 +63,7 @@ class WebPasskeyPort implements PasskeyPort {
     }.jsify() as CredentialCreationOptions;
 
     final credential =
-        await _ceremony(window.navigator.credentials.create(options));
+        await passkeyCeremony(window.navigator.credentials.create(options));
     final credentialId = credential.rawId.toDart.asUint8List();
 
     return (credentialId: credentialId, prfFirst: _prfFirst(credential));
@@ -98,24 +99,9 @@ class WebPasskeyPort implements PasskeyPort {
     }.jsify() as CredentialRequestOptions;
 
     final credential =
-        await _ceremony(window.navigator.credentials.get(options));
+        await passkeyCeremony(window.navigator.credentials.get(options));
     final credentialId = credential.rawId.toDart.asUint8List();
 
     return (credentialId: credentialId, prfFirst: _prfFirst(credential));
   }
-}
-
-/// Awaits [request], rethrowing any rejection or null result as a
-/// [PasskeyCeremonyException].
-Future<PublicKeyCredential> _ceremony(JSPromise<Credential?> request) async {
-  final Credential? credential;
-  try {
-    credential = await request.toDart;
-  } catch (e) {
-    throw PasskeyCeremonyException('$e');
-  }
-  if (credential == null) {
-    throw PasskeyCeremonyException('no credential returned');
-  }
-  return credential as PublicKeyCredential;
 }

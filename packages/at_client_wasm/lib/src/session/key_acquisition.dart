@@ -74,12 +74,27 @@ Future<AcquiredKeys> acquireKeys({
   return _held(store, registered.secret, codec);
 }
 
+/// What [heal] found, and whether it wrote the server copy.
+enum HealOutcome {
+  /// The server copy lacked the unlock and now holds it.
+  healed,
+
+  /// The server copy already opens with the unlock; nothing written.
+  alreadyPresent,
+
+  /// The server and device copies are sealed under different content keys;
+  /// nothing written.
+  contentKeyMismatch,
+
+  /// The device or server copy is missing; nothing written.
+  missingCopy,
+}
+
 /// Adds the [prf] unlock in [store]'s copy of [atSign]'s envelope to the
 /// server copy of [app] when the server copy lacks it.
 ///
-/// Writes nothing when either copy is missing, the server copy already opens
-/// with [prf], or it is sealed under another content key (a stale copy).
-Future<void> heal({
+/// Writes only on [HealOutcome.healed].
+Future<HealOutcome> heal({
   required String atSign,
   required String app,
   required KeyBytesStore store,
@@ -89,17 +104,22 @@ Future<void> heal({
 }) async {
   final serverBytes = await server.fetch(atSign, app);
   final localBytes = await store.get(atSign);
-  if (serverBytes == null || localBytes == null) return;
-  if (await _opens(atSign, serverBytes, prf, codec)) return;
+  if (serverBytes == null || localBytes == null) {
+    return HealOutcome.missingCopy;
+  }
+  if (await _opens(atSign, serverBytes, prf, codec)) {
+    return HealOutcome.alreadyPresent;
+  }
 
   final opened = await codec.open(atSign, localBytes, prf);
   final Uint8List merged;
   try {
     merged = await opened.mergeUnlocksFrom(serverBytes);
   } on EnvelopeContentKeyMismatchException {
-    return;
+    return HealOutcome.contentKeyMismatch;
   }
   await server.put(atSign, app, merged);
+  return HealOutcome.healed;
 }
 
 AcquiredKeys _held(
