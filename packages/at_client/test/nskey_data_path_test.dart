@@ -210,6 +210,123 @@ void main() {
     });
   });
 
+  group('each value is encrypted under its own key', () {
+    /// alice1 with a current CK, and alice2 already holding that CK.
+    Future<(_Client, _Client, ContentKey)> twoClients() async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
+      final alice2 = authorisedClient();
+      alice2.cache.put(owner, namespace, ck);
+      return (alice1, alice2, ck);
+    }
+
+    AtKey withAdditional(String name, Map<String, dynamic> additional) =>
+        dataKey(name)
+          ..metadata.appMetadata = AppMetadata(
+              providerId: symmetricAesGcmCryptoProviderId,
+              additional: additional);
+
+    test('two values under one content key carry different salts', () async {
+      final (alice1, _, _) = await twoClients();
+      final first = dataKey('a');
+      final second = dataKey('b');
+      await alice1.data.encrypt(context, first, 'same text');
+      await alice1.data.encrypt(context, second, 'same text');
+
+      String saltOf(AtKey k) =>
+          k.metadata.appMetadata!.additional!['salt'] as String;
+      expect(base64Decode(saltOf(first)),
+          hasLength(SymmetricAesGcmProvider.saltLength));
+      expect(saltOf(first), isNot(saltOf(second)),
+          reason: 'one salt per value is what gives each value its own key');
+    });
+
+    test('a value with no salt, encrypted under the content key itself, reads',
+        () async {
+      final (_, alice2, ck) = await twoClients();
+      final iv = InitialisationVector.random(12);
+      final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+          .encrypt(
+              Uint8List.fromList(utf8.encode('written by an earlier client')),
+              iv: iv,
+              aad:
+                  utf8.encode('at/symmetric/AES/GCM:@alice::older.$namespace'));
+
+      expect(
+          await alice2.data.decrypt(
+              context,
+              withAdditional('older', {
+                'ckKid': ck.ckKid,
+                'iv': base64Encode(iv.ivBytes),
+                'ns': namespace,
+                'ckNs': namespace,
+              }),
+              base64Encode(ciphertext)),
+          'written by an earlier client');
+    });
+
+    test('a value whose salt was altered does not decrypt', () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      // NOTE: positive control — unaltered, the same value decrypts.
+      expect(
+          await alice2.data
+              .decrypt(context, withAdditional('v', additional), ciphertext),
+          'text');
+
+      final salt = base64Decode(additional['salt'] as String);
+      salt[0] ^= 1;
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {...additional, 'salt': base64Encode(salt)}),
+              ciphertext),
+          throwsA(isA<Exception>()),
+          reason: 'the salt chooses the key, so changing it must not decrypt');
+    });
+
+    test('a salt that is not base64 is refused as a decryption failure',
+        () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {...additional, 'salt': '!!not base64!!'}),
+              ciphertext),
+          throwsA(isA<AtDecryptionException>()
+              .having((e) => e.message, 'message', contains('not base64'))));
+    });
+
+    test('a salt of the wrong length is refused by name', () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {
+                ...additional,
+                'salt': base64Encode(List<int>.filled(16, 1)),
+              }),
+              ciphertext),
+          throwsA(isA<AtDecryptionException>()
+              .having((e) => e.message, 'message', contains('16-byte salt'))));
+    });
+  });
+
   group('CK resolution & ordering', () {
     test(
         'a data value arriving before its conveyance defers rather than '

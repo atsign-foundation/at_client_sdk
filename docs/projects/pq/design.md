@@ -145,7 +145,7 @@ Layer 3 per data write.
 |---|---|---|---|
 | `legacy` | legacy data + inline-wrapped key (modern values never inline a key) | RSA-2048 + AES (monolithic) | RSA keypair. **Bare-name default** for an *absent* `providerId` (pre-convention data) |
 | `at/nskey/XWING` | a **CK-conveyance record** (a sealed content key, cited by `ckKid`) | `X-Wing-seal` (the CK encapsulated to an nskey public half) — via `pqSeal`/`pqOpen` ([§3](#3-subsystem-c--at_chops-pq-primitives)) | the recipient's **nskey** — the owner's own nskey (self data) or another atSign's nskey (shared) |
-| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
+| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a key derived per value from a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
 
 Notes:
 
@@ -191,7 +191,7 @@ content-key kids. Working names marked.
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **signing-root mint lock** *(working)* | `_rootlock@alice` (self key, immutable create, short ttl — no namespace, matching the record it guards) | no | n/a | serialises minting the signing root between the owner's own privileged enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
-| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
+| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a key derived per value from a CK, cites `ckKid` |
 | **substrate envelope** *(working)* | `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
 | **APKAM key package** | per [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) | (enrollment record) | the APKAM keypair | recipient unit for Layer-1 |
 
@@ -417,8 +417,12 @@ disclosure — the namespace is already plaintext in the key name.
   `appMetadata.ckKid`. The value is the `pqSeal` envelope wrapping the CK (KEM ct +
   AEAD body) — **no separate `iv`/`kemCt`** on the conveyance.
 - On an `at/symmetric/AES/GCM` **data value**:
-  `{ providerId: "at/symmetric/AES/GCM", ckKid, iv, ns, ckNs }`. `iv` is the base64
-  12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
+  `{ providerId: "at/symmetric/AES/GCM", ckKid, salt, iv, ns, ckNs }`. `salt` is 32
+  base64 bytes of fresh randomness per value, and the value is encrypted under
+  `HKDF-SHA256(ikm = CK, salt, info = "at/symmetric/AES/GCM/value-key/v1", L = 32)`
+  rather than under the CK itself, so no `(key, nonce)` pair can repeat however many
+  values share a CK; a value carrying no `salt` is read under the CK directly. `iv` is
+  the base64 12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
   the value's **own** full namespace — it is what the AAD binds, so two items under
   different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
   namespace the CK and its conveyance live at, which differs from `ns` whenever
@@ -519,8 +523,8 @@ crypto:
    recipient's key was found, unless the application turned
    `seedNamespaceKeys` off
    ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
-3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
-   `ckKid` (+ `iv`) in `appMetadata`.
+3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under a key derived from
+   the CK and a fresh per-value salt; stamp `ckKid`, `salt` and `iv` in `appMetadata`.
 
 A cross-atSign share therefore writes one ciphertext and two conveyances, the
 recipient's and the sibling copy. An application that wants a separate self-copy

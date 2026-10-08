@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_base2e15/at_base2e15.dart';
@@ -100,15 +101,16 @@ class SymmetricAesGcmProvider
           'an $nskeyCryptoProviderId record before writing data');
     }
 
-    // NOTE: a fresh nonce per value — never reuse a (key, nonce) pair.
+    final salt = _freshSalt();
     final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
-    final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+    final ciphertext = await AesGcm256EncryptionAlgo(valueKeyOf(ck, salt))
         .encrypt(_toBytes(atKey, plaintext), iv: iv, aad: _aad(atKey));
 
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
       additional: {
         'ckKid': ck.ckKid,
+        'salt': base64Encode(salt),
         'iv': base64Encode(iv.ivBytes),
         // NOTE: AtKey.fromString splits at the last dot, so a multi-segment
         // namespace cannot be recovered from the wire string.
@@ -162,13 +164,63 @@ class SymmetricAesGcmProvider
           'conveyance record has not synced, or the key was rotated away');
     }
 
-    final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+    final saltB64 = additional['salt'];
+    if (saltB64 != null && saltB64 is! String) {
+      throw AtDecryptionException(
+          'an $symmetricAesGcmCryptoProviderId value carries a salt that is not '
+          'a string');
+    }
+    final AESKey key;
+    if (saltB64 == null) {
+      // NOTE: a value written before per-value keys existed is encrypted under
+      // the content key itself.
+      key = AESKey(ck.toBase64());
+    } else {
+      final List<int> salt;
+      try {
+        salt = base64Decode(saltB64 as String);
+      } on FormatException catch (e) {
+        throw AtDecryptionException(
+            'an $symmetricAesGcmCryptoProviderId value carries a salt that is '
+            'not base64: ${e.message}');
+      }
+      if (salt.length != saltLength) {
+        throw AtDecryptionException(
+            'an $symmetricAesGcmCryptoProviderId value carries a '
+            '${salt.length}-byte salt, and the salt is $saltLength bytes');
+      }
+      key = valueKeyOf(ck, salt);
+    }
+    final plain = await AesGcm256EncryptionAlgo(key).decrypt(
       Uint8List.fromList(base64Decode(ciphertext)),
       iv: InitialisationVector(Uint8List.fromList(base64Decode(ivB64))),
       aad: _aad(atKey),
     );
     return _fromBytes(atKey, plain);
   }
+
+  /// How many bytes of fresh randomness each value's key is derived with.
+  static const int saltLength = 32;
+
+  static final Random _random = Random.secure();
+
+  static Uint8List _freshSalt() => Uint8List.fromList(
+      List<int>.generate(saltLength, (_) => _random.nextInt(256)));
+
+  /// The HKDF `info` a value key is derived under.
+  static final Uint8List _valueKeyInfo =
+      Uint8List.fromList(utf8.encode('at/symmetric/AES/GCM/value-key/v1'));
+
+  /// The AES key one value is encrypted under: HKDF-SHA256 over [ck], salted
+  /// with that value's own [salt].
+  ///
+  /// A fresh key per value means no `(key, nonce)` pair repeats however many
+  /// values share a content key and however long it stays current, so the
+  /// random-nonce limit on AES-GCM does not bound a content key's use.
+  @visibleForTesting
+  static AESKey valueKeyOf(ContentKey ck, List<int> salt) =>
+      AESKey(base64Encode(HkdfSha256.deriveKey(ck.bytes,
+          salt: Uint8List.fromList(salt), info: _valueKeyInfo, length: 32)));
 
   /// Binds a value's ciphertext to the record it was written under.
   ///

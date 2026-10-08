@@ -427,8 +427,9 @@ per keyfile/install):
     `nskey` and nothing else; self and inbound both seal to the one nskey. The
     `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
     resolved namespace the conveyance lives at.
-  - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv, ns, ckNs}` — application data
-    AES-256-GCM under a CK, cited by `ckKid`. `ns` is the value's own full namespace
+  - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
+    data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
+    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the value's own full namespace
     and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
     whenever resolution walked up.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
@@ -734,7 +735,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `public:__nskey.app_1.my_apps@alice`; `alice1`, `alice2` hold its private.
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
+  1. Cut a symmetric **content key (CK)**; encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`): seal the CK to @alice's **nskey** under the
      KEM that nskey's own advertisement names, and write it as its own CK-conveyance
      record, stamping `appMetadata = {providerId: at/nskey/XWING, recipientKind:
@@ -742,7 +743,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      `alg` is `ml-kem-1024`.
      (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
-     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, iv}`; the value carries
+     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, salt, iv}`; the value carries
      **no** inline sealed CK. Write; sync.
 - **Then:**
   - `alice2` syncs both records: the `at/nskey` provider decapsulates the CK with the
@@ -841,8 +842,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Given:** `@alice` pq-native; `alice1`, `alice2` PQ; `alice2` running a monitor.
 - **When:** `alice1` does `notify` to `@alice` (self) carrying an encrypted value.
 - **Steps:**
-  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a CK
-     (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
+  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a key
+     derived from a CK and a per-value salt (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
      record sealed to the nskey (`recipientKind: nskey`, the only kind).
   2. Stamp `appMetadata.providerId` on the **notification** payload; send `notify:`.
   3. atServer queues/delivers; `alice2`'s monitor receives the notification frame.
@@ -912,7 +913,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   1. `plookup` `public:__nskey.app_1.my_apps@bob`, verify its APKAM signature, and note
      the advertised `nskeyKid`. Cut a symmetric **CK for @bob** — CKs are per
      recipient — or reuse the current one if it was conveyed to that same generation.
-     Encrypt the value with it (AES-256-GCM under the CK).
+     Encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): seal it to **bob's
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
@@ -2048,7 +2049,7 @@ These invariants are testable against **every** UC above:
   an error. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
   `{providerId, recipientKind, ckKid}`; `at/symmetric/AES/GCM` →
-  `{providerId, ckKid, iv}`).
+  `{providerId, ckKid, salt, iv}`).
 - **No RSA in any confidentiality path** for a fully-PQ interaction (auth, enrollment
   conveyance, self, shared, notification).
 - **ML-DSA APKAM auth is record-authoritative.** PQ auth verifies against the

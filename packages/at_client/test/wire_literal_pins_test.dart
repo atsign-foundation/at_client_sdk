@@ -30,6 +30,7 @@ import 'package:at_chops/at_chops.dart'
     show
         AESKey,
         AesGcm256EncryptionAlgo,
+        HkdfSha256,
         RsaKeyPair,
         InitialisationVector,
         MlDsa65PureDartAlgo,
@@ -356,8 +357,9 @@ void main() {
               'binding');
     });
 
-    test('a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>"',
-        () async {
+    test(
+        'a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>" '
+        'under a key derived from the CK and its salt', () async {
       final cache = ContentKeyCache();
       final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
       // _nskeyOwnerOf is sharedWith ?? sharedBy, so the CK scopes to @bob.
@@ -372,20 +374,37 @@ void main() {
       final wire = await provider.encrypt(
           CryptoContext(atClient: atClient), atKey, 'hello');
 
-      final iv = InitialisationVector(Uint8List.fromList(
-          base64Decode(atKey.metadata.appMetadata!.additional!['iv'])));
+      final additional = atKey.metadata.appMetadata!.additional!;
+      final iv = InitialisationVector(
+          Uint8List.fromList(base64Decode(additional['iv'])));
+      // The value key: HKDF-SHA256 over the CK, salted per value, under this
+      // info — written as raw literals so a change to either is a pin edit.
+      final valueKey = AESKey(base64Encode(HkdfSha256.deriveKey(ck.bytes,
+          salt: Uint8List.fromList(base64Decode(additional['salt'])),
+          info: Uint8List.fromList(
+              utf8.encode('at/symmetric/AES/GCM/value-key/v1')),
+          length: 32)));
       final aad = utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.myapp');
-      final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+      final plain = await AesGcm256EncryptionAlgo(valueKey)
           .decrypt(Uint8List.fromList(base64Decode(wire)), iv: iv, aad: aad);
       expect(utf8.decode(plain), 'hello');
 
       await expectLater(
-          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+          AesGcm256EncryptionAlgo(valueKey).decrypt(
               Uint8List.fromList(base64Decode(wire)),
               iv: iv,
               aad: utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.other')),
           throwsA(anything),
           reason: 'the negative control for the AAD arm');
+
+      await expectLater(
+          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+              Uint8List.fromList(base64Decode(wire)),
+              iv: iv,
+              aad: aad),
+          throwsA(anything),
+          reason: 'the negative control for the value key: a value is never '
+              'encrypted under the content key itself');
     });
 
     test('fullNameOf joins key and namespace at a dot', () {
@@ -498,7 +517,8 @@ void main() {
       await provider.encrypt(CryptoContext(atClient: atClient), atKey, 'hello');
 
       final json = atKey.metadata.appMetadata!.toJson();
-      expect(json.keys.toList(), ['providerId', 'ckKid', 'iv', 'ns', 'ckNs']);
+      expect(json.keys.toList(),
+          ['providerId', 'ckKid', 'salt', 'iv', 'ns', 'ckNs']);
       expect(json['providerId'], 'at/symmetric/AES/GCM');
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');

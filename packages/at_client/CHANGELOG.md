@@ -2,6 +2,8 @@
 
 - fix: a secret shared between an atSign's own clients can no longer be filed
   under the wrong namespace or credited to the wrong sender.
+- fix: a post-quantum content key no longer has a limit on how many values it
+  can safely encrypt.
 
 ## 3.15.0-rc5
 
