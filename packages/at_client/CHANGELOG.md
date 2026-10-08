@@ -10,6 +10,8 @@
 - deprecated, to be removed in 4.0: `AtClientImpl.create`'s
   `localSecondaryKeyStore` and `AtClient.persistenceBundle`; pass storage
   instead.
+- deprecated, to be removed in 4.0: `AtClientPreference.keyStoreSecret`, which
+  nothing reads.
 - docs: the SQLite storage writes records to disk in clear; Hive encrypts its
   keystore.
 - fix: local storage the client cannot open, such as a file it may not read,

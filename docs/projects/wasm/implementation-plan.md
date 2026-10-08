@@ -1052,8 +1052,8 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   its own barrel and is passed as `storage:`; outside the backends only
   `default_storage.dart` names Hive, the default until 4.0, and `StorageManager` is folded
   into `HiveAtClientStorage`. (First written as a backend chosen on `AtClientPreference`
-  with an opaque storage location, which D-12 rejected.) What remains is
-  `AtClientPreference.keyStoreSecret`, which nothing reads.
+  with an opaque storage location, which D-12 rejected.)
+  `AtClientPreference.keyStoreSecret`, which nothing reads, is deprecated for 4.0.
 - **I9 — Backend-neutral `AtSyncQueue`.** ✅ Done, #2327 (D-25). `AtSyncQueue` takes a
   `SyncQueueStore` from the storage backend and opens nothing itself; the Hive box store
   lives in the Hive backend and the SQLite one beside it. (First written as building on

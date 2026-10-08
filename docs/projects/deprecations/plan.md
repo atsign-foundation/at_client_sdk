@@ -262,6 +262,9 @@ also deprecated `AtClientImpl.create(localSecondaryKeyStore:)` and
 outside at_client uses either; inside it, 3 test files pass
 `localSecondaryKeyStore` and 1 reads `persistenceBundle`, found by
 `grep -rnE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
+`AtClientPreference.keyStoreSecret` is deprecated beside them, and nothing in
+this tree sets it. at_client 1.0.0 to 3.0.4 passed it to the Hive vault as its
+secret; nothing has read it since 3.0.5 (2021-11-15).
 
 ### F6, the `AtClientPreference` transport fields (declared in at_client)
 

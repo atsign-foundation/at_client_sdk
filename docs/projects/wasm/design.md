@@ -212,7 +212,7 @@ The keystore and its bootstrap are both injectable. A client takes a constructed
 That default still requires `hiveStoragePath` and throws `'Please set local storage path'`
 without it. `StorageManager`, which hard-coded `HiveAtPersistenceFactory()` with no
 constructor parameter, is folded into `HiveAtClientStorage`, and the `keyStoreSecret` it
-accepted and ignored is now read by nothing.
+accepted and ignored is deprecated, read by nothing.
 
 `AtClientImpl.create(..., localSecondaryKeyStore:)`, the bare-keystore route that skipped
 the bootstrap, is deprecated and goes in 4.0; a caller passes storage instead.
@@ -615,7 +615,7 @@ It carries platform-specific configuration as `String?`:
 | `tlsKeysSavePath` | —    | **@Deprecated.** Copied onto `SecureSocketConfig` by `defaultLookUps` (`at_client/lib/src/lifecycle/lookups.dart`), then `File(...).writeAsStringSync` in `SecureSocketUtil`; goes in 4.0 |
 | `pathToCerts`     | —    | **@Deprecated.** The same route, then `SecurityContext.setTrustedCertificates`; goes in 4.0 |
 | `decryptPackets`  | —    | **@Deprecated.** The same route, where it gates the TLS keylog write; goes in 4.0. The replacement for all three is `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:` |
-| `keyStoreSecret`  | 37   | read by nothing; `StorageManager` is gone           |
+| `keyStoreSecret`  | 37   | deprecated; read by nothing                         |
 
 **This is the mechanism by which native-only configuration compiles on web and fails at
 runtime.** A path is a string everywhere; it only stops meaning anything when something
@@ -649,8 +649,8 @@ D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when
 its leg landed and gone in 4.0. `downloadPath` (file transfer,
-[§2.8](#28-filesystem-and-file-transfer)) and `keyStoreSecret` (ignored) are the two not
-yet claimed by a leg.
+[§2.8](#28-filesystem-and-file-transfer)) is the one not yet claimed by a leg;
+`keyStoreSecret`, which nothing reads, is deprecated without one.
 
 ---
 
