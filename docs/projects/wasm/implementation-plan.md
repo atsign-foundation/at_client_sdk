@@ -434,8 +434,7 @@ D-12. Independent of the P series, which is `at_server`-side.
     client. The guard firing is the evidence that the sharing was real and unnoticed.
   - **A child isolate is a separate heap**, so `sync_multiple_client_test`'s two clients
     cannot be handed a bundle at all — that isolate builds its own from the path string it
-    is sent. The third client in that file sets `isLocalStoreRequired` false and opens no
-    local store.
+    is sent. The third client in that file opens on `InMemoryAtClientStorage`.
   - **`setCurrentAtSign` treated any storage argument as a change** and took the
     destructive stop/recreate path, which would have altered the client lifecycle at every
     site the pack touches. Re-offering the bundle a client already holds is now not a
@@ -1049,16 +1048,21 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 - **I7 — Inject an `http.Client` into `file_transfer_service.dart`** (`:14,31,40,50`,
   top-level `http.post`/`get` with no seam). Worth doing independently of I6 — it is
   also the only way to test that service.
-- **I8 — Storage backend selectable from `AtClientPreference`.**
-  `storage_manager.dart:16` hardcodes `HiveAtPersistenceFactory()` and requires
-  `hiveStoragePath`. Introduce the backend choice (`AtPersistenceBackendId` already has
-  `hive` and `sqlite`) and an opaque storage location. Remove the unused
-  `keyStoreSecret` parameter while in the file. Resolve OQ-3 here.
-- **I9 — Backend-neutral `AtSyncQueue`.** Replace the direct `Hive.openBox` at
-  `at_sync_queue.dart:121` with a small spec interface plus Hive and SQLite
-  implementations, building on S3's plumbing.
-- **I10 — Drop the direct `hive: ^2.2.3` dependency** from `at_client`'s pubspec once
-  I8 and I9 land. OQ-9 determines whether this is required or merely tidy.
+- **I8 — The app chooses its storage.** ✅ Done, #2327 (D-25). Each backend comes from
+  its own barrel and is passed as `storage:`; outside the backends only
+  `default_storage.dart` names Hive, the default until 4.0, and `StorageManager` is folded
+  into `HiveAtClientStorage`. (First written as a backend chosen on `AtClientPreference`
+  with an opaque storage location, which D-12 rejected.) What remains is
+  `AtClientPreference.keyStoreSecret`, which nothing reads.
+- **I9 — Backend-neutral `AtSyncQueue`.** ✅ Done, #2327 (D-25). `AtSyncQueue` takes a
+  `SyncQueueStore` from the storage backend and opens nothing itself; the Hive box store
+  lives in the Hive backend and the SQLite one beside it. (First written as building on
+  S3's plumbing, which D-12 superseded.)
+- **I10 — The direct `hive` dependency stays** while `hive.dart` lives in at_client
+  (D-25); every at_client app resolves `hive` through at_persistence_secondary_server
+  anyway. Until 4.0 removes the default seam, core compiles Hive in every build, so OQ-9
+  still decides whether the browser lane can carry it. (First written as dropping the
+  dependency once I8 and I9 landed.)
 - **I11 — Publish `at_client` 4.0.0.** → T0 green, T1, T2.4
 
 ### C — crypto verification

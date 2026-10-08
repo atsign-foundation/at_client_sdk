@@ -254,6 +254,15 @@ own test files set `hiveStoragePath`; those are found by
 location together, with `closedByClient: true` where the client is meant to
 close it.
 
+Since [D-25](../wasm/decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)
+the flag is read only when a client is given no storage, and false is then
+refused, so a 3.x app that sets it false already has to pass storage. D-25
+also deprecated `AtClientImpl.create(localSecondaryKeyStore:)` and
+`AtClient.persistenceBundle`, both removed in 4.0 with the rest. Nothing
+outside at_client uses either; inside it, 3 test files pass
+`localSecondaryKeyStore` and 1 reads `persistenceBundle`, found by
+`grep -rnE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
+
 ### F6, the `AtClientPreference` transport fields (declared in at_client)
 
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
