@@ -47,8 +47,14 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// share nothing, while one atSign under one directory is a single box
   /// however many of these point at it.
   @override
-  String get location =>
-      '${HiveInstances.canonicalPathFor(storagePath)}::$atSign';
+  String get location => locationOf(atSign, storagePath);
+
+  /// The [location] of a store for [atSign] under [storagePath]. With
+  /// [create] false a missing directory is not created, and gives a location
+  /// no open store holds.
+  static String locationOf(String atSign, String storagePath,
+          {bool create = true}) =>
+      '${HiveInstances.canonicalPathFor(storagePath, create: create)}::$atSign';
 
   /// The persistence bundle, or `null` before the first [attach].
   AtPersistenceBundle? get bundle => _bundle;

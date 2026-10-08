@@ -11,7 +11,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 
@@ -144,7 +144,5 @@ String? _locationOf(
   if (!preference.isLocalStoreRequired) return null;
   final path = preference.hiveStoragePath;
   if (path == null) return null;
-  return HiveAtClientStorage(
-          atSign: AtUtils.fixAtSign(atSign), storagePath: path)
-      .location;
+  return defaultStorageLocation(AtUtils.fixAtSign(atSign), path);
 }

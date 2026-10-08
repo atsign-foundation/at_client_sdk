@@ -45,7 +45,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -1017,8 +1017,7 @@ class AtClientImpl implements AtClient {
           if (storagePath == null) {
             throw Exception('Please set local storage path');
           }
-          storage = HiveAtClientStorage(
-              atSign: _atSign, storagePath: storagePath, closedByClient: true);
+          storage = defaultStorageFor(_atSign, storagePath);
         }
         await storage.attach(this);
         _storage = storage;
@@ -1548,10 +1547,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  AtPersistenceBundle? get persistenceBundle {
-    final storage = _storage;
-    return storage is HiveAtClientStorage ? storage.bundle : null;
-  }
+  AtPersistenceBundle? get persistenceBundle => defaultStorageBundle(_storage);
 
   @override
   RemoteSecondary? getRemoteSecondary() {
