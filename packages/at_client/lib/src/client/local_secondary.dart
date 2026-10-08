@@ -133,10 +133,12 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      // NOTE: a null storagePath is legal — a LocalSecondary built around an
-      // injected keystore has no hiveStoragePath.
-      final q = await openDefaultSyncQueue(atSign,
-          storagePath: _atClient.getPreferences()?.hiveStoragePath);
+      final storagePath = _atClient.getPreferences()?.hiveStoragePath;
+      if (storagePath == null) {
+        throw StateError('the client for $atSign was built on a bare keystore '
+            'with no hiveStoragePath, so its sync queue has nowhere to live');
+      }
+      final q = await openDefaultSyncQueue(atSign, storagePath: storagePath);
       _syncQueue = q;
       return q;
     }();

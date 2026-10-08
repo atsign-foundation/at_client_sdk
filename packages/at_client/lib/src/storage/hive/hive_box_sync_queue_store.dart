@@ -28,17 +28,11 @@ class HiveBoxSyncQueueStore implements SyncQueueStore {
   Future<void> close() => _box.close();
 }
 
-/// [atSign]'s sync queue, open on its box under [storagePath], or on Hive's
-/// global instance when that is null.
-///
-/// The global instance must already be initialised, as the keystore's own
-/// open does; this never calls `Hive.init` itself.
+/// [atSign]'s sync queue, open on its box under [storagePath].
 Future<AtSyncQueue> openHiveSyncQueue(String atSign,
-    {required String? storagePath}) async {
-  final HiveInterface hive =
-      storagePath == null ? Hive : HiveInstances.forPath(storagePath);
-  final box = await openReportingOnce(
-      () => hive.openBox<String>(HiveBoxSyncQueueStore.boxNameFor(atSign)));
+    {required String storagePath}) async {
+  final box = await openReportingOnce(() => HiveInstances.forPath(storagePath)
+      .openBox<String>(HiveBoxSyncQueueStore.boxNameFor(atSign)));
   final queue = AtSyncQueue(atSign: atSign);
   await queue.open(store: HiveBoxSyncQueueStore(box));
   return queue;

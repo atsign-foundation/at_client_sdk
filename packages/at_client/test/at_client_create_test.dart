@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/hive.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -9,6 +10,7 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
+import 'storage/storage_contract.dart' show FakeClient;
 import 'test_utils/no_op_services.dart';
 
 void main() {
@@ -283,6 +285,20 @@ void main() {
             contains('package:at_client/memory.dart'))),
         reason: 'every client keeps local storage, so the refusal names the '
             'storage to pass for one with nothing to keep');
+  });
+
+  test('a bare keystore with no hiveStoragePath is refused', () async {
+    final keys = InMemoryAtClientStorage(atSign: '@factorybare');
+    await keys.attach(FakeClient('@factorybare', null));
+    addTearDown(keys.close);
+    await expectLater(
+        () => AtClientImpl.create('@factorybare', 'wavi', AtClientPreference(),
+            localSecondaryKeyStore: keys.keyStore),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
+        reason: 'the sync queue of a client built on a bare keystore lives '
+            'under preference.hiveStoragePath; with none it would open on '
+            'Hive\'s global instance, which is wherever that last pointed');
   });
 
   test('a client that fails to build is not left behind', () async {

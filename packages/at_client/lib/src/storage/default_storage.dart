@@ -24,8 +24,8 @@ AtPersistenceBundle? defaultStorageBundle(AtClientStorage? storage) =>
     storage is HiveAtClientStorage ? storage.bundle : null;
 
 /// [atSign]'s sync queue for a client built around a bare keystore, which has
-/// no storage of its own to hold one: on the default storage's queue box
-/// under [storagePath], or on Hive's global instance when that is null.
+/// no storage of its own to hold one: the default storage's queue box under
+/// [storagePath].
 Future<AtSyncQueue> openDefaultSyncQueue(String atSign,
-        {required String? storagePath}) =>
+        {required String storagePath}) =>
     openHiveSyncQueue(atSign, storagePath: storagePath);

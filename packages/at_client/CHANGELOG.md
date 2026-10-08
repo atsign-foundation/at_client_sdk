@@ -7,6 +7,8 @@
 - BREAKING: a client with `isLocalStoreRequired` false and no storage is
   refused; pass one such as `InMemoryAtClientStorage`. Storage an app passes is
   now always used.
+- BREAKING: a client built on the deprecated `localSecondaryKeyStore` with no
+  `hiveStoragePath` is refused; set the path, or pass a storage.
 - deprecated, to be removed in 4.0: `AtClientImpl.create`'s
   `localSecondaryKeyStore` and `AtClient.persistenceBundle`; pass storage
   instead.

@@ -880,6 +880,13 @@ class AtClientImpl implements AtClient {
               'package:at_client/memory.dart, keeps nothing on disk',
           'preference.isLocalStoreRequired');
     }
+    if (localSecondaryKeyStore != null && preference.hiveStoragePath == null) {
+      throw ArgumentError(
+          'a client built on a bare keystore holds its sync queue under '
+              'preference.hiveStoragePath, and $theAtSign names none. Set it, '
+              'or pass a storage instead of the keystore',
+          'preference.hiveStoragePath');
+    }
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');

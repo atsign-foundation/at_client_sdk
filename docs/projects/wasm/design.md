@@ -344,9 +344,10 @@ carries a variant that opens on `HiveInstances.forPath(path)` when the preferenc
 path, falling back to the global instance; the X3 merge-back has to keep both.)
 
 A queue is still opened lazily from `LocalSecondary._ensureSyncQueueOpen()`, but only on
-the deprecated bare-keystore route, through the default seam's `openDefaultSyncQueue`.
-That it assumes something already called `Hive.init` is stated on `openHiveSyncQueue`; it
-is an implicit global contract, not an enforced one, and it goes with the route in 4.0.
+the deprecated bare-keystore route, through the default seam's `openDefaultSyncQueue`, and
+only under the preference's `hiveStoragePath`: a bare keystore with no path is refused at
+construction, so nothing in at_client opens a box on Hive's global instance. The route goes
+in 4.0.
 
 Consequences, before D-25: it fired on the first `put` or `syncQueueSize`, not at
 construction; it compiled everywhere; and injecting a keystore to bypass `StorageManager`
