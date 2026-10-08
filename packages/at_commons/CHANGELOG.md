@@ -1,3 +1,9 @@
+## 5.21.0
+
+- feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
+  atServer's `info` lists text notifications; an atServer that refuses them
+  lists it as `Retired`.
+
 ## 5.20.0
 
 - feat: `AtConstants.atTelemetrySigningPrivateKey`
