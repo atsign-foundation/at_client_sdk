@@ -136,8 +136,7 @@ void main() {
 
   for (final MapEntry(key: whose, value: build) in builders.entries) {
     group('$whose filing', () {
-      test('files an arriving private under the KEM its generation names',
-          () async {
+      test('files an arriving private under its KEM', () async {
         final c = client();
         final conveyed = await published(c);
         final keys = await emptyKeys();

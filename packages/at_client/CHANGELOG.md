@@ -1,9 +1,11 @@
 ## 3.15.0-rc6
 
 - fix: an enrollment sent an ML-KEM-1024 namespace key can read that
-  namespace, and a namespace key matching nothing published is refused.
+  namespace, and a namespace key that doesn't match the one its atSign
+  publishes is refused.
 - fix: a link vouching for an enrollment's signing key is published as soon
-  as it arrives, and one not yet published survives a restart.
+  as it arrives, and one not yet published is kept in a typed keyfile across
+  a restart.
 - build: requires `at_auth` ^4.0.0-rc5.
 
 ## 3.15.0-rc5

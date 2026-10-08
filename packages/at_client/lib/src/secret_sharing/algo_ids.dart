@@ -142,8 +142,8 @@ class SecretSharingAlgos {
   /// The key algorithm whose seeds are [length] bytes, or null when no
   /// algorithm this build implements has seeds that long.
   ///
-  /// Unambiguous because the seeds differ in length. Must stay in step with
-  /// [kemFor].
+  /// Unambiguous only while no two KEMs [kemFor] implements share a seed
+  /// length, which a test holds. Must stay in step with [kemFor].
   static String? keyAlgoForSeedLength(int length) => switch (length) {
         XWingPureDartAlgo.seedLength => xWing,
         MlKem1024PureDartAlgo.seedLength => mlKem1024,

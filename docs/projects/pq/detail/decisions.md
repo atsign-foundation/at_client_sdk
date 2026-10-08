@@ -15039,19 +15039,26 @@ Gary ruled the fix knowing that.
   restart.
 - `publishPendingLink` stamps a filed link as well as one in the secret store.
   It drops a filed link once it is stamped, or once it never can be: it names
-  another enrollment, vouches for another key, or is a root link that does not
-  verify. One that cannot be stamped for now (no readable `_apsk`, no published
-  signing root, a check that threw) stays filed for the next attempt.
+  another enrollment or vouches for another key; it is a chain link whose
+  signature fails or whose signer's `_apsk` is withdrawn or gone; or it is a
+  root link that is malformed or does not verify. It drops only the link it
+  stamped, so one filed meanwhile stays. One that cannot be stamped for now (no
+  readable `_apsk`, no published signing root, a chain-link check that failed
+  for some other reason, such as the network) stays filed for the next attempt.
+- A link the keyfile cannot hold is still stamped from the secret store, and a
+  keyfile that cannot be written keeps the envelope until the next start.
 - A link is not kept after stamping. It signs the `_apsk` value, so after a
   rewrite under a new key the old link vouches for nothing and only a new one
   will do.
 
 The sweep still conveys root links only, as
 [67](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10) has it. A sweep re-sending a missing
-chain link was ruled on 2026-10-07 and withdrawn on 2026-10-08: with links filed
-as they arrive, a chain link is lost only on a keyfile with no entry for its
-enrollment, and a root-holder's sweep anchors any enrollment with no root link,
-chain-linked or not.
+chain link was ruled on 2026-10-07 and withdrawn on 2026-10-08, because a
+root-holder's sweep anchors any enrollment with no root link, chain-linked or
+not, and filing as links arrive closes most of the loss. A chain link is still
+lost where it cannot be filed: a legacy keyfile with no entry for its
+enrollment, a client whose startup does not publish links, or a writer that
+drops the field, such as at_auth before 4.0.0-rc5.
 
 Pinned by `test/pq_signing_chain_filed_links_test.dart`, and for the keyfile by
 at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
@@ -15062,8 +15069,8 @@ at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
 **Decided by gkc on 2026-10-07 and 2026-10-08.** A filing checks an arriving
 nskey seed against the generation its atSign publishes, and learns from that
 generation which KEM the seed is for. Only `collectConveyedKeyMaterial` supplied
-that lookup, and only when it had no ring of its own, while every arriving
-private went through the start-up bootstrap's filing, which had none. With no
+that lookup, and only when its ring carried no filing of its own, while every
+arriving private went through the start-up bootstrap's filing, which had none. With no
 lookup the filing assumed X-Wing and checked nothing. A test written before the
 fix observed both: an ML-KEM-1024 seed was filed as X-Wing, which leaves its
 namespace unopenable on that enrollment, and a seed deriving nothing published
@@ -15074,8 +15081,9 @@ over the ring it works with. A private whose kid the current generation does not
 carry, such as an earlier generation's after a rotation, has nothing published
 to compare against, so its seed's length names the KEM: X-Wing takes exactly 32
 bytes and ML-KEM-1024 exactly 64 (measured), and any other length is refused.
-Only fleets that configure ML-KEM-1024 meet the mislabelling; every built-in
-posture mints X-Wing.
+Such a private is filed unchecked, as it was before. A test holds that no two
+KEMs `kemFor` implements share a seed length. Only fleets that configure
+ML-KEM-1024 meet the mislabelling; every built-in posture mints X-Wing.
 
 Pinned by `test/nskey_filing_published_key_test.dart`, for the start-up
 bootstrap's filing, a key ring's own and a rotation's, and by the seed-length

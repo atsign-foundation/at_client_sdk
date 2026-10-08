@@ -332,6 +332,20 @@ void main() {
     test('an unimplemented algorithm states no key length either', () {
       expect(SecretSharingAlgos.publicKeyLengthFor('kyber-1024-v9'), isNull);
     });
+
+    test('every algorithm with a KEM has a seed length no other one shares',
+        () {
+      final byLength = <int, String>{};
+      for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+        final length = SecretSharingAlgos.kemFor(keyAlgo)!.newSeed().length;
+        expect(byLength[length], isNull,
+            reason: '$keyAlgo and ${byLength[length]} both take $length-byte '
+                'seeds, so a seed filed with nothing published to name its '
+                'KEM would be labelled by guesswork');
+        byLength[length] = keyAlgo;
+        expect(SecretSharingAlgos.keyAlgoForSeedLength(length), keyAlgo);
+      }
+    });
   });
 
   group('the crypto config registers a conveyance provider per KEM', () {

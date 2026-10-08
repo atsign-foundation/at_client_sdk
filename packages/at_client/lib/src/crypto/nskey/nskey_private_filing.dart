@@ -191,10 +191,10 @@ class NskeyPrivateFiling {
     // NOTE: an arriving seed carries no algorithm, so the ENTRY under this kid
     // names it — never the document's own `alg`, which answers for whichever
     // entry a sender with no preference would take and would expand the seed
-    // under the wrong KEM. A generation carrying no entry under this kid still
-    // falls back to that single-key answer, so the seed is compared against
-    // the key peers actually seal to and refused rather than filed. With
-    // nothing published to name it, the seed's length does.
+    // under the wrong KEM. A lookup that answers with a generation carrying no
+    // entry under this kid falls back to that single-key answer; the one
+    // `checkedAgainst` builds answers null instead, and with nothing published
+    // to name the KEM the seed's length does.
     final entry = advertised == null
         ? null
         : (advertised.entryWithKid(nskeyKid) ??
