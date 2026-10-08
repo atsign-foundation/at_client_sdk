@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0.0-rc5
+
+- fix: keychain writes made at the same moment, for one atSign or several, no
+  longer lose each other's keys.
+- build: requires `at_auth` ^4.0.0-rc5.
+
 ## 2.0.0-rc4
 
 - fix: an atSign that an app built on at_client_mobile saved to the keychain

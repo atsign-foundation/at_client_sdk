@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
@@ -6,6 +8,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysValidationException,
         WrittenAtKeysIo;
 import 'package:at_commons/at_commons.dart';
+import 'package:mutex/mutex.dart';
 
 import 'keychain_storage.dart';
 
@@ -14,6 +17,10 @@ import 'keychain_storage.dart';
 ///
 /// This is the main class to interact with keychain for storing and retrieving AtKeys
 class KeychainAtKeysIo extends WrittenAtKeysIo {
+  // NOTE: one lock for every instance and every atSign. The keychain keeps all
+  // atSigns' keys in a single entry, so any two writes overwrite each other.
+  static final _writing = Mutex();
+
   KeychainStorage keychainStorage;
   KeychainAtKeysIo({KeychainStorage? keychainStorage})
     : keychainStorage = keychainStorage ?? KeychainStorage();
@@ -37,22 +44,44 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   }
 
   @override
-  Future<void> write(String atSign, AtKeys atKeys) async {
-    // NOTE: create-only. The underlying store appends and `read` answers with
-    // the first matching entry, so a second write for the same atSign would
-    // leave the newer keys unreachable.
-    if (await _existing(atSign) != null) {
-      throw AtKeysFileOverwriteException(
-        'Tried writing $atSign to the keychain, but failed since it already '
-        'has an entry. Use flush() to persist a change to existing keys.',
-      );
-    }
-    _stampAtSign(atSign, atKeys);
-    await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
-  }
+  Future<void> write(String atSign, AtKeys atKeys) => _writing.protect(
+    () async {
+      // NOTE: create-only. The underlying store appends and `read` answers with
+      // the first matching entry, so a second write for the same atSign would
+      // leave the newer keys unreachable.
+      if (await _existing(atSign) != null) {
+        throw AtKeysFileOverwriteException(
+          'Tried writing $atSign to the keychain, but failed since it already '
+          'has an entry. Use flush() to persist a change to existing keys.',
+        );
+      }
+      _stampAtSign(atSign, atKeys);
+      await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
+    },
+  );
 
   @override
-  Future<void> flush(Atsign atsign, AtKeys atKeys) async {
+  Future<void> flush(Atsign atsign, AtKeys atKeys) =>
+      _writing.protect(() => _flush(atsign, atKeys));
+
+  /// Reads [atsign]'s keys, applies [mutate] and writes the result, holding
+  /// the lock [write] and [flush] take across all three.
+  ///
+  /// Without it, an update that read before another one wrote would write back
+  /// keys missing that one's change. The never-lose check refuses that for key
+  /// material, but nothing refuses it for a link. The lock does not reach
+  /// another isolate.
+  @override
+  Future<void> update(
+    Atsign atsign,
+    FutureOr<bool> Function(AtKeys keys) mutate,
+  ) => _writing.protect(() async {
+    final keys = await read(atsign.toString());
+    if (await mutate(keys) == false) return;
+    await _flush(atsign, keys);
+  });
+
+  Future<void> _flush(Atsign atsign, AtKeys atKeys) async {
     final atSign = atsign.toString();
     _stampAtSign(atSign, atKeys);
     await keychainStorage.updateAtKeysInKeychain(

@@ -15058,11 +15058,20 @@ root-holder's sweep anchors any enrollment with no root link, chain-linked or
 not, and filing as links arrive closes most of the loss. A chain link is still
 lost where it cannot be filed: a legacy keyfile with no entry for its
 enrollment, a client whose startup does not publish links, or a writer that
-drops the field, such as at_auth before 4.0.0-rc5.
+drops the field, such as at_auth before 4.0.0-rc5. at_onboarding_cli,
+at_cli_commons and at_client_flutter require 4.0.0-rc5 for that reason.
 
-Pinned by `test/pq_signing_chain_filed_links_test.dart`, and for the keyfile by
+A filed link is also lost to a write that read the keys before the link was
+filed, since the never-lose check covers key material and not links. Both
+stores therefore serialise their writes: the keyfile with its lock file, and
+at_client_flutter's keychain with one in-memory lock for every atSign, because
+the keychain holds every atSign's keys in one entry. The keychain's lock does
+not reach another isolate.
+
+Pinned by `test/pq_signing_chain_filed_links_test.dart`, for the keyfile by
 at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
-`at_keys_test.dart`.
+`at_keys_test.dart`, and for the keychain by at_client_flutter's
+`keychain_io_impl_test.dart`.
 
 ## 153. An arriving nskey private is checked against what is published, else named by its length (2026-10-08)
 

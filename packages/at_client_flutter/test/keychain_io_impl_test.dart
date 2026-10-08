@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -187,6 +188,142 @@ void main() {
         throwsA(isA<AtKeysAssuranceException>()),
       );
       expect(blob, before, reason: 'a refused flush must not have written');
+    },
+  );
+
+  /// Holds the next keychain write until [release] completes, answering once
+  /// it is held: its writer has read the keychain and its write has not
+  /// landed.
+  Future<void> parkNextWrite(Future<void> release) {
+    final held = Completer<void>();
+    when(() => file.write(any())).thenAnswer((invocation) async {
+      if (!held.isCompleted) {
+        held.complete();
+        await release;
+      }
+      blob = invocation.positionalArguments[0] as String;
+    });
+    return held.future;
+  }
+
+  bool holdsWavi(AtKeys keys) =>
+      keys.getAtSignKey(
+        'nskey.wavi',
+        CryptographicMaterialRole.symmetricEncryption,
+      ) !=
+      null;
+
+  test(
+    'two concurrent updates, through two instances, each keep what the other '
+    'filed',
+    () async {
+      await io.write(
+        '@alice',
+        AtKeys(atsign: '@alice'.toAtsign())..addKey(
+          CryptographicMaterial(
+            keyId: 'sign:mldsa65:1',
+            enrollmentId: 'E1',
+            role: CryptographicMaterialRole.publicVerification,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString('UFVC'),
+            createdAt: DateTime.utc(2026, 6, 11),
+          ),
+        ),
+      );
+      final gate = Completer<void>();
+
+      final adding = io.update('@alice'.toAtsign(), (keys) async {
+        await gate.future;
+        keys.addKey(material('nskey.wavi'));
+        return true;
+      });
+      final linking =
+          KeychainAtKeysIo(
+            keychainStorage: KeychainStorage()..biometricStorage = storage,
+          ).update(
+            '@alice'.toAtsign(),
+            (keys) => keys.fileLink('E1', 'apskChainLink', {'v': 1}),
+          );
+      await pumpEventQueue();
+      gate.complete();
+      await Future.wait([adding, linking]);
+
+      final reread = await io.read('@alice');
+      expect(
+        reread.linkFor('E1', 'apskChainLink'),
+        {'v': 1},
+        reason:
+            'an update that read before the link was filed and wrote after '
+            'it erases the link, and nothing refuses that: the never-lose '
+            'check covers key material, not links',
+      );
+      expect(
+        reread.getAtSignKey(
+          'nskey.wavi',
+          CryptographicMaterialRole.symmetricEncryption,
+        ),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'a flush for one atSign is not undone by an update of another',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+      await io.write('@bob', keysFor('@bob'));
+      final bob = await io.read('@bob');
+      bob.addKey(material('nskey.wavi'));
+      final release = Completer<void>();
+      final held = parkNextWrite(release.future);
+
+      final updating = io.update('@alice'.toAtsign(), (keys) {
+        keys.addKey(material('nskey.wavi'));
+        return true;
+      });
+      await held;
+      final flushing = io.flush('@bob'.toAtsign(), bob);
+      await pumpEventQueue();
+      release.complete();
+      await Future.wait([updating, flushing]);
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      expect(
+        holdsWavi(await io.read('@bob')),
+        isTrue,
+        reason:
+            'the keychain keeps every atSign in one entry, so a write that '
+            'read it before another landed puts back the entry without that '
+            'one, and the never-lose check only compares its own atSign',
+      );
+    },
+  );
+
+  test(
+    'a write for one atSign is not undone by an update of another',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+      final release = Completer<void>();
+      final held = parkNextWrite(release.future);
+
+      final updating = io.update('@alice'.toAtsign(), (keys) {
+        keys.addKey(material('nskey.wavi'));
+        return true;
+      });
+      await held;
+      final writing = io.write('@bob', keysFor('@bob'));
+      await pumpEventQueue();
+      release.complete();
+      await Future.wait([updating, writing]);
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      expect(
+        entryCount(),
+        2,
+        reason:
+            'an atSign onboarded while another\'s keys are being written '
+            'must not be dropped from the keychain',
+      );
     },
   );
 
