@@ -32,24 +32,12 @@ class FakeAtLookUp implements AtLookupMuxable {
   dynamic noSuchMethod(Invocation invocation) {}
 }
 
-/// Hands out a fresh [FakeAtLookUp] per call, throwing instead on the calls
-/// numbered in [failOn] (1-based).
-class FakeLookUps {
-  FakeLookUps({this.failOn = const {}});
-
-  final Set<int> failOn;
-  int calls = 0;
-
-  AtLookupMuxable call(
-      {required String atSign,
-      required AtRootDomain rootDomain,
-      required AtAuthenticator? authenticator,
-      SecondaryAddressFinder? secondaryAddressFinder}) {
-    calls++;
-    if (failOn.contains(calls)) throw Exception('socket dropped');
-    return FakeAtLookUp()..authenticator = authenticator;
-  }
-}
+AtLookupMuxable fakeLookUps(
+        {required String atSign,
+        required AtRootDomain rootDomain,
+        required AtAuthenticator? authenticator,
+        SecondaryAddressFinder? secondaryAddressFinder}) =>
+    FakeAtLookUp()..authenticator = authenticator;
 
 class FakeServerCopy implements ServerCopy {
   final Map<String, Uint8List> data = {};
@@ -319,7 +307,7 @@ void main() {
     final prf = FakePasskeyPort().secret;
     final other = FakePasskeyPort(seed: 50).secret;
 
-    Future<void> healNow() => heal(
+    Future<HealOutcome> healNow() => heal(
         atSign: _atSign,
         app: _app,
         store: store,
@@ -331,8 +319,7 @@ void main() {
       server.seed(await sealFor(other));
       await store.put(_atSign, await withUnlockFor(server.held!, other, prf));
 
-      await healNow();
-
+      expect(await healNow(), HealOutcome.healed);
       expect(server.puts, 1);
       expect(await opens(server.held, prf), isTrue);
       expect(await opens(server.held, other), isTrue);
@@ -342,8 +329,12 @@ void main() {
       server.seed(await sealFor(prf));
       await store.put(_atSign, server.held!);
 
-      await healNow();
+      expect(await healNow(), HealOutcome.alreadyPresent);
+      expect(server.puts, 0);
+    });
 
+    test('writes nothing when the device has no copy', () async {
+      expect(await healNow(), HealOutcome.missingCopy);
       expect(server.puts, 0);
     });
 
@@ -352,8 +343,7 @@ void main() {
       server.seed(stale);
       await store.put(_atSign, await sealFor(prf));
 
-      await healNow();
-
+      expect(await healNow(), HealOutcome.contentKeyMismatch);
       expect(server.puts, 0);
       expect(server.held, stale);
     });
@@ -364,23 +354,27 @@ void main() {
       ..namespace = _app
       ..monitorAutoStart = false;
 
-    test('Mode E retries after a dropped socket with fresh keys', () async {
-      final lookUps = FakeLookUps(failOn: {2});
+    test('Mode E retries cleanly after a start that failed past storage attach',
+        () async {
+      final failing = AtClientPreference()
+        ..namespace = _app
+        ..monitorAutoStart = false
+        ..crypto = CryptoConfig(defaultProviderId: 'missing');
 
-      Future<AtClient> attempt() => ephemeralSession(
+      Future<AtClient> attempt(AtClientPreference p) => ephemeralSession(
           atSign: _atSign,
           app: _app,
           atKeys: keys,
-          prefs: prefs,
-          lookUps: lookUps.call,
+          prefs: p,
+          lookUps: fakeLookUps,
           secondaryAddressFinder: _finder);
 
-      await expectLater(attempt(), throwsException);
-      final client = await attempt();
+      await expectLater(
+          attempt(failing), throwsA(isA<CryptoProviderNotRegistered>()));
+      final client = await attempt(prefs);
 
       expect(
           (client as AtClientImpl).storage, isA<RemoteOnlyAtClientStorage>());
-      expect(lookUps.calls, greaterThan(2));
     });
 
     test('Mode E storage is remote-only and authenticates', () async {
@@ -389,7 +383,7 @@ void main() {
           app: _app,
           atKeys: keys,
           prefs: prefs,
-          lookUps: FakeLookUps().call,
+          lookUps: fakeLookUps,
           secondaryAddressFinder: _finder);
 
       final storage =
@@ -404,7 +398,7 @@ void main() {
         atSign: _atSign,
         app: _app,
         prefs: prefs,
-        lookUps: FakeLookUps().call,
+        lookUps: fakeLookUps,
         secondaryAddressFinder: _finder,
         store: store,
         kek: PasskeyKek(port),

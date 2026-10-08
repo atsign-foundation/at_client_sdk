@@ -2,7 +2,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/remote_only.dart';
 
 /// An [AtClient] for [atSign] holding no local replica: its storage writes
-/// through an authenticated [RemoteSecondary] over [lookUps].
+/// through the client's own authenticated [RemoteSecondary] over [lookUps],
+/// so the client's stop closes the one connection both use.
 Future<AtClient> remoteOnlyClient({
   required String atSign,
   required String app,
@@ -12,6 +13,11 @@ Future<AtClient> remoteOnlyClient({
   required SecondaryAddressFinder secondaryAddressFinder,
 }) async {
   final keys = await keysIo.read(atSign);
+  final remote = RemoteSecondary(atSign, prefs,
+      atKeysIo: keysIo,
+      lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder,
+      enrollmentId: keys.enrollmentToAuthenticateAs());
   return AtClientImpl.create(
     atSign,
     app,
@@ -19,17 +25,8 @@ Future<AtClient> remoteOnlyClient({
     atKeysIo: keysIo,
     lookUps: lookUps,
     secondaryAddressFinder: secondaryAddressFinder,
+    remoteSecondary: remote,
     storage: RemoteOnlyAtClientStorage(
-      atSign: atSign,
-      closedByClient: true,
-      remoteSecondary: RemoteSecondary(
-        atSign,
-        prefs,
-        atKeysIo: keysIo,
-        lookUps: lookUps,
-        secondaryAddressFinder: secondaryAddressFinder,
-        enrollmentId: keys.enrollmentToAuthenticateAs(),
-      ),
-    ),
+        atSign: atSign, remoteSecondary: remote, closedByClient: true),
   );
 }
