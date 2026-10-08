@@ -159,6 +159,29 @@ void main() {
         expect(await filing.read(namespace, conveyed.kid), isNotNull);
       });
 
+      test(
+          'files an earlier generation\'s private, its kid no longer '
+          'published, under the KEM its seed names', () async {
+        final c = client();
+        await published(c);
+        final keys = await emptyKeys();
+        final filing = build(c, keys);
+        final earlier = Uint8List.fromList(
+            List<int>.generate(64, (_) => Random.secure().nextInt(256)));
+
+        final stored = await filing.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-earlier',
+            value: base64Encode(earlier)));
+
+        expect(stored, isTrue);
+        final material = (await keys.read(atSign)).getAtSignKey(
+            NskeyPrivateFiling.keyIdFor(namespace, 'kid-earlier'),
+            CryptographicMaterialRole.privateDecapsulation);
+        expect(SecretSharingAlgos.keyAlgoForMaterial(material!.algorithm),
+            SecretSharingAlgos.mlKem1024);
+      });
+
       test('refuses an arriving private that does not derive the published key',
           () async {
         final c = client();

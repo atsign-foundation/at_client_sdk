@@ -17,7 +17,9 @@ void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
 
-  final privateBytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
+  // NOTE: an X-Wing seed's length. Nothing is published to name a KEM in
+  // most tests here, so the seed's length is what names it.
+  final privateBytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
 
   Future<(InMemoryAtKeysIo, NskeyPrivateFiling)> filing() async {
     final io = InMemoryAtKeysIo();
@@ -75,6 +77,41 @@ void main() {
     expect(await filer.file(nskeySecret('kid-one')), isFalse,
         reason: 'the substrate converges by re-sending, so arrival has to be '
             'idempotent — AtKeys.addKey rejects a duplicate outright');
+  });
+
+  test('with nothing published, a seed is filed under the KEM its length names',
+      () async {
+    final (io, filer) = await filing();
+    final mlKemSeed = Uint8List.fromList(List<int>.generate(64, (i) => i));
+
+    expect(
+        await filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-earlier',
+            value: base64Encode(mlKemSeed))),
+        isTrue);
+
+    final material = (await io.read(atSign)).getAtSignKey(
+        NskeyPrivateFiling.keyIdFor(namespace, 'kid-earlier'),
+        CryptographicMaterialRole.privateDecapsulation);
+    expect(material!.algorithm, CryptographicMaterialAlgorithm.mlKem1024,
+        reason: 'an earlier generation is no longer published, and filing its '
+            'ML-KEM-1024 seed as X-Wing leaves it unopenable');
+  });
+
+  test('with nothing published, a seed of no KEM\'s length is refused',
+      () async {
+    final (io, filer) = await filing();
+
+    expect(
+        await filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-odd',
+            value: base64Encode(Uint8List(48)))),
+        isFalse,
+        reason: 'no KEM this build has could expand it, so a namespace it '
+            'claims to open would read as corrupt data instead');
+    expect((await io.read(atSign)).keys, isEmpty);
   });
 
   test('a private with no kid in its name is refused', () async {

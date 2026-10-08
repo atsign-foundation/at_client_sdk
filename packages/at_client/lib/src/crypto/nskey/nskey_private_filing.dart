@@ -192,12 +192,20 @@ class NskeyPrivateFiling {
     // entry a sender with no preference would take and would expand the seed
     // under the wrong KEM. A generation carrying no entry under this kid still
     // falls back to that single-key answer, so the seed is compared against
-    // the key peers actually seal to and refused rather than filed.
+    // the key peers actually seal to and refused rather than filed. With
+    // nothing published to name it, the seed's length does.
     final entry = advertised == null
         ? null
         : (advertised.entryWithKid(nskeyKid) ??
             advertised.usableFor(SecretSharingAlgos.keyAlgos));
-    final keyAlgo = entry?.alg ?? SecretSharingAlgos.xWing;
+    final keyAlgo = entry?.alg ??
+        SecretSharingAlgos.keyAlgoForSeedLength(seed.bytes.length);
+    if (keyAlgo == null) {
+      _logger.severe('Refusing the nskey private for ${secret.namespace}:'
+          '$nskeyKid — nothing published names its KEM, and at '
+          '${seed.bytes.length} bytes it is a seed for none this build has');
+      return false;
+    }
     if (!await _corresponds(secret.namespace, nskeyKid, seed, keyAlgo, entry)) {
       return false;
     }
