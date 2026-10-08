@@ -46,13 +46,26 @@ Future<AtClient> portalSession({
   final prf = keys.prf;
   if (prf != null) {
     try {
-      await heal(
+      final outcome = await heal(
           atSign: atSign,
           app: app,
           store: store,
           server: server,
           prf: prf,
           codec: codec);
+      switch (outcome) {
+        case HealOutcome.healed:
+          _logger.info('added this device\'s passkey unlock to the server '
+              'copy of $atSign\'s keys for $app');
+        case HealOutcome.alreadyPresent:
+          break;
+        case HealOutcome.contentKeyMismatch:
+          _logger.warning('the server copy of $atSign\'s keys for $app is '
+              'sealed under a different content key from this device\'s copy');
+        case HealOutcome.missingCopy:
+          _logger.severe('no device or server copy of $atSign\'s keys for '
+              '$app after acquiring them');
+      }
     } on Exception catch (e) {
       _logger.warning('could not heal the server copy of $atSign\'s keys '
           'for $app: $e');
