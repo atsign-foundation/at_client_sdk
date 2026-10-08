@@ -41,6 +41,13 @@ void main() {
     return LocalSecondary(atClient, syncQueue: syncQueue);
   }
 
+  /// Empties [storageDir], which other test files share and can leave
+  /// holding this atSign's queue, so a test starts from nothing.
+  void clearStorageDir() {
+    final dir = Directory(storageDir);
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  }
+
   Future<void> tearDownLocalSecondary() async {
     try {
       // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
@@ -58,15 +65,14 @@ void main() {
       await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      final dir = Directory(storageDir);
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
+      clearStorageDir();
     } catch (e) {
       print('teardown error: $e');
     }
   }
 
   group('LocalSecondary sync-queue enqueue', () {
-    setUp(() async {});
+    setUp(clearStorageDir);
     tearDown(() async => await tearDownLocalSecondary());
 
     test('public key write enqueues with op=updateAll', () async {
@@ -331,7 +337,10 @@ void main() {
   group('LocalSecondary sync-queue failures', () {
     final logs = RecordedLogs();
     setUpAll(() => logs.installOn());
-    setUp(() => logs.records.clear());
+    setUp(() {
+      clearStorageDir();
+      logs.records.clear();
+    });
     tearDown(() async => await tearDownLocalSecondary());
 
     UpdateVerbBuilder publicEmail() => UpdateVerbBuilder()
