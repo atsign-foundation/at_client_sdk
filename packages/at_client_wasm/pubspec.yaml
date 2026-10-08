@@ -1,0 +1,22 @@
+name: at_client_wasm
+publish_to: none
+version: 0.1.0
+description: Browser storage for at_client
+resolution: workspace
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  at_client: ^3.15.0-rc1
+  at_commons: ^5.18.0
+  at_persistence_secondary_server: ^5.3.0
+  web: ^1.1.0
+
+dev_dependencies:
+  test: ^1.25.0
+  mocktail: ^1.0.4
+  sqlite3: ^2.9.4
+  lints: ^6.0.0
+  at_demo_data: ^1.2.0
+  at_lookup: ^3.7.0-rc2
