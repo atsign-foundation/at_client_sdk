@@ -1,7 +1,7 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/connection/at_connection.dart';
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -76,8 +76,8 @@ abstract interface class AtLookUp {
   /// returns null into a non-nullable type **at runtime only**, with
   /// `dart analyze` clean.
   ///
-  /// Named for its transport, so a differently-transported factory can join it
-  /// later rather than this one growing a mode flag.
+  /// [withTransport] is the same factory under a transport-neutral name, for a
+  /// [transport] that is not a socket.
   ///
   /// [authenticator] is required and nullable, which is not an oversight: null
   /// means *this connection never authenticates*, and that is a real mode —
@@ -97,6 +97,9 @@ abstract interface class AtLookUp {
   /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
   /// while a caller on another transport says nothing about TLS at all.
   ///
+  /// [secondaryAddressFinder] is required for the same reason: the neutral
+  /// barrel cannot name a native implementation, so the caller supplies one.
+  ///
   /// [onConnect] runs on every connection this lookup opens, once it is up
   /// and before anything else is sent on it: a proxy that needs `from:` first
   /// to learn which atServer the connection is for is the case it exists for.
@@ -104,19 +107,39 @@ abstract interface class AtLookUp {
     required String atSign,
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
-    required AtLookupTransport transport,
+    required AtLookupTransportFactories transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
     Map<String, dynamic> clientConfig = const {},
-    SecondaryAddressFinder? secondaryAddressFinder,
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
+  }) =>
+      withTransport(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        authenticator: authenticator,
+        transport: transport,
+        secondaryAddressFinder: secondaryAddressFinder,
+        clientConfig: clientConfig,
+        onConnect: onConnect,
+      );
+
+  /// Build a lookup over [transport]; every parameter means what it means on
+  /// [withSecureSocket].
+  static AtLookupMuxable withTransport({
+    required String atSign,
+    required AtRootDomain rootDomain,
+    required AtAuthenticator? authenticator,
+    required AtLookupTransportFactories transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
+    Map<String, dynamic> clientConfig = const {},
     Future<void> Function(AtCommandExecutor connection)? onConnect,
   }) {
     return AtLookupImpl(
       atSign,
       rootDomain.rootDomain,
       rootDomain.rootPort,
-      secureSocketConfig: transport.secureSocketConfig,
       clientConfig: clientConfig,
       secondaryAddressFinder: secondaryAddressFinder,
-      secureSocketFactory: transport.socketFactory,
+      transportFactory: transport.transportFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
       onConnect: onConnect,
@@ -143,11 +166,7 @@ abstract interface class AtLookUp {
   /// scan
   Future<List<String>> scan({String? regex, String? sharedBy});
 
-  Future<String?> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it. The verb always executes '
-          'on the remote atServer; there is no sync behaviour here '
-          'to control. Removed in 4.0.')
-      bool sync = false});
+  Future<String?> executeVerb(VerbBuilder builder);
 
   Future<String?> executeCommand(String command, {bool auth = false});
 
@@ -171,80 +190,11 @@ abstract interface class AtLookUp {
   /// again. Calling this again waits for the first close.
   Future<void> close();
 
-  /// set an instance of  [AtChops] for signing and verification operations.
-  ///
-  /// Deprecated as a *credential*. Authentication runs through an injected
-  /// [AtAuthenticator] instead, so at_lookup no longer needs to hold key
-  /// material to authenticate. Callers that read this for crypto which is not
-  /// authentication should be handed their own key material - that is what
-  /// at_auth EnrollmentApprover.approve takes its approverKeys for.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  set atChops(AtChops? atChops);
-
-  OutboundConnection? get connection;
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  AtChops? get atChops;
+  AtConnection? get connection;
 
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
-
-  /// Signing algorithm for pkam signature
-  ///
-  /// Deprecated together with [hashingAlgoType]: the two are read on the same
-  /// lines when the PKAM signature is built, so they are one setting and they
-  /// move together.
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set signingAlgoType(SigningAlgoType signingAlgoType);
-
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  SigningAlgoType get signingAlgoType;
-
-  /// Hashing algorithm for pkam signature
-  ///
-  /// Deprecated together with [signingAlgoType]; see the note there.
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set hashingAlgoType(HashingAlgoType hashingAlgoType);
-
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  HashingAlgoType get hashingAlgoType;
-
-  /// EnrollmentId has to be set for clients that are enrolled through APKAM.
-  ///
-  /// This is the enrollment the *next* authentication will use, which is
-  /// deliberately not [AtConnectionMetaData.authenticatedAsEnrollmentId] -
-  /// what a live socket actually authenticated as. That distinction survives
-  /// the deprecation; the two are not interchangeable.
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  set enrollmentId(String? enrollmentId);
-
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  String? get enrollmentId;
 }
 
 /// An [AtLookUp] that also carries the atServer's asynchronous notification
@@ -453,29 +403,23 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 /// where bundling leaves exactly one — and the change lands inside it without
 /// touching this signature.
 ///
-/// ⚠️ **This is not yet enough for a non-socket transport, and it does not
-/// claim to be.** `AtConnection` exposes `Socket getSocket()`, which the
-/// listener calls, so a WebSocket implementation needs that member gone —
-/// a breaking change for every `implements AtConnection`, and out of scope
-/// while this ships as an additive minor.
-class AtLookupTransport {
-  final AtLookupSecureSocketFactory socketFactory;
+/// Nothing here names a socket any more. [AtTransportFactory] returns an
+/// [AtTransport], `AtConnection` speaks `inbound`/`add`, and the settings a
+/// TLS socket needs live inside the factory that opens one — so a WebSocket
+/// implementation is a value passed to [transportFactory] rather than a
+/// change to any type on this path.
+class AtLookupTransportFactories {
+  /// Opens the byte channel. Required and undefaulted for the same reason
+  /// [AtLookUp.withSecureSocket]'s `transport` is: a default naming an
+  /// implementation imports that implementation into every caller.
+  final AtTransportFactory transportFactory;
+
   final AtLookupOutboundConnectionFactory connectionFactory;
-  final AtLookupSecureSocketListenerFactory listenerFactory;
+  final AtLookupMessageListenerFactory listenerFactory;
 
-  /// How this transport is configured to reach an atServer.
-  ///
-  /// Here rather than on [AtLookUp.withSecureSocket] because it is a property
-  /// of the transport, not of the lookup: TLS certificates, a keylog path and
-  /// a cert-check toggle mean nothing to a transport that is not TLS over TCP.
-  /// A WebSocket transport would carry its own settings in its own type and
-  /// leave the factory's signature alone.
-  final SecureSocketConfig secureSocketConfig;
-
-  const AtLookupTransport({
-    required this.secureSocketConfig,
-    this.socketFactory = const AtLookupSecureSocketFactory(),
+  const AtLookupTransportFactories({
+    required this.transportFactory,
     this.connectionFactory = const AtLookupOutboundConnectionFactory(),
-    this.listenerFactory = const AtLookupSecureSocketListenerFactory(),
+    this.listenerFactory = const AtLookupMessageListenerFactory(),
   });
 }

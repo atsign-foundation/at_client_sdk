@@ -550,9 +550,20 @@ web finder; `buildAtClient` already takes one) and a platform-default registrati
 the core stops building the Hive and TLS defaults itself. at_lookup's own major stays
 where it was: T3 (`Socket getSocket()` on `AtConnection`), T4 (the three io-typed
 factories `AtLookupTransport` bundles), T5 (`at_lookup_io.dart` absorbs the socket
-util) and T8 (publish 4.0.0) — which is also why the factory type still reaches
-`dart:io` transitively today, through the main barrel's export of
-`secure_socket_util.dart`.
+util) and T8 (publish 4.0.0).
+
+**Amended 2026-09-20 — T3–T5 done.** `AtConnection` no longer declares `getSocket()`
+or imports `dart:io`; the three factories in `AtLookupTransport` are retyped off
+`SecureSocket`; `secure_socket_util.dart` (and the hand-rolled TLS-handshake-timeout
+wrapper it uses, `tls_connect.dart`) moved behind `at_lookup_io.dart`. The factory type
+no longer reaches `dart:io` from the neutral barrel — `.github/wasm_gates.yaml`'s
+`at_lookup:` stanza ratchets `at_lookup.dart` at zero blocked packages. T7 (a web-safe
+`SecondaryAddressFinder`, OQ-7) remains open by choice, not oversight; a dedicated
+wasm-gate control on `cacheable_secondary_address_finder.dart` fences the gap in CI
+rather than leaving it to documentation alone. **T6 update, 2026-09-20:**
+`stream_notification_handler.dart`'s raw `SecureSocket.connect` is now routed through
+`AtTransportFactory` (step 10, `plans/wasm/at_lookup-4.0.0-transport-split.md`);
+`monitor_client.dart`'s half of T6 was not re-checked this pass.
 
 **Deprecated by this ruling.** `AtClientPreference.decryptPackets`, `tlsKeysSavePath`
 and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is

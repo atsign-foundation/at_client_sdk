@@ -12,6 +12,39 @@ import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
 
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
+
+/// A legacy keyfile enrolled as [enrollmentId]; the key material is any
+/// demo atSign's, since nothing here reaches an atServer.
+AtKeys _demoKeys(String enrollmentId) => AtKeys()
+  // ignore: deprecated_member_use
+  ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPublicKey =
+      AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPrivateKey =
+      AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultSelfEncryptionKey = AtBytes.fromString(demo.aesKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..enrollmentId = enrollmentId;
+
 void main() {
   late Directory dir;
 
@@ -159,30 +192,11 @@ void main() {
       ..hiveStoragePath = '${dir.path}/$principal'
       ..rootDomain = InternetAddress.loopbackIPv4.address
       ..rootPort = refusedPort;
-    // A legacy keyfile enrolled as [enrollmentId]; the key material is any
-    // demo atSign's, since nothing here reaches an atServer.
-    AtKeys keysAs(String enrollmentId) => AtKeys()
-      // ignore: deprecated_member_use
-      ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..apkamPrivateKey =
-          AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultSelfEncryptionKey =
-          AtBytes.fromString(demo.aesKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..enrollmentId = enrollmentId;
     Future<AtClient> build(String enrollmentId) => buildAtClient(
         atSign: atSign,
         namespace: 'wavi',
         preference: offline(enrollmentId),
-        atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs(enrollmentId)));
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys(enrollmentId)));
 
     final first = await build('e1');
     final second = await build('e2');
@@ -213,7 +227,7 @@ void main() {
             atSign: atSign,
             namespace: 'wavi',
             preference: offline('e1'),
-            atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs('e3'))),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys('e3'))),
         throwsA(isA<StateError>().having((e) => e.message, 'message',
             allOf(contains('storage at'), contains('as enrollment e1')))),
         reason: 'one store holds one principal, and the refusal names the '
@@ -232,26 +246,36 @@ void main() {
 
   test('buildRemoteSecondary carries the client identity a preference cannot',
       () async {
+    const enrollmentId = 'enrollment-under-test';
     final client = await buildAtClient(
         atSign: '@buildsecondary',
         namespace: 'wavi',
-        preference: pref()..privateKey = 'dummy_private_key',
-        enrollmentId: 'enrollment-under-test') as AtClientImpl;
+        preference: pref(),
+        enrollmentId: enrollmentId,
+        atKeysIo: InMemoryAtKeysIo.holding(
+            '@buildsecondary', _demoKeys(enrollmentId))) as AtClientImpl;
 
     final built = client.buildRemoteSecondary();
 
-    // enrollmentId, not the credential: RemoteSecondary recovers privateKey
-    // from the preference on its own (`privateKey ??= preference.privateKey`),
-    // so asserting on the authenticator passes whether or not the factory
-    // threaded anything. The enrollment id is held by the client alone.
-    // The ladder stamp is the assertion.
-    // ignore: deprecated_member_use
-    expect(built.atLookUp.enrollmentId, 'enrollment-under-test',
+    // enrollmentId, not the credential: signing with real keyfile material is
+    // only what lets the authenticator run to completion, not what's under
+    // test. The enrollment id is captured inside the authenticator closure
+    // with nothing on the built object to read it back from, so it's run
+    // against a recording executor and the enrollment id is read off the
+    // `pkam:` command it actually sent.
+    final authenticator = (built.atLookUp as AtLookupMuxable).authenticator;
+    expect(authenticator, isNotNull,
+        reason: 'it authenticates through the seam, not the ladder');
+    final executor = _RecordingExecutor([
+      'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@buildsecondary'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f',
+      'data:success',
+    ]);
+    await expectLater(authenticator!(executor), completion(isTrue));
+    expect(executor.sent.last, contains(':enrollmentId:enrollment-under-test:'),
         reason: 'every RemoteSecondary this client opens is configured FROM '
             'the client, so a second connection acts as the same enrollment '
             'rather than being assembled independently');
-    expect((built.atLookUp as AtLookupMuxable).authenticator, isNotNull,
-        reason: 'and it authenticates through the seam, not the ladder');
 
     await client.stop();
   });

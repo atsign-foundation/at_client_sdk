@@ -4,21 +4,11 @@ import 'dart:typed_data';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
-  @Deprecated('use RemoteSecondary.findSecondaryUrl')
-  static Future<String> findSecondary(
-      String toAtSign, String rootDomain, int rootPort) async {
-    final secondaryAddress =
-        await CacheableSecondaryAddressFinder(rootDomain, rootPort)
-            .findSecondary(toAtSign);
-    return secondaryAddress.toString();
-  }
-
   static List<String> getSecondaryInfo(String? url) {
     var result = <String>[];
     if (url != null && url.contains(':')) {

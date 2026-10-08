@@ -18,7 +18,7 @@ dependencies:
   at_commons: ^5.8.0
   at_utils: ^3.4.0
   at_chops: ^3.0.0
-  at_lookup: ^3.7.0-rc2
+  at_lookup: ^4.0.0-rc1
   # WrittenAtKeysIo.update, which the keychain store's flush makes reachable
   # here, needs 4.0.0-rc2; 4.0.0-rc3 also releases a keyfile lock a stopped
   # process left behind. Resolution in this workspace is by path, so only a

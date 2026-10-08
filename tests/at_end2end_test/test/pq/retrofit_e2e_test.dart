@@ -193,8 +193,12 @@ void main() {
     // The connection's id is written from the client's at every rebuild, and
     // every reader of "which enrollment am I" now asks the client. This is the
     // moment the two could have parted, so it is the moment they are compared.
-    // ignore: deprecated_member_use
-    expect(client.getRemoteSecondary()!.atLookUp.enrollmentId,
+    final retrofittedMetaData =
+        client.getRemoteSecondary()!.atLookUp.connection?.getMetaData();
+    expect(retrofittedMetaData, isNotNull,
+        reason: 'the retrofit must leave a live, authenticated connection '
+            'behind, or the comparison below is vacuous');
+    expect(retrofittedMetaData?.authenticatedAsEnrollmentId,
         client.enrollmentId,
         reason: 'the retrofitted connection must authenticate as the '
             'enrollment the client says it is');

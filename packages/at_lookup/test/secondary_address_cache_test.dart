@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
 import 'package:mocktail/mocktail.dart';

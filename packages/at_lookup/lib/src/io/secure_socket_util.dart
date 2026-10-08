@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/src/util/tls_connect.dart';
+import 'package:at_lookup/src/io/tls_connect.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 class SecureSocketUtil {
