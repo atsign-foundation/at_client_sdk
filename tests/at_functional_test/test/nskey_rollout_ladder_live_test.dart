@@ -215,22 +215,21 @@ void main() {
     final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
     final remoteRead = GetRequestOptions()..useRemoteAtServer = true;
 
-    // ── c1: the direction that needs no conveyance ──
-    // `old` minted the shared generation, so it already holds the private.
-    // Asserted first so a failure here reads as the seal being wrong rather
-    // than the delivery.
+    // ── before any conveyance: the rollout-1 install cannot write ──
+    // It holds no private for the shared generation, and a client seals to its
+    // own atSign's key only when it holds the private, so the public half an
+    // atServer served it cannot be a substitute.
     final fromRolled = AtKey()
       ..key = 'ladder_new_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await rolled.client.put(fromRolled, 'written by the rollout-1 install',
-        putRequestOptions: remoteWrite);
-    expect(
-        (await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
-        'written by the rollout-1 install',
-        reason: 'c1: the rollout-1 install added an algorithm without changing '
-            'what it seals to, so the older install opens it with the private '
-            'it minted itself — no conveyance in this direction');
+    await expectLater(
+        rolled.client.put(fromRolled, 'written by the rollout-1 install',
+            putRequestOptions: remoteWrite),
+        throwsA(isA<NskeyPrivateNotHeldException>()),
+        reason: 'an install that has not been conveyed the private must not '
+            'seal to the advertisement it was served');
+
 
     // NOTE: a holder answers a request from its secret store, which the mint
     // does not fill — the bootstrap would prime it from the filing at every
@@ -328,5 +327,15 @@ void main() {
             'opens immediately — no ask, no wait. c2 of UC-G2.11: the older '
             'build seals to the entry it always used and the rollout-1 build '
             'holds it');
+
+    // ── c1: the rollout-1 install writes, now that it holds the private ──
+    await rolled.client.put(fromRolled, 'written by the rollout-1 install',
+        putRequestOptions: remoteWrite);
+    expect(
+        (await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
+        'written by the rollout-1 install',
+        reason: 'c1: the rollout-1 install added an algorithm without changing '
+            'what it seals to, so the older install opens it with the private '
+            'it minted itself');
   }, timeout: Timeout(Duration(minutes: 5)));
 }

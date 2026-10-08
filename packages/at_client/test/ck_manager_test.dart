@@ -1,3 +1,6 @@
+import 'dart:convert' show base64Decode;
+import 'dart:typed_data' show Uint8List;
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -37,8 +40,16 @@ class _WidenableRing extends InMemoryNskeyKeyRing {
   /// Republish `(owner, namespace)` carrying [added] beside what it already
   /// advertises, listed **first** — where a reader walking the record's own
   /// order rather than its own preference would find it.
-  Future<void> widen(String owner, String namespace, PackageKey added) async {
+  ///
+  /// Holds [privateKey] for it, as a client that publishes a key it minted
+  /// does.
+  Future<void> widen(String owner, String namespace, PackageKey added,
+      {required Uint8List privateKey}) async {
     final published = (await super.currentPublic(owner, namespace))!;
+    seedKeypair(owner, namespace,
+        publicKey: base64Decode(added.pub),
+        privateKey: privateKey,
+        keyAlgo: added.alg);
     _widened['$owner|$namespace'] = NskeyAdvertisement(
         v: published.v,
         createdAt: published.createdAt,
@@ -323,7 +334,7 @@ void main() {
           use: SecretSharingAlgos.useEnc,
           alg: SecretSharingAlgos.mlKem1024,
           pub: second.publicKey);
-      await ring.widen(owner, namespace, added);
+      await ring.widen(owner, namespace, added, privateKey: second.secretKey);
 
       // The control: these three checks say the widening actually landed, so
       // the absences below are read against a changed advertisement.
@@ -453,7 +464,8 @@ void main() {
           PackageKey.fromBytes(
               use: SecretSharingAlgos.useEnc,
               alg: SecretSharingAlgos.mlKem1024,
-              pub: second.publicKey));
+              pub: second.publicKey),
+          privateKey: second.secretKey);
       expect((await ring.currentPublic(owner, namespace))!.keys, hasLength(2),
           reason: 'the control: the record really did gain an entry, so the '
               'absence below is measured against a widening rather than '
@@ -494,7 +506,7 @@ void main() {
           use: SecretSharingAlgos.useEnc,
           alg: SecretSharingAlgos.mlKem1024,
           pub: second.publicKey);
-      await ring.widen(owner, namespace, added);
+      await ring.widen(owner, namespace, added, privateKey: second.secretKey);
       expect(
           (await ring.currentPublic(owner, namespace))!.keys.map((k) => k.alg),
           [SecretSharingAlgos.mlKem1024, SecretSharingAlgos.xWing],

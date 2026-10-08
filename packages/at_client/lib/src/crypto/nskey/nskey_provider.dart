@@ -170,6 +170,12 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
           'and $id can only seal to $keyAlgo');
     }
+    // NOTE: own-atSign keys only. A peer's private is never held, so a share
+    // can rest only on the advertisement's signature.
+    if (nskeyOwner == context.atClient.getCurrentAtSign() &&
+        await keyRing.privateHalf(nskeyOwner, namespace, entry.kid) == null) {
+      throw NskeyPrivateNotHeldException(nskeyOwner, namespace, entry.kid);
+    }
     final int? version = _sealVersionFor(advertised);
     if (version == null) {
       throw AtEncryptionException(

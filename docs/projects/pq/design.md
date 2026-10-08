@@ -1890,10 +1890,10 @@ so the keys @alice seals to are also only as trustworthy as her atServer.
 ### 7.3 Impact scope — precisely what an operator can and cannot do
 
 - **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
-  — inbound cross-atSign shares, and self-data where the client relies on server-served
-  keys rather than locally-held ones — by substituting the *recipient* key. The same holds
+  — inbound cross-atSign shares — by substituting the *recipient* key. The same holds
   for data those atSigns send out, since their clients fetch every peer key through it,
-  so the trust covers both directions of an atSign's traffic.
+  so the trust covers both directions of an atSign's traffic. Self-data is not in this
+  reach (see the self-data caveat below).
 - **Can — modify (a strictly harder bar where the sender signs):** read and integrity
   are **asymmetric**. Pure read is a pass-through re-seal, so any *sender* signature inside
   the payload survives unchanged and still verifies. To silently **modify** a signed
@@ -1913,10 +1913,12 @@ so the keys @alice seals to are also only as trustworthy as her atServer.
   substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
   (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
   break); or MITM traffic between atSigns it does not host.
-- **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
-  the matching public and should seal self-data to the **locally-held** key, never a
-  server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD
-  prefer locally-held keys over server-served keys wherever they hold the private.
+- **Self-data caveat:** a client seals to its own atSign's `nskey` only for a generation
+  whose private it holds, and otherwise refuses the write with
+  `NskeyPrivateNotHeldException` rather than sealing to the public half it was served.
+  That takes self-data, and the sender's own copy of a shared content key, out of the
+  operator's reach. The cost is that an enrollment authorised for a namespace cannot
+  write there until its private arrives, which `holdsPrivate` reports.
 
 ### 7.4 Detectability — undetectable to a *targeted* victim today
 

@@ -84,6 +84,25 @@ class NskeyPrivateUnavailableException extends AtDecryptionException {
             '$nskeyKid — $reason');
 }
 
+/// This client was asked to seal a content key to its own atSign's nskey
+/// generation [nskeyKid] without holding that generation's private half.
+///
+/// The public half came from the atServer, and only a private this client holds
+/// shows it is genuine; sealing to a served key would let whoever served it read
+/// everything sealed under it. Never answered by falling back to the legacy
+/// path. Writes in [namespace] go through once this client holds the private,
+/// which `AtReachabilityResult.holdsPrivate` reports.
+class NskeyPrivateNotHeldException extends AtEncryptionException {
+  final String atSign;
+  final String namespace;
+  final String nskeyKid;
+
+  NskeyPrivateNotHeldException(this.atSign, this.namespace, this.nskeyKid)
+      : super('refusing to seal to $atSign:$namespace generation $nskeyKid: '
+            'this client does not hold its private half, so it cannot tell '
+            'the public half it was served from one an atServer substituted');
+}
+
 /// A record identifying one filed nskey private, as [SignalsPrivateFiling]
 /// reports it.
 typedef FiledNskeyPrivate = ({String owner, String namespace, String nskeyKid});

@@ -215,11 +215,34 @@ void main() {
         reason: 'and a different one from the client that wrote the first '
             'record');
 
-    // alice2 mints NOTHING for itself: a sender seals to the recipient's
-    // published namespace key, so it needs no generation of its own.
+    // alice2 mints NOTHING for itself: it seals the share to @bob's published
+    // key and its own sibling copy to the generation alice1 minted.
     final aliceSecondRing = PublishedNskeyKeyRing(aliceSecond.client);
     aliceSecond.client.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: aliceSecondRing);
+
+    // A client seals to its own atSign's key only when it holds the private,
+    // and UC-A4.3's table gives aE2 that private. Approval conveys it in
+    // production; it is copied from alice1's keyfile here, because the
+    // conveyance is proven live by the functional pack's rollout ladder.
+    final heldByFirst = (await NskeyPrivateFiling(
+                keysIo: aliceClient.atKeysIo!, atSign: alice)
+            .readAll())[sharedNamespace] ??
+        const {};
+    expect(heldByFirst, isNotEmpty,
+        reason: 'alice1 minted the generation its first share sealed the '
+            'sibling copy to, so it holds that private');
+    final secondFiling =
+        NskeyPrivateFiling(keysIo: aliceSecond.client.atKeysIo!, atSign: alice);
+    for (final held in heldByFirst.entries) {
+      expect(
+          await secondFiling.file(Secret(
+            namespace: sharedNamespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}${held.key}',
+            value: base64Encode(held.value.bytes),
+          )),
+          isTrue);
+    }
 
     final secondKeyName = 'multishare2${DateTime.now().microsecondsSinceEpoch}';
     const secondPlaintext = 'written by alice\'s other enrollment';

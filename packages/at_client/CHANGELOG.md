@@ -4,6 +4,9 @@
   under the wrong namespace or credited to the wrong sender.
 - fix: a post-quantum content key no longer has a limit on how many values it
   can safely encrypt.
+- fix: a client no longer writes post-quantum data in its own namespace before
+  it holds that namespace's private key; the write throws
+  `NskeyPrivateNotHeldException` until the key arrives.
 
 ## 3.15.0-rc5
 
