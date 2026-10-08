@@ -12,7 +12,7 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/crypto.dart' show FiledNskeyPrivate;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
-    show NskeyAdvertisement, NskeyDecapsulationKey, NskeySeed;
+    show NskeyAdvertisement, NskeyDecapsulationKey, NskeyKeyRing, NskeySeed;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyKeyfileIdFor, nskeyKeyfileIdPrefix, nskeySecretNamePrefix;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -105,6 +105,28 @@ class NskeyPrivateFiling {
     required String atSign,
     this.publishedGeneration,
   }) : atSign = atSign.toAtsign();
+
+  /// A filing that checks each arriving private against the generation
+  /// [atSign] publishes for its namespace, as [ring] answers it.
+  ///
+  /// [ring] is asked only when a private arrives, so a ring built around this
+  /// filing can be the one it asks. A private whose kid the published
+  /// generation does not carry is filed unchecked, as an earlier generation's
+  /// is.
+  factory NskeyPrivateFiling.checkedAgainst(NskeyKeyRing Function() ring,
+          {required AtKeysIo keysIo, required String atSign}) =>
+      NskeyPrivateFiling(
+        keysIo: keysIo,
+        atSign: atSign,
+        publishedGeneration: (namespace, nskeyKid) async {
+          final advertised =
+              await ring().currentPublic(atSign.toAtsign(), namespace);
+          if (advertised == null || advertised.entryWithKid(nskeyKid) == null) {
+            return null;
+          }
+          return advertised;
+        },
+      );
 
   final StreamController<FiledNskeyPrivate> _filed =
       StreamController<FiledNskeyPrivate>.broadcast();

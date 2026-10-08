@@ -217,10 +217,13 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final keysIo = _atClient.atKeysIo;
     if (keysIo != null) {
       try {
-        final filing = NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+        late final PublishedNskeyKeyRing ring;
+        final filing = NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo, atSign: atSign);
+        ring = PublishedNskeyKeyRing(_atClient, privateFiling: filing);
         final sent = await NskeySeeding(
           atClient: _atClient,
-          ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
+          ring: ring,
           sharing: sharing,
           privateFiling: filing,
         ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {},
