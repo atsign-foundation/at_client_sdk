@@ -7,10 +7,12 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData, AtKeyValueStore, AtMetaData;
+import 'package:at_persistence_secondary_server/hive.dart' show HiveInstances;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -490,6 +492,39 @@ void main() {
           reason: 'the second stop ran a teardown of its own. Holding the '
               'first one\'s future past a restart would answer this caller '
               'from it and tear down nothing');
+    });
+
+    test('a stop closes the sync queue a bare-keystore client opened itself',
+        () async {
+      final keys = InMemoryAtClientStorage(atSign: '@ownqueue');
+      await keys.attach(FakeClient('@ownqueue', null));
+      addTearDown(keys.close);
+      final client = await AtClientImpl.create(
+          '@ownqueue',
+          'wavi',
+          AtClientPreference()
+            ..hiveStoragePath = dir.path
+            ..namespace = 'wavi'
+            ..monitorAutoStart = false,
+          localSecondaryKeyStore: keys.keyStore,
+          lookUps: recording) as AtClientImpl;
+      final queueBox = HiveBoxSyncQueueStore.boxNameFor('@ownqueue');
+      final hive = HiveInstances.forPath(dir.path);
+      await client.getLocalSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'k'
+          ..sharedBy = '@ownqueue'
+          ..namespace = 'wavi')
+        ..value = 'v');
+      expect(hive.isBoxOpen(queueBox), isTrue,
+          reason: 'the write opened the queue, so the box named here is the '
+              'one the stop is asked about');
+
+      await client.stop();
+
+      expect(hive.isBoxOpen(queueBox), isFalse,
+          reason: 'no storage closes this queue for the client, and a '
+              'stopped client keeps nothing open');
     });
 
     test('closes every connection it opened: its own, sync\'s, the monitor\'s',

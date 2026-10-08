@@ -73,6 +73,10 @@ class LocalSecondary implements Secondary {
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
+  /// Whether the queue is this secondary's to close: opened lazily here
+  /// rather than handed in by a storage, which closes its own.
+  final bool _ownsSyncQueue;
+
   /// Tracks atKeys with a currently-executing [_update] / [_delete] —
   /// i.e. a write that has entered the keystore mutation phase but
   /// hasn't yet enqueued for sync. The sync service's pull-side
@@ -111,6 +115,7 @@ class LocalSecondary implements Secondary {
     AtSyncQueue? syncQueue,
     void Function(DataEvent)? onEvent,
   })  : _syncQueue = syncQueue,
+        _ownsSyncQueue = syncQueue == null,
         _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
   }
@@ -151,10 +156,28 @@ class LocalSecondary implements Secondary {
 
   /// Ends this local secondary's use of its storage, when its client stops:
   /// from here every keystore and sync-queue operation throws
-  /// [StoppedException].
-  void release() {
+  /// [StoppedException], and a sync queue opened here rather than handed in
+  /// by a storage is closed.
+  Future<void> release() async {
     _released = true;
     keyStore = _ReleasedKeyStore(_stopped);
+    if (!_ownsSyncQueue) return;
+    AtSyncQueue? q = _syncQueue;
+    final inflight = _syncQueueOpenInflight;
+    if (q == null && inflight != null) {
+      try {
+        q = await inflight;
+      } on Object {
+        return;
+      }
+    }
+    _syncQueue = null;
+    _syncQueueOpenInflight = null;
+    try {
+      await q?.close();
+    } on Exception catch (e) {
+      _logger.warning('could not close the sync queue: $e');
+    }
   }
 
   /// Number of atKeys with pending client→server writes. Reads the

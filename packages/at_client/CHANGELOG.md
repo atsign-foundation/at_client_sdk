@@ -9,6 +9,8 @@
   now always used.
 - BREAKING: a client built on the deprecated `localSecondaryKeyStore` with no
   `hiveStoragePath` is refused; set the path, or pass a storage.
+- fix: a stopped client built on the deprecated `localSecondaryKeyStore`
+  closes the sync queue it opened.
 - fix: a Hive store whose sync queue fails to open closes the keystore it had
   opened, so a retry opens cleanly.
 - deprecated, to be removed in 4.0: `AtClientImpl.create`'s

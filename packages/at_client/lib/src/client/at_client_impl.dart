@@ -842,7 +842,7 @@ class AtClientImpl implements AtClient {
         atClientImpl._isStopped = true;
         await atClientImpl._stopBackgroundProcesses();
         await atClientImpl._releaseStorage();
-        atClientImpl.localSecondary?.release();
+        await atClientImpl.localSecondary?.release();
         rethrow;
       }
     }
@@ -1407,7 +1407,7 @@ class AtClientImpl implements AtClient {
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
-    localSecondary?.release();
+    await localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
