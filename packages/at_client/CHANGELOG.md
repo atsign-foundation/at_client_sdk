@@ -1,13 +1,13 @@
 ## 3.15.0-rc6
 
-- BREAKING: each storage backend has its own import: `HiveAtClientStorage`
-  comes from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
+- feat: each storage backend has its own import: `HiveAtClientStorage` comes
+  from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
   `package:at_client/memory.dart`, no longer from `at_client.dart` and
   `sqlite.dart`.
-- BREAKING: a client with `isLocalStoreRequired` false and no storage is
-  refused; pass one such as `InMemoryAtClientStorage`. Storage an app passes is
-  now always used.
-- BREAKING: a client built on the deprecated `localSecondaryKeyStore` with no
+- fix: a client with `isLocalStoreRequired` false and no storage is refused,
+  as the flag's deprecation says; pass one such as `InMemoryAtClientStorage`.
+  Storage an app passes is now always used.
+- fix: a client built on the deprecated `localSecondaryKeyStore` with no
   `hiveStoragePath` is refused; set the path, or pass a storage.
 - fix: a client passed neither storage nor `hiveStoragePath` is refused with
   the same `ArgumentError` as the other cases, before any keys are read.
@@ -98,10 +98,10 @@
   share a request id, which could drop one or hand a caller another's response.
 - fix: an `AtKey` reused for several puts or notifications carries nothing
   over from one to the next.
-- BREAKING: a value an app encrypts itself and puts with `shouldEncrypt: false`
+- fix: a value an app encrypts itself and puts with `shouldEncrypt: false`
   is stored as given and treated as plain: the put drops `isEncrypted`,
   `ivNonce` and the other encryption fields an app sets on the key's metadata.
-- BREAKING: a provider id set in a key's `appMetadata` no longer chooses the
+- fix: a provider id set in a key's `appMetadata` no longer chooses the
   provider for a notification the SDK encrypts; pass `cryptoProviderId`.
 - fix: a `noCommit` put that falls back to legacy encryption still asks the
   atServer not to record a commit.
