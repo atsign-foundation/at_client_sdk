@@ -28,8 +28,9 @@ abstract class AtClient {
 
   LocalSecondary? getLocalSecondary();
 
-  /// The persistence bundle backing this client when it runs on the default
-  /// storage, or `null` on any other storage or before it has opened.
+  /// The persistence bundle backing this client when it runs on a Hive
+  /// storage, the default or one the app passed; `null` on any other storage
+  /// or before it has opened.
   /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
   /// `null` on the client. Owned and torn down by the client; callers must
   /// not close it.

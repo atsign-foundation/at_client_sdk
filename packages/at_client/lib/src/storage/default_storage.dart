@@ -18,8 +18,8 @@ AtClientStorage defaultStorageFor(String atSign, String storagePath) =>
 String defaultStorageLocation(String atSign, String storagePath) =>
     HiveAtClientStorage.locationOf(atSign, storagePath, create: false);
 
-/// The persistence bundle [storage] holds when it is the default storage,
-/// else null.
+/// The persistence bundle [storage] holds when it is a Hive storage, else
+/// null.
 AtPersistenceBundle? defaultStorageBundle(AtClientStorage? storage) =>
     storage is HiveAtClientStorage ? storage.bundle : null;
 

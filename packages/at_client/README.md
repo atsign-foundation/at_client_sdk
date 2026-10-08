@@ -180,11 +180,12 @@ any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath` are deprecated in favour of the factory's config.
 
 Every client keeps local storage, even if only in memory. A client given none
-opens Hive under `preference.hiveStoragePath` until 4.0, and one whose
-preference sets `isLocalStoreRequired` false is refused. The backends differ
-at rest: Hive encrypts its keystore, SQLite writes records in clear, and the
-in-memory store writes nothing to disk. A backend of your own needs types
-at_client doesn't export, so raise a
+opens Hive under `preference.hiveStoragePath` until 4.0; one given none and
+no path, or none with `isLocalStoreRequired` false, is refused, and the
+refusal names `InMemoryAtClientStorage`, which keeps nothing on disk. The
+backends differ at rest: Hive encrypts its keystore, SQLite writes records in
+clear, and the in-memory store writes nothing to disk. A backend of your own
+needs types at_client doesn't export, so raise a
 [feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
 for it.
 
