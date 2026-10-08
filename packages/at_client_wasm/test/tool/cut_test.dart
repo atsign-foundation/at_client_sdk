@@ -4,6 +4,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client_wasm/src/keys/envelope_exceptions.dart';
 import 'package:at_client_wasm/src/keys/key_envelope.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
+import 'package:at_client_wasm/src/session/server_copy.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 

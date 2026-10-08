@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_client_wasm/src/session/server_copy.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 
