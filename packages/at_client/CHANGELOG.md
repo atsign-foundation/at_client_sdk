@@ -1,3 +1,8 @@
+## 3.15.0-rc6
+
+- fix: an enrollment sent an ML-KEM-1024 namespace key can read that
+  namespace, and a namespace key matching nothing published is refused.
+
 ## 3.15.0-rc5
 
 - feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
