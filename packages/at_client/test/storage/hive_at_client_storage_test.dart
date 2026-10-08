@@ -50,4 +50,16 @@ void main() {
     expect((await again.keyStore.get('k$atSign'))?.data, 'v');
     await again.close();
   });
+
+  test('location is resolved once, so reading it recreates nothing', () {
+    final s = HiveAtClientStorage(atSign: '@hivegone', storagePath: dir.path);
+    final resolved = s.location;
+    dir.deleteSync(recursive: true);
+    addTearDown(dir.createSync);
+
+    expect(s.location, resolved);
+    expect(dir.existsSync(), isFalse,
+        reason: 'close() reads location to drop its claim; a read that '
+            'created the directory would make closing write');
+  });
 }

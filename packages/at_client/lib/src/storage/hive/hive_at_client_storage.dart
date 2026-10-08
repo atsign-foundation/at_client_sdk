@@ -45,9 +45,11 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// resolves the instance by, plus the atSign the box is named from. Both
   /// halves are needed — two atSigns under one directory are two boxes and
   /// share nothing, while one atSign under one directory is a single box
-  /// however many of these point at it.
+  /// however many of these point at it. Resolved on first use and kept, so a
+  /// close after the directory has gone writes nothing.
   @override
-  String get location => locationOf(atSign, storagePath);
+  String get location => _location ??= locationOf(atSign, storagePath);
+  String? _location;
 
   /// The [location] of a store for [atSign] under [storagePath]. With
   /// [create] false a missing directory is not created, and gives a location
