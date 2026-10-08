@@ -5,6 +5,7 @@
 - feat: a dialog given no storage opens Hive in the app's support directory,
   or under `preference.hiveStoragePath` while that is set. An app that kept its
   store anywhere else should pass it as `storage:` before at_client 4.0.
+- build: requires `at_client` ^3.15.0-rc6.
 
 ## 2.0.0-rc4
 

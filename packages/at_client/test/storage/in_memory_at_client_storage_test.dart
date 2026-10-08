@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/sqlite.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:test/test.dart';
 

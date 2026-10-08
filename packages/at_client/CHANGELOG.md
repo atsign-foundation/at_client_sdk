@@ -1,5 +1,9 @@
 ## 3.15.0-rc6
 
+- BREAKING: each storage backend has its own import: `HiveAtClientStorage`
+  comes from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
+  `package:at_client/memory.dart`, no longer from `at_client.dart` and
+  `sqlite.dart`.
 - fix: local storage the client cannot open, such as a file it may not read,
   fails with an exception the app can catch, and no longer also ends a
   command-line program with an unhandled error.

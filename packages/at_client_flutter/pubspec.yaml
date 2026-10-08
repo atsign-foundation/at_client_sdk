@@ -28,10 +28,11 @@ dependencies:
   # PqPosture and EnrollmentConveyanceException need a 3.15.0 prerelease,
   # 3.15.0-rc4 carries the fixes for a device upgrading from 3.14.0, and
   # 3.15.0-rc5 re-exports the atServer check and AtSignLogger that apps reach
-  # through this package. It has to be written as a prerelease: a caret on a
-  # stable lower bound never accepts one, so ^3.14.1 would not resolve
-  # 3.15.0-rc5 however it is published.
-  at_client: ^3.15.0-rc5
+  # through this package, and 3.15.0-rc6 serves the Hive store this package
+  # opens by default from package:at_client/hive.dart. It has to be written
+  # as a prerelease: a caret on a stable lower bound never accepts one, so
+  # ^3.14.1 would not resolve 3.15.0-rc6 however it is published.
+  at_client: ^3.15.0-rc6
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.02

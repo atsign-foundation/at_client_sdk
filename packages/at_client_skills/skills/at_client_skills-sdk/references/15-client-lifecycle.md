@@ -13,6 +13,7 @@ opened.
 
 ```dart
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
 final preference = AtClientPreference()
@@ -63,6 +64,10 @@ client comes back offline, 5 s by default).
 ## 2. Storage
 
 A client holds one `AtClientStorage`, and one store is held by one live client.
+Each backend comes from its own import: `HiveAtClientStorage` from
+`package:at_client/hive.dart`, `SqliteAtClientStorage` from
+`package:at_client/sqlite.dart` and `InMemoryAtClientStorage` from
+`package:at_client/memory.dart`.
 
 ```dart
 HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true)

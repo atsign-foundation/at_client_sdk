@@ -11,7 +11,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/hive/hive_at_client_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 

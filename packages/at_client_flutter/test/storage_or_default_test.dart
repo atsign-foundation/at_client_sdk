@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:flutter_test/flutter_test.dart';

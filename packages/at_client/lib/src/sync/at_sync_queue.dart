@@ -2,7 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/sync/sync_queue_store.dart';
-import 'package:at_client/src/util/open_reporting_once.dart';
+import 'package:at_client/src/storage/hive/open_reporting_once.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
@@ -123,8 +123,9 @@ class AtSyncQueue {
 
   /// Returns the Hive box name this queue uses, derived
   /// deterministically from the atSign. Exposed as a static so callers
-  /// (e.g. `StorageManager` cleanup paths, or tests that want to wipe
-  /// state without a live `AtSyncQueue` instance) can compute it
+  /// (the Hive storage looking for a queue an earlier release left in another
+  /// directory, or tests that want to wipe state without a live `AtSyncQueue`
+  /// instance) can compute it
   /// without constructing the class.
   static String boxNameForAtSign(String atSign) =>
       '$_boxNamePrefix${AtUtils.getShaForAtSign(atSign)}';

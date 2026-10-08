@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
 import 'package:at_client_flutter/src/widgets/cram_dialog.dart';

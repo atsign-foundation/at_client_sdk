@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/src/util/open_reporting_once.dart';
+import 'package:at_client/src/storage/hive/open_reporting_once.dart';
 import 'package:test/test.dart';
 
 /// [openReportingOnce] runs an open whose failure hive also leaves unhandled,

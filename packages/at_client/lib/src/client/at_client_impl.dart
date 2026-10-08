@@ -45,7 +45,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/hive/hive_at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';

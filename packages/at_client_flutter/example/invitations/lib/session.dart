@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart'

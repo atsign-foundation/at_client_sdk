@@ -11,9 +11,8 @@ Nothing in these flows imports `at_auth`.
 Add the packages with `dart pub add` (pins the latest compatible versions):
 
 ```sh
-dart pub add at_client_flutter path_provider
-# at_client_flutter re-exports at_client; path_provider is for
-# getApplicationSupportDirectory()
+dart pub add at_client_flutter
+# at_client_flutter re-exports at_client
 ```
 
 ---
@@ -38,7 +37,6 @@ there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
 ```dart
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign()
-import 'package:path_provider/path_provider.dart';
 
 const namespace = 'my_namespace';
 
@@ -46,22 +44,17 @@ AtClientPreference _preference() => AtClientPreference()
   ..namespace = namespace
   ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
 
-/// Where this app keeps the atSign's local store. closedByClient: the client
-/// closes it when it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(
-      atSign: atSign, storagePath: dir.path, closedByClient: true);
-}
-
 /// Screens that read AtClientManager.getInstance().atClient need this; an app
 /// that passes the client around does not.
 void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 ```
 
-`AtClientPreference.hiveStoragePath` and `commitLogPath` are deprecated: the
-storage object above is where the store lives, and it is what the dialogs and
-the `Atsign` verbs take as `storage`.
+Pass no `storage` and the dialogs open Hive in the app's support directory
+(`getApplicationSupportDirectory()`), or under `preference.hiveStoragePath`
+while the app still sets it. That field and `commitLogPath` are deprecated: an
+app that keeps its store anywhere else, or wants another backend, passes an
+`AtClientStorage` as `storage`, such as `HiveAtClientStorage` from
+`package:at_client/hive.dart` with `at_client` added as a dependency.
 
 ---
 
@@ -96,7 +89,6 @@ Future<void> activateNewAtSign(BuildContext context) async {
     rootDomain: selection.rootDomain,
     cramKey: cramKey,
     preference: _preference(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -127,7 +119,6 @@ Future<void> loginWithFile(BuildContext context) async {
     atSign: atSign,
     keys: atKeysIo,
     preference: _preference(),
-    storage: await _storage(atSign),
     backupKeys: [KeychainAtKeysIo()],
   );
   if (client == null) return;
@@ -190,7 +181,6 @@ Future<void> loginWithKeychain(BuildContext context) async {
     rootDomain: selection.rootDomain,
     keys: KeychainAtKeysIo(),
     preference: _preference(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -224,7 +214,6 @@ Future<void> loginWithApkam(BuildContext context) async {
     namespaces: {namespace: 'rw'},   // the permissions this device needs
     preference: _preference(),
     keys: KeychainAtKeysIo(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -288,7 +277,7 @@ hook, not a logout.
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_storage` and `_adopt` helpers
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
 - [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
 - [packages/at_client_flutter/example/todos/lib/onboarding.dart](../../../../at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 

@@ -1,10 +1,8 @@
 import 'dart:io';
 
-import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive/open_reporting_once.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
-import 'package:at_client/src/util/open_reporting_once.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_logger.dart';
@@ -38,7 +36,8 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// The stores whose backend is open now, in this process.
   static final Set<HiveAtClientStorage> _open = <HiveAtClientStorage>{};
 
-  StorageManager? _manager;
+  final HiveAtPersistenceFactory _factory = HiveAtPersistenceFactory();
+  AtPersistenceBundle? _bundle;
   AtSyncQueue? _queue;
 
   /// The store this points at: the canonical directory `HiveInstances.forPath`
@@ -51,11 +50,11 @@ class HiveAtClientStorage extends AtClientStorageBase {
       '${HiveInstances.canonicalPathFor(storagePath)}::$atSign';
 
   /// The persistence bundle, or `null` before the first [attach].
-  AtPersistenceBundle? get bundle => _manager?.bundleOrNull;
+  AtPersistenceBundle? get bundle => _bundle;
 
   @override
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>
-      _openManager.keyValueStore;
+      _openBundle.keyValueStore;
 
   @override
   AtSyncQueue get syncQueue {
@@ -64,26 +63,25 @@ class HiveAtClientStorage extends AtClientStorageBase {
     return q;
   }
 
-  StorageManager get _openManager {
-    final m = _manager;
-    if (m == null) throw StateError('storage for $atSign is not open');
-    return m;
+  AtPersistenceBundle get _openBundle {
+    final b = _bundle;
+    if (b == null) throw StateError('storage for $atSign is not open');
+    return b;
   }
 
   @override
   Future<void> openBackend() async {
-    if (_manager != null) return;
+    if (_bundle != null) return;
     // NOTE: read before the store opens, which re-points Hive's global
     // instance at [storagePath]. hive marks the field for tests, and nothing
     // public names the directory its global instance points at.
     // ignore: invalid_use_of_visible_for_testing_member
     final globalHome = (Hive as HiveImpl).homePath;
-    final manager =
-        StorageManager(AtClientPreference()..hiveStoragePath = storagePath);
-    await manager.init(atSign, null);
+    final bundle = await openReportingOnce(() => _factory.initialize(atSign,
+        HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
     final queue = AtSyncQueue(atSign: atSign, storagePath: storagePath);
     await queue.open();
-    _manager = manager;
+    _bundle = bundle;
     _queue = queue;
 
     final here = HiveInstances.canonicalPathFor(storagePath);
@@ -155,7 +153,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
 
   @override
   Future<void> clearData() async {
-    await _openManager.bundle.clear();
+    await _openBundle.clear();
     await syncQueue.clear();
   }
 
@@ -163,6 +161,6 @@ class HiveAtClientStorage extends AtClientStorageBase {
   Future<void> closeBackend() async {
     _open.remove(this);
     await _queue?.close();
-    await _manager?.bundleOrNull?.close();
+    await _bundle?.close();
   }
 }
