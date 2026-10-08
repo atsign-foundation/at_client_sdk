@@ -69,7 +69,6 @@ void main() {
     remote = MockRemoteSecondary();
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     when(() => atClient.notificationService)
         .thenReturn(_MockNotificationService());
     final syncService = MockSyncService();

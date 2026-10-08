@@ -113,7 +113,6 @@ class LocalSecondary implements Secondary {
   })  : _syncQueue = syncQueue,
         _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
-    keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
 
   /// Idempotent lazy-open of the sync queue. The first caller wins

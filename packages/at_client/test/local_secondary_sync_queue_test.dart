@@ -38,7 +38,8 @@ void main() {
       atClientManager: atClientManager,
     );
     atClient.syncService = MockSyncService();
-    return LocalSecondary(atClient, syncQueue: syncQueue);
+    return LocalSecondary(atClient,
+        keyStore: atClient.getLocalSecondary()!.keyStore, syncQueue: syncQueue);
   }
 
   /// Empties [storageDir], which other test files share and can leave

@@ -737,6 +737,8 @@ class AtClientImpl implements AtClient {
     AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
+    @Deprecated('Pass storage instead, such as InMemoryAtClientStorage from '
+        'package:at_client/memory.dart; removed in 4.0')
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     @Deprecated('replaced by atKeysIo, will be removed in the next release')
     AtChops? atChops,
@@ -1548,6 +1550,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @Deprecated('Read the keystore from the AtClientStorage the client was '
+      'given; removed in 4.0')
   AtPersistenceBundle? get persistenceBundle => defaultStorageBundle(_storage);
 
   @override
