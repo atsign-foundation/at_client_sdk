@@ -14717,6 +14717,18 @@ enrollment without one, so once the stale link is cleared the next privileged
 start re-anchors the enrollment over its new value. Before, a stale root link
 made the sweep skip it for good.
 
+⚠️ **Found 2026-10-08, live, and not fixed.** The clearing runs only where
+`republishedAppMetadata` is sent, on the put the atSign's own credential
+publishes with. An ordinary enrollment republishes `_apsk` through
+`enroll:update`, which carries no `appMetadata`, and the atServer keeps what is
+stored, so a link over the old value rides the new one and the walk reads it
+`broken`, the outcome this ruling set out to prevent. The sweep sends a
+chain-linked enrollment a root link, which anchors it, and skips one whose stale
+root link fills the field, so that one stays `broken` for good. Seen twice
+against the `dev_env` virtualenv with a throwaway functional-pack probe: a
+stamped chain link read `chained` and an approval-time root link `anchored`
+before an `enroll:update` changed the value, and both read `broken` after.
+
 ### 144.3 Every move of _apsk stands, and verification tells the locations apart
 
 Revocation, and supersession of a non-root predecessor at its successor's first
