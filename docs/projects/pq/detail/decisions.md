@@ -15064,9 +15064,10 @@ at_cli_commons and at_client_flutter require 4.0.0-rc5 for that reason.
 A filed link is also lost to a write that read the keys before the link was
 filed, since the never-lose check covers key material and not links. Both
 stores therefore serialise their writes: the keyfile with its lock file, and
-at_client_flutter's keychain with one in-memory lock for every atSign, because
-the keychain holds every atSign's keys in one entry. The keychain's lock does
-not reach another isolate.
+at_client_flutter's keychain with one in-memory lock that every write to it
+takes, removals included, because the keychain holds every atSign's keys in one
+entry. That lock does not reach another isolate, so an update whose keys are
+removed from outside it refuses rather than putting them back.
 
 Pinned by `test/pq_signing_chain_filed_links_test.dart`, for the keyfile by
 at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in

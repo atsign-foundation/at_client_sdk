@@ -8,7 +8,6 @@ import 'package:at_auth/at_auth.dart'
         AtKeysValidationException,
         WrittenAtKeysIo;
 import 'package:at_commons/at_commons.dart';
-import 'package:mutex/mutex.dart';
 
 import 'keychain_storage.dart';
 
@@ -17,10 +16,6 @@ import 'keychain_storage.dart';
 ///
 /// This is the main class to interact with keychain for storing and retrieving AtKeys
 class KeychainAtKeysIo extends WrittenAtKeysIo {
-  // NOTE: one lock for every instance and every atSign. The keychain keeps all
-  // atSigns' keys in a single entry, so any two writes overwrite each other.
-  static final _writing = Mutex();
-
   KeychainStorage keychainStorage;
   KeychainAtKeysIo({KeychainStorage? keychainStorage})
     : keychainStorage = keychainStorage ?? KeychainStorage();
@@ -44,7 +39,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   }
 
   @override
-  Future<void> write(String atSign, AtKeys atKeys) => _writing.protect(
+  Future<void> write(String atSign, AtKeys atKeys) => keychainStorage.writing(
     () async {
       // NOTE: create-only. The underlying store appends and `read` answers with
       // the first matching entry, so a second write for the same atSign would
@@ -61,32 +56,39 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   );
 
   @override
-  Future<void> flush(Atsign atsign, AtKeys atKeys) =>
-      _writing.protect(() => _flush(atsign, atKeys));
+  Future<void> flush(Atsign atsign, AtKeys atKeys) => _flush(atsign, atKeys);
 
   /// Reads [atsign]'s keys, applies [mutate] and writes the result, holding
-  /// the lock [write] and [flush] take across all three.
+  /// the keychain's write lock across all three.
   ///
-  /// Without it, an update that read before another one wrote would write back
+  /// Without it, an update that read before another write would write back
   /// keys missing that one's change. The never-lose check refuses that for key
-  /// material, but nothing refuses it for a link. The lock does not reach
-  /// another isolate.
+  /// material, but nothing refuses it for a link, or for another atSign, since
+  /// the keychain keeps every atSign in one entry. The lock does not reach
+  /// another isolate, so keys gone by the time this writes, as one could
+  /// remove them, are refused with [AtKeysSourceAbsentException] rather than
+  /// put back.
   @override
   Future<void> update(
     Atsign atsign,
     FutureOr<bool> Function(AtKeys keys) mutate,
-  ) => _writing.protect(() async {
+  ) => keychainStorage.writing(() async {
     final keys = await read(atsign.toString());
     if (await mutate(keys) == false) return;
-    await _flush(atsign, keys);
+    await _flush(atsign, keys, requireExisting: true);
   });
 
-  Future<void> _flush(Atsign atsign, AtKeys atKeys) async {
+  Future<void> _flush(
+    Atsign atsign,
+    AtKeys atKeys, {
+    bool requireExisting = false,
+  }) async {
     final atSign = atsign.toString();
     _stampAtSign(atSign, atKeys);
     await keychainStorage.updateAtKeysInKeychain(
       atSign: atSign,
       keys: atKeys,
+      requireExisting: requireExisting,
       assureUpdate: (existing) => assurance.validateMapUpdate(
         existing: existing.toJson(),
         candidate: atKeys.toJson(),

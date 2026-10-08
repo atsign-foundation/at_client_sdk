@@ -38,7 +38,7 @@ dependencies:
   file_picker: ^11.0.02
   path: ^1.9.1
   pinput: ^5.0.1
-  mutex: ^3.1.0
+  synchronized: ^3.1.0
 
 dev_dependencies:
   lints: ^6.0.0

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_auth/at_auth.dart' show AtKeys;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -13,6 +13,7 @@ import 'package:biometric_storage/biometric_storage.dart'
         Win32BiometricStoragePlugin;
 import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:synchronized/synchronized.dart';
 
 import 'keychain_data.dart';
 
@@ -24,6 +25,11 @@ const int _kWindowSegmentDataLength =
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
+
+  // NOTE: one for every instance, which all read and write the same keychain
+  // entry, and reentrant, so a caller holding it through [writing] can call
+  // the writers here, which take it too.
+  static final _writes = Lock(reentrant: true);
   static bool isWindows = Platform.isWindows;
   @visibleForTesting
   late BiometricStorage biometricStorage;
@@ -97,6 +103,15 @@ class KeychainStorage {
     return improperDataString;
   }
 
+  /// Runs [action] holding the lock every write of stored keys takes, so a
+  /// read, change and write inside it cannot interleave with another write in
+  /// this isolate.
+  ///
+  /// A write [action] starts and does not await runs alongside the rest of
+  /// it, and throws [StateError] if it reaches a writer after [action] ends.
+  Future<T> writing<T>(Future<T> Function() action) =>
+      _writes.synchronized(action);
+
   /// Get the stored keys for a specific Atsign
   ///
   ///   [atSign] - Atsign whose key material should be retrieved
@@ -135,14 +150,26 @@ class KeychainStorage {
   ///   [assureUpdate] - called with the entry about to be replaced, before
   ///   anything is written. Throwing from it abandons the write.
   ///
-  /// Concurrent writers resolve last-writer-wins: this backend offers no
-  /// compare-and-swap, so the read and the write cannot be made atomic.
+  ///   [requireExisting] - throw [AtKeysSourceAbsentException] and write
+  ///   nothing when [atSign] has no entry, rather than adding one.
+  ///
+  /// Writes in this isolate take turns; one from another isolate still wins
+  /// over this, or loses to it, whole, since the keychain offers no
+  /// compare-and-swap.
   Future<void> updateAtKeysInKeychain({
     required String atSign,
     required AtKeys keys,
     void Function(AtKeys existing)? assureUpdate,
-  }) async {
+    bool requireExisting = false,
+  }) => _writes.synchronized(() async {
     final atKeysData = await readAtKeysData();
+    final index = atKeysData == null ? -1 : _indexOf(atKeysData, atSign);
+    if (index == -1 && requireExisting) {
+      throw AtKeysSourceAbsentException(
+        'The keychain no longer holds keys for $atSign, so nothing was '
+        'written',
+      );
+    }
     if (atKeysData == null) {
       await _write(
         biometricStoreName: (await AtKeysStore.getName()),
@@ -150,7 +177,6 @@ class KeychainStorage {
       );
       return;
     }
-    final index = _indexOf(atKeysData, atSign);
     if (index == -1) {
       atKeysData.keys.add(keys);
     } else {
@@ -161,7 +187,7 @@ class KeychainStorage {
       biometricStoreName: (await AtKeysStore.getName()),
       keychainData: atKeysData,
     );
-  }
+  });
 
   /// The atSign an entry belongs to, in whatever spelling it was stored: the
   /// typed `atsign` field, else the `atsign` metadata entry, else the legacy
@@ -201,7 +227,10 @@ class KeychainStorage {
   ///   [keys] - [AtKeys] instance to persist
   ///
   /// Note: the Atsign must be included in the [AtKeys.metadata] field
-  Future<void> appendAtKeysToKeychain({required AtKeys keys}) async {
+  Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
+      _writes.synchronized(() => _append(keys));
+
+  Future<void> _append(AtKeys keys) async {
     String? existingData;
     try {
       existingData = await _readAtKeysDataRaw();
@@ -229,7 +258,10 @@ class KeychainStorage {
   /// Remove a stored Atsign entry from the keychain
   ///
   ///   [atSign] - Atsign whose persisted keys should be removed
-  Future<void> removeAtsignFromKeychain(String atSign) async {
+  Future<void> removeAtsignFromKeychain(String atSign) =>
+      _writes.synchronized(() => _remove(atSign));
+
+  Future<void> _remove(String atSign) async {
     try {
       final data = await _readAtKeysDataRaw();
       if (data != null) {
@@ -255,7 +287,9 @@ class KeychainStorage {
   /// data still held under the legacy pre-2.0.0 `_` delimited store name.
   /// TODO(3.0.0): remove the `_` cleanup once `_` stores are deleted during
   /// migration (see [_readAtKeysDataRaw] sequencing comment).
-  Future<void> deleteAllAtKeysData() async {
+  Future<void> deleteAllAtKeysData() => _writes.synchronized(_deleteAll);
+
+  Future<void> _deleteAll() async {
     try {
       await _delete(keychainStoreName: await AtKeysStore.getName());
     } catch (e, s) {
