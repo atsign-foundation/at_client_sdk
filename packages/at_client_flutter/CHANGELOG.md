@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0.0-rc5
+
+- feat: a dialog given no storage opens Hive in the app's support directory,
+  or under `preference.hiveStoragePath` while that is set. An app that kept its
+  store anywhere else should pass it as `storage:` before at_client 4.0.
+
 ## 2.0.0-rc4
 
 - fix: an atSign that an app built on at_client_mobile saved to the keychain

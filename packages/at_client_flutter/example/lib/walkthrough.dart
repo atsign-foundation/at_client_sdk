@@ -4,8 +4,6 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:example/main.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'
-    show getApplicationSupportDirectory;
 
 final namespace = 'at_client_flutter_example';
 final AtSignLogger _logger = AtSignLogger(namespace);
@@ -57,8 +55,6 @@ Future<void> onboard(BuildContext context) async {
       );
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing CramDialog to complete onboarding');
@@ -70,7 +66,6 @@ Future<void> onboard(BuildContext context) async {
       rootDomain: selection.rootDomain,
       cramKey: cramKey,
       preference: _preference(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('CramDialog failed or user cancelled');
@@ -114,8 +109,6 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing PkamDialog, opening on the keychain');
@@ -125,7 +118,6 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       rootDomain: selection.rootDomain,
       keys: KeychainAtKeysIo(),
       preference: _preference(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('PkamDialog failed or user cancelled');
@@ -152,8 +144,6 @@ Future<void> authenticateWithFile(BuildContext context) async {
     _logger.info('Step 2: Processing selected file');
     final atSign = atKeysIo.getAtsign();
     _logger.info('Extracted atSign from filename: $atSign');
-
-    final storage = await _storage(atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing PkamDialog, opening on the file');
@@ -164,7 +154,6 @@ Future<void> authenticateWithFile(BuildContext context) async {
       atSign: atSign,
       keys: atKeysIo,
       preference: _preference(),
-      storage: storage,
       backupKeys: [KeychainAtKeysIo()],
     );
     if (client == null) {
@@ -186,8 +175,6 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info(
@@ -206,7 +193,6 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       namespaces: {namespace: 'rw'},
       preference: _preference(),
       keys: KeychainAtKeysIo(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('ApkamActivationDialog failed or user cancelled');
@@ -297,19 +283,6 @@ Future<String?> _openFileSaveDialog({
 }
 
 AtClientPreference _preference() => AtClientPreference()..namespace = namespace;
-
-/// Where this app keeps [atSign]'s local store. closedByClient: this app
-/// picks the location and the client still closes the store when it stops,
-/// so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  var dir = await getApplicationSupportDirectory();
-  _logger.info('Application support directory: ${dir.path}');
-  return HiveAtClientStorage(
-    atSign: atSign,
-    storagePath: dir.path,
-    closedByClient: true,
-  );
-}
 
 /// Every dialog hands back a client the app owns. This app keeps one current
 /// client in [AtClientManager], since its pages read it from there, whether or

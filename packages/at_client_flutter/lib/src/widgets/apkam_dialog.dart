@@ -167,9 +167,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       if (mounted) setState(() => _status = event.msg);
     });
     try {
+      final preference = under(widget.preference, widget.rootDomain);
       final client = await pending.client(
-        under(widget.preference, widget.rootDomain),
-        storage: widget.storage,
+        preference,
+        storage: await storageOrDefault(
+          widget.atSign,
+          preference,
+          widget.storage,
+        ),
       );
       if (!mounted) return;
       Navigator.of(context).pop(client);

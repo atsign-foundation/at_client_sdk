@@ -6,6 +6,9 @@ import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+import 'fake_path_provider.dart';
 
 class MockAtsignFlows extends Mock implements AtsignFlows {}
 
@@ -21,9 +24,11 @@ class FakeAtClientPreference extends Fake implements AtClientPreference {}
 /// failed future, which is how the stubs fail.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const supportPath = '/app/support';
   setUpAll(() {
     registerFallbackValue(InMemoryAtKeysIo());
     registerFallbackValue(FakeAtClientPreference());
+    PathProviderPlatform.instance = FakePathProvider(supportPath);
   });
 
   late MockAtsignFlows flows;
@@ -323,6 +328,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(result, same(client));
+      final storage = verify(
+        () => pending.client(any(), storage: captureAny(named: 'storage')),
+      ).captured.single;
+      expect(
+        storage,
+        isA<HiveAtClientStorage>()
+            .having((s) => s.storagePath, 'storagePath', supportPath)
+            .having((s) => s.atSign, 'atSign', '@alice')
+            .having((s) => s.closedByClient, 'closedByClient', isTrue),
+        reason:
+            'an app passing no storage gets this package\'s default, which '
+            'the client closes when it stops',
+      );
       verifyNever(
         () => flows.enroll(
           any(),
