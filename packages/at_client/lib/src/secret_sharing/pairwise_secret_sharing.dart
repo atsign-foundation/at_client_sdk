@@ -167,7 +167,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       perEnrollmentSecretRequestGate;
 
   /// Files a secret that just arrived durably, before the envelope carrying
-  /// it is deleted; a throw keeps the envelope for the next sweep.
+  /// it is deleted; a throw keeps the envelope, which is handled again at the
+  /// next start.
   Future<void> Function(Secret secret)? fileReceivedSecret;
 
   /// Anti-storm floor: the same (requester, secret-name) is answered at most

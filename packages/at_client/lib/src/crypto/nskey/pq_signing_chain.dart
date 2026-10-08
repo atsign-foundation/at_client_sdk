@@ -527,8 +527,8 @@ class PqSigningChain {
   ///
   /// A client with no keyfile to write, or whose keyfile holds no entry for
   /// this enrollment, keeps the link in its secret store only. A keyfile that
-  /// cannot be written throws, so the envelope carrying the link is kept for
-  /// the next sweep.
+  /// cannot be written throws, so the envelope carrying the link is kept and
+  /// handled again at the next start.
   Future<bool> fileConveyedLink(Secret secret) async {
     final field = switch (secret.name) {
       linkSecretName => linkField,
@@ -588,7 +588,7 @@ class PqSigningChain {
 
     final outcome = await stamp(link);
     if (filed != null && outcome != _Stamp.retry) {
-      await _dropFiledLink(enrollmentId, field);
+      await _dropFiledLink(enrollmentId, field, filed);
     }
     return outcome == _Stamp.published;
   }
@@ -625,12 +625,18 @@ class PqSigningChain {
     }
   }
 
-  Future<void> _dropFiledLink(String enrollmentId, String field) async {
+  /// Drops [settled] from [enrollmentId]'s keyfile entry, unless a newer link
+  /// was filed under [field] while it was being stamped.
+  Future<void> _dropFiledLink(
+      String enrollmentId, String field, Map<String, Object?> settled) async {
     final io = _atClient.atKeysIo;
     if (io is! WrittenAtKeysIo) return;
     try {
-      await io.update(_atClient.getCurrentAtSign()!.toAtsign(),
-          (keys) => keys.dropLink(enrollmentId, field));
+      await io.update(_atClient.getCurrentAtSign()!.toAtsign(), (keys) {
+        final current = keys.linkFor(enrollmentId, field);
+        if (current == null || !_sameLink(current, settled)) return false;
+        return keys.dropLink(enrollmentId, field);
+      });
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.warning('Could not drop the settled $field from the keyfile; '
@@ -663,6 +669,13 @@ class PqSigningChain {
       return _Stamp.settled;
     }
 
+    final signature = link['signature'];
+    if (signature is! String) {
+      _logger.warning('Conveyed root link carries no signature; not '
+          'publishing it');
+      return _Stamp.settled;
+    }
+
     final candidates = await _rootCandidates(atSign);
     if (candidates.isEmpty) {
       _logger.warning('A root link was conveyed but $atSign publishes no '
@@ -672,15 +685,17 @@ class PqSigningChain {
     }
     final bool verifies;
     try {
+      // NOTE: the candidates are already fetched, so nothing here reaches the
+      // network and a throw means the link itself cannot be read.
       verifies = await _verifiesUnderAny(
         rootLinkSignableBytes(payload.cast<String, Object?>()),
-        link['signature'] as String,
+        signature,
         _narrowedTo(link, candidates),
       );
     } catch (e) {
-      _logger.warning('Conveyed root link could not be checked; not '
-          'publishing: $e');
-      return _Stamp.retry;
+      _logger.warning('Conveyed root link cannot be checked; not '
+          'publishing it: $e');
+      return _Stamp.settled;
     }
     if (!verifies) {
       _logger.warning('Conveyed root link does not verify against the '
@@ -753,9 +768,20 @@ class PqSigningChain {
           signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
       if (e is StoppedException) rethrow;
-      _logger.warning('Conveyed chain link does not verify against the '
-          'enrollment it names as signer, so publishing it would advertise a '
-          'link no verifier can follow: $e');
+      // NOTE: a signature that fails, or a signer whose key is withdrawn or
+      // absent from its atServer, never verifies; anything else may be the
+      // network, and is tried again.
+      final never = e is AtSigningVerificationException ||
+          e is AtKeyNotFoundException ||
+          e is KeyNotFoundException;
+      if (never) {
+        _logger.warning('Conveyed chain link does not verify against the '
+            'enrollment it names as signer, so publishing it would advertise '
+            'a link no verifier can follow: $e');
+        return _Stamp.settled;
+      }
+      _logger.warning('Conveyed chain link could not be checked now; it is '
+          'tried again: $e');
       return _Stamp.retry;
     }
 

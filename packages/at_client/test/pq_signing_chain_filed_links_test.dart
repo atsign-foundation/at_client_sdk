@@ -1,5 +1,6 @@
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -13,6 +14,18 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+
+/// A keyfile that reads [keys] and refuses every write.
+class _Unwritable extends Fake implements WrittenAtKeysIo {
+  _Unwritable(this.keys);
+  final AtKeys keys;
+  @override
+  Future<AtKeys> read(String atSign) async => keys;
+  @override
+  Future<void> update(
+          Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async =>
+      throw Exception('the keyfile cannot be written');
+}
 
 class _Unprivileged implements EnrollmentPrivilegeResolver {
   @override
@@ -205,6 +218,114 @@ void main() {
     expect(await filed(io, PqSigningChain.rootLinkField), isNull);
   });
 
+  test('a link filed while another is being stamped is not the one dropped',
+      () async {
+    final signed = await signedChainLink();
+    final io = await keyfileFor(signed.child, 'child-1');
+    await PqSigningChain(signed.child)
+        .fileConveyedLink(chainLinkSecret(signed.link));
+    final uri = PqSigningChain.apskUri(atSign, 'child-1');
+    // NOTE: the child's key moves on, so the first link settles as stale.
+    remoteData[uri] = '${remoteData[uri]!} ';
+    final parentClient = client('parent-1');
+    final newer = (await PqSigningChain(parentClient).signLinkFor(
+        AtClientSecretSharing.forClient(parentClient), 'child-1'))!;
+
+    final gate = Completer<void>();
+    final reached = Completer<void>();
+    var gated = false;
+    when(() => signed.child
+            .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final key = inv.positionalArguments[0].toString();
+      if (key == uri && !gated) {
+        gated = true;
+        reached.complete();
+        await gate.future;
+      }
+      final value = remoteData[key];
+      if (value == null) throw AtKeyNotFoundException(key);
+      return AtValue()
+        ..value = value
+        ..metadata = remoteMetadata[key];
+    });
+
+    final stamping = PqSigningChain(signed.child).publishPendingLink();
+    await reached.future;
+    await PqSigningChain(signed.child).fileConveyedLink(chainLinkSecret(newer));
+    gate.complete();
+    await stamping;
+
+    expect(await filed(io, PqSigningChain.linkField),
+        jsonDecode(jsonEncode(newer.toJson())),
+        reason: 'the stale link settled, and dropping by name would delete '
+            'the newer link filed while it was being stamped');
+  });
+
+  test('a filed chain link whose signature does not verify is dropped',
+      () async {
+    final signed = await signedChainLink();
+    final io = await keyfileFor(signed.child, 'child-1');
+    final tampered =
+        jsonDecode(jsonEncode(signed.link.toJson())) as Map<String, dynamic>;
+    final entry = (tampered['signatures'] as List).first as Map;
+    final signature = entry['signature'] as String;
+    entry['signature'] =
+        (signature.startsWith('A') ? 'B' : 'A') + signature.substring(1);
+    await PqSigningChain(signed.child).fileConveyedLink(Secret(
+        namespace: 'buzz',
+        name: PqSigningChain.linkSecretName,
+        value: PqSigningChain.encodeLink(tampered)));
+    expect(await filed(io, PqSigningChain.linkField), isNotNull,
+        reason: 'the premise: the link is filed');
+
+    expect(await PqSigningChain(signed.child).publishPendingLink(), isFalse);
+
+    expect(await filed(io, PqSigningChain.linkField), isNull,
+        reason: 'a signature that does not verify never will, so keeping it '
+            'would only check it again at every start');
+  });
+
+  test('a filed chain link whose signer\'s _apsk is gone is dropped', () async {
+    final signed = await signedChainLink();
+    final io = await keyfileFor(signed.child, 'child-1');
+    await PqSigningChain(signed.child)
+        .fileConveyedLink(chainLinkSecret(signed.link));
+    remoteData.remove(PqSigningChain.apskUri(atSign, 'parent-1'));
+
+    expect(await PqSigningChain(signed.child).publishPendingLink(), isFalse);
+
+    expect(await filed(io, PqSigningChain.linkField), isNull,
+        reason: 'the atServer says the signer publishes no key, so nothing '
+            'can verify the link');
+  });
+
+  test('a filed root link that is malformed is dropped', () async {
+    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+    remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+        jsonEncode(apskAdvertisement(keys: [
+      ApskSigningKey.forPublicKey(
+          alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+    ]));
+    final holderClient = client('holder-1');
+    await registered(holderClient);
+    final childClient = client('child-1');
+    await registered(childClient);
+    final link = (await PqSigningChain(holderClient)
+        .signRootLinkFor('child-1', rootPrivate: pair.secretKey))!;
+    final io = await keyfileFor(childClient, 'child-1');
+    await PqSigningChain(childClient).fileConveyedLink(Secret(
+        namespace: 'buzz',
+        name: PqSigningChain.rootLinkSecretName,
+        value: PqSigningChain.encodeLink({...link, 'signature': 42})));
+    expect(await filed(io, PqSigningChain.rootLinkField), isNotNull,
+        reason: 'the premise: the link is filed');
+
+    expect(await PqSigningChain(childClient).publishPendingLink(), isFalse);
+
+    expect(await filed(io, PqSigningChain.rootLinkField), isNull);
+  });
+
   group('a link arriving at a running client', () {
     test('is filed and stamped as it arrives', () async {
       final signed = await signedChainLink();
@@ -221,6 +342,29 @@ void main() {
           reason: 'a long-running client would otherwise hold it unstamped '
               'until it restarted');
       expect(await filed(io, PqSigningChain.linkField), isNull);
+    });
+
+    test('is still stamped when its keyfile cannot be written', () async {
+      final signed = await signedChainLink();
+      final keys = AtKeys(atsign: atSign.toAtsign())
+        ..recordEnrollmentSnapshot('child-1', appName: 'app');
+      final io = _Unwritable(keys);
+      when(() => signed.child.atKeysIo).thenReturn(io);
+      PqClientBootstrap(signed.child,
+          keysIo: io,
+          privilege: _Unprivileged(),
+          sweepUnanchoredEnrollments: () async => 0);
+      final sharing = AtClientSecretSharing.forClient(signed.child);
+      final secret = chainLinkSecret(signed.link);
+      // NOTE: as a sweep does, the secret is held before the hook files it.
+      await sharing.secretStore.putSecret(secret, allowReservedName: true);
+
+      await expectLater(sharing.fileReceivedSecret!(secret), throwsException,
+          reason: 'the throw keeps the envelope for another try');
+
+      expect(await PqSigningChain(signed.child).readLink('child-1'), isNotNull,
+          reason: 'the link is held in memory, and a keyfile that cannot be '
+              'written is no reason to leave it unstamped');
     });
 
     test('is left alone when the start-up does not publish links', () async {
