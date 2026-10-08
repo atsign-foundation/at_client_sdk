@@ -240,13 +240,7 @@ class PqClientBootstrap {
       await filing?.filePending([secret]);
       await root.filePendingPrivate(_atSign, [secret]);
       if (gates.publishChainLink && PqSigningChain.isLinkSecret(secret.name)) {
-        // NOTE: stamped even when the filing throws, since the secret store
-        // holds the link; the filing's throw still keeps the envelope.
-        try {
-          await chain.fileConveyedLink(secret);
-        } finally {
-          await _publishChainLink();
-        }
+        await chain.stampConveyedLink(secret);
       }
     };
     chain = PqSigningChain(_atClient);

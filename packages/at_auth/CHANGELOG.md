@@ -1,7 +1,5 @@
 ## 4.0.0-rc5
 
-- feat: `AtKeys.fileLink`, `linkFor` and `dropLink` hold a link signed for
-  one of the keyfile's enrollments until it is published.
 - feat: `RegistrarService.registerAtSign` (v4 `/register-atsign/`).
 - feat: `RegistrarAdminService` for the v4 `/manage-atsigns/` delete flow
   (Super API key).

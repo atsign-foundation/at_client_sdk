@@ -7,8 +7,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, AtKeysIo, WrittenAtKeysIo;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, AtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show serialiseApskWrite;
@@ -521,92 +520,49 @@ class PqSigningChain {
   static bool isLinkSecret(String secretName) =>
       secretName == linkSecretName || secretName == rootLinkSecretName;
 
-  /// Files a link conveyed to this enrollment into its keyfile entry, where it
-  /// waits for [publishPendingLink] across a restart, answering whether it was
-  /// filed.
+  /// Stamps a link conveyed to this enrollment as it arrives.
   ///
-  /// A client with no keyfile to write, or whose keyfile holds no entry for
-  /// this enrollment, keeps the link in its secret store only. A keyfile that
-  /// cannot be written throws, so the envelope carrying the link is kept and
-  /// handled again at the next start.
-  Future<bool> fileConveyedLink(Secret secret) async {
-    final field = switch (secret.name) {
-      linkSecretName => linkField,
-      rootLinkSecretName => rootLinkField,
-      _ => null,
-    };
-    if (field == null) return false;
-    final io = _atClient.atKeysIo;
-    if (io is! WrittenAtKeysIo) return false;
-
+  /// Throws when the link may yet be stamped but cannot be now, such as when
+  /// this enrollment's `_apsk` cannot be read, so the envelope carrying it is
+  /// kept and handled again at the next start. A link that is stamped, or
+  /// never can be, returns normally and its envelope goes.
+  Future<void> stampConveyedLink(Secret secret) async {
     final Map<String, Object?> link;
     try {
       link = decodeConveyedLink(secret.value);
     } catch (e) {
-      _logger.warning('Conveyed $field is malformed; not filing it: $e');
-      return false;
+      _logger.warning('Conveyed ${secret.name} is malformed; not publishing '
+          'it: $e');
+      return;
     }
-
-    final enrollmentId =
-        AtClientSecretSharing.forClient(_atClient).enrollmentId;
-    var filed = false;
-    await io.update(_atClient.getCurrentAtSign()!.toAtsign(), (keys) {
-      filed = keys.fileLink(enrollmentId, field, Map.of(link));
-      return filed;
-    });
-    if (!filed) {
-      _logger.info('This keyfile holds no entry for $enrollmentId, so the '
-          'conveyed $field is kept in memory only until it is stamped');
+    final outcome = switch (secret.name) {
+      linkSecretName => await _stampChainLink(link),
+      rootLinkSecretName => await _stampRootLink(link),
+      _ => _Stamp.settled,
+    };
+    if (outcome == _Stamp.retry) {
+      throw AtException('The conveyed ${secret.name} cannot be stamped yet, so '
+          'its envelope is kept for the next start');
     }
-    return filed;
   }
 
   /// Publishes the links this enrollment was conveyed — a root link, a chain
-  /// link, or both — if any is waiting and its key does not already carry it,
-  /// returning whether anything was published.
+  /// link, or both — if any is waiting in the secret store and its key does
+  /// not already carry it, returning whether anything was published.
   ///
-  /// A link waits in this enrollment's keyfile entry, filed there by
-  /// [fileConveyedLink] as it arrived, or in the secret store when there was
-  /// no entry to file it in. Once it is stamped, or can never be, it is
-  /// dropped from the keyfile; one that cannot be stamped for now stays there
-  /// for the next attempt.
+  /// A link arriving after this runs is stamped as it arrives, by
+  /// [stampConveyedLink].
   Future<bool> publishPendingLink() async {
-    final rootPublished = await _publishPending(
-        rootLinkSecretName, rootLinkField, _stampRootLink);
-    final chainPublished =
-        await _publishPending(linkSecretName, linkField, _stampChainLink);
+    final rootPublished =
+        await _publishHeld(rootLinkSecretName, _stampRootLink);
+    final chainPublished = await _publishHeld(linkSecretName, _stampChainLink);
     return rootPublished || chainPublished;
   }
 
-  Future<bool> _publishPending(String secretName, String field,
+  Future<bool> _publishHeld(String secretName,
       Future<_Stamp> Function(Map<String, Object?> link) stamp) async {
-    final enrollmentId =
-        AtClientSecretSharing.forClient(_atClient).enrollmentId;
-    final filed = await _filedLink(enrollmentId, field);
-    final link = filed ?? _heldLink(secretName);
-    if (link == null) return false;
-
-    final outcome = await stamp(link);
-    if (filed != null && outcome != _Stamp.retry) {
-      await _dropFiledLink(enrollmentId, field, filed);
-    }
-    return outcome == _Stamp.published;
-  }
-
-  /// The link filed in [enrollmentId]'s keyfile entry under [field], or null.
-  Future<Map<String, Object?>?> _filedLink(
-      String enrollmentId, String field) async {
-    final keysIo = _atClient.atKeysIo;
-    if (keysIo == null) return null;
-    try {
-      return (await keysIo.read(_atClient.getCurrentAtSign()!))
-          .linkFor(enrollmentId, field);
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('Could not read the keyfile for a filed $field, so only '
-          'one held in memory is published: $e');
-      return null;
-    }
+    final link = _heldLink(secretName);
+    return link != null && await stamp(link) == _Stamp.published;
   }
 
   /// The link the secret store holds under [secretName], or null.
@@ -622,25 +578,6 @@ class PqSigningChain {
     } catch (e) {
       _logger.warning('Conveyed $secretName is malformed; not publishing: $e');
       return null;
-    }
-  }
-
-  /// Drops [settled] from [enrollmentId]'s keyfile entry, unless a newer link
-  /// was filed under [field] while it was being stamped.
-  Future<void> _dropFiledLink(
-      String enrollmentId, String field, Map<String, Object?> settled) async {
-    final io = _atClient.atKeysIo;
-    if (io is! WrittenAtKeysIo) return;
-    try {
-      await io.update(_atClient.getCurrentAtSign()!.toAtsign(), (keys) {
-        final current = keys.linkFor(enrollmentId, field);
-        if (current == null || !_sameLink(current, settled)) return false;
-        return keys.dropLink(enrollmentId, field);
-      });
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('Could not drop the settled $field from the keyfile; '
-          'the next attempt finds it settled again: $e');
     }
   }
 

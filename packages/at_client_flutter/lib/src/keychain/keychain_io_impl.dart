@@ -62,9 +62,9 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   /// the keychain's write lock across all three.
   ///
   /// Without it, an update that read before another write would write back
-  /// keys missing that one's change. The never-lose check refuses that for key
-  /// material, but nothing refuses it for a link, or for another atSign, since
-  /// the keychain keeps every atSign in one entry. The lock does not reach
+  /// keys missing that one's change. For this atSign the never-lose check
+  /// refuses that, so one of the two fails; for another atSign nothing does,
+  /// since the keychain keeps every atSign in one entry. The lock does not reach
   /// another isolate, so keys gone by the time this writes, as one could
   /// remove them, are refused with [AtKeysSourceAbsentException] rather than
   /// put back.

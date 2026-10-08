@@ -215,55 +215,40 @@ void main() {
 
   test(
     'two concurrent updates, through two instances, each keep what the other '
-    'filed',
+    'added',
     () async {
-      await io.write(
-        '@alice',
-        AtKeys(atsign: '@alice'.toAtsign())..addKey(
-          CryptographicMaterial(
-            keyId: 'sign:mldsa65:1',
-            enrollmentId: 'E1',
-            role: CryptographicMaterialRole.publicVerification,
-            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-            bytes: AtBytes.fromString('UFVC'),
-            createdAt: DateTime.utc(2026, 6, 11),
-          ),
-        ),
-      );
+      await io.write('@alice', keysFor('@alice'));
       final gate = Completer<void>();
 
-      final adding = io.update('@alice'.toAtsign(), (keys) async {
+      final first = io.update('@alice'.toAtsign(), (keys) async {
         await gate.future;
         keys.addKey(material('nskey.wavi'));
         return true;
       });
-      final linking =
+      final second =
           KeychainAtKeysIo(
             keychainStorage: KeychainStorage()..biometricStorage = storage,
-          ).update(
-            '@alice'.toAtsign(),
-            (keys) => keys.fileLink('E1', 'apskChainLink', {'v': 1}),
-          );
+          ).update('@alice'.toAtsign(), (keys) {
+            keys.addKey(material('nskey.buzz'));
+            return true;
+          });
       await pumpEventQueue();
       gate.complete();
-      await Future.wait([adding, linking]);
+      await Future.wait([first, second]);
 
       final reread = await io.read('@alice');
       expect(
-        reread.linkFor('E1', 'apskChainLink'),
-        {'v': 1},
-        reason:
-            'an update that read before the link was filed and wrote after '
-            'it erases the link, and nothing refuses that: the never-lose '
-            'check covers key material, not links',
-      );
-      expect(
         reread.getAtSignKey(
-          'nskey.wavi',
+          'nskey.buzz',
           CryptographicMaterialRole.symmetricEncryption,
         ),
         isNotNull,
+        reason:
+            'an update that read before the other wrote would write back keys '
+            'missing its addition, which the never-lose check refuses, so one '
+            'of the two would fail',
       );
+      expect(holdsWavi(reread), isTrue);
     },
   );
 

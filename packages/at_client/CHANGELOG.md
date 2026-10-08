@@ -5,9 +5,8 @@
   and a namespace key that doesn't match the one its atSign publishes is
   refused.
 - fix: a link vouching for an enrollment's signing key is published as soon
-  as it arrives, and one not yet published is kept in a typed keyfile across
-  a restart.
-- build: requires `at_auth` ^4.0.0-rc5.
+  as it arrives, and one that can't be published yet is tried again at the
+  next start.
 
 ## 3.15.0-rc5
 

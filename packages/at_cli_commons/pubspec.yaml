@@ -12,7 +12,7 @@ resolution: workspace
 
 dependencies:
   args: ^2.6.0
-  at_auth: ^4.0.0-rc5
+  at_auth: ^4.0.0-rc4
   at_client: ^3.15.0-rc4
   at_commons: ^5.6.0
   at_onboarding_cli: ^2.0.0-rc4

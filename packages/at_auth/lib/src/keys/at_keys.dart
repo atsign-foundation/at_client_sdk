@@ -1,5 +1,3 @@
-import 'dart:convert' show jsonDecode, jsonEncode;
-
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart' hide AtPublicKey, AtPrivateKey;
@@ -33,8 +31,7 @@ final class AtKeysEnrollment {
 }
 
 /// One enrollment's mutable slot in the document: its snapshot, and the
-/// materials it owns keyed by `keyId` then `role`, and the links filed for it
-/// keyed by name.
+/// materials it owns keyed by `keyId` then `role`.
 class _EnrollmentSlot {
   _EnrollmentSlot(this.enrollmentId);
 
@@ -43,7 +40,6 @@ class _EnrollmentSlot {
   String? appName;
   String? deviceName;
   final Map<String, Map<String, CryptographicMaterial>> materialsByKeyId = {};
-  final Map<String, Map<String, dynamic>> links = {};
 
   AtKeysEnrollment get snapshot => AtKeysEnrollment(
         enrollmentId: enrollmentId,
@@ -169,33 +165,6 @@ class AtKeys {
     if (appName != null) slot.appName = appName;
     if (deviceName != null) slot.deviceName = deviceName;
   }
-
-  /// Files [link] under [name] for [enrollmentId], replacing any link already
-  /// filed there: a statement another enrollment signed about this one, held
-  /// until it is published.
-  ///
-  /// False when this keyfile holds no such enrollment. A slot is never
-  /// created here, since a typed enrollment entry turns a legacy keyfile into
-  /// a typed one.
-  bool fileLink(String enrollmentId, String name, Map<String, dynamic> link) {
-    final slot = _enrollments[enrollmentId];
-    if (slot == null) return false;
-    slot.links[name] = jsonDecode(jsonEncode(link)) as Map<String, dynamic>;
-    return true;
-  }
-
-  /// The link filed under [name] for [enrollmentId], or null.
-  Map<String, dynamic>? linkFor(String enrollmentId, String name) {
-    final link = _enrollments[enrollmentId]?.links[name];
-    return link == null
-        ? null
-        : jsonDecode(jsonEncode(link)) as Map<String, dynamic>;
-  }
-
-  /// Removes the link filed under [name] for [enrollmentId], answering
-  /// whether there was one.
-  bool dropLink(String enrollmentId, String name) =>
-      _enrollments[enrollmentId]?.links.remove(name) != null;
 
   /// Looks up one of [enrollmentId]'s materials by `(keyId, role)` —
   /// [type] is a [CryptographicMaterialRole] token.
@@ -951,7 +920,6 @@ class AtKeys {
     }
 
     final snapshots = <AtKeysEnrollment>[];
-    final linksByEnrollment = <String, Map<String, Map<String, dynamic>>>{};
     if (json.containsKey('enrollments')) {
       final enrollmentsJson =
           assurance.expectList(json['enrollments'], 'enrollments');
@@ -972,7 +940,6 @@ class AtKeys {
             assurance.expectList(entryJson['keys'], '$prefix.keys'),
             enrollmentId: enrollmentId,
             fieldPrefix: '$prefix.keys'));
-        linksByEnrollment[enrollmentId] = _linksOf(entryJson['links']);
       }
     }
     assurance.validateKeyMaterials(materials);
@@ -998,26 +965,10 @@ class AtKeys {
         deviceName: snapshot.deviceName,
       );
     }
-    for (final MapEntry(key: enrollmentId, value: links)
-        in linksByEnrollment.entries) {
-      atKeys._enrollments[enrollmentId]?.links.addAll(links);
-    }
 
     // join them with the legacy format
     return AtKeys._fromLegacyJson(legacyJson, existing: atKeys);
   }
-
-  /// An enrollment's filed links, skipping any entry that is not a JSON
-  /// object: a link is checked before it is published, so one too damaged to
-  /// read is simply absent, where refusing it would make the keyfile
-  /// unreadable.
-  static Map<String, Map<String, dynamic>> _linksOf(Object? value) => {
-        if (value is Map)
-          for (final entry in value.entries)
-            if (entry.key is String && entry.value is Map)
-              entry.key as String:
-                  Map<String, dynamic>.from(entry.value as Map),
-      };
 
   /// An enrollment's `namespaces` map, or null when it is absent — which
   /// means "not yet reconciled", a different thing from an empty map's "no
@@ -1085,7 +1036,6 @@ class AtKeys {
               if (slot.deviceName != null) 'deviceName': slot.deviceName,
               'keys': encodeAtKeysDocument(slot.materialsByKeyId.values
                   .expand((byType) => byType.values)),
-              if (slot.links.isNotEmpty) 'links': slot.links,
             },
         ],
     };

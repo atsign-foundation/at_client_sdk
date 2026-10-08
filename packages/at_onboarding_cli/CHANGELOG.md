@@ -2,7 +2,6 @@
 
 - fix: the package no longer includes keyfiles that local test runs leave in
   the package directory.
-- build: requires `at_auth` ^4.0.0-rc5.
 
 ## 2.0.0-rc5
 

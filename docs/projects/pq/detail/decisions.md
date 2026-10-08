@@ -15019,7 +15019,7 @@ decided here.
 
 Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
 
-## 152. A conveyed link waits in the keyfile until stamped, and is stamped as it arrives (2026-10-08)
+## 152. A conveyed link is stamped as it arrives, and its envelope kept until it is (2026-10-08)
 
 **Decided by gkc on 2026-10-07 and 2026-10-08.** A link vouching for an
 enrollment's `_apsk` reached only the in-memory `SecretStore`, and only the
@@ -15031,48 +15031,46 @@ a later sweep by a root-private holder; a lost chain link never did. Nothing act
 on an unsigned chain today, since `verifyChain` has no production caller, and
 Gary ruled the fix knowing that.
 
-- at_auth's typed keyfile holds an enrollment's links in a `links` map on its
-  entry (`AtKeys.fileLink`, `linkFor`, `dropLink`), and only for an enrollment
-  the keyfile already holds, so a legacy keyfile never turns typed for one.
-- The secret-arrival hook files a conveyed link there and stamps it at once,
-  under the `publishChainLink` gate, so a running client no longer waits for a
-  restart.
-- `publishPendingLink` stamps a filed link as well as one in the secret store.
-  It drops a filed link once it is stamped, or once it never can be: it names
-  another enrollment or vouches for another key; it is a chain link whose
-  signature fails or whose signer's `_apsk` is withdrawn or gone; or it is a
-  root link that is malformed or does not verify. It drops only the link it
-  stamped, so one filed meanwhile stays. One that cannot be stamped for now (no
-  readable `_apsk`, no published signing root, a chain-link check that failed
-  for some other reason, such as the network) stays filed for the next attempt.
-- A link the keyfile cannot hold is still stamped from the secret store, and a
-  keyfile that cannot be written keeps the envelope until the next start.
-- A link is not kept after stamping. It signs the `_apsk` value, so after a
-  rewrite under a new key the old link vouches for nothing and only a new one
-  will do.
+- The secret-arrival hook stamps a conveyed link at once, through
+  `PqSigningChain.stampConveyedLink` and under the `publishChainLink` gate, so a
+  running client no longer waits for a restart.
+- A link that may yet be stamped but cannot be now makes the hook throw, so the
+  sweep keeps its envelope on the atServer and the next start handles it again,
+  until the envelope's 7-day TTL runs out. That covers no readable `_apsk`, no
+  published signing root, and a chain-link check that failed for a reason other
+  than the link itself, such as the network.
+- A link that never can be stamped lets its envelope go: one that names another
+  enrollment or vouches for another key, a chain link whose signature fails or
+  whose signer's `_apsk` is withdrawn or gone, and a root link that is malformed
+  or does not verify.
+- `publishPendingLink`, the startup step, still stamps a link the secret store
+  holds.
 
 The sweep still conveys root links only, as
 [67](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10) has it. A sweep re-sending a missing
 chain link was ruled on 2026-10-07 and withdrawn on 2026-10-08, because a
 root-holder's sweep anchors any enrollment with no root link, chain-linked or
-not, and filing as links arrive closes most of the loss. A chain link is still
-lost where it cannot be filed: a legacy keyfile with no entry for its
-enrollment, a client whose startup does not publish links, or a writer that
-drops the field, such as at_auth before 4.0.0-rc5. at_onboarding_cli,
-at_cli_commons and at_client_flutter require 4.0.0-rc5 for that reason.
+not, and stamping links as they arrive closes most of the loss. A chain link is
+still lost when its envelope expires before it is read or stamped, and when a
+client's startup does not publish links.
 
-A filed link is also lost to a write that read the keys before the link was
-filed, since the never-lose check covers key material and not links. Both
-stores therefore serialise their writes: the keyfile with its lock file, and
-at_client_flutter's keychain with one in-memory lock that every write to it
-takes, removals included, because the keychain holds every atSign's keys in one
-entry. That lock does not reach another isolate, so an update whose keys are
-removed from outside it refuses rather than putting them back.
+⚠️ **AMENDED 2026-10-08 by gkc, before release.** As first built, a conveyed
+link also waited in at_auth's typed keyfile until it was stamped: a `links` map
+on the enrollment's entry (`AtKeys.fileLink`, `linkFor`, `dropLink`), filed by
+`fileConveyedLink` as the link arrived, dropped once it was stamped or could
+never be, and kept across restarts with no time limit. at_onboarding_cli,
+at_cli_commons and at_client_flutter required at_auth 4.0.0-rc5 so that no
+writer they ship would drop the field. Gary revisited the premise the same day:
+nothing in production walks a chain, a fully privileged root-holder's sweep
+sends a root link to any enrollment without one, and the link that will matter
+in steady state is the one an approver provides at approval, which a proposed
+approval-time stamp would deliver with nothing stored on the enrollee's side.
+The keyfile half was taken out and the envelope kept instead, and the at_auth
+floors went back to 4.0.0-rc4. The keychain write lock built beside it stayed,
+since it also stops one atSign's write undoing another's key material.
 
-Pinned by `test/pq_signing_chain_filed_links_test.dart`, for the keyfile by
-at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
-`at_keys_test.dart`, and for the keychain by at_client_flutter's
-`keychain_io_impl_test.dart`.
+Pinned by `test/pq_signing_chain_conveyed_links_test.dart`, and for the keychain
+by at_client_flutter's `keychain_io_impl_test.dart`.
 
 ## 153. An arriving nskey private is checked against what is published, else named by its length (2026-10-08)
 

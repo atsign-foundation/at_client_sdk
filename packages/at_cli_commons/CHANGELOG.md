@@ -1,7 +1,7 @@
 ## 3.1.2-rc3
 
 - build: requires `at_onboarding_cli` ^2.0.0-rc4, `at_client` ^3.15.0-rc4 and
-  `at_auth` ^4.0.0-rc5, for their fixes to upgrading from at_client 3.14.0.
+  `at_auth` ^4.0.0-rc4, for their fixes to upgrading from at_client 3.14.0.
 
 ## 3.1.2-rc2
 
