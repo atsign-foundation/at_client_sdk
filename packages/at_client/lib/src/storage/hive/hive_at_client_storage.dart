@@ -86,7 +86,13 @@ class HiveAtClientStorage extends AtClientStorageBase {
     final globalHome = (Hive as HiveImpl).homePath;
     final bundle = await openReportingOnce(() => _factory.initialize(atSign,
         HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
-    final queue = await openHiveSyncQueue(atSign, storagePath: storagePath);
+    final AtSyncQueue queue;
+    try {
+      queue = await openHiveSyncQueue(atSign, storagePath: storagePath);
+    } catch (_) {
+      await bundle.close();
+      rethrow;
+    }
     _bundle = bundle;
     _queue = queue;
 
