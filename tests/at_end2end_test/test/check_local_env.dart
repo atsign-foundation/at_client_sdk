@@ -82,7 +82,15 @@ Future<SecureSocket?> _connect(String host, int port,
   return socket;
 }
 
-void _onData(dynamic data) => _queue.add(utf8.decode(data));
+/// Queues each answer without the prompt the atServer appends after it, so a
+/// `data:null` answer is one [_read] can recognise.
+void _onData(dynamic data) {
+  var text = utf8.decode(data);
+  if (text.endsWith('@') && text.contains('\n')) {
+    text = text.substring(0, text.lastIndexOf('\n') + 1);
+  }
+  _queue.add(text);
+}
 
 Future<String> _read({int maxWaitMs = 5000}) async {
   for (var i = 0; i < (maxWaitMs / 100).round(); i++) {
