@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/hive.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:hive/hive.dart';
@@ -58,7 +59,7 @@ void main() {
   }
 
   String queueFile(String atSign, String directory) =>
-      '$directory/${AtSyncQueue.boxNameForAtSign(atSign)}.hive';
+      '$directory/${HiveBoxSyncQueueStore.boxNameFor(atSign)}.hive';
 
   /// Leaves [atSign]'s queue box in [directory] holding [entries], as the
   /// earlier release wrote one on Hive's global instance.
@@ -66,7 +67,7 @@ void main() {
       String atSign, String directory, Map<String, String> entries) async {
     final hive = HiveImpl()..init(directory);
     final box =
-        await hive.openBox<String>(AtSyncQueue.boxNameForAtSign(atSign));
+        await hive.openBox<String>(HiveBoxSyncQueueStore.boxNameFor(atSign));
     await box.putAll(entries);
     await box.close();
   }

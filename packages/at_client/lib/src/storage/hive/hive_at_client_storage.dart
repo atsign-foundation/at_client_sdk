@@ -1,11 +1,12 @@
 import 'dart:io';
 
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/storage/hive/open_reporting_once.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
 // ignore: implementation_imports
 import 'package:hive/src/hive_impl.dart';
@@ -79,8 +80,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
     final globalHome = (Hive as HiveImpl).homePath;
     final bundle = await openReportingOnce(() => _factory.initialize(atSign,
         HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
-    final queue = AtSyncQueue(atSign: atSign, storagePath: storagePath);
-    await queue.open();
+    final queue = await openHiveSyncQueue(atSign, storagePath: storagePath);
     _bundle = bundle;
     _queue = queue;
 
@@ -98,8 +98,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
   }
 
   /// The sha this atSign's keystore and queue boxes are named from.
-  String get _sha =>
-      AtSyncQueue.boxNameForAtSign(atSign).substring('syncqueue_'.length);
+  String get _sha => AtUtils.getShaForAtSign(atSign);
 
   /// Whether [directory] holds a queue box for the atSign named by [sha] but
   /// no keystore for it, which a store of that atSign never leaves.
@@ -115,14 +114,15 @@ class HiveAtClientStorage extends AtClientStorageBase {
   Future<void> _adoptStrayQueueIn(String directory) async {
     if (!_holdsStrayQueue(directory, _sha)) return;
     try {
-      final name = AtSyncQueue.boxNameForAtSign(atSign);
+      final name = HiveBoxSyncQueueStore.boxNameFor(atSign);
       final HiveInterface hive = _directoriesOpened.contains(directory)
           ? HiveInstances.forPath(directory)
           : (HiveImpl()..init(directory));
       if (hive.isBoxOpen(name)) return;
-      final taken = await syncQueue.adopt(
-          await openReportingOnce(() => hive.openBox<String>(name)),
+      final stray = await openReportingOnce(() => hive.openBox<String>(name));
+      final taken = await syncQueue.adopt(HiveBoxSyncQueueStore(stray),
           keep: _agreesWithKeyStore);
+      await stray.deleteFromDisk();
       _logger.info('$atSign: took $taken pending write(s) from a sync queue '
           'an earlier release left in $directory');
     } catch (e) {

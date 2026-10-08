@@ -351,8 +351,8 @@ void main() {
       // A real queue in a real failure state - constructed and never opened,
       // so every enqueue throws. Injected, so the lazy open that would
       // otherwise repair it never runs.
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
       await localSecondary.executeVerb(builder, sync: true);
@@ -371,8 +371,8 @@ void main() {
     });
 
     test('a write that cannot be queued still lands in the keystore', () async {
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
       await localSecondary.executeVerb(builder, sync: true);

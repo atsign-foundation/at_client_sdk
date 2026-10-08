@@ -13,6 +13,7 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -140,12 +141,10 @@ class LocalSecondary implements Secondary {
         );
       }
       // NOTE: a null storagePath is legal — a LocalSecondary built around an
-      // injected keystore has no hiveStoragePath, and AtSyncQueue then uses
+      // injected keystore has no hiveStoragePath, and the queue then opens on
       // the global Hive instance.
-      final q = AtSyncQueue(
-          atSign: atSign,
+      final q = await openHiveSyncQueue(atSign,
           storagePath: _atClient.getPreferences()?.hiveStoragePath);
-      await q.open();
       _syncQueue = q;
       return q;
     }();
