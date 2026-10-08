@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -7,6 +6,8 @@ import 'package:at_client_wasm/src/keys/envelope_exceptions.dart';
 import 'package:at_client_wasm/src/keys/key_envelope.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
 import 'package:test/test.dart';
+
+import 'fixtures/envelope_v1_golden.dart';
 
 void main() {
   const argon2idCheap =
@@ -367,8 +368,7 @@ void main() {
 
   group('golden', () {
     test('read test/fixtures/envelope_v1_golden.json', () async {
-      final file = File('test/fixtures/envelope_v1_golden.json');
-      final goldenBytes = await file.readAsBytes();
+      final goldenBytes = utf8.encode(envelopeV1Golden);
 
       final goldenPrf =
           PrfSecret(Uint8List.fromList(List.generate(32, (i) => i)));
