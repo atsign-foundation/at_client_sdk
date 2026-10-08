@@ -37,6 +37,9 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   bool get holdsKeyMaterial => false;
 
   @override
+  bool get replicatesServer => false;
+
+  @override
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>
       _keyStore ?? (throw StateError('storage for $atSign is not open'));
 

@@ -98,7 +98,7 @@ class RemoteWriteThroughKeyStore
         await _withRetry(() => remoteSecondary.executeVerb(builder));
     final cleanResponse = response.replaceFirst(RegExp('^data:'), '');
     final decoded = jsonDecode(cleanResponse) as Map<String, dynamic>;
-    return AtData().fromJson(decoded);
+    return AtData().fromJson(decoded)..key = key;
   }
 
   @override
