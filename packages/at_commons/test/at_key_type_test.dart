@@ -104,6 +104,8 @@ void main() {
       keyTypeList.add('${AtConstants.atEncryptionPublicKey}@owner');
       keyTypeList.add('public:signing_publickey@alice');
       keyTypeList.add('public:signing_publickey@☎️_0002');
+      keyTypeList.add('${AtConstants.atTelemetrySigningPublicKey}@alice');
+      keyTypeList.add('${AtConstants.atTelemetrySigningPublicKey}@☎️_0002');
       // keys without atsign
       keyTypeList.add(AtConstants.atPkamPublicKey);
       keyTypeList.add(AtConstants.atPkamPrivateKey);
@@ -115,6 +117,7 @@ void main() {
       keyTypeList.add(AtConstants.commitLogCompactionKey);
       keyTypeList.add(AtConstants.accessLogCompactionKey);
       keyTypeList.add(AtConstants.notificationCompactionKey);
+      keyTypeList.add(AtConstants.atTelemetrySigningPrivateKey);
       keyTypeList.add('configkey');
       keyTypeList.add('_latestNotificationIdv2');
 
@@ -141,6 +144,7 @@ void main() {
       keyTypeList.add(AtConstants.atEncryptionSharedKey);
       keyTypeList.add('@allen:${AtConstants.atSigningPrivateKey}');
       keyTypeList.add(AtConstants.atSigningPrivateKey);
+      keyTypeList.add(AtConstants.atTelemetrySigningPublicKey);
 
       for (var key in keyTypeList) {
         var type = RegexUtil.keyType(key, false);
@@ -167,6 +171,7 @@ void main() {
       keysList.add('${AtConstants.commitLogCompactionKey}@alice123');
       keysList.add('${AtConstants.accessLogCompactionKey}@alice123');
       keysList.add('${AtConstants.notificationCompactionKey}@alice123');
+      keysList.add('${AtConstants.atTelemetrySigningPrivateKey}@alice123');
       keysList.add('configkey@alice123');
       keysList.add('_latestNotificationIdv2@client');
 
@@ -202,6 +207,12 @@ void main() {
       keysList.add('public:commitLogCompactionStats');
       keysList.add('public:accessLogCompactionStats');
       keysList.add('public:notificationCompactionStats');
+      keysList.add('public:at_telemetry_signing_privatekey');
+      keysList.add(
+          '@alice:_at_telemetry_signing_publickey.__atserver@alice');
+      keysList.add('private:_at_telemetry_signing_publickey.__atserver@alice');
+      keysList.add('public:_at_telemetry_signing_publickey@alice');
+      keysList.add('public:_at_telemetry_signing_publickey.wavi@alice');
       keysList.add('privatekey:configkey');
       keysList.add('privatekey:_latestNotificationIdv2');
 
