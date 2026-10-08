@@ -41,6 +41,7 @@ import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/remote_only/remote_only_at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -1159,6 +1160,20 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   Future<void> armAvailableTimerForTest() => _armAvailableTimer();
 
+  /// Runs [_rederiveFromEnrollment], as a settled enrollment change would.
+  @visibleForTesting
+  Future<void> rederiveFromEnrollmentForTest(
+          {required String? previousEnrollmentId}) =>
+      _rederiveFromEnrollment(previousEnrollmentId: previousEnrollmentId);
+
+  /// Whether the expiry timer is currently armed.
+  @visibleForTesting
+  bool get expiryTimerArmedForTest => _expiryTimer != null;
+
+  /// Whether the availability timer is currently armed.
+  @visibleForTesting
+  bool get availableTimerArmedForTest => _availableTimer != null;
+
   /// Runs [_onExpiryFire], as a sweep that the timer started would.
   @visibleForTesting
   Future<void> expirySweepForTest() => _onExpiryFire();
@@ -2213,12 +2228,17 @@ class AtClientImpl implements AtClient {
   /// authenticated as the superseded enrollment, for good when that
   /// enrollment is fully privileged, and until its next command once the
   /// atServer has revoked a scoped one.
+  /// A remote-only storage on the old connection moves to the new one.
   Future<void> _rederiveFromEnrollment(
       {required String? previousEnrollmentId}) async {
     await _resolveSigningAlgoFromKeyMaterial();
 
     final previous = _remoteSecondary;
-    _remoteSecondary = buildRemoteSecondary();
+    final next = _remoteSecondary = buildRemoteSecondary();
+    if (_storage case final RemoteOnlyAtClientStorage storage
+        when identical(storage.remoteSecondary, previous)) {
+      storage.remoteSecondary = next;
+    }
     try {
       await previous?.closeConnection();
     } on Exception catch (e) {
