@@ -15085,6 +15085,14 @@ Such a private is filed unchecked, as it was before. A test holds that no two
 KEMs `kemFor` implements share a seed length. Only fleets that configure
 ML-KEM-1024 meet the mislabelling; every built-in posture mints X-Wing.
 
+A seed already filed under the wrong label, as at_client 3.15.0-rc1 to rc5
+filed an ML-KEM-1024 one, is read under the KEM its length names, by
+`NskeyPrivateFiling.read` and `filedFor` alike. The keyfile cannot be corrected
+instead, since at_auth refuses to change a filed material's algorithm. A label
+naming no KEM this build implements is still not read, whatever the seed's
+length: an ML-KEM-768 seed is 64 bytes too.
+
 Pinned by `test/nskey_filing_published_key_test.dart`, for the start-up
 bootstrap's filing, a key ring's own and a rotation's, and by the seed-length
-tests in `test/nskey_private_filing_test.dart`.
+tests in `test/nskey_private_filing_test.dart`, which also hold the reading of a
+mislabelled seed.

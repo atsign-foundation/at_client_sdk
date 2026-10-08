@@ -881,7 +881,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     the advertised KEM** rather than assuming X-Wing. With nothing published under the
     private's kid, as for an earlier generation, the seed's length names the KEM: X-Wing
     takes exactly 32 bytes and ML-KEM-1024 exactly 64, and a seed of any other length is
-    refused.
+    refused. A seed already filed under a label its length contradicts is **opened under
+    the KEM its length names**.
 - **Then (the version is negotiated, not fixed):** `suites` says which sealing
   constructions the owner can **open**, which `alg` does not determine — a KEM key opens
   every construction built on that KEM. An X-Wing owner therefore receives

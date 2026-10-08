@@ -29,7 +29,7 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 final _logger = AtSignLogger('NskeyPrivateFiling');
 
 /// One private filed for a namespace: the generation it opens, its seed, the
-/// algorithm it was filed under, and when it was filed.
+/// algorithm it expands under, and when it was filed.
 typedef FiledNskeySeed = ({
   String nskeyKid,
   NskeySeed seed,
@@ -319,7 +319,7 @@ class NskeyPrivateFiling {
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
-      final keyAlgo = SecretSharingAlgos.keyAlgoForMaterial(material.algorithm);
+      final keyAlgo = _keyAlgoOf(material);
       final kem = keyAlgo == null ? null : SecretSharingAlgos.kemFor(keyAlgo);
       if (kem == null) {
         _logger.info('The nskey seed for $namespace:$nskeyKid is a '
@@ -361,9 +361,24 @@ class NskeyPrivateFiling {
     }
   }
 
-  /// Every private filed for [namespace], with the algorithm it was filed
-  /// under and when; an entry under an algorithm this build cannot expand is
-  /// left out.
+  /// The key algorithm [material]'s seed expands under, or null for a label
+  /// this build does not know.
+  ///
+  /// The seed's length decides wherever it names a KEM, and otherwise the
+  /// label: every at_client 3.15.0 prerelease up to rc5 filed a seed nothing
+  /// published named as X-Wing whatever its length, and a keyfile refuses to
+  /// relabel a material.
+  static String? _keyAlgoOf(CryptographicMaterial material) {
+    final labelled = SecretSharingAlgos.keyAlgoForMaterial(material.algorithm);
+    if (labelled == null) return null;
+    return SecretSharingAlgos.keyAlgoForSeedLength(
+            material.bytes.bytes.length) ??
+        labelled;
+  }
+
+  /// Every private filed for [namespace], with the algorithm it expands under
+  /// and when it was filed; an entry under an algorithm this build cannot
+  /// expand is left out.
   Future<List<FiledNskeySeed>> filedFor(String namespace) async {
     final keys = await _readSourceOrNull('every private for $namespace');
     if (keys == null) return const [];
@@ -373,8 +388,7 @@ class NskeyPrivateFiling {
         if (material.role == CryptographicMaterialRole.privateDecapsulation &&
             material.keyId.startsWith(prefix) &&
             !material.keyId.substring(prefix.length).contains('.'))
-          if (SecretSharingAlgos.keyAlgoForMaterial(material.algorithm)
-              case final keyAlgo?)
+          if (_keyAlgoOf(material) case final keyAlgo?)
             (
               nskeyKid: material.keyId.substring(prefix.length),
               seed: NskeySeed(Uint8List.fromList(material.bytes.bytes)),
@@ -448,8 +462,8 @@ class NskeyPrivateFiling {
   /// but not for ML-KEM, whose decapsulation key is expanded and cannot be
   /// turned back into a public half. [read] expands it again on the way out.
   ///
-  /// [keyAlgo] is stored with it because the bytes alone do not identify a
-  /// KEM — 32 and 64 bytes are both valid seeds for one of them.
+  /// [keyAlgo] is stored with it as the material's algorithm, though a reader
+  /// goes by the seed's length wherever that names a KEM.
   ///
   /// The minting path calls this **before publishing the public half**: a
   /// published key whose private did not survive leaves every sender sealing

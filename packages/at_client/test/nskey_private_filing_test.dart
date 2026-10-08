@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart' show StoppedException;
+import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show Atsign;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -307,6 +307,61 @@ void main() {
     expect(expanded.bytes, isNot(seed.bytes),
         reason: 'under ML-KEM the two forms differ — the distinction the '
             'NskeySeed/NskeyDecapsulationKey types exist to keep');
+  });
+
+  Future<NskeyPrivateFiling> filedUnder(
+      CryptographicMaterialAlgorithm algorithm, Uint8List seed) async {
+    final keys = AtKeys()
+      ..addKey(CryptographicMaterial(
+        keyId: NskeyPrivateFiling.keyIdFor(namespace, 'kid-mislabelled'),
+        role: CryptographicMaterialRole.privateDecapsulation,
+        algorithm: algorithm,
+        bytes: AtBytes(seed),
+        createdAt: DateTime.now().toUtc(),
+      ));
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, keys);
+    return NskeyPrivateFiling(keysIo: io, atSign: atSign);
+  }
+
+  group('an ML-KEM-1024 seed filed under the X-Wing label', () {
+    final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+    late Uint8List seed;
+    late NskeyPrivateFiling filer;
+
+    setUp(() async {
+      seed = kem.newSeed();
+      filer = await filedUnder(CryptographicMaterialAlgorithm.xWing, seed);
+    });
+
+    test('opens under ML-KEM-1024', () async {
+      final expanded = await filer.read(namespace, 'kid-mislabelled');
+
+      expect(expanded?.bytes, (await kem.keyPairFromSeed(seed)).secretKey,
+          reason: 'at_client 3.15.0-rc1 to rc5 filed a seed nothing '
+              'published named as X-Wing whatever its length, and a keyfile '
+              'refuses to relabel a material, so its length has to decide');
+    });
+
+    test('is reported as ML-KEM-1024', () async {
+      final filed = await filer.filedFor(namespace);
+
+      expect(filed.single.keyAlgo, SecretSharingAlgos.mlKem1024,
+          reason: 'a caller expands what this reports under the KEM it names, '
+              'and X-Wing refuses a 64-byte seed');
+    });
+  });
+
+  test(
+      'a seed filed under a KEM this build lacks is not read, whatever its '
+      'length', () async {
+    final filer = await filedUnder(CryptographicMaterialAlgorithm.mlKem768,
+        SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!.newSeed());
+
+    expect(await filer.read(namespace, 'kid-mislabelled'), isNull,
+        reason: 'an ML-KEM-768 seed is 64 bytes too, and expanding it under '
+            'ML-KEM-1024 yields a key that opens nothing');
+    expect(await filer.filedFor(namespace), isEmpty);
   });
 
   group('a key source that cannot be read is not an empty one', () {
