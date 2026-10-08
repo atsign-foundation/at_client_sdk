@@ -1880,16 +1880,21 @@ so the keys @alice seals to are also only as trustworthy as her atServer.
   keys rather than locally-held ones — by substituting the *recipient* key. The same holds
   for data those atSigns send out, since their clients fetch every peer key through it,
   so the trust covers both directions of an atSign's traffic.
-- **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
-  read is a pass-through re-seal, so any *sender* signature inside the payload survives
-  unchanged and still verifies. To silently **modify**, the operator must also defeat that
-  sender signature — which for a [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means substituting the *sender's*
-  signing key **as the recipient's client sees it**. It can (it mediates that client's
-  lookups too), so modify is achievable — but it needs a **second** substitution and is
-  defeated the moment the recipient anchors the sender's key independently (out-of-band
-  pin / KT). An unsigned or self-data payload is silently modifiable with the single
-  recipient-key substitution. So: read depends on one substitution; silent modify depends
-  on two (and both collapse under an independent anchor).
+- **Can — modify (a strictly harder bar where the sender signs):** read and integrity
+  are **asymmetric**. Pure read is a pass-through re-seal, so any *sender* signature inside
+  the payload survives unchanged and still verifies. To silently **modify** a signed
+  payload, the operator must also defeat that sender signature — which for a
+  [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means
+  substituting the *sender's* signing key **as the recipient's client sees it**. It can
+  (it mediates that client's lookups too), so modify is achievable — but it needs a
+  **second** substitution and is defeated the moment the recipient anchors the sender's
+  key independently (out-of-band pin / KT). The sender of an **unsigned** payload rests
+  on the atServers alone, with no key substituted: nskey data values and their
+  content-key conveyances carry no sender signature, and `pqSeal` is RFC 9180 Base mode,
+  which authenticates no sender, so a reader takes the `sharedBy` a record names from the
+  atServer that served it, self-data included. So: read depends on one substitution;
+  modifying a signed payload depends on two (both collapse under an independent anchor);
+  an unsigned payload's sender depends on the atServers alone.
 - **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
   substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
   (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
@@ -1943,6 +1948,12 @@ exclusive.
    while still trusting a third-party host* — but the heaviest: TEEs move trust to the
    silicon vendor and carry side-channel/rollback risk; audit proves the *source* honest,
    not that the *running instance* is that source (needs attestation to bridge the gap).
+
+None of these rungs reaches the sender of an **unsigned** payload
+([section 7.3](#73-impact-scope--precisely-what-an-operator-can-and-cannot-do)), which
+rests on the atServers with no key substituted, so there is nothing to detect. A sender
+signature on the content-key conveyance moves it onto the sender's signing key, and
+rungs 3–4 anchor that key outside the atServers.
 
 **Note on `disallowLegacyEncryption` / PQ scope:** none of the above is a PQ-specific
 problem — it is the standard end-to-end trust-root problem, present classically. PQ makes
