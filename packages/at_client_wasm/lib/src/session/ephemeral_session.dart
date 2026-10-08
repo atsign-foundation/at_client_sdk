@@ -11,10 +11,11 @@ Future<AtClient> ephemeralSession({
   required AtKeys atKeys,
   required AtClientPreference prefs,
   required AtLookUpFactory lookUps,
-}) =>
-    remoteOnlyClient(
-        atSign: atSign,
-        app: app,
-        prefs: prefs,
-        keysIo: InMemoryAtKeysIo.holding(atSign, atKeys),
-        lookUps: lookUps);
+}) async =>
+    (await remoteOnlyClient(
+            atSign: atSign,
+            app: app,
+            prefs: prefs,
+            keysIo: InMemoryAtKeysIo.holding(atSign, atKeys),
+            lookUps: lookUps))
+        .client;

@@ -12,3 +12,4 @@ export 'src/session/key_acquisition.dart';
 export 'src/session/portal_session.dart';
 export 'src/session/ephemeral_session.dart';
 export 'src/session/server_copy.dart';
+export 'src/session/lookup_server_copy.dart';

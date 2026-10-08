@@ -11,13 +11,6 @@ import '../keys/unlock_secret.dart';
 import '../keys/web_at_keys_io.dart';
 import 'server_copy.dart';
 
-/// The credential id of the passkey that last unlocked an atSign's keys on
-/// this device, kept beside its envelope.
-abstract interface class CredentialHintStore {
-  Future<Uint8List?> credentialId(String atSign);
-  Future<void> putCredentialId(String atSign, Uint8List id);
-}
-
 /// The keys a session runs on. [prf] is set only when they are held in the
 /// device's [KeyBytesStore] under a passkey, and is the secret [heal] adds to
 /// the server copy.
@@ -38,7 +31,7 @@ Future<AcquiredKeys> acquireKeys({
   required String app,
   required KeyBytesStore store,
   required PasskeyKek kek,
-  required ServerCopy server,
+  required ServerCopyReader server,
   required Future<PassphraseSecret> Function(String atSign) promptPassphrase,
   KeyEnvelopeCodec codec = const KeyEnvelopeCodec(),
   CredentialHintStore? hintStore,

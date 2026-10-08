@@ -382,6 +382,7 @@ void main() {
           store: store,
           kek: PasskeyKek(port),
           server: server,
+          healServer: (_) => server,
           promptPassphrase: (_) async => cut.passphrase,
           codec: codec);
 
@@ -390,6 +391,32 @@ void main() {
       expect(server.puts, 1);
       expect(await opens(server.held, port.secret), isTrue);
       expect(await opens(server.held, cut.passphrase), isTrue);
+    });
+
+    test('Mode P heals over the client\'s own RemoteSecondary', () async {
+      final port = FakePasskeyPort()
+        ..getError = PasskeyCeremonyException('no credential');
+      RemoteSecondary? healedOver;
+
+      final client = await portalSession(
+          atSign: _atSign,
+          app: _app,
+          prefs: prefs,
+          lookUps: fakeLookUps,
+          store: store,
+          kek: PasskeyKek(port),
+          server: server,
+          healServer: (remote) {
+            healedOver = remote;
+            return server;
+          },
+          promptPassphrase: (_) async => cut.passphrase,
+          codec: codec);
+
+      final storage =
+          (client as AtClientImpl).storage! as RemoteOnlyAtClientStorage;
+      expect(healedOver, same(storage.remoteSecondary));
+      expect(healedOver, same(client.getRemoteSecondary()));
     });
   });
 }
