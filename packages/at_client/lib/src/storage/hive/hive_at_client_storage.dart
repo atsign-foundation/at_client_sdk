@@ -111,14 +111,12 @@ class HiveAtClientStorage extends AtClientStorageBase {
     await _handOnStrayQueuesIn(here);
   }
 
-  /// The sha this atSign's keystore and queue boxes are named from.
-  String get _sha => AtUtils.getShaForAtSign(atSign);
-
-  /// Whether [directory] holds a queue box for the atSign named by [sha] but
-  /// no keystore for it, which a store of that atSign never leaves.
-  static bool _holdsStrayQueue(String directory, String sha) =>
-      File('$directory/syncqueue_$sha.hive').existsSync() &&
-      !File('$directory/$sha.hive').existsSync();
+  /// Whether [directory] holds a queue box for [atSign] but no keystore for
+  /// it, which a store of that atSign never leaves.
+  static bool _holdsStrayQueue(String directory, String atSign) =>
+      File('$directory/${HiveBoxSyncQueueStore.boxNameFor(atSign)}.hive')
+          .existsSync() &&
+      !File('$directory/${AtUtils.getShaForAtSign(atSign)}.hive').existsSync();
 
   /// Takes in this atSign's stray queue in [directory], if there is one.
   ///
@@ -126,7 +124,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// opening is worth more than the writes it might hold, and the next open
   /// tries again.
   Future<void> _adoptStrayQueueIn(String directory) async {
-    if (!_holdsStrayQueue(directory, _sha)) return;
+    if (!_holdsStrayQueue(directory, atSign)) return;
     try {
       final name = HiveBoxSyncQueueStore.boxNameFor(atSign);
       final HiveInterface hive = _directoriesOpened.contains(directory)
@@ -150,7 +148,8 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// belongs to, when exactly one store of that atSign is open.
   Future<void> _handOnStrayQueuesIn(String directory) async {
     for (final other in _open.toList()) {
-      if (identical(other, this) || !_holdsStrayQueue(directory, other._sha)) {
+      if (identical(other, this) ||
+          !_holdsStrayQueue(directory, other.atSign)) {
         continue;
       }
       if (_open.where((s) => s.atSign == other.atSign).length != 1) continue;
