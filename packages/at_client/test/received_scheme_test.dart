@@ -29,7 +29,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(AtKey());
-    registerFallbackValue(NotificationParams.forText('', me));
+    registerFallbackValue(NotificationParams.forUpdate(AtKey()));
     registerFallbackValue(LookupVerbBuilder());
   });
 
