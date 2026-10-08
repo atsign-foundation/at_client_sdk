@@ -9,7 +9,7 @@ import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/service/write_through_sync_service.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -107,7 +107,7 @@ Future<AtClient> buildAtClient({
             lookUps: client is AtClientImpl ? client.lookUps : null)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
-        ? await SyncServiceImpl.create(client)
+        ? await defaultSyncServiceFor(client)
         : await syncServiceBuilder(client);
     client.enrollmentService = enrollmentServiceBuilder == null
         ? EnrollmentServiceImpl(client, AtEnrollment.create())

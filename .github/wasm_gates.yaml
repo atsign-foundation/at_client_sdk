@@ -78,8 +78,13 @@ at_client:
       allowed_offenders: []
       max_blocked_packages: 1
       min_files_walked: 1100
+    - barrel: package:at_client/remote_only.dart
+      allowed_offenders: []
+      max_blocked_packages: 3
+      min_files_walked: 1050
   probe:
     - package:at_client/at_client.dart
+    - package:at_client/remote_only.dart
   controls:
     - barrel: package:at_client/at_client.dart
       environment: io
