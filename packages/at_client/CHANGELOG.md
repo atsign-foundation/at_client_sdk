@@ -1,11 +1,14 @@
+## 3.15.0-rc6
+
+- fix: local storage the client cannot open, such as a file it may not read,
+  fails with an exception the app can catch, and no longer also ends a
+  command-line program with an unhandled error.
+
 ## 3.15.0-rc5
 
 - feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
   `AtSignLogger` come through `package:at_client/at_client.dart`, so an app no
   longer needs at_lookup or at_utils for them.
-- fix: local storage the client cannot open, such as a file it may not read,
-  fails with an exception the app can catch, and no longer also ends a
-  command-line program with an unhandled error.
 
 ## 3.15.0-rc4
 
