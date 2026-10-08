@@ -287,8 +287,7 @@ void main() {
         () async {
       await expectLater(
           acquire(FakePasskeyPort(),
-              importAtKeys: (_) async =>
-                  legacyAtKeys(atsign: Atsign('@bob'))),
+              importAtKeys: (_) async => legacyAtKeys(atsign: Atsign('@bob'))),
           throwsA(isA<AtKeysValidationException>()));
       expect(store.puts, 0);
     });
@@ -394,18 +393,21 @@ void main() {
           isNotNull);
     });
 
-    Future<AtClient> portal(FakePasskeyPort port) => portalSession(
-        atSign: _atSign,
-        app: _app,
-        prefs: prefs,
-        lookUps: fakeLookUps,
-        secondaryAddressFinder: _finder,
-        store: store,
-        kek: PasskeyKek(port),
-        server: server,
-        importAtKeys: importKeys,
-        codec: codec,
-        hintStore: hints);
+    Future<AtClient> portal(FakePasskeyPort port,
+            {ServerCopy Function(RemoteSecondary remote)? healServer}) =>
+        portalSession(
+            atSign: _atSign,
+            app: _app,
+            prefs: prefs,
+            lookUps: fakeLookUps,
+            secondaryAddressFinder: _finder,
+            store: store,
+            kek: PasskeyKek(port),
+            server: server,
+            healServer: healServer ?? (_) => server,
+            importAtKeys: importKeys,
+            codec: codec,
+            hintStore: hints);
 
     test('Mode P first visit imports and starts without a server copy',
         () async {
@@ -430,6 +432,20 @@ void main() {
       expect(server.puts, 1);
       expect(await opens(server.held, port.secret), isTrue);
       expect(await opens(server.held, other), isTrue);
+    });
+
+    test('Mode P heals over the client\'s own RemoteSecondary', () async {
+      RemoteSecondary? healedOver;
+
+      final client = await portal(FakePasskeyPort(), healServer: (remote) {
+        healedOver = remote;
+        return server;
+      });
+
+      final storage =
+          (client as AtClientImpl).storage! as RemoteOnlyAtClientStorage;
+      expect(healedOver, same(storage.remoteSecondary));
+      expect(healedOver, same(client.getRemoteSecondary()));
     });
   });
 }

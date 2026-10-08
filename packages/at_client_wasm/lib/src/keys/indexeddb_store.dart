@@ -6,8 +6,8 @@ import 'package:web/web.dart';
 
 import 'key_bytes_store.dart';
 
-/// A [KeyBytesStore] implementation that persists data to IndexedDB.
-class IndexedDbKeyBytesStore implements KeyBytesStore {
+/// A [KeyBytesStore] and [CredentialHintStore] that persists to IndexedDB.
+class IndexedDbKeyBytesStore implements KeyBytesStore, CredentialHintStore {
   IndexedDbKeyBytesStore._(this._db);
 
   final IDBDatabase _db;
@@ -72,10 +72,12 @@ class IndexedDbKeyBytesStore implements KeyBytesStore {
   }
 
   /// Stores a passkey [id] associated with the [atSign].
+  @override
   Future<void> putCredentialId(String atSign, Uint8List id) =>
       _put(_credentialsStore, atSign, id);
 
   /// Retrieves the passkey credential ID for the [atSign].
+  @override
   Future<Uint8List?> credentialId(String atSign) =>
       _get(_credentialsStore, atSign);
 

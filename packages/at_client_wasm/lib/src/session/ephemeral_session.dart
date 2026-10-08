@@ -12,12 +12,13 @@ Future<AtClient> ephemeralSession({
   required AtClientPreference prefs,
   required AtLookUpFactory lookUps,
   required SecondaryAddressFinder secondaryAddressFinder,
-}) =>
-    remoteOnlyClient(
-        atSign: atSign,
-        app: app,
-        prefs: prefs,
-        // ignore: invalid_use_of_visible_for_testing_member
-        keysIo: InMemoryAtKeysIo.holding(atSign, atKeys),
-        lookUps: lookUps,
-        secondaryAddressFinder: secondaryAddressFinder);
+}) async =>
+    (await remoteOnlyClient(
+            atSign: atSign,
+            app: app,
+            prefs: prefs,
+            // ignore: invalid_use_of_visible_for_testing_member
+            keysIo: InMemoryAtKeysIo.holding(atSign, atKeys),
+            lookUps: lookUps,
+            secondaryAddressFinder: secondaryAddressFinder))
+        .client;
