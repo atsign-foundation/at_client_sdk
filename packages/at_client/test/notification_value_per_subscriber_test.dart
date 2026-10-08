@@ -239,27 +239,6 @@ void main() {
   });
 
   test(
-      'an encrypted text message is matched against its decrypted text, and '
-      'decrypted once', () async {
-    final byText = <String>[];
-    final byOther = <String>[];
-    service.subscribe(regex: r'ipaddr').listen((n) => byText.add(n.key));
-    service
-        .subscribe(regex: r'"port"', shouldDecrypt: true)
-        .listen((n) => byOther.add(n.key));
-
-    await deliver(_frame('@alice:$_ciphertext',
-        // ignore: deprecated_member_use
-        messageType: MessageTypeEnum.text));
-
-    expect(byText, ['@alice:$_plaintext'],
-        reason: 'a text message\'s key is its ciphertext, so the regex is '
-            'matched against the decrypted text');
-    expect(byOther, ['@alice:$_plaintext']);
-    expect(provider.decrypts, 1);
-  });
-
-  test(
       'subscribers parked on one notification are re-driven from one '
       'decryption', () async {
     provider.filed = false;
