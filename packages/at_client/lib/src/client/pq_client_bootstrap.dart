@@ -239,6 +239,10 @@ class PqClientBootstrap {
     sharing.fileReceivedSecret = (secret) async {
       await filing?.filePending([secret]);
       await root.filePendingPrivate(_atSign, [secret]);
+      if (gates.publishChainLink && PqSigningChain.isLinkSecret(secret.name)) {
+        await chain.fileConveyedLink(secret);
+        await _publishChainLink();
+      }
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);

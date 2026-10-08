@@ -57,7 +57,7 @@ abstract interface class EnrollmentConveyance {
   /// Every approved enrollment with a discoverable key package and no
   /// published *root* link gets one signed with the root private and conveyed.
   /// The enrollment verifies it against the published signing root and stamps
-  /// it onto its own `_apsk` at its next start; this client cannot stamp it
+  /// it onto its own `_apsk` when it arrives; this client cannot stamp it
   /// directly, because `_apsk` accepts writes only from its own enrollment's
   /// connection, and that restriction is the guarantee the anchoring hangs
   /// off.

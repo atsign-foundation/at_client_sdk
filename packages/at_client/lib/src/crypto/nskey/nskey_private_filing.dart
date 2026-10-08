@@ -160,8 +160,8 @@ class NskeyPrivateFiling {
   /// Files every conveyed nskey private waiting in the secret store. Returns
   /// how many were filed.
   ///
-  /// A private that arrives after this runs is filed at the next start, and
-  /// until then the namespace simply reads as one this client cannot open.
+  /// A private that arrives later is filed as it arrives, by the client's
+  /// `fileReceivedSecret` hook.
   ///
   /// The caller must have swept first. The store is in memory and its only
   /// populator is [PairwiseSecretSharing.sweepOnce], so draining it before a

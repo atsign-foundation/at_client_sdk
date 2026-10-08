@@ -2713,7 +2713,9 @@ enrollment id, or `primary` — is fully privileged by construction, with no
 roster lookup.
 
 **The approver never writes the enrollee's `_apsk`.** It conveys the link as a
-sealed secret and the enrollee stamps it at startup.
+sealed secret and the enrollee stamps it as it arrives, keeping it in its
+keyfile entry until it is stamped
+([`decisions.md` 152](detail/decisions.md#152-a-conveyed-link-waits-in-the-keyfile-until-stamped-and-is-stamped-as-it-arrives-2026-10-08)).
 
 #### 9.8.5 Two coherence rules on the preference
 

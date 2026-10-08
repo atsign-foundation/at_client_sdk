@@ -138,7 +138,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
 
     // NOTE: the link vouching for this enrollment is conveyed rather than
     // published, because `_apsk` accepts writes only from its own
-    // enrollment's connection, so the child stamps it on first run. An
+    // enrollment's connection, so the child stamps it when it arrives. An
     // approver holding neither the signing-root private nor a data signing key
     // of its own conveys no link at all: `signingKeys` falls back to the APKAM
     // authentication key, which is dropped from the advertisement rather than
@@ -323,7 +323,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     }
     if (conveyed > 0) {
       _logger.info('Swept root links to $conveyed unanchored enrollment(s); '
-          'each stamps its own _apsk at its next start');
+          'each stamps its own _apsk when it arrives');
     }
     return conveyed;
   }

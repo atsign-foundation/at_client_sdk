@@ -431,7 +431,7 @@ class NskeySeeding {
               return;
             }
             _logger.info('No holder answered for $name in $owner:$namespace '
-                'within the wait; a later answer is filed at the next start '
+                'within the wait; a later answer is filed as it arrives '
                 '($e)');
           }));
         }

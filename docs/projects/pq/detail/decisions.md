@@ -15018,3 +15018,34 @@ language's JSON reader. Whether ids become strings at a major release is not
 decided here.
 
 Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
+
+## 152. A conveyed link waits in the keyfile until stamped, and is stamped as it arrives (2026-10-08)
+
+**Decided by gkc on 2026-10-07 and 2026-10-08.** A link vouching for an
+enrollment's `_apsk` reached only the in-memory `SecretStore`, and only the
+startup's link step stamped it. The envelope carrying a link is deleted once it
+is received, so a link received after that step, one whose stamp failed (an
+offline start, an `_apsk` that could not be read), or one held by a process that
+stopped first was gone at the next restart. A lost root link came back only with
+a later sweep by a root-private holder; a lost chain link never did. Nothing acts
+on an unsigned chain today, since `verifyChain` has no production caller, and
+Gary ruled the fix knowing that.
+
+- at_auth's typed keyfile holds an enrollment's links in a `links` map on its
+  entry (`AtKeys.fileLink`, `linkFor`, `dropLink`), and only for an enrollment
+  the keyfile already holds, so a legacy keyfile never turns typed for one.
+- The secret-arrival hook files a conveyed link there and stamps it at once,
+  under the `publishChainLink` gate, so a running client no longer waits for a
+  restart.
+- `publishPendingLink` stamps a filed link as well as one in the secret store.
+  It drops a filed link once it is stamped, or once it never can be: it names
+  another enrollment, vouches for another key, or is a root link that does not
+  verify. One that cannot be stamped for now (no readable `_apsk`, no published
+  signing root, a check that threw) stays filed for the next attempt.
+- A link is not kept after stamping. It signs the `_apsk` value, so after a
+  rewrite under a new key the old link vouches for nothing and only a new one
+  will do.
+
+Pinned by `test/pq_signing_chain_filed_links_test.dart`, and for the keyfile by
+at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
+`at_keys_test.dart`.

@@ -545,7 +545,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      a pq-native E2 is, since it advertises `mldsa65`
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
      postures). What chains it to the root is the **approval-chain link** `alice1` signs
-     and conveys, which E2 stamps onto its own `_apsk` **metadata** at first run — the
+     and conveys, which E2 stamps onto its own `_apsk` **metadata** as it arrives — the
      value itself is untouched either way.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under

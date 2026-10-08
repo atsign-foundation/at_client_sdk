@@ -7,7 +7,8 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, AtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show serialiseApskWrite;
@@ -21,6 +22,7 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
+import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -515,16 +517,125 @@ class PqSigningChain {
   ) async =>
       _readField(enrollmentId, rootLinkField);
 
+  /// Whether [secretName] names a conveyed link of either flavour.
+  static bool isLinkSecret(String secretName) =>
+      secretName == linkSecretName || secretName == rootLinkSecretName;
+
+  /// Files a link conveyed to this enrollment into its keyfile entry, where it
+  /// waits for [publishPendingLink] across a restart, answering whether it was
+  /// filed.
+  ///
+  /// A client with no keyfile to write, or whose keyfile holds no entry for
+  /// this enrollment, keeps the link in its secret store only. A keyfile that
+  /// cannot be written throws, so the envelope carrying the link is kept for
+  /// the next sweep.
+  Future<bool> fileConveyedLink(Secret secret) async {
+    final field = switch (secret.name) {
+      linkSecretName => linkField,
+      rootLinkSecretName => rootLinkField,
+      _ => null,
+    };
+    if (field == null) return false;
+    final io = _atClient.atKeysIo;
+    if (io is! WrittenAtKeysIo) return false;
+
+    final Map<String, Object?> link;
+    try {
+      link = decodeConveyedLink(secret.value);
+    } catch (e) {
+      _logger.warning('Conveyed $field is malformed; not filing it: $e');
+      return false;
+    }
+
+    final enrollmentId =
+        AtClientSecretSharing.forClient(_atClient).enrollmentId;
+    var filed = false;
+    await io.update(_atClient.getCurrentAtSign()!.toAtsign(), (keys) {
+      filed = keys.fileLink(enrollmentId, field, Map.of(link));
+      return filed;
+    });
+    if (!filed) {
+      _logger.info('This keyfile holds no entry for $enrollmentId, so the '
+          'conveyed $field is kept in memory only until it is stamped');
+    }
+    return filed;
+  }
+
   /// Publishes the links this enrollment was conveyed — a root link, a chain
   /// link, or both — if any is waiting and its key does not already carry it,
   /// returning whether anything was published.
   ///
-  /// A link that arrives *after* this runs is stamped at the next start rather
-  /// than immediately; until it lands the enrollment is simply unsigned.
+  /// A link waits in this enrollment's keyfile entry, filed there by
+  /// [fileConveyedLink] as it arrived, or in the secret store when there was
+  /// no entry to file it in. Once it is stamped, or can never be, it is
+  /// dropped from the keyfile; one that cannot be stamped for now stays there
+  /// for the next attempt.
   Future<bool> publishPendingLink() async {
-    final rootPublished = await _publishPendingRootLink();
-    final chainPublished = await _publishPendingChainLink();
+    final rootPublished = await _publishPending(
+        rootLinkSecretName, rootLinkField, _stampRootLink);
+    final chainPublished =
+        await _publishPending(linkSecretName, linkField, _stampChainLink);
     return rootPublished || chainPublished;
+  }
+
+  Future<bool> _publishPending(String secretName, String field,
+      Future<_Stamp> Function(Map<String, Object?> link) stamp) async {
+    final enrollmentId =
+        AtClientSecretSharing.forClient(_atClient).enrollmentId;
+    final filed = await _filedLink(enrollmentId, field);
+    final link = filed ?? _heldLink(secretName);
+    if (link == null) return false;
+
+    final outcome = await stamp(link);
+    if (filed != null && outcome != _Stamp.retry) {
+      await _dropFiledLink(enrollmentId, field);
+    }
+    return outcome == _Stamp.published;
+  }
+
+  /// The link filed in [enrollmentId]'s keyfile entry under [field], or null.
+  Future<Map<String, Object?>?> _filedLink(
+      String enrollmentId, String field) async {
+    final keysIo = _atClient.atKeysIo;
+    if (keysIo == null) return null;
+    try {
+      return (await keysIo.read(_atClient.getCurrentAtSign()!))
+          .linkFor(enrollmentId, field);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read the keyfile for a filed $field, so only '
+          'one held in memory is published: $e');
+      return null;
+    }
+  }
+
+  /// The link the secret store holds under [secretName], or null.
+  Map<String, Object?>? _heldLink(String secretName) {
+    final secret = AtClientSecretSharing.forClient(_atClient)
+        .secretStore
+        .listSecrets()
+        .where((s) => s.name == secretName)
+        .firstOrNull;
+    if (secret == null) return null;
+    try {
+      return decodeConveyedLink(secret.value);
+    } catch (e) {
+      _logger.warning('Conveyed $secretName is malformed; not publishing: $e');
+      return null;
+    }
+  }
+
+  Future<void> _dropFiledLink(String enrollmentId, String field) async {
+    final io = _atClient.atKeysIo;
+    if (io is! WrittenAtKeysIo) return;
+    try {
+      await io.update(_atClient.getCurrentAtSign()!.toAtsign(),
+          (keys) => keys.dropLink(enrollmentId, field));
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not drop the settled $field from the keyfile; '
+          'the next attempt finds it settled again: $e');
+    }
   }
 
   /// Stamps a conveyed **root** link, after verifying it the way a downstream
@@ -534,32 +645,22 @@ class PqSigningChain {
   /// the root, so the link is verified against the published signing root
   /// before it is stamped, plus the same two checks every link gets: it names
   /// **this** enrollment, and it vouches for the key actually published.
-  Future<bool> _publishPendingRootLink() async {
-    final sharing = AtClientSecretSharing.forClient(_atClient);
+  Future<_Stamp> _stampRootLink(Map<String, Object?> link) async {
     final atSign = _atClient.getCurrentAtSign()!;
-    final enrollmentId = sharing.enrollmentId;
+    final enrollmentId =
+        AtClientSecretSharing.forClient(_atClient).enrollmentId;
 
-    final secret = sharing.secretStore
-        .listSecrets()
-        .where((s) => s.name == rootLinkSecretName)
-        .firstOrNull;
-    if (secret == null) return false;
-
-    final Map<String, Object?> link;
-    final Map payload;
-    try {
-      link = decodeConveyedLink(secret.value);
-      payload = link['payload'] as Map;
-    } catch (e) {
-      _logger.warning('Conveyed root link is malformed; not publishing: $e');
-      return false;
+    final payload = link['payload'];
+    if (payload is! Map) {
+      _logger.warning('Conveyed root link is malformed; not publishing it');
+      return _Stamp.settled;
     }
 
     if (payload['childEnrollmentId'] != enrollmentId) {
       _logger.warning('Conveyed root link vouches for enrollment '
           '${payload['childEnrollmentId']}, not for $enrollmentId; not '
           'publishing it here');
-      return false;
+      return _Stamp.settled;
     }
 
     final candidates = await _rootCandidates(atSign);
@@ -567,7 +668,7 @@ class PqSigningChain {
       _logger.warning('A root link was conveyed but $atSign publishes no '
           'signing root to verify it against; not publishing an unverifiable '
           'link');
-      return false;
+      return _Stamp.retry;
     }
     final bool verifies;
     try {
@@ -579,13 +680,13 @@ class PqSigningChain {
     } catch (e) {
       _logger.warning('Conveyed root link could not be checked; not '
           'publishing: $e');
-      return false;
+      return _Stamp.retry;
     }
     if (!verifies) {
       _logger.warning('Conveyed root link does not verify against the '
           "atSign's signing root, so publishing it would advertise a link no "
           'verifier can follow');
-      return false;
+      return _Stamp.settled;
     }
 
     return serialiseApskWrite(_atClient, () async {
@@ -599,24 +700,24 @@ class PqSigningChain {
         if (e is StoppedException) rethrow;
         _logger.warning('This enrollment has no readable _apsk to publish a '
             'root link onto: $e');
-        return false;
+        return _Stamp.retry;
       }
 
       if (payload['apkamPublicKey'] != current.value) {
         _logger.warning('Conveyed root link vouches for a key that is not the '
             'one published for $enrollmentId; not publishing it');
-        return false;
+        return _Stamp.settled;
       }
 
       final existing = _fieldFrom(current, rootLinkField);
       if (existing != null && _sameLink(existing, link)) {
-        return false;
+        return _Stamp.settled;
       }
 
       await _publishInto(enrollmentId, rootLinkField, link, current: current);
       _logger.info('Anchored $enrollmentId to the signing root via a conveyed '
           'root link');
-      return true;
+      return _Stamp.published;
     });
   }
 
@@ -625,32 +726,26 @@ class PqSigningChain {
   /// Refused unless all three hold: the link names **this** enrollment, it
   /// verifies against the parent it names, and it vouches for the key actually
   /// published.
-  Future<bool> _publishPendingChainLink() async {
-    final sharing = AtClientSecretSharing.forClient(_atClient);
+  Future<_Stamp> _stampChainLink(Map<String, Object?> json) async {
     final atSign = _atClient.getCurrentAtSign()!;
+    final sharing = AtClientSecretSharing.forClient(_atClient);
     final enrollmentId = sharing.enrollmentId;
-
-    final secret = sharing.secretStore
-        .listSecrets()
-        .where((s) => s.name == linkSecretName)
-        .firstOrNull;
-    if (secret == null) return false;
 
     final SignedEnvelope link;
     final Map payload;
     try {
-      link = SignedEnvelope.fromJson(decodeConveyedLink(secret.value));
+      link = SignedEnvelope.fromJson(json);
       payload = link.payload as Map;
     } catch (e) {
       _logger.warning('Conveyed chain link is malformed; not publishing: $e');
-      return false;
+      return _Stamp.settled;
     }
 
     if (payload['childEnrollmentId'] != enrollmentId) {
       _logger.warning('Conveyed chain link vouches for enrollment '
           '${payload['childEnrollmentId']}, not for $enrollmentId; not '
           'publishing it here');
-      return false;
+      return _Stamp.settled;
     }
 
     try {
@@ -661,7 +756,7 @@ class PqSigningChain {
       _logger.warning('Conveyed chain link does not verify against the '
           'enrollment it names as signer, so publishing it would advertise a '
           'link no verifier can follow: $e');
-      return false;
+      return _Stamp.retry;
     }
 
     return serialiseApskWrite(_atClient, () async {
@@ -675,22 +770,22 @@ class PqSigningChain {
         if (e is StoppedException) rethrow;
         _logger.warning('This enrollment has no readable _apsk to publish a '
             'chain link onto: $e');
-        return false;
+        return _Stamp.retry;
       }
 
       if (payload['apkamPublicKey'] != current.value) {
         _logger.warning('Conveyed chain link vouches for a key that is not the '
             'one published for $enrollmentId; not publishing it');
-        return false;
+        return _Stamp.settled;
       }
 
       final existing = _fieldFrom(current, linkField);
       if (existing != null && _sameLink(existing, link.toJson())) {
-        return false;
+        return _Stamp.settled;
       }
 
       await _stampLink(enrollmentId, link, current: current);
-      return true;
+      return _Stamp.published;
     });
   }
 
@@ -935,4 +1030,16 @@ class PqSigningChain {
 
   /// Encodes a link for conveyance as a [Secret] value.
   static String encodeLink(Map<String, Object?> link) => jsonEncode(link);
+}
+
+/// What became of one attempt to stamp a conveyed link.
+enum _Stamp {
+  /// Stamped onto this enrollment's `_apsk`.
+  published,
+
+  /// Already stamped, or never can be: nothing more to do with it.
+  settled,
+
+  /// Not stamped for now, and worth trying again.
+  retry,
 }
