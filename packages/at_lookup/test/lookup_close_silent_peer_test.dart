@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -73,7 +73,7 @@ void main() {
         rootDomain: AtRootDomain('127.0.0.1', silent.port),
         authenticator: (_) async => true,
         secondaryAddressFinder: finder,
-        transport: AtLookupTransport(secureSocketConfig: SecureSocketConfig()),
+        transport: secureSocketTransport(SecureSocketConfig()),
       );
 
   /// Starts a request on [atLookup], waits for [silent] to accept its

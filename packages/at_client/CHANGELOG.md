@@ -8,6 +8,8 @@
 - BREAKING: `HiveAtClientStorage.bundle` is `persistenceBundle`, a member of
   `AtClientStorage`; storages extending `AtClientStorageBase` inherit it.
 - feat: on the web, a client built without `storage:` throws a `StateError` naming it.
+- build: requires `at_lookup` ^4.0.0-rc1; `RemoteSecondary` authenticates only
+  through the lookup's `AtAuthenticator`.
 
 ## 3.15.0-rc4
 
@@ -58,6 +60,18 @@
   which an exhaustive `switch` must now handle.
 
 ## 3.15.0-rc1
+- breaking: `AtClientUtil.findSecondary` is removed. Use
+  `RemoteSecondary.findSecondaryUrl`.
+- feat: at_client builds its connections through `AtLookUp.withSecureSocket`,
+  which returns the muxable that owns reconnect, reauth and heartbeat. Requires
+  `at_lookup` ^3.7.0-rc1. Credentials travel as an `AtAuthenticator` built from
+  whichever of four shapes the client holds - a keystore, chops, a private key,
+  a cram secret - rather than being parked on the lookup, so every connection a
+  client opens is configured alike instead of assembled independently at each
+  site. `AtClientImpl.buildRemoteSecondary` is the single place that builds one;
+  the file-stream path used to build its own with neither enrollment nor
+  credentials. The sync service's own connection now gets the client's key
+  material.
 
 - feat (experimental): post-quantum cryptography, chosen by
   `AtClientPreference.posture` (`PqPosture.legacy`, the default, `pqReady` or

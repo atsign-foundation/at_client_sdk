@@ -8,7 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 class _RecordedLogs implements LoggingHandler {
   final List<({String level, String message})> records = [];
@@ -22,7 +22,7 @@ class _RecordedLogs implements LoggingHandler {
 }
 
 /// `close()` ends a lookup and `dropConnection()` does not, over a real
-/// connection and listener on a [FakeAtServerSocket].
+/// connection and listener on a [FakeAtServerTransport].
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
@@ -32,29 +32,17 @@ void main() {
     AtSignLogger.defaultLoggingHandler = recorded;
   });
 
-  late List<FakeAtServerSocket> sockets;
+  late FakeAtServerTransportFactory transportFactory;
   late MockSecondaryAddressFinder addressFinder;
-  late MockSecureSocketFactory socketFactory;
 
-  /// While set, a socket is not handed out until it completes.
-  Completer<void>? connectGate;
+  List<FakeAtServerTransport> sockets() => transportFactory.created;
 
   setUp(() {
     recorded.records.clear();
-    sockets = [];
-    connectGate = null;
+    transportFactory = FakeAtServerTransportFactory();
     addressFinder = MockSecondaryAddressFinder();
-    socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final s = FakeAtServerSocket();
-      sockets.add(s);
-      await connectGate?.future;
-      return s;
-    });
   });
 
   AtLookupMuxable build() => AtLookUp.withSecureSocket(
@@ -62,9 +50,8 @@ void main() {
         rootDomain: const AtRootDomain(host, 64),
         authenticator: (_) async => true,
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory,
+        transport: AtLookupTransportFactories(
+          transportFactory: transportFactory,
         ),
       );
 
@@ -72,7 +59,7 @@ void main() {
   Future<String?> answered(AtLookupMuxable atLookup, String command) async {
     final response = atLookup.executeCommand(command);
     await Future.delayed(const Duration(milliseconds: 50));
-    await sockets.last.serverSends('data:ok\n@alice@');
+    await sockets().last.serverSends('data:ok\n@alice@');
     return response;
   }
 
@@ -100,7 +87,7 @@ void main() {
     test('refuses every later call, and opens no connection', () async {
       final atLookup = build();
       await answered(atLookup, 'noop:0\n');
-      expect(sockets, hasLength(1));
+      expect(sockets(), hasLength(1));
       await atLookup.close();
 
       final calls = <String, Future<Object?> Function()>{
@@ -119,39 +106,39 @@ void main() {
         await expectLater(call.value(), throwsA(isA<StoppedException>()),
             reason: '${call.key} after close()');
       }
-      expect(sockets, hasLength(1),
+      expect(sockets(), hasLength(1),
           reason: 'a closed lookup must not reconnect to report its refusal');
     });
 
     test('destroys a socket that arrives after it', () async {
       final atLookup = build();
-      connectGate = Completer<void>();
+      transportFactory.connectGate = Completer<void>();
       Object? thrown;
       final pending = atLookup
           .executeCommand('noop:0\n')
           .then<void>((_) {}, onError: (Object e) => thrown = e);
       await Future.delayed(const Duration(milliseconds: 50));
-      expect(sockets, hasLength(1), reason: 'the connect must be in flight');
+      expect(sockets(), hasLength(1), reason: 'the connect must be in flight');
 
       await atLookup.close();
-      connectGate!.complete();
+      transportFactory.connectGate!.complete();
       await pending.timeout(const Duration(seconds: 5),
           onTimeout: () => fail('the request on the late socket was never '
               'failed'));
 
       expect(thrown, isA<StoppedException>());
-      expect(sockets.single.destroyed, isTrue,
+      expect(sockets().single.destroyed, isTrue,
           reason: 'nothing else holds this socket, so a late one left open '
               'keeps the process alive');
-      expect(sockets.single.written, isEmpty);
+      expect(sockets().single.written, isEmpty);
     });
 
     test('fails a connect in flight at once, without waiting for it', () async {
       final atLookup = build();
-      connectGate = Completer<void>();
+      transportFactory.connectGate = Completer<void>();
       final pending = atLookup.executeCommand('noop:0\n');
       await Future.delayed(const Duration(milliseconds: 50));
-      expect(sockets, hasLength(1), reason: 'the connect must be in flight');
+      expect(sockets(), hasLength(1), reason: 'the connect must be in flight');
 
       final closing = atLookup.close();
 
@@ -161,20 +148,20 @@ void main() {
                   'which a silent peer never completes')),
           throwsA(isA<StoppedException>()));
       await closing;
-      connectGate!.complete();
+      transportFactory.connectGate!.complete();
     });
 
     test('ends a reconnect loop sleeping on its backoff', () async {
       final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();
-      await sockets.single.serverCloses();
+      await sockets().single.serverCloses();
       await Future.delayed(const Duration(milliseconds: 50));
       expect(atLookup.isReconnectingNotifications, isTrue);
 
       await atLookup.close();
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(1),
+      expect(sockets(), hasLength(1),
           reason: 'a reconnect after close() reopens what its owner closed');
       expect(atLookup.isNotifying, isFalse);
     });
@@ -191,7 +178,7 @@ void main() {
 
       expect(atLookup.isNotifying, isFalse);
       expect(notificationsDone.isCompleted, isTrue);
-      expect(sockets.single.written, isNot(contains('noop:0\n')),
+      expect(sockets().single.written, isNot(contains('noop:0\n')),
           reason: 'the heartbeat must not outlive the close');
       await expectLater(atLookup.notifications, emitsDone,
           reason: 'a stream read after close() can never produce anything');
@@ -203,20 +190,20 @@ void main() {
     test('landing while notifications start, leaves them stopped', () async {
       final atLookup = build()
         ..heartbeatInterval = const Duration(milliseconds: 40);
-      connectGate = Completer<void>();
+      transportFactory.connectGate = Completer<void>();
       final starting = atLookup.startNotifications();
       await Future.delayed(const Duration(milliseconds: 50));
 
       await atLookup.stopNotifications();
-      connectGate!.complete();
+      transportFactory.connectGate!.complete();
       await starting;
       await Future.delayed(const Duration(milliseconds: 150));
 
       expect(atLookup.isNotifying, isFalse,
           reason: 'the stop came after the start, so it wins');
-      expect(sockets.single.written, isEmpty,
+      expect(sockets().single.written, isEmpty,
           reason: 'no monitor: on a connection nobody is listening to');
-      expect(sockets.single.destroyed, isTrue,
+      expect(sockets().single.destroyed, isTrue,
           reason: 'the connection the start opened is closed, not left open');
       await atLookup.close();
     });
@@ -227,11 +214,11 @@ void main() {
         ..heartbeatResponseTimeout = const Duration(seconds: 5);
       await atLookup.startNotifications();
       for (var i = 0;
-          i < 50 && !sockets.single.written.contains('noop:0\n');
+          i < 50 && !sockets().single.written.contains('noop:0\n');
           i++) {
         await Future.delayed(const Duration(milliseconds: 10));
       }
-      expect(sockets.single.written, contains('noop:0\n'),
+      expect(sockets().single.written, contains('noop:0\n'),
           reason: 'the probe must be out before the stop');
 
       await atLookup.stopNotifications();
@@ -240,7 +227,7 @@ void main() {
       expect(recorded.records.map((r) => r.message),
           isNot(contains(contains('heartbeat failed'))),
           reason: 'a probe the stop cut short is not a failed connection');
-      expect(sockets, hasLength(1));
+      expect(sockets(), hasLength(1));
       await atLookup.close();
     });
   });
@@ -252,10 +239,10 @@ void main() {
 
       await atLookup.dropConnection();
 
-      expect(sockets.single.destroyed, isTrue);
+      expect(sockets().single.destroyed, isTrue);
       expect(await answered(atLookup, 'noop:0\n'), 'data:ok',
           reason: 'the next call opens a new connection');
-      expect(sockets, hasLength(2));
+      expect(sockets(), hasLength(2));
       await atLookup.close();
     });
 
@@ -266,8 +253,8 @@ void main() {
       await atLookup.dropConnection();
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(2));
-      expect(sockets.last.written.single, startsWith('monitor:'));
+      expect(sockets(), hasLength(2));
+      expect(sockets().last.written.single, startsWith('monitor:'));
       expect(atLookup.isNotifying, isTrue);
       await atLookup.close();
     });

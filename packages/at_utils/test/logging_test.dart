@@ -1,4 +1,5 @@
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 
@@ -24,7 +25,7 @@ void main() {
       l1.info('testing 1');
       expect(lh1.lastLogRecord!.message, 'testing 1');
 
-      var lh2 = MyLoggingHandler(AtSignLogger.stdErrLoggingHandler);
+      var lh2 = MyLoggingHandler(StdErrLoggingHandler());
       AtSignLogger.defaultLoggingHandler = lh2;
       var l2 = AtSignLogger('stderr');
       l2.info('testing 2');
