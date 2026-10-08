@@ -120,6 +120,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.storage == null && !widget.preference.isLocalStoreRequired) {
+      // NOTE: before any request goes out; an approval earned for a client
+      // that cannot open is wasted.
+      AtClientImpl.refuseWithoutStorage(widget.atSign, widget.preference);
+    }
     _keys = widget.keys ?? KeychainAtKeysIo();
     _resumeIfPending();
   }
