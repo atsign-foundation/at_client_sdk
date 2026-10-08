@@ -856,6 +856,43 @@ class AtClientImpl implements AtClient {
     return atClientInstanceMap[filedKey];
   }
 
+  /// Throws the [ArgumentError] a client built from these arguments throws,
+  /// so a caller can refuse before an irreversible step, such as a CRAM
+  /// activation or an enrollment request, rather than after it. Every client
+  /// keeps local storage: a [storage], a [localSecondaryKeyStore] whose queue
+  /// lives under `preference.hiveStoragePath`, or the default store under
+  /// that path.
+  static void refuseWithoutStorage(
+    String atSign,
+    AtClientPreference preference, {
+    AtClientStorage? storage,
+    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+  }) {
+    if (storage != null) return;
+    if (localSecondaryKeyStore != null) {
+      if (preference.hiveStoragePath != null) return;
+      throw ArgumentError(
+          'a client built on a bare keystore holds its sync queue under '
+              'preference.hiveStoragePath, and $atSign names none. Set it, '
+              'or pass a storage instead of the keystore',
+          'preference.hiveStoragePath');
+    }
+    if (!preference.isLocalStoreRequired) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage: InMemoryAtClientStorage, from '
+              'package:at_client/memory.dart, keeps nothing on disk',
+          'preference.isLocalStoreRequired');
+    }
+    if (preference.hiveStoragePath == null) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage, or set preference.hiveStoragePath '
+              'for the default Hive store',
+          'preference.hiveStoragePath');
+    }
+  }
+
   AtClientImpl._(
     String theAtSign,
     String? namespace,
@@ -871,22 +908,8 @@ class AtClientImpl implements AtClient {
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
-    if (!preference.isLocalStoreRequired &&
-        storage == null &&
-        localSecondaryKeyStore == null) {
-      throw ArgumentError(
-          'every client keeps local storage, and none was passed for '
-              '$theAtSign. Pass a storage: InMemoryAtClientStorage, from '
-              'package:at_client/memory.dart, keeps nothing on disk',
-          'preference.isLocalStoreRequired');
-    }
-    if (localSecondaryKeyStore != null && preference.hiveStoragePath == null) {
-      throw ArgumentError(
-          'a client built on a bare keystore holds its sync queue under '
-              'preference.hiveStoragePath, and $theAtSign names none. Set it, '
-              'or pass a storage instead of the keystore',
-          'preference.hiveStoragePath');
-    }
+    refuseWithoutStorage(theAtSign, preference,
+        storage: storage, localSecondaryKeyStore: localSecondaryKeyStore);
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -1024,11 +1047,7 @@ class AtClientImpl implements AtClient {
       if (injected != null) {
         storage = injected;
       } else {
-        final storagePath = preference!.hiveStoragePath;
-        if (storagePath == null) {
-          throw Exception('Please set local storage path');
-        }
-        storage = defaultStorageFor(_atSign, storagePath);
+        storage = defaultStorageFor(_atSign, preference!.hiveStoragePath!);
       }
       await storage.attach(this);
       _storage = storage;

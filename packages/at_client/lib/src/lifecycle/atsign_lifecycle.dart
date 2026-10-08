@@ -189,6 +189,7 @@ extension AtsignLifecycle on Atsign {
     AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
+    AtClientImpl.refuseWithoutStorage(this, preference, storage: storage);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);

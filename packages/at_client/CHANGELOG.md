@@ -9,6 +9,11 @@
   now always used.
 - BREAKING: a client built on the deprecated `localSecondaryKeyStore` with no
   `hiveStoragePath` is refused; set the path, or pass a storage.
+- fix: a client passed neither storage nor `hiveStoragePath` is refused with
+  the same `ArgumentError` as the other cases, before any keys are read.
+- fix: `Atsign.activate` and `PendingEnrollment.client` refuse a client that
+  would have no local storage before the CRAM secret is spent or the approval
+  is waited for.
 - fix: a stopped client built on the deprecated `localSecondaryKeyStore`
   closes the sync queue it opened.
 - fix: a Hive store whose sync queue fails to open closes the keystore it had

@@ -287,6 +287,20 @@ void main() {
             'storage to pass for one with nothing to keep');
   });
 
+  test('no storage and no hiveStoragePath is refused at construction',
+      () async {
+    await expectLater(
+        () => buildAtClient(
+            atSign: '@factorynopath',
+            namespace: 'wavi',
+            preference: AtClientPreference()),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
+        reason: 'the one refusal for a client with nothing to keep its '
+            'records in, whichever argument is missing, before any key '
+            'material is read');
+  });
+
   test('a bare keystore with no hiveStoragePath is refused', () async {
     final keys = InMemoryAtClientStorage(atSign: '@factorybare');
     await keys.attach(FakeClient('@factorybare', null));
