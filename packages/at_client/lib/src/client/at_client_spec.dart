@@ -564,16 +564,7 @@ abstract class AtClient {
   ///                                                .._messageType = MessageTypeEnum.key;
   ///   notifyChange(notificationParams);
   ///```
-  ///3. To notify a text message
-  ///```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._messageType = MessageTypeEnum.text;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///4. To notify a deletion of a key to @bob.
+  ///3. To notify a deletion of a key to @bob.
   ///```dart
   ///   var key = AtKey()..key='phone'
   ///                    ..sharedWith='@bob'

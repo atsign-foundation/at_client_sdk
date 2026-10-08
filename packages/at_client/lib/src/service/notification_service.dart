@@ -198,14 +198,6 @@ abstract class NotificationService {
   ///   var notificationService = AtClientManager.getInstance().notificationService;
   ///   await notificationService.notify(NotificationParams.forDelete(key));
   ///```
-  ///4. To notify a text message to @bob
-  ///   forText notifications are case sensitive
-  ///   `await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));`
-  ///
-  ///```dart
-  ///   var notificationService = AtClientManager.getInstance().notificationService;
-  ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
-  ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
@@ -352,10 +344,9 @@ class NotificationParams {
       .._cryptoProviderId = cryptoProviderId;
   }
 
-  /// Returns [NotificationParams] to send a text message to another atSign.
-  /// forText notifications are case-sensitive
-  /// platform level lower case enforcement will not apply to forText notifications
-  @Deprecated('No longer supported')
+  /// Returns [NotificationParams] to send a text message to another atSign,
+  /// which atServers refuse with AT0003; send a key notification instead.
+  @Deprecated('atServers refuse text notifications; use forUpdate')
   static NotificationParams forText(String text, String whomToNotify,
       {bool shouldEncrypt = false, String? cryptoProviderId}) {
     var atKey = AtKey()
