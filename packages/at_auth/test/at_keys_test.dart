@@ -1857,4 +1857,92 @@ void main() {
           reason: 'control: the typed enrollment is what authenticates');
     });
   });
+
+  group('AtKeys links', () {
+    CryptographicMaterial verificationFor(String enrollmentId) =>
+        CryptographicMaterial(
+          keyId: 'sign:mldsa65:1',
+          enrollmentId: enrollmentId,
+          role: CryptographicMaterialRole.publicVerification,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+          bytes: AtBytes.fromString('UFVC'),
+          createdAt: DateTime.utc(2026, 6, 11),
+        );
+
+    AtKeys holding(String enrollmentId) => AtKeys(atsign: '@alice'.toAtsign())
+      ..addKey(verificationFor(enrollmentId));
+
+    AtKeys reread(AtKeys keys) =>
+        AtKeys.fromJson(jsonDecode(jsonEncode(keys.toJson())));
+
+    test('a link filed for an enrollment reads back through the document', () {
+      final keys = holding('E1');
+
+      expect(
+          keys.fileLink('E1', 'apskChainLink', {'v': 1, 'sig': 'S'}), isTrue);
+
+      expect(reread(keys).linkFor('E1', 'apskChainLink'), {'v': 1, 'sig': 'S'});
+      expect(reread(keys).linkFor('E1', 'apskRootLink'), isNull);
+    });
+
+    test(
+        'a link for an enrollment the keyfile does not hold is refused, and '
+        'no enrollment is made for it', () {
+      final keys = AtKeys(atsign: '@alice'.toAtsign())
+        ..apkamPublicKey = AtBytes.fromString('UEtQVUI=');
+
+      expect(keys.fileLink('E1', 'apskChainLink', {'v': 1}), isFalse);
+
+      expect(keys.enrollmentIds, isEmpty);
+      expect(keys.toJson().containsKey('enrollments'), isFalse,
+          reason: 'a typed enrollment entry would turn this legacy keyfile '
+              'into a typed one');
+    });
+
+    test(
+        'a dropped link is gone, and an enrollment with none writes no '
+        'links field', () {
+      final keys = holding('E1')..fileLink('E1', 'apskChainLink', {'v': 1});
+
+      expect(keys.dropLink('E1', 'apskChainLink'), isTrue);
+      expect(keys.dropLink('E1', 'apskChainLink'), isFalse);
+
+      final enrollments = keys.toJson()['enrollments'] as List;
+      expect((enrollments.single as Map).containsKey('links'), isFalse);
+    });
+
+    test('the link read back is a copy', () {
+      final keys = holding('E1')
+        ..fileLink('E1', 'apskChainLink', {
+          'v': 1,
+          'payload': {'k': 'v'}
+        });
+
+      (keys.linkFor('E1', 'apskChainLink')!['payload'] as Map)['k'] = 'x';
+
+      expect(keys.linkFor('E1', 'apskChainLink'), {
+        'v': 1,
+        'payload': {'k': 'v'}
+      });
+    });
+
+    test(
+        'a link entry that is not a JSON object is skipped on read, and the '
+        'keyfile still reads', () {
+      final json = holding('E1').toJson();
+      ((json['enrollments'] as List).single as Map)['links'] = {
+        'apskChainLink': 'not an object',
+        'apskRootLink': {'v': 1},
+      };
+
+      final keys = AtKeys.fromJson(jsonDecode(jsonEncode(json)));
+
+      expect(keys.linkFor('E1', 'apskChainLink'), isNull);
+      expect(keys.linkFor('E1', 'apskRootLink'), {'v': 1});
+      expect(
+          keys.getKey('E1', 'sign:mldsa65:1',
+              CryptographicMaterialRole.publicVerification),
+          isNotNull);
+    });
+  });
 }

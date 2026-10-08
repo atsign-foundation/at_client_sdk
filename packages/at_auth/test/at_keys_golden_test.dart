@@ -143,6 +143,32 @@ void main() {
       expect(material.enrollmentId, 'enroll-2');
     });
 
+    test('an enrollment\'s filed links are emitted after its keys', () {
+      // Absent when there are none, so a document holding no link is the
+      // golden above byte for byte.
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign())
+        ..addKey(CryptographicMaterial(
+          keyId: 'sign:mldsa65:1',
+          enrollmentId: 'enroll-2',
+          role: CryptographicMaterialRole.publicVerification,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+          bytes: AtBytes.fromString('UFVC'),
+          createdAt: DateTime.utc(2026, 6, 11),
+        ));
+      atKeys
+          .fileLink('enroll-2', 'apskChainLink', {'v': 1, 'signature': 'U0lH'});
+
+      expect(
+          jsonEncode(atKeys.toJson()['enrollments']),
+          '[{"enrollmentId":"enroll-2",'
+          '"keys":['
+          '{"keyId":"sign:mldsa65:1","material":['
+          '{"role":"publicVerification","algorithm":"mldsa65",'
+          '"createdAt":"2026-06-11T00:00:00.000Z","status":"active",'
+          '"bytes":"UFVC"}]}],'
+          '"links":{"apskChainLink":{"v":1,"signature":"U0lH"}}}]');
+    });
+
     test('absent legacy fields are emitted as null, not dropped', () {
       // A reader distinguishes "field with null" from "no such field"; the
       // legacy shape has always carried the full field set.

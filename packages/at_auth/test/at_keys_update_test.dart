@@ -283,4 +283,31 @@ void main() {
               'was rolled back');
     });
   });
+
+  group('links through FileAtKeysIo.update', () {
+    test('a link filed and then dropped passes the update assurance', () async {
+      final io = FileAtKeysIo(filePath: pathFor);
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.addKey(CryptographicMaterial(
+          keyId: 'sign:mldsa65:1',
+          enrollmentId: 'E1',
+          role: CryptographicMaterialRole.publicVerification,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+          bytes: AtBytes.fromString('UFVC'),
+          createdAt: DateTime.utc(2026, 1, 1),
+        ));
+        return true;
+      });
+
+      await io.update(atSign.toAtsign(),
+          (keys) => keys.fileLink('E1', 'apskChainLink', {'v': 1}));
+      expect((await io.read(atSign)).linkFor('E1', 'apskChainLink'), {'v': 1});
+
+      await io.update(
+          atSign.toAtsign(), (keys) => keys.dropLink('E1', 'apskChainLink'));
+      expect((await io.read(atSign)).linkFor('E1', 'apskChainLink'), isNull,
+          reason: 'a link is held only until it is published, so dropping one '
+              'is not the material loss the assurance refuses');
+    });
+  });
 }
