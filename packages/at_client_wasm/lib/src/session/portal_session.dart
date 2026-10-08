@@ -4,6 +4,7 @@ import '../keys/key_bytes_store.dart';
 import '../keys/key_envelope.dart';
 import '../keys/passkey_kek.dart';
 import 'key_acquisition.dart';
+import 'lookup_server_copy.dart';
 import 'remote_only_client.dart';
 import 'server_copy.dart';
 
@@ -12,6 +13,11 @@ final _logger = AtSignLogger('portalSession');
 /// Starts a Mode P client: keys from [acquireKeys], storage remote-only over
 /// [lookUps], then [heal] when the keys are passkey-held. A failed heal is
 /// logged and leaves the client running.
+///
+/// [server] reads the server copy, by default with an unauthenticated
+/// lookup over [lookUps] through [secondaryAddressFinder]. [healServer] gives [heal] its
+/// server copy over the client's [RemoteSecondary], by default reading
+/// through [server] and writing on that connection.
 Future<AtClient> portalSession({
   required String atSign,
   required String app,
@@ -20,22 +26,28 @@ Future<AtClient> portalSession({
   required SecondaryAddressFinder secondaryAddressFinder,
   required KeyBytesStore store,
   required PasskeyKek kek,
-  required ServerCopy server,
+  ServerCopyReader? server,
+  ServerCopy Function(RemoteSecondary remote)? healServer,
   required Future<AtKeys> Function(String atSign) importAtKeys,
   KeyEnvelopeCodec codec = const KeyEnvelopeCodec(),
   CredentialHintStore? hintStore,
 }) async {
+  final reader = server ??
+      LookupServerCopyReader(
+          lookUps: lookUps,
+          rootDomain: AtRootDomain(prefs.rootDomain, prefs.rootPort),
+          secondaryAddressFinder: secondaryAddressFinder);
   final keys = await acquireKeys(
     atSign: atSign,
     app: app,
     store: store,
     kek: kek,
-    server: server,
+    server: reader,
     importAtKeys: importAtKeys,
     codec: codec,
     hintStore: hintStore,
   );
-  final client = await remoteOnlyClient(
+  final (:client, :remote) = await remoteOnlyClient(
       atSign: atSign,
       app: app,
       prefs: prefs,
@@ -50,7 +62,7 @@ Future<AtClient> portalSession({
           atSign: atSign,
           app: app,
           store: store,
-          server: server,
+          server: (healServer ?? (r) => RemoteServerCopy(reader, r))(remote),
           prf: prf,
           codec: codec);
       switch (outcome) {
