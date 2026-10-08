@@ -262,6 +262,9 @@ class AtClientPreference {
 
   bool _isLocalStoreRequired = true;
 
+  /// Read only when a client is passed no storage: true opens the default
+  /// store under [hiveStoragePath], and false is refused, since every client
+  /// keeps local storage.
   bool get isLocalStoreRequired => _isLocalStoreRequired;
 
   @Deprecated("LocalStore is always required")

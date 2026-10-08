@@ -869,6 +869,15 @@ class AtClientImpl implements AtClient {
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
+    if (!preference.isLocalStoreRequired &&
+        storage == null &&
+        localSecondaryKeyStore == null) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$theAtSign. Pass a storage: InMemoryAtClientStorage, from '
+              'package:at_client/memory.dart, keeps nothing on disk',
+          'preference.isLocalStoreRequired');
+    }
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -884,12 +893,6 @@ class AtClientImpl implements AtClient {
           AtNetworkTimeouts.cap(preference.networkTimeout!);
     }
     _localSecondaryKeyStore = localSecondaryKeyStore;
-
-    if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
-      throw IllegalArgumentException(
-        'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false',
-      );
-    }
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
@@ -942,7 +945,7 @@ class AtClientImpl implements AtClient {
   /// atServer with: the process-wide finder when one is registered, else one
   /// of this client's own, either way remembering the answer in this
   /// client's storage so a start with the atDirectory unreachable still
-  /// finds the atServer. A client with no local storage remembers nothing.
+  /// finds the atServer.
   SecondaryAddressFinder get secondaryAddressFinder =>
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
           inner: () =>
@@ -1005,62 +1008,60 @@ class AtClientImpl implements AtClient {
     // client whose AtChops was injected never builds one, and it must not
     // sign the preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
-    if (_preference!.isLocalStoreRequired) {
-      AtSyncQueue? syncQueue;
-      if (_localSecondaryKeyStore == null) {
-        final injected = _injectedStorage;
-        final AtClientStorage storage;
-        if (injected != null) {
-          storage = injected;
-        } else {
-          final storagePath = preference!.hiveStoragePath;
-          if (storagePath == null) {
-            throw Exception('Please set local storage path');
-          }
-          storage = defaultStorageFor(_atSign, storagePath);
+    AtSyncQueue? syncQueue;
+    if (_localSecondaryKeyStore == null) {
+      final injected = _injectedStorage;
+      final AtClientStorage storage;
+      if (injected != null) {
+        storage = injected;
+      } else {
+        final storagePath = preference!.hiveStoragePath;
+        if (storagePath == null) {
+          throw Exception('Please set local storage path');
         }
-        await storage.attach(this);
-        _storage = storage;
-        syncQueue = storage.syncQueue;
+        storage = defaultStorageFor(_atSign, storagePath);
       }
-
-      localSecondary = LocalSecondary(
-        this,
-        keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
-        syncQueue: syncQueue,
-        onEvent: emitDataEvent,
-      );
-      _atChops ??= await _createAtChops(_atSign);
-      _validateDefaultCryptoProvider();
-
-      // Wire the event-driven expiry timer to the data-events stream.
-      // Re-arms on every keystore mutation; first arm uses the current
-      // cache state (no-op when nothing has TTL).
-      _expirySub = dataEvents.listen((_) {
-        if (_expirySweepInFlight) return;
-        unawaited(_armExpiryTimer());
-      });
-      await _armExpiryTimer();
-
-      // Symmetric wire-up for the availability timer. SEED the
-      // already-fired set BEFORE arming the timer: every cached
-      // record whose `availableAt` is in the past at startup gets
-      // marked as already-emitted so the first sweep doesn't replay
-      // it. Without this, restarting the AtClient against an
-      // existing storage-dir would re-emit `DataUpdated` for every
-      // such record, which AtCollection forwards as
-      // CSubItemUpdated / CItemUpdated — making listeners see a
-      // fresh stream of "arrivals" when nothing has actually
-      // arrived. The semantic of `_onAvailableFire` is "fire when
-      // availableAt JUST CROSSED" — past crossings observed by an
-      // earlier process run shouldn't replay on a later one.
-      await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
-      _availableSub = dataEvents.listen((_) {
-        if (_availableSweepInFlight) return;
-        unawaited(_armAvailableTimer());
-      });
-      await _armAvailableTimer();
+      await storage.attach(this);
+      _storage = storage;
+      syncQueue = storage.syncQueue;
     }
+
+    localSecondary = LocalSecondary(
+      this,
+      keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
+      syncQueue: syncQueue,
+      onEvent: emitDataEvent,
+    );
+    _atChops ??= await _createAtChops(_atSign);
+    _validateDefaultCryptoProvider();
+
+    // Wire the event-driven expiry timer to the data-events stream.
+    // Re-arms on every keystore mutation; first arm uses the current
+    // cache state (no-op when nothing has TTL).
+    _expirySub = dataEvents.listen((_) {
+      if (_expirySweepInFlight) return;
+      unawaited(_armExpiryTimer());
+    });
+    await _armExpiryTimer();
+
+    // Symmetric wire-up for the availability timer. SEED the
+    // already-fired set BEFORE arming the timer: every cached
+    // record whose `availableAt` is in the past at startup gets
+    // marked as already-emitted so the first sweep doesn't replay
+    // it. Without this, restarting the AtClient against an
+    // existing storage-dir would re-emit `DataUpdated` for every
+    // such record, which AtCollection forwards as
+    // CSubItemUpdated / CItemUpdated — making listeners see a
+    // fresh stream of "arrivals" when nothing has actually
+    // arrived. The semantic of `_onAvailableFire` is "fire when
+    // availableAt JUST CROSSED" — past crossings observed by an
+    // earlier process run shouldn't replay on a later one.
+    await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
+    _availableSub = dataEvents.listen((_) {
+      if (_availableSweepInFlight) return;
+      unawaited(_armAvailableTimer());
+    });
+    await _armAvailableTimer();
 
     // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
@@ -1940,9 +1941,6 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    // NOTE: refused before any work — on a client with no local store, doing
-    // the encryption first never reaches this answer, dying on the missing
-    // secondary instead.
     _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
         _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
     // Performs the put request validations.

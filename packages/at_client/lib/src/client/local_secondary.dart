@@ -8,7 +8,6 @@ import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
@@ -23,7 +22,6 @@ import 'package:meta/meta.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
-/// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
 /// Delete and Update commands will be synced to the server
 class LocalSecondary implements Secondary {
   final AtClient _atClient;

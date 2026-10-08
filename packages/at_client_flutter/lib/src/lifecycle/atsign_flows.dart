@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 /// `hiveStoragePath`, so an app that followed them finds its store.
 ///
 /// Null when [preference] asks for no local store and none was passed, which
-/// at_client accepts only without storage.
+/// at_client refuses.
 Future<AtClientStorage?> storageOrDefault(
   String atSign,
   AtClientPreference preference,

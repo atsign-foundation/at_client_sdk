@@ -31,9 +31,10 @@ import 'package:at_utils/at_utils.dart';
 /// closing it and the caller closes it when done; a bundle built with
 /// `closedByClient: true` is closed by the client instead. Supplying none
 /// falls back to a Hive store under the deprecated
-/// `preference.hiveStoragePath`. [lookUps] builds every connection the
-/// client opens (its own, its sync's, its monitor's); with none, TLS on TCP
-/// from the preference.
+/// `preference.hiveStoragePath`, and is refused when
+/// `preference.isLocalStoreRequired` is false. [lookUps] builds every
+/// connection the client opens (its own, its sync's, its monitor's); with
+/// none, TLS on TCP from the preference.
 ///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -67,13 +68,6 @@ Future<AtClient> buildAtClient({
         'is already live. buildAtClient builds a client the caller owns, so '
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
-  }
-  if (storage != null && !preference.isLocalStoreRequired) {
-    throw ArgumentError.value(
-        storage,
-        'storage',
-        'preference.isLocalStoreRequired is false for $atSign, so this '
-            'storage would never be opened');
   }
   final location = _locationOf(atSign, preference, storage);
   final holder = location == null ? null : AtClientImpl.liveClientOn(location);

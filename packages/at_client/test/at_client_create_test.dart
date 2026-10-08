@@ -255,22 +255,34 @@ void main() {
     await client.stop();
   });
 
-  test('storage the preference would never open is refused', () async {
+  test('storage passed is used whatever the preference says', () async {
     final storage =
         HiveAtClientStorage(atSign: '@factorynolocal', storagePath: dir.path);
+    final client = await buildAtClient(
+        atSign: '@factorynolocal',
+        namespace: 'wavi',
+        preference: pref()..isLocalStoreRequired = false,
+        storage: storage);
 
+    expect(storage.isHeldBy(client), isTrue,
+        reason: 'a caller that named its own backend gets it, not a client '
+            'that opens no local store at all');
+
+    await client.stop();
+    await storage.close();
+  });
+
+  test('a preference asking for no local store, with none passed, is refused',
+      () async {
     await expectLater(
         () => buildAtClient(
-            atSign: '@factorynolocal',
+            atSign: '@factorynone',
             namespace: 'wavi',
-            preference: pref()..isLocalStoreRequired = false,
-            storage: storage),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('isLocalStoreRequired'))),
-        reason: 'a caller that named its own backend must not be told it took '
-            'effect when the client opens no local store at all');
-
-    await storage.close();
+            preference: pref()..isLocalStoreRequired = false),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
+            contains('package:at_client/memory.dart'))),
+        reason: 'every client keeps local storage, so the refusal names the '
+            'storage to pass for one with nothing to keep');
   });
 
   test('a client that fails to build is not left behind', () async {

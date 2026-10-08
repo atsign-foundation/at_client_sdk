@@ -382,11 +382,7 @@ class CkManager {
   /// completely, and whether a later pass might, or null when it can.
   static Future<({String why, bool transient})?> _whyLocalStorageIsPartial(
       AtClient atClient) async {
-    final preference = atClient.getPreferences();
-    if (preference == null || !preference.isLocalStoreRequired) {
-      return (why: 'this client keeps no local store', transient: false);
-    }
-    final syncRegex = preference.syncRegex;
+    final syncRegex = atClient.getPreferences()?.syncRegex;
     if (syncRegex != null && syncRegex.isNotEmpty) {
       return (
         why: 'syncRegex "$syncRegex" narrows what local storage holds',

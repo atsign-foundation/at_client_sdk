@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -13,6 +14,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'storage/storage_contract.dart' show FakeClient;
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
@@ -459,15 +461,20 @@ void main() {
 
     test('a client restarted after a stop tears down again on the next stop',
         () async {
-      // A client with no local store is the one that can restart: releasing
-      // storage is what makes a stop final, and this one holds none.
-      final restartable = await buildAtClient(
-          atSign: '@restartable',
-          namespace: 'wavi',
-          preference: AtClientPreference()
-            ..isLocalStoreRequired = false
+      // A client built on a bare keystore is the one that can restart:
+      // releasing storage is what makes a stop final, and this one holds no
+      // storage of its own.
+      final keys = InMemoryAtClientStorage(atSign: '@restartable');
+      await keys.attach(FakeClient('@restartable', null));
+      addTearDown(keys.close);
+      final restartable = await AtClientImpl.create(
+          '@restartable',
+          'wavi',
+          AtClientPreference()
+            ..hiveStoragePath = dir.path
             ..namespace = 'wavi'
             ..monitorAutoStart = false,
+          localSecondaryKeyStore: keys.keyStore,
           lookUps: recording) as AtClientImpl;
       int teardowns() => recorded
           .at('INFO')

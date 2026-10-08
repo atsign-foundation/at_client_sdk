@@ -7,8 +7,6 @@ import 'package:crypto/crypto.dart';
 class TestUtil {
   static AtClientPreference getPreferenceRemote() {
     var preference = AtClientPreference();
-    // ignore: deprecated_member_use_from_same_package
-    preference.isLocalStoreRequired = false;
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.outboundConnectionTimeout = 60000;
     return preference;
