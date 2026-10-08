@@ -48,6 +48,7 @@ jobs:
       matrix:
         package:
           - at_auth
+          - at_client_wasm
           - at_lookup
           - at_chops
           - at_onboarding_cli
