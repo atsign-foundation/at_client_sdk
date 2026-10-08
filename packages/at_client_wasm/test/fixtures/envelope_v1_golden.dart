@@ -1,0 +1,2 @@
+/// The bytes of `envelope_v1_golden.json`, for platforms without `dart:io`.
+const envelopeV1Golden = r'''{"v":1,"atSign":"@golden","content":{"alg":"A256GCM","iv":"7H+hvXj116m74Z/V","ct":"Oi77Gg0s0m9np8Wkf2vBIBp1AaD+L0rPxckcBRi8fdoH5fc2PLTig4CotYJGCIFWcMnejY0lpIx7Or8T9+NwBgr6V6M3lpp9W6qpVlhtdQ=="},"unlocks":[{"kind":"prf","kdf":{"alg":"hkdf-sha256","salt":"DVjkg0D/kCbQf3KdBEDd1A=="},"wrap":{"iv":"43a+aNxLYP1ilsKs","ct":"ZTsV7pG2jEXx/iWwvjZeUA1MFLxVkpUiJKGt0PsuaPcHswxEbbAgUTx7r0nwdUXa"}}]}''';
