@@ -210,6 +210,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
 | [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
 | [152] | A conveyed link waits in the keyfile until stamped, stamped as it arrives                    | 2026-10-08 | LIVE               |
+| [153] | An arriving nskey private is checked against what is published, else named by length         | 2026-10-08 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -364,3 +365,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [150]: detail/decisions.md#150-the-startup-seeds-the-namespace-the-client-was-built-with-2026-10-05
 [151]: detail/decisions.md#151-atrpc-request-ids-are-random-53-bit-integers-2026-10-05
 [152]: detail/decisions.md#152-a-conveyed-link-waits-in-the-keyfile-until-stamped-and-is-stamped-as-it-arrives-2026-10-08
+[153]: detail/decisions.md#153-an-arriving-nskey-private-is-checked-against-what-is-published-else-named-by-its-length-2026-10-08

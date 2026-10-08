@@ -878,8 +878,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     absent-means-the-hybrid hatch**: `PackageKey.fromJson` returns null unless `alg` is
     a string, and the reader refuses what is left;
   - the correspondence check on an arriving private re-derives the public half **through
-    the advertised KEM** rather than assuming X-Wing. A seed arrives as bare bytes, and 32
-    or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
+    the advertised KEM** rather than assuming X-Wing. With nothing published under the
+    private's kid, as for an earlier generation, the seed's length names the KEM: X-Wing
+    takes exactly 32 bytes and ML-KEM-1024 exactly 64, and a seed of any other length is
+    refused.
 - **Then (the version is negotiated, not fixed):** `suites` says which sealing
   constructions the owner can **open**, which `alg` does not determine — a KEM key opens
   every construction built on that KEM. An X-Wing owner therefore receives

@@ -15046,6 +15046,37 @@ Gary ruled the fix knowing that.
   rewrite under a new key the old link vouches for nothing and only a new one
   will do.
 
+The sweep still conveys root links only, as
+[67](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10) has it. A sweep re-sending a missing
+chain link was ruled on 2026-10-07 and withdrawn on 2026-10-08: with links filed
+as they arrive, a chain link is lost only on a keyfile with no entry for its
+enrollment, and a root-holder's sweep anchors any enrollment with no root link,
+chain-linked or not.
+
 Pinned by `test/pq_signing_chain_filed_links_test.dart`, and for the keyfile by
 at_auth's `at_keys_golden_test.dart` and the `AtKeys links` group in
 `at_keys_test.dart`.
+
+## 153. An arriving nskey private is checked against what is published, else named by its length (2026-10-08)
+
+**Decided by gkc on 2026-10-07 and 2026-10-08.** A filing checks an arriving
+nskey seed against the generation its atSign publishes, and learns from that
+generation which KEM the seed is for. Only `collectConveyedKeyMaterial` supplied
+that lookup, and only when it had no ring of its own, while every arriving
+private went through the start-up bootstrap's filing, which had none. With no
+lookup the filing assumed X-Wing and checked nothing. A test written before the
+fix observed both: an ML-KEM-1024 seed was filed as X-Wing, which leaves its
+namespace unopenable on that enrollment, and a seed deriving nothing published
+was filed.
+
+Every filing a client builds now asks through `NskeyPrivateFiling.checkedAgainst`,
+over the ring it works with. A private whose kid the current generation does not
+carry, such as an earlier generation's after a rotation, has nothing published
+to compare against, so its seed's length names the KEM: X-Wing takes exactly 32
+bytes and ML-KEM-1024 exactly 64 (measured), and any other length is refused.
+Only fleets that configure ML-KEM-1024 meet the mislabelling; every built-in
+posture mints X-Wing.
+
+Pinned by `test/nskey_filing_published_key_test.dart`, for the start-up
+bootstrap's filing, a key ring's own and a rotation's, and by the seed-length
+tests in `test/nskey_private_filing_test.dart`.

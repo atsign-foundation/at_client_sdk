@@ -89,7 +89,8 @@ class NskeyPrivateFiling {
   /// The published generation for `(namespace, nskeyKid)`, consulted to check
   /// that an arriving seed corresponds to the key peers are sealing to —
   /// and to learn which KEM it is a seed for, since the seed arrives as bare
-  /// bytes and 32 or 64 of them are valid for one KEM or the other.
+  /// bytes. With nothing published under the kid, the seed's length names the
+  /// KEM.
   ///
   /// A secondary check, subordinate to the signature that already
   /// authenticated the envelope, and the only thing that catches a private
