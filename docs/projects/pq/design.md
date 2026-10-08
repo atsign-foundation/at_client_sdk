@@ -799,10 +799,12 @@ The full built/gap inventory with `file:line` evidence is in
 
 **Envelope key shape.** `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@<owner>` — a
 self key,
-`shouldEncrypt=false` (the value is already ciphertext). The body is raw `pqSeal`
+`shouldEncrypt=false` (the value is already ciphertext). The body is an
+APKAM-signed `SecretEnvelope` (version 2) naming the sender's enrollment and kpid,
+the recipient kpid and the namespace `<ns>`, whose `sealed` member holds `pqSeal`
 bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
-[seal-spec.md](seal-spec.md) — HKDF info domain-separation
-`'at_client/secret_sharing/v1'`).
+[seal-spec.md](seal-spec.md)) under the HKDF info
+`'at_client/secret_sharing/v2:<fromEnrollmentId>:<fromKpid>:<toKpid>:<ns>'`.
 The same envelope carries both the *request* (pull) and the *response*.
 
 **Two gates protect every copy:**
@@ -820,6 +822,14 @@ it: discovery/sealing mistakes cannot leak. Gate = defence in depth; seal = boun
 **Sign / verify-before-decrypt.** Each envelope is **APKAM-signed**; the receiver
 **verifies before decrypt** (`_consume`), proving a genuine owner-client wrote it.
 Per-enrollment `_apsk` signing-key resolution drives the verify.
+
+**The namespace and the parties are signed and sealed, not read off the key name.**
+The receiver refuses an envelope whose signed namespace differs from the `<ns>` in
+its key, and files a received secret under the signed one. Because the HKDF info
+names the sender and recipient as well, a sealed body opens only inside the
+envelope it was sealed for: lifted into another enrollment's signed envelope, it
+fails as a tampered one does. A version 1 envelope, which named neither, is refused
+at parse.
 
 **Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) [section 6](detail/decisions.md#6-resolved--open-execution-decisions-af)).**
 Every *advertised recipient key* — the per-enrollment **key package** (Layer 1) and the
@@ -1724,7 +1734,7 @@ all published.
 
 | Capability | Evidence (`file:line`) |
 |---|---|
-| X-Wing `pqSeal`/`pqOpen` of `__ssenv` (HPKE + AES-256-GCM, HKDF info `'at_client/secret_sharing/v1'`) | `pairwise_secret_sharing.dart:191,398,99`; `pq_hpke.dart:80` |
+| `pqSeal`/`pqOpen` of `__ssenv` (RFC 9180 at the suite the version byte names; HKDF info `'at_client/secret_sharing/v2:…'` binding sender, recipient and namespace) | `pairwise_secret_sharing.dart:109,276,671`; `pq_hpke.dart:152` |
 | Per-envelope APKAM sign + verify-before-decrypt; per-enrollment `_apsk` resolution | `mixins/envelope_signing.dart:74,152`; verify precedes open `pairwise_secret_sharing.dart:366` |
 | `kpid` addressing throughout (envelopes and fan-out keyed by the key-package kid) | `secret_envelope.dart` `toKpid`/`fromKpid`; `key_package.dart:29` |
 | Per-APKAM `KeyPackage` keyed by `(enrollmentId, apkamId)`; crypto-agile parse + `bestKeyFor` | `key_package.dart:76,108,156`; `algo_ids.dart:34,46` |

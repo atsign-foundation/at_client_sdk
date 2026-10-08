@@ -1,3 +1,8 @@
+## 3.15.0-rc6
+
+- fix: a secret shared between an atSign's own clients can no longer be filed
+  under the wrong namespace or credited to the wrong sender.
+
 ## 3.15.0-rc5
 
 - feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and

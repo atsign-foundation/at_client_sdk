@@ -300,12 +300,13 @@ void main() {
       // The CROSS-SUBSTRATE control. The arm above varies the namespace within
       // this substrate; this one crosses to the pairwise substrate's binding,
       // which is the replay the two distinct `info` values exist to prevent.
-      // Written as a raw literal rather than PairwiseSecretSharing.sealInfo so
-      // it cannot follow that constant if someone pointed it here.
+      // Written as a raw literal rather than PairwiseSecretSharing.sealInfoFor
+      // so it cannot follow that function if someone pointed it here.
       await expectLater(
           pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+              info: Uint8List.fromList(utf8.encode(
+                  'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:'
+                  'myapp'))),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding — shared code for seal/open is fine, a shared binding '
@@ -347,8 +348,9 @@ void main() {
       // the X-Wing one above.
       await expectLater(
           pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+              info: Uint8List.fromList(utf8.encode(
+                  'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:'
+                  'myapp'))),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding');
@@ -394,14 +396,22 @@ void main() {
       expect(SymmetricAesGcmProvider.fullNameOf(k), 'msg.app_1.my_apps');
     });
 
-    test('the pairwise substrate binds info "at_client/secret_sharing/v1"', () {
-      // Pins the constant's VALUE, and only that: it never touches a
-      // ciphertext, so it stays green if a call site stops passing the
-      // constant. The arms that read real sealed output — and that go red on a
-      // converged binding — are in pairwise_secret_sharing_test.dart, group
+    test(
+        'the pairwise substrate binds info "at_client/secret_sharing/v2:'
+        '<fromEnrollmentId>:<fromKpid>:<toKpid>:<appNamespace>"', () {
+      // Pins the function's OUTPUT, and only that: it never touches a
+      // ciphertext, so it stays green if a call site stops passing it. The
+      // arms that read real sealed output — and that go red on a converged or
+      // unbound binding — are in pairwise_secret_sharing_test.dart, group
       // 'FROZEN FOREVER: the pairwise seal binding, read from real output'.
-      expect(utf8.decode(PairwiseSecretSharing.sealInfo),
-          'at_client/secret_sharing/v1');
+      expect(
+          utf8.decode(PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'myapp',
+          )),
+          'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:myapp');
     });
   });
 
@@ -591,15 +601,16 @@ void main() {
         fromKpid: 'kpid-from',
         fromEnrollmentId: 'enroll-a',
         toKpid: 'kpid-to',
+        appNamespace: 'myapp',
         suite: 'x-wing-rfc9180-v1',
         kid: 'kpid-to',
         sealed: 'U0VBTEVE',
       );
       expect(
           jsonEncode(env.toJson()),
-          '{"v":1,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
-          '"to":"kpid-to","suite":"x-wing-rfc9180-v1","kid":"kpid-to",'
-          '"sealed":"U0VBTEVE"}');
+          '{"v":2,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
+          '"to":"kpid-to","ns":"myapp","suite":"x-wing-rfc9180-v1",'
+          '"kid":"kpid-to","sealed":"U0VBTEVE"}');
     });
 
     test('PackageKey emits its exact JSON shape', () {
