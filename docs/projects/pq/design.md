@@ -843,8 +843,10 @@ self key,
 APKAM-signed `SecretEnvelope` (version 2) naming the sender's enrollment and kpid,
 the recipient kpid and the namespace `<ns>`, whose `sealed` member holds `pqSeal`
 bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
-[seal-spec.md](seal-spec.md)) under the HKDF info
-`'at_client/secret_sharing/v2:<fromEnrollmentId>:<fromKpid>:<toKpid>:<ns>'`.
+[seal-spec.md](seal-spec.md)) under an HKDF info of five components: the label
+`at_client/secret_sharing/v2`, `<fromEnrollmentId>`, `<fromKpid>`, `<toKpid>`
+and `<ns>`, each written as its UTF-8 length in two big-endian bytes followed by
+those bytes, so no two sets of fields give the same info.
 The same envelope carries both the *request* (pull) and the *response*.
 
 **Two gates protect every copy:**
@@ -1791,7 +1793,7 @@ all published.
 
 | Capability | Evidence (`file:line`) |
 |---|---|
-| `pqSeal`/`pqOpen` of `__ssenv` (RFC 9180 at the suite the version byte names; HKDF info `'at_client/secret_sharing/v2:…'` binding sender, recipient and namespace) | `pairwise_secret_sharing.dart:109,276,671`; `pq_hpke.dart:152` |
+| `pqSeal`/`pqOpen` of `__ssenv` (RFC 9180 at the suite the version byte names; HKDF info labelled `at_client/secret_sharing/v2`, length-prefixed components binding sender, recipient and namespace) | `pairwise_secret_sharing.dart:109,276,671`; `pq_hpke.dart:152` |
 | Per-envelope APKAM sign + verify-before-decrypt; per-enrollment `_apsk` resolution | `mixins/envelope_signing.dart:74,152`; verify precedes open `pairwise_secret_sharing.dart:366` |
 | `kpid` addressing throughout (envelopes and fan-out keyed by the key-package kid) | `secret_envelope.dart` `toKpid`/`fromKpid`; `key_package.dart:29` |
 | Per-APKAM `KeyPackage` keyed by `(enrollmentId, apkamId)`; crypto-agile parse + `bestKeyFor` | `key_package.dart:76,108,156`; `algo_ids.dart:34,46` |

@@ -268,6 +268,18 @@ void main() {
     // ciphertext opens ONLY under the hand-built binding string, and a
     // negative control proves the test can fail.
 
+    /// The pairwise substrate's info for enroll-a, kpid-from, kpid-to and
+    /// myapp: each component is a two-byte big-endian length, then its UTF-8.
+    final pairwiseInfo = Uint8List.fromList([
+      for (final (length, text) in [
+        (0x1b, 'at_client/secret_sharing/v2'),
+        (0x08, 'enroll-a'),
+        (0x09, 'kpid-from'),
+        (0x07, 'kpid-to'),
+        (0x05, 'myapp'),
+      ]) ...[0x00, length, ...utf8.encode(text)],
+    ]);
+
     AtKey selfConveyance() => AtKey()
       ..key = 'ckkid.__ck'
       ..namespace = 'myapp'
@@ -304,10 +316,7 @@ void main() {
       // Written as a raw literal rather than PairwiseSecretSharing.sealInfoFor
       // so it cannot follow that function if someone pointed it here.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(utf8.encode(
-                  'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:'
-                  'myapp'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding — shared code for seal/open is fine, a shared binding '
@@ -348,10 +357,7 @@ void main() {
       // The cross-substrate control on the ML-KEM path, for the same reason as
       // the X-Wing one above.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(utf8.encode(
-                  'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:'
-                  'myapp'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding');
@@ -418,21 +424,63 @@ void main() {
     });
 
     test(
-        'the pairwise substrate binds info "at_client/secret_sharing/v2:'
-        '<fromEnrollmentId>:<fromKpid>:<toKpid>:<appNamespace>"', () {
+        'the pairwise substrate binds info "at_client/secret_sharing/v2", '
+        '<fromEnrollmentId>, <fromKpid>, <toKpid>, <appNamespace>, each '
+        'after its two-byte length', () {
       // Pins the function's OUTPUT, and only that: it never touches a
       // ciphertext, so it stays green if a call site stops passing it. The
       // arms that read real sealed output — and that go red on a converged or
       // unbound binding — are in pairwise_secret_sharing_test.dart, group
       // 'FROZEN FOREVER: the pairwise seal binding, read from real output'.
       expect(
-          utf8.decode(PairwiseSecretSharing.sealInfoFor(
+          PairwiseSecretSharing.sealInfoFor(
             fromEnrollmentId: 'enroll-a',
             fromKpid: 'kpid-from',
             toKpid: 'kpid-to',
             appNamespace: 'myapp',
-          )),
-          'at_client/secret_sharing/v2:enroll-a:kpid-from:kpid-to:myapp');
+          ),
+          pairwiseInfo);
+    });
+
+    test('fields that join to the same string give different pairwise info',
+        () {
+      final colonInSender = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a:kpid-from',
+        fromKpid: 'kpid-to',
+        toKpid: 'myapp',
+        appNamespace: 'other',
+      );
+      final colonInNamespace = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a',
+        fromKpid: 'kpid-from',
+        toKpid: 'kpid-to',
+        appNamespace: 'myapp:other',
+      );
+      expect(['enroll-a:kpid-from', 'kpid-to', 'myapp', 'other'].join(':'),
+          ['enroll-a', 'kpid-from', 'kpid-to', 'myapp:other'].join(':'),
+          reason: 'the premise: joined with ":", the two sets of fields are '
+              'one string');
+      expect(colonInSender, isNot(colonInNamespace));
+    });
+
+    test('a component longer than 65535 bytes is refused', () {
+      expect(
+          PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'n' * 0xffff,
+          ).length,
+          2 + 27 + 2 + 8 + 2 + 9 + 2 + 7 + 2 + 0xffff,
+          reason: 'the control: 65535 bytes is the most a length can say');
+      expect(
+          () => PairwiseSecretSharing.sealInfoFor(
+                fromEnrollmentId: 'enroll-a',
+                fromKpid: 'kpid-from',
+                toKpid: 'kpid-to',
+                appNamespace: 'n' * 0x10000,
+              ),
+          throwsArgumentError);
     });
   });
 

@@ -411,10 +411,22 @@ void main() {
     /// The exact bytes each substrate binds, as raw literals: reading the
     /// constants would follow one of them being changed into the other.
     /// The pairwise binding names the sender's enrollment and keypair, the
-    /// recipient keypair and the namespace, in that order.
+    /// recipient keypair and the namespace, in that order, after the label,
+    /// each as a two-byte big-endian length and then its UTF-8.
     Uint8List pairwiseInfo({String ns = 'myapp', String? fromKpid}) =>
-        Uint8List.fromList(utf8.encode('at_client/secret_sharing/v2:enroll-a:'
-            '${fromKpid ?? sharerA.kpid}:${sharerB.kpid}:$ns'));
+        Uint8List.fromList([
+          for (final component in [
+            'at_client/secret_sharing/v2',
+            'enroll-a',
+            fromKpid ?? sharerA.kpid,
+            sharerB.kpid,
+            ns,
+          ]) ...[
+            utf8.encode(component).length >> 8,
+            utf8.encode(component).length & 0xff,
+            ...utf8.encode(component),
+          ],
+        ]);
     final nskeyInfo = Uint8List.fromList(utf8.encode('at/nskey:@alice:myapp'));
 
     /// The `sealed` bytes off the envelope A actually wrote to B.

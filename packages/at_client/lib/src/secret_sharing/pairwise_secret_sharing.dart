@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' show Random;
 import 'dart:convert' show base64Decode, jsonDecode, jsonEncode, utf8;
-import 'dart:typed_data' show Uint8List;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -106,14 +106,37 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// for: lifted into another enrollment's signed envelope, or moved to
   /// another namespace, it fails as a tampered one does. The label also
   /// separates it from every other `pqSeal`-based protocol.
+  ///
+  /// Each component, the label `at_client/secret_sharing/v2` first, is its
+  /// UTF-8 length as two big-endian bytes followed by those bytes, so no two
+  /// sets of fields give the same info. Throws [ArgumentError] for a
+  /// component longer than 65535 bytes.
   static Uint8List sealInfoFor({
     required String fromEnrollmentId,
     required String fromKpid,
     required String toKpid,
     required String appNamespace,
-  }) =>
-      Uint8List.fromList(utf8.encode('at_client/secret_sharing/v2:'
-          '$fromEnrollmentId:$fromKpid:$toKpid:$appNamespace'));
+  }) {
+    final info = BytesBuilder(copy: false);
+    for (final component in [
+      'at_client/secret_sharing/v2',
+      fromEnrollmentId,
+      fromKpid,
+      toKpid,
+      appNamespace,
+    ]) {
+      final bytes = utf8.encode(component);
+      if (bytes.length > 0xffff) {
+        throw ArgumentError('A seal info component is ${bytes.length} bytes; '
+            'the most it can be is 65535');
+      }
+      info
+        ..addByte(bytes.length >> 8)
+        ..addByte(bytes.length & 0xff)
+        ..add(bytes);
+    }
+    return info.takeBytes();
+  }
 
   /// [sealInfoFor] with the parties and namespace [envelope] names.
   static Uint8List sealInfoOf(SecretEnvelope envelope) => sealInfoFor(
