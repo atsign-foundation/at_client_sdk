@@ -93,15 +93,13 @@ const unprovableClauses = <String, String>{
 const provenClauseCount = 243;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 100;
+const serverProvenClauseCount = 101;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
 /// Separate from [liveProofExempt] because the two decay in opposite
 /// directions: an exemption is meant to last, an entry here to be deleted.
 const liveProofOwed = <String, String>{
-  'UC-A5.7':
-      'no live test covers this row yet and one is feasible and additive: revoke an enrollment, write to a peer from a remaining one, and read the new key\'s sibling copy back from a real atServer to show the revoked enrollment\'s private cannot open it. Every citation here is in-process, against an in-memory ring',
   'UC-G2.1':
       'feasible AND it would add something these citations cannot: they parse hand-built payloads, so nothing establishes that an atServer STORES and SERVES a key-package entry it has no code for, verbatim. That is the other half of reader-ships-first, and it is reachable by publishing such a package with enroll:update and reading it back',
   'UC-G2.2':

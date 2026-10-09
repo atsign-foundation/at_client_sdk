@@ -539,6 +539,18 @@ void main() {
               'rather than on the metadata alone',
           clauses: ['the value cites a fresh content key whose sibling copy']);
       provenIn(
+          'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+          'UC-A5.7 · a revoked enrollment cannot open what a remaining one '
+              'shares next',
+          proves: 'the row against a live atServer: an operator enrollment '
+              'revokes one enrollment and rotates, and the remaining writer\'s '
+              'own client, learning of the rotation through the conveyed '
+              'private and the synced advertisement, shares next under a fresh '
+              'key whose sibling copy rests on the new generation, which the '
+              'revoked enrollment never receives. The control shows the '
+              'writer\'s key rested on the old generation before',
+          clauses: ['the value cites a fresh content key whose sibling copy']);
+      provenIn(
           'packages/at_client/test/ck_manager_test.dart',
           'when two writes start at once after G2 arrives, then they cut one '
               'fresh key, which @bob opens',

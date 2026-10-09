@@ -11,8 +11,9 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey;
+    show ckConveyanceKey, ckSiblingCopyKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:test/test.dart';
@@ -554,6 +555,105 @@ void main() {
     expect(await owner.filing.read(ns, before.nskeyKid), isNotNull,
         reason: 'while the owner still opens everything sealed to the '
             'superseded generation');
+  });
+
+  test(
+      'UC-A5.7 · a revoked enrollment cannot open what a remaining one shares '
+      'next',
+      // Three enrollments, a second atSign's namespace key, a rotation and the
+      // remaining writer noticing it through its own client.
+      timeout: const Timeout(Duration(minutes: 4)), () async {
+    final ns = 'snd$runId.$namespace';
+    final peer = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
+    final operator = await holder('snd-operator', namespaces: operatorGrants);
+    // NOTE: the parent namespace too, which is the grant the atServer's write
+    // gate reads for a key under [ns].
+    final writer =
+        await holder('snd-writer', namespaces: {namespace: 'rw', ns: 'rw'});
+    final doomed = await holder('snd-doomed', namespaces: {ns: 'rw'});
+
+    // NOTE: the peer needs a namespace key at [ns] for a share to seal to. An
+    // owned client, because switching the manager to another atSign stops the
+    // approver every other test here enrols through.
+    final peerKeys = InMemoryAtKeysIo.holding(peer,
+        AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(peer));
+    final peerClient = await Atsign(peer).open(
+        keys: peerKeys,
+        preference:
+            TestUtils.getPreference(peer, posture: legacyPlusPqProviders),
+        namespace: ns,
+        storage: TestUtils.storageForPrincipal(peer, 'snd-peer'));
+    addTearDown(peerClient.stop);
+    await PublishedNskeyKeyRing(peerClient,
+            privateFiling: NskeyPrivateFiling(keysIo: peerKeys, atSign: peer),
+            lockTtl: liveMintLockTtl)
+        .mintAndPublish(ns);
+
+    final g1 = await writer.ring.mintAndPublish(ns);
+
+    /// Shares a fresh value with [peer] from the writer's own client, and
+    /// answers which content key it went under and which of this atSign's
+    /// generations that key's sibling copy was sealed to, read off the copy's
+    /// own record.
+    Future<({String ckKid, String? sealedTo})> share(String name) async {
+      final key = AtKey()
+        ..key = name
+        ..namespace = ns
+        ..sharedBy = atSign
+        ..sharedWith = peer;
+      expect(
+          await writer.enrolled.client.put(key, 'shared with $peer',
+              putRequestOptions: PutRequestOptions()
+                ..cryptoProviderId = symmetricAesGcmCryptoProviderId),
+          isTrue);
+      final written = await writer.enrolled.client.getMeta(key);
+      final ckKid = written?.appMetadata?.additional?['ckKid'] as String?;
+      expect(ckKid, isNotNull,
+          reason: '$name must be on the nskey data path, or it has no '
+              'content key and no sibling copy to read');
+      final copy = await writer.enrolled.client
+          .getMeta(ckSiblingCopyKey(sender: atSign, ckKid: ckKid!, ckNs: ns));
+      return (
+        ckKid: ckKid,
+        sealedTo: copy?.appMetadata?.additional?['nskeyKid'] as String?,
+      );
+    }
+
+    final before = await share('before$runId');
+    expect(before.sealedTo, g1.nskeyKid,
+        reason: 'the control: before the rotation the writer\'s key rests on '
+            'the generation every enrollment with access holds');
+
+    await waitOutMintLock();
+    final outcomes = await NskeyRotation(
+      atClient: operator.enrolled.client,
+      ring: operator.ring,
+      privateFiling: operator.filing,
+      sharing: operator.sharing,
+    ).revokeEnrollmentAndRotate(doomed.enrolled.enrollmentId);
+    final g2 = outcomes.firstWhere((o) => o.namespace == ns).advertisement;
+    expect(g2.nskeyKid, isNot(g1.nskeyKid));
+
+    // NOTE: polled, because the writer learns of the rotation through its own
+    // client — the conveyed private and the synced advertisement — and the
+    // write that follows is what moves its key.
+    var after = await share('after$runId-0');
+    for (var i = 1; i < 90 && after.sealedTo != g2.nskeyKid; i++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      after = await share('after$runId-$i');
+    }
+    expect(after.sealedTo, g2.nskeyKid,
+        reason: 'the writer\'s next share must rest on the generation the '
+            'revoked enrollment was excluded from');
+    expect(after.ckKid, isNot(before.ckKid),
+        reason: '$peer did not rotate, so only the sending side moved the '
+            'key');
+
+    await NskeyPrivateFiling(keysIo: doomed.io, atSign: atSign)
+        .filePending(doomed.sharing.secretStore.listSecrets());
+    expect(await doomed.filing.read(ns, g2.nskeyKid), isNull,
+        reason: 'the revoked enrollment never receives G2, which is now all '
+            'that opens the copy of the key the writer shares under');
   });
 
   test(
