@@ -2666,16 +2666,26 @@ Cheapest first, because the common case must not pay for the rare one.
 1. **Already holds it** → return. Settles the question with no round trip, and is true for every
    enrollment that was online when it was approved.
 2. **No enrollment id** → return. Such a client authenticates with the atSign's own keys. It
-   does not ask: it is the atSign, so its route to a missing root is to mint one. **Amended
-   2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
+   does not ask: it advertises no key package, so no holder could seal the answer to it. The
+   atServer has held a `primary` enrollment record since 3.16.4, but the only two writers of a
+   key package into a record are `enroll:request`'s metadata, which `primary` never sends, and
+   `reconcileKeyPackage`, which skips the atSign's own credential. **Amended 2026-10-09.**
+   This item used to give the reason as "it is the atSign, so its route to a missing root is to
+   mint one". That holds only at activation and in a retrofit: on an ordinary start
+   `mintIfAbsent` refuses once a root is published, so this client neither asks nor mints and
+   stays unanchored. gkc ruled on 2026-10-09 that `primary` keeps this route. Under `legacy`
+   the post-quantum start-up steps do not run, and under `pqReady` and `pqActive` a client on
+   the atSign's own rsa2048 keys retrofits at start into a fully privileged ML-DSA enrollment
+   before they run, and that enrollment asks. What reaches this guard is a start whose retrofit
+   failed, which the next start retries, or a custom `PqPosture` that keeps rsa2048
+   authentication with post-quantum providers. **Amended 2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
    refused a connection without APKAM authentication, observed against the atServer of
    2026-08-04. Since at_server 3.16.4 a legacy `pkam:` connection is judged as the `primary`
    enrollment and `enroll:listns` answers it, measured on 2026-09-12 against the `dev_env` image
    the functional pack runs in CI: the roster came back naming `primary`, and the same verb on an
    unauthenticated connection was refused with AT0401 as the control. So the guard is a
-   client-side choice rather than a server constraint, and whether `primary` should ask a holder
-   rather than mint is the question the PQ table's `primary` signing-root row holds open for
-   gkc. The guard was added after the first live run, where its absence made every legacy PKAM
+   client-side choice rather than a server constraint; the 2026-10-09 amendment above says why
+   it stays. The guard was added after the first live run, where its absence made every legacy PKAM
    client broadcast and be refused by the atServer of that day.
 
    **The first version of this guard was dead code.** It tested
