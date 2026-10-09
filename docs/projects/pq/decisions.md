@@ -210,6 +210,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
 | [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
 | [154] | A shared content key follows the sender's own namespace key too                             | 2026-10-09 | LIVE               |
+| [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -364,3 +365,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [150]: detail/decisions.md#150-the-startup-seeds-the-namespace-the-client-was-built-with-2026-10-05
 [151]: detail/decisions.md#151-atrpc-request-ids-are-random-53-bit-integers-2026-10-05
 [154]: detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09
+[155]: detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09

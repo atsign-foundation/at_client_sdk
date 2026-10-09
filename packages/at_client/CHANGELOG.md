@@ -10,6 +10,10 @@
 - fix: once an atSign's namespace key rotates, including after a revocation,
   the content keys its clients share with other atSigns move to the new key on
   their next write.
+- feat: by default a content key is replaced once it is a year old (it was a
+  week), and a namespace key once it was minted a year ago (it was never).
+  `rotateCkAfterOneWeek` and `neverRotateNskey` remain for an app that wants
+  the old behaviour.
 - feat: where OpenSSL is installed (desktop, server and CLI), post-quantum
   encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
   several times faster. Other platforms keep pure Dart.

@@ -1358,14 +1358,16 @@ knows which is which. Design in
   the enrollment that cut it once neither holds. Deleting a key that records
   still cite is UC-A5.1's lever (a), which the SDK never pulls on the
   application's behalf.
-- **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
-  week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
-  than a day because each replacement adds a conveyance that is kept as long
-  as any record written under its key lives, so a short period multiplies what
-  a long-lived store keeps; rather than a month because a week is already the
-  period this design measures an envelope's life in.
+- **Then, the default:** `rotateCkAfterOneYear` — replace once the key is a
+  year old, with the boundary **inclusive** (`age >= 365 days`). Each value is
+  encrypted under its own key, derived from the content key and a fresh salt,
+  so no usage limit bounds a content key's life, and revocation replaces it
+  through [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)
+  rather than through the timer. A year is NIST SP 800-57 Part 1's suggested
+  cryptoperiod for a key-derivation key, which is what a content key is.
+  `rotateCkAfterOneWeek` remains for an application that wants a week.
 
-### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
+### 6.5 UC-A5.5 — The namespace-key lever is asked at exactly two points
 
 - **Given:** an application that supplied an `NskeyRotationPolicy`.
 - **When:** the client runs.
@@ -1397,9 +1399,14 @@ knows which is which. Design in
   **retained** so records sealed to it still open, and the successor is conveyed
   to every authorised enrollment. This is UC-A5.1's lever (b) — O(n) per
   enrollment, and not cheap.
-- **Then, the default:** `neverRotateNskey` — false at any age. A policy that
-  always says no rather than an absent one, so every call site asks
-  unconditionally and there is no null to forget.
+- **Then, the default:** `rotateNskeyAfterOneYear` — replace a generation once
+  its advertisement says it was minted a year ago, with the boundary
+  **inclusive**. Revocation rotates on its own cause; the yearly rotation is
+  what heals a compromise nobody detected, and a year sits in NIST SP 800-57
+  Part 1's 1-to-2-year range for a public key-transport key. Each rotation
+  conveys to every authorised enrollment and makes each peer cut one content
+  key. `neverRotateNskey` remains for an application that leaves rotation to
+  revocation and to itself.
 
 ### 6.6 UC-A5.6 — Where a lever is deliberately not asked, and where a yes is refused out loud
 
@@ -2196,7 +2203,7 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
 | `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2**. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
-| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneYear` and `rotateNskeyAfterOneYear`, each with its period pinned as a raw literal and its boundary inclusive — that every config the SDK builds carries them, the weekly and never alternatives, and that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
@@ -3603,15 +3610,18 @@ is where its missing lever lives.
     `approved`, making the test vacuously false forever.
 
     ⚠️ **Why the rotation ignores the policy.** `NskeyRotationPolicy` governs
-    *discretionary* rotation, and its shipped default is `neverRotateNskey`,
-    which returns false unconditionally. A revocation-driven rotation that asked
-    it would be inert for every application that has not opted in — and the
-    rotation is the only thing that cuts a revoked enrollment off from data
-    sealed to the generation it already holds.
+    *discretionary* rotation, and its shipped default,
+    `rotateNskeyAfterOneYear`, says yes only once a generation is a year old.
+    A revocation-driven rotation that asked it would wait up to a year, or for
+    ever under `neverRotateNskey` — and the rotation is the only thing that cuts
+    a revoked enrollment off from data sealed to the generation it already
+    holds.
 
-    ⚠️ **Age is not an nskey trigger at all** — the SDK carries no clock for
-    this lever, and an application deciding it is time is a *cause* rather than
-    a schedule;
+    ⚠️ **Age is the default policy's trigger, never the revocation's** — the
+    revocation-driven rotation needs no clock, and the yearly one is asked only
+    at the two points
+    [UC-A5.5](#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)
+    names;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
     start or at the next content key it conveys to a namespace key **this

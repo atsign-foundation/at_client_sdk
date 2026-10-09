@@ -395,17 +395,23 @@ void main() {
             'so a recipient can still open a notification sent under it'
           ]);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'the period is SEVEN days, pinned as a literal',
+          'the period is 365 days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '
               'round trip through the constant that defines it, so an '
               'intended change edits the pin and that edit is the review',
-          clauses: ['`rotateCkAfterOneWeek`']);
+          clauses: ['`rotateCkAfterOneYear`']);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'a key a week old or older is replaced',
+          'every config the SDK builds carries the yearly defaults',
+          proves: 'that it IS the default: CryptoConfig, CryptoConfig.nskey '
+              'and readsNskeyWritesLegacy all hand it to an application that '
+              'names none, and the era default is built through the second',
+          clauses: ['`rotateCkAfterOneYear`']);
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'a key a year old or older is replaced',
           proves: 'the boundary is INCLUSIVE, which is the arm an off-by-one '
               'would silently move');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'a key younger than a week is left alone',
+          'a key younger than a year is left alone',
           proves: 'the other side of the boundary');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'age is measured against the now it is given, not the clock',
@@ -414,8 +420,8 @@ void main() {
     });
 
     test(
-        'UC-A5.5 \u00b7 the namespace-key lever fires on a cause, and is asked '
-        'at exactly two points', () {
+        'UC-A5.5 \u00b7 the namespace-key lever is asked at exactly two points',
+        () {
       provenIn('packages/at_client/test/nskey_seeding_test.dart',
           'a sibling publishing mid-route does not become a rotation',
           proves: 'the third ask is closed, measured rather than reasoned: a '
@@ -427,7 +433,7 @@ void main() {
       // THEN  asked before a CK is conveyed but only for this atSign's own
       //       namespace key; asked once per authorised namespace at start;
       //       there is no third ask; handed the advertisement's own dates; a
-      //       yes mints, retains and conveys; the default is never.
+      //       yes mints, retains and conveys; the default is a year.
       provenIn('packages/at_client/test/ck_manager_test.dart',
           'the namespace-key hook is asked only where this atSign owns the key',
           proves: 'the first ask AND the constraint that makes it safe: a '
@@ -458,14 +464,15 @@ void main() {
           proves: 'the conveyance half, which is what makes the rotation O(n) '
               'per enrollment and therefore the expensive lever');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'never, at any age',
-          proves: 'the default, at an age no schedule would leave alone — so '
-              'it is the POLICY being asserted and not a period',
-          clauses: ['`neverRotateNskey`']);
+          'the period is 365 days from the advertised mint, pinned as a literal',
+          proves: 'the default period and its inclusive boundary as raw '
+              'literals, measured from the advertisement\'s own mint date',
+          clauses: ['`rotateNskeyAfterOneYear`']);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'it is a policy rather than an absent one',
-          proves: 'that the default is a closure that says no rather than a '
-              'null, which is what lets every call site ask unconditionally');
+          'every config the SDK builds carries the yearly defaults',
+          proves: 'that it IS the default every config the SDK builds hands '
+              'an application that names none',
+          clauses: ['`rotateNskeyAfterOneYear`']);
 
       // NOTE: "there is no third ask" is deliberately UNPINNED, being an
       //       absence: `AtClient.ensureReachable` cannot reach the policy,

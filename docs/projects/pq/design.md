@@ -648,6 +648,16 @@ namespace-granular **post-compromise security**; it is the per-APKAM revocation
 lever. It does **not** give per-message FS or history re-encryption (the old nskey
 private retained → history-on). Coarse FS comes from B5a, not from this.
 
+**When each lever fires by default.** Revocation rotates the namespace keys the revoked
+enrollment held, and a CK follows either namespace key it rests on, without asking any
+policy. Beyond that, both levers ask an application policy, and the defaults are a year:
+`rotateCkAfterOneYear`, since with per-value keys a CK is a key-derivation key with no
+usage limit, and `rotateNskeyAfterOneYear`, measured from the advertisement's own mint
+date, which is what heals a compromise nobody detected. A year is NIST SP 800-57 Part 1's
+suggested cryptoperiod for a key-derivation key, and inside its 1-to-2-year range for a
+public key-transport key
+([ruling 155](detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09)).
+
 **(B6) Revocation wiring.** Composes: (1) enrollment revocation (`enroll:revoke` —
 APKAM, free, cuts future server access); (2) nskey-keypair rotation **excluding**
 the revoked enrollment (`excludeEnrollmentIds`, B5b); (3) optional history

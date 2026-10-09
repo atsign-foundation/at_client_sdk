@@ -15076,3 +15076,48 @@ side.
 Pinned by `ck_manager_test.dart`'s group "Given a content key shared with @bob, whose
 sibling copy rests on this enrollment's own generation G1", and catalogued as
 [UC-A5.7](../acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
+
+## 155. Content keys and namespace keys rotate yearly by default (2026-10-09)
+
+**Decided by gkc on 2026-10-09.** For content keys he first leaned to 90 days, then to
+never, then asked that the choice be "defensible to an expert cryptography auditor", and
+chose "About 1 year". For namespace keys he chose "About 1 year (Recommended)". The
+defaults become `rotateCkAfterOneYear` (`age >= 365 days`) and `rotateNskeyAfterOneYear`
+(365 days from the advertisement's own `createdAt`). `rotateCkAfterOneWeek` and
+`neverRotateNskey` remain for applications that want them.
+
+**Why a content key needs no short period.** The weekly default served two purposes,
+and each now has its own mechanism:
+- **It kept a content key under AES-GCM's random-IV limit.** Per-value keys took that
+  over. Each value is encrypted under HKDF-SHA256-Expand(CK, label ‖ 32-byte salt) with a
+  fresh 12-byte IV, so nonce reuse needs the same value key and the same IV: at most
+  2^-255 · 2^-96 = 2^-351 per pair. At SP 800-38D's 2^-32 target that is 2^160 values.
+  At an absurd 2^30 writes a second for 90 days (2^52.9 values), p(nonce reuse) ≤ 2^-246,
+  and p(two values sharing a key) ≤ 2^-150.
+- **It replaced a shared CK after its sender's own namespace key rotated.**
+  [Ruling 154](#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09)
+  now does that on the rotation itself.
+
+**Why a year rather than never.** With per-value keys a CK is a key-derivation key, and
+NIST SP 800-57 Part 1 Rev 5 (section 5.3.6 item 9, Table 1) suggests "about 1 year" for
+one. Its periods are "rough order-of-magnitude guidelines", and a longer one needs
+"serious consideration … of the risks (see Section 5.3.1)". Never was defensible against
+those factors, because a CK exists in the clear only in the memory of a client that also
+holds the nskey it is sealed under, so a timed rotation heals nothing on a compromised
+device. But it was a documented deviation, and an auditor would still have listed a CK
+disclosed on its own. A year costs one cut per enrollment, destination and namespace a year,
+and needs no defence.
+
+**Namespace keys.** Under `neverRotateNskey` only revocation and the application
+replaced a namespace key; the yearly default replaces it on its own as well. An nskey is a KEM keypair senders encapsulate CKs to, and the nearest
+SP 800-57 rows are a public key-transport key (1 to 2 years) and a private one (under
+2 years; its footnote 61 allows the private to outlive that where stored messages are
+decrypted later, as the ring does by keeping old privates). A rotation conveys to every
+authorised enrollment and makes each peer cut one CK, which once a year is small; an
+enrollment that misses the envelope pulls the generation at its next start
+(`requestMissingPrivates`) or on a read miss. Revocation-driven rotation still asks no
+policy (UC-G2.5).
+
+Pinned by `rotation_policy_test.dart` (both periods as raw literals, inclusive, and that
+`CryptoConfig`, `CryptoConfig.nskey` and `readsNskeyWritesLegacy` all carry them), and
+catalogued under UC-A5.4 and UC-A5.5.

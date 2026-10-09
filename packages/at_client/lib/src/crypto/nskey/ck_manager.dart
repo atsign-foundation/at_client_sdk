@@ -106,7 +106,7 @@ class CkManager {
       required this.keyRing,
       NskeyResolver? resolver,
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-      this.ckRotationPolicy = rotateCkAfterOneWeek,
+      this.ckRotationPolicy = rotateCkAfterOneYear,
       this.supersededCkGrace = defaultSupersededCkGrace,
       this.pointer = const CurrentCkPointer()})
       : resolver = resolver ??

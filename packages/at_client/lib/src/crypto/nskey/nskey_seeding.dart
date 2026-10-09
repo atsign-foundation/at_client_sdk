@@ -60,7 +60,7 @@ class NskeySeeding {
     required this.ring,
     this.sharing,
     this.privateFiling,
-    this.rotationPolicy = neverRotateNskey,
+    this.rotationPolicy = rotateNskeyAfterOneYear,
   }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
   /// The namespaces this client should hold a key for; see

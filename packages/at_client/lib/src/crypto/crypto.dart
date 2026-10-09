@@ -145,7 +145,7 @@ class CryptoConfig {
   /// namespace should be replaced before anything else is written under it.
   ///
   /// Answered per namespace, and independently of [nskeyRotationPolicy].
-  /// Defaults to [rotateCkAfterOneWeek].
+  /// Defaults to [rotateCkAfterOneYear].
   final CkRotationPolicy ckRotationPolicy;
 
   /// How long a superseded content key is kept after the key that replaced it
@@ -158,18 +158,18 @@ class CryptoConfig {
 
   /// Asked whether a namespace key this atSign owns should be replaced.
   ///
-  /// Defaults to [neverRotateNskey]: replacing one costs a conveyance to every
-  /// authorised enrollment and makes every peer cut a fresh content key, so
-  /// nothing in the SDK fires it on a schedule.
+  /// Defaults to [rotateNskeyAfterOneYear]. Replacing one costs a conveyance to
+  /// every authorised enrollment and makes every peer cut a fresh content key,
+  /// which once a year is small.
   final NskeyRotationPolicy nskeyRotationPolicy;
 
   const CryptoConfig({
     required this.defaultProviderId,
     this.providers = const [],
     this.keyRing,
-    this.ckRotationPolicy = rotateCkAfterOneWeek,
+    this.ckRotationPolicy = rotateCkAfterOneYear,
     this.supersededCkGrace = defaultSupersededCkGrace,
-    this.nskeyRotationPolicy = neverRotateNskey,
+    this.nskeyRotationPolicy = rotateNskeyAfterOneYear,
   });
 
   /// Legacy-only — the default for un-migrated apps.
@@ -177,9 +177,9 @@ class CryptoConfig {
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [],
         keyRing = null,
-        ckRotationPolicy = rotateCkAfterOneWeek,
+        ckRotationPolicy = rotateCkAfterOneYear,
         supersededCkGrace = defaultSupersededCkGrace,
-        nskeyRotationPolicy = neverRotateNskey;
+        nskeyRotationPolicy = rotateNskeyAfterOneYear;
 
   /// The distinguished "the app named nothing" marker — the default value of
   /// [AtClientPreference.crypto].
@@ -209,9 +209,9 @@ class CryptoConfig {
   factory CryptoConfig.nskey(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneYear,
           Duration supersededCkGrace = defaultSupersededCkGrace,
-          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+          NskeyRotationPolicy nskeyRotationPolicy = rotateNskeyAfterOneYear}) =>
       _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms,
           ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
@@ -226,9 +226,9 @@ class CryptoConfig {
   factory CryptoConfig.readsNskeyWritesLegacy(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneYear,
           Duration supersededCkGrace = defaultSupersededCkGrace,
-          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+          NskeyRotationPolicy nskeyRotationPolicy = rotateNskeyAfterOneYear}) =>
       _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms,
           ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
