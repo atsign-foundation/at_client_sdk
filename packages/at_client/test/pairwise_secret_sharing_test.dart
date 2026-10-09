@@ -454,8 +454,8 @@ void main() {
       ]) {
         await expectLater(pqOpen(kem, recipient.secretKey, sealed, info: other),
             throwsA(isA<PqOpenException>()),
-            reason: 'the binding must name the namespace and the sender, or '
-                'a sealed body opens in an envelope it was not sealed for: '
+            reason: 'the binding names the namespace and the sender, so a '
+                'sealed body opens only in the envelope it was sealed for: '
                 '${utf8.decode(other)}');
       }
 

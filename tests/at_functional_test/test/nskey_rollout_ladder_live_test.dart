@@ -217,8 +217,7 @@ void main() {
 
     // ── before any conveyance: the rollout-1 install cannot write ──
     // It holds no private for the shared generation, and a client seals to its
-    // own atSign's key only when it holds the private, so the public half an
-    // atServer served it cannot be a substitute.
+    // own atSign's key only when it holds the private.
     final fromRolled = AtKey()
       ..key = 'ladder_new_$runId'
       ..namespace = namespace

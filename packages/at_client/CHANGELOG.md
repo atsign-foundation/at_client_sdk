@@ -1,12 +1,12 @@
 ## 3.15.0-rc6
 
-- fix: a secret shared between an atSign's own clients can no longer be filed
-  under the wrong namespace or credited to the wrong sender.
-- fix: a post-quantum content key no longer has a limit on how many values it
-  can safely encrypt.
-- fix: a client no longer writes post-quantum data in its own namespace before
-  it holds that namespace's private key; the write throws
-  `NskeyPrivateNotHeldException` until the key arrives.
+- fix: a secret shared between an atSign's own clients is filed under the
+  namespace it was sent through, and credited to the client that sent it.
+- fix: each post-quantum value is encrypted under a key of its own, so a
+  content key can encrypt any number of values.
+- fix: a client writes post-quantum data in its own namespace once it holds
+  that namespace's private key; until the key arrives the write throws
+  `NskeyPrivateNotHeldException`.
 - feat: where OpenSSL is installed (desktop, server and CLI), post-quantum
   encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
   several times faster. Other platforms keep pure Dart.

@@ -99,8 +99,8 @@ class NskeyPrivateNotHeldException extends AtEncryptionException {
 
   NskeyPrivateNotHeldException(this.atSign, this.namespace, this.nskeyKid)
       : super('refusing to seal to $atSign:$namespace generation $nskeyKid: '
-            'this client does not hold its private half, so it cannot tell '
-            'the public half it was served from one an atServer substituted');
+            'a client seals to its own atSign\'s namespace key only once it '
+            'holds the private half');
 }
 
 /// A record identifying one filed nskey private, as [SignalsPrivateFiling]
