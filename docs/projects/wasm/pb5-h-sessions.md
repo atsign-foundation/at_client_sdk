@@ -119,7 +119,7 @@ sequenceDiagram
   - The golden test now reads `test/fixtures/envelope_v1_golden.dart`.
   - `test/fixtures_test.dart` (VM) pins that constant to the JSON contract file byte for byte.
   - It passes on dart2js. On dart2wasm it hits the hang above.
-- **The at_client follow-up (separate branch `st/at_client/remote-only-timers`):**
+- **The at_client follow-up ([#2336](https://github.com/atsign-foundation/at_client_sdk/pull/2336), merged into this branch):**
   - A remote-only client starts with `isLocalStoreRequired` at its default.
   - Rederiving after an enrollment change moves `RemoteOnlyAtClientStorage` onto the new `RemoteSecondary`.
-  - Once that lands, `remoteOnlyClient` stops setting `isLocalStoreRequired = false`.
+  - `remoteOnlyClient` no longer sets `isLocalStoreRequired = false`.
