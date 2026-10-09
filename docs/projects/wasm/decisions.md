@@ -846,12 +846,9 @@ release passing `InMemoryAtClientStorage` once at_client 3.15.0 publishes.
 deprecated; 4.0 removes them along with the default seam, `hiveStoragePath` and
 `isLocalStoreRequired`, after which storage is required at every door.
 
-What a backend protects at rest is its own, and `AtClientStorage` says so. Every backend
-stores a value the client encrypted as that ciphertext; the difference is the records the
-client leaves unencrypted, such as its sync and notification watermarks and `local:`
-values. Hive encrypts every value in its keystore with the key in its `.hash` file (record
-names and its queue box are in clear), SQLite writes those records in clear, and the
-in-memory store writes nothing to disk.
+The storage docs say one thing about what is on disk: end-to-end-encrypted values are
+stored in local storage as ciphertext, never in the clear. What each backend does at rest
+beyond that is left out of them, as it confused readers (gkc, 2026-10-09).
 
 **Why.** Which store suits an app is a platform question (a Flutter app, a command-line
 tool and a browser each want a different one), and a core that names one backend chooses
@@ -1210,3 +1207,4 @@ invent a number.
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
 | 2026-10-07 | **D-25 ruled; D-5 amended.** Client storage is the app's choice, each backend from its own barrel, with a Hive default in one core file until 4.0; every client keeps local storage, and one with `isLocalStoreRequired` false and no storage is refused; the bare-keystore route and `persistenceBundle` are deprecated; each backend says what it protects at rest. D-12's amendment item 3 and D-18's consequence 2 built. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327). |
+| 2026-10-09 | **D-25 amended.** The storage docs no longer say what each backend protects at rest, which confused readers; they say only that end-to-end-encrypted values are stored in local storage as ciphertext, never in the clear (gkc). |

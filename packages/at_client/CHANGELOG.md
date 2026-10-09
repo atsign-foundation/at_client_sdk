@@ -23,8 +23,6 @@
   instead.
 - deprecated, to be removed in 4.0: `AtClientPreference.keyStoreSecret`, which
   nothing reads.
-- docs: every storage backend keeps encrypted values as ciphertext; Hive also
-  encrypts at rest what the client leaves unencrypted, and SQLite doesn't.
 - fix: local storage the client cannot open, such as a file it may not read,
   fails with an exception the app can catch, and no longer also ends a
   command-line program with an unhandled error.
