@@ -121,6 +121,13 @@ class ContentKeyCache {
   String? currentOwnNskeyKid(String owner, String namespace) =>
       _currentOwnNskeyKidByNamespace[_scope(owner, namespace)];
 
+  /// The own generations the current CKs in [namespace] rest on, toward every
+  /// destination.
+  Iterable<String> currentOwnNskeyKidsIn(String namespace) =>
+      _currentOwnNskeyKidByNamespace.entries
+          .where((e) => e.key.endsWith('|$namespace'))
+          .map((e) => e.value);
+
   static bool _sameKey(Uint8List a, Uint8List b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {

@@ -15042,6 +15042,15 @@ atSigns as well as their own.
   `ckRotationPolicy` is asked.
 - While a new own generation is advertised and its private has not arrived, the CK is
   kept, and the check's `privateHalf` call asks the atSign's other enrollments for it.
+- A CK cut inside that window for another reason (a first write, the destination
+  rotating, the policy) seals its sibling copy to the own generation this enrollment's
+  keys in that namespace already rest on, re-derived from the held seed by the ring's
+  new `heldPublic`. When none records one, the share goes without a copy until the
+  private arrives. gkc chose that over the latest-filed seed: nothing filed orders
+  generations, and every generation before the new one is one the revoked enrollment
+  holds, so the choice decides only whether the atSign's other enrollments can open the
+  copy. The cut seals to that held generation, so it succeeds where the advertised
+  generation's private has not yet arrived.
 - A restart resumes a pointer only when it names the own generation the sender holds.
   A pointer written before the field existed names none.
 

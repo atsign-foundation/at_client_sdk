@@ -546,6 +546,41 @@ void main() {
           proves: 'the private-first order, on a ring that goes on answering '
               'with G1 the way a client does before sync lands G2',
           clauses: ['whichever arrived first']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when @bob rotates and the next write needs a fresh key, then it '
+              'succeeds with a sibling copy sealed to G1',
+          proves: 'a cut inside the window succeeds, its sibling copy sealed '
+              'to the generation the replaced key rested on, and the next '
+              'write after the private arrives moves to G2',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when it first writes to another destination, then that key\'s '
+              'sibling copy rests on G1 too',
+          proves: 'that "the generation E1\'s keys in `buzz` already rest on" '
+              'is read across destinations, not only from the key replaced',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when nothing in the namespace records an own generation, then the '
+              'share goes without a sibling copy, and a key with one follows G2',
+          proves: 'the no-copy arm, and that it is temporary',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when it restarts with a pointer written before the own generation '
+              'was recorded, then it cuts a fresh key rather than resuming',
+          proves: 'the case where only the field\'s absence refuses the '
+              'resume: inside the window no own generation is held to '
+              'compare with',
+          clauses: ['A pointer written before it recorded']);
+      provenIn('packages/at_client/test/nskey_self_heal_test.dart',
+          're-derives a generation it holds from the filed seed',
+          proves: 'what a window copy is sealed to on a real ring: the public '
+              'half re-derived from the filed seed, which a seed filed under '
+              'some other kid does not pass',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
       provenIn('packages/at_client/test/nskey_self_heal_test.dart',
           'a miss on an own generation fires the injected ask, once',
           proves: 'the asking half: `CkManager` checks an own generation '

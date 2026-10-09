@@ -629,7 +629,11 @@ holds the private for, and cuts a fresh CK when they differ. It does so uncondit
 before the rotation policy is asked, as it does for the destination. While a new own
 generation is advertised and its private has not arrived, the current CK is kept until
 it does, and the check's `privateHalf` call pulls the missing private from the atSign's
-other enrollments. The
+other enrollments. A CK cut
+in that window for another reason (a first write, the destination rotating, the policy)
+seals its sibling copy to the own generation this enrollment's keys in that namespace
+already rest on, its public half re-derived from the held seed (`heldPublic`), or goes
+without a copy when none records one, rather than failing on the unheld generation. The
 current-CK pointer records both generations, and a restart resumes only a pointer
 naming the own generation the sender holds; one written before `ownNskeyKid` existed
 names none

@@ -407,6 +407,11 @@ class _FixedRing implements NskeyKeyRing {
       nskeyKid == _advertised.nskeyKid
           ? NskeyDecapsulationKey(_secretKey)
           : null;
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      _advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull;
 }
 
 /// A ring serving one advertisement carrying MORE THAN ONE key, plus the
@@ -428,4 +433,11 @@ class _WidenedRing implements NskeyKeyRing {
     final secret = _privates[nskeyKid];
     return secret == null ? null : NskeyDecapsulationKey(secret);
   }
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      _privates.containsKey(nskeyKid)
+          ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
+          : null;
 }

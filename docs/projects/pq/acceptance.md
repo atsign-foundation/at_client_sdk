@@ -1454,8 +1454,11 @@ held. A content key is replaced when either generation it rests on moves on. Des
   conveyance nor its sibling copy.
 - **Then, inside the window:** while G2 is advertised and E1 does not yet hold its
   private, E1 keeps its current key and asks Alice's other enrollments for G2's
-  private. Once E1 both holds G2's private and sees it advertised, whichever
-  arrived first, its next write cuts a fresh key sealed to G2.
+  private. A write that needs a fresh key meanwhile succeeds: its sibling copy is
+  sealed to G1, the generation E1's keys in `buzz` already rest on, or goes
+  without one when none of them records an own generation. Once E1 both holds
+  G2's private and sees it advertised, whichever arrived first, its next write
+  cuts a fresh key sealed to G2.
 - **Then, the policy is not asked:** a `CkRotationPolicy` that always answers no
   does not stop the replacement.
 - **Then, across a restart:** E1 resumes a content key only when its pointer

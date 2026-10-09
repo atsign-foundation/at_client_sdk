@@ -16,6 +16,7 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
         currentCkPointerRecordName,
         parseCkConveyanceKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -523,7 +524,9 @@ class CkManager {
   /// `appMetadata` that names the recipient. An atSign holding no key covering
   /// [ckNs] mints one there first, at the recipient's level rather than the
   /// value's own; where it makes none, the share goes without a copy and this
-  /// returns null.
+  /// returns null. While the advertised generation's private has not reached
+  /// this enrollment, the copy is sealed to the generation its keys in [ckNs]
+  /// already rest on, or goes without one when none is recorded.
   Future<String?> _conveySiblingCopy(
       CryptoContext context, String destination, String ckNs, ContentKey ck,
       {required bool useRemoteAtServer}) async {
@@ -542,10 +545,31 @@ class CkManager {
         return null;
       }
     }
+    var alg = own.alg;
+    String? sealTo;
+    if (await keyRing.privateHalf(sender, own.namespace, own.nskeyKid) ==
+        null) {
+      final held = await _recordedOwnGeneration(
+          context, sender, destination, ckNs, own.namespace);
+      if (held == null) {
+        _logger.warning('$sender holds no private for its namespace key '
+            '${own.nskeyKid} covering $ckNs yet, and none of its content keys '
+            'there rests on another, so the content key ${ck.ckKid} shared '
+            'with $destination has no sibling copy until a fresh one is cut '
+            'once that private arrives');
+        return null;
+      }
+      alg = held.alg;
+      sealTo = held.kid;
+    }
     final key = ckSiblingCopyKey(sender: sender, ckKid: ck.ckKid, ckNs: ckNs)
       ..metadata.appMetadata = AppMetadata(
-          providerId: nskeyProviderIdFor(own.alg) ?? nskeyCryptoProviderId,
-          additional: {'destination': destination, 'ns': own.namespace});
+          providerId: nskeyProviderIdFor(alg) ?? nskeyCryptoProviderId,
+          additional: {
+            'destination': destination,
+            'ns': own.namespace,
+            if (sealTo != null) 'sealTo': sealTo,
+          });
     final sealed =
         await CryptoRuntime(context.atClient).encryptForPut(key, ck.toBase64());
     await context.atClient.put(key, sealed,
@@ -554,6 +578,26 @@ class CkManager {
           ..alreadyEncrypted = true
           ..useRemoteAtServer = useRemoteAtServer);
     return key.metadata.appMetadata?.additional?['nskeyKid'] as String?;
+  }
+
+  /// The public half of the own generation this enrollment's content keys in
+  /// [ckNs] already rest on and whose private it holds: the one toward
+  /// [destination] first, from the cache or the pointer, then any other.
+  Future<PackageKey?> _recordedOwnGeneration(CryptoContext context,
+      String sender, String destination, String ckNs, String ownNs) async {
+    final candidates = <String>{
+      if (cache.currentOwnNskeyKid(destination, ckNs) case final kid?) kid,
+      ...cache.currentOwnNskeyKidsIn(ckNs),
+      if ((await pointer?.read(context.atClient, destination, ckNs))
+              ?.ownNskeyKid
+          case final kid?)
+        kid,
+    };
+    for (final kid in candidates) {
+      final held = await keyRing.heldPublic(sender, ownNs, kid);
+      if (held != null) return held;
+    }
+    return null;
   }
 
   static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>

@@ -549,6 +549,55 @@ void main() {
     });
   });
 
+  group('what the ring seals to without an advertisement (heldPublic)', () {
+    test('re-derives a generation it holds from the filed seed', () async {
+      final filed = await filing();
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      await filed.store(
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
+      final ring = PublishedNskeyKeyRing(client(), privateFiling: filed);
+
+      final held = await ring.heldPublic(atSign, namespace, kid);
+
+      expect(held?.kid, kid);
+      expect(held?.pubBytes, pair.publicKeyBytes);
+    });
+
+    test('answers null for a generation it holds no private for', () async {
+      final ring =
+          PublishedNskeyKeyRing(client(), privateFiling: await filing());
+
+      expect(await ring.heldPublic(atSign, namespace, 'kid1'), isNull);
+    });
+
+    test('answers null for a seed filed under a kid it does not derive',
+        () async {
+      final filed = await filing();
+      await filed.store(
+          namespace: namespace,
+          nskeyKid: 'not-its-kid',
+          seed: NskeySeed(pair.privateKeyBytes));
+      final ring = PublishedNskeyKeyRing(client(), privateFiling: filed);
+
+      expect(await ring.heldPublic(atSign, namespace, 'not-its-kid'), isNull,
+          reason: 'a copy sealed to it would name a kid nobody opens it under');
+    });
+
+    test('answers null for another atSign\'s generation', () async {
+      final filed = await filing();
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      await filed.store(
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
+      final ring = PublishedNskeyKeyRing(client(), privateFiling: filed);
+
+      expect(await ring.heldPublic('@bob', namespace, kid), isNull);
+    });
+  });
+
   group('the on-miss pull (PublishedNskeyKeyRing)', () {
     test('a miss on an own generation fires the injected ask, once', () async {
       final atClient = client();
