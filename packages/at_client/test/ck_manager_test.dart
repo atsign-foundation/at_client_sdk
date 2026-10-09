@@ -1,4 +1,4 @@
-import 'dart:convert' show base64Decode;
+import 'dart:convert' show base64Decode, utf8;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart';
@@ -24,8 +24,19 @@ class InMemoryCkPointer extends CurrentCkPointer {
 
   @override
   Future<void> write(AtClient atClient, String owner, String ckNs, String ckKid,
-          String nskeyKid) async =>
-      _remembered['$owner|$ckNs'] = (ckKid: ckKid, nskeyKid: nskeyKid);
+          String nskeyKid,
+          {String? ownNskeyKid}) async =>
+      _remembered['$owner|$ckNs'] = (
+        ckKid: ckKid,
+        nskeyKid: nskeyKid,
+        ownNskeyKid: ownNskeyKid,
+        ownRecorded: true,
+      );
+
+  /// Overwrite what is remembered for `(owner, ckNs)`, as an earlier version
+  /// or a sibling's write would leave it.
+  void remember(String owner, String ckNs, CurrentCk pointer) =>
+      _remembered['$owner|$ckNs'] = pointer;
 }
 
 /// An [InMemoryNskeyKeyRing] whose advertisement for a namespace can gain a
@@ -63,6 +74,26 @@ class _WidenableRing extends InMemoryNskeyKeyRing {
       await super.currentPublic(owner, namespace);
 }
 
+/// An [InMemoryNskeyKeyRing] that can go on answering with the advertisement it
+/// held when [pin] was called, as a client does while sync has yet to land a
+/// newer one.
+class _PinnableRing extends InMemoryNskeyKeyRing {
+  final Map<String, NskeyAdvertisement> _pinned = {};
+
+  Future<void> pin(String owner, String namespace) async =>
+      _pinned['$owner|$namespace'] =
+          (await super.currentPublic(owner, namespace))!;
+
+  void unpin(String owner, String namespace) =>
+      _pinned.remove('$owner|$namespace');
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      _pinned['$owner|$namespace'] ??
+      await super.currentPublic(owner, namespace);
+}
+
 /// The CK manager — the step that makes `put` work at all on the nskey path.
 ///
 /// Content keys are scoped per recipient, so "no current CK" fires on the first
@@ -81,6 +112,7 @@ void main() {
     aliceNskey = await XWingKeyPair.generate();
     bobNskey = await XWingKeyPair.generate();
     registerFallbackValue(AtKey());
+    registerFallbackValue(Duration.zero);
   });
 
   /// A client whose `put` routes through the real providers, the way the put
@@ -103,6 +135,7 @@ void main() {
     List<String?> providerIds,
     List<bool?> routings,
     InMemoryCkPointer pointer,
+    Map<String, String> conveyed,
     DateTime conveyanceCreatedAt,
     CkManager Function(ContentKeyCache,
         {CkRotationPolicy ckRotationPolicy}) coldManager,
@@ -220,6 +253,7 @@ void main() {
       ring: ring,
       cache: cache,
       pointer: pointer,
+      conveyed: conveyed,
       conveyanceCreatedAt: conveyanceCreatedAt,
       coldManager: (ContentKeyCache c,
           {CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
@@ -798,6 +832,243 @@ void main() {
             'rather than surface an encryption error',
       );
       expect(c.written, isEmpty);
+    });
+  });
+
+  group(
+      'Given a content key shared with @bob, whose sibling copy rests on this '
+      'enrollment\'s own generation G1', () {
+    /// The sibling copy written for [ckKid]: the sender's own record of the
+    /// key, which carries no recipient.
+    AtKey siblingCopyOf(List<AtKey> written, String ckKid) => written
+        .lastWhere((k) => k.key == '$ckKid.__ck' && k.sharedWith == null);
+
+    /// Whether [privateKey] opens the sibling copy of [ckKid], as an enrollment
+    /// holding only that private would try to.
+    Future<bool> opensSiblingCopy(Map<String, String> conveyed,
+        List<AtKey> written, String ckKid, Uint8List privateKey) async {
+      final copy = siblingCopyOf(written, ckKid);
+      try {
+        await pqOpen(XWingPureDartAlgo.instance, privateKey,
+            base64Decode(conveyed[copy.toString()]!),
+            info:
+                Uint8List.fromList(utf8.encode('at/nskey:$owner:$namespace')));
+        return true;
+      } on PqOpenException {
+        return false;
+      }
+    }
+
+    test(
+        'when this enrollment comes to hold its own generation G2, then its '
+        'next write cuts a fresh key sealed to G2, which G1 does not open',
+        () async {
+      final c = client();
+      final g1 = c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      expect(c.cache.currentOwnNskeyKid(bob, namespace), g1,
+          reason: 'the control: the key records the generation its copy is '
+              'sealed to');
+
+      final rotated = await XWingKeyPair.generate();
+      final g2 = c.ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      final second = c.cache.current(bob, namespace)!.ckKid;
+      expect(second, isNot(first),
+          reason: 'the key in use rests on the generation this enrollment '
+              'now holds');
+      expect(c.cache.currentOwnNskeyKid(bob, namespace), g2);
+      expect(
+          siblingCopyOf(c.written, second)
+              .metadata
+              .appMetadata!
+              .additional!['nskeyKid'],
+          g2);
+      expect(
+          await opensSiblingCopy(
+              c.conveyed, c.written, second, aliceNskey.privateKeyBytes),
+          isFalse);
+      expect(
+          await opensSiblingCopy(
+              c.conveyed, c.written, second, rotated.privateKeyBytes),
+          isTrue,
+          reason: 'the positive control for the open above');
+      expect(c.cache.currentNskeyKid(bob, namespace),
+          (await c.ring.currentPublic(bob, namespace))!.nskeyKid,
+          reason: '@bob did not rotate; only this side moved');
+    });
+
+    test(
+        'when G2 is advertised but its private has not reached this '
+        'enrollment, then its next write keeps the current key', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      final rotated = await XWingKeyPair.generate();
+      c.ring
+          .seedPublicOnly(owner, namespace, publicKey: rotated.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.written, hasLength(conveyed),
+          reason: 'a copy sealed to G2 is one this enrollment cannot seal yet');
+      expect(c.cache.current(bob, namespace)!.ckKid, first);
+
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.cache.current(bob, namespace)!.ckKid, isNot(first),
+          reason: 'once the private arrives, the next write moves to G2');
+    });
+
+    test(
+        'when G2\'s private arrives before its advertisement, then the key is '
+        'kept until G2 is advertised too', () async {
+      final ring = _PinnableRing();
+      final c = client(keyRing: ring);
+      ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+
+      await ring.pin(owner, namespace);
+      final rotated = await XWingKeyPair.generate();
+      final g2 = ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      expect(c.cache.current(bob, namespace)!.ckKid, first);
+
+      ring.unpin(owner, namespace);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.cache.current(bob, namespace)!.ckKid, isNot(first));
+      expect(c.cache.currentOwnNskeyKid(bob, namespace), g2);
+    });
+
+    test(
+        'when the rotation policy always answers no, then a move to G2 still '
+        'cuts a fresh key', () async {
+      final asked = <CkRotationContext>[];
+      final c = client(ckRotationPolicy: (ck) {
+        asked.add(ck);
+        return false;
+      });
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      expect(asked, hasLength(1),
+          reason: 'the control: the policy is asked while nothing moved');
+
+      final rotated = await XWingKeyPair.generate();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.cache.current(bob, namespace)!.ckKid, isNot(first));
+      expect(asked, hasLength(1),
+          reason: 'a move of the sender\'s own generation replaces the key '
+              'whatever the policy answers');
+    });
+
+    test(
+        'when this enrollment restarts, then it resumes the key only while '
+        'its pointer names the own generation it holds', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      final conveyed = c.written.length;
+
+      final resumedCache = ContentKeyCache();
+      await c
+          .coldManager(resumedCache)
+          .ensureCurrent(c.context, sharedValue('pact'));
+      expect(c.written, hasLength(conveyed));
+      expect(resumedCache.current(bob, namespace)?.ckKid, first);
+
+      final rotated = await XWingKeyPair.generate();
+      final g2 = c.ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      final restartedCache = ContentKeyCache();
+      await c
+          .coldManager(restartedCache)
+          .ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(restartedCache.current(bob, namespace)?.ckKid, isNot(first));
+      expect(restartedCache.currentOwnNskeyKid(bob, namespace), g2);
+    });
+
+    test(
+        'when its pointer was written before the own generation was '
+        'recorded, then a restart cuts a fresh key', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      c.pointer.remember(bob, namespace, (
+        ckKid: first,
+        nskeyKid: c.cache.currentNskeyKid(bob, namespace)!,
+        ownNskeyKid: null,
+        ownRecorded: false,
+      ));
+
+      final coldCache = ContentKeyCache();
+      await c
+          .coldManager(coldCache)
+          .ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(coldCache.current(bob, namespace)?.ckKid, isNot(first),
+          reason: 'a pointer that names no own generation cannot show which '
+              'one the key rests on');
+    });
+  });
+
+  group('Given this enrollment holds no namespace key of its own', () {
+    test(
+        'when it shares with @bob, then the key records no own generation, '
+        'and none replaces it', () async {
+      final c = client();
+      when(() => c.context.atClient
+              .ensureReachable(any(), timeout: any(named: 'timeout')))
+          .thenAnswer((_) async =>
+              const AtReachabilityResult(AtReachability.postureDoesNotSeed));
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+
+      expect(c.cache.currentOwnNskeyKid(bob, namespace), isNull);
+      expect(c.cache.current(bob, namespace)!.ckKid, first);
     });
   });
 

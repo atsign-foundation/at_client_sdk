@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**97 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 98 use cases and 108 scenarios —
+**98 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 99 use cases and 109 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -97,6 +97,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A5.4  | The content-key lever is a policy the application supplies                         | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.5  | The namespace-key lever is asked at exactly two points                             | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.6  | Where a lever is not asked, and where a yes is refused out loud                    | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.7  | A content key follows both namespace keys it rests on                              | PROVEN    | `a5_rotation_test.dart`      |
 | UC-B0.1  | A PQ-capable client cannot PQ-upgrade against a legacy atServer                     | PROVEN    | `b0_server_prereq_test.dart` |
 | UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
@@ -1303,6 +1304,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   the replacement edge; a caller reaches the cascade by APPROVAL, having been
   approved somewhere beneath the target.
 
+- **Then, what a remaining enrollment shares next:** it opens only under
+  generations E2 never held, because a content key follows the sender's own
+  rotation as well as the destination's — see
+  [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
 - **Cross-ref:** `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
 - **Impl/verify (A5.x):** **B-2**.
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
@@ -1420,6 +1425,42 @@ deliberate skip with a reason, not an oversight.
   application that configured a policy and sees nothing happen needs to read.
 - **Then, a policy that throws rotates nothing:** the exception is caught,
   logged at warning, and the published generation stands.
+
+### 6.7 UC-A5.7 — A content key follows both namespace keys it rests on
+
+A shared content key is sealed twice: to the destination's namespace key, and, as
+a sibling copy, to the sender's own, so the sender's other enrollments can open
+what it shares. A revocation rotates the namespace keys the revoked enrollment
+held. A content key is replaced when either generation it rests on moves on. Design in
+[`design.md` 1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).
+
+- **@race:** a write a remaining enrollment begins before the rotation reaches
+  it goes out under the key it held until then; that window is the conveyance's
+  latency. A restart between a cut and its pointer write cuts a fresh key.
+- **@replay:** out of scope. At this time atServers are assumed trustworthy:
+  which generation a sender seals to rests on the advertisements its atServer
+  serves, on either side. A replayed envelope is answered by its version 2
+  binding.
+- **@dos:** nothing here runs before authentication. Each write reads the cached
+  advertisement and the filed private, and a missing private is asked for at most
+  once per generation per cooldown.
+- **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
+  current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
+  Alice's generation G1.
+- **When:** E3 calls `revokeEnrollmentAndRotate(E2)`, and E1 then writes a value
+  shared with `@bob` in `buzz`.
+- **Then:** the value cites a fresh content key whose sibling copy is sealed to
+  Alice's new generation G2, and E2's G1 private opens neither that key's
+  conveyance nor its sibling copy.
+- **Then, inside the window:** while G2 is advertised and E1 does not yet hold its
+  private, E1 keeps its current key and asks Alice's other enrollments for G2's
+  private. Once E1 both holds G2's private and sees it advertised, whichever
+  arrived first, its next write cuts a fresh key sealed to G2.
+- **Then, the policy is not asked:** a `CkRotationPolicy` that always answers no
+  does not stop the replacement.
+- **Then, across a restart:** E1 resumes a content key only when its pointer
+  names both generations as current. A pointer written before it recorded the
+  sender's own generation resumes nothing.
 
 ## 7. B0 · Prerequisite — atServer upgrade
 

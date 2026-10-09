@@ -620,6 +620,22 @@ every `ensureCurrent`, from its cache while that is fresh, and re-cuts its CK on
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)). Exposure is bounded by
 `advertisementTtl` plus `advertisementStaleGrace`.
 
+**So must the sender's own side.** A shared CK is conveyed twice: to the recipient, and
+as a sibling copy sealed to the sender's own nskey, so the sender's other enrollments
+can open what it shares, and a revocation rotates the sender's own namespace keys as
+well as anyone else's. So `ensureCurrent` also compares the own generation the sibling copy was sealed to
+(`ownNskeyKid`) with the newest own generation this enrollment both sees advertised and
+holds the private for, and cuts a fresh CK when they differ. It does so unconditionally,
+before the rotation policy is asked, as it does for the destination. While a new own
+generation is advertised and its private has not arrived, the current CK is kept until
+it does, and the check's `privateHalf` call pulls the missing private from the atSign's
+other enrollments. The
+current-CK pointer records both generations, and a restart resumes only a pointer
+naming the own generation the sender holds; one written before `ownNskeyKid` existed
+names none
+([ruling 154](detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09),
+[UC-A5.7](acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)).
+
 Rotation buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation
 lever. It does **not** give per-message FS or history re-encryption (the old nskey

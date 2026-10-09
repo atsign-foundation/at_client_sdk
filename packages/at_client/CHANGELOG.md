@@ -7,6 +7,9 @@
 - fix: a client writes post-quantum data in its own namespace once it holds
   that namespace's private key; until the key arrives the write throws
   `NskeyPrivateNotHeldException`.
+- fix: once an atSign's namespace key rotates, including after a revocation,
+  the content keys its clients share with other atSigns move to the new key on
+  their next write.
 - feat: where OpenSSL is installed (desktop, server and CLI), post-quantum
   encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
   several times faster. Other platforms keep pure Dart.

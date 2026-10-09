@@ -292,6 +292,15 @@ void main() {
             'E2\'s APKAM keypair is cut at auth',
             'exclusion set stays the ONE',
           ]);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment comes to hold its own generation G2, then its '
+              'next write cuts a fresh key sealed to G2',
+          proves: 'the sending side of the cut: a remaining enrollment\'s next '
+              'share is under a fresh key whose sibling copy the superseded '
+              'generation fails to open, with the new generation\'s private as '
+              'the positive control. UC-A5.7 carries the rest of that row',
+          clauses: ['generations E2 never held']);
     });
 
     test(
@@ -501,6 +510,78 @@ void main() {
               'policy really was consulted so the false return is the catch '
               'rather than a question never put',
           clauses: ['the exception is caught, logged at warning']);
+    });
+
+    test('UC-A5.7 \u00b7 a content key follows both namespace keys it rests on',
+        () {
+      // GIVEN E1's content key toward @bob has its sibling copy sealed to
+      //       Alice's generation G1.
+      // WHEN  a revocation rotates Alice's own namespace key to G2, and E1
+      //       writes to @bob again.
+      // THEN  a fresh key sealed to G2, which G1 does not open; inside the
+      //       window the key is kept and the private asked for; the policy is
+      //       not asked; a restart resumes only a pointer naming both
+      //       generations.
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment comes to hold its own generation G2, then its '
+              'next write cuts a fresh key sealed to G2',
+          proves: 'the replacement, the sibling copy\'s recorded generation, '
+              'and that G1\'s private fails to open it while G2\'s opens it — '
+              'the open is the clause, so it is asserted on the ciphertext '
+              'rather than on the metadata alone',
+          clauses: ['the value cites a fresh content key whose sibling copy']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when G2 is advertised but its private has not reached this '
+              'enrollment, then its next write keeps the current key',
+          proves: 'the advertisement-first order: no conveyance while the '
+              'private is missing, then a fresh key on the write after it '
+              'arrives',
+          clauses: ['E1 keeps its current key and asks']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when G2\'s private arrives before its advertisement, then the key '
+              'is kept until G2 is advertised too',
+          proves: 'the private-first order, on a ring that goes on answering '
+              'with G1 the way a client does before sync lands G2',
+          clauses: ['whichever arrived first']);
+      provenIn('packages/at_client/test/nskey_self_heal_test.dart',
+          'a miss on an own generation fires the injected ask, once',
+          proves: 'the asking half: `CkManager` checks an own generation '
+              'through `privateHalf`, and a miss there sends the request to '
+              'the atSign\'s other enrollments. The composition of the two is '
+              'read, not run, in-process',
+          clauses: ['E1 keeps its current key and asks']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when the rotation policy always answers no, then a move to G2 '
+              'still cuts a fresh key',
+          proves: 'the replacement with a policy that refuses, which the '
+              'control shows was asked while nothing had moved and not asked '
+              'once G2 had',
+          clauses: ['does not stop the replacement']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment restarts, then it resumes the key only while '
+              'its pointer names the own generation it holds',
+          proves: 'a resume while both generations match, and a fresh key '
+              'after a restart that finds G2 held',
+          clauses: ['names both generations as current']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when its pointer was written before the own generation was '
+              'recorded, then a restart cuts a fresh key',
+          proves: 'that a pointer naming no own generation is not resumed '
+              'once the sender holds one',
+          clauses: ['A pointer written before it recorded']);
+      provenIn(
+          'packages/at_client/test/current_ck_pointer_test.dart',
+          'written before the own generation was recorded, reads as '
+              'recording none',
+          proves: 'the read half: such a pointer is parsed as one that '
+              'recorded no own generation, which is what the resume refuses',
+          clauses: ['A pointer written before it recorded']);
     });
   });
 }

@@ -15018,3 +15018,49 @@ language's JSON reader. Whether ids become strings at a major release is not
 decided here.
 
 Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
+
+## 154. A shared content key follows the sender's own namespace key too (2026-10-09)
+
+**Decided by gkc on 2026-10-09**, in a grill of how content keys should rotate. Asked
+what should make a sender replace its outgoing CK, he chose "Own generation changed";
+then that the generation is recorded in the cache and the pointer, that the comparison
+is with the newest own generation both advertised and held, and that it is
+"Unconditional".
+
+**What it adds.** Every enrollment cuts its own CK per destination and namespace, and
+conveys each one twice: to the recipient, and as a sibling copy sealed to its own
+atSign's nskey. `CkManager.ensureCurrent` replaces a CK when the *destination's*
+generation moves, and now also when the *sender's own* does, so a revocation, which
+rotates the owner's nskeys, moves the CKs the remaining enrollments share with other
+atSigns as well as their own.
+
+**What was built.**
+- `ContentKeyCache` and `CurrentCkPointer` record `ownNskeyKid`, the own generation a
+  shared CK's sibling copy was sealed to, null when it has none.
+- `ensureCurrent` compares it with the newest own generation this enrollment both sees
+  advertised and holds the private for, and cuts a fresh CK when they differ, before
+  `ckRotationPolicy` is asked.
+- While a new own generation is advertised and its private has not arrived, the CK is
+  kept, and the check's `privateHalf` call asks the atSign's other enrollments for it.
+- A restart resumes a pointer only when it names the own generation the sender holds.
+  A pointer written before the field existed names none.
+
+**Why advertised AND held.** Triggering on the advertisement alone races the
+conveyance: the sibling copy is sealed through `NskeyProvider.encrypt`, which refuses
+an own generation whose private is not held (`NskeyPrivateNotHeldException`), so the
+cut, and the share write with it, would fail. Triggering on the private alone seals the
+fresh copy to the old generation, which the ring still advertises until sync lands the
+new one.
+
+**Not built.** The grill's answer also had `privatesFiled` force a re-read of the own
+advertisement. It would change nothing: the re-read goes to local storage first, which
+holds the old advertisement until sync lands the new one, and `ownChanges` already
+re-reads at that moment.
+
+**Out of scope.** gkc: "At this time, we must assume atServers are trustworthy." Which
+generation a sender seals to rests on the advertisements its atServer serves, on either
+side.
+
+Pinned by `ck_manager_test.dart`'s group "Given a content key shared with @bob, whose
+sibling copy rests on this enrollment's own generation G1", and catalogued as
+[UC-A5.7](../acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
