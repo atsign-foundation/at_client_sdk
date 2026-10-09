@@ -963,6 +963,44 @@ void main() {
     });
 
     test(
+        'when two writes start at once after G2 arrives, then they cut one '
+        'fresh key, which @bob opens', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      final first = c.cache.current(bob, namespace)!.ckKid;
+      final rotated = await XWingKeyPair.generate();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: rotated.publicKeyBytes,
+          privateKey: rotated.privateKeyBytes);
+      final conveyed = c.written.length;
+
+      await Future.wait([
+        c.manager.ensureCurrent(c.context, sharedValue('pact')),
+        c.manager.ensureCurrent(c.context, sharedValue('other')),
+      ]);
+
+      final fresh = c.cache.current(bob, namespace)!.ckKid;
+      expect(fresh, isNot(first),
+          reason: 'the control: the move to G2 did cut a fresh key');
+      expect(
+          c.written.skip(conveyed).map((k) => k.key).toSet(), {'$fresh.__ck'},
+          reason: 'one key, conveyed once to @bob and once as its sibling '
+              'copy; a second cut would leave a key no write uses');
+      final toBob = c.written
+          .lastWhere((k) => k.key == '$fresh.__ck' && k.sharedWith == bob);
+      expect(
+          await pqOpen(XWingPureDartAlgo.instance, bobNskey.privateKeyBytes,
+              base64Decode(c.conveyed[toBob.toString()]!),
+              info: Uint8List.fromList(
+                  utf8.encode('at/nskey:$owner:$namespace'))),
+          c.cache.current(bob, namespace)!.bytes);
+    });
+
+    test(
         'when the rotation policy always answers no, then a move to G2 still '
         'cuts a fresh key', () async {
       final asked = <CkRotationContext>[];

@@ -15053,6 +15053,9 @@ atSigns as well as their own.
   generation's private has not yet arrived.
 - A restart resumes a pointer only when it names the own generation the sender holds.
   A pointer written before the field existed names none.
+- A queued cut re-checks inside its turn: one queued behind a cut that already replaced
+  the key it found current returns that key, so racing writes share one fresh CK
+  (gkc: "Re-check in the turn"), for a destination's rotation too.
 
 **Why advertised AND held.** Triggering on the advertisement alone races the
 conveyance: the sibling copy is sealed through `NskeyProvider.encrypt`, which refuses

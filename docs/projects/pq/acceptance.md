@@ -1434,16 +1434,18 @@ what it shares. A revocation rotates the namespace keys the revoked enrollment
 held. A content key is replaced when either generation it rests on moves on. Design in
 [`design.md` 1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).
 
-- **@race:** a write a remaining enrollment begins before the rotation reaches
-  it goes out under the key it held until then; that window is the conveyance's
-  latency. A restart between a cut and its pointer write cuts a fresh key.
+- **@race:** two writes racing a rotation cut one key. A write a remaining
+  enrollment begins before the rotation reaches it goes out under the key it held
+  until then; that window is the conveyance's latency. A restart between a cut
+  and its pointer write cuts a fresh key.
 - **@replay:** out of scope. At this time atServers are assumed trustworthy:
   which generation a sender seals to rests on the advertisements its atServer
   serves, on either side. A replayed envelope is answered by its version 2
   binding.
 - **@dos:** nothing here runs before authentication. Each write reads the cached
-  advertisement and the filed private, and a missing private is asked for at most
-  once per generation per cooldown.
+  advertisement and the filed private, a missing private is asked for at most
+  once per generation per cooldown, and a cut happens at most once per
+  destination, namespace and generation change.
 - **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
   current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
   Alice's generation G1.
@@ -1452,6 +1454,8 @@ held. A content key is replaced when either generation it rests on moves on. Des
 - **Then:** the value cites a fresh content key whose sibling copy is sealed to
   Alice's new generation G2, and E2's G1 private opens neither that key's
   conveyance nor its sibling copy.
+- **Then, racing writes:** two writes E1 starts at once after the rotation cut
+  one content key, and `@bob` opens both values.
 - **Then, inside the window:** while G2 is advertised and E1 does not yet hold its
   private, E1 keeps its current key and asks Alice's other enrollments for G2's
   private. A write that needs a fresh key meanwhile succeeds: its sibling copy is

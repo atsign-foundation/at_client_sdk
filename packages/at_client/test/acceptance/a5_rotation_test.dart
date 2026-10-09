@@ -533,6 +533,13 @@ void main() {
           clauses: ['the value cites a fresh content key whose sibling copy']);
       provenIn(
           'packages/at_client/test/ck_manager_test.dart',
+          'when two writes start at once after G2 arrives, then they cut one '
+              'fresh key, which @bob opens',
+          proves: 'one fresh key across two racing writes, counted on what '
+              'was conveyed, and @bob\'s private opening its conveyance',
+          clauses: ['two writes E1 starts at once']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
           'when G2 is advertised but its private has not reached this '
               'enrollment, then its next write keeps the current key',
           proves: 'the advertisement-first order: no conveyance while the '

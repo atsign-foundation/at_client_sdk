@@ -183,7 +183,9 @@ class CkManager {
     }
 
     await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
-        keyAlgo: target.alg, useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: target.alg,
+        useRemoteAtServer: useRemoteAtServer,
+        replacing: current?.ckKid);
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
@@ -232,11 +234,18 @@ class CkManager {
     }
 
     return _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
-        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: advertised.alg,
+        useRemoteAtServer: useRemoteAtServer,
+        force: true);
   }
 
   /// Cuts a fresh CK for `(owner, ckNs)`, conveys it sealed to [nskeyKid], and
   /// promotes it to current.
+  ///
+  /// [replacing] is the CK the caller found current, or null when it found
+  /// none. A cut queued behind another that already replaced it, with a key
+  /// sealed to [nskeyKid], returns that key instead of cutting a second one,
+  /// unless [force] asks for a fresh one regardless.
   Future<ContentKey> _cutAndConvey(
     CryptoContext context,
     AtKey valueKey,
@@ -245,10 +254,20 @@ class CkManager {
     String nskeyKid, {
     required String keyAlgo,
     bool? useRemoteAtServer,
+    String? replacing,
+    bool force = false,
   }) =>
-      _inTurn(() => _cutAndConveyInTurn(
-          context, valueKey, owner, ckNs, nskeyKid,
-          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer));
+      _inTurn(() async {
+        final current = cache.current(owner, ckNs);
+        if (!force &&
+            current != null &&
+            current.ckKid != replacing &&
+            cache.currentNskeyKid(owner, ckNs) == nskeyKid) {
+          return current;
+        }
+        return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
+            keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
+      });
 
   Future<ContentKey> _cutAndConveyInTurn(
     CryptoContext context,

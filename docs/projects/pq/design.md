@@ -633,7 +633,10 @@ other enrollments. A CK cut
 in that window for another reason (a first write, the destination rotating, the policy)
 seals its sibling copy to the own generation this enrollment's keys in that namespace
 already rest on, its public half re-derived from the held seed (`heldPublic`), or goes
-without a copy when none records one, rather than failing on the unheld generation. The
+without a copy when none records one, rather than failing on the unheld generation. Cuts
+queue behind one another, and one queued behind a cut that already replaced the key it
+found current returns that key rather than cutting a second, so racing writes share one
+fresh CK; an explicit `rotateContentKey` always cuts. The
 current-CK pointer records both generations, and a restart resumes only a pointer
 naming the own generation the sender holds; one written before `ownNskeyKid` existed
 names none
