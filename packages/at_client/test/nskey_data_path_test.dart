@@ -333,7 +333,7 @@ void main() {
               context,
               withAdditional('v', {...additional, 'salt': base64Encode(salt)}),
               ciphertext),
-          throwsA(isA<Exception>()),
+          throwsA(isA<AtDecryptionException>()),
           reason: 'the salt chooses the key, so changing it must not decrypt');
     });
 
