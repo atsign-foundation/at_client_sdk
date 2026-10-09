@@ -1556,6 +1556,23 @@ errors on any `dart:io` reachable from the entry point, so:
   its atServer check is at_lookup's neutral `checkAtSignServer` over that lookup,
   so no reachability probe is left to extract.
 
+### OpenSSL backends behind a conditional export (at_client)
+
+at_client's post-quantum data path takes its X-Wing KEM (`SecretSharingAlgos.kemFor`
+and `kemForSuite`) and its value AES-256-GCM (`SymmetricAesGcmProvider`) from
+`lib/src/crypto/backends/crypto_backends.dart`, which applies the FFI
+auto-resolve default ([`decisions.md`, rulings of 2026-07-02](detail/decisions.md#rulings--2026-07-02))
+to at_client without at_client importing `at_chops_ffi.dart` from anywhere a web
+build reaches:
+
+- It is a conditional export, `if (dart.library.ffi)`. A native build uses at_chops's
+  OpenSSL backends where the loaded libcrypto supports the algorithm (AES-256-GCM with
+  any OpenSSL 3, X-Wing with OpenSSL 3.5 or later) and pure Dart otherwise; a web or
+  wasm build takes the pure-Dart branch and never reaches `dart:ffi`.
+- Every backend takes the persisted seed as its secret key, so a record written on a
+  device with OpenSSL opens on one without, and back. ML-KEM-1024 has no OpenSSL
+  backend and stays pure Dart, as does the AEAD inside `pqSeal`, which at_chops selects.
+
 ### File partition
 
 Within `at_client/crypto/`: track-C owns `crypto.dart`, `crypto_runtime.dart`,

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show aesGcm256Decrypt, aesGcm256Encrypt;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
@@ -103,8 +105,9 @@ class SymmetricAesGcmProvider
 
     final salt = _freshSalt();
     final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
-    final ciphertext = await AesGcm256EncryptionAlgo(valueKeyOf(ck, salt))
-        .encrypt(_toBytes(atKey, plaintext), iv: iv, aad: _aad(atKey));
+    final ciphertext = await aesGcm256Encrypt(
+        valueKeyOf(ck, salt), _toBytes(atKey, plaintext),
+        iv: iv, aad: _aad(atKey));
 
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
@@ -191,7 +194,8 @@ class SymmetricAesGcmProvider
       }
       key = valueKeyOf(ck, salt);
     }
-    final plain = await AesGcm256EncryptionAlgo(key).decrypt(
+    final plain = await aesGcm256Decrypt(
+      key,
       Uint8List.fromList(base64Decode(ciphertext)),
       iv: InitialisationVector(Uint8List.fromList(base64Decode(ivB64))),
       aad: _aad(atKey),

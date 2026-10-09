@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -93,9 +95,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     required this.cache,
     this.keyAlgo = SecretSharingAlgos.xWing,
     AtKemAlgorithm? kem,
-  }) : _kem = kem ??
-            SecretSharingAlgos.kemFor(keyAlgo) ??
-            XWingPureDartAlgo.instance;
+  }) : _kem = kem ?? SecretSharingAlgos.kemFor(keyAlgo) ?? xWingKem;
 
   /// The nskey data path is scoped to `(owner, namespace)` throughout — the key
   /// ring, the CK cache and the HPKE binding all take a namespace — so a key

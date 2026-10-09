@@ -7,6 +7,9 @@
 - fix: a client no longer writes post-quantum data in its own namespace before
   it holds that namespace's private key; the write throws
   `NskeyPrivateNotHeldException` until the key arrives.
+- feat: where OpenSSL is installed (desktop, server and CLI), post-quantum
+  encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
+  several times faster. Other platforms keep pure Dart.
 
 ## 3.15.0-rc5
 
