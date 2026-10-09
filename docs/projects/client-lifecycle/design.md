@@ -32,11 +32,13 @@ an enrolled client of one atSign in one process. `Atsign.authenticatesAs` is
 the client-less check ruling 2 allowed for, added because six pack tests
 assert exactly that. `AtClientManager.setCurrentAtSign` and `fromAuthSession`
 are deprecated, removed in 4.0, now that the live packs' fixtures are on
-`open`. The `npt_flutter` port is built on sshnoports branch
-`gkc-client-lifecycle-port` (not pushed): acceptance item 1 measures no
+`open`. The `npt_flutter` port was built on sshnoports branch
+`gkc-client-lifecycle-port`, where acceptance item 1 measured no
 `package:at_auth` import under its `lib/` and no `at_auth` dependency in its
-pubspec, its analyzer reports no error and only warnings trunk already
-carried, and its 359 tests pass. The port found that the keychain store
+pubspec, its analyzer reported no error and only warnings trunk already
+carried, and its 359 tests passed. It merged to NoPorts trunk on 2026-10-03
+(noports#2952), and on 2026-10-09 NoPorts trunk still met item 1: at_auth only
+as a transitive dependency, and no analyzer error. The port found that the keychain store
 reported an atSign it did not hold as unreadable rather than absent, which
 refused every first enrollment on a fresh keychain; fixed in
 at_client_flutter. Acceptance item 2 was measured on 2026-09-13: against this
@@ -63,11 +65,11 @@ communications leg of the platform bundle
 day: the verbs take `lookUps:`, every connection a client opens comes from
 it, and the four live packs were re-run green at that tip (functional 200,
 e2e 52 and 21, onboarding-CLI 21, proxy 4), the proxy pack being the live
-proof of `proxyLookUps()`. The work is a
+proof of `proxyLookUps()`. The work was a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
-gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
-NoPorts `npt_flutter` port. It is built on `gkc-client-lifecycle`, cut from
+gated at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
+NoPorts `npt_flutter` port; the row left the table on 2026-10-09. It is built on `gkc-client-lifecycle`, cut from
 `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12 (ruling 7,
 amended); that branch merged to trunk the same day as PR #2229, and the
 lifecycle branch was rebased onto trunk. It supersedes families B, C and D
@@ -478,7 +480,8 @@ and files its keys only afterwards), and family F's seven fields stay deprecated
 with a legacy writer and two readers as their replacement. What the plan
 still lists is the majors' removals, a P1 row blocked on them.
 
-The PQ table carries this as a P0 row because it is on D1's critical path.
+The PQ table carried this as a P0 row, because it was on D1's critical path,
+until it left the table on 2026-10-09.
 The motivation is PQ conveyance: an approval issued through at_auth alone
 conveys the legacy keys and nothing else, which is what NoPorts does today.
 
