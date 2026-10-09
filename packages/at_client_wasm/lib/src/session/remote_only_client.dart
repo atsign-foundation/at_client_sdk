@@ -5,9 +5,6 @@ import 'package:at_client/remote_only.dart';
 /// through the client's own authenticated [RemoteSecondary] over [lookUps],
 /// so the client's stop closes the one connection both use. Returns that
 /// [RemoteSecondary] alongside the client.
-///
-/// Sets [prefs]' `isLocalStoreRequired` to false, which turns off the
-/// client's expiry and availability timers over a local replica.
 Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
   required String atSign,
   required String app,
@@ -16,8 +13,6 @@ Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
   required AtLookUpFactory lookUps,
 }) async {
   final keys = await keysIo.read(atSign);
-  // ignore: deprecated_member_use
-  prefs.isLocalStoreRequired = false;
   final remote = RemoteSecondary(atSign, prefs,
       atKeysIo: keysIo,
       lookUps: lookUps,
