@@ -14,14 +14,22 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   RemoteOnlyAtClientStorage({
     required this.atSign,
-    required this.remoteSecondary,
+    required RemoteSecondary remoteSecondary,
     this.keyStoreMaxAttempts = 3,
     super.closedByClient,
-  });
+  }) : _remoteSecondary = remoteSecondary;
 
   final String atSign;
-  final RemoteSecondary remoteSecondary;
   final int keyStoreMaxAttempts;
+  RemoteSecondary _remoteSecondary;
+
+  /// The connection every read and write goes over; setting it moves the open
+  /// keystore onto the new one.
+  RemoteSecondary get remoteSecondary => _remoteSecondary;
+  set remoteSecondary(RemoteSecondary remote) {
+    _remoteSecondary = remote;
+    _keyStore?.remoteSecondary = remote;
+  }
 
   RemoteWriteThroughKeyStore? _keyStore;
   AtSyncQueue? _queue;
@@ -35,6 +43,9 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
 
   @override
   bool get holdsKeyMaterial => false;
+
+  @override
+  bool get replicatesServer => false;
 
   @override
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>

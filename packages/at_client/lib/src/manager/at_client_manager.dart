@@ -15,7 +15,7 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/service/write_through_sync_service.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -432,7 +432,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       @Deprecated('no longer needed. will be removed in a future release')
       AtClientManager atClientManager,
       NotificationService notificationService) async {
-    return await SyncServiceImpl.create(atClient);
+    return await defaultSyncServiceFor(atClient);
   }
 
   @override
