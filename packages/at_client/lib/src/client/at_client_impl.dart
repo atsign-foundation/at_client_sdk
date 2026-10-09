@@ -47,6 +47,7 @@ import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/storage/default_storage.dart';
+import 'package:at_client/src/storage/remote_only_at_client_storage.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
@@ -1006,7 +1007,8 @@ class AtClientImpl implements AtClient {
     _atChops ??= await _createAtChops(_atSign);
     _validateDefaultCryptoProvider();
 
-    if (_preference!.isLocalStoreRequired) {
+    if (_preference!.isLocalStoreRequired &&
+        (_storage?.replicatesServer ?? true)) {
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
       // cache state (no-op when nothing has TTL).
@@ -1210,6 +1212,12 @@ class AtClientImpl implements AtClient {
   /// Runs [_armAvailableTimer], as a keystore mutation would.
   @visibleForTesting
   Future<void> armAvailableTimerForTest() => _armAvailableTimer();
+
+  /// Runs [_rederiveFromEnrollment], as a settled enrollment change would.
+  @visibleForTesting
+  Future<void> rederiveFromEnrollmentForTest(
+          {required String? previousEnrollmentId}) =>
+      _rederiveFromEnrollment(previousEnrollmentId: previousEnrollmentId);
 
   /// Whether the expiry timer is currently armed.
   @visibleForTesting
@@ -2341,14 +2349,18 @@ class AtClientImpl implements AtClient {
   /// Rebuilds everything `_init` derives from the enrollment id, after it has
   /// changed. The old connection is closed explicitly: left open it stays
   /// authenticated as the superseded enrollment for the atServer's grace
-  /// period.
+  /// period. A remote-only storage on the old connection moves to the new one.
   Future<void> _rederiveFromEnrollment(
       {required String? previousEnrollmentId}) async {
     await _resolveSigningAlgoFromKeyMaterial();
     _atChops = await _createAtChops(_atSign);
 
     final previous = _remoteSecondary;
-    _remoteSecondary = buildRemoteSecondary();
+    final next = _remoteSecondary = buildRemoteSecondary();
+    if (_storage case final RemoteOnlyAtClientStorage storage
+        when identical(storage.remoteSecondary, previous)) {
+      storage.remoteSecondary = next;
+    }
     try {
       await previous?.atLookUp.close();
     } on Exception catch (e) {
