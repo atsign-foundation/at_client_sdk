@@ -377,12 +377,14 @@ void main() {
       final additional = atKey.metadata.appMetadata!.additional!;
       final iv = InitialisationVector(
           Uint8List.fromList(base64Decode(additional['iv'])));
-      // The value key: HKDF-SHA256 over the CK, salted per value, under this
-      // info — written as raw literals so a change to either is a pin edit.
-      final valueKey = AESKey(base64Encode(HkdfSha256.deriveKey(ck.bytes,
-          salt: Uint8List.fromList(base64Decode(additional['salt'])),
-          info: Uint8List.fromList(
-              utf8.encode('at/symmetric/AES/GCM/value-key/v1')),
+      // The value key: HKDF-SHA256-Expand keyed by the CK, over this label
+      // followed by the value's salt — written as raw literals so a change to
+      // either is a pin edit.
+      final valueKey = AESKey(base64Encode(HkdfSha256.expand(ck.bytes,
+          info: Uint8List.fromList([
+            ...utf8.encode('at/symmetric/AES/GCM/value-key/v2'),
+            ...base64Decode(additional['salt']),
+          ]),
           length: 32)));
       final aad = utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.myapp');
       final plain = await AesGcm256EncryptionAlgo(valueKey)

@@ -419,9 +419,12 @@ disclosure — the namespace is already plaintext in the key name.
 - On an `at/symmetric/AES/GCM` **data value**:
   `{ providerId: "at/symmetric/AES/GCM", ckKid, salt, iv, ns, ckNs }`. `salt` is 32
   base64 bytes of fresh randomness per value, and the value is encrypted under
-  `HKDF-SHA256(ikm = CK, salt, info = "at/symmetric/AES/GCM/value-key/v1", L = 32)`
+  `HKDF-SHA256-Expand(prk = CK, info = "at/symmetric/AES/GCM/value-key/v2" ‖ salt, L = 32)`
   rather than under the CK itself, so no `(key, nonce)` pair can repeat however many
-  values share a CK; a value carrying no `salt` is read under the CK directly. `iv` is
+  values share a CK. The CK is already a uniform 256-bit key, so it keys the expand step
+  directly (RFC 5869 section 3.3), and each value key rests on HMAC-SHA256's PRF
+  security under the CK rather than on HKDF-Extract keyed by a public salt. A value
+  carrying no `salt` is read under the CK directly. `iv` is
   the base64 12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
   the value's **own** full namespace — it is what the AAD binds, so two items under
   different sub-collections cannot have their ciphertexts swapped. `ckNs` is the

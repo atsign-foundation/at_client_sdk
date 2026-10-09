@@ -211,20 +211,23 @@ class SymmetricAesGcmProvider
   static Uint8List _freshSalt() => Uint8List.fromList(
       List<int>.generate(saltLength, (_) => _random.nextInt(256)));
 
-  /// The HKDF `info` a value key is derived under.
-  static final Uint8List _valueKeyInfo =
-      Uint8List.fromList(utf8.encode('at/symmetric/AES/GCM/value-key/v1'));
+  /// The label a value key's HKDF `info` starts with; the value's salt follows.
+  static final Uint8List _valueKeyLabel =
+      Uint8List.fromList(utf8.encode('at/symmetric/AES/GCM/value-key/v2'));
 
-  /// The AES key one value is encrypted under: HKDF-SHA256 over [ck], salted
-  /// with that value's own [salt].
+  /// The AES key one value is encrypted under: HKDF-SHA256-Expand keyed by
+  /// [ck], over the label followed by that value's own [salt].
   ///
   /// A fresh key per value means no `(key, nonce)` pair repeats however many
   /// values share a content key and however long it stays current, so the
-  /// random-nonce limit on AES-GCM does not bound a content key's use.
+  /// random-nonce limit on AES-GCM does not bound a content key's use. The CK
+  /// is already a uniform 256-bit key, so it keys the expand step directly
+  /// (RFC 5869 section 3.3) and each value key rests on HMAC-SHA256's PRF
+  /// security under the CK.
   @visibleForTesting
   static AESKey valueKeyOf(ContentKey ck, List<int> salt) =>
-      AESKey(base64Encode(HkdfSha256.deriveKey(ck.bytes,
-          salt: Uint8List.fromList(salt), info: _valueKeyInfo, length: 32)));
+      AESKey(base64Encode(HkdfSha256.expand(ck.bytes,
+          info: Uint8List.fromList([..._valueKeyLabel, ...salt]), length: 32)));
 
   /// Binds a value's ciphertext to the record it was written under.
   ///
