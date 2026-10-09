@@ -846,9 +846,12 @@ release passing `InMemoryAtClientStorage` once at_client 3.15.0 publishes.
 deprecated; 4.0 removes them along with the default seam, `hiveStoragePath` and
 `isLocalStoreRequired`, after which storage is required at every door.
 
-What a backend protects at rest is its own, and `AtClientStorage` says so: Hive encrypts
-its keystore with the key in its `.hash` file (its queue box is in clear), SQLite writes
-records in clear, and the in-memory store writes nothing to disk.
+What a backend protects at rest is its own, and `AtClientStorage` says so. Every backend
+stores a value the client encrypted as that ciphertext; the difference is the records the
+client leaves unencrypted, such as its sync and notification watermarks and `local:`
+values. Hive encrypts every value in its keystore with the key in its `.hash` file (record
+names and its queue box are in clear), SQLite writes those records in clear, and the
+in-memory store writes nothing to disk.
 
 **Why.** Which store suits an app is a platform question (a Flutter app, a command-line
 tool and a browser each want a different one), and a core that names one backend chooses

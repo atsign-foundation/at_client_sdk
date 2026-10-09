@@ -13,12 +13,16 @@ import 'package:meta/meta.dart';
 /// https://github.com/atsign-foundation/at_client_sdk/issues, since the types
 /// a backend is written against are not exported.
 ///
-/// What is protected on disk depends on the backend. The Hive storage
-/// encrypts its keystore with a key kept in a `.hash` file beside it, while
-/// its sync queue, which names the records waiting to sync, is not encrypted.
-/// The SQLite storage writes everything in clear. The in-memory storage
-/// writes nothing to disk. The client stores a `local:` value as the app gives
-/// it.
+/// Every backend stores a value as the client hands it over, so a value the
+/// client encrypted is ciphertext on disk whichever backend holds it. The
+/// backends differ over the records the client does not encrypt, such as its
+/// sync and notification watermarks and a `local:` value, which the client
+/// stores as the app gives it. The Hive storage encrypts every value in its
+/// keystore with a key kept in a `.hash` file beside it, so those records are
+/// protected there; the SQLite storage writes them in clear; the in-memory
+/// storage writes nothing to disk. Record names are readable on disk under
+/// both Hive and SQLite, as Hive encrypts values and not keys, and Hive's sync
+/// queue, which names the records waiting to sync, is not encrypted.
 abstract class AtClientStorage {
   /// Claims this storage for [owner].
   ///

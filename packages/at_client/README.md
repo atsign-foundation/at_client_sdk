@@ -182,9 +182,12 @@ any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
 Every client keeps local storage, even if only in memory. A client given none
 opens Hive under `preference.hiveStoragePath` until 4.0; one given none and
 no path, or none with `isLocalStoreRequired` false, is refused, and the
-refusal names `InMemoryAtClientStorage`, which keeps nothing on disk. The
-backends differ at rest: Hive encrypts its keystore, SQLite writes records in
-clear, and the in-memory store writes nothing to disk. A backend of your own
+refusal names `InMemoryAtClientStorage`, which keeps nothing on disk. Every
+backend stores a value the client encrypted as ciphertext. They differ over the
+records the client keeps unencrypted, such as its sync and notification
+watermarks and your `local:` values: Hive encrypts them at rest and SQLite
+writes them in clear, while the in-memory store writes nothing to disk. Record
+names are readable on disk under both Hive and SQLite. A backend of your own
 needs types at_client doesn't export, so raise a
 [feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
 for it.
