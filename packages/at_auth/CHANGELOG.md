@@ -1,3 +1,12 @@
+## 4.0.0-rc5
+
+- feat: `RegistrarService.registerAtSign` (v4 `/register-atsign/`).
+- feat: `RegistrarAdminService` for the v4 `/manage-atsigns/` delete flow
+  (Super API key).
+- refactor: `registrarApiRequest`'s `data` is now `Map<String, dynamic>`.
+- BREAKING: removed `getFreeAtSign`, `getFreeAtSignByCategory`,
+  `registerPerson` and `validatePerson`; use `registerAtSign`.
+
 ## 4.0.0-rc4
 
 - fix: waiting for an enrollment's approval ends at once, with the atServer's

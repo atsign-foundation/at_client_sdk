@@ -1,3 +1,6 @@
+# NOTE pub reads .pubignore instead of this file in this directory, so a rule
+# added here must be added there too or the file still ships in the package.
+
 # Files and directories created by pub.
 .dart_tool/
 .packages

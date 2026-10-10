@@ -56,6 +56,7 @@ jobs:
         include:
           - packages: at_auth at_lookup at_commons at_utils
           - packages: at_onboarding_cli at_chops at_cli_commons at_policy
+          - packages: at_telemetry
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

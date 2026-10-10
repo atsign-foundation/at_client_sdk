@@ -30,7 +30,15 @@ void main() {
   TestUtils.isolateStorage('nskey_rotation_live_test');
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+  // NOTE: unique per run — the atServer refuses a second enrollment carrying
+  // an (appName, deviceName) pair that already has one approved, so fixed
+  // names collide on the second run against the same virtualenv.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'rotation$runId';
 
   setUpAll(() async {
     // NOTE: the SECOND atSign, not the first. These tests create enrollments
@@ -45,11 +53,6 @@ void main() {
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
-
-  // NOTE: unique per run — the atServer refuses a second enrollment carrying
-  // an (appName, deviceName) pair that already has one approved, so fixed
-  // names collide on the second run against the same virtualenv.
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
@@ -70,7 +73,7 @@ void main() {
   /// What revocation needs, which is not what rotation needs: revoking is gated
   /// on `__manage`, and a client without it cannot even enumerate the atSign's
   /// enrollments to find the one it means.
-  const operatorGrants = {'*': 'rw', '__manage': 'rw', namespace: 'rw'};
+  final operatorGrants = {'*': 'rw', '__manage': 'rw', namespace: 'rw'};
 
   /// An enrollment with its own keyfile, sharing substrate, filing and ring —
   /// everything a client needs to hold and answer for a namespace key.
@@ -507,7 +510,7 @@ void main() {
     // NOTE: its OWN namespace, because this needs a genuine cold start — the
     // owner retains the private for the superseded generation only if it
     // minted it, and on a warm namespace `mintAndPublish` ADOPTS the live
-    // generation and files nothing. A sub-namespace of `buzz`, so the same
+    // generation and files nothing. A sub-namespace of [namespace], so the same
     // grant satisfies the atServer's write gate; the target is granted it
     // explicitly, because revokeEnrollmentAndRotate rotates what the TARGET's
     // enrollment names.

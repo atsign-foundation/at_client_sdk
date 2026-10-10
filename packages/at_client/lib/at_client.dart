@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 export 'package:at_client/src/client/at_client_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
@@ -52,8 +50,6 @@ export 'package:at_client/src/rpc/at_rpc_types.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync_service.dart';
-@experimental
-export 'package:at_client/src/telemetry/at_client_telemetry.dart';
 export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';

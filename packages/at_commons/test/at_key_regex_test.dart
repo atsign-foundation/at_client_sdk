@@ -265,6 +265,33 @@ void main() {
     });
 
     test(
+        'Validate appropriate parts of telemetry signing private key are identified correctly',
+        () {
+      String key = AtConstants.atTelemetrySigningPrivateKey;
+      KeyType type = RegexUtil.keyType(key, false);
+      expect(type, KeyType.reservedKey);
+
+      Map<String, String> matches =
+          RegexUtil.matchesByGroup(Regexes(false).reservedKey, key);
+      expect(matches['owner'], '');
+      expect(matches['atKey'], 'at_telemetry_signing_privatekey');
+      expect(matches['sharedWith'], '');
+    });
+
+    test(
+        'Validate appropriate parts of telemetry signing public key are identified correctly',
+        () {
+      String key = '${AtConstants.atTelemetrySigningPublicKey}@owner';
+      KeyType type = RegexUtil.keyType(key, true);
+      expect(type, KeyType.reservedKey);
+
+      Map<String, String> matches =
+          RegexUtil.matchesByGroup(Regexes(true).reservedKey, key);
+      expect(matches['owner'], 'owner');
+      expect(matches['atKey'], '_at_telemetry_signing_publickey.__atserver');
+    });
+
+    test(
         'Validate appropriate parts of _latestNotificationId are identified correctly',
         () {
       String key = '_latestNotificationId';

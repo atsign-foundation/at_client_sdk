@@ -118,20 +118,6 @@ class AtClientImpl implements AtClient {
 
   EncryptionService? _encryptionService;
 
-  @experimental
-  AtTelemetryService? _telemetry;
-
-  @override
-  @experimental
-  set telemetry(AtTelemetryService? telemetryService) {
-    _telemetry = telemetryService;
-    _cascadeSetTelemetryService();
-  }
-
-  @override
-  @experimental
-  AtTelemetryService? get telemetry => _telemetry;
-
   @override
   @Deprecated(
       'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
@@ -1090,8 +1076,6 @@ class AtClientImpl implements AtClient {
 
     putRequestTransformer.atClient = this;
 
-    _cascadeSetTelemetryService();
-
     // NOTE: built before the crypto config adopts its era default — the
     // config's nskey providers read through the bootstrap's key ring, the same
     // ring the startup steps mint into and file from.
@@ -1558,14 +1542,6 @@ class AtClientImpl implements AtClient {
     // No-op: the commit-log-free client has no commit log compaction job.
   }
 
-  void _cascadeSetTelemetryService() {
-    // if (telemetry != null) {
-    //   _encryptionService?.telemetry = telemetry;
-    //   _localSecondary?.telemetry = telemetry;
-    //   _remoteSecondary?.telemetry = telemetry;
-    // }
-  }
-
   @override
   LocalSecondary? getLocalSecondary() {
     return localSecondary;
@@ -1667,23 +1643,7 @@ class AtClientImpl implements AtClient {
     bool isDedicated = false,
     DeleteRequestOptions? deleteRequestOptions,
   }) {
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
-    );
-    // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult = _delete(
-      atKey,
-      deleteRequestOptions: deleteRequestOptions,
-    );
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.delete complete', {
-        "key": atKey,
-        "_deleteResult": _deleteResult,
-      }),
-    );
-    return _deleteResult;
+    return _delete(atKey, deleteRequestOptions: deleteRequestOptions);
   }
 
   Future<bool> _delete(
@@ -1905,10 +1865,6 @@ class AtClientImpl implements AtClient {
     bool isDedicated = false,
     PutRequestOptions? putRequestOptions,
   }) async {
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.put called', {"key": atKey}),
-    );
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -1930,10 +1886,6 @@ class AtClientImpl implements AtClient {
         putRequestOptions: putRequestOptions,
       );
     }
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}),
-    );
     return atResponse.response.isNotEmpty;
   }
 
