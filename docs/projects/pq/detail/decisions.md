@@ -14686,7 +14686,7 @@ naming why, and the walk reports `ChainVerdict.revoked` or `ChainVerdict.deleted
 change: a revoke moves `_apsk` to `.r.__e` and the atServer serves it to any
 reader, proven live against the published `vip` image by
 `apsk_server_side_test` (a peer atSign and a sibling enrollment both refused as
-revoked). 144.4 is at_server work and not built yet.
+revoked). 144.4 is at_server work, owed for at_server#2831.
 
 ### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
 
@@ -14754,38 +14754,77 @@ location).
 ### 144.4 The atServer moves an expired enrollment's data on first sight
 
 An at_server change: when a lookup of a per-enrollment key finds its enrollment
-expired, the atServer moves that enrollment's data to `.d.__e` then, as the
-lookup handlers' comment — the fetch "ensures that expired enrollment keys are in
-the right place" — already claims; the expiry sweep stays as the backstop. This
-closes the window, 10 seconds to about 10.5 minutes, in which an expired
-enrollment's `_apsk` was still accepted at `.a.__e`.
+expired, the atServer removes that enrollment then, as the expired-keys pass
+would, so its data is at `.d.__e` before the lookup answers; the pass stays as
+the backstop. A verifier that then looks for the key at `.d.__e` finds it and is
+told the signer was deleted or expired, as 144.3 says.
 
-## 145. A reader's atServer caches no post-quantum key records, and the client bypasses its cache for them (2026-09-30)
+⚠️ **AMENDED 2026-10-10 by gkc, before it was built.** at_server#2853 (in
+c3.17.0) closed the window in which an expired enrollment's `_apsk` was still
+accepted at `.a.__e` another way: `lookup`, `llookup` and an HTTP GET answer
+not-found for `.a.__e` data whose enrollment no longer reads as approved. It
+moves nothing, so until the pass runs a verifier gets a bare not-found, since
+`.d.__e` is still empty. gkc kept the move owed so the refusal stays the same
+either way: "we need to be careful during implementation as we've gone around on
+this a few times now". Before at_server 3.16.4 a read of an expired enrollment
+removed it, which is what the lookup handlers' comment — the fetch "ensures that
+expired enrollment keys are in the right place" — relied on; 3.16.4 stopped
+that, because enrollments are read on every verb and every authorisation check,
+outside the atSign's enrollment-mutation critical section. So the move is built
+under three constraints:
+
+- only `lookup`, `llookup` and an HTTP GET of an enrollment's own data trigger
+  it, never the enrollment read every verb shares;
+- the data moves inside that critical section, as every removal's does, so a
+  lookup overlapping the pass, an owner's delete or another lookup moves it once;
+- moving a removed enrollment's data to `.d.__e` commits nothing, since no
+  client of that enrollment can connect again, no other enrollment reads its
+  private data, and its public `_apsk` is read from the atServer; moves to
+  `.r.__e` on a revoke, and back to `.a.__e`, still commit.
+
+## 145. A reader's atServer caches no public record without a ttr (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
 (the P0 row's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
-The client half is built: `LookUpBuilderManager.get` sets `bypassCache` on every
-lookup of either record, pinned in `test/verb_builder_test.dart`. The atServer
-half lands in at_server.
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)),
+and widened by him on 2026-10-10. The client half is built:
+`LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
+`__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
+at_server work, for at_server#2831.
 
-**The atServer (at_server).** A reader's atServer writes no `cached:public:`
-copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at
-every lookup — "for backwards compatibility, we will temporarily cache other
-public data with a ttl of 24 hours" — committed it and synced it to the reader's
-clients, yet never served it, because a lookup serves a cached copy only with
-`ttr -1` or before its `refreshAt`, and nothing on the client reads those
-records by their cached name. The 24-hour copy stays for other public data with
-no `ttr`, which an application may read by asking for the `cached:public:` key
-explicitly. Three defects are fixed with it:
+**The atServer (at_server).** A reader's atServer keeps no `cached:public:` copy
+of another atSign's public record whose owner gave it no ttr, or a ttr of 0.
+Another atSign's encryption public key is still kept with `ttr -1`, and a record
+with a ttr is still copied and served within it. Copies kept before, which are
+`cached:public:` copies with no ttr, go at the next lookup of the record, and the
+daily refresh deletes the rest without fetching them; a copy of a record another
+atSign shared (`cached:@<reader>:…`) is not touched. With it:
 
 - a lookup miss commits a DELETE of the cached name only when a cached copy
   existed, rather than every time;
-- a cache refresh that finds a changed value keeps the copy's ttl, rather than
-  re-putting it with none, which left it expiring only when the next lookup
-  re-stamped it;
-- `runRefreshJobHour` is honoured when set; the random start hour, which spreads
-  the refresh load across atServers, stays the default.
+- a refresh that finds a copy's value unchanged re-writes it, committing as a
+  lookup's re-write does, so its `refreshAt` moves on and it is served again,
+  where it used to be left past its `refreshAt`, unserved;
+- `runRefreshJobHour` is honoured when an operator sets the environment variable
+  or `refreshJob.runJobHour` in the yaml, and otherwise the hour is random from
+  0 to 23, which spreads the refresh load across atServers. The `runJobHour: 3`
+  every shipped config.yaml carried goes, since honouring it would have run
+  every atServer's refresh at 03:00, and a value that is not an hour is logged
+  and ignored.
+
+⚠️ **AMENDED 2026-10-10 by gkc**, when the at_server work was spec'd. This read
+"A reader's atServer writes no `cached:public:` copy of an `_apsk` or `__nskey`
+record … The 24-hour copy stays for other public data with no `ttr`", and its
+second defect was a refresh that dropped the copy's ttl. gkc removed the 24-hour
+copy for every record: at_server added it in fd79068d (2023-03-05),
+"temporarily", when a missing ttr stopped meaning "cache forever"; no lookup ever
+served one, and nothing in the SDKs reads one (at_follows_flutter reads cached
+profile fields and falls back to a plookup). The ttl defect went with it, since
+the only ttl a refresh dropped was the reader's own 24 hours: a copy with a ttr
+is re-written correctly, measured in-process. He also asked whether these records
+should carry `ttr -1`, and kept [143.1](#1431-the-advertisement-carries-no-ttr):
+a reader's atServer would serve such a copy forever, and its refresh never
+re-checks one.
 
 **The client, in the interim (gkc).** The client sets `bypassCache` on every
 `_apsk` and `__nskey` fetch. That does not stop the copies being written: a

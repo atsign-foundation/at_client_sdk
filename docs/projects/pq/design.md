@@ -493,7 +493,7 @@ Without this, a sender keeps sealing to a pre-rotation generation that a revoked
 enrollment can still open, and **B6 revocation silently fails for inbound
 cross-atSign data**. The advertisement carries no `ttr`, and the client fetches it
 with `bypassCache`, so a reader's atServer never serves a cached copy of it
-([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)).
+([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30)).
 For self data the owner's own advertisement is read
 local-first, which sync keeps current, through the same cache, cleared early when sync
 pulls a change, and a re-read of bytes already verified is not verified again, so her

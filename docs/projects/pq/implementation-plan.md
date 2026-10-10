@@ -87,7 +87,7 @@ it stopped being parked.
 | **the acceptance catalogue's default-flip passes** | When each default flip lands — `legacy` to `pqReady` at 4.0, `pqReady` to `pqActive` at 5.0 — the same commit edits every `acceptance.md` clause that names a posture, so the catalogue describes the tree it ships with — never before, and found from the flip's own diff rather than from a list here. | the 4.0 default flip: `AtClientPreference` still defaults `posture` to `PqPosture.legacy` |
 | **the clause burn-down, objective 2: live proof** | Every clause proven only in-process gains a proof against a real atServer where feasible; `liveProofOwed` in `packages/at_client/test/acceptance/manifest.dart` names what owes one and why, and the suite prints both counts (`BURN-DOWN clauses proven: N of T server-proven: M of T`). Start with citations that name a live pack test but carry no `clauses:` list, reading each `proves:` first — some are unpinned on purpose. | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | Publish in dependency order, read from the pubspecs — at_commons, at_utils, at_chops, at_lookup, at_server_status, at_auth, at_client, at_onboarding_cli, at_cli_commons, at_client_flutter — after re-deriving tree-against-pub.dev with the loop in [Re-deriving the state](#re-deriving-the-state); merged is not published. **at_client_skills 1.4.0 is not published until the stable at_client 3.15.0 and at_client_flutter 2.0.0 are** (gkc, 2026-10-03): it teaches the `Atsign` verbs and at_client_flutter 2.0's dialogs, which only the prereleases carry, and the `dart pub add` it recommends resolves the stable releases. Its CHANGELOG heading's date moves to the day it ships. | gkc — publishing is his act |
-| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Rulings 142–145 settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. Their at_client half is built, in PR #2294, and proven on the functional, e2e and onboarding-CLI live packs. What remains is item 17 and the server half of item 18, at_server work filed as [at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831) with no worktree, branch or PR yet, which nothing on the client waits on. The section lists each item and what it built or owes. | Nothing |
+| [PQ key writing and fetching](#pq-key-writing-and-fetching-lifetimes-and-caching) | Rulings 142–145 settle what every namespace-key advertisement, content-key and `_apsk` write carries and what every reader caches, on its client and on its atServer. Their at_client half is built, in PR #2294, and proven on the functional, e2e and onboarding-CLI live packs. What remains is item 17 and the server half of item 18, at_server work filed as [at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831), which gkc widened on 2026-10-10 (rulings 144.4 and 145) and which is being built on the at_server branch `gkc-no-pq-key-cache-copies`; nothing on the client waits on it. The section lists each item and what it built or owes. | Nothing |
 
 ### P1 — must do before D1 closes
 
@@ -154,6 +154,7 @@ it stopped being parked.
 | **secret-sharing envelope lifetimes are unpinned and unvalidated** | `PairwiseSecretSharing.envelopeTtl` (7 days) has no test pinning its default and no validation — a `Duration` under a millisecond sends `:ttl:0`, which the atServer reads as never expiring — and one assignment on the `AtClientSecretSharing.forClient` instance changes it for every envelope the SDK sends. The wake-up's `notificationExpiry: envelopeTtl` is unpinned too and falls back to 24 hours if dropped; and an envelope `_consume` rejects is retried every sweep, once a minute, until its ttl ends. | Nothing |
 | **`public:publickey`'s `ttr -1` is unpinned** | `AtAuthImpl.completeActivation` publishes the encryption public key with `ttr -1` so peers may cache it indefinitely (at_libraries#297, at_server#1226); the functional test that asserted it lost the assertion in `9b55a2365`, and nothing has checked it since. Pin the built command. | Nothing |
 | **rows and copies a cold read found stale on 2026-10-03** | Verify each, then delete or correct it: the P0 client-lifecycle row says "in progress" on a branch PR #2233 merged 2026-09-13; the P2 test-pack speed-up row describes a branch PR #2229 merged 2026-09-12; the P0 `ApkamSigning` row carries a ✅ the table's rule forbids; step 20's arm is blocked on "the at_auth publish" though at_auth's rcs are on pub.dev; the 14.18 section's "Order, from the pubspecs" and the detail file's "single reference for publish order" disagree with the release-train row; and the release-train loop in [Re-deriving the state](#re-deriving-the-state) reads `.versions[-1]` positionally and skips at_cli_commons and at_client_skills. The doc-set rails row should also say that PR #2232 was a first attempt, closed unmerged. | Nothing |
+| **a missing `_apsk` is looked up again on every verification** | `EnvelopeSigning` caches a found `_apsk` for five minutes per AtClient but not a miss: each verification of something signed by a revoked, deleted or unknown enrollment makes up to three lookups (`.a.__e`, then `.r.__e` and `.d.__e` in `withdrawnApskLocation`), and nothing remembers the answer. Raised by gkc on 2026-10-10, ruling the at_server#2831 spec. | Nothing |
 
 ### P3 — nice to have, explicitly after D1, or in another repo
 
@@ -593,26 +594,28 @@ items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
 17. **The atServer moves an expired enrollment's data on first sight (144.4).**
     Owed *(at_server,
     [#2831](https://github.com/atsign-foundation/at_server/issues/2831))*: a
-    lookup of a per-enrollment key whose enrollment has
-    expired moves that enrollment's data to `.d.__e` then, making the lookup
-    handlers' "ensures that expired enrollment keys are in the right place" true;
-    the expiry sweep stays the backstop.
+    `lookup`, `llookup` or HTTP GET of an enrollment's own data that finds it
+    expired removes it then, as the expired-keys pass would, so its data is at
+    `.d.__e` before the lookup answers; the pass stays the backstop. at_server#2853
+    already refuses such data without moving it; ruling 144.4 says why the move
+    stays owed and the constraints it is built under.
 
 *Server-side caching — ruled by gkc on 2026-09-30 in
-[ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)*
+[ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30)*
 
-18. **A reader's atServer caches no post-quantum key records; the client
-    bypasses its cache for them (145).** Found: every lookup of an `_apsk` or
-    `__nskey` record wrote and committed a 24-hour copy that was never served
-    and never read; every lookup miss committed a DELETE whether or not a copy
-    existed; a refresh finding a changed value dropped the copy's ttl; and the
+18. **A reader's atServer caches no public record without a ttr; the client
+    bypasses its cache for post-quantum key records (145).** Found: every lookup
+    of an `_apsk` or `__nskey` record, and of any other public record with no
+    ttr, wrote and committed a 24-hour copy that was never served; every lookup
+    miss committed a DELETE whether or not a copy existed; a refresh dropped a
+    24-hour copy's ttl, and left a copy it found unchanged unserved; and the
     configured refresh hour was ignored. Owed *(at_server,
     [#2831](https://github.com/atsign-foundation/at_server/issues/2831))*: no
-    cached copy of
-    those two record kinds, the 24-hour copy kept for other public data, and
-    the three defects fixed. The client half is built: `LookUpBuilderManager.get`
-    sets `bypassCache` on every lookup of either record, whatever the caller
-    asked.
+    cached copy of a public record without a ttr, the copies kept before
+    removed, and the defects fixed, as ruling 145 has said since gkc widened it
+    on 2026-10-10. The client half is built: `LookUpBuilderManager.get` sets
+    `bypassCache` on every lookup of an `_apsk` or `__nskey` record, whatever the
+    caller asked.
 
 **Pins on what each write sends:** the advertisement, the signing root and
 both locks in `nskey_minting_test` and `pq_signing_root_test`; the share
