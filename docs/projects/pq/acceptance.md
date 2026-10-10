@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**97 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 98 use cases and 108 scenarios —
+**98 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 99 use cases and 109 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -97,6 +97,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A5.4  | The content-key lever is a policy the application supplies                         | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.5  | The namespace-key lever is asked at exactly two points                             | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.6  | Where a lever is not asked, and where a yes is refused out loud                    | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.7  | A content key follows both namespace keys it rests on                              | PROVEN    | `a5_rotation_test.dart`      |
 | UC-B0.1  | A PQ-capable client cannot PQ-upgrade against a legacy atServer                     | PROVEN    | `b0_server_prereq_test.dart` |
 | UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
@@ -427,8 +428,9 @@ per keyfile/install):
     `nskey` and nothing else; self and inbound both seal to the one nskey. The
     `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
     resolved namespace the conveyance lives at.
-  - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv, ns, ckNs}` — application data
-    AES-256-GCM under a CK, cited by `ckKid`. `ns` is the value's own full namespace
+  - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
+    data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
+    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the value's own full namespace
     and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
     whenever resolution walked up.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
@@ -734,7 +736,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `public:__nskey.app_1.my_apps@alice`; `alice1`, `alice2` hold its private.
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
+  1. Cut a symmetric **content key (CK)**; encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`): seal the CK to @alice's **nskey** under the
      KEM that nskey's own advertisement names, and write it as its own CK-conveyance
      record, stamping `appMetadata = {providerId: at/nskey/XWING, recipientKind:
@@ -742,7 +744,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      `alg` is `ml-kem-1024`.
      (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
-     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, iv}`; the value carries
+     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, salt, iv}`; the value carries
      **no** inline sealed CK. Write; sync.
 - **Then:**
   - `alice2` syncs both records: the `at/nskey` provider decapsulates the CK with the
@@ -841,8 +843,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Given:** `@alice` pq-native; `alice1`, `alice2` PQ; `alice2` running a monitor.
 - **When:** `alice1` does `notify` to `@alice` (self) carrying an encrypted value.
 - **Steps:**
-  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a CK
-     (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
+  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a key
+     derived from a CK and a per-value salt (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
      record sealed to the nskey (`recipientKind: nskey`, the only kind).
   2. Stamp `appMetadata.providerId` on the **notification** payload; send `notify:`.
   3. atServer queues/delivers; `alice2`'s monitor receives the notification frame.
@@ -912,7 +914,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   1. `plookup` `public:__nskey.app_1.my_apps@bob`, verify its APKAM signature, and note
      the advertised `nskeyKid`. Cut a symmetric **CK for @bob** — CKs are per
      recipient — or reuse the current one if it was conveyed to that same generation.
-     Encrypt the value with it (AES-256-GCM under the CK).
+     Encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): seal it to **bob's
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
@@ -1302,6 +1304,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   the replacement edge; a caller reaches the cascade by APPROVAL, having been
   approved somewhere beneath the target.
 
+- **Then, what a remaining enrollment shares next:** it opens only under
+  generations E2 never held, because a content key follows the sender's own
+  rotation as well as the destination's — see
+  [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
 - **Cross-ref:** `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
 - **Impl/verify (A5.x):** **B-2**.
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
@@ -1352,14 +1358,16 @@ knows which is which. Design in
   the enrollment that cut it once neither holds. Deleting a key that records
   still cite is UC-A5.1's lever (a), which the SDK never pulls on the
   application's behalf.
-- **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
-  week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
-  than a day because each replacement adds a conveyance that is kept as long
-  as any record written under its key lives, so a short period multiplies what
-  a long-lived store keeps; rather than a month because a week is already the
-  period this design measures an envelope's life in.
+- **Then, the default:** `rotateCkAfterOneYear` — replace once the key is a
+  year old, with the boundary **inclusive** (`age >= 365 days`). Each value is
+  encrypted under its own key, derived from the content key and a fresh salt,
+  so no usage limit bounds a content key's life, and revocation replaces it
+  through [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)
+  rather than through the timer. A year is NIST SP 800-57 Part 1's suggested
+  cryptoperiod for a key-derivation key, which is what a content key is.
+  `rotateCkAfterOneWeek` remains for an application that wants a week.
 
-### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
+### 6.5 UC-A5.5 — The namespace-key lever is asked at exactly two points
 
 - **Given:** an application that supplied an `NskeyRotationPolicy`.
 - **When:** the client runs.
@@ -1391,9 +1399,14 @@ knows which is which. Design in
   **retained** so records sealed to it still open, and the successor is conveyed
   to every authorised enrollment. This is UC-A5.1's lever (b) — O(n) per
   enrollment, and not cheap.
-- **Then, the default:** `neverRotateNskey` — false at any age. A policy that
-  always says no rather than an absent one, so every call site asks
-  unconditionally and there is no null to forget.
+- **Then, the default:** `rotateNskeyAfterOneYear` — replace a generation once
+  its advertisement says it was minted a year ago, with the boundary
+  **inclusive**. Revocation rotates on its own cause; the yearly rotation is
+  what heals a compromise nobody detected, and a year sits in NIST SP 800-57
+  Part 1's 1-to-2-year range for a public key-transport key. Each rotation
+  conveys to every authorised enrollment and makes each peer cut one content
+  key. `neverRotateNskey` remains for an application that leaves rotation to
+  revocation and to itself.
 
 ### 6.6 UC-A5.6 — Where a lever is deliberately not asked, and where a yes is refused out loud
 
@@ -1419,6 +1432,49 @@ deliberate skip with a reason, not an oversight.
   application that configured a policy and sees nothing happen needs to read.
 - **Then, a policy that throws rotates nothing:** the exception is caught,
   logged at warning, and the published generation stands.
+
+### 6.7 UC-A5.7 — A content key follows both namespace keys it rests on
+
+A shared content key is sealed twice: to the destination's namespace key, and, as
+a sibling copy, to the sender's own, so the sender's other enrollments can open
+what it shares. A revocation rotates the namespace keys the revoked enrollment
+held. A content key is replaced when either generation it rests on moves on. Design in
+[`design.md` 1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).
+
+- **@race:** two writes racing a rotation cut one key. A write a remaining
+  enrollment begins before the rotation reaches it goes out under the key it held
+  until then; that window is the conveyance's latency. A restart between a cut
+  and its pointer write cuts a fresh key.
+- **@replay:** out of scope. At this time atServers are assumed trustworthy:
+  which generation a sender seals to rests on the advertisements its atServer
+  serves, on either side. A replayed envelope is answered by its version 2
+  binding.
+- **@dos:** nothing here runs before authentication. Each write reads the cached
+  advertisement and the filed private, a missing private is asked for at most
+  once per generation per cooldown, and a cut happens at most once per
+  destination, namespace and generation change.
+- **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
+  current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
+  Alice's generation G1.
+- **When:** E3 calls `revokeEnrollmentAndRotate(E2)`, and E1 then writes a value
+  shared with `@bob` in `buzz`.
+- **Then:** the value cites a fresh content key whose sibling copy is sealed to
+  Alice's new generation G2, and E2's G1 private opens neither that key's
+  conveyance nor its sibling copy.
+- **Then, racing writes:** two writes E1 starts at once after the rotation cut
+  one content key, and `@bob` opens both values.
+- **Then, inside the window:** while G2 is advertised and E1 does not yet hold its
+  private, E1 keeps its current key and asks Alice's other enrollments for G2's
+  private. A write that needs a fresh key meanwhile succeeds: its sibling copy is
+  sealed to G1, the generation E1's keys in `buzz` already rest on, or goes
+  without one when none of them records an own generation. Once E1 both holds
+  G2's private and sees it advertised, whichever arrived first, its next write
+  cuts a fresh key sealed to G2.
+- **Then, the policy is not asked:** a `CkRotationPolicy` that always answers no
+  does not stop the replacement.
+- **Then, across a restart:** E1 resumes a content key only when its pointer
+  names both generations as current. A pointer written before it recorded the
+  sender's own generation resumes nothing.
 
 ## 7. B0 · Prerequisite — atServer upgrade
 
@@ -2048,7 +2104,7 @@ These invariants are testable against **every** UC above:
   an error. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
   `{providerId, recipientKind, ckKid}`; `at/symmetric/AES/GCM` →
-  `{providerId, ckKid, iv}`).
+  `{providerId, ckKid, salt, iv}`).
 - **No RSA in any confidentiality path** for a fully-PQ interaction (auth, enrollment
   conveyance, self, shared, notification).
 - **ML-DSA APKAM auth is record-authoritative.** PQ auth verifies against the
@@ -2147,7 +2203,7 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
 | `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2**. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
-| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneYear` and `rotateNskeyAfterOneYear`, each with its period pinned as a raw literal and its boundary inclusive — that every config the SDK builds carries them, the weekly and never alternatives, and that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
@@ -3554,15 +3610,18 @@ is where its missing lever lives.
     `approved`, making the test vacuously false forever.
 
     ⚠️ **Why the rotation ignores the policy.** `NskeyRotationPolicy` governs
-    *discretionary* rotation, and its shipped default is `neverRotateNskey`,
-    which returns false unconditionally. A revocation-driven rotation that asked
-    it would be inert for every application that has not opted in — and the
-    rotation is the only thing that cuts a revoked enrollment off from data
-    sealed to the generation it already holds.
+    *discretionary* rotation, and its shipped default,
+    `rotateNskeyAfterOneYear`, says yes only once a generation is a year old.
+    A revocation-driven rotation that asked it would wait up to a year, or for
+    ever under `neverRotateNskey` — and the rotation is the only thing that cuts
+    a revoked enrollment off from data sealed to the generation it already
+    holds.
 
-    ⚠️ **Age is not an nskey trigger at all** — the SDK carries no clock for
-    this lever, and an application deciding it is time is a *cause* rather than
-    a schedule;
+    ⚠️ **Age is the default policy's trigger, never the revocation's** — the
+    revocation-driven rotation needs no clock, and the yearly one is asked only
+    at the two points
+    [UC-A5.5](#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)
+    names;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
     start or at the next content key it conveys to a namespace key **this

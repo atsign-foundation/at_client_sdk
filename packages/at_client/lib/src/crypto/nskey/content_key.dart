@@ -49,6 +49,7 @@ class ContentKeyCache {
   final Map<String, ContentKey> _byKid = {};
   final Map<String, String> _currentKidByNamespace = {};
   final Map<String, String> _currentNskeyKidByNamespace = {};
+  final Map<String, String> _currentOwnNskeyKidByNamespace = {};
   final Map<String, DateTime> _currentCutAtByNamespace = {};
 
   static String _scope(String owner, String namespace) => '$owner|$namespace';
@@ -80,17 +81,25 @@ class ContentKeyCache {
   ///
   /// [nskeyKid] is what lets a sender notice a rotation: once the recipient's
   /// advertised generation no longer matches, the current CK is stale.
+  /// [ownNskeyKid] is the sender's own generation a shared CK's sibling copy
+  /// was sealed to, null when it has none; once the sender holds a newer own
+  /// generation, the current CK is stale too.
   /// [cutAt] is when the CK came into being, which a rotation policy judges it
   /// against: the caller that cut it passes nothing and gets this device's
   /// clock, while one that read it back passes the conveyance record's
   /// `createdAt`, the only date two devices can agree on.
   void putAsCurrent(
       String owner, String namespace, ContentKey ck, String nskeyKid,
-      {DateTime? cutAt}) {
+      {String? ownNskeyKid, DateTime? cutAt}) {
     put(owner, namespace, ck);
     final scope = _scope(owner, namespace);
     _currentKidByNamespace[scope] = ck.ckKid;
     _currentNskeyKidByNamespace[scope] = nskeyKid;
+    if (ownNskeyKid == null) {
+      _currentOwnNskeyKidByNamespace.remove(scope);
+    } else {
+      _currentOwnNskeyKidByNamespace[scope] = ownNskeyKid;
+    }
     _currentCutAtByNamespace[scope] = cutAt ?? DateTime.now().toUtc();
   }
 
@@ -106,6 +115,18 @@ class ContentKeyCache {
   /// no current CK for `(owner, namespace)`.
   String? currentNskeyKid(String owner, String namespace) =>
       _currentNskeyKidByNamespace[_scope(owner, namespace)];
+
+  /// The sender's own nskey generation the current CK's sibling copy was
+  /// sealed to, or null if it has none or there is no current CK.
+  String? currentOwnNskeyKid(String owner, String namespace) =>
+      _currentOwnNskeyKidByNamespace[_scope(owner, namespace)];
+
+  /// The own generations the current CKs in [namespace] rest on, toward every
+  /// destination.
+  Iterable<String> currentOwnNskeyKidsIn(String namespace) =>
+      _currentOwnNskeyKidByNamespace.entries
+          .where((e) => e.key.endsWith('|$namespace'))
+          .map((e) => e.value);
 
   static bool _sameKey(Uint8List a, Uint8List b) {
     if (a.length != b.length) return false;
@@ -137,6 +158,7 @@ class ContentKeyCache {
     if (_currentKidByNamespace[scope] == ckKid) {
       _currentKidByNamespace.remove(scope);
       _currentNskeyKidByNamespace.remove(scope);
+      _currentOwnNskeyKidByNamespace.remove(scope);
       _currentCutAtByNamespace.remove(scope);
     }
   }

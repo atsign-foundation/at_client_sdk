@@ -292,6 +292,15 @@ void main() {
             'E2\'s APKAM keypair is cut at auth',
             'exclusion set stays the ONE',
           ]);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment comes to hold its own generation G2, then its '
+              'next write cuts a fresh key sealed to G2',
+          proves: 'the sending side of the cut: a remaining enrollment\'s next '
+              'share is under a fresh key whose sibling copy the superseded '
+              'generation fails to open, with the new generation\'s private as '
+              'the positive control. UC-A5.7 carries the rest of that row',
+          clauses: ['generations E2 never held']);
     });
 
     test(
@@ -386,17 +395,23 @@ void main() {
             'so a recipient can still open a notification sent under it'
           ]);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'the period is SEVEN days, pinned as a literal',
+          'the period is 365 days, pinned as a literal',
           proves: 'the default period as a raw-literal pin rather than a '
               'round trip through the constant that defines it, so an '
               'intended change edits the pin and that edit is the review',
-          clauses: ['`rotateCkAfterOneWeek`']);
+          clauses: ['`rotateCkAfterOneYear`']);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'a key a week old or older is replaced',
+          'every config the SDK builds carries the yearly defaults',
+          proves: 'that it IS the default: CryptoConfig, CryptoConfig.nskey '
+              'and readsNskeyWritesLegacy all hand it to an application that '
+              'names none, and the era default is built through the second',
+          clauses: ['`rotateCkAfterOneYear`']);
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'a key a year old or older is replaced',
           proves: 'the boundary is INCLUSIVE, which is the arm an off-by-one '
               'would silently move');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'a key younger than a week is left alone',
+          'a key younger than a year is left alone',
           proves: 'the other side of the boundary');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
           'age is measured against the now it is given, not the clock',
@@ -405,8 +420,8 @@ void main() {
     });
 
     test(
-        'UC-A5.5 \u00b7 the namespace-key lever fires on a cause, and is asked '
-        'at exactly two points', () {
+        'UC-A5.5 \u00b7 the namespace-key lever is asked at exactly two points',
+        () {
       provenIn('packages/at_client/test/nskey_seeding_test.dart',
           'a sibling publishing mid-route does not become a rotation',
           proves: 'the third ask is closed, measured rather than reasoned: a '
@@ -418,7 +433,7 @@ void main() {
       // THEN  asked before a CK is conveyed but only for this atSign's own
       //       namespace key; asked once per authorised namespace at start;
       //       there is no third ask; handed the advertisement's own dates; a
-      //       yes mints, retains and conveys; the default is never.
+      //       yes mints, retains and conveys; the default is a year.
       provenIn('packages/at_client/test/ck_manager_test.dart',
           'the namespace-key hook is asked only where this atSign owns the key',
           proves: 'the first ask AND the constraint that makes it safe: a '
@@ -449,14 +464,15 @@ void main() {
           proves: 'the conveyance half, which is what makes the rotation O(n) '
               'per enrollment and therefore the expensive lever');
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'never, at any age',
-          proves: 'the default, at an age no schedule would leave alone — so '
-              'it is the POLICY being asserted and not a period',
-          clauses: ['`neverRotateNskey`']);
+          'the period is 365 days from the advertised mint, pinned as a literal',
+          proves: 'the default period and its inclusive boundary as raw '
+              'literals, measured from the advertisement\'s own mint date',
+          clauses: ['`rotateNskeyAfterOneYear`']);
       provenIn('packages/at_client/test/rotation_policy_test.dart',
-          'it is a policy rather than an absent one',
-          proves: 'that the default is a closure that says no rather than a '
-              'null, which is what lets every call site ask unconditionally');
+          'every config the SDK builds carries the yearly defaults',
+          proves: 'that it IS the default every config the SDK builds hands '
+              'an application that names none',
+          clauses: ['`rotateNskeyAfterOneYear`']);
 
       // NOTE: "there is no third ask" is deliberately UNPINNED, being an
       //       absence: `AtClient.ensureReachable` cannot reach the policy,
@@ -501,6 +517,132 @@ void main() {
               'policy really was consulted so the false return is the catch '
               'rather than a question never put',
           clauses: ['the exception is caught, logged at warning']);
+    });
+
+    test('UC-A5.7 \u00b7 a content key follows both namespace keys it rests on',
+        () {
+      // GIVEN E1's content key toward @bob has its sibling copy sealed to
+      //       Alice's generation G1.
+      // WHEN  a revocation rotates Alice's own namespace key to G2, and E1
+      //       writes to @bob again.
+      // THEN  a fresh key sealed to G2, which G1 does not open; inside the
+      //       window the key is kept and the private asked for; the policy is
+      //       not asked; a restart resumes only a pointer naming both
+      //       generations.
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment comes to hold its own generation G2, then its '
+              'next write cuts a fresh key sealed to G2',
+          proves: 'the replacement, the sibling copy\'s recorded generation, '
+              'and that G1\'s private fails to open it while G2\'s opens it — '
+              'the open is the clause, so it is asserted on the ciphertext '
+              'rather than on the metadata alone',
+          clauses: ['the value cites a fresh content key whose sibling copy']);
+      provenIn(
+          'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+          'UC-A5.7 · a revoked enrollment cannot open what a remaining one '
+              'shares next',
+          proves: 'the row against a live atServer: an operator enrollment '
+              'revokes one enrollment and rotates, and the remaining writer\'s '
+              'own client, learning of the rotation through the conveyed '
+              'private and the synced advertisement, shares next under a fresh '
+              'key whose sibling copy rests on the new generation, which the '
+              'revoked enrollment never receives. The control shows the '
+              'writer\'s key rested on the old generation before',
+          clauses: ['the value cites a fresh content key whose sibling copy']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when two writes start at once after G2 arrives, then they cut one '
+              'fresh key, which @bob opens',
+          proves: 'one fresh key across two racing writes, counted on what '
+              'was conveyed, and @bob\'s private opening its conveyance',
+          clauses: ['two writes E1 starts at once']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when G2 is advertised but its private has not reached this '
+              'enrollment, then its next write keeps the current key',
+          proves: 'the advertisement-first order: no conveyance while the '
+              'private is missing, then a fresh key on the write after it '
+              'arrives',
+          clauses: ['E1 keeps its current key and asks']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when G2\'s private arrives before its advertisement, then the key '
+              'is kept until G2 is advertised too',
+          proves: 'the private-first order, on a ring that goes on answering '
+              'with G1 the way a client does before sync lands G2',
+          clauses: ['whichever arrived first']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when @bob rotates and the next write needs a fresh key, then it '
+              'succeeds with a sibling copy sealed to G1',
+          proves: 'a cut inside the window succeeds, its sibling copy sealed '
+              'to the generation the replaced key rested on, and the next '
+              'write after the private arrives moves to G2',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when it first writes to another destination, then that key\'s '
+              'sibling copy rests on G1 too',
+          proves: 'that "the generation E1\'s keys in `buzz` already rest on" '
+              'is read across destinations, not only from the key replaced',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when nothing in the namespace records an own generation, then the '
+              'share goes without a sibling copy, and a key with one follows G2',
+          proves: 'the no-copy arm, and that it is temporary',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when it restarts with a pointer written before the own generation '
+              'was recorded, then it cuts a fresh key rather than resuming',
+          proves: 'the case where only the field\'s absence refuses the '
+              'resume: inside the window no own generation is held to '
+              'compare with',
+          clauses: ['A pointer written before it recorded']);
+      provenIn('packages/at_client/test/nskey_self_heal_test.dart',
+          're-derives a generation it holds from the filed seed',
+          proves: 'what a window copy is sealed to on a real ring: the public '
+              'half re-derived from the filed seed, which a seed filed under '
+              'some other kid does not pass',
+          clauses: ['A write that needs a fresh key meanwhile succeeds']);
+      provenIn('packages/at_client/test/nskey_self_heal_test.dart',
+          'a miss on an own generation fires the injected ask, once',
+          proves: 'the asking half: `CkManager` checks an own generation '
+              'through `privateHalf`, and a miss there sends the request to '
+              'the atSign\'s other enrollments. The composition of the two is '
+              'read, not run, in-process',
+          clauses: ['E1 keeps its current key and asks']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when the rotation policy always answers no, then a move to G2 '
+              'still cuts a fresh key',
+          proves: 'the replacement with a policy that refuses, which the '
+              'control shows was asked while nothing had moved and not asked '
+              'once G2 had',
+          clauses: ['does not stop the replacement']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when this enrollment restarts, then it resumes the key only while '
+              'its pointer names the own generation it holds',
+          proves: 'a resume while both generations match, and a fresh key '
+              'after a restart that finds G2 held',
+          clauses: ['names both generations as current']);
+      provenIn(
+          'packages/at_client/test/ck_manager_test.dart',
+          'when its pointer was written before the own generation was '
+              'recorded, then a restart cuts a fresh key',
+          proves: 'that a pointer naming no own generation is not resumed '
+              'once the sender holds one',
+          clauses: ['A pointer written before it recorded']);
+      provenIn(
+          'packages/at_client/test/current_ck_pointer_test.dart',
+          'written before the own generation was recorded, reads as '
+              'recording none',
+          proves: 'the read half: such a pointer is parsed as one that '
+              'recorded no own generation, which is what the resume refuses',
+          clauses: ['A pointer written before it recorded']);
     });
   });
 }

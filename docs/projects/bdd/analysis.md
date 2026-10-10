@@ -172,7 +172,7 @@ deliberately*. The current design provides:
 8. Unnumbered cross-cutting invariants that count as rows, cite tests, and cannot
    pin clauses.
 9. One catalogue row split into two scenarios by an `(a)`/`(b)` suffix the id
-   grammar ignores (98 use cases, 108 scenarios).
+   grammar ignores, so the use-case and scenario counts differ.
 10. A document that is design prose as well as acceptance rows, where only the Then
     structure is parsed.
 11. A status table and a headline sentence generated from the tree and guarded

@@ -145,7 +145,7 @@ Layer 3 per data write.
 |---|---|---|---|
 | `legacy` | legacy data + inline-wrapped key (modern values never inline a key) | RSA-2048 + AES (monolithic) | RSA keypair. **Bare-name default** for an *absent* `providerId` (pre-convention data) |
 | `at/nskey/XWING` | a **CK-conveyance record** (a sealed content key, cited by `ckKid`) | `X-Wing-seal` (the CK encapsulated to an nskey public half) — via `pqSeal`/`pqOpen` ([§3](#3-subsystem-c--at_chops-pq-primitives)) | the recipient's **nskey** — the owner's own nskey (self data) or another atSign's nskey (shared) |
-| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
+| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a key derived per value from a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
 
 Notes:
 
@@ -191,7 +191,7 @@ content-key kids. Working names marked.
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **signing-root mint lock** *(working)* | `_rootlock@alice` (self key, immutable create, short ttl — no namespace, matching the record it guards) | no | n/a | serialises minting the signing root between the owner's own privileged enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
-| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
+| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a key derived per value from a CK, cites `ckKid` |
 | **substrate envelope** *(working)* | `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
 | **APKAM key package** | per [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) | (enrollment record) | the APKAM keypair | recipient unit for Layer-1 |
 
@@ -417,8 +417,15 @@ disclosure — the namespace is already plaintext in the key name.
   `appMetadata.ckKid`. The value is the `pqSeal` envelope wrapping the CK (KEM ct +
   AEAD body) — **no separate `iv`/`kemCt`** on the conveyance.
 - On an `at/symmetric/AES/GCM` **data value**:
-  `{ providerId: "at/symmetric/AES/GCM", ckKid, iv, ns, ckNs }`. `iv` is the base64
-  12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
+  `{ providerId: "at/symmetric/AES/GCM", ckKid, salt, iv, ns, ckNs }`. `salt` is 32
+  base64 bytes of fresh randomness per value, and the value is encrypted under
+  `HKDF-SHA256-Expand(prk = CK, info = "at/symmetric/AES/GCM/value-key/v2" ‖ salt, L = 32)`
+  rather than under the CK itself, so no `(key, nonce)` pair can repeat however many
+  values share a CK. The CK is already a uniform 256-bit key, so it keys the expand step
+  directly (RFC 5869 section 3.3), and each value key rests on HMAC-SHA256's PRF
+  security under the CK rather than on HKDF-Extract keyed by a public salt. A value
+  carrying no `salt` is read under the CK directly. `iv` is
+  the base64 12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
   the value's **own** full namespace — it is what the AAD binds, so two items under
   different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
   namespace the CK and its conveyance live at, which differs from `ns` whenever
@@ -486,7 +493,7 @@ Without this, a sender keeps sealing to a pre-rotation generation that a revoked
 enrollment can still open, and **B6 revocation silently fails for inbound
 cross-atSign data**. The advertisement carries no `ttr`, and the client fetches it
 with `bypassCache`, so a reader's atServer never serves a cached copy of it
-([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)).
+([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30)).
 For self data the owner's own advertisement is read
 local-first, which sync keeps current, through the same cache, cleared early when sync
 pulls a change, and a re-read of bytes already verified is not verified again, so her
@@ -519,8 +526,8 @@ crypto:
    recipient's key was found, unless the application turned
    `seedNamespaceKeys` off
    ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
-3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
-   `ckKid` (+ `iv`) in `appMetadata`.
+3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under a key derived from
+   the CK and a fresh per-value salt; stamp `ckKid`, `salt` and `iv` in `appMetadata`.
 
 A cross-atSign share therefore writes one ciphertext and two conveyances, the
 recipient's and the sibling copy. An application that wants a separate self-copy
@@ -613,10 +620,43 @@ every `ensureCurrent`, from its cache while that is fresh, and re-cuts its CK on
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)). Exposure is bounded by
 `advertisementTtl` plus `advertisementStaleGrace`.
 
+**So must the sender's own side.** A shared CK is conveyed twice: to the recipient, and
+as a sibling copy sealed to the sender's own nskey, so the sender's other enrollments
+can open what it shares, and a revocation rotates the sender's own namespace keys as
+well as anyone else's. So `ensureCurrent` also compares the own generation the sibling copy was sealed to
+(`ownNskeyKid`) with the newest own generation this enrollment both sees advertised and
+holds the private for, and cuts a fresh CK when they differ. It does so unconditionally,
+before the rotation policy is asked, as it does for the destination. While a new own
+generation is advertised and its private has not arrived, the current CK is kept until
+it does, and the check's `privateHalf` call pulls the missing private from the atSign's
+other enrollments. A CK cut
+in that window for another reason (a first write, the destination rotating, the policy)
+seals its sibling copy to the own generation this enrollment's keys in that namespace
+already rest on, its public half re-derived from the held seed (`heldPublic`), or goes
+without a copy when none records one, rather than failing on the unheld generation. Cuts
+queue behind one another, and one queued behind a cut that already replaced the key it
+found current returns that key rather than cutting a second, so racing writes share one
+fresh CK; an explicit `rotateContentKey` always cuts. The
+current-CK pointer records both generations, and a restart resumes only a pointer
+naming the own generation the sender holds; one written before `ownNskeyKid` existed
+names none
+([ruling 154](detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09),
+[UC-A5.7](acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)).
+
 Rotation buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation
 lever. It does **not** give per-message FS or history re-encryption (the old nskey
 private retained → history-on). Coarse FS comes from B5a, not from this.
+
+**When each lever fires by default.** Revocation rotates the namespace keys the revoked
+enrollment held, and a CK follows either namespace key it rests on, without asking any
+policy. Beyond that, both levers ask an application policy, and the defaults are a year:
+`rotateCkAfterOneYear`, since with per-value keys a CK is a key-derivation key with no
+usage limit, and `rotateNskeyAfterOneYear`, measured from the advertisement's own mint
+date, which is what heals a compromise nobody detected. A year is NIST SP 800-57 Part 1's
+suggested cryptoperiod for a key-derivation key, and inside its 1-to-2-year range for a
+public key-transport key
+([ruling 155](detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09)).
 
 **(B6) Revocation wiring.** Composes: (1) enrollment revocation (`enroll:revoke` —
 APKAM, free, cuts future server access); (2) nskey-keypair rotation **excluding**
@@ -799,10 +839,14 @@ The full built/gap inventory with `file:line` evidence is in
 
 **Envelope key shape.** `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@<owner>` — a
 self key,
-`shouldEncrypt=false` (the value is already ciphertext). The body is raw `pqSeal`
+`shouldEncrypt=false` (the value is already ciphertext). The body is an
+APKAM-signed `SecretEnvelope` (version 2) naming the sender's enrollment and kpid,
+the recipient kpid and the namespace `<ns>`, whose `sealed` member holds `pqSeal`
 bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
-[seal-spec.md](seal-spec.md) — HKDF info domain-separation
-`'at_client/secret_sharing/v1'`).
+[seal-spec.md](seal-spec.md)) under an HKDF info of five components: the label
+`at_client/secret_sharing/v2`, `<fromEnrollmentId>`, `<fromKpid>`, `<toKpid>`
+and `<ns>`, each written as its UTF-8 length in two big-endian bytes followed by
+those bytes, so no two sets of fields give the same info.
 The same envelope carries both the *request* (pull) and the *response*.
 
 **Two gates protect every copy:**
@@ -820,6 +864,14 @@ it: discovery/sealing mistakes cannot leak. Gate = defence in depth; seal = boun
 **Sign / verify-before-decrypt.** Each envelope is **APKAM-signed**; the receiver
 **verifies before decrypt** (`_consume`), proving a genuine owner-client wrote it.
 Per-enrollment `_apsk` signing-key resolution drives the verify.
+
+**The namespace and the parties are signed and sealed, not read off the key name.**
+The receiver refuses an envelope whose signed namespace differs from the `<ns>` in
+its key, and files a received secret under the signed one. Because the HKDF info
+names the sender and recipient as well, a sealed body opens only inside the
+envelope it was sealed for: lifted into another enrollment's signed envelope, it
+fails as a tampered one does. A version 1 envelope, which named neither, is refused
+at parse.
 
 **Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) [section 6](detail/decisions.md#6-resolved--open-execution-decisions-af)).**
 Every *advertised recipient key* — the per-enrollment **key package** (Layer 1) and the
@@ -1542,6 +1594,23 @@ errors on any `dart:io` reachable from the entry point, so:
   its atServer check is at_lookup's neutral `checkAtSignServer` over that lookup,
   so no reachability probe is left to extract.
 
+### OpenSSL backends behind a conditional export (at_client)
+
+at_client's post-quantum data path takes its X-Wing KEM (`SecretSharingAlgos.kemFor`
+and `kemForSuite`) and its value AES-256-GCM (`SymmetricAesGcmProvider`) from
+`lib/src/crypto/backends/crypto_backends.dart`, which applies the FFI
+auto-resolve default ([`decisions.md`, rulings of 2026-07-02](detail/decisions.md#rulings--2026-07-02))
+to at_client without at_client importing `at_chops_ffi.dart` from anywhere a web
+build reaches:
+
+- It is a conditional export, `if (dart.library.ffi)`. A native build uses at_chops's
+  OpenSSL backends where the loaded libcrypto supports the algorithm (AES-256-GCM with
+  any OpenSSL 3, X-Wing with OpenSSL 3.5 or later) and pure Dart otherwise; a web or
+  wasm build takes the pure-Dart branch and never reaches `dart:ffi`.
+- Every backend takes the persisted seed as its secret key, so a record written on a
+  device with OpenSSL opens on one without, and back. ML-KEM-1024 has no OpenSSL
+  backend and stays pure Dart, as does the AEAD inside `pqSeal`, which at_chops selects.
+
 ### File partition
 
 Within `at_client/crypto/`: track-C owns `crypto.dart`, `crypto_runtime.dart`,
@@ -1724,7 +1793,7 @@ all published.
 
 | Capability | Evidence (`file:line`) |
 |---|---|
-| X-Wing `pqSeal`/`pqOpen` of `__ssenv` (HPKE + AES-256-GCM, HKDF info `'at_client/secret_sharing/v1'`) | `pairwise_secret_sharing.dart:191,398,99`; `pq_hpke.dart:80` |
+| `pqSeal`/`pqOpen` of `__ssenv` (RFC 9180 at the suite the version byte names; HKDF info labelled `at_client/secret_sharing/v2`, length-prefixed components binding sender, recipient and namespace) | `pairwise_secret_sharing.dart:109,276,671`; `pq_hpke.dart:152` |
 | Per-envelope APKAM sign + verify-before-decrypt; per-enrollment `_apsk` resolution | `mixins/envelope_signing.dart:74,152`; verify precedes open `pairwise_secret_sharing.dart:366` |
 | `kpid` addressing throughout (envelopes and fan-out keyed by the key-package kid) | `secret_envelope.dart` `toKpid`/`fromKpid`; `key_package.dart:29` |
 | Per-APKAM `KeyPackage` keyed by `(enrollmentId, apkamId)`; crypto-agile parse + `bestKeyFor` | `key_package.dart:76,108,156`; `algo_ids.dart:34,46` |
@@ -1876,28 +1945,35 @@ so the keys @alice seals to are also only as trustworthy as her atServer.
 ### 7.3 Impact scope — precisely what an operator can and cannot do
 
 - **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
-  — inbound cross-atSign shares, and self-data where the client relies on server-served
-  keys rather than locally-held ones — by substituting the *recipient* key. The same holds
+  — inbound cross-atSign shares — by substituting the *recipient* key. The same holds
   for data those atSigns send out, since their clients fetch every peer key through it,
-  so the trust covers both directions of an atSign's traffic.
-- **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
-  read is a pass-through re-seal, so any *sender* signature inside the payload survives
-  unchanged and still verifies. To silently **modify**, the operator must also defeat that
-  sender signature — which for a [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means substituting the *sender's*
-  signing key **as the recipient's client sees it**. It can (it mediates that client's
-  lookups too), so modify is achievable — but it needs a **second** substitution and is
-  defeated the moment the recipient anchors the sender's key independently (out-of-band
-  pin / KT). An unsigned or self-data payload is silently modifiable with the single
-  recipient-key substitution. So: read depends on one substitution; silent modify depends
-  on two (and both collapse under an independent anchor).
+  so the trust covers both directions of an atSign's traffic. Self-data is not in this
+  reach (see the self-data caveat below).
+- **Can — modify (a strictly harder bar where the sender signs):** read and integrity
+  are **asymmetric**. Pure read is a pass-through re-seal, so any *sender* signature inside
+  the payload survives unchanged and still verifies. To silently **modify** a signed
+  payload, the operator must also defeat that sender signature — which for a
+  [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means
+  substituting the *sender's* signing key **as the recipient's client sees it**. It can
+  (it mediates that client's lookups too), so modify is achievable — but it needs a
+  **second** substitution and is defeated the moment the recipient anchors the sender's
+  key independently (out-of-band pin / KT). The sender of an **unsigned** payload rests
+  on the atServers alone, with no key substituted: nskey data values and their
+  content-key conveyances carry no sender signature, and `pqSeal` is RFC 9180 Base mode,
+  which authenticates no sender, so a reader takes the `sharedBy` a record names from the
+  atServer that served it, self-data included. So: read depends on one substitution;
+  modifying a signed payload depends on two (both collapse under an independent anchor);
+  an unsigned payload's sender depends on the atServers alone.
 - **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
   substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
   (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
   break); or MITM traffic between atSigns it does not host.
-- **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
-  the matching public and should seal self-data to the **locally-held** key, never a
-  server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD
-  prefer locally-held keys over server-served keys wherever they hold the private.
+- **Self-data caveat:** a client seals to its own atSign's `nskey` only for a generation
+  whose private it holds, and otherwise refuses the write with
+  `NskeyPrivateNotHeldException` rather than sealing to the public half it was served.
+  That takes self-data, and the sender's own copy of a shared content key, out of the
+  operator's reach. The cost is that an enrollment authorised for a namespace cannot
+  write there until its private arrives, which `holdsPrivate` reports.
 
 ### 7.4 Detectability — undetectable to a *targeted* victim today
 
@@ -1943,6 +2019,12 @@ exclusive.
    while still trusting a third-party host* — but the heaviest: TEEs move trust to the
    silicon vendor and carry side-channel/rollback risk; audit proves the *source* honest,
    not that the *running instance* is that source (needs attestation to bridge the gap).
+
+None of these rungs reaches the sender of an **unsigned** payload
+([section 7.3](#73-impact-scope--precisely-what-an-operator-can-and-cannot-do)), which
+rests on the atServers with no key substituted, so there is nothing to detect. A sender
+signature on the content-key conveyance moves it onto the sender's signing key, and
+rungs 3–4 anchor that key outside the atServers.
 
 **Note on `disallowLegacyEncryption` / PQ scope:** none of the above is a PQ-specific
 problem — it is the standard end-to-end trust-root problem, present classically. PQ makes

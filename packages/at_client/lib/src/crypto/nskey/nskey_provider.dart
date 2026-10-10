@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_commons/at_commons.dart';
 
 /// The provider id that conveys a content key sealed to a [keyAlgo] nskey, or
@@ -93,9 +96,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     required this.cache,
     this.keyAlgo = SecretSharingAlgos.xWing,
     AtKemAlgorithm? kem,
-  }) : _kem = kem ??
-            SecretSharingAlgos.kemFor(keyAlgo) ??
-            XWingPureDartAlgo.instance;
+  }) : _kem = kem ?? SecretSharingAlgos.kemFor(keyAlgo) ?? xWingKem;
 
   /// The nskey data path is scoped to `(owner, namespace)` throughout — the key
   /// ring, the CK cache and the HPKE binding all take a namespace — so a key
@@ -114,14 +115,15 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   String get id => nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId;
 
   /// The strongest `pqSeal` construction both this provider and the
-  /// destination can handle, or null if there is no overlap.
+  /// destination can handle, given the [suites] the destination opens, or null
+  /// if there is no overlap.
   ///
   /// No overlap is a refusal, not a fallback to this build's preference: the
   /// owner would get a conveyance it cannot unwrap, and the failure would
   /// surface on their side as an AEAD error naming nothing.
-  int? _sealVersionFor(NskeyAdvertisement advertised) {
+  int? _sealVersionFor(List<String> suites) {
     final suite = SecretSharingAlgos.bestSuiteBetween(
-        SecretSharingAlgos.openableSuitesFor(keyAlgo), advertised.suites);
+        SecretSharingAlgos.openableSuitesFor(keyAlgo), suites);
     return suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
   }
 
@@ -144,7 +146,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   /// A **sibling copy** — the sender's own record of a key it shares — arrives
   /// with `appMetadata` naming the recipient as `destination` and the level of
   /// the sender's key as `ns`; it is sealed at that level and records the scope
-  /// it is filed under, since the pipeline that writes it cannot.
+  /// it is filed under, since the pipeline that writes it cannot. One that also
+  /// names `sealTo` is sealed to that generation of the sender's own key, whose
+  /// private this client holds, instead of the one advertised.
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
@@ -153,28 +157,52 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     final namespace = sibling?.sealNs ?? _namespaceOf(atKey);
     final cutBy = context.atClient.enrollmentId;
 
-    final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
-    if (advertised == null) {
-      throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
-    }
-
     final ck = ContentKey.fromBase64(plaintext);
 
-    // NOTE: seal to the ENTRY under this provider's own KEM, never to
-    // `NskeyAdvertisement.alg`/`.publicKey`/`.nskeyKid` — those answer for a
-    // single entry, so on an advertisement carrying two they encapsulate to the
-    // wrong key and stamp a kid the owner never looks for.
-    final entry = advertised.usableFor([keyAlgo]);
-    if (entry == null) {
-      throw AtEncryptionException('$nskeyOwner:$namespace advertises '
-          '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
-          'and $id can only seal to $keyAlgo');
+    final PackageKey entry;
+    final List<String> suites;
+    final sealTo = sibling?.sealTo;
+    if (sealTo != null) {
+      final held = await keyRing.heldPublic(nskeyOwner, namespace, sealTo);
+      if (held == null) {
+        throw NskeyPrivateNotHeldException(nskeyOwner, namespace, sealTo);
+      }
+      if (held.alg != keyAlgo) {
+        throw AtEncryptionException('$nskeyOwner:$namespace generation '
+            '$sealTo is a ${held.alg} key, and $id can only seal to $keyAlgo');
+      }
+      entry = held;
+      suites = SecretSharingAlgos.openableSuitesFor(held.alg);
+    } else {
+      final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
+      if (advertised == null) {
+        throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
+      }
+      // NOTE: seal to the ENTRY under this provider's own KEM, never to
+      // `NskeyAdvertisement.alg`/`.publicKey`/`.nskeyKid` — those answer for a
+      // single entry, so on an advertisement carrying two they encapsulate to
+      // the wrong key and stamp a kid the owner never looks for.
+      final usable = advertised.usableFor([keyAlgo]);
+      if (usable == null) {
+        throw AtEncryptionException('$nskeyOwner:$namespace advertises '
+            '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
+            'and $id can only seal to $keyAlgo');
+      }
+      // NOTE: own-atSign keys only. A peer's private is never held, so a share
+      // can rest only on the advertisement's signature.
+      if (nskeyOwner == context.atClient.getCurrentAtSign() &&
+          await keyRing.privateHalf(nskeyOwner, namespace, usable.kid) ==
+              null) {
+        throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
+      }
+      entry = usable;
+      suites = advertised.suites;
     }
-    final int? version = _sealVersionFor(advertised);
+    final int? version = _sealVersionFor(suites);
     if (version == null) {
       throw AtEncryptionException(
           '$nskeyOwner:$namespace advertises a ${entry.alg} nskey opening '
-          '${advertised.suites}, and $id produces '
+          '$suites, and $id produces '
           '${SecretSharingAlgos.openableSuitesFor(keyAlgo)} — no shared '
           'construction, so nothing is sealed rather than sealing something '
           'they cannot open');
@@ -277,9 +305,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     return ck.toBase64();
   }
 
-  /// The recipient and seal level a sibling copy is being written with, or null
-  /// for any other conveyance.
-  static ({String destination, String sealNs})? _siblingCopyOf(AtKey atKey) {
+  /// The recipient, seal level and any held generation a sibling copy is being
+  /// written with, or null for any other conveyance.
+  static ({String destination, String sealNs, String? sealTo})? _siblingCopyOf(
+      AtKey atKey) {
     final additional = atKey.metadata.appMetadata?.additional;
     final destination = additional?['destination'];
     if (destination == null) return null;
@@ -288,9 +317,11 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'recipient of a content key it shares; ${atKey.sharedWith} is this '
           'record\'s recipient');
     }
+    final sealTo = additional?['sealTo'];
     return (
       destination: destination,
       sealNs: additional?['ns'] as String? ?? _namespaceOf(atKey),
+      sealTo: sealTo is String ? sealTo : null,
     );
   }
 

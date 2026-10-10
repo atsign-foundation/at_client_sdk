@@ -992,6 +992,26 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return null;
   }
 
+  @override
+  Future<PackageKey?> heldPublic(
+      String owner, String namespace, String nskeyKid) async {
+    if (owner != _atClient.getCurrentAtSign()) return null;
+    final filed = (await privateFiling?.filedFor(namespace))
+        ?.where((f) => f.nskeyKid == nskeyKid)
+        .firstOrNull;
+    if (filed == null) return null;
+    final kem = SecretSharingAlgos.kemFor(filed.keyAlgo);
+    if (kem == null) return null;
+    final pair = await kem.keyPairFromSeed(filed.seed.bytes);
+    final derived = PackageKey.fromBytes(
+        use: SecretSharingAlgos.useEnc,
+        alg: filed.keyAlgo,
+        pub: pair.publicKey);
+    // NOTE: a seed that re-derives some other kid is not this generation, and
+    // sealing to it would leave a copy nobody opens under the kid it names.
+    return derived.kid == nskeyKid ? derived : null;
+  }
+
   /// What [privateHalf] answers, without asking the atSign's other enrollments
   /// for a private this client does not hold.
   Future<NskeyDecapsulationKey?> heldPrivateHalf(

@@ -50,7 +50,19 @@ class CkRotationContext {
   Duration get age => now.difference(cutAt);
 }
 
-/// The default [CkRotationPolicy]: replace a content key once it is a week old.
+/// The default [CkRotationPolicy]: replace a content key once it is a year
+/// old.
+///
+/// Each value is encrypted under its own key, derived from the content key and
+/// a fresh salt, so no usage limit bounds how long a content key can serve, and
+/// a revocation replaces it on its own cause. A year is NIST SP 800-57 Part 1's
+/// suggested cryptoperiod for a key-derivation key, which is what a content
+/// key is.
+@experimental
+bool rotateCkAfterOneYear(CkRotationContext ck) =>
+    ck.age >= const Duration(days: 365);
+
+/// A [CkRotationPolicy] that replaces a content key once it is a week old.
 @experimental
 bool rotateCkAfterOneWeek(CkRotationContext ck) =>
     ck.age >= const Duration(days: 7);
@@ -91,9 +103,17 @@ class NskeyRotationContext {
   Duration get age => now.difference(createdAt);
 }
 
-/// The default [NskeyRotationPolicy]: never.
+/// The default [NskeyRotationPolicy]: replace a namespace key once its
+/// advertisement says it was minted a year ago.
 ///
-/// A policy that always says no rather than an absent one, so every call site
-/// asks unconditionally.
+/// A revocation rotates the namespace keys the revoked enrollment held on its
+/// own cause; this is what heals a compromise nobody detected. A year sits in
+/// NIST SP 800-57 Part 1's 1-to-2-year range for a public key-transport key.
+@experimental
+bool rotateNskeyAfterOneYear(NskeyRotationContext ns) =>
+    ns.age >= const Duration(days: 365);
+
+/// An [NskeyRotationPolicy] that never replaces a namespace key on its own,
+/// leaving rotation to revocation and to the application.
 @experimental
 bool neverRotateNskey(NskeyRotationContext ns) => false;

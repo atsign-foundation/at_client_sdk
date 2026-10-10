@@ -2666,16 +2666,26 @@ Cheapest first, because the common case must not pay for the rare one.
 1. **Already holds it** → return. Settles the question with no round trip, and is true for every
    enrollment that was online when it was approved.
 2. **No enrollment id** → return. Such a client authenticates with the atSign's own keys. It
-   does not ask: it is the atSign, so its route to a missing root is to mint one. **Amended
-   2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
+   does not ask: it advertises no key package, so no holder could seal the answer to it. The
+   atServer has held a `primary` enrollment record since 3.16.4, but the only two writers of a
+   key package into a record are `enroll:request`'s metadata, which `primary` never sends, and
+   `reconcileKeyPackage`, which skips the atSign's own credential. **Amended 2026-10-09.**
+   This item used to give the reason as "it is the atSign, so its route to a missing root is to
+   mint one". That holds only at activation and in a retrofit: on an ordinary start
+   `mintIfAbsent` refuses once a root is published, so this client neither asks nor mints and
+   stays unanchored. gkc ruled on 2026-10-09 that `primary` keeps this route. Under `legacy`
+   the post-quantum start-up steps do not run, and under `pqReady` and `pqActive` a client on
+   the atSign's own rsa2048 keys retrofits at start into a fully privileged ML-DSA enrollment
+   before they run, and that enrollment asks. What reaches this guard is a start whose retrofit
+   failed, which the next start retries, or a custom `PqPosture` that keeps rsa2048
+   authentication with post-quantum providers. **Amended 2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
    refused a connection without APKAM authentication, observed against the atServer of
    2026-08-04. Since at_server 3.16.4 a legacy `pkam:` connection is judged as the `primary`
    enrollment and `enroll:listns` answers it, measured on 2026-09-12 against the `dev_env` image
    the functional pack runs in CI: the roster came back naming `primary`, and the same verb on an
    unauthenticated connection was refused with AT0401 as the control. So the guard is a
-   client-side choice rather than a server constraint, and whether `primary` should ask a holder
-   rather than mint is the question the PQ table's `primary` signing-root row holds open for
-   gkc. The guard was added after the first live run, where its absence made every legacy PKAM
+   client-side choice rather than a server constraint; the 2026-10-09 amendment above says why
+   it stays. The guard was added after the first live run, where its absence made every legacy PKAM
    client broadcast and be refused by the atServer of that day.
 
    **The first version of this guard was dead code.** It tested
@@ -14676,7 +14686,7 @@ naming why, and the walk reports `ChainVerdict.revoked` or `ChainVerdict.deleted
 change: a revoke moves `_apsk` to `.r.__e` and the atServer serves it to any
 reader, proven live against the published `vip` image by
 `apsk_server_side_test` (a peer atSign and a sibling enrollment both refused as
-revoked). 144.4 is at_server work and not built yet.
+revoked). 144.4 is at_server work, owed for at_server#2831.
 
 ### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
 
@@ -14744,38 +14754,77 @@ location).
 ### 144.4 The atServer moves an expired enrollment's data on first sight
 
 An at_server change: when a lookup of a per-enrollment key finds its enrollment
-expired, the atServer moves that enrollment's data to `.d.__e` then, as the
-lookup handlers' comment — the fetch "ensures that expired enrollment keys are in
-the right place" — already claims; the expiry sweep stays as the backstop. This
-closes the window, 10 seconds to about 10.5 minutes, in which an expired
-enrollment's `_apsk` was still accepted at `.a.__e`.
+expired, the atServer removes that enrollment then, as the expired-keys pass
+would, so its data is at `.d.__e` before the lookup answers; the pass stays as
+the backstop. A verifier that then looks for the key at `.d.__e` finds it and is
+told the signer was deleted or expired, as 144.3 says.
 
-## 145. A reader's atServer caches no post-quantum key records, and the client bypasses its cache for them (2026-09-30)
+⚠️ **AMENDED 2026-10-10 by gkc, before it was built.** at_server#2853 (in
+c3.17.0) closed the window in which an expired enrollment's `_apsk` was still
+accepted at `.a.__e` another way: `lookup`, `llookup` and an HTTP GET answer
+not-found for `.a.__e` data whose enrollment no longer reads as approved. It
+moves nothing, so until the pass runs a verifier gets a bare not-found, since
+`.d.__e` is still empty. gkc kept the move owed so the refusal stays the same
+either way: "we need to be careful during implementation as we've gone around on
+this a few times now". Before at_server 3.16.4 a read of an expired enrollment
+removed it, which is what the lookup handlers' comment — the fetch "ensures that
+expired enrollment keys are in the right place" — relied on; 3.16.4 stopped
+that, because enrollments are read on every verb and every authorisation check,
+outside the atSign's enrollment-mutation critical section. So the move is built
+under three constraints:
+
+- only `lookup`, `llookup` and an HTTP GET of an enrollment's own data trigger
+  it, never the enrollment read every verb shares;
+- the data moves inside that critical section, as every removal's does, so a
+  lookup overlapping the pass, an owner's delete or another lookup moves it once;
+- moving a removed enrollment's data to `.d.__e` commits nothing, since no
+  client of that enrollment can connect again, no other enrollment reads its
+  private data, and its public `_apsk` is read from the atServer; moves to
+  `.r.__e` on a revoke, and back to `.a.__e`, still commit.
+
+## 145. A reader's atServer caches no public record without a ttr (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
 (the P0 row's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
-The client half is built: `LookUpBuilderManager.get` sets `bypassCache` on every
-lookup of either record, pinned in `test/verb_builder_test.dart`. The atServer
-half lands in at_server.
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)),
+and widened by him on 2026-10-10. The client half is built:
+`LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
+`__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
+at_server work, for at_server#2831.
 
-**The atServer (at_server).** A reader's atServer writes no `cached:public:`
-copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at
-every lookup — "for backwards compatibility, we will temporarily cache other
-public data with a ttl of 24 hours" — committed it and synced it to the reader's
-clients, yet never served it, because a lookup serves a cached copy only with
-`ttr -1` or before its `refreshAt`, and nothing on the client reads those
-records by their cached name. The 24-hour copy stays for other public data with
-no `ttr`, which an application may read by asking for the `cached:public:` key
-explicitly. Three defects are fixed with it:
+**The atServer (at_server).** A reader's atServer keeps no `cached:public:` copy
+of another atSign's public record whose owner gave it no ttr, or a ttr of 0.
+Another atSign's encryption public key is still kept with `ttr -1`, and a record
+with a ttr is still copied and served within it. Copies kept before, which are
+`cached:public:` copies with no ttr, go at the next lookup of the record, and the
+daily refresh deletes the rest without fetching them; a copy of a record another
+atSign shared (`cached:@<reader>:…`) is not touched. With it:
 
 - a lookup miss commits a DELETE of the cached name only when a cached copy
   existed, rather than every time;
-- a cache refresh that finds a changed value keeps the copy's ttl, rather than
-  re-putting it with none, which left it expiring only when the next lookup
-  re-stamped it;
-- `runRefreshJobHour` is honoured when set; the random start hour, which spreads
-  the refresh load across atServers, stays the default.
+- a refresh that finds a copy's value unchanged re-writes it, committing as a
+  lookup's re-write does, so its `refreshAt` moves on and it is served again,
+  where it used to be left past its `refreshAt`, unserved;
+- `runRefreshJobHour` is honoured when an operator sets the environment variable
+  or `refreshJob.runJobHour` in the yaml, and otherwise the hour is random from
+  0 to 23, which spreads the refresh load across atServers. The `runJobHour: 3`
+  every shipped config.yaml carried goes, since honouring it would have run
+  every atServer's refresh at 03:00, and a value that is not an hour is logged
+  and ignored.
+
+⚠️ **AMENDED 2026-10-10 by gkc**, when the at_server work was spec'd. This read
+"A reader's atServer writes no `cached:public:` copy of an `_apsk` or `__nskey`
+record … The 24-hour copy stays for other public data with no `ttr`", and its
+second defect was a refresh that dropped the copy's ttl. gkc removed the 24-hour
+copy for every record: at_server added it in fd79068d (2023-03-05),
+"temporarily", when a missing ttr stopped meaning "cache forever"; no lookup ever
+served one, and nothing in the SDKs reads one (at_follows_flutter reads cached
+profile fields and falls back to a plookup). The ttl defect went with it, since
+the only ttl a refresh dropped was the reader's own 24 hours: a copy with a ttr
+is re-written correctly, measured in-process. He also asked whether these records
+should carry `ttr -1`, and kept [143.1](#1431-the-advertisement-carries-no-ttr):
+a reader's atServer would serve such a copy forever, and its refresh never
+re-checks one.
 
 **The client, in the interim (gkc).** The client sets `bypassCache` on every
 `_apsk` and `__nskey` fetch. That does not stop the copies being written: a
@@ -15018,3 +15067,106 @@ language's JSON reader. Whether ids become strings at a major release is not
 decided here.
 
 Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
+
+## 154. A shared content key follows the sender's own namespace key too (2026-10-09)
+
+**Decided by gkc on 2026-10-09**, in a grill of how content keys should rotate. Asked
+what should make a sender replace its outgoing CK, he chose "Own generation changed";
+then that the generation is recorded in the cache and the pointer, that the comparison
+is with the newest own generation both advertised and held, and that it is
+"Unconditional".
+
+**What it adds.** Every enrollment cuts its own CK per destination and namespace, and
+conveys each one twice: to the recipient, and as a sibling copy sealed to its own
+atSign's nskey. `CkManager.ensureCurrent` replaces a CK when the *destination's*
+generation moves, and now also when the *sender's own* does, so a revocation, which
+rotates the owner's nskeys, moves the CKs the remaining enrollments share with other
+atSigns as well as their own.
+
+**What was built.**
+- `ContentKeyCache` and `CurrentCkPointer` record `ownNskeyKid`, the own generation a
+  shared CK's sibling copy was sealed to, null when it has none.
+- `ensureCurrent` compares it with the newest own generation this enrollment both sees
+  advertised and holds the private for, and cuts a fresh CK when they differ, before
+  `ckRotationPolicy` is asked.
+- While a new own generation is advertised and its private has not arrived, the CK is
+  kept, and the check's `privateHalf` call asks the atSign's other enrollments for it.
+- A CK cut inside that window for another reason (a first write, the destination
+  rotating, the policy) seals its sibling copy to the own generation this enrollment's
+  keys in that namespace already rest on, re-derived from the held seed by the ring's
+  new `heldPublic`. When none records one, the share goes without a copy until the
+  private arrives. gkc chose that over the latest-filed seed: nothing filed orders
+  generations, and every generation before the new one is one the revoked enrollment
+  holds, so the choice decides only whether the atSign's other enrollments can open the
+  copy. The cut seals to that held generation, so it succeeds where the advertised
+  generation's private has not yet arrived.
+- A restart resumes a pointer only when it names the own generation the sender holds.
+  A pointer written before the field existed names none.
+- A queued cut re-checks inside its turn: one queued behind a cut that already replaced
+  the key it found current returns that key, so racing writes share one fresh CK
+  (gkc: "Re-check in the turn"), for a destination's rotation too.
+
+**Why advertised AND held.** Triggering on the advertisement alone races the
+conveyance: the sibling copy is sealed through `NskeyProvider.encrypt`, which refuses
+an own generation whose private is not held (`NskeyPrivateNotHeldException`), so the
+cut, and the share write with it, would fail. Triggering on the private alone seals the
+fresh copy to the old generation, which the ring still advertises until sync lands the
+new one.
+
+**Not built.** The grill's answer also had `privatesFiled` force a re-read of the own
+advertisement. It would change nothing: the re-read goes to local storage first, which
+holds the old advertisement until sync lands the new one, and `ownChanges` already
+re-reads at that moment.
+
+**Out of scope.** gkc: "At this time, we must assume atServers are trustworthy." Which
+generation a sender seals to rests on the advertisements its atServer serves, on either
+side.
+
+Pinned by `ck_manager_test.dart`'s group "Given a content key shared with @bob, whose
+sibling copy rests on this enrollment's own generation G1", and catalogued as
+[UC-A5.7](../acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
+
+## 155. Content keys and namespace keys rotate yearly by default (2026-10-09)
+
+**Decided by gkc on 2026-10-09.** For content keys he first leaned to 90 days, then to
+never, then asked that the choice be "defensible to an expert cryptography auditor", and
+chose "About 1 year". For namespace keys he chose "About 1 year (Recommended)". The
+defaults become `rotateCkAfterOneYear` (`age >= 365 days`) and `rotateNskeyAfterOneYear`
+(365 days from the advertisement's own `createdAt`). `rotateCkAfterOneWeek` and
+`neverRotateNskey` remain for applications that want them.
+
+**Why a content key needs no short period.** The weekly default served two purposes,
+and each now has its own mechanism:
+- **It kept a content key under AES-GCM's random-IV limit.** Per-value keys took that
+  over. Each value is encrypted under HKDF-SHA256-Expand(CK, label ‖ 32-byte salt) with a
+  fresh 12-byte IV, so nonce reuse needs the same value key and the same IV: at most
+  2^-255 · 2^-96 = 2^-351 per pair. At SP 800-38D's 2^-32 target that is 2^160 values.
+  At an absurd 2^30 writes a second for 90 days (2^52.9 values), p(nonce reuse) ≤ 2^-246,
+  and p(two values sharing a key) ≤ 2^-150.
+- **It replaced a shared CK after its sender's own namespace key rotated.**
+  [Ruling 154](#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09)
+  now does that on the rotation itself.
+
+**Why a year rather than never.** With per-value keys a CK is a key-derivation key, and
+NIST SP 800-57 Part 1 Rev 5 (section 5.3.6 item 9, Table 1) suggests "about 1 year" for
+one. Its periods are "rough order-of-magnitude guidelines", and a longer one needs
+"serious consideration … of the risks (see Section 5.3.1)". Never was defensible against
+those factors, because a CK exists in the clear only in the memory of a client that also
+holds the nskey it is sealed under, so a timed rotation heals nothing on a compromised
+device. But it was a documented deviation, and an auditor would still have listed a CK
+disclosed on its own. A year costs one cut per enrollment, destination and namespace a year,
+and needs no defence.
+
+**Namespace keys.** Under `neverRotateNskey` only revocation and the application
+replaced a namespace key; the yearly default replaces it on its own as well. An nskey is a KEM keypair senders encapsulate CKs to, and the nearest
+SP 800-57 rows are a public key-transport key (1 to 2 years) and a private one (under
+2 years; its footnote 61 allows the private to outlive that where stored messages are
+decrypted later, as the ring does by keeping old privates). A rotation conveys to every
+authorised enrollment and makes each peer cut one CK, which once a year is small; an
+enrollment that misses the envelope pulls the generation at its next start
+(`requestMissingPrivates`) or on a read miss. Revocation-driven rotation still asks no
+policy (UC-G2.5).
+
+Pinned by `rotation_policy_test.dart` (both periods as raw literals, inclusive, and that
+`CryptoConfig`, `CryptoConfig.nskey` and `readsNskeyWritesLegacy` all carry them), and
+catalogued under UC-A5.4 and UC-A5.5.

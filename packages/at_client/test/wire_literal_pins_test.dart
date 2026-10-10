@@ -30,6 +30,7 @@ import 'package:at_chops/at_chops.dart'
     show
         AESKey,
         AesGcm256EncryptionAlgo,
+        HkdfSha256,
         RsaKeyPair,
         InitialisationVector,
         MlDsa65PureDartAlgo,
@@ -267,6 +268,18 @@ void main() {
     // ciphertext opens ONLY under the hand-built binding string, and a
     // negative control proves the test can fail.
 
+    /// The pairwise substrate's info for enroll-a, kpid-from, kpid-to and
+    /// myapp: each component is a two-byte big-endian length, then its UTF-8.
+    final pairwiseInfo = Uint8List.fromList([
+      for (final (length, text) in [
+        (0x1b, 'at_client/secret_sharing/v2'),
+        (0x08, 'enroll-a'),
+        (0x09, 'kpid-from'),
+        (0x07, 'kpid-to'),
+        (0x05, 'myapp'),
+      ]) ...[0x00, length, ...utf8.encode(text)],
+    ]);
+
     AtKey selfConveyance() => AtKey()
       ..key = 'ckkid.__ck'
       ..namespace = 'myapp'
@@ -300,12 +313,10 @@ void main() {
       // The CROSS-SUBSTRATE control. The arm above varies the namespace within
       // this substrate; this one crosses to the pairwise substrate's binding,
       // which is the replay the two distinct `info` values exist to prevent.
-      // Written as a raw literal rather than PairwiseSecretSharing.sealInfo so
-      // it cannot follow that constant if someone pointed it here.
+      // Written as a raw literal rather than PairwiseSecretSharing.sealInfoFor
+      // so it cannot follow that function if someone pointed it here.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding — shared code for seal/open is fine, a shared binding '
@@ -346,16 +357,15 @@ void main() {
       // The cross-substrate control on the ML-KEM path, for the same reason as
       // the X-Wing one above.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding');
     });
 
-    test('a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>"',
-        () async {
+    test(
+        'a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>" '
+        'under a key derived from the CK and its salt', () async {
       final cache = ContentKeyCache();
       final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
       // _nskeyOwnerOf is sharedWith ?? sharedBy, so the CK scopes to @bob.
@@ -370,20 +380,39 @@ void main() {
       final wire = await provider.encrypt(
           CryptoContext(atClient: atClient), atKey, 'hello');
 
-      final iv = InitialisationVector(Uint8List.fromList(
-          base64Decode(atKey.metadata.appMetadata!.additional!['iv'])));
+      final additional = atKey.metadata.appMetadata!.additional!;
+      final iv = InitialisationVector(
+          Uint8List.fromList(base64Decode(additional['iv'])));
+      // The value key: HKDF-SHA256-Expand keyed by the CK, over this label
+      // followed by the value's salt — written as raw literals so a change to
+      // either is a pin edit.
+      final valueKey = AESKey(base64Encode(HkdfSha256.expand(ck.bytes,
+          info: Uint8List.fromList([
+            ...utf8.encode('at/symmetric/AES/GCM/value-key/v2'),
+            ...base64Decode(additional['salt']),
+          ]),
+          length: 32)));
       final aad = utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.myapp');
-      final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+      final plain = await AesGcm256EncryptionAlgo(valueKey)
           .decrypt(Uint8List.fromList(base64Decode(wire)), iv: iv, aad: aad);
       expect(utf8.decode(plain), 'hello');
 
       await expectLater(
-          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+          AesGcm256EncryptionAlgo(valueKey).decrypt(
               Uint8List.fromList(base64Decode(wire)),
               iv: iv,
               aad: utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.other')),
           throwsA(anything),
           reason: 'the negative control for the AAD arm');
+
+      await expectLater(
+          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+              Uint8List.fromList(base64Decode(wire)),
+              iv: iv,
+              aad: aad),
+          throwsA(anything),
+          reason: 'the negative control for the value key: a value is never '
+              'encrypted under the content key itself');
     });
 
     test('fullNameOf joins key and namespace at a dot', () {
@@ -394,14 +423,64 @@ void main() {
       expect(SymmetricAesGcmProvider.fullNameOf(k), 'msg.app_1.my_apps');
     });
 
-    test('the pairwise substrate binds info "at_client/secret_sharing/v1"', () {
-      // Pins the constant's VALUE, and only that: it never touches a
-      // ciphertext, so it stays green if a call site stops passing the
-      // constant. The arms that read real sealed output — and that go red on a
-      // converged binding — are in pairwise_secret_sharing_test.dart, group
+    test(
+        'the pairwise substrate binds info "at_client/secret_sharing/v2", '
+        '<fromEnrollmentId>, <fromKpid>, <toKpid>, <appNamespace>, each '
+        'after its two-byte length', () {
+      // Pins the function's OUTPUT, and only that: it never touches a
+      // ciphertext, so it stays green if a call site stops passing it. The
+      // arms that read real sealed output — and that go red on a converged or
+      // unbound binding — are in pairwise_secret_sharing_test.dart, group
       // 'FROZEN FOREVER: the pairwise seal binding, read from real output'.
-      expect(utf8.decode(PairwiseSecretSharing.sealInfo),
-          'at_client/secret_sharing/v1');
+      expect(
+          PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'myapp',
+          ),
+          pairwiseInfo);
+    });
+
+    test('fields that join to the same string give different pairwise info',
+        () {
+      final colonInSender = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a:kpid-from',
+        fromKpid: 'kpid-to',
+        toKpid: 'myapp',
+        appNamespace: 'other',
+      );
+      final colonInNamespace = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a',
+        fromKpid: 'kpid-from',
+        toKpid: 'kpid-to',
+        appNamespace: 'myapp:other',
+      );
+      expect(['enroll-a:kpid-from', 'kpid-to', 'myapp', 'other'].join(':'),
+          ['enroll-a', 'kpid-from', 'kpid-to', 'myapp:other'].join(':'),
+          reason: 'the premise: joined with ":", the two sets of fields are '
+              'one string');
+      expect(colonInSender, isNot(colonInNamespace));
+    });
+
+    test('a component longer than 65535 bytes is refused', () {
+      expect(
+          PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'n' * 0xffff,
+          ).length,
+          2 + 27 + 2 + 8 + 2 + 9 + 2 + 7 + 2 + 0xffff,
+          reason: 'the control: 65535 bytes is the most a length can say');
+      expect(
+          () => PairwiseSecretSharing.sealInfoFor(
+                fromEnrollmentId: 'enroll-a',
+                fromKpid: 'kpid-from',
+                toKpid: 'kpid-to',
+                appNamespace: 'n' * 0x10000,
+              ),
+          throwsArgumentError);
     });
   });
 
@@ -488,7 +567,8 @@ void main() {
       await provider.encrypt(CryptoContext(atClient: atClient), atKey, 'hello');
 
       final json = atKey.metadata.appMetadata!.toJson();
-      expect(json.keys.toList(), ['providerId', 'ckKid', 'iv', 'ns', 'ckNs']);
+      expect(json.keys.toList(),
+          ['providerId', 'ckKid', 'salt', 'iv', 'ns', 'ckNs']);
       expect(json['providerId'], 'at/symmetric/AES/GCM');
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');
@@ -591,15 +671,16 @@ void main() {
         fromKpid: 'kpid-from',
         fromEnrollmentId: 'enroll-a',
         toKpid: 'kpid-to',
+        appNamespace: 'myapp',
         suite: 'x-wing-rfc9180-v1',
         kid: 'kpid-to',
         sealed: 'U0VBTEVE',
       );
       expect(
           jsonEncode(env.toJson()),
-          '{"v":1,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
-          '"to":"kpid-to","suite":"x-wing-rfc9180-v1","kid":"kpid-to",'
-          '"sealed":"U0VBTEVE"}');
+          '{"v":2,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
+          '"to":"kpid-to","ns":"myapp","suite":"x-wing-rfc9180-v1",'
+          '"kid":"kpid-to","sealed":"U0VBTEVE"}');
     });
 
     test('PackageKey emits its exact JSON shape', () {
