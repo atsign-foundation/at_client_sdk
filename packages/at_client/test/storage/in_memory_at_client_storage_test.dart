@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/sqlite.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:test/test.dart';
 
@@ -8,7 +8,8 @@ import 'storage_contract.dart';
 
 void main() {
   runStorageContract(
-      'memory', (atSign) => InMemoryAtClientStorage(atSign: atSign));
+      'memory', (atSign) => InMemoryAtClientStorage(atSign: atSign),
+      breakOpen: null);
 
   test('memory: nothing reaches disk, and nothing survives close', () async {
     final before = Directory.current.listSync().map((e) => e.path).toSet();

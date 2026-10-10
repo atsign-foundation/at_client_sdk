@@ -2,9 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/sync/sync_queue_store.dart';
-import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:hive/hive.dart';
 import 'package:meta/meta.dart';
 
 /// On-the-wire op carried in the sync queue's persisted record. The
@@ -71,14 +69,12 @@ class SyncQueueEntry {
 /// Persisted + in-memory queue of pending client→server writes for one
 /// atSign.
 ///
-/// **Persistence**: a Hive box named `syncqueue_<sha256(atSign)>` in
-/// the same Hive directory the keystore uses
-/// ([AtClientPreference.hiveStoragePath]). The box is keyed by the
-/// AtKey's canonical string form; values are JSON-encoded
-/// `{"op": "<SyncQueueOp.name>", "ts": <ms>}`. By construction at most
-/// one record exists per atKey — a second [enqueue] for the same key
-/// overwrites the first (per-key dedup; UPDATE→DELETE collapses to
-/// DELETE).
+/// **Persistence**: a [SyncQueueStore] the client's storage opens beside its
+/// keystore. Records are keyed by the AtKey's canonical string form; values
+/// are JSON-encoded `{"op": "<SyncQueueOp.name>", "ts": <ms>}`. By
+/// construction at most one record exists per atKey — a second [enqueue] for
+/// the same key overwrites the first (per-key dedup; UPDATE→DELETE collapses
+/// to DELETE).
 ///
 /// **In-memory**: a [LinkedHashSet] of atKey strings, giving FIFO
 /// iteration order with O(1) dedup. On [open] the in-memory queue is
@@ -87,19 +83,10 @@ class SyncQueueEntry {
 /// order across restarts.
 ///
 /// Lifecycle: construct → [open] → use → [close]. [open] is idempotent.
-/// The box opens on the Hive instance owning this queue's `storagePath`, so
-/// two clients of one atSign in one process keep separate queues when given
-/// separate paths.
 class AtSyncQueue {
-  static const String _boxNamePrefix = 'syncqueue_';
-
   final String _atSign;
   final AtSignLogger _logger;
 
-  /// Test seam. Production callers should use the default constructor —
-  /// [open] resolves the box on the instance owning this queue's
-  /// `storagePath`. Tests can pass an already-opened `Box<String>` to bypass
-  /// that (useful for in-memory test boxes or to share one across fixtures).
   SyncQueueStore? _store;
 
   final LinkedHashSet<String> _inMemoryQueue = LinkedHashSet<String>();
@@ -108,48 +95,16 @@ class AtSyncQueue {
 
   bool get isOpen => _opened;
 
-  /// The directory this queue's box lives in, or null for the package-global
-  /// Hive instance. Required so the compiler names every call site — a second
-  /// client of one atSign needs its own path and a default would be silently
-  /// wrong. Null keeps the legacy global-instance behaviour for a caller
-  /// (e.g. an injected keystore) that has no directory to name.
-  final String? _storagePath;
-
-  AtSyncQueue({required String atSign, String? storagePath})
+  AtSyncQueue({required String atSign})
       : _atSign = atSign,
-        _storagePath = storagePath,
         _logger = AtSignLogger('AtSyncQueue ($atSign)');
 
-  /// Returns the Hive box name this queue uses, derived
-  /// deterministically from the atSign. Exposed as a static so callers
-  /// (e.g. `StorageManager` cleanup paths, or tests that want to wipe
-  /// state without a live `AtSyncQueue` instance) can compute it
-  /// without constructing the class.
-  static String boxNameForAtSign(String atSign) =>
-      '$_boxNamePrefix${AtUtils.getShaForAtSign(atSign)}';
-
-  /// Opens the persisted box and replays it into the in-memory queue
-  /// in `ts`-ascending order. Idempotent — calling [open] twice is a
-  /// no-op after the first.
-  ///
-  /// The box opens on the instance owning this queue's `storagePath`, not on
-  /// the package-global `Hive`: the box name derives from the atSign alone and
-  /// Hive resolves open boxes by name within an instance, so opening on the
-  /// global meant two clients of one atSign shared one queue however different
-  /// their paths. A [store] from a storage bundle is used as is; an
-  /// [injectedBox] (test seam) is wrapped.
-  Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
+  /// Takes [store], which the client's storage opened for this atSign, and
+  /// replays it into the in-memory queue in `ts`-ascending order.
+  /// Idempotent — calling [open] twice is a no-op after the first.
+  Future<void> open({required SyncQueueStore store}) async {
     if (_opened) return;
-    if (store != null) {
-      _store = store;
-    } else if (injectedBox != null) {
-      _store = HiveBoxSyncQueueStore(injectedBox);
-    } else {
-      final path = _storagePath;
-      final hive = path == null ? Hive : HiveInstances.forPath(path);
-      _store = HiveBoxSyncQueueStore(
-          await hive.openBox<String>(boxNameForAtSign(_atSign)));
-    }
+    _store = store;
     _replayIntoMemory();
     _opened = true;
     _logger
@@ -265,22 +220,22 @@ class AtSyncQueue {
     return true;
   }
 
-  /// Takes in the entries of [stray], another box of this atSign's queue that
-  /// lies outside this queue's directory, then deletes [stray] from disk;
-  /// returns how many it took.
+  /// Takes in the entries of [stray], another store of this atSign's queue,
+  /// and returns how many it took.
   ///
   /// Only the entries [keep] accepts are taken, and an entry this queue
   /// already holds for the same atKey stays when it is at least as recent.
-  /// Each entry leaves [stray] as it is taken, so a [stray] left on disk by a
-  /// failure holds only what was not taken, and no write is pushed twice.
-  /// Called by the Hive store as it opens, for a queue an earlier release
-  /// left elsewhere; not for application code.
-  Future<int> adopt(Box<String> stray,
+  /// Each entry leaves [stray] as it is taken, so a [stray] kept after a
+  /// failure holds only what was not taken, and no write is pushed twice. On a
+  /// failure [stray] is closed before the error is rethrown. Called by a
+  /// storage as it opens, for a queue an earlier release left elsewhere; not
+  /// for application code.
+  Future<int> adopt(SyncQueueStore stray,
       {required Future<bool> Function(SyncQueueEntry entry) keep}) async {
     _ensureOpen();
     var taken = 0;
     try {
-      for (final atKey in stray.keys.cast<String>().toList()) {
+      for (final atKey in stray.keys.toList()) {
         final raw = stray.get(atKey);
         if (raw == null) continue;
         final SyncQueueEntry entry;
@@ -302,7 +257,6 @@ class AtSyncQueue {
       await stray.close();
       rethrow;
     }
-    await stray.deleteFromDisk();
     return taken;
   }
 

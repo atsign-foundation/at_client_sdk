@@ -26,7 +26,7 @@ dependencies:
   # which no stable at_client carries, and a caret on a stable version does not
   # accept a prerelease. 3.15.0-rc5 is the first to re-export AtSignLogger,
   # which this package takes from at_client.
-  at_client: ^3.15.0-rc5
+  at_client: ^3.15.0-rc6
   at_commons: ^5.6.0
   at_lookup: ^3.7.0-rc2
   at_utils: ^3.2.0

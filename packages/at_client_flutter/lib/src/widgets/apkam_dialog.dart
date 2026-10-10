@@ -120,6 +120,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.storage == null && !widget.preference.isLocalStoreRequired) {
+      // NOTE: before any request goes out; an approval earned for a client
+      // that cannot open is wasted.
+      AtClientImpl.refuseWithoutStorage(widget.atSign, widget.preference);
+    }
     _keys = widget.keys ?? KeychainAtKeysIo();
     _resumeIfPending();
   }
@@ -167,9 +172,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       if (mounted) setState(() => _status = event.msg);
     });
     try {
+      final preference = under(widget.preference, widget.rootDomain);
       final client = await pending.client(
-        under(widget.preference, widget.rootDomain),
-        storage: widget.storage,
+        preference,
+        storage: await storageOrDefault(
+          widget.atSign,
+          preference,
+          widget.storage,
+        ),
       );
       if (!mounted) return;
       Navigator.of(context).pop(client);

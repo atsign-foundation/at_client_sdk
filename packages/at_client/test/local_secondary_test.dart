@@ -124,7 +124,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPrivateKey, pkamPrivateKey);
@@ -141,7 +142,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPublicKey, pkamPublicKey);
@@ -158,7 +160,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -177,7 +180,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           '${AtConstants.atEncryptionPublicKey}$atSign', encryptionPublicKey);
@@ -195,7 +199,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
           AtConstants.atEncryptionSelfKey, selfEncryptionKey);
@@ -226,7 +231,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -248,7 +254,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -275,7 +282,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -303,7 +311,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -330,7 +339,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -362,7 +372,8 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -412,7 +423,8 @@ void main() {
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
-      return LocalSecondary(atClient);
+      return LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
     }
 
     UpdateVerbBuilder updateBuilderFor(String keyName) => UpdateVerbBuilder()

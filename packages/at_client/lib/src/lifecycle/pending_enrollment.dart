@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
@@ -145,6 +146,7 @@ class PendingEnrollment {
     int maxRetries = AtEnrollment.defaultMaxRetries,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
+    AtClientImpl.refuseWithoutStorage(atSign, preference, storage: storage);
     await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
     return atSign.open(
         keys: keys,

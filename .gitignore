@@ -48,6 +48,8 @@ coverage/
 # Functional test related
 
 hive/
+# The Hive storage backend's source, not a test store.
+!packages/at_client/lib/src/storage/hive/
 
 # Misc
 .DS_Store

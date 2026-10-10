@@ -8,7 +8,9 @@
 
 import 'dart:io';
 
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_client/src/sync/sync_queue_store.dart';
 import 'package:hive/hive.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:test/test.dart';
@@ -34,9 +36,9 @@ void main() {
 
   group('AtSyncQueue.open', () {
     test('idempotent — second call is a no-op', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
-      await q.open(); // must not throw, must not reopen the box
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
+      // NOTE: the second store throws on any use, so replaying it would fail.
+      await q.open(store: _UntouchedStore());
       expect(q.size, 0);
       await q.close();
     });
@@ -45,16 +47,14 @@ void main() {
         () async {
       // Round 1: write three entries with explicit ts values out of
       // insertion order, then close.
-      final q1 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q1.open();
+      final q1 = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q1.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 200);
       await q1.enqueue('email.demo@alice', SyncQueueOp.delete, ts: 100);
       await q1.enqueue('city.demo@alice', SyncQueueOp.updateAll, ts: 300);
       await q1.close();
 
       // Round 2: reopen — replay should ts-sort.
-      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q2.open();
+      final q2 = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       expect(q2.peek(), [
         'email.demo@alice', // ts 100 first
         'phone.demo@alice', // ts 200
@@ -65,24 +65,42 @@ void main() {
 
     test('skips malformed persisted entries with a warning', () async {
       // Pre-populate the raw box with one good and one malformed entry.
-      final boxName = AtSyncQueue.boxNameForAtSign('@alice');
+      final boxName = HiveBoxSyncQueueStore.boxNameFor('@alice');
       final box = await Hive.openBox<String>(boxName);
       await box.put('ok.demo@alice', '{"op":"update","ts":42}');
       await box.put('broken.demo@alice', 'not json');
       await box.close();
 
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       // Only the well-formed entry survives.
       expect(q.peek(), ['ok.demo@alice']);
       await q.close();
+    });
+
+    test('a queue box that cannot be read fails the open once, to the caller',
+        () async {
+      if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+        markTestSkipped('root reads a file whatever its mode says');
+        return;
+      }
+      final first = await openHiveSyncQueue('@alice', storagePath: tmp.path);
+      await first.close();
+      final file = File(
+          '${tmp.path}/${HiveBoxSyncQueueStore.boxNameFor('@alice')}.hive');
+      expect(Process.runSync('chmod', ['000', file.path]).exitCode, 0);
+      addTearDown(() => Process.runSync('chmod', ['600', file.path]));
+
+      await expectLater(openHiveSyncQueue('@alice', storagePath: tmp.path),
+          throwsA(isA<FileSystemException>()));
+      // NOTE: an unhandled second report would arrive after the caller's,
+      // and fails this test only if it lands before the test ends.
+      await pumpEventQueue();
     });
   });
 
   group('AtSyncQueue.enqueue', () {
     test('persists op + ts and adds atKey to the in-memory FIFO', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
 
       final tsBefore = DateTime.now().millisecondsSinceEpoch;
       await q.enqueue('phone.demo@alice', SyncQueueOp.update);
@@ -101,8 +119,7 @@ void main() {
     test(
         'second enqueue for same key overwrites op+ts but preserves '
         'in-memory FIFO position', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 100);
       await q.enqueue('email.demo@alice', SyncQueueOp.update, ts: 200);
@@ -122,8 +139,7 @@ void main() {
 
     test('UPDATE then DELETE for same key collapses to DELETE on persist',
         () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.updateAll, ts: 100);
       await q.enqueue('phone.demo@alice', SyncQueueOp.delete, ts: 200);
@@ -136,8 +152,7 @@ void main() {
 
   group('AtSyncQueue.peek + size', () {
     test('peek limit caps the result', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       for (var i = 0; i < 10; i++) {
         await q.enqueue('k$i.demo@alice', SyncQueueOp.update, ts: i);
       }
@@ -151,8 +166,7 @@ void main() {
     });
 
     test('isEmpty / isNotEmpty track size', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       expect(q.isEmpty, isTrue);
       expect(q.isNotEmpty, isFalse);
 
@@ -165,8 +179,7 @@ void main() {
 
   group('AtSyncQueue.remove', () {
     test('removes from both in-memory and persisted', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 100);
       await q.enqueue('email.demo@alice', SyncQueueOp.update, ts: 200);
@@ -179,15 +192,13 @@ void main() {
       expect(q.readEntry('phone.demo@alice'), isNull);
       // Survives reopen.
       await q.close();
-      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q2.open();
+      final q2 = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       expect(q2.peek(), ['email.demo@alice']);
       await q2.close();
     });
 
     test('remove of non-existent key is a no-op', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q.remove('never.existed@alice'); // must not throw
       expect(q.size, 0);
       await q.close();
@@ -196,22 +207,22 @@ void main() {
 
   group('AtSyncQueue.boxNameForAtSign', () {
     test('is deterministic and prefixed', () {
-      final n1 = AtSyncQueue.boxNameForAtSign('@alice');
-      final n2 = AtSyncQueue.boxNameForAtSign('@alice');
+      final n1 = HiveBoxSyncQueueStore.boxNameFor('@alice');
+      final n2 = HiveBoxSyncQueueStore.boxNameFor('@alice');
       expect(n1, n2);
       expect(n1.startsWith('syncqueue_'), isTrue);
     });
 
     test('different atSigns get different box names', () {
-      final n1 = AtSyncQueue.boxNameForAtSign('@alice');
-      final n2 = AtSyncQueue.boxNameForAtSign('@bob');
+      final n1 = HiveBoxSyncQueueStore.boxNameFor('@alice');
+      final n2 = HiveBoxSyncQueueStore.boxNameFor('@bob');
       expect(n1, isNot(n2));
     });
   });
 
   group('AtSyncQueue lifecycle', () {
     test('use before open throws StateError', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      final q = AtSyncQueue(atSign: '@alice');
       expect(() => q.size, throwsStateError);
       expect(() => q.peek(), throwsStateError);
       expect(() => q.readEntry('foo'), throwsStateError);
@@ -220,8 +231,7 @@ void main() {
     });
 
     test('use after close throws StateError', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q.enqueue('phone.demo@alice', SyncQueueOp.update);
       await q.close();
       expect(() => q.size, throwsStateError);
@@ -231,8 +241,7 @@ void main() {
   group('removeIfUnchanged — the drain\'s success-path removal', () {
     test('removes exactly the version it was given, and reports which',
         () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q.enqueue('k1', SyncQueueOp.updateAll);
       final pushed = q.readEntry('k1')!;
 
@@ -247,8 +256,7 @@ void main() {
     test(
         'a delete replacing an in-flight update survives the update\'s '
         'removal', () async {
-      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q.open();
+      final q = await openHiveSyncQueue('@alice', storagePath: tmp.path);
 
       await q.enqueue('k1', SyncQueueOp.updateAll);
       final pushed = q.readEntry('k1')!;
@@ -271,19 +279,24 @@ void main() {
     });
 
     test('seq survives a restart and is never reissued', () async {
-      final q1 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q1.open();
+      final q1 = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q1.enqueue('k1', SyncQueueOp.updateAll);
       final before = q1.readEntry('k1')!.seq;
       await q1.close();
 
       // NOTE: a reissued seq would let removeIfUnchanged remove an entry the
       // drain never pushed.
-      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
-      await q2.open();
+      final q2 = await openHiveSyncQueue('@alice', storagePath: tmp.path);
       await q2.enqueue('k2', SyncQueueOp.updateAll);
       expect(q2.readEntry('k2')!.seq, greaterThan(before));
       await q2.close();
     });
   });
+}
+
+/// A store that fails on any use, for checking it is never read.
+class _UntouchedStore implements SyncQueueStore {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('the store was used');
 }

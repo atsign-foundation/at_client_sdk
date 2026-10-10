@@ -262,6 +262,9 @@ class AtClientPreference {
 
   bool _isLocalStoreRequired = true;
 
+  /// Read only when a client is passed no storage: true opens the default
+  /// store under [hiveStoragePath], and false is refused, since every client
+  /// keeps local storage.
   bool get isLocalStoreRequired => _isLocalStoreRequired;
 
   @Deprecated("LocalStore is always required")
@@ -276,7 +279,10 @@ class AtClientPreference {
   /// Specifies the namespace of an app.
   String? namespace;
 
-  /// Secret key to encrypt keystore data
+  /// Read by nothing: the Hive storage makes its own key and keeps it beside
+  /// the keystore.
+  @Deprecated('Nothing reads this; the Hive storage keeps its own key beside '
+      'the keystore. Removed in 4.0')
   List<int>? keyStoreSecret;
 
   /// Domain of the root server. Defaults to root.atsign.org

@@ -45,7 +45,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -737,6 +737,8 @@ class AtClientImpl implements AtClient {
     AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
+    @Deprecated('Pass storage instead, such as InMemoryAtClientStorage from '
+        'package:at_client/memory.dart; removed in 4.0')
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     @Deprecated('replaced by atKeysIo, will be removed in the next release')
     AtChops? atChops,
@@ -840,7 +842,7 @@ class AtClientImpl implements AtClient {
         atClientImpl._isStopped = true;
         await atClientImpl._stopBackgroundProcesses();
         await atClientImpl._releaseStorage();
-        atClientImpl.localSecondary?.release();
+        await atClientImpl.localSecondary?.release();
         rethrow;
       }
     }
@@ -852,6 +854,43 @@ class AtClientImpl implements AtClient {
     final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
     atClientInstanceMap[filedKey] = atClientImpl;
     return atClientInstanceMap[filedKey];
+  }
+
+  /// Throws the [ArgumentError] a client built from these arguments throws,
+  /// so a caller can refuse before an irreversible step, such as a CRAM
+  /// activation or an enrollment request, rather than after it. Every client
+  /// keeps local storage: a [storage], a [localSecondaryKeyStore] whose queue
+  /// lives under `preference.hiveStoragePath`, or the default store under
+  /// that path.
+  static void refuseWithoutStorage(
+    String atSign,
+    AtClientPreference preference, {
+    AtClientStorage? storage,
+    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+  }) {
+    if (storage != null) return;
+    if (localSecondaryKeyStore != null) {
+      if (preference.hiveStoragePath != null) return;
+      throw ArgumentError(
+          'a client built on a bare keystore holds its sync queue under '
+              'preference.hiveStoragePath, and $atSign names none. Set it, '
+              'or pass a storage instead of the keystore',
+          'preference.hiveStoragePath');
+    }
+    if (!preference.isLocalStoreRequired) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage: InMemoryAtClientStorage, from '
+              'package:at_client/memory.dart, keeps nothing on disk',
+          'preference.isLocalStoreRequired');
+    }
+    if (preference.hiveStoragePath == null) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage, or set preference.hiveStoragePath '
+              'for the default Hive store',
+          'preference.hiveStoragePath');
+    }
   }
 
   AtClientImpl._(
@@ -869,6 +908,8 @@ class AtClientImpl implements AtClient {
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
+    refuseWithoutStorage(theAtSign, preference,
+        storage: storage, localSecondaryKeyStore: localSecondaryKeyStore);
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -884,12 +925,6 @@ class AtClientImpl implements AtClient {
           AtNetworkTimeouts.cap(preference.networkTimeout!);
     }
     _localSecondaryKeyStore = localSecondaryKeyStore;
-
-    if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
-      throw IllegalArgumentException(
-        'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false',
-      );
-    }
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
@@ -942,7 +977,7 @@ class AtClientImpl implements AtClient {
   /// atServer with: the process-wide finder when one is registered, else one
   /// of this client's own, either way remembering the answer in this
   /// client's storage so a start with the atDirectory unreachable still
-  /// finds the atServer. A client with no local storage remembers nothing.
+  /// finds the atServer.
   SecondaryAddressFinder get secondaryAddressFinder =>
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
           inner: () =>
@@ -1005,63 +1040,56 @@ class AtClientImpl implements AtClient {
     // client whose AtChops was injected never builds one, and it must not
     // sign the preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
-    if (_preference!.isLocalStoreRequired) {
-      AtSyncQueue? syncQueue;
-      if (_localSecondaryKeyStore == null) {
-        final injected = _injectedStorage;
-        final AtClientStorage storage;
-        if (injected != null) {
-          storage = injected;
-        } else {
-          final storagePath = preference!.hiveStoragePath;
-          if (storagePath == null) {
-            throw Exception('Please set local storage path');
-          }
-          storage = HiveAtClientStorage(
-              atSign: _atSign, storagePath: storagePath, closedByClient: true);
-        }
-        await storage.attach(this);
-        _storage = storage;
-        syncQueue = storage.syncQueue;
+    AtSyncQueue? syncQueue;
+    if (_localSecondaryKeyStore == null) {
+      final injected = _injectedStorage;
+      final AtClientStorage storage;
+      if (injected != null) {
+        storage = injected;
+      } else {
+        storage = defaultStorageFor(_atSign, preference!.hiveStoragePath!);
       }
-
-      localSecondary = LocalSecondary(
-        this,
-        keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
-        syncQueue: syncQueue,
-        onEvent: emitDataEvent,
-      );
-      _atChops ??= await _createAtChops(_atSign);
-      _validateDefaultCryptoProvider();
-
-      // Wire the event-driven expiry timer to the data-events stream.
-      // Re-arms on every keystore mutation; first arm uses the current
-      // cache state (no-op when nothing has TTL).
-      _expirySub = dataEvents.listen((_) {
-        if (_expirySweepInFlight) return;
-        unawaited(_armExpiryTimer());
-      });
-      await _armExpiryTimer();
-
-      // Symmetric wire-up for the availability timer. SEED the
-      // already-fired set BEFORE arming the timer: every cached
-      // record whose `availableAt` is in the past at startup gets
-      // marked as already-emitted so the first sweep doesn't replay
-      // it. Without this, restarting the AtClient against an
-      // existing storage-dir would re-emit `DataUpdated` for every
-      // such record, which AtCollection forwards as
-      // CSubItemUpdated / CItemUpdated — making listeners see a
-      // fresh stream of "arrivals" when nothing has actually
-      // arrived. The semantic of `_onAvailableFire` is "fire when
-      // availableAt JUST CROSSED" — past crossings observed by an
-      // earlier process run shouldn't replay on a later one.
-      await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
-      _availableSub = dataEvents.listen((_) {
-        if (_availableSweepInFlight) return;
-        unawaited(_armAvailableTimer());
-      });
-      await _armAvailableTimer();
+      await storage.attach(this);
+      _storage = storage;
+      syncQueue = storage.syncQueue;
     }
+
+    localSecondary = LocalSecondary(
+      this,
+      keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
+      syncQueue: syncQueue,
+      onEvent: emitDataEvent,
+    );
+    _atChops ??= await _createAtChops(_atSign);
+    _validateDefaultCryptoProvider();
+
+    // Wire the event-driven expiry timer to the data-events stream.
+    // Re-arms on every keystore mutation; first arm uses the current
+    // cache state (no-op when nothing has TTL).
+    _expirySub = dataEvents.listen((_) {
+      if (_expirySweepInFlight) return;
+      unawaited(_armExpiryTimer());
+    });
+    await _armExpiryTimer();
+
+    // Symmetric wire-up for the availability timer. SEED the
+    // already-fired set BEFORE arming the timer: every cached
+    // record whose `availableAt` is in the past at startup gets
+    // marked as already-emitted so the first sweep doesn't replay
+    // it. Without this, restarting the AtClient against an
+    // existing storage-dir would re-emit `DataUpdated` for every
+    // such record, which AtCollection forwards as
+    // CSubItemUpdated / CItemUpdated — making listeners see a
+    // fresh stream of "arrivals" when nothing has actually
+    // arrived. The semantic of `_onAvailableFire` is "fire when
+    // availableAt JUST CROSSED" — past crossings observed by an
+    // earlier process run shouldn't replay on a later one.
+    await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
+    _availableSub = dataEvents.listen((_) {
+      if (_availableSweepInFlight) return;
+      unawaited(_armAvailableTimer());
+    });
+    await _armAvailableTimer();
 
     // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
@@ -1398,7 +1426,7 @@ class AtClientImpl implements AtClient {
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
-    localSecondary?.release();
+    await localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
@@ -1548,10 +1576,9 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  AtPersistenceBundle? get persistenceBundle {
-    final storage = _storage;
-    return storage is HiveAtClientStorage ? storage.bundle : null;
-  }
+  @Deprecated('Read the keystore from the AtClientStorage the client was '
+      'given; removed in 4.0')
+  AtPersistenceBundle? get persistenceBundle => defaultStorageBundle(_storage);
 
   @override
   RemoteSecondary? getRemoteSecondary() {
@@ -1944,9 +1971,6 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    // NOTE: refused before any work — on a client with no local store, doing
-    // the encryption first never reaches this answer, dying on the missing
-    // secondary instead.
     _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
         _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
     // Performs the put request validations.
@@ -1989,8 +2013,7 @@ class AtClientImpl implements AtClient {
     // starts — minting a content key means writing a conveyance record, and
     // that cannot happen once the transformer is mid-way through building a
     // verb builder. A `local:` record is excluded: it is never synced to the
-    // atServer, the keystore already encrypts it at rest, and every
-    // post-quantum provider declines a local key.
+    // atServer, and every post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
       atKey.metadata = metadataForEncryptedSend(atKey.metadata);

@@ -8,11 +8,11 @@ import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -22,7 +22,6 @@ import 'package:meta/meta.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
-/// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
 /// Delete and Update commands will be synced to the server
 class LocalSecondary implements Secondary {
   final AtClient _atClient;
@@ -74,6 +73,10 @@ class LocalSecondary implements Secondary {
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
+  /// Whether the queue is this secondary's to close: opened lazily here
+  /// rather than handed in by a storage, which closes its own.
+  final bool _ownsSyncQueue;
+
   /// Tracks atKeys with a currently-executing [_update] / [_delete] —
   /// i.e. a write that has entered the keystore mutation phase but
   /// hasn't yet enqueued for sync. The sync service's pull-side
@@ -112,21 +115,17 @@ class LocalSecondary implements Secondary {
     AtSyncQueue? syncQueue,
     void Function(DataEvent)? onEvent,
   })  : _syncQueue = syncQueue,
+        _ownsSyncQueue = syncQueue == null,
         _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
-    keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
 
-  /// Idempotent lazy-open of the sync queue. The first caller wins
-  /// the open; concurrent callers await the same in-flight future so
-  /// we never call `Hive.openBox` twice for the same atSign.
+  /// Opens the sync queue on first use, for a client built around a bare
+  /// keystore, which brings no queue of its own. Concurrent callers share one
+  /// open, so the queue is never opened twice for one atSign.
   ///
-  /// The queue opens on the instance owning the client's
-  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
-  /// halves cannot land in different places. A client configuring no path
-  /// falls back to the package-global instance, which is why this must still
-  /// run after the keystore's initialisation has called `Hive.init(...)`; we
-  /// never call it here ourselves.
+  /// The queue opens through the default storage under the client's
+  /// `hiveStoragePath`, whatever backend the keystore uses.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     if (_released) return Future.error(_stopped());
     final existing = _syncQueue;
@@ -139,13 +138,12 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      // NOTE: a null storagePath is legal — a LocalSecondary built around an
-      // injected keystore has no hiveStoragePath, and AtSyncQueue then uses
-      // the global Hive instance.
-      final q = AtSyncQueue(
-          atSign: atSign,
-          storagePath: _atClient.getPreferences()?.hiveStoragePath);
-      await q.open();
+      final storagePath = _atClient.getPreferences()?.hiveStoragePath;
+      if (storagePath == null) {
+        throw StateError('the client for $atSign was built on a bare keystore '
+            'with no hiveStoragePath, so its sync queue has nowhere to live');
+      }
+      final q = await openDefaultSyncQueue(atSign, storagePath: storagePath);
       _syncQueue = q;
       return q;
     }();
@@ -158,10 +156,28 @@ class LocalSecondary implements Secondary {
 
   /// Ends this local secondary's use of its storage, when its client stops:
   /// from here every keystore and sync-queue operation throws
-  /// [StoppedException].
-  void release() {
+  /// [StoppedException], and a sync queue opened here rather than handed in
+  /// by a storage is closed.
+  Future<void> release() async {
     _released = true;
     keyStore = _ReleasedKeyStore(_stopped);
+    if (!_ownsSyncQueue) return;
+    AtSyncQueue? q = _syncQueue;
+    final inflight = _syncQueueOpenInflight;
+    if (q == null && inflight != null) {
+      try {
+        q = await inflight;
+      } on Object {
+        return;
+      }
+    }
+    _syncQueue = null;
+    _syncQueueOpenInflight = null;
+    try {
+      await q?.close();
+    } on Exception catch (e) {
+      _logger.warning('could not close the sync queue: $e');
+    }
   }
 
   /// Number of atKeys with pending client→server writes. Reads the

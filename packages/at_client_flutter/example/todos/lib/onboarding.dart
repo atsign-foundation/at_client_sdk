@@ -2,8 +2,6 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'
-    show getApplicationSupportDirectory;
 
 import 'services/todos_service.dart';
 
@@ -24,8 +22,6 @@ Future<bool> loginWithKeychain(BuildContext context) async {
     existingAtSigns: atSigns,
   );
   if (selection == null || !context.mounted) return false;
-
-  final storage = await _storage(selection.atSign);
   if (!context.mounted) return false;
   final client = await PkamDialog.show(
     context,
@@ -33,7 +29,6 @@ Future<bool> loginWithKeychain(BuildContext context) async {
     rootDomain: selection.rootDomain,
     keys: KeychainAtKeysIo(),
     preference: _preference(),
-    storage: storage,
   );
   if (client == null) return false;
 
@@ -46,7 +41,6 @@ Future<bool> loginWithFile(BuildContext context) async {
   if (atKeysIo == null || !context.mounted) return false;
 
   final atSign = atKeysIo.getAtsign();
-  final storage = await _storage(atSign);
   if (!context.mounted) return false;
   // backupKeys: the file's keys are copied into the keychain once the client
   // is open, so the next login can come from the keychain.
@@ -55,7 +49,6 @@ Future<bool> loginWithFile(BuildContext context) async {
     atSign: atSign,
     keys: atKeysIo,
     preference: _preference(),
-    storage: storage,
     backupKeys: [KeychainAtKeysIo()],
   );
   if (client == null) return false;
@@ -67,8 +60,6 @@ Future<bool> loginWithFile(BuildContext context) async {
 Future<bool> loginWithApkam(BuildContext context) async {
   final selection = await AtSignSelectionDialog.show(context);
   if (selection == null || !context.mounted) return false;
-
-  final storage = await _storage(selection.atSign);
   if (!context.mounted) return false;
   // The dialog submits the enrollment request, waits for an enrolled client
   // to approve it, and hands back the client that opens on the approved
@@ -83,7 +74,6 @@ Future<bool> loginWithApkam(BuildContext context) async {
     namespaces: {_namespace: 'rw'},
     preference: _preference(),
     keys: KeychainAtKeysIo(),
-    storage: storage,
   );
   if (client == null) return false;
 
@@ -97,18 +87,6 @@ Future<void> logout() async {
 
 AtClientPreference _preference() =>
     AtClientPreference()..namespace = _namespace;
-
-/// Where this app keeps [atSign]'s local store. closedByClient: the app picks
-/// the backend and the location, and the client still closes the store when
-/// it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(
-    atSign: atSign,
-    storagePath: dir.path,
-    closedByClient: true,
-  );
-}
 
 /// Every dialog hands back a client the app owns. This app keeps one current
 /// client in [AtClientManager], since its screens read it from there.

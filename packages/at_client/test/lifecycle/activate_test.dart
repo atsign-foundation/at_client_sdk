@@ -208,4 +208,26 @@ void main() {
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
+  test(
+      'a preference asking for no local store, with none passed, is refused '
+      'before the CRAM secret is spent', () async {
+    final server = atServer();
+    final pref = await preference()
+      ..isLocalStoreRequired = false;
+
+    await expectLater(
+        () => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: InMemoryAtKeysIo(),
+            preference: pref,
+            app: 'wavi',
+            device: 'laptop',
+            atLookUp: server.lookUp),
+        throwsA(isA<ArgumentError>()));
+
+    expect(server.sent, isEmpty,
+        reason: 'refused after the activation, the one-time secret is spent '
+            'on keys no client can open; so the refusal comes first');
+    verifyNever(() => server.lookUp.cramAuthenticate(any()));
+  });
 }

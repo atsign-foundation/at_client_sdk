@@ -38,7 +38,15 @@ void main() {
       atClientManager: atClientManager,
     );
     atClient.syncService = MockSyncService();
-    return LocalSecondary(atClient, syncQueue: syncQueue);
+    return LocalSecondary(atClient,
+        keyStore: atClient.getLocalSecondary()!.keyStore, syncQueue: syncQueue);
+  }
+
+  /// Empties [storageDir], which other test files share and can leave
+  /// holding this atSign's queue, so a test starts from nothing.
+  void clearStorageDir() {
+    final dir = Directory(storageDir);
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
   }
 
   Future<void> tearDownLocalSecondary() async {
@@ -58,15 +66,14 @@ void main() {
       await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      final dir = Directory(storageDir);
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
+      clearStorageDir();
     } catch (e) {
       print('teardown error: $e');
     }
   }
 
   group('LocalSecondary sync-queue enqueue', () {
-    setUp(() async {});
+    setUp(clearStorageDir);
     tearDown(() async => await tearDownLocalSecondary());
 
     test('public key write enqueues with op=updateAll', () async {
@@ -331,7 +338,10 @@ void main() {
   group('LocalSecondary sync-queue failures', () {
     final logs = RecordedLogs();
     setUpAll(() => logs.installOn());
-    setUp(() => logs.records.clear());
+    setUp(() {
+      clearStorageDir();
+      logs.records.clear();
+    });
     tearDown(() async => await tearDownLocalSecondary());
 
     UpdateVerbBuilder publicEmail() => UpdateVerbBuilder()
@@ -351,8 +361,8 @@ void main() {
       // A real queue in a real failure state - constructed and never opened,
       // so every enqueue throws. Injected, so the lazy open that would
       // otherwise repair it never runs.
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
       await localSecondary.executeVerb(builder, sync: true);
@@ -371,8 +381,8 @@ void main() {
     });
 
     test('a write that cannot be queued still lands in the keystore', () async {
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
       await localSecondary.executeVerb(builder, sync: true);

@@ -316,7 +316,6 @@ final client = await PkamDialog.show(context,
   atSign: atSign,
   keys: atKeysIo,
   preference: AtClientPreference()..namespace = 'my_namespace',
-  storage: await _storage(atSign),
   backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
 );
 if (client == null) return;
@@ -334,22 +333,16 @@ final client = await PkamDialog.show(context,
   rootDomain: selection.rootDomain,
   keys: KeychainAtKeysIo(),
   preference: AtClientPreference()..namespace = 'my_namespace',
-  storage: await _storage(selection.atSign),
 );
 if (client == null) return;
 _adopt(client);
 ```
 
-**Storage and adoption (all flows):**
+**Storage and adoption (all flows).** With no `storage`, the dialogs open Hive
+in the app's support directory; pass an `AtClientStorage` only to keep the store
+elsewhere or to choose another backend.
 
 ```dart
-// Where this app keeps the atSign's local store. closedByClient: the client
-// closes it when it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
-}
-
 // An app whose screens read AtClientManager.getInstance().atClient makes the
 // client current; an app that passes the client around needs no manager.
 void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
@@ -378,6 +371,9 @@ hands back an `AtClient` the app **owns and stops**. The Flutter dialogs (§10)
 and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 
 ```dart
+import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+
 final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
   preference: AtClientPreference()..namespace = 'my_namespace'..syncRegex = 'my_namespace',
@@ -585,7 +581,8 @@ final AtClient atClient =
 ```
 
 - **Every process needs its own storage** (`HiveAtClientStorage(atSign:,
-  storagePath:)`, or the deprecated `hiveStoragePath`) — one store is held by
+  storagePath:)` from `package:at_client/hive.dart`, or the deprecated
+  `hiveStoragePath`) — one store is held by
   one live client and a second open on it is refused. Use
   `Directory.systemTemp.createTempSync('agent_')` per instance, and
   `client.stop()` when the process is done.
@@ -643,7 +640,7 @@ an operation must see or produce server-side truth immediately.
 | `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
 | `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
 | `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
-| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
+| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage` (`at_client/hive.dart`) as `storage`       |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old `AtCollectionModel` patterns to

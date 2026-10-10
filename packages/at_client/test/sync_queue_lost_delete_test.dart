@@ -26,11 +26,14 @@ import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
 class _MockAtClient extends Mock implements AtClient {
+  _MockAtClient(this._preference);
+  final AtClientPreference _preference;
+
   @override
   String? getCurrentAtSign() => '@alice';
 
   @override
-  AtClientPreference getPreferences() => AtClientPreference();
+  AtClientPreference getPreferences() => _preference;
 }
 
 class _MockNotificationService extends Mock implements NotificationServiceImpl {
@@ -65,11 +68,11 @@ void main() {
     final bundle = await factory.initialize(atSignStr,
         HivePersistenceConfig.clientDefaults(storagePath: storageDir));
 
-    atClient = _MockAtClient();
+    atClient =
+        _MockAtClient(AtClientPreference()..hiveStoragePath = storageDir);
     remote = MockRemoteSecondary();
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     when(() => atClient.notificationService)
         .thenReturn(_MockNotificationService());
     final syncService = MockSyncService();
@@ -95,6 +98,7 @@ void main() {
 
   tearDown(() async {
     if (!service.isStopped) await service.stop();
+    await (await local.syncQueueForTest).close();
     await factory.close();
     final dir = Directory(storageDir);
     if (await dir.exists()) dir.deleteSync(recursive: true);

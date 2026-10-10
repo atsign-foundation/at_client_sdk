@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -10,6 +11,8 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
+import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -104,6 +107,19 @@ void main() {
     // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put('public:publickey@alice',
         AtData()..data = encryptionKeyPair.atPublicKey.publicKey);
+  });
+
+  // NOTE: test/hive is shared with other files, so what this file leaves there
+  // becomes the store a later test opens.
+  tearDownAll(() async {
+    for (final client
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await (client as AtClientImpl).stop();
+    }
+    await HiveInstances.closeAll();
+    await Hive.close();
+    final dir = Directory('test/hive');
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
   group('A group of tests related to apkam/enrollments', () {

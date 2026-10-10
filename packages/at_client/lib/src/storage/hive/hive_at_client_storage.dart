@@ -1,13 +1,12 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
+import 'package:at_client/src/storage/hive/open_reporting_once.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
 // ignore: implementation_imports
 import 'package:hive/src/hive_impl.dart';
@@ -38,24 +37,33 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// The stores whose backend is open now, in this process.
   static final Set<HiveAtClientStorage> _open = <HiveAtClientStorage>{};
 
-  StorageManager? _manager;
+  final HiveAtPersistenceFactory _factory = HiveAtPersistenceFactory();
+  AtPersistenceBundle? _bundle;
   AtSyncQueue? _queue;
 
   /// The store this points at: the canonical directory `HiveInstances.forPath`
   /// resolves the instance by, plus the atSign the box is named from. Both
   /// halves are needed — two atSigns under one directory are two boxes and
   /// share nothing, while one atSign under one directory is a single box
-  /// however many of these point at it.
+  /// however many of these point at it. Resolved on first use and kept, so a
+  /// close after the directory has gone writes nothing.
   @override
-  String get location =>
-      '${HiveInstances.canonicalPathFor(storagePath)}::$atSign';
+  String get location => _location ??= locationOf(atSign, storagePath);
+  String? _location;
+
+  /// The [location] of a store for [atSign] under [storagePath]. With
+  /// [create] false a missing directory is not created, and gives a location
+  /// no open store holds.
+  static String locationOf(String atSign, String storagePath,
+          {bool create = true}) =>
+      '${HiveInstances.canonicalPathFor(storagePath, create: create)}::$atSign';
 
   /// The persistence bundle, or `null` before the first [attach].
-  AtPersistenceBundle? get bundle => _manager?.bundleOrNull;
+  AtPersistenceBundle? get bundle => _bundle;
 
   @override
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>
-      _openManager.keyValueStore;
+      _openBundle.keyValueStore;
 
   @override
   AtSyncQueue get syncQueue {
@@ -64,26 +72,30 @@ class HiveAtClientStorage extends AtClientStorageBase {
     return q;
   }
 
-  StorageManager get _openManager {
-    final m = _manager;
-    if (m == null) throw StateError('storage for $atSign is not open');
-    return m;
+  AtPersistenceBundle get _openBundle {
+    final b = _bundle;
+    if (b == null) throw StateError('storage for $atSign is not open');
+    return b;
   }
 
   @override
   Future<void> openBackend() async {
-    if (_manager != null) return;
+    if (_bundle != null) return;
     // NOTE: read before the store opens, which re-points Hive's global
     // instance at [storagePath]. hive marks the field for tests, and nothing
     // public names the directory its global instance points at.
     // ignore: invalid_use_of_visible_for_testing_member
     final globalHome = (Hive as HiveImpl).homePath;
-    final manager =
-        StorageManager(AtClientPreference()..hiveStoragePath = storagePath);
-    await manager.init(atSign, null);
-    final queue = AtSyncQueue(atSign: atSign, storagePath: storagePath);
-    await queue.open();
-    _manager = manager;
+    final bundle = await openReportingOnce(() => _factory.initialize(atSign,
+        HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
+    final AtSyncQueue queue;
+    try {
+      queue = await openHiveSyncQueue(atSign, storagePath: storagePath);
+    } catch (_) {
+      await bundle.close();
+      rethrow;
+    }
+    _bundle = bundle;
     _queue = queue;
 
     final here = HiveInstances.canonicalPathFor(storagePath);
@@ -99,15 +111,12 @@ class HiveAtClientStorage extends AtClientStorageBase {
     await _handOnStrayQueuesIn(here);
   }
 
-  /// The sha this atSign's keystore and queue boxes are named from.
-  String get _sha =>
-      AtSyncQueue.boxNameForAtSign(atSign).substring('syncqueue_'.length);
-
-  /// Whether [directory] holds a queue box for the atSign named by [sha] but
-  /// no keystore for it, which a store of that atSign never leaves.
-  static bool _holdsStrayQueue(String directory, String sha) =>
-      File('$directory/syncqueue_$sha.hive').existsSync() &&
-      !File('$directory/$sha.hive').existsSync();
+  /// Whether [directory] holds a queue box for [atSign] but no keystore for
+  /// it, which a store of that atSign never leaves.
+  static bool _holdsStrayQueue(String directory, String atSign) =>
+      File('$directory/${HiveBoxSyncQueueStore.boxNameFor(atSign)}.hive')
+          .existsSync() &&
+      !File('$directory/${AtUtils.getShaForAtSign(atSign)}.hive').existsSync();
 
   /// Takes in this atSign's stray queue in [directory], if there is one.
   ///
@@ -115,15 +124,17 @@ class HiveAtClientStorage extends AtClientStorageBase {
   /// opening is worth more than the writes it might hold, and the next open
   /// tries again.
   Future<void> _adoptStrayQueueIn(String directory) async {
-    if (!_holdsStrayQueue(directory, _sha)) return;
+    if (!_holdsStrayQueue(directory, atSign)) return;
     try {
-      final name = AtSyncQueue.boxNameForAtSign(atSign);
+      final name = HiveBoxSyncQueueStore.boxNameFor(atSign);
       final HiveInterface hive = _directoriesOpened.contains(directory)
           ? HiveInstances.forPath(directory)
           : (HiveImpl()..init(directory));
       if (hive.isBoxOpen(name)) return;
-      final taken = await syncQueue.adopt(await _openStray(hive, name),
+      final stray = await openReportingOnce(() => hive.openBox<String>(name));
+      final taken = await syncQueue.adopt(HiveBoxSyncQueueStore(stray),
           keep: _agreesWithKeyStore);
+      await stray.deleteFromDisk();
       _logger.info('$atSign: took $taken pending write(s) from a sync queue '
           'an earlier release left in $directory');
     } catch (e) {
@@ -133,33 +144,12 @@ class HiveAtClientStorage extends AtClientStorageBase {
     }
   }
 
-  /// Opens the box [name] on [hive], reporting a failure once, to the caller.
-  ///
-  /// NOTE: hive completes the future it parks concurrent openers on with the
-  /// same error it throws, and nothing listens to that future, so a failed
-  /// open is also an unhandled asynchronous error, which ends a command-line
-  /// isolate. The zone here takes that second report.
-  static Future<Box<String>> _openStray(HiveInterface hive, String name) {
-    final opened = Completer<Box<String>>();
-    void fail(Object e, StackTrace st) {
-      if (!opened.isCompleted) opened.completeError(e, st);
-    }
-
-    runZonedGuarded(() async {
-      try {
-        opened.complete(await hive.openBox<String>(name));
-      } catch (e, st) {
-        fail(e, st);
-      }
-    }, fail);
-    return opened.future;
-  }
-
   /// Hands each stray queue in [directory] to the open store of the atSign it
   /// belongs to, when exactly one store of that atSign is open.
   Future<void> _handOnStrayQueuesIn(String directory) async {
     for (final other in _open.toList()) {
-      if (identical(other, this) || !_holdsStrayQueue(directory, other._sha)) {
+      if (identical(other, this) ||
+          !_holdsStrayQueue(directory, other.atSign)) {
         continue;
       }
       if (_open.where((s) => s.atSign == other.atSign).length != 1) continue;
@@ -176,7 +166,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
 
   @override
   Future<void> clearData() async {
-    await _openManager.bundle.clear();
+    await _openBundle.clear();
     await syncQueue.clear();
   }
 
@@ -184,6 +174,6 @@ class HiveAtClientStorage extends AtClientStorageBase {
   Future<void> closeBackend() async {
     _open.remove(this);
     await _queue?.close();
-    await _manager?.bundleOrNull?.close();
+    await _bundle?.close();
   }
 }

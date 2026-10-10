@@ -142,8 +142,8 @@ class SyncServiceImpl implements SyncService {
 
   /// How both sync watermarks above are written.
   ///
-  /// They are `local:` records — never synced, and already encrypted at rest by
-  /// the keystore — so there is nothing for value-level encryption to protect.
+  /// They are `local:` records, never synced and holding nothing sensitive, so
+  /// there is nothing for value-level encryption to protect.
   /// Saying so explicitly keeps them off the shared-data crypto path, where
   /// every post-quantum provider declines a local key and the fallback from
   /// that decline is the legacy provider, which a client that refuses it then

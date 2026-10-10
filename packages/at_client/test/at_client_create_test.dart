@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -8,6 +10,7 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
+import 'storage/storage_contract.dart' show FakeClient;
 import 'test_utils/no_op_services.dart';
 
 void main() {
@@ -254,22 +257,62 @@ void main() {
     await client.stop();
   });
 
-  test('storage the preference would never open is refused', () async {
+  test('storage passed is used whatever the preference says', () async {
     final storage =
         HiveAtClientStorage(atSign: '@factorynolocal', storagePath: dir.path);
+    final client = await buildAtClient(
+        atSign: '@factorynolocal',
+        namespace: 'wavi',
+        preference: pref()..isLocalStoreRequired = false,
+        storage: storage);
 
+    expect(storage.isHeldBy(client), isTrue,
+        reason: 'a caller that named its own backend gets it, not a client '
+            'that opens no local store at all');
+
+    await client.stop();
+    await storage.close();
+  });
+
+  test('a preference asking for no local store, with none passed, is refused',
+      () async {
     await expectLater(
         () => buildAtClient(
-            atSign: '@factorynolocal',
+            atSign: '@factorynone',
             namespace: 'wavi',
-            preference: pref()..isLocalStoreRequired = false,
-            storage: storage),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message, 'message', contains('isLocalStoreRequired'))),
-        reason: 'a caller that named its own backend must not be told it took '
-            'effect when the client opens no local store at all');
+            preference: pref()..isLocalStoreRequired = false),
+        throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
+            contains('package:at_client/memory.dart'))),
+        reason: 'every client keeps local storage, so the refusal names the '
+            'storage to pass for one with nothing to keep');
+  });
 
-    await storage.close();
+  test('no storage and no hiveStoragePath is refused at construction',
+      () async {
+    await expectLater(
+        () => buildAtClient(
+            atSign: '@factorynopath',
+            namespace: 'wavi',
+            preference: AtClientPreference()),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
+        reason: 'the one refusal for a client with nothing to keep its '
+            'records in, whichever argument is missing, before any key '
+            'material is read');
+  });
+
+  test('a bare keystore with no hiveStoragePath is refused', () async {
+    final keys = InMemoryAtClientStorage(atSign: '@factorybare');
+    await keys.attach(FakeClient('@factorybare', null));
+    addTearDown(keys.close);
+    await expectLater(
+        () => AtClientImpl.create('@factorybare', 'wavi', AtClientPreference(),
+            localSecondaryKeyStore: keys.keyStore),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
+        reason: 'the sync queue of a client built on a bare keystore lives '
+            'under preference.hiveStoragePath; with none it would open on '
+            'Hive\'s global instance, which is wherever that last pointed');
   });
 
   test('a client that fails to build is not left behind', () async {

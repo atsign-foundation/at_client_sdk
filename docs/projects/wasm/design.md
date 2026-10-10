@@ -205,27 +205,17 @@ or HTTPS-reachable directory endpoint, which is an open question in
 
 ### 2.2 Storage bootstrap
 
-The keystore *is* injectable. Its bootstrap is not.
+The keystore and its bootstrap are both injectable. A client takes a constructed
+`AtClientStorage` as `storage:`, and builds one itself only when given none, through
+`lib/src/storage/default_storage.dart`, the one core file that names Hive until 4.0
+([D-25](decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)).
+That default still requires `hiveStoragePath` and throws `'Please set local storage path'`
+without it. `StorageManager`, which hard-coded `HiveAtPersistenceFactory()` with no
+constructor parameter, is folded into `HiveAtClientStorage`, and the `keyStoreSecret` it
+accepted and ignored is deprecated, read by nothing.
 
-```dart
-// at_client/lib/src/manager/storage_manager.dart:16
-final HiveAtPersistenceFactory _factory = HiveAtPersistenceFactory();
-```
-
-`final`, no constructor parameter, `package:at_persistence_secondary_server/hive.dart`
-imported directly. `_initStorage` then requires `preferences!.hiveStoragePath` and
-throws `'Please set local storage path'` when it is null. The chain runs
-`AtClientImpl._init()` (`at_client_impl.dart:392-399`) → `StorageManager.init(...)` →
-`HiveAtPersistenceFactory().initialize(...)` → `Hive.init(storagePath)` +
-`Directory(storagePath)` inside `at_persistence_secondary_server`.
-
-`StorageManager.init(String currentAtSign, List<int>? keyStoreSecret)` accepts
-`keyStoreSecret` and never uses it — worth removing while in the area.
-
-**The existing escape hatch:** `AtClientImpl.create(..., localSecondaryKeyStore:)`.
-When non-null, `StorageManager` is skipped entirely and `LocalSecondary` takes the
-injected store. Good, but it means a web caller must construct the whole store itself
-rather than choosing a backend.
+`AtClientImpl.create(..., localSecondaryKeyStore:)`, the bare-keystore route that skipped
+the bootstrap, is deprecated and goes in 4.0; a caller passes storage instead.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 `at_client` owns a storage abstraction covering the keystore **and** the sync queue
@@ -330,10 +320,10 @@ abstract class AtClientStorage {
 
 ### 2.3 The sync queue
 
-**The canonical runtime landmine, and the one to lead with when explaining this
-project.**
-
-On trunk (after X3, `at_sync_queue.dart` — `AtSyncQueue.open()`):
+**Defused by D-25.** `AtSyncQueue.open` takes a `SyncQueueStore` and opens nothing
+itself: each backend opens its queue on its own storage and hands it over, and the Hive
+box store lives in `lib/src/storage/hive/`. Until then this was the canonical runtime
+landmine, as `AtSyncQueue.open()` read after X3:
 
 ```dart
 if (store != null) {
@@ -353,15 +343,15 @@ is what lets a storage bundle hand the queue its own store instead. (`gkc-pq-d1-
 carries a variant that opens on `HiveInstances.forPath(path)` when the preference names a
 path, falling back to the global instance; the X3 merge-back has to keep both.)
 
-Opened lazily from `LocalSecondary._ensureSyncQueueOpen()` when no storage bundle
-supplied a queue, assuming someone already called `Hive.init`. `local_secondary.dart:118-121` documents that
-ordering dependency in a comment — it is an implicit global contract, not an enforced
-one.
+A queue is still opened lazily from `LocalSecondary._ensureSyncQueueOpen()`, but only on
+the deprecated bare-keystore route, through the default seam's `openDefaultSyncQueue`, and
+only under the preference's `hiveStoragePath`: a bare keystore with no path is refused at
+construction, so nothing in at_client opens a box on Hive's global instance. The route goes
+in 4.0.
 
-Consequences: it fires on the first `put` or `syncQueueSize`, not at construction; it
-compiles everywhere; and injecting a keystore to bypass `StorageManager` makes it throw
-rather than fixing it. `at_client`'s pubspec carries a direct `hive: ^2.2.3` dependency
-solely for this file.
+Consequences, before D-25: it fired on the first `put` or `syncQueueSize`, not at
+construction; it compiled everywhere; and injecting a keystore to bypass `StorageManager`
+made it throw rather than fixing it.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 The queue does **not** get a spec interface of its own. It belongs to the storage bundle
@@ -370,8 +360,8 @@ separately from the store whose writes it tracks. This supersedes the earlier de
 — a small parallel interface matching how the keystore is factored — and S3 with it, which
 plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as a test
 seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
-tests; it stops being the route to backend selection. Drop the direct `hive` dependency
-once this and §2.2 land.
+tests; it stops being the route to backend selection. (D-25 removed that seam, and keeps
+the direct `hive` dependency while `hive.dart` lives in at_client.)
 
 
 ### 2.4 Key material — the exemplar
@@ -590,7 +580,7 @@ an oversight.
 **Status: mostly history.** The first row is superseded by the `AtLookUpFactory`
 every at_client connection is built from, the third was plumbed, and
 `AtSyncQueue.open({injectedBox})` was overtaken by the storage bundle (D-12, the X
-series). The table stays as the record of what the seams were.
+series) and removed (D-25). The table stays as the record of what the seams were.
 
 Four injection points already existed and were simply never passed through. Plumbing
 them changes no interface, breaks nothing, and shrinks every later diff.
@@ -626,7 +616,7 @@ It carries platform-specific configuration as `String?`:
 | `tlsKeysSavePath` | —    | **@Deprecated.** Copied onto `SecureSocketConfig` by `defaultLookUps` (`at_client/lib/src/lifecycle/lookups.dart`), then `File(...).writeAsStringSync` in `SecureSocketUtil`; goes in 4.0 |
 | `pathToCerts`     | —    | **@Deprecated.** The same route, then `SecurityContext.setTrustedCertificates`; goes in 4.0 |
 | `decryptPackets`  | —    | **@Deprecated.** The same route, where it gates the TLS keylog write; goes in 4.0. The replacement for all three is `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:` |
-| `keyStoreSecret`  | 37   | passed to `StorageManager.init` and ignored         |
+| `keyStoreSecret`  | 37   | deprecated; read by nothing                         |
 
 **This is the mechanism by which native-only configuration compiles on web and fails at
 runtime.** A path is a string everywhere; it only stops meaning anything when something
@@ -660,8 +650,8 @@ D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when
 its leg landed and gone in 4.0. `downloadPath` (file transfer,
-[§2.8](#28-filesystem-and-file-transfer)) and `keyStoreSecret` (ignored) are the two not
-yet claimed by a leg.
+[§2.8](#28-filesystem-and-file-transfer)) is the one not yet claimed by a leg;
+`keyStoreSecret`, which nothing reads, is deprecated without one.
 
 ---
 

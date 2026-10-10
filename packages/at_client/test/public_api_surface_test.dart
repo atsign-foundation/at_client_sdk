@@ -124,8 +124,31 @@ void main() {
               'If intentional, update _atClientMixinsBarrelExports in the same '
               'commit.');
     });
+
+    test('each storage backend barrel exports exactly its reviewed set', () {
+      for (final MapEntry(key: barrel, value: reviewed)
+          in _storageBarrelExports.entries) {
+        expect(exportsOf(barrel), reviewed,
+            reason: 'The export surface of $barrel changed. If intentional, '
+                'update _storageBarrelExports in the same commit.');
+      }
+    });
   });
 }
+
+/// The exports of each storage backend's barrel, as reviewed.
+const Map<String, Set<String>> _storageBarrelExports = {
+  'hive.dart': {
+    'package:at_client/src/storage/hive/hive_at_client_storage.dart',
+  },
+  'sqlite.dart': {
+    'package:at_client/src/storage/sqlite/sqlite_at_client_storage.dart',
+    'package:at_client/src/storage/sqlite/sqlite_sync_queue_store.dart',
+  },
+  'memory.dart': {
+    'package:at_client/src/storage/memory/in_memory_at_client_storage.dart',
+  },
+};
 
 /// The exports of `lib/at_client.dart`, as reviewed. A refactor that narrows or
 /// widens this surface updates the set here in the same commit.
@@ -143,8 +166,9 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/local_secondary.dart',
   'package:at_client/src/client/remote_secondary.dart',
   'package:at_client/src/client/request_options.dart',
+  // The storage interface only: each backend has its own barrel, so an app
+  // names the one it chooses.
   'package:at_client/src/storage/at_client_storage.dart',
-  'package:at_client/src/storage/hive_at_client_storage.dart',
   'package:at_client/src/crypto/crypto.dart',
   'package:at_client/src/crypto/crypto_runtime.dart',
   'package:at_client/src/key_stream/key_stream.dart',

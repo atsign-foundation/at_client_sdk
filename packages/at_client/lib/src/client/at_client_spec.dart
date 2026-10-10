@@ -28,11 +28,14 @@ abstract class AtClient {
 
   LocalSecondary? getLocalSecondary();
 
-  /// The local persistence bundle backing this client, or `null`
-  /// when local storage is not required or has not yet been
-  /// initialised. Commit-log-free: `persistenceBundle.keyValueStore.commitLog`
-  /// is always `null` on the client. Owned and torn down by the
-  /// client; callers must not close it.
+  /// The persistence bundle backing this client when it runs on a Hive
+  /// storage, the default or one the app passed; `null` on any other storage
+  /// or before it has opened.
+  /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
+  /// `null` on the client. Owned and torn down by the client; callers must
+  /// not close it.
+  @Deprecated('Read the keystore from the AtClientStorage the client was '
+      'given; removed in 4.0')
   AtPersistenceBundle? get persistenceBundle;
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local

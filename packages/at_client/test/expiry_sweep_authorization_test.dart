@@ -35,7 +35,6 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSignStr);
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn('enroll-1');
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     final syncService = _MockSyncService();
     when(() => atClient.syncService).thenReturn(syncService);
 

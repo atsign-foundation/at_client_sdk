@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2.0.0-rc5
+
+- feat: a dialog given no storage opens Hive in the app's support directory,
+  or under `preference.hiveStoragePath` while that is set. An app that kept its
+  store anywhere else should pass it as `storage:` before at_client 4.0.
+- fix: an app whose preference sets `isLocalStoreRequired` false must pass
+  `storage:`, as at_client now refuses a client with no local storage;
+  `ApkamActivationDialog` refuses such an app when it opens, before any
+  enrollment request goes out.
+- build: requires `at_client` ^3.15.0-rc6.
+
 ## 2.0.0-rc4
 
 - fix: an atSign that an app built on at_client_mobile saved to the keychain
