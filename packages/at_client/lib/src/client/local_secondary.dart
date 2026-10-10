@@ -904,31 +904,31 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPrivateKey")
   Future<String?> getPrivateKey() => getPkamPrivateKey();
 
-  bool _keySourceRead = false;
-  AtKeys? _keySourceKeys;
+  Future<AtKeys?>? _keySourceRead;
 
   /// The keys this client's [AtClient.atKeysIo] holds, or null when it has no
   /// key source or the source holds nothing readable for this atSign.
   ///
   /// Read once and kept: a file-backed source decrypts on every read and each
   /// key getter below consults it, while the source a client was built with
-  /// does not change over that client's life.
+  /// does not change over that client's life. Callers that ask while the
+  /// read is in flight wait for it.
   ///
   /// A source that throws is not an error here. The getters have a keystore
   /// behind them, and a client can legitimately be built before its keyfile
   /// exists.
-  Future<AtKeys?> _keysFromSource() async {
-    if (_keySourceRead) return _keySourceKeys;
-    _keySourceRead = true;
+  Future<AtKeys?> _keysFromSource() => _keySourceRead ??= _readKeySource();
+
+  Future<AtKeys?> _readKeySource() async {
     final io = _atClient.atKeysIo;
     final atSign = _atClient.getCurrentAtSign();
     if (io == null || atSign == null) return null;
     try {
-      _keySourceKeys = await io.read(atSign);
+      return await io.read(atSign);
     } on Exception catch (e) {
       _logger.finer('the key source holds nothing readable for $atSign: $e');
+      return null;
     }
-    return _keySourceKeys;
   }
 
   /// The APKAM keypair the key source holds for this client's enrollment,

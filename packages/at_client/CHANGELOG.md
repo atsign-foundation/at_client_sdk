@@ -7,6 +7,9 @@
 - fix: a link vouching for an enrollment's signing key is published as soon
   as it arrives, and one that can't be published yet is tried again at the
   next start.
+- fix: two operations that need the client's keys at the same moment, such as
+  two notifications to the client's own atSign, no longer fail with "Self
+  encryption key is not set for current atSign".
 
 ## 3.15.0-rc5
 
