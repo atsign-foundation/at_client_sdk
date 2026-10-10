@@ -189,6 +189,10 @@ void main() {
           remoteSecondary: mockRemoteSecondary) as AtClientImpl;
       atClientImpl.putRequestTransformer = mockPutRequestTransformer;
 
+      expect(atClientImpl.atChops, isNotNull,
+          reason: 'chops/crypto setup is hoisted out of the '
+              'isLocalStoreRequired branch, so this no-storage config gets a '
+              'real (if keyless) AtChops instead of leaving atChops null');
       expect(
           () async => await atClientImpl.put(atKey, value),
           throwsA(predicate((dynamic e) =>
