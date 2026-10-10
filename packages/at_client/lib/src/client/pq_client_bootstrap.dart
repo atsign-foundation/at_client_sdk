@@ -201,7 +201,8 @@ class PqClientBootstrap {
         '${_atClient.enrollmentId == null ? '' : ', ${_atClient.enrollmentId}'})');
     filing = keysIo == null
         ? null
-        : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign);
+        : NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo, atSign: _atSign);
     sharing = AtClientSecretSharing.forClient(_atClient);
     // NOTE: wired in the constructor rather than in a startup step, because a
     // request can arrive as soon as the client listens. Left null, the gate
@@ -238,6 +239,9 @@ class PqClientBootstrap {
     sharing.fileReceivedSecret = (secret) async {
       await filing?.filePending([secret]);
       await root.filePendingPrivate(_atSign, [secret]);
+      if (gates.publishChainLink && PqSigningChain.isLinkSecret(secret.name)) {
+        await chain.stampConveyedLink(secret);
+      }
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);

@@ -14717,6 +14717,18 @@ enrollment without one, so once the stale link is cleared the next privileged
 start re-anchors the enrollment over its new value. Before, a stale root link
 made the sweep skip it for good.
 
+⚠️ **Found 2026-10-08, live, and not fixed.** The clearing runs only where
+`republishedAppMetadata` is sent, on the put the atSign's own credential
+publishes with. An ordinary enrollment republishes `_apsk` through
+`enroll:update`, which carries no `appMetadata`, and the atServer keeps what is
+stored, so a link over the old value rides the new one and the walk reads it
+`broken`, the outcome this ruling set out to prevent. The sweep sends a
+chain-linked enrollment a root link, which anchors it, and skips one whose stale
+root link fills the field, so that one stays `broken` for good. Seen twice
+against the `dev_env` virtualenv with a throwaway functional-pack probe: a
+stamped chain link read `chained` and an approval-time root link `anchored`
+before an `enroll:update` changed the value, and both read `broken` after.
+
 ### 144.3 Every move of _apsk stands, and verification tells the locations apart
 
 Revocation, and supersession of a non-root predecessor at its successor's first
@@ -15018,3 +15030,89 @@ language's JSON reader. Whether ids become strings at a major release is not
 decided here.
 
 Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
+
+## 152. A conveyed link is stamped as it arrives, and its envelope kept until it is (2026-10-08)
+
+**Decided by gkc on 2026-10-07 and 2026-10-08.** A link vouching for an
+enrollment's `_apsk` reached only the in-memory `SecretStore`, and only the
+startup's link step stamped it. The envelope carrying a link is deleted once it
+is received, so a link received after that step, one whose stamp failed (an
+offline start, an `_apsk` that could not be read), or one held by a process that
+stopped first was gone at the next restart. A lost root link came back only with
+a later sweep by a root-private holder; a lost chain link never did. Nothing acts
+on an unsigned chain today, since `verifyChain` has no production caller, and
+Gary ruled the fix knowing that.
+
+- The secret-arrival hook stamps a conveyed link at once, through
+  `PqSigningChain.stampConveyedLink` and under the `publishChainLink` gate, so a
+  running client no longer waits for a restart.
+- A link that may yet be stamped but cannot be now makes the hook throw, so the
+  sweep keeps its envelope on the atServer and the next start handles it again,
+  until the envelope's 7-day TTL runs out. That covers no readable `_apsk`, no
+  published signing root, and a chain-link check that failed for a reason other
+  than the link itself, such as the network.
+- A link that never can be stamped lets its envelope go: one that names another
+  enrollment or vouches for another key, a chain link whose signature fails or
+  whose signer's `_apsk` is withdrawn or gone, and a root link that is malformed
+  or does not verify.
+- `publishPendingLink`, the startup step, still stamps a link the secret store
+  holds.
+
+The sweep still conveys root links only, as
+[67](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10) has it. A sweep re-sending a missing
+chain link was ruled on 2026-10-07 and withdrawn on 2026-10-08, because a
+root-holder's sweep anchors any enrollment with no root link, chain-linked or
+not, and stamping links as they arrive closes most of the loss. A chain link is
+still lost when its envelope expires before it is read or stamped, and when a
+client's startup does not publish links.
+
+⚠️ **AMENDED 2026-10-08 by gkc, before release.** As first built, a conveyed
+link also waited in at_auth's typed keyfile until it was stamped: a `links` map
+on the enrollment's entry (`AtKeys.fileLink`, `linkFor`, `dropLink`), filed by
+`fileConveyedLink` as the link arrived, dropped once it was stamped or could
+never be, and kept across restarts with no time limit. at_onboarding_cli,
+at_cli_commons and at_client_flutter required at_auth 4.0.0-rc5 so that no
+writer they ship would drop the field. Gary revisited the premise the same day:
+nothing in production walks a chain, a fully privileged root-holder's sweep
+sends a root link to any enrollment without one, and the link that will matter
+in steady state is the one an approver provides at approval, which a proposed
+approval-time stamp would deliver with nothing stored on the enrollee's side.
+The keyfile half was taken out and the envelope kept instead, and the at_auth
+floors went back to 4.0.0-rc4. The keychain write lock built beside it stayed,
+since it also stops one atSign's write undoing another's key material.
+
+Pinned by `test/pq_signing_chain_conveyed_links_test.dart`, and for the keychain
+by at_client_flutter's `keychain_io_impl_test.dart`.
+
+## 153. An arriving nskey private is checked against what is published, else named by its length (2026-10-08)
+
+**Decided by gkc on 2026-10-07 and 2026-10-08.** A filing checks an arriving
+nskey seed against the generation its atSign publishes, and learns from that
+generation which KEM the seed is for. Only `collectConveyedKeyMaterial` supplied
+that lookup, and only when its ring carried no filing of its own, while every
+arriving private went through the start-up bootstrap's filing, which had none. With no
+lookup the filing assumed X-Wing and checked nothing. A test written before the
+fix observed both: an ML-KEM-1024 seed was filed as X-Wing, which leaves its
+namespace unopenable on that enrollment, and a seed deriving nothing published
+was filed.
+
+Every filing a client builds now asks through `NskeyPrivateFiling.checkedAgainst`,
+over the ring it works with. A private whose kid the current generation does not
+carry, such as an earlier generation's after a rotation, has nothing published
+to compare against, so its seed's length names the KEM: X-Wing takes exactly 32
+bytes and ML-KEM-1024 exactly 64 (measured), and any other length is refused.
+Such a private is filed unchecked, as it was before. A test holds that no two
+KEMs `kemFor` implements share a seed length. Only fleets that configure
+ML-KEM-1024 meet the mislabelling; every built-in posture mints X-Wing.
+
+A seed already filed under the wrong label, as at_client 3.15.0-rc1 to rc5
+filed an ML-KEM-1024 one, is read under the KEM its length names, by
+`NskeyPrivateFiling.read` and `filedFor` alike. The keyfile cannot be corrected
+instead, since at_auth refuses to change a filed material's algorithm. A label
+naming no KEM this build implements is still not read, whatever the seed's
+length: an ML-KEM-768 seed is 64 bytes too.
+
+Pinned by `test/nskey_filing_published_key_test.dart`, for the start-up
+bootstrap's filing, a key ring's own and a rotation's, and by the seed-length
+tests in `test/nskey_private_filing_test.dart`, which also hold the reading of a
+mislabelled seed.

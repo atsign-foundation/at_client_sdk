@@ -2673,16 +2673,22 @@ so renaming it changes what verifies.
 
 **Every verification of it is a whole-string comparison** — five of them in
 `PqSigningChain`. Any republish that changes the `_apsk` value therefore
-invalidates a link signed over the old one, and the publish does not merely
-invalidate it: a republish removes the link fields from the record's
-`appMetadata`, which the atServer would otherwise keep, so the enrollment goes
-from `chained` to `unsigned` rather than `broken`
+invalidates a link signed over the old one, and what becomes of that link
+depends on the path that republishes. The atSign's own credential publishes
+with `publishPublicSigningKey`, which removes the link fields from the record's
+`appMetadata`, so the enrollment goes from `chained` to `unsigned` rather than
+`broken`
 ([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
-An enrollment holding the signing root re-anchors in the same write; any other
-is re-conveyed by the next fully privileged start's sweep, as a root link over
-the new value. A link that still vouches for the value being published is kept.
-This is why the mint must be inert at first start, and
-why 9.8.2's two composers must agree.
+One holding the signing root re-anchors in the same write, and any other is
+re-conveyed by the next fully privileged start's sweep, as a root link over the
+new value. An ordinary enrollment republishes through `enroll:update` instead,
+which carries no `appMetadata`, and the atServer keeps what is stored, so a
+link over the old value rides the new one and the walk reads it `broken`. The
+sweep then sends a chain-linked enrollment a root link, which anchors it, but
+skips one whose stale root link fills the field, and that one stays `broken`;
+both were observed against the atServer on 2026-10-08. A link that still
+vouches for the value being published is kept. This is why the mint must be
+inert at first start, and why 9.8.2's two composers must agree.
 
 #### 9.8.4 What the approver conveys is a three-way branch
 
@@ -2713,7 +2719,9 @@ enrollment id, or `primary` — is fully privileged by construction, with no
 roster lookup.
 
 **The approver never writes the enrollee's `_apsk`.** It conveys the link as a
-sealed secret and the enrollee stamps it at startup.
+sealed secret and the enrollee stamps it as it arrives; a link it cannot stamp
+yet keeps its envelope on the atServer for the next start
+([`decisions.md` 152](detail/decisions.md#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08)).
 
 #### 9.8.5 Two coherence rules on the preference
 
