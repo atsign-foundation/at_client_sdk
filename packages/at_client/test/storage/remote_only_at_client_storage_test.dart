@@ -8,6 +8,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/remote_only.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
@@ -43,6 +44,20 @@ AtLookupMuxable _recording({
       .thenAnswer((_) async => 'data:null');
   return lookUp;
 }
+
+AtKeys _demoKeys() => AtKeys()
+  // ignore: deprecated_member_use
+  ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPublicKey =
+      AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPrivateKey =
+      AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultSelfEncryptionKey = AtBytes.fromString(demo.aesKeyMap['@alice🛠']!);
 
 void main() {
   setUpAll(() => registerFallbackValue(LLookupVerbBuilder()));
@@ -169,10 +184,6 @@ void main() {
     const atSign = '@remoteonly6';
     when(() => remoteSecondary.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:1');
-    // No key material on a fresh atServer — the real llookup-miss shape
-    // _createAtChops's degrade-gracefully path is built to catch.
-    when(() => remoteSecondary.executeVerb(any()))
-        .thenThrow(KeyNotFoundException('no key material for $atSign'));
 
     final client = await buildAtClient(
         atSign: atSign,
@@ -183,6 +194,7 @@ void main() {
           ..monitorAutoStart = false,
         storage: RemoteOnlyAtClientStorage(
             atSign: atSign, remoteSecondary: remoteSecondary),
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys()),
         lookUps: _recording) as AtClientImpl;
 
     expect(client.localSecondary, isNotNull,
