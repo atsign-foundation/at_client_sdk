@@ -30,7 +30,6 @@
 /// comparable to the gap between rows says nothing about chunk size.**
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -178,8 +177,8 @@ String _opensslCeiling() {
 /// One long-lived context for the whole pass, which is how a tunnel uses it.
 double _ffiPass(
     int bytes, int chunkSize, DynamicLibrary lib, Uint8List key, Uint8List iv) {
-  final AesCtrFfiCipher cipher = AesCtrFfiCipher.fromLib(
-      lib, AESKey(base64Encode(key)), InitialisationVector(iv));
+  final AesCtrFfiCipher cipher =
+      AesCtrFfiCipher.fromLib(lib, key, InitialisationVector(iv));
   // Allocated before the stopwatch: the buffer is the caller's, not the
   // cipher's, and a socket would have handed it over already.
   final Uint8List chunk = Uint8List(chunkSize);

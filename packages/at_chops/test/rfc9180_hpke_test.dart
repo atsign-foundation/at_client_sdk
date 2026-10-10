@@ -14,7 +14,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 // Package-internal key-schedule machinery under test; not barrel-exported.
-import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart';
+import 'package:at_chops/src/encryption/rfc9180_hpke.dart';
 import 'package:at_commons/at_commons.dart' show AtDecryptionException;
 import 'package:test/test.dart';
 
@@ -168,11 +168,10 @@ void main() {
 
     test('the AEAD decrypts the published encryptions', () async {
       for (final e in (w['encryptions'] as List).cast<Map>()) {
-        final pt = await AesGcm256EncryptionAlgo(
-                AESKey(base64Encode(_hex(w['key'] as String))))
-            .decrypt(_hex(e['ct'] as String),
-                iv: InitialisationVector(_hex(e['nonce'] as String)),
-                aad: _hex(e['aad'] as String));
+        final pt = await AesGcm256EncryptionAlgo().decrypt(
+            _hex(e['ct'] as String), _hex(w['key'] as String),
+            iv: InitialisationVector(_hex(e['nonce'] as String)),
+            aad: _hex(e['aad'] as String));
         expect(_toHex(pt), e['pt']);
       }
     });
