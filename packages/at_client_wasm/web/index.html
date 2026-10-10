@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>at_client DEV</title>
+  <script src="at_client.js" defer></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    .form-group { margin-bottom: 10px; }
+    label { display: inline-block; width: 100px; }
+    #log { background: #eee; padding: 10px; margin-top: 20px; min-height: 100px; }
+  </style>
+</head>
+<body>
+  <h2>at_client JS Dev Session</h2>
+
+  <div class="form-group">
+    <label>atSign:</label>
+    <input type="text" id="atSign" value="@alice">
+  </div>
+  <div class="form-group">
+    <label>app:</label>
+    <input type="text" id="app" value="myapp">
+  </div>
+  <div class="form-group">
+    <label>proxyHost:</label>
+    <input type="text" id="proxyHost" value="localhost">
+  </div>
+  <div class="form-group">
+    <label>proxyPort:</label>
+    <input type="number" id="proxyPort" value="443">
+  </div>
+
+  <button id="btnOpen">Open</button>
+  <button id="btnClose">Close</button>
+
+  <hr>
+
+  <div class="form-group">
+    <label>key:</label>
+    <input type="text" id="key" value="mykey">
+  </div>
+  <div class="form-group">
+    <label>value:</label>
+    <input type="text" id="val" value="myvalue">
+  </div>
+
+  <button id="btnPut">Put</button>
+  <button id="btnGet">Get</button>
+  <button id="btnDelete">Delete</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+    }
+
+    let session = null;
+
+    document.getElementById('btnOpen').addEventListener('click', async () => {
+      try {
+        const options = {
+          atSign: document.getElementById('atSign').value,
+          app: document.getElementById('app').value,
+          proxyHost: document.getElementById('proxyHost').value,
+          proxyPort: parseInt(document.getElementById('proxyPort').value, 10)
+        };
+        session = await globalThis.atClientDev.openSession(options, (atSign) => {
+          return new Promise((resolve, reject) => {
+            const pwd = window.prompt(`Passphrase for ${atSign}?`);
+            if (pwd === null) {
+              reject(new Error("Cancelled"));
+            } else {
+              resolve(pwd);
+            }
+          });
+        });
+        log('Opened session for ' + options.atSign);
+      } catch (err) {
+        log('Open error: ' + err.message);
+      }
+    });
+
+    document.getElementById('btnClose').addEventListener('click', async () => {
+      if (!session) return log('No session');
+      try {
+        await session.close();
+        log('Closed session');
+      } catch (err) {
+        log('Close error: ' + err.message);
+      }
+    });
+
+    document.getElementById('btnPut').addEventListener('click', async () => {
+      if (!session) return log('No session');
+      try {
+        const k = document.getElementById('key').value;
+        const v = document.getElementById('val').value;
+        await session.put(k, v);
+        log(`Put ${k} = ${v}`);
+      } catch (err) {
+        log('Put error: ' + err.message);
+      }
+    });
+
+    document.getElementById('btnGet').addEventListener('click', async () => {
+      if (!session) return log('No session');
+      try {
+        const k = document.getElementById('key').value;
+        const v = await session.get(k);
+        log(`Get ${k} = ${v}`);
+      } catch (err) {
+        log('Get error: ' + err.message);
+      }
+    });
+
+    document.getElementById('btnDelete').addEventListener('click', async () => {
+      if (!session) return log('No session');
+      try {
+        const k = document.getElementById('key').value;
+        await session.delete(k);
+        log(`Deleted ${k}`);
+      } catch (err) {
+        log('Delete error: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
