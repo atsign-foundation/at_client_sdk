@@ -2,8 +2,8 @@
 
 - fix: an enrollment sent an ML-KEM-1024 namespace key can read that
   namespace, including one it received under an earlier 3.15.0 prerelease,
-  and a namespace key that doesn't match the one its atSign publishes is
-  refused.
+  and a namespace key that doesn't match what its atSign publishes for that
+  key is refused.
 - fix: a link vouching for an enrollment's signing key is published as soon
   as it arrives, and one that can't be published yet is tried again at the
   next start.
