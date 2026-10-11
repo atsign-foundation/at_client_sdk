@@ -15,6 +15,8 @@ void main(List<String> args) async {
     ..addOption('atkeys',
         abbr: 'k', help: 'Path to .atKeys file', mandatory: true)
     ..addOption('app', abbr: 'a', help: 'App namespace', mandatory: true)
+    ..addOption('atsign',
+        help: 'atSign the keys belong to; defaults to the keyfile or its name')
     ..addOption('root-domain',
         help: 'Root domain', defaultsTo: 'root.atsign.org')
     ..addOption('root-port', help: 'Root port', defaultsTo: '64')
@@ -47,11 +49,15 @@ void main(List<String> args) async {
     final io = FileAtKeysIo(filePath: (_) => atKeysPath);
     final loadedKeys = await io.read('');
 
-    final atSignStr = loadedKeys.atsign;
-    if (atSignStr == null) {
-      stderr.writeln('Could not find atSign in the .atKeys file');
+    final atSign = resolveAtSign(loadedKeys, atKeysPath,
+        explicit: results['atsign'] as String?);
+    if (atSign == null) {
+      stderr
+          .writeln('No atSign in the .atKeys file or its name; pass --atsign');
       exit(1);
     }
+    loadedKeys.atsign = atSign;
+    final atSignStr = atSign.toString();
 
     final cutResult = await cutEnvelope(loadedKeys);
 
