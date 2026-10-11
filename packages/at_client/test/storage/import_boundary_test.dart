@@ -47,6 +47,18 @@ void main() {
     importsOf = _importsUnder(p.dirname(barrel!.toFilePath()));
   });
 
+  test('the check flags a core file that imports package:hive', () {
+    expect(
+        _offenders({
+          'src/client/at_client_impl.dart': ['package:hive/hive.dart'],
+          'src/storage/hive/hive_at_client_storage.dart': [
+            'package:hive/hive.dart'
+          ],
+        }, _backends['Hive']!),
+        ['src/client/at_client_impl.dart names package:hive/hive.dart'],
+        reason: 'a check that never fires is green for every import there is');
+  });
+
   test('the scan reads every library and resolves relative imports', () {
     expect(importsOf.length, greaterThan(100));
     expect(importsOf['src/storage/hive/hive_at_client_storage.dart'],
@@ -60,19 +72,22 @@ void main() {
 
   for (final MapEntry(key: name, value: backend) in _backends.entries) {
     test('only the $name backend names $name', () {
-      final offenders = [
-        for (final MapEntry(key: file, value: uris) in importsOf.entries)
-          if (!backend.owners.any(file.startsWith))
-            for (final uri in uris)
-              if (backend.engine.any(uri.startsWith)) '$file names $uri',
-      ];
-
-      expect(offenders, isEmpty,
+      expect(_offenders(importsOf, backend), isEmpty,
           reason: 'storage is the app\'s choice, so outside its backend the '
               'client works with the AtClientStorage it is given');
     });
   }
 }
+
+/// Each import in [importsOf] of [backend]'s engine from a file outside it.
+List<String> _offenders(
+        Map<String, List<String>> importsOf, _Backend backend) =>
+    [
+      for (final MapEntry(key: file, value: uris) in importsOf.entries)
+        if (!backend.owners.any(file.startsWith))
+          for (final uri in uris)
+            if (backend.engine.any(uri.startsWith)) '$file names $uri',
+    ];
 
 /// Every library under [lib], by its path relative to [lib], with the URIs
 /// it imports or exports, relative ones resolved to `package:at_client/`.

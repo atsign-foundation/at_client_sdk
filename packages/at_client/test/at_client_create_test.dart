@@ -308,10 +308,29 @@ void main() {
         () => AtClientImpl.create('@factorybare', 'wavi', AtClientPreference(),
             localSecondaryKeyStore: keys.keyStore),
         throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
+            .having((e) => e.message, 'message', contains('bare keystore'))),
         reason: 'the sync queue of a client built on a bare keystore lives '
             'under preference.hiveStoragePath; with none it would open on '
             'Hive\'s global instance, which is wherever that last pointed');
+  });
+
+  group('Given a bare keystore and a hiveStoragePath', () {
+    test(
+        'when the client is built with isLocalStoreRequired false, then it is '
+        'built', () async {
+      final keys = InMemoryAtClientStorage(atSign: '@factorybareflag');
+      await keys.attach(FakeClient('@factorybareflag', null));
+      addTearDown(keys.close);
+
+      final client = await AtClientImpl.create(
+          '@factorybareflag', 'wavi', pref()..isLocalStoreRequired = false,
+          localSecondaryKeyStore: keys.keyStore);
+
+      expect(client.getLocalSecondary()?.keyStore, same(keys.keyStore),
+          reason: 'the keystore names where the records live, and the path '
+              'where its sync queue does, so the flag has nothing to decide');
+      await client.stop();
+    });
   });
 
   test('a client that fails to build is not left behind', () async {
