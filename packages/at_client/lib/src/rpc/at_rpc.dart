@@ -19,6 +19,10 @@ abstract class AtRpcCallbacks {
   Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign);
 
   /// Called when a 'response' is received
+  ///
+  /// The same response can arrive more than once: a responder sends a reply
+  /// again when it cannot confirm the atServer accepted it. Ignore a repeat
+  /// for a request already answered, as [AtRpcClient] does.
   Future<void> handleResponse(AtRpcResp response);
 }
 
