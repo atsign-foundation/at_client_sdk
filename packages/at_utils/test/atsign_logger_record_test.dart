@@ -69,28 +69,32 @@ void main() {
     expect(handler.records.single.stackTrace, same(stackTrace));
   });
 
-  test(
-      'when a record is copied for its escapes, then the copy keeps the level,'
-      ' error, stack trace, zone and object it was logged with', () {
-    final _Shown shown = _Shown('a\rb');
-    final StateError error = StateError('bad');
-    final StackTrace stackTrace = StackTrace.current;
-    logger.severe(shown, error, stackTrace);
-    final LogRecord handed = handler.records.single;
-    expect(handed.message, r'a\rb');
-    expect(handed.level, Level.SEVERE);
-    expect(handed.error, same(error));
-    expect(handed.stackTrace, same(stackTrace));
-    expect(handed.zone, same(Zone.current));
-    expect(handed.object, same(shown));
-  });
+  group(
+      'Given an AtSignLogger whose LoggingHandler keeps each record it is'
+      ' handed', () {
+    test(
+        'when a record is copied for its escapes, then the copy keeps the level,'
+        ' error, stack trace, zone and object it was logged with', () {
+      final _Shown shown = _Shown('a\rb');
+      final StateError error = StateError('bad');
+      final StackTrace stackTrace = StackTrace.current;
+      logger.severe(shown, error, stackTrace);
+      final LogRecord handed = handler.records.single;
+      expect(handed.message, r'a\rb');
+      expect(handed.level, Level.SEVERE);
+      expect(handed.error, same(error));
+      expect(handed.stackTrace, same(stackTrace));
+      expect(handed.zone, same(Zone.current));
+      expect(handed.object, same(shown));
+    });
 
-  test(
-      'when a message holds characters at each edge of the escaped ranges,'
-      ' then only C0, DEL and C1 reach the handler as escapes', () {
-    logger.info('\t\x00\x1f \x7e\x7f\x85\x9f\xa0');
-    expect(handler.records.single.message,
-        r'\t\x00\x1f' ' \x7e' r'\x7f\x85\x9f' '\xa0');
+    test(
+        'when a message holds characters at each edge of the escaped ranges,'
+        ' then only C0, DEL and C1 reach the handler as escapes', () {
+      logger.info('\t\x00\x1f \x7e\x7f\x85\x9f\xa0');
+      expect(handler.records.single.message,
+          r'\t\x00\x1f' ' \x7e' r'\x7f\x85\x9f' '\xa0');
+    });
   });
 
   test('A listener on the underlying logger is handed the message as logged',
