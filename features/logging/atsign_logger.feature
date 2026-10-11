@@ -13,14 +13,22 @@ Feature: AtSignLogger hands its LoggingHandler printable text
   DoS: an escaped message is at most four times the length of the message
   logged (`\x9b` for one character), so a call site logging text from outside
   the process still bounds its length.
+  Forgery: text logged from outside the process cannot start a record of its
+  own, nor move a terminal's cursor or clear its screen, in what a handler is
+  handed (the scenarios tagged @forgery).
+  Impersonation: a message cannot pass as another logger's record, since none
+  of its lines can start a record; the name an AtSignLogger is given is its
+  creator's choice and outside this feature.
 
   Background:
     Given an AtSignLogger whose LoggingHandler keeps each record it is handed
 
+  @forgery
   Scenario: A message's control characters other than LF reach the handler as visible escapes
     When it logs at info the message "k", CR, ESC, "[2J", LF, "yy"
     Then the handler is handed the message `k\r\x1b[2J`, LF, two spaces, "yy"
 
+  @forgery
   Scenario: A line in a message cannot start a record
     When it logs at info the message "a", LF, "INFO|x"
     Then the handler is handed the message "a", LF, two spaces, "INFO|x"
@@ -37,6 +45,7 @@ Feature: AtSignLogger hands its LoggingHandler printable text
     When it logs at warning, as the message, a stack trace of two frames, whose text ends with LF
     Then the handler is handed the first frame, LF, two spaces, the second frame, LF, two spaces
 
+  @forgery
   Scenario: A logger name's control characters reach the handler as visible escapes
     Given the AtSignLogger is named "sync", LF, "INFO"
     When it logs at info the message "hello"
