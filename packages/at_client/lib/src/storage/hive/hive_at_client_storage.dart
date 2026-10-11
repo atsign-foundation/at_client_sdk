@@ -8,6 +8,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
+import 'package:meta/meta.dart';
 // ignore: implementation_imports
 import 'package:hive/src/hive_impl.dart';
 
@@ -36,6 +37,9 @@ class HiveAtClientStorage extends AtClientStorageBase {
 
   /// The stores whose backend is open now, in this process.
   static final Set<HiveAtClientStorage> _open = <HiveAtClientStorage>{};
+
+  /// Each stray-queue adoption under way, by directory and atSign.
+  static final Map<String, Future<void>> _adopting = <String, Future<void>>{};
 
   final HiveAtPersistenceFactory _factory = HiveAtPersistenceFactory();
   AtPersistenceBundle? _bundle;
@@ -118,12 +122,27 @@ class HiveAtClientStorage extends AtClientStorageBase {
           .existsSync() &&
       !File('$directory/${AtUtils.getShaForAtSign(atSign)}.hive').existsSync();
 
+  /// Takes in this atSign's stray queue in [directory], as opening does.
+  @visibleForTesting
+  Future<void> adoptStrayQueueIn(String directory) =>
+      _adoptStrayQueueIn(directory);
+
+  /// Takes in this atSign's stray queue in [directory], if there is one,
+  /// joining an adoption of it already under way rather than opening its box
+  /// a second time.
+  Future<void> _adoptStrayQueueIn(String directory) {
+    final key = '$directory::$atSign';
+    return _adopting[key] ??= _adoptStrayQueue(directory).whenComplete(() {
+      _adopting.remove(key);
+    });
+  }
+
   /// Takes in this atSign's stray queue in [directory], if there is one.
   ///
   /// A stray that cannot be opened or read is left where it is: the store
   /// opening is worth more than the writes it might hold, and the next open
   /// tries again.
-  Future<void> _adoptStrayQueueIn(String directory) async {
+  Future<void> _adoptStrayQueue(String directory) async {
     if (!_holdsStrayQueue(directory, atSign)) return;
     try {
       final name = HiveBoxSyncQueueStore.boxNameFor(atSign);

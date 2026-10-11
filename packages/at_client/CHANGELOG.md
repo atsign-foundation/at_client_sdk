@@ -14,6 +14,10 @@
   the same `ArgumentError` as the other cases.
 - fix: `AtClientManager.setCurrentAtSign` refuses a client it could not build
   for want of storage before it stops the current one, which stays current.
+- fix: a storage, or a sync queue under one `hiveStoragePath`, is held by one
+  client at a time: a second client asking for it meanwhile is refused with a
+  `StateError` instead of sharing it, which could hang an open or close the
+  other client's queue.
 - fix: `Atsign.activate` and `PendingEnrollment.client` refuse a client that
   would have no local storage before the CRAM secret is spent or the approval
   is waited for.

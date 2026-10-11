@@ -10,6 +10,10 @@ import 'dart:async';
 /// failed, an uncaught error that is the caller's error, or is quoted in it,
 /// as a store wrapping hive's error quotes it. Every other uncaught error goes
 /// on to the zone this was called from.
+///
+/// NOTE: a second open of the same box must not start while one runs here:
+/// hive parks it on a future whose error stays in this zone, so it never
+/// completes.
 Future<T> openReportingOnce<T>(Future<T> Function() open) {
   final caller = Zone.current;
   final result = Completer<T>();

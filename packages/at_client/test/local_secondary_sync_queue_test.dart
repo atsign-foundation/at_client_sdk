@@ -38,8 +38,11 @@ void main() {
       atClientManager: atClientManager,
     );
     atClient.syncService = MockSyncService();
+    // NOTE: with no [syncQueue] the client's own queue, as its storage holds
+    // it; one queue box carries one queue.
     return LocalSecondary(atClient,
-        keyStore: atClient.getLocalSecondary()!.keyStore, syncQueue: syncQueue);
+        keyStore: atClient.getLocalSecondary()!.keyStore,
+        syncQueue: syncQueue ?? (atClient as AtClientImpl).storage!.syncQueue);
   }
 
   /// Empties [storageDir], which other test files share and can leave

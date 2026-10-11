@@ -67,6 +67,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
   String? _lastPrincipal;
   bool _closed = false;
 
+  /// The client whose [attach] is under way, and its outcome.
+  ({AtClient owner, Future<void> done})? _attaching;
+
   /// The storages whose backend is open, keyed by [location].
   ///
   /// Two storages over one location are one store on disk, so the second is
@@ -93,7 +96,22 @@ abstract class AtClientStorageBase implements AtClientStorage {
   String get location;
 
   @override
-  Future<void> attach(AtClient owner) async {
+  Future<void> attach(AtClient owner) {
+    final under = _attaching;
+    if (under != null) {
+      if (identical(under.owner, owner)) return under.done;
+      return Future.error(StateError('this storage is held by '
+          '${principalOf(under.owner)}; a client cannot attach to storage '
+          'another client holds'));
+    }
+    final done = _attach(owner);
+    _attaching = (owner: owner, done: done);
+    return done.whenComplete(() {
+      _attaching = null;
+    });
+  }
+
+  Future<void> _attach(AtClient owner) async {
     if (identical(_owner, owner)) return;
     if (_closed) {
       throw StateError('this storage has been closed and cannot be reopened');

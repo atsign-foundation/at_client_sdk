@@ -4,6 +4,7 @@ import 'package:at_client/hive.dart';
 import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/hive.dart' show HiveInstances;
 import 'package:hive/hive.dart';
 // ignore: implementation_imports
 import 'package:hive/src/hive_impl.dart';
@@ -194,6 +195,32 @@ void main() {
     expect(logs.at('WARNING').where((m) => m.contains('could not take in')),
         hasLength(1),
         reason: 'the store opened, and said what it left behind');
+  });
+
+  group('Given a stray sync queue box that cannot be opened', () {
+    test('when two adoptions of it run at once, then both return', () async {
+      if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+        markTestSkipped('root reads a file whatever its mode says');
+        return;
+      }
+      const alice = '@strayracealice';
+      final mine = dirFor('alice');
+      final theirs = dirFor('bob');
+      await close(await open('@strayracebob', theirs));
+      await leaveStrayQueue(alice, theirs, {'phone.wavi$alice': updateWritten});
+      final stray = File(queueFile(alice, theirs));
+      expect(Process.runSync('chmod', ['000', stray.path]).exitCode, 0);
+      addTearDown(() => Process.runSync('chmod', ['600', stray.path]));
+      final store = await open(alice, mine);
+      final directory = HiveInstances.canonicalPathFor(theirs);
+
+      await Future.wait([
+        store.adoptStrayQueueIn(directory),
+        store.adoptStrayQueueIn(directory),
+      ]).timeout(const Duration(seconds: 10),
+          onTimeout: () => fail('an adoption waited on the other\'s failed '
+              'open and never returned'));
+    });
   });
 
   test('a newer entry already queued here stays', () async {

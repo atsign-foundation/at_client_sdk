@@ -7,8 +7,10 @@ import 'package:hive/hive.dart';
 
 /// A [SyncQueueStore] on a Hive box.
 class HiveBoxSyncQueueStore implements SyncQueueStore {
-  HiveBoxSyncQueueStore(this._box);
+  HiveBoxSyncQueueStore(this._box, {void Function()? onClose})
+      : _onClose = onClose;
   final Box<String> _box;
+  final void Function()? _onClose;
 
   /// The box [atSign]'s sync queue lives in, beside its keystore.
   static String boxNameFor(String atSign) =>
@@ -25,15 +27,42 @@ class HiveBoxSyncQueueStore implements SyncQueueStore {
   @override
   Future<void> clear() => _box.clear();
   @override
-  Future<void> close() => _box.close();
+  Future<void> close() async {
+    try {
+      await _box.close();
+    } finally {
+      _onClose?.call();
+    }
+  }
 }
 
+/// The queue boxes open in this process, by directory and box name.
+final Set<String> _claimed = <String>{};
+
 /// [atSign]'s sync queue, open on its box under [storagePath].
+///
+/// Refused with a [StateError] while that box is open for another queue in
+/// this process: two queues over one box each replay the other's writes, and
+/// closing either closes both.
 Future<AtSyncQueue> openHiveSyncQueue(String atSign,
     {required String storagePath}) async {
-  final box = await openReportingOnce(() => HiveInstances.forPath(storagePath)
-      .openBox<String>(HiveBoxSyncQueueStore.boxNameFor(atSign)));
-  final queue = AtSyncQueue(atSign: atSign);
-  await queue.open(store: HiveBoxSyncQueueStore(box));
-  return queue;
+  final name = HiveBoxSyncQueueStore.boxNameFor(atSign);
+  final claim = '${HiveInstances.canonicalPathFor(storagePath)}::$name';
+  if (!_claimed.add(claim)) {
+    throw StateError('the sync queue of $atSign under $storagePath is already '
+        'open for another client; give this one its own hiveStoragePath, or '
+        'stop that client first');
+  }
+  try {
+    final box = await openReportingOnce(
+        () => HiveInstances.forPath(storagePath).openBox<String>(name));
+    final queue = AtSyncQueue(atSign: atSign);
+    await queue.open(
+        store:
+            HiveBoxSyncQueueStore(box, onClose: () => _claimed.remove(claim)));
+    return queue;
+  } catch (_) {
+    _claimed.remove(claim);
+    rethrow;
+  }
 }
