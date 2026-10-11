@@ -3,6 +3,8 @@
 - feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
   `Atsign` refuse a longer one with `InvalidAtSignException`
   (`AtMessage.tooLong`).
+- feat: `GateVerbBuilder` builds the `gate:` verb's commands, for reading and
+  changing an atServer's gate.
 
 ## 5.20.0
 

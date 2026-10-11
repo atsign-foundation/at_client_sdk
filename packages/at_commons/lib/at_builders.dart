@@ -22,3 +22,4 @@ export 'package:at_commons/src/verb/notify_fetch_verb_builder.dart';
 export 'package:at_commons/src/verb/enroll_verb_builder.dart';
 export 'package:at_commons/src/verb/pkam_verb_builder.dart';
 export 'package:at_commons/src/verb/keys_verb_builder.dart';
+export 'package:at_commons/src/verb/gate_verb_builder.dart';
