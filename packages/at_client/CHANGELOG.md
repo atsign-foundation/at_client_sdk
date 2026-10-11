@@ -12,6 +12,8 @@
   set it is built whatever `isLocalStoreRequired` says.
 - fix: a client passed neither storage nor `hiveStoragePath` is refused with
   the same `ArgumentError` as the other cases.
+- fix: `AtClientManager.setCurrentAtSign` refuses a client it could not build
+  for want of storage before it stops the current one, which stays current.
 - fix: `Atsign.activate` and `PendingEnrollment.client` refuse a client that
   would have no local storage before the CRAM secret is spent or the approval
   is waited for.
