@@ -168,4 +168,18 @@ class VerbSyntax {
       r'(?:encryptionKeyName:(?<encryptionKeyName>[a-zA-Z0-9_\-]+):?)?'
       r'(?:keyName:(?<keyName>\S+) ?)?'
       r'(?<keyValue>.*)?$';
+
+  /// An atServer's gate: its default, a namespace's rule, a change to a
+  /// namespace's sets, or a namespace's rule and sets to show. `*` names the
+  /// atSign-wide set where a set is changed.
+  static const gate = r'^gate:(?:'
+      r'(?<gateDefault>default)(?::(?<gateDefaultMode>ungated|closed))?'
+      r'|(?<gateRule>rule):(?<gateRuleNamespace>[\w\-.]+):(?:'
+      r'(?<gateOpen>open)(?::(?<gateSetting>limit|window|size|maxQuarantined'
+      r'|maxQuarantinedBytes):(?<gateSettingValue>\d+))?'
+      r'|(?<gateClosed>closed)(?::admit:(?<gateAdmit>@[^:@\s]+))?)'
+      r'|(?<gateSetOperation>admit|deny|remove):'
+      r'(?<gateSetNamespace>\*|[\w\-.]+):(?<gateSetAtSign>@[^:@\s]+)'
+      r'|(?<gateShow>show):(?<gateShowNamespace>[\w\-.]+)'
+      r')$';
 }
