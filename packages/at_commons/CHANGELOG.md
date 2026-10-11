@@ -5,6 +5,14 @@
   (`AtMessage.tooLong`).
 - feat: `GateVerbBuilder` builds the `gate:` verb's commands, for reading and
   changing an atServer's gate.
+- feat: `VerbSyntax.gate` parses the `gate:` verb, with its parameters named
+  in `AtConstants`.
+- feat: three error codes for an exchange the gate refuses: AT0033
+  `NotAcceptedException`, AT0034 `QuarantineLimitException` and AT0035
+  `QuarantineSizeException`.
+- feat: `monitor`, `notify:list` and `notify:fetch` take a `:quarantined`
+  flag (`AtConstants.quarantined`), by which a client asks for notifications
+  from quarantined atSigns.
 
 ## 5.20.0
 
