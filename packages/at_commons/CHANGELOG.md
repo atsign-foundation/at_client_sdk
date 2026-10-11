@@ -1,3 +1,9 @@
+## 5.21.0
+
+- feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
+  `Atsign` refuse a longer one with `InvalidAtSignException`
+  (`AtMessage.tooLong`).
+
 ## 5.20.0
 
 - feat: `AtConstants.atTelemetrySigningPrivateKey`

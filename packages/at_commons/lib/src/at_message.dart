@@ -8,6 +8,7 @@ enum AtMessage {
   reservedCharacterUsed,
   noAtSign,
   controlCharacter,
+  tooLong,
 }
 
 extension AtMessageExtension on AtMessage {
@@ -27,6 +28,8 @@ extension AtMessageExtension on AtMessage {
         'invalid @sign: must include one @ character and at least one character on the right';
     const controlCharacter =
         'invalid @sign: must not include control characters';
+    const tooLong =
+        'invalid @sign: must have at most 55 characters after the @';
 
     switch (this) {
       case AtMessage.wrongVerb:
@@ -45,6 +48,8 @@ extension AtMessageExtension on AtMessage {
         return noAtSign;
       case AtMessage.controlCharacter:
         return controlCharacter;
+      case AtMessage.tooLong:
+        return tooLong;
       // ignore: unreachable_switch_default
       default:
         return notFoundMsg;
