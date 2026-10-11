@@ -29,6 +29,10 @@ class AtSignLogger {
   ///
   /// The loggingHandler defaults to the value of [defaultLoggingHandler].
   ///
+  /// The loggingHandler is handed each record with every control character in
+  /// its message and logger name written as a visible escape (`\r`, `\x1b`),
+  /// except that each LF in the message is kept and followed by two spaces.
+  ///
   /// To customize the logging behavior based on your specific requirements, create an
   /// instance of a class that implements the [LoggingHandler] interface and pass this
   /// instance to the loggingHandler argument
@@ -46,11 +50,53 @@ class AtSignLogger {
   /// ```
   AtSignLogger(String name, {LoggingHandler? loggingHandler}) {
     logger = logging.Logger.detached(name);
-    loggingHandler ??= defaultLoggingHandler;
-    // ignore: implicit_call_tearoffs
-    logger.onRecord.listen(loggingHandler);
+    final LoggingHandler handler = loggingHandler ?? defaultLoggingHandler;
+    logger.onRecord.listen((record) => handler(_printable(record)));
     level = _root_level;
   }
+
+  /// [record], or, when its message or logger name holds a control character,
+  /// a copy of it with those escaped.
+  static logging.LogRecord _printable(logging.LogRecord record) {
+    final String message = _escaped(record.message, keepingLineBreaks: true);
+    final String loggerName =
+        _escaped(record.loggerName, keepingLineBreaks: false);
+    if (identical(message, record.message) &&
+        identical(loggerName, record.loggerName)) {
+      return record;
+    }
+    return logging.LogRecord(record.level, message, loggerName, record.error,
+        record.stackTrace, record.zone, record.object);
+  }
+
+  /// [text] with each control character written as a visible escape, or,
+  /// when [keepingLineBreaks], each LF kept and followed by two spaces.
+  static String _escaped(String text, {required bool keepingLineBreaks}) {
+    if (!text.codeUnits.any(_isControl)) {
+      return text;
+    }
+    final StringBuffer escaped = StringBuffer();
+    for (final int codeUnit in text.codeUnits) {
+      if (keepingLineBreaks && codeUnit == 0x0a) {
+        escaped.write('\n  ');
+      } else if (_isControl(codeUnit)) {
+        escaped.write(_escape(codeUnit));
+      } else {
+        escaped.writeCharCode(codeUnit);
+      }
+    }
+    return escaped.toString();
+  }
+
+  static bool _isControl(int codeUnit) =>
+      codeUnit < 0x20 || (codeUnit >= 0x7f && codeUnit <= 0x9f);
+
+  static String _escape(int codeUnit) => switch (codeUnit) {
+        0x09 => r'\t',
+        0x0a => r'\n',
+        0x0d => r'\r',
+        _ => '\\x${codeUnit.toRadixString(16).padLeft(2, '0')}',
+      };
 
   String? get level {
     return LogLevel.level.keys
