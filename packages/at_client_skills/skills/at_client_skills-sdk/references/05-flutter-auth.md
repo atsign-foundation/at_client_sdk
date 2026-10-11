@@ -53,8 +53,8 @@ Pass no `storage` and the dialogs open Hive in the app's support directory
 (`getApplicationSupportDirectory()`), or under `preference.hiveStoragePath`
 while the app still sets it. That field and `commitLogPath` are deprecated: an
 app that keeps its store anywhere else, or wants another backend, passes an
-`AtClientStorage` as `storage`, such as `HiveAtClientStorage` from
-`package:at_client/hive.dart` with `at_client` added as a dependency.
+`AtClientStorage` as `storage`, such as `HiveAtClientStorage`, which comes
+through `package:at_client_flutter`.
 
 ---
 
