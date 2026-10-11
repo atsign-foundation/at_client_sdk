@@ -1,5 +1,6 @@
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
@@ -19,6 +20,13 @@ class _Unprivileged implements EnrollmentPrivilegeResolver {
   Future<bool> isFullyPrivileged() async => false;
   @override
   Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async => false;
+}
+
+class _Privileged implements EnrollmentPrivilegeResolver {
+  @override
+  Future<bool> isFullyPrivileged() async => true;
+  @override
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async => true;
 }
 
 /// A link conveyed to an enrollment is stamped as it arrives, and the envelope
@@ -250,5 +258,146 @@ void main() {
 
     expect(await PqSigningChain(signed.child).publishPendingLink(), isTrue);
     expect(await PqSigningChain(signed.child).readLink('child-1'), isNotNull);
+  });
+
+  /// [c]'s bootstrap, wired as a client start wires it, with only the link
+  /// publication left on, so a start runs its mint step and then publishes.
+  Future<PqClientBootstrap> bootstrapOf(MockAtClient c,
+      {Future<int> Function()? sweepUnanchored}) async {
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    when(() => c.atKeysIo).thenReturn(io);
+    return PqClientBootstrap(c,
+        keysIo: io,
+        // NOTE: the chain sweep runs only on a fully privileged client.
+        privilege: sweepUnanchored == null ? _Unprivileged() : _Privileged(),
+        sweepUnanchoredEnrollments: sweepUnanchored ?? () async => 0,
+        gates: PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestRootPrivate: false,
+          requestMissingPrivates: false,
+          publishRootLink: false,
+          sweepUnanchoredEnrollments: sweepUnanchored != null,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ));
+  }
+
+  /// Delivers [secret] to [c] as a sweep does: stored, then handed to the
+  /// arrival hook.
+  Future<void> arrive(MockAtClient c, Secret secret) async {
+    final sharing = AtClientSecretSharing.forClient(c);
+    await sharing.secretStore.putSecret(secret, allowReservedName: true);
+    await sharing.fileReceivedSecret!(secret);
+  }
+
+  group('Given a client start that has not yet run its mint step', () {
+    /// Starts [bootstrap], completing once the start is held just before its
+    /// mint step; the start goes on when [release] completes.
+    Future<({Future<void> started})> heldBeforeMint(
+        PqClientBootstrap bootstrap, Completer<void> release) async {
+      final atMint = Completer<void>();
+      bootstrap.holdBeforeMint = () {
+        atMint.complete();
+        return release.future;
+      };
+      final started = bootstrap.startup();
+      await atMint.future;
+      return (started: started);
+    }
+
+    test(
+        'when a link for this enrollment arrives, then it waits in the secret'
+        ' store unstamped', () async {
+      final signed = await signedChainLink();
+      final release = Completer<void>();
+      final (:started) =
+          await heldBeforeMint(await bootstrapOf(signed.child), release);
+
+      await arrive(signed.child, chainLinkSecret(signed.link));
+
+      expect(await PqSigningChain(signed.child).readLink('child-1'), isNull,
+          reason: 'a link stamped now would ride the key the mint replaces');
+      expect(
+          AtClientSecretSharing.forClient(signed.child)
+              .secretStore
+              .listSecrets()
+              .where((s) => s.name == PqSigningChain.linkSecretName),
+          hasLength(1),
+          reason: 'the start publishes it from the store once it has minted');
+      release.complete();
+      await started;
+    });
+
+    test(
+        'when the mint then gives the enrollment a new signing key, then the'
+        ' link is not stamped, and the chain reads unsigned rather than'
+        ' broken', () async {
+      final signed = await signedChainLink();
+      final release = Completer<void>();
+      final (:started) =
+          await heldBeforeMint(await bootstrapOf(signed.child), release);
+      await arrive(signed.child, chainLinkSecret(signed.link));
+
+      // What enroll:update does to the record: a new value, while the
+      // atServer keeps the metadata it already stores.
+      final apsk = AtKey.fromString(PqSigningChain.apskUri(atSign, 'child-1'))
+          .toString();
+      expect(remoteData[apsk], isNotNull);
+      remoteData[apsk] = 'a signing key minted on this start';
+      release.complete();
+      await started;
+
+      final result = await PqSigningChain(signed.child).verifyChain(
+          AtClientSecretSharing.forClient(signed.child), 'child-1');
+      expect(result.verdict, ChainVerdict.unsigned);
+      expect(await PqSigningChain(signed.child).readLink('child-1'), isNull);
+    });
+
+    test(
+        'when the mint leaves the signing key as it was, then the start stamps'
+        ' the link once it publishes links', () async {
+      final signed = await signedChainLink();
+      final release = Completer<void>();
+      final (:started) =
+          await heldBeforeMint(await bootstrapOf(signed.child), release);
+      await arrive(signed.child, chainLinkSecret(signed.link));
+
+      release.complete();
+      await started;
+
+      expect(await PqSigningChain(signed.child).readLink('child-1'), isNotNull);
+    });
+  });
+
+  group('Given a client start that has run its mint step', () {
+    test(
+        'when a link for this enrollment arrives, then it is stamped as it'
+        ' arrives', () async {
+      final signed = await signedChainLink();
+      final pastMint = Completer<void>();
+      final release = Completer<void>();
+      // NOTE: the chain sweep runs after the mint and the link publication,
+      // so holding it delivers the link while the start is still running.
+      final bootstrap =
+          await bootstrapOf(signed.child, sweepUnanchored: () async {
+        pastMint.complete();
+        await release.future;
+        return 0;
+      });
+      final started = bootstrap.startup();
+      await pastMint.future;
+
+      await arrive(signed.child, chainLinkSecret(signed.link));
+
+      expect(await PqSigningChain(signed.child).readLink('child-1'), isNotNull);
+      release.complete();
+      await started;
+    });
   });
 }

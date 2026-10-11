@@ -239,7 +239,9 @@ class PqClientBootstrap {
     sharing.fileReceivedSecret = (secret) async {
       await filing?.filePending([secret]);
       await root.filePendingPrivate(_atSign, [secret]);
-      if (gates.publishChainLink && PqSigningChain.isLinkSecret(secret.name)) {
+      if (gates.publishChainLink &&
+          !_holdingLinkStamps &&
+          PqSigningChain.isLinkSecret(secret.name)) {
         await chain.stampConveyedLink(secret);
       }
     };
@@ -291,6 +293,17 @@ class PqClientBootstrap {
   final Completer<void> _startupComplete = Completer<void>();
   bool _started = false;
 
+  /// Awaited immediately before the mint step, so a test can hold a start
+  /// there. Null in production.
+  @visibleForTesting
+  Future<void> Function()? holdBeforeMint;
+
+  // NOTE: true from the start of startup until its mint step has run. A mint
+  // republishes `_apsk` by enroll:update, which keeps the stored
+  // `appMetadata`, so a link stamped over the old key would ride the new one;
+  // a link arriving meanwhile is stamped by the link-publishing step instead.
+  bool _holdingLinkStamps = false;
+
   /// Completes when the last startup step has run. Steps fail
   /// independently and are logged, so this never completes with an error —
   /// it answers "has the startup finished?", not "did every step work?".
@@ -323,6 +336,7 @@ class PqClientBootstrap {
             _atClient.getCurrentAtSign()!, namespace);
 
     final steps = _steps;
+    _holdingLinkStamps = true;
     try {
       for (var i = 0; i < steps.length; i++) {
         if (_stopped) {
@@ -340,6 +354,7 @@ class PqClientBootstrap {
         }
       }
     } finally {
+      _holdingLinkStamps = false;
       _startupComplete.complete();
     }
   }
@@ -480,6 +495,7 @@ class PqClientBootstrap {
   /// sweep steps run first and reply with whatever the keyfile already holds.
   Future<void> _mintInUseSigningKeys() async {
     try {
+      await holdBeforeMint?.call();
       if (!_gates.mintInUseSigningKeys) return;
       await minting.reconcileSigningKeys();
     } catch (e, st) {
@@ -487,6 +503,8 @@ class PqClientBootstrap {
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
+    } finally {
+      _holdingLinkStamps = false;
     }
   }
 
