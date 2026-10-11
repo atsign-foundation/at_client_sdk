@@ -46,6 +46,12 @@ class AtExceptionUtils {
         return AtEnrollmentRevokeException(errorDescription);
       case 'AT0032':
         return IllegalStateException(errorDescription);
+      case 'AT0033':
+        return NotAcceptedException(errorDescription);
+      case 'AT0034':
+        return QuarantineLimitException(errorDescription);
+      case 'AT0035':
+        return QuarantineSizeException(errorDescription);
       case 'AT0401':
         return UnAuthenticatedException(errorDescription);
       default:
