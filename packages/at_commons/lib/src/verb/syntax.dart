@@ -171,18 +171,21 @@ class VerbSyntax {
 
   /// An atServer's gate: its default, a namespace's rule, a change to a
   /// namespace's sets, a namespace's rule and sets to show, the verdict an
-  /// atSign gets in a namespace, or the namespaces it holds. `*` names the
-  /// atSign-wide set, and a setting's value `default` the operator's.
+  /// atSign gets in a namespace, or the namespaces it holds. A namespace is
+  /// dot-separated labels, none empty. `*` names the atSign-wide set, a
+  /// setting's value `default` the operator's, and a rule `none` no rule.
   static const gate = r'^gate:(?:'
       r'(?<gateDefault>default)(?::(?<gateDefaultMode>ungated|closed))?'
-      r'|(?<gateRule>rule):(?<gateRuleNamespace>[\w\-.]+):(?:'
+      r'|(?<gateRule>rule):(?<gateRuleNamespace>[\w\-]+(?:\.[\w\-]+)*):(?:'
       r'(?<gateOpen>open)(?::(?<gateSetting>limit|window|size|maxQuarantined'
       r'|maxQuarantinedBytes):(?<gateSettingValue>\d+|default))?'
-      r'|(?<gateClosed>closed)(?::admit:(?<gateAdmit>@[^:@\s]+))?)'
+      r'|(?<gateClosed>closed)(?::admit:(?<gateAdmit>@[^:@\s]+))?'
+      r'|(?<gateNone>none))'
       r'|(?<gateSetOperation>admit|deny|remove):'
-      r'(?<gateSetNamespace>\*|[\w\-.]+):(?<gateSetAtSign>@[^:@\s]+)'
-      r'|(?<gateShow>show):(?<gateShowNamespace>\*|[\w\-.]+)'
-      r'|(?<gateCheck>check):(?<gateCheckNamespace>[\w\-.]+)'
+      r'(?<gateSetNamespace>\*|[\w\-]+(?:\.[\w\-]+)*)'
+      r':(?<gateSetAtSign>@[^:@\s]+)'
+      r'|(?<gateShow>show):(?<gateShowNamespace>\*|[\w\-]+(?:\.[\w\-]+)*)'
+      r'|(?<gateCheck>check):(?<gateCheckNamespace>[\w\-]+(?:\.[\w\-]+)*)'
       r':(?<gateCheckAtSign>@[^:@\s]+)'
       r'|(?<gateList>list)'
       r')$';

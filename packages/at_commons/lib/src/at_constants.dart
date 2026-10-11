@@ -143,6 +143,7 @@ class AtConstants {
   static const String gateSetting = 'gateSetting';
   static const String gateSettingValue = 'gateSettingValue';
   static const String gateClosed = 'gateClosed';
+  static const String gateNone = 'gateNone';
   static const String gateAdmit = 'gateAdmit';
   static const String gateSetOperation = 'gateSetOperation';
   static const String gateSetNamespace = 'gateSetNamespace';

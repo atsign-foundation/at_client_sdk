@@ -112,6 +112,21 @@ void main() {
       expect(parse('gate:list')[AtConstants.gateList], 'list');
     });
 
+    test("when a namespace's rule is removed, then none parses", () {
+      final Map<String, String?> params = parse('gate:rule:chat:none');
+      expect(params[AtConstants.gateRuleNamespace], 'chat');
+      expect(params[AtConstants.gateNone], 'none');
+      expect(params[AtConstants.gateOpen], isNull);
+      expect(params[AtConstants.gateClosed], isNull);
+    });
+
+    test(
+        'when a namespace has labels of word characters and hyphens, then it'
+        ' parses', () {
+      expect(parse('gate:show:my-app_1.chat')[AtConstants.gateShowNamespace],
+          'my-app_1.chat');
+    });
+
     test('when a command breaks the grammar, then it does not parse', () {
       for (final String command in [
         'gate',
@@ -135,6 +150,18 @@ void main() {
         'gate:check:*:@bob',
         'gate:check:chat:bob',
         'gate:list:chat',
+        'gate:rule:chat:none:admit:@bob',
+        'gate:rule:chat:none:limit:3',
+        'gate:rule:.chat:open',
+        'gate:rule:chat.:closed',
+        'gate:rule:a..chat:none',
+        'gate:admit:.chat:@bob',
+        'gate:deny:chat.:@bob',
+        'gate:remove:a..chat:@bob',
+        'gate:show:.chat',
+        'gate:show:chat.',
+        'gate:check:a..chat:@bob',
+        'gate:check:.chat:@bob',
       ]) {
         expect(VerbUtil.getVerbParam(VerbSyntax.gate, command), isNull,
             reason: '"$command" is not in the grammar');
