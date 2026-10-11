@@ -121,7 +121,8 @@ void main() {
     await NskeyPrivateFiling(keysIo: io, atSign: atSign).file(Secret(
       namespace: 'app_1.my_apps',
       name: '${NskeyPrivateFiling.secretNamePrefix}kid-one',
-      value: base64Encode(Uint8List.fromList(List<int>.generate(64, (i) => i))),
+      // NOTE: an X-Wing seed's length, the KEM a key package also uses.
+      value: base64Encode(Uint8List.fromList(List<int>.generate(32, (i) => i))),
     ));
 
     final registrant = await boundRegistrant(io);
@@ -138,7 +139,8 @@ void main() {
     await NskeyPrivateFiling(keysIo: io, atSign: atSign).file(Secret(
       namespace: 'app_1.my_apps',
       name: '${NskeyPrivateFiling.secretNamePrefix}kid-one',
-      value: base64Encode(Uint8List.fromList(List<int>.generate(64, (i) => i))),
+      // NOTE: an X-Wing seed's length, the KEM a key package also uses.
+      value: base64Encode(Uint8List.fromList(List<int>.generate(32, (i) => i))),
     ));
 
     expect(keyPackageMaterial(await io.read(atSign)), isNull,

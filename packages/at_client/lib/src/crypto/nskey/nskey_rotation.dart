@@ -86,11 +86,14 @@ class NskeyRotation {
           'process — leaving every peer sealing to a generation this atSign '
           'can no longer open');
     }
-    final filing =
-        privateFiling ?? NskeyPrivateFiling(keysIo: keysIo!, atSign: atSign);
+    late final PublishedNskeyKeyRing ring;
+    final filing = privateFiling ??
+        NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo!, atSign: atSign);
+    ring = PublishedNskeyKeyRing(atClient, privateFiling: filing);
     return NskeyRotation(
       atClient: atClient,
-      ring: PublishedNskeyKeyRing(atClient, privateFiling: filing),
+      ring: ring,
       privateFiling: filing,
       sharing: sharing ?? AtClientSecretSharing.forClient(atClient),
     );

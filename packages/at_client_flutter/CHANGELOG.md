@@ -9,6 +9,9 @@
   `storage:`, as at_client now refuses a client with no local storage;
   `ApkamActivationDialog` refuses such an app when it opens, before any
   enrollment request goes out.
+- fix: keychain writes made at the same moment no longer lose another
+  atSign's keys, and `update` no longer fails or brings back an atSign
+  removed meanwhile.
 - build: requires `at_client` ^3.15.0-rc6.
 
 ## 2.0.0-rc4
