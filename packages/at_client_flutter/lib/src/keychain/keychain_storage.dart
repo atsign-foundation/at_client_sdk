@@ -91,16 +91,26 @@ class KeychainStorage {
     if (improperDataString == null) {
       return null;
     }
+    final legacyData = improperDataString;
 
-    _logger.info(
-      'Migrating AtKeysData from legacy keychain store '
-      '"$keychainStorageImproperName" to "$currentName"',
-    );
-    await _write(
-      biometricStoreName: currentName,
-      keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
-    );
-    return improperDataString;
+    return _writes.synchronized(() async {
+      // NOTE: read again under the lock. A writer may have copied the legacy
+      // entry and changed it since the read above, and copying it again would
+      // write over that change.
+      final migrated = await _read(keychainStoreName: currentName);
+      if (migrated != null) {
+        return migrated;
+      }
+      _logger.info(
+        'Migrating AtKeysData from legacy keychain store '
+        '"$keychainStorageImproperName" to "$currentName"',
+      );
+      await _write(
+        biometricStoreName: currentName,
+        keychainData: AtKeysData.fromJson(jsonDecode(legacyData)),
+      );
+      return legacyData;
+    });
   }
 
   /// Runs [action] holding the lock every write of stored keys takes, so a
