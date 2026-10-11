@@ -32,8 +32,9 @@ abstract class AtClient {
   /// storage, the default or one the app passed; `null` on any other storage
   /// or before it has opened.
   /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
-  /// `null` on the client. Owned and torn down by the client; callers must
-  /// not close it.
+  /// `null` on the client. Callers must not close it: the storage that holds
+  /// it closes it, when the client stops for a storage built with
+  /// `closedByClient: true`, else when its owner closes the storage.
   @Deprecated('Read the keystore from the AtClientStorage the client was '
       'given; removed in 4.0')
   AtPersistenceBundle? get persistenceBundle;

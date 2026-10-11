@@ -209,10 +209,10 @@ The keystore and its bootstrap are both injectable. A client takes a constructed
 `AtClientStorage` as `storage:`, and builds one itself only when given none, through
 `lib/src/storage/default_storage.dart`, the one core file that names Hive until 4.0
 ([D-25](decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)).
-That default still requires `hiveStoragePath` and throws `'Please set local storage path'`
-without it. `StorageManager`, which hard-coded `HiveAtPersistenceFactory()` with no
-constructor parameter, is folded into `HiveAtClientStorage`, and the `keyStoreSecret` it
-accepted and ignored is deprecated, read by nothing.
+That default still requires `hiveStoragePath`, and a client given no storage and no path
+is refused with an `ArgumentError` at construction. The Hive bootstrap lives in
+`HiveAtClientStorage`, which builds its keystore through `HiveAtPersistenceFactory`, and
+`keyStoreSecret`, which nothing reads, is deprecated.
 
 `AtClientImpl.create(..., localSecondaryKeyStore:)`, the bare-keystore route that skipped
 the bootstrap, is deprecated and goes in 4.0; a caller passes storage instead.
@@ -350,8 +350,8 @@ construction, so nothing in at_client opens a box on Hive's global instance. The
 in 4.0.
 
 Consequences, before D-25: it fired on the first `put` or `syncQueueSize`, not at
-construction; it compiled everywhere; and injecting a keystore to bypass `StorageManager`
-made it throw rather than fixing it.
+construction; it compiled everywhere; and injecting a keystore in place of the Hive
+bootstrap made it throw rather than fixing it.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 The queue does **not** get a spec interface of its own. It belongs to the storage bundle

@@ -181,7 +181,7 @@ class LocalSecondary implements Secondary {
   }
 
   /// Number of atKeys with pending client→server writes. Reads the
-  /// in-memory queue length (no Hive I/O). Triggers a one-time
+  /// in-memory queue length, without touching the store. Triggers a one-time
   /// open of the queue on first call.
   Future<int> get syncQueueSize async {
     final q = await _ensureSyncQueueOpen();

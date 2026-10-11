@@ -24,14 +24,17 @@ import 'package:flutter/services.dart';
 ///   platform keychain by default. It is also the resume record: a request
 ///   submitted earlier for the same app and device is waited on again rather
 ///   than repeated, so the passcode is only asked for when nothing is pending.
-/// - [storage]: the client's local storage.
+/// - [storage]: the client's local storage; with none, a Hive store under the
+///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
 ///   its symmetric key travels; with neither, the preference's posture
 ///   decides.
 ///
 /// Returns:
 /// - The `AtClient` opened on the approved keys, or null if the process fails
-///   or is cancelled.
+///   or is cancelled. A preference with `isLocalStoreRequired` false and no
+///   [storage] is a programming error: the dialog throws an [ArgumentError] as
+///   it opens, before any request goes out.
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;

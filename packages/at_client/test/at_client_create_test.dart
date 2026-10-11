@@ -297,8 +297,7 @@ void main() {
         throwsA(isA<ArgumentError>()
             .having((e) => e.message, 'message', contains('hiveStoragePath'))),
         reason: 'the one refusal for a client with nothing to keep its '
-            'records in, whichever argument is missing, before any key '
-            'material is read');
+            'records in, whichever argument is missing');
   });
 
   test('a bare keystore with no hiveStoragePath is refused', () async {

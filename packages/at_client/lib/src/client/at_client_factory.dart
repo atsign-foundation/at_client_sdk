@@ -32,9 +32,9 @@ import 'package:at_utils/at_utils.dart';
 /// `closedByClient: true` is closed by the client instead. Supplying none
 /// falls back to a Hive store under the deprecated
 /// `preference.hiveStoragePath`, and is refused when
-/// `preference.isLocalStoreRequired` is false. [lookUps] builds every
-/// connection the client opens (its own, its sync's, its monitor's); with
-/// none, TLS on TCP from the preference.
+/// `preference.isLocalStoreRequired` is false or that path is unset.
+/// [lookUps] builds every connection the client opens (its own, its sync's,
+/// its monitor's); with none, TLS on TCP from the preference.
 ///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -128,8 +128,9 @@ Future<String?> _principalOf(
 }
 
 /// Where a client built from these arguments would keep its storage, or
-/// null when it would keep none: the bundle supplied, else the Hive store
-/// `AtClientImpl.create` opens under `preference.hiveStoragePath`.
+/// null when it would be refused for want of storage: the bundle supplied,
+/// else the Hive store `AtClientImpl.create` opens under
+/// `preference.hiveStoragePath`.
 String? _locationOf(
     String atSign, AtClientPreference preference, AtClientStorage? storage) {
   if (storage != null) {

@@ -135,6 +135,9 @@ class PendingEnrollment {
 
   /// Waits for the decision, then opens a client on the completed keys.
   ///
+  /// A client it could not build for want of local storage is refused with
+  /// an [ArgumentError] before the wait starts.
+  ///
   /// The client is the caller's to stop. See `Atsign.open` for [preference],
   /// [namespace], [storage] and [connectBudget]; see [awaitApproval] for
   /// [retryInterval] and [maxRetries] and for what a denial does.

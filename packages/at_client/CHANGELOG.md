@@ -8,9 +8,10 @@
   as the flag's deprecation says; pass one such as `InMemoryAtClientStorage`.
   Storage an app passes is now always used.
 - fix: a client built on the deprecated `localSecondaryKeyStore` with no
-  `hiveStoragePath` is refused; set the path, or pass a storage.
+  `hiveStoragePath` is refused; set the path, or pass a storage. With the path
+  set it is built whatever `isLocalStoreRequired` says.
 - fix: a client passed neither storage nor `hiveStoragePath` is refused with
-  the same `ArgumentError` as the other cases, before any keys are read.
+  the same `ArgumentError` as the other cases.
 - fix: `Atsign.activate` and `PendingEnrollment.client` refuse a client that
   would have no local storage before the CRAM secret is spent or the approval
   is waited for.

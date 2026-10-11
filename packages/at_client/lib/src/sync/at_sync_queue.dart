@@ -280,7 +280,7 @@ class AtSyncQueue {
   }
 
   /// Number of pending entries in the in-memory queue. Cheap; reads
-  /// from the LinkedHashSet length, no Hive I/O.
+  /// from the LinkedHashSet length, without touching the store.
   int get size {
     _ensureOpen();
     return _inMemoryQueue.length;

@@ -107,7 +107,7 @@ summary is:
    compromised scoped key can only damage data in its granted
    namespaces.
 
-### In code: one import, four verbs
+### In code: four verbs
 
 `at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
 (a `.atKeys` file, the platform keychain, or memory) and asks the atSign
@@ -115,11 +115,17 @@ for a client; every verb hands back an `AtClient` the app owns and stops.
 
 ```dart
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+
+// Every client keeps local storage, here Hive in a directory the app picks.
+AtClientStorage storage() => HiveAtClientStorage(
+    atSign: '@alice', storagePath: '/data/alice', closedByClient: true);
 
 // Log in: a client on keys the app already holds. It comes back online,
 // offline or refused, and says which; offline it serves its local store.
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    storage: storage(),
     preference: AtClientPreference()..namespace = 'todos');
 client.connection.current;                  // online | offline | refused
 client.connection.changes.listen((state) => print(state));
@@ -128,14 +134,15 @@ await client.connection.awaitOnline();      // wait, with a budget
 // Onboard: activate a newly registered atSign with its CRAM secret. The
 // keys it mints land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, preference: preference);
+    cramSecret: secret, keys: keys, storage: storage(), preference: preference);
 
 // Enroll: ask the atSign's owner to approve this app. The request is filed
 // in `keys` as pending, so a restart resumes it rather than repeating it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
     preference: preference);
-final enrolled = await pending.client(preference);      // waits for approval
+final enrolled = await pending.client(preference,
+    storage: storage());                                 // waits for approval
 final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
     device: 'phone', keys: keys, preference: preference);
 
@@ -180,9 +187,11 @@ any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath` are deprecated in favour of the factory's config.
 
 Every client keeps local storage, even if only in memory. A client given none
-opens Hive under `preference.hiveStoragePath` until 4.0; one given none and
-no path, or none with `isLocalStoreRequired` false, is refused, and the
-refusal names `InMemoryAtClientStorage`, which keeps nothing on disk.
+opens Hive under `preference.hiveStoragePath` until 4.0. One given none and
+no path, or none with `isLocalStoreRequired` false, is refused with an
+`ArgumentError` before anything irreversible, such as spending a CRAM secret
+or waiting for an approval; `InMemoryAtClientStorage` keeps nothing on
+disk.
 End-to-end-encrypted values are stored in local storage as their ciphertext,
 never in the clear. A backend of your own
 needs types at_client doesn't export, so raise a

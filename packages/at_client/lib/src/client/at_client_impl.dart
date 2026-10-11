@@ -717,7 +717,8 @@ class AtClientImpl implements AtClient {
   ///
   /// Two mismatches are **refused** rather than ignored: a [storage] the cached
   /// client does not hold, and a preference naming different rollout axes —
-  /// see [refuseChangedRolloutAxes]. A test or an app
+  /// see [refuseChangedRolloutAxes]. A client it would build with no local
+  /// storage is refused as [refuseWithoutStorage] says. A test or an app
   /// that needs a genuinely different client must not rely on passing
   /// different arguments here.
   ///

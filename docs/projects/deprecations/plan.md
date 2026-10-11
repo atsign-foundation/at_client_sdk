@@ -259,9 +259,8 @@ the flag is read only when a client is given no storage, and false is then
 refused, so a 3.x app that sets it false already has to pass storage. D-25
 also deprecated `AtClientImpl.create(localSecondaryKeyStore:)` and
 `AtClient.persistenceBundle`, both removed in 4.0 with the rest. Nothing
-outside at_client uses either; inside it, 3 test files pass
-`localSecondaryKeyStore` and 1 reads `persistenceBundle`, found by
-`grep -rnE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
+outside at_client uses either; inside it, only tests use them, listed by
+`grep -rlE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
 `AtClientPreference.keyStoreSecret` is deprecated beside them, and nothing in
 this tree sets it. at_client 1.0.0 to 3.0.4 passed it to the Hive vault as its
 secret; nothing has read it since 3.0.5 (2021-11-15).
