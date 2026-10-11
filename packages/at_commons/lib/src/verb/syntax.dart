@@ -108,6 +108,7 @@ class VerbSyntax {
       r'(:(?<strict>strict))?'
       r'(:(?<selfNotifications>selfNotifications))?'
       r'(:(?<multiplexed>multiplexed))?'
+      r'(:(?<quarantined>quarantined))?'
       r'(:(?<epochMillis>\d+))?'
       r'( (?<regex>.+))?'
       r'$';
@@ -131,9 +132,10 @@ class VerbSyntax {
       r'(:(?<value>.+))?'
       r'$';
   static const notifyList =
-      r'^notify:list(:(?<fromDate>\d{4}-[01]?\d?-[0123]?\d?))?(:(?<toDate>\d{4}-[01]?\d?-[0123]?\d?))?(:(?<regex>[^:]+))?';
+      r'^notify:list(:(?<quarantined>quarantined))?(:(?<fromDate>\d{4}-[01]?\d?-[0123]?\d?))?(:(?<toDate>\d{4}-[01]?\d?-[0123]?\d?))?(:(?<regex>[^:]+))?';
   static const notifyStatus = r'^notify:status:(?<notificationId>\S+)$';
-  static const notifyFetch = r'^notify:fetch:(?<notificationId>\S+)$';
+  static const notifyFetch =
+      r'^notify:fetch:(?<notificationId>\S+?)(:(?<quarantined>quarantined))?$';
   static const notifyAll = r'^notify:all:'
       r'((?<operation>update|delete):)?'
       r'(messageType:((?<messageType>key|text):))?'

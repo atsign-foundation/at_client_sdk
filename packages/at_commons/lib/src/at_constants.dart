@@ -59,6 +59,10 @@ class AtConstants {
   static const String monitorMultiplexedMode = 'multiplexed';
   static const String monitorRegex = 'regex';
   static const String monitorSelfNotifications = 'selfNotifications';
+
+  /// The flag by which monitor, notify:list and notify:fetch ask for
+  /// notifications from atSigns quarantined by the gate.
+  static const String quarantined = 'quarantined';
   static const String id = 'id';
   static const String operation = 'operation';
   static const String setOperation = 'setOperation';
