@@ -30,6 +30,9 @@ extension AtsignString on String {
   }
 }
 
+/// The most characters an atSign may have after its `@`, counted in code points.
+const int _maxAtSignCharacters = 55;
+
 Atsign _fixAtSign(String atSign) {
   // @signs are always lowercase Latin
   if (atSign == '' || atSign.isEmpty) {
@@ -55,6 +58,9 @@ Atsign _fixAtSign(String atSign) {
   right = right.replaceAll(r'.', '');
   if (right.isEmpty) {
     throw InvalidAtSignException(AtMessage.noAtSign.text);
+  }
+  if (right.runes.length > _maxAtSignCharacters) {
+    throw InvalidAtSignException(AtMessage.tooLong.text);
   }
   // reconstruct @sign
   atSign = '$left@$right';
