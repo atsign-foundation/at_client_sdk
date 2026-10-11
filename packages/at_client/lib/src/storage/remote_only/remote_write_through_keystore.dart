@@ -31,6 +31,10 @@ class RemoteWriteThroughKeyStore
     throw lastError!;
   }
 
+  /// Sends [command] as one newline-terminated protocol line, with retry.
+  Future<String?> _execute(String command) => _withRetry(
+      () => remoteSecondary.executeCommand('$command\n', auth: true));
+
   @override
   Future<void> initialize() async {}
 
@@ -42,8 +46,7 @@ class RemoteWriteThroughKeyStore
       _local[key] = value;
       return null;
     }
-    await _withRetry(() => remoteSecondary
-        .executeCommand('update:$key ${value.data}', auth: true));
+    await _execute('update:$key ${value.data}');
     return null;
   }
 
@@ -56,8 +59,7 @@ class RemoteWriteThroughKeyStore
       return null;
     }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
-    await _withRetry(() => remoteSecondary
-        .executeCommand('update:meta:$key$fragment', auth: true));
+    await _execute('update:meta:$key$fragment');
     return null;
   }
 
@@ -68,8 +70,7 @@ class RemoteWriteThroughKeyStore
       return null;
     }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
-    await _withRetry(() => remoteSecondary
-        .executeCommand('update$fragment:$key ${value.data}', auth: true));
+    await _execute('update$fragment:$key ${value.data}');
     return null;
   }
 
@@ -80,8 +81,7 @@ class RemoteWriteThroughKeyStore
       _local.remove(key);
       return null;
     }
-    await _withRetry(
-        () => remoteSecondary.executeCommand('delete:$key', auth: true));
+    await _execute('delete:$key');
     return null;
   }
 
