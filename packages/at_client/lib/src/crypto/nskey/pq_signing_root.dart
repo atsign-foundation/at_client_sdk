@@ -763,8 +763,9 @@ class PqSigningRoot {
   /// Files a conveyed root private waiting in the secret store, if there is one
   /// this client does not already hold, and returns whether it filed.
   ///
-  /// A one-shot check of the store rather than a subscription, so a private
-  /// arriving after this runs is filed at the next start.
+  /// A one-shot check of the store rather than a subscription; a private
+  /// arriving later is filed as it arrives, by the client's
+  /// `fileReceivedSecret` hook.
   Future<bool> filePendingPrivate(
       String atSign, Iterable<Secret> heldSecrets) async {
     final secret = heldSecrets.where((s) => s.name == secretName).firstOrNull;

@@ -1,3 +1,6 @@
+## 3.4.2
+- fix: `AtUtils.fixAtSign` refuses an atSign with more than 55 characters
+  after its `@`, as `toAtsign` does
 ## 3.4.1
 - fix: ConsoleLoggingHandler no longer prints an empty line after every record
 ## 3.4.0

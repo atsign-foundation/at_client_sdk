@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -87,6 +88,60 @@ void main() {
     await storage.close();
   });
 
+  group('Given a client whose keys have not yet been read from its key source',
+      () {
+    Future<(LocalSecondary, InMemoryAtClientStorage)> secondaryOver(
+        _HeldKeySource source) async {
+      final atClient = MockAtClientImpl();
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      when(() => atClient.enrollmentId).thenReturn(enrollmentId);
+      when(() => atClient.atKeysIo).thenReturn(source);
+      final storage = InMemoryAtClientStorage(atSign: atSign);
+      await storage.attach(atClient);
+      return (LocalSecondary(atClient, keyStore: storage.keyStore), storage);
+    }
+
+    Future<Object?> outcome(Future<String?> call) =>
+        call.then<Object?>((v) => v, onError: (Object e) => e.runtimeType);
+
+    test(
+        'when two operations need a key at the same moment, then both get it '
+        'and the key source is read once', () async {
+      final source = _HeldKeySource(
+          await (await typedKeyfile(atSign)).read(atSign),
+          failWith: null);
+      final (local, storage) = await secondaryOver(source);
+
+      final first = outcome(local.getEncryptionSelfKey());
+      final second = outcome(local.getEncryptionSelfKey());
+      source.release.complete();
+
+      expect(await Future.wait([first, second]),
+          [testSelfEncryptionKey, testSelfEncryptionKey],
+          reason: 'a caller asking while the read is in flight waits for it');
+      expect(source.reads, 1);
+      await storage.close();
+    });
+
+    test(
+        'when the key source cannot be read, then every caller gets nothing '
+        'from it and falls through to the keystore', () async {
+      final source = _HeldKeySource(null,
+          failWith: AtKeysNotInMemoryException('$atSign not found in memory'));
+      final (local, storage) = await secondaryOver(source);
+
+      final first = outcome(local.getEncryptionSelfKey());
+      final second = outcome(local.getEncryptionSelfKey());
+      source.release.complete();
+
+      expect(await Future.wait([first, second]),
+          [KeyNotFoundException, KeyNotFoundException],
+          reason: 'the empty keystore answers both callers');
+      expect(source.reads, 1);
+      await storage.close();
+    });
+  });
+
   test('control: with no key source the read falls through to the keystore',
       () async {
     // The keystore is empty, so every tier misses and the keystore's exception
@@ -104,4 +159,23 @@ void main() {
     await expectLater(
         () => local.getPkamPrivateKey(), throwsA(isA<KeyNotFoundException>()));
   });
+}
+
+/// A key source whose reads finish only once the test completes [release],
+/// answering [keys] or throwing [failWith].
+class _HeldKeySource extends InMemoryAtKeysIo {
+  final AtKeys? keys;
+  final Exception? failWith;
+  final Completer<void> release = Completer<void>();
+  int reads = 0;
+
+  _HeldKeySource(this.keys, {required this.failWith});
+
+  @override
+  Future<AtKeys> read(String atsign) async {
+    reads++;
+    await release.future;
+    if (failWith != null) throw failWith!;
+    return keys!;
+  }
 }

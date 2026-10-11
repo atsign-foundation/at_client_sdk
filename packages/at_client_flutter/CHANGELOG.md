@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0.0-rc5
+
+- fix: keychain writes made at the same moment no longer lose another
+  atSign's keys, and `update` no longer fails or brings back an atSign
+  removed meanwhile.
+
 ## 2.0.0-rc4
 
 - fix: an atSign that an app built on at_client_mobile saved to the keychain

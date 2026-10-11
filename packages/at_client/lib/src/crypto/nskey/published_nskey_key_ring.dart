@@ -231,10 +231,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     Stream<DataEvent> Function()? ownChanges,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
-        privateFiling = privateFiling ?? _filingFor(_atClient),
         _requestConveyance = requestConveyance,
         _ownChanges = ownChanges,
-        _signer = AtClientEnvelopeSigner(_atClient);
+        _signer = AtClientEnvelopeSigner(_atClient) {
+    _privateFiling = privateFiling ?? _filingFor(_atClient, this);
+  }
 
   final Stream<DataEvent> Function()? _ownChanges;
 
@@ -244,12 +245,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Two filings over one keyfile are safe, but they carry separate
   /// `privatesFiled` streams, so a caller that needs a filing's events must
   /// pass the instance it is listening to.
-  static NskeyPrivateFiling? _filingFor(AtClient atClient) {
+  static NskeyPrivateFiling? _filingFor(
+      AtClient atClient, PublishedNskeyKeyRing ring) {
     final keysIo = atClient.atKeysIo;
     if (keysIo == null) return null;
     final atSign = atClient.getCurrentAtSign();
     if (atSign == null) return null;
-    return NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+    return NskeyPrivateFiling.checkedAgainst(() => ring,
+        keysIo: keysIo, atSign: atSign);
   }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
@@ -294,7 +297,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// says so at `severe` and mints anyway: a published key whose private did
   /// not survive the process leaves every sender sealing to something nobody
   /// can open.
-  final NskeyPrivateFiling? privateFiling;
+  NskeyPrivateFiling? get privateFiling => _privateFiling;
+  late final NskeyPrivateFiling? _privateFiling;
 
   @override
   Stream<FiledNskeyPrivate> get privatesFiled =>
