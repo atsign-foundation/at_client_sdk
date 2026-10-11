@@ -130,4 +130,38 @@ void main() {
       expect(atSign, null);
     });
   });
+
+  group('Given AtUtils.fixAtSign', () {
+    test('when it is given an atSign, then it answers what toAtsign answers',
+        () {
+      const Map<String, String> fixed = {
+        'Bob': '@bob',
+        '@colin.constable': '@colinconstable',
+        '@alice\u{1F6E0}': '@alice\u{1F6E0}',
+      };
+      fixed.forEach((String given, String expected) {
+        expect(AtUtils.fixAtSign(given), expected, reason: '"$given"');
+        expect(AtUtils.fixAtSign(given), given.toAtsign(), reason: '"$given"');
+      });
+    });
+
+    test(
+        'when it is given an atSign toAtsign refuses, then it throws the same'
+        ' InvalidAtSignException with the same message', () {
+      for (final String refused in ['@bo b', '@bob@x', '@${'a' * 56}']) {
+        late final String refusal;
+        try {
+          refused.toAtsign();
+          fail('toAtsign accepted "$refused"');
+        } on InvalidAtSignException catch (e) {
+          refusal = e.message;
+        }
+        expect(
+            () => AtUtils.fixAtSign(refused),
+            throwsA(isA<InvalidAtSignException>()
+                .having((e) => e.message, 'message', refusal)),
+            reason: '"$refused"');
+      }
+    });
+  });
 }
