@@ -87,6 +87,31 @@ void main() {
       expect(params[AtConstants.gateShowNamespace], 'chat');
     });
 
+    test('when the atSign-wide set is shown, then its namespace parses as *',
+        () {
+      expect(parse('gate:show:*')[AtConstants.gateShowNamespace], '*');
+    });
+
+    test(
+        "when a setting is returned to the operator's default, then its value"
+        ' parses as default', () {
+      final Map<String, String?> params =
+          parse('gate:rule:invitations.chat:open:limit:default');
+      expect(params[AtConstants.gateSetting], 'limit');
+      expect(params[AtConstants.gateSettingValue], 'default');
+    });
+
+    test('when an atSign is checked in a namespace, then both parse', () {
+      final Map<String, String?> params = parse('gate:check:chat:@bob🛠');
+      expect(params[AtConstants.gateCheck], 'check');
+      expect(params[AtConstants.gateCheckNamespace], 'chat');
+      expect(params[AtConstants.gateCheckAtSign], '@bob🛠');
+    });
+
+    test('when the namespaces are listed, then it parses', () {
+      expect(parse('gate:list')[AtConstants.gateList], 'list');
+    });
+
     test('when a command breaks the grammar, then it does not parse', () {
       for (final String command in [
         'gate',
@@ -95,6 +120,7 @@ void main() {
         'gate:rule:chat',
         'gate:rule:chat:open:limit',
         'gate:rule:chat:open:limit:three',
+        'gate:rule:chat:open:limit:defaults',
         'gate:rule:chat:open:colour:3',
         'gate:rule:chat:closed:limit:3',
         'gate:rule:chat:open:admit:@bob',
@@ -104,8 +130,11 @@ void main() {
         'gate:admit:chat',
         'gate:deny:chat:@bob:extra',
         'gate:show',
-        'gate:show:*',
         'gate:show:chat:extra',
+        'gate:check:chat',
+        'gate:check:*:@bob',
+        'gate:check:chat:bob',
+        'gate:list:chat',
       ]) {
         expect(VerbUtil.getVerbParam(VerbSyntax.gate, command), isNull,
             reason: '"$command" is not in the grammar');

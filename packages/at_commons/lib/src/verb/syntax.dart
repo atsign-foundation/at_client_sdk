@@ -170,16 +170,20 @@ class VerbSyntax {
       r'(?<keyValue>.*)?$';
 
   /// An atServer's gate: its default, a namespace's rule, a change to a
-  /// namespace's sets, or a namespace's rule and sets to show. `*` names the
-  /// atSign-wide set where a set is changed.
+  /// namespace's sets, a namespace's rule and sets to show, the verdict an
+  /// atSign gets in a namespace, or the namespaces it holds. `*` names the
+  /// atSign-wide set, and a setting's value `default` the operator's.
   static const gate = r'^gate:(?:'
       r'(?<gateDefault>default)(?::(?<gateDefaultMode>ungated|closed))?'
       r'|(?<gateRule>rule):(?<gateRuleNamespace>[\w\-.]+):(?:'
       r'(?<gateOpen>open)(?::(?<gateSetting>limit|window|size|maxQuarantined'
-      r'|maxQuarantinedBytes):(?<gateSettingValue>\d+))?'
+      r'|maxQuarantinedBytes):(?<gateSettingValue>\d+|default))?'
       r'|(?<gateClosed>closed)(?::admit:(?<gateAdmit>@[^:@\s]+))?)'
       r'|(?<gateSetOperation>admit|deny|remove):'
       r'(?<gateSetNamespace>\*|[\w\-.]+):(?<gateSetAtSign>@[^:@\s]+)'
-      r'|(?<gateShow>show):(?<gateShowNamespace>[\w\-.]+)'
+      r'|(?<gateShow>show):(?<gateShowNamespace>\*|[\w\-.]+)'
+      r'|(?<gateCheck>check):(?<gateCheckNamespace>[\w\-.]+)'
+      r':(?<gateCheckAtSign>@[^:@\s]+)'
+      r'|(?<gateList>list)'
       r')$';
 }

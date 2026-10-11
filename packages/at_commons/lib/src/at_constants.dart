@@ -149,4 +149,8 @@ class AtConstants {
   static const String gateSetAtSign = 'gateSetAtSign';
   static const String gateShow = 'gateShow';
   static const String gateShowNamespace = 'gateShowNamespace';
+  static const String gateCheck = 'gateCheck';
+  static const String gateCheckNamespace = 'gateCheckNamespace';
+  static const String gateCheckAtSign = 'gateCheckAtSign';
+  static const String gateList = 'gateList';
 }
