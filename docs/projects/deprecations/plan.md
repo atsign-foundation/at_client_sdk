@@ -571,6 +571,14 @@ material that disagrees with the algorithm its own envelope names. A signature
 made that way never verified against a reader that trusts the label, so the
 refusal turns a silent cross-implementation failure into a local error.
 
+PKAM sign-in is the one exception (gkc, 2026-10-12). at_auth's authenticators,
+from a keys file or a bare private key, sign the `from:` challenge with a
+1024-bit RSA PKAM key under `rsa2048`, so atSigns whose keys were cut at that
+size still authenticate; the atServer verifies an `rsa2048` PKAM signature
+whatever the key's size. Every other RSA size but 2048 is still refused there,
+and `RsaSignatureAlgo` itself, `signPkamChallenge` and the `enroll:update`
+possession proof are unchanged.
+
 **The public-data signature signs with the caller's encryption private key**,
 not with an APKAM signing key. The plan read `_signPublicData` as moving to
 `ApkamSigning.authenticationSigningKey`; that would have changed which key a

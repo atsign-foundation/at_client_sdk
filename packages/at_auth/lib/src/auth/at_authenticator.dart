@@ -9,6 +9,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart' show RSAPrivateKey;
 
 final _logger = AtSignLogger('AtAuthenticator');
 
@@ -185,9 +186,7 @@ AtAuthenticator authenticatorForPrivateKey(
       fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
       fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-      final signature = base64Encode(RsaSignatureAlgo.rsa2048().signBytesSync(
-          Uint8List.fromList(utf8.encode(fromResponse)),
-          secretKey: base64Decode(privateKey)));
+      final signature = _signRsaPkamChallenge(fromResponse, privateKey);
 
       final pkamResponse = await executor.sendSync((PkamVerbBuilder()
             ..signingAlgo = SigningAlgoType.rsa2048.name
@@ -282,7 +281,9 @@ Future<bool> _pkam(
           ..signingMode = AtSigningMode.pkam)
         .result;
   } else if (keyPair != null) {
-    signature = signPkamChallenge(keyPair, fromResponse);
+    signature = keyPair.algorithm == SigningAlgoType.rsa2048
+        ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
+        : signPkamChallenge(keyPair, fromResponse);
   } else {
     throw AtKeyNotFoundException(
         'AtKeys holds no authentication keypair for '
@@ -346,7 +347,8 @@ Future<bool> _cram(
 /// `pkam:` verb carries.
 ///
 /// The algorithm comes from the key material rather than from a caller, so a
-/// key cannot be put through the wrong routine.
+/// key cannot be put through the wrong routine. An rsa2048 key must be 2048
+/// bits here; the authenticators also sign a `pkam:` with a 1024-bit one.
 String signPkamChallenge(
   ({SigningAlgoType algorithm, String publicKey, String privateKey}) keyPair,
   String challenge,
@@ -363,6 +365,31 @@ String signPkamChallenge(
       throw AtSigningException(
           'a PKAM challenge cannot be signed with ${keyPair.algorithm.name}: '
           'this build signs one with rsa2048 or mldsa65');
+  }
+}
+
+/// Base64 of [challenge] signed by [privateKey], a base64 PKCS#8 RSA private
+/// key, for a `pkam:` naming rsa2048.
+///
+/// Signs with a 1024-bit key as well as a 2048-bit one; [RsaSignatureAlgo]
+/// refuses every other size.
+String _signRsaPkamChallenge(String challenge, String privateKey) {
+  final data = Uint8List.fromList(utf8.encode(challenge));
+  final key = _rsaPrivateKeyOrNull(privateKey);
+  if (key != null && key.asPointyCastle.n?.bitLength == 1024) {
+    return base64Encode(key.createSHA256Signature(data));
+  }
+  return base64Encode(RsaSignatureAlgo.rsa2048()
+      .signBytesSync(data, secretKey: base64Decode(privateKey)));
+}
+
+/// Null when [base64Key] is not a readable RSA private key, which
+/// [RsaSignatureAlgo] then reports.
+RSAPrivateKey? _rsaPrivateKeyOrNull(String base64Key) {
+  try {
+    return RSAPrivateKey.fromString(base64Key);
+  } catch (_) {
+    return null;
   }
 }
 
