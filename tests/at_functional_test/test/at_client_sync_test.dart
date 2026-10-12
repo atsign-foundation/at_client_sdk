@@ -201,9 +201,6 @@ void main() {
     expect(putResult, true);
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
-    // The local key must not have reached the server — a remote lookup
-    // throws. (This is the real proof; the old commit-log last-synced-entry
-    // check was redundant and is removed with the commit log.)
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'local:localkey.wavi'
@@ -213,7 +210,12 @@ void main() {
         () async => await atClient
             .getRemoteSecondary()!
             .executeVerb(llookupVerbBuilder),
-        throwsA(predicate((dynamic e) => e is KeyNotFoundException)));
+        throwsA(predicate((dynamic e) =>
+            e is KeyNotFoundException ||
+            (e is UnAuthorizedException &&
+                e.message.contains('local: keys belong to the atServer')))),
+        reason: 'the local key must not reach the atServer, which answers '
+            'key-not-found or refuses every local: key');
   });
 
   test('a test to verify multiple updates of a key is synced to the cloud',
