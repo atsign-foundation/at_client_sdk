@@ -12658,11 +12658,13 @@ Contained, and the enumeration was cross-checked by two instruments agreeing on
 
 ⛔ **But the multi-signature READER must stay, and this is the asymmetry to get
 right.** `SignedEnvelope.fromJson` refuses an envelope whose signature entries
-carry differing `kid`s or differing `typ`s. Those refusals exist to stop an
-attacker **appending** an entry to an envelope in flight — and nothing about a
+carry differing `enid`s or differing `typ`s (it compared `kid`s until
+[131](#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31)
+moved the enrollment into `enid`). Those refusals keep an entry **appended** to
+an envelope in flight from being read as part of it — and nothing about a
 single-key *writer* makes an appended second entry impossible. **The writer can
 lose plurality; the parser cannot.** A change that removed both because "we no
-longer sign twice" would open exactly the hole those guards close.
+longer sign twice" would undo what those refusals are for.
 
 **Status:** ruled, unbuilt. Step 3's lever does not exist; steps 1 and 2 are
 expressible today. Removing the writer is contained but is **not** part of this

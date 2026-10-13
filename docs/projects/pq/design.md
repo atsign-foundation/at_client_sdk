@@ -2371,10 +2371,12 @@ There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `enid`, where the signature covers them. A
 version or signer claim outside the signature is one an attacker can edit.
 
-There is no legacy branch: **nothing released reads or writes an envelope** (no
-release ships `lib/src/signing/`; at_client 3.14.0, the latest, has no such
-directory). The bare-string `_apsk` is
-the released thing in this area, and it is a *record*, not an envelope — see
+There is no legacy branch, by decision. at_client 3.14.0 ships a flat
+`{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` envelope in
+`lib/src/mixins/envelope_signing.dart`, read only through the `@experimental`
+`AtClientSecretSharing`; this shape replaces it rather than reading it, and the
+3.15.0 release candidates ship this shape. The bare-string `_apsk` is a
+*record*, not an envelope — see
 [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 3.
 
