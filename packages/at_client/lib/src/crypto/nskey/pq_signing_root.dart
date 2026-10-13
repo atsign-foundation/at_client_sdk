@@ -22,7 +22,8 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart'
+    show MintLock, checkedMintLockTtl;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
@@ -118,8 +119,11 @@ class PqSigningRoot {
   final MintLock mintLock;
 
   PqSigningRoot(this.atClient,
-      {this.keysIo, MintLock? mintLock, this.lockTtl = signingRootMintLockTtl})
-      : mintLock = mintLock ?? MintLock(atClient);
+      {this.keysIo,
+      MintLock? mintLock,
+      Duration lockTtl = signingRootMintLockTtl})
+      : lockTtl = checkedMintLockTtl(lockTtl, 'lockTtl'),
+        mintLock = mintLock ?? MintLock(atClient);
 
   /// How long this client holds the root's mint lock once it has taken it.
   ///

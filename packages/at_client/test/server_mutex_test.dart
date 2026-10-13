@@ -8,7 +8,10 @@
 library;
 
 import 'package:at_client/at_client.dart';
+import 'dart:convert';
+
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/server_mutex.dart' show ServerMutexHolder;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_commons/at_builders.dart';
@@ -216,18 +219,39 @@ void main() {
       await expectRefused('cached:@alice:s1.session_mutexes.sshnp@bob');
       await expectRefused('local:s1.session_mutexes.sshnp@alice');
     });
+
+    test('A key whose name carries another atSign is refused', () async {
+      // NOTE: no flag on this key says shared; only its name as built does.
+      final key = AtKey()
+        ..key = '@bob:s1'
+        ..namespace = 'session_mutexes.sshnp';
+      final sent = <String>[];
+      await expectLater(clientOf(sent).tryAcquireServerMutex(key, ttl: ttl),
+          throwsA(refusedNaming('key')));
+      expect(sent, isEmpty, reason: 'nothing is sent to the atServer');
+    });
   });
 
-  group('asking whether this client holds a lock', () {
-    test('reads the record with llookup and compares its enrollment', () async {
+  group('reading a lock back, for at_client\'s own use', () {
+    final expiry = DateTime.utc(2026, 10, 13, 12, 30);
+
+    /// A lock record as llookup:all serves it, held by [holder].
+    String record(String holder, {DateTime? expiresAt}) => 'data:${jsonEncode({
+              'key': 's1.session_mutexes.sshnp@alice',
+              'data': holder,
+              'metaData': {'expiresAt': expiresAt?.toIso8601String()},
+            })}';
+
+    test('reads the record with llookup:all and compares its enrollment',
+        () async {
       final sent = <String>[];
       expect(
-          await clientOf(sent, onLookup: () async => 'data:e-1')
+          await clientOf(sent, onLookup: () async => record('e-1'))
               .holdsServerMutex(lockKey),
           isTrue);
-      expect(sent, ['llookup:s1.session_mutexes.sshnp@alice\n']);
+      expect(sent, ['llookup:all:s1.session_mutexes.sshnp@alice\n']);
       expect(
-          await clientOf([], onLookup: () async => 'data:e-2')
+          await clientOf([], onLookup: () async => record('e-2'))
               .holdsServerMutex(lockKey),
           isFalse);
     });
@@ -248,6 +272,38 @@ void main() {
               .holdsServerMutex(lockKey),
           throwsA(same(failure)));
     });
+
+    test(
+        'gives a lease on this enrollment\'s own lock ending at the '
+        'record\'s own expiry', () async {
+      final lease = await clientOf([],
+              onLookup: () async => record('e-1', expiresAt: expiry))
+          .ownServerMutexLease(lockKey);
+      expect(lease, isNotNull);
+      expect(lease!.expiresAt, expiry);
+    });
+
+    test(
+        'gives no lease on another enrollment\'s lock, or on one with no '
+        'expiry', () async {
+      expect(
+          await clientOf([],
+                  onLookup: () async => record('e-2', expiresAt: expiry))
+              .ownServerMutexLease(lockKey),
+          isNull);
+      expect(
+          await clientOf([], onLookup: () async => record('e-1'))
+              .ownServerMutexLease(lockKey),
+          isNull,
+          reason: 'a lease must end no later than its lock');
+    });
+
+    test('throws a FormatException for a reply that is not a record', () async {
+      await expectLater(
+          clientOf([], onLookup: () async => 'data:1')
+              .holdsServerMutex(lockKey),
+          throwsA(isA<FormatException>()));
+    });
   });
 
   group('the local store', () {
@@ -255,7 +311,11 @@ void main() {
       const atSign = '@servermutexlocal';
       final remote = MockRemoteSecondary();
       when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:-1');
+          .thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0] as VerbBuilder;
+        if (builder is UpdateVerbBuilder) return 'data:-1';
+        throw StateError('unexpected verb: ${builder.runtimeType}');
+      });
       final atClient = await AtClientImpl.create(
           atSign, 'sshnp', AtClientPreference(),
           remoteSecondary: remote,

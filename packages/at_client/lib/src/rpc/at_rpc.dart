@@ -225,7 +225,10 @@ class AtRpc {
   /// handling across all services that use [AtRpc].
   ///
   /// When enabled, it prevents multiple [AtRpc] responses from being sent for
-  /// the same request.
+  /// the same request: each request's id is held as a server mutex
+  /// (`tryAcquireServerMutex`) for 30 seconds by the one responder that takes
+  /// it. It needs an atServer from p3.13.0; an older one refuses every lock,
+  /// so a responder with this on handles no requests.
   final bool enableRequestMutex;
 
   factory AtRpc.server({

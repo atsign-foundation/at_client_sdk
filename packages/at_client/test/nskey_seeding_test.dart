@@ -624,8 +624,7 @@ void main() {
               'Connection with enrollment ID enroll-r is not authorized to '
                   'update key: ${builder.atKey}');
         }
-        throw AtLookUpException(
-            'AT0023', 'Immutable records may not be updated');
+        throw IllegalStateException('Immutable records may not be updated');
       });
 
       final sharing = MockSharing();

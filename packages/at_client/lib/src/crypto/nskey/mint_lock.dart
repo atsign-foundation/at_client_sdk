@@ -8,6 +8,16 @@ import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
 
+/// [ttl], checked as a mint lock's ttl: at least a millisecond and no longer
+/// than [maxServerMutexTtl], or an [ArgumentError] naming [name].
+Duration checkedMintLockTtl(Duration ttl, String name) {
+  if (ttl.inMilliseconds < 1 || ttl > maxServerMutexTtl) {
+    throw ArgumentError.value(ttl, name,
+        'must be at least a millisecond and no longer than $maxServerMutexTtl');
+  }
+  return ttl;
+}
+
 /// Serialises minting a key record between an atSign's own enrollments.
 ///
 /// The records this guards are mutable, so the interlock cannot be their own
@@ -84,13 +94,9 @@ class MintLock {
     _inFlight[inFlightKey] = done.future;
     try {
       final ttl = Duration(milliseconds: ttlMillis);
-      // NOTE: stamped before the request goes out, as a won lease is.
-      final leaseFrom = DateTime.now();
       final (lease, refused) = await _take(lockKey, ttl);
-      final held = lease ??
-          (ownLockIsNotContention && await _isOwnLock(lockKey)
-              ? ServerMutexLease(lockKey, leaseFrom.add(ttl))
-              : null);
+      final held =
+          lease ?? (ownLockIsNotContention ? await _ownLease(lockKey) : null);
       if (held == null) {
         _logger.info('Could not take $lockKey, so nothing is minted under it '
             'this time: $refused');
@@ -111,33 +117,39 @@ class MintLock {
       AtKey lockKey, Duration ttl) async {
     try {
       final lease = await atClient.tryAcquireServerMutex(lockKey, ttl: ttl);
-      return (lease, lease == null ? 'another client holds it' : null);
+      return (lease, lease == null ? 'its record already exists' : null);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      // NOTE: an Error is a mistake in the call, such as a ttl over the cap,
+      // not a reason the lock was unavailable.
+      if (e is StoppedException || e is Error) rethrow;
       // NOTE: any failure to take the lock is as much a reason not to mint as
       // the lock being held.
       return (null, e);
     }
   }
 
-  /// Whether the lock that refused us is one this enrollment already holds.
+  /// A lease on the lock that refused us when this enrollment already holds
+  /// it, ending when the lock does; otherwise null.
   ///
   /// The winner never releases — the ttl does — so a client that mints and then
   /// re-enters within the cooldown loses the election to itself; the cooldown
   /// covers an ordinary restart. Proceeding is safe only because every caller
   /// reads what is published before minting, and a read that cannot say whose
-  /// lock it is answers false.
-  Future<bool> _isOwnLock(AtKey lockKey) async {
+  /// lock it is answers null.
+  Future<ServerMutexLease?> _ownLease(AtKey lockKey) async {
+    final ServerMutexLease? lease;
     try {
-      if (!await atClient.holdsServerMutex(lockKey)) return false;
+      lease = await atClient.ownServerMutexLease(lockKey);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      if (e is StoppedException || e is Error) rethrow;
       _logger.finer('Could not read $lockKey to check ownership: $e');
-      return false;
+      return null;
     }
-    _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
-        'its cooldown — proceeding rather than treating ourselves as a '
-        'loser');
-    return true;
+    if (lease != null) {
+      _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
+          'its cooldown — proceeding until it expires rather than treating '
+          'ourselves as a loser');
+    }
+    return lease;
   }
 }
