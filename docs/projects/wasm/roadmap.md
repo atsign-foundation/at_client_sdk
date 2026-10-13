@@ -152,8 +152,8 @@ consequences:
 
 `at_client`, `at_lookup`, `at_utils`, `at_auth`, `at_chops`, `at_commons`,
 `at_contact`, `at_policy`, `at_server_status`. Interfaces, models, protocol logic,
-pure-Dart crypto. Zero platform libraries, zero `if (dart.library.*)`, zero throwing
-fallbacks.
+pure-Dart crypto. Zero platform libraries, zero `if (dart.library.*)` but at_client's
+crypto backends (D-1 records that exception), zero throwing fallbacks.
 
 ### Tier 2 — the `_io` barrels
 

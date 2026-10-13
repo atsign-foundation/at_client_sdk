@@ -87,7 +87,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [28]  | The PQ performance budget, measured                                                         | 2026-08-04 | LIVE                      |
 | [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | LIVE                      |
 | [30]  | UC-B5.1's pull backstop has no initiator                                                    | 2026-08-04 | LIVE                      |
-| [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | AMENDED 2026-09-12        |
+| [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | AMENDED 2026-10-09        |
 | [32]  | The two-enrollment fixture: what works and what does not                                    | 2026-08-04 | LIVE                      |
 | [33]  | Keying the client cache by (atSign, enrollmentId)                                           | 2026-08-04 | LIVE                      |
 | [34]  | PKAM is record-authoritative, and the no-RSA row reads narrower than it looks               | 2026-08-04 | LIVE                      |
@@ -179,7 +179,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | AMENDED 2026-08-28        |
 | [120] | A signing migration is three steps, and the third has no lever                               | 2026-08-28 | LIVE                      |
 | [121] | A revocation publishes what it obliges                                                      | 2026-08-28 | SUPERSEDED by [129], [130] |
-| [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | LIVE                      |
+| [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | PARTLY SUPERSEDED by [155]|
 | [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
 | [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
@@ -187,7 +187,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |
 | [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
 | [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | LIVE               |
-| [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | LIVE               |
+| [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | AMENDED 2026-10-13 |
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
 | [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
@@ -201,8 +201,8 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
 | [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-10-04 |
 | [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
-| [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-09-30 |
-| [145] | A reader's atServer caches no PQ key records; the client bypasses its cache                  | 2026-09-30 | LIVE               |
+| [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-10-10 |
+| [145] | A reader's atServer caches no public record without a ttr                                    | 2026-09-30 | AMENDED 2026-10-10 |
 | [146] | Keys an app publishes below its grants are its own; ensureReachable reports holding          | 2026-10-04 | LIVE               |
 | [147] | An nskey reaches every enrollment with access: at its mint, and at approval                  | 2026-10-04 | LIVE               |
 | [148] | An approver's envelopes go where the enrollment may read and the approver may write          | 2026-10-05 | LIVE               |
@@ -211,6 +211,8 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
 | [152] | A conveyed link is stamped as it arrives, its envelope kept until then                       | 2026-10-08 | AMENDED 2026-10-08 |
 | [153] | An arriving nskey private is checked against what is published, else named by length         | 2026-10-08 | LIVE               |
+| [154] | A shared content key follows the sender's own namespace key too                              | 2026-10-09 | AMENDED 2026-10-13 |
+| [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -357,7 +359,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30
 [143]: detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30
 [144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30
-[145]: detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30
+[145]: detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30
 [146]: detail/decisions.md#146-keys-an-app-publishes-below-its-grants-are-its-own-and-ensurereachable-reports-holding-them-2026-10-04
 [147]: detail/decisions.md#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04
 [148]: detail/decisions.md#148-an-approvers-envelopes-go-in-a-namespace-the-enrollment-may-read-and-the-approver-may-write-2026-10-05
@@ -366,3 +368,5 @@ first, `enroll:updateMetadata`, and they still resolve.
 [151]: detail/decisions.md#151-atrpc-request-ids-are-random-53-bit-integers-2026-10-05
 [152]: detail/decisions.md#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08
 [153]: detail/decisions.md#153-an-arriving-nskey-private-is-checked-against-what-is-published-else-named-by-its-length-2026-10-08
+[154]: detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09
+[155]: detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09

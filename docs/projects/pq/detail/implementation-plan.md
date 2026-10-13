@@ -9302,6 +9302,12 @@ cost, and the unit tests that cover it measure exactly that. But the key include
 cheaper, never wrong.** `NskeyResolver.resolve` walks with the memory as before;
 if it *hits*, nothing changes. If it finds nothing **and** the memory made it
 skip a level, it re-walks the skipped levels for real before answering null.
+**Amended 2026-10-13:** `CkManager` also remembers that a sender holds no key of
+its own covering a namespace, for the resolver's `missMemory`, and only while the
+current content key toward that destination rests on no own generation. That
+answer can be stale: an own key another enrollment mints meanwhile is noticed up to
+15 minutes late. It is allowed because a null from that check never replaces a
+content key, so being late costs a delay and changes no answer a write acts on.
 
 ⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
 keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the
