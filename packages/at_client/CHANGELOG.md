@@ -54,6 +54,9 @@
 - feat: on macOS and Linux, where OpenSSL 3 is installed, post-quantum
   encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
   several times faster. Elsewhere it stays pure Dart.
+- fix: two subscriptions with the same regex but different `shouldDecrypt`
+  each receive notifications as they asked; the second no longer shares the
+  first one's stream and setting.
 - build: requires `at_chops` ^3.7.0.
 
 ## 3.15.0-rc6
