@@ -8,9 +8,11 @@ Feature: AtRpc request mutex
   Races: the atServer serialises the creates, so two responders can't both
   take one request's lock. Replay: the lock dedupes a request only within its
   30 seconds, as before; this adds no replay surface. DoS: each request costs
-  one lock record for 30 seconds, and from c3.16.3/p3.16.5 no commit entry.
-  Forgery and impersonation: unchanged; only allow-listed requesters are
-  handled, and the lock is a self record on the responder's own atServer.
+  one lock record for 30 seconds, or until the expiry sweep on an atServer
+  before c3.16.2/p3.16.5, and from c3.16.3/p3.16.5 no commit entry. Forgery
+  and impersonation: unchanged; a responder handles only requesters on its
+  allow list, or anyone when allowAll is set, and the lock is a self record on
+  the responder's own atServer.
 
   @race
   Scenario: Exactly one of two responders handles a request

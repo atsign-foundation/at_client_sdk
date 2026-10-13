@@ -1,9 +1,10 @@
 ## 3.15.0-rc7
 
 - feat: `tryAcquireServerMutex` takes a short-lived lock that every client of
-  the atSign shares, held on the atServer for at most 15 minutes. It needs an
-  atServer from p3.13.0, and from c3.16.3 and p3.16.5 the lock records no
-  commit.
+  the atSign shares, held on the atServer for at most 15 minutes; before
+  c3.16.2 and p3.16.5 an expired lock blocks until the atServer's expiry sweep,
+  up to about ten and a half minutes. It needs an atServer from p3.13.0, and
+  from c3.16.3 and p3.16.5 the lock records no commit.
 - fix: `AtRpc`'s request mutex records no commit on an atServer from c3.16.3
   or p3.16.5, so it no longer leaves an entry behind for every client of the
   atSign to sync. It now needs an atServer from p3.13.0: on an older one, a
