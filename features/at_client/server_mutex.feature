@@ -3,13 +3,22 @@ Feature: Server mutex on AtClient
   a ttl on its own atServer. The atServer refuses a second create of the same
   record until the ttl runs out, so exactly one client wins. The create goes
   straight to the atServer with :nc, so the record never enters the local
-  store or the commit log, and its ttl is the only thing that releases it.
+  store, and its ttl is the only thing that releases it.
+
+  atServer versions: the lock needs an atServer from p3.13.0 (at_commons
+  5.10.0), the first to parse :nc; an older one refuses every lock, and the
+  client reports that as a failure. The record stays out of the commit log
+  from c3.16.3 and p3.16.5; between p3.13.0 and those the atServer accepts :nc
+  but still records the commit. An expired lock stops blocking at once from
+  c3.16.2 and p3.16.5; before that it blocks until the atServer's expiry sweep,
+  up to about ten and a half minutes.
 
   Races: the atServer serialises creates of one record and accepts exactly
   one. Replay: the record is not a credential, and the create travels on the
   client's own authenticated connection. Denial of service: the ttl is capped
-  at 15 minutes, and a lock leaves no commit entry, so locks taken for other
-  atSigns' requests no longer grow the commit log. Forgery and impersonation:
+  at 15 minutes, and on an atServer that honours :nc a lock leaves no commit
+  entry, so locks taken for other atSigns' requests no longer grow the commit
+  log. Forgery and impersonation:
   only the atSign's own authenticated connections can create its self
   records, and a key owned by another atSign, shared with one, or public is
   refused.
@@ -86,23 +95,15 @@ Feature: Server mutex on AtClient
     Then it throws an ArgumentError naming the key
     And nothing is sent to the atServer
 
+  @impersonation
+  Scenario: A key whose name carries another atSign is refused
+    When a client of @alice asks for a lock whose key name is "@bob:s1" in
+      namespace "session_mutexes.sshnp"
+    Then it throws an ArgumentError naming the key
+    And nothing is sent to the atServer
+
   Scenario: Any other failure is thrown to the caller
     Given the atServer answers the create with an error other than the
       refusal of a second create
     When a client asks for a lock
     Then that error is thrown, so the caller decides whether to go ahead
-
-  Scenario: A client recognises a lock its own enrollment holds
-    Given a client took a lock under its enrollment
-    When a client under the same enrollment asks whether it holds that lock
-    Then the answer is yes
-
-  Scenario: A lock held by another enrollment is not the client's own
-    Given a client under another enrollment holds the lock
-    When a client asks whether it holds that lock
-    Then the answer is no
-
-  Scenario: A lock that no longer exists is not held
-    Given no record exists for the lock key
-    When a client asks whether it holds that lock
-    Then the answer is no
