@@ -59,6 +59,10 @@ class AtConstants {
   static const String monitorMultiplexedMode = 'multiplexed';
   static const String monitorRegex = 'regex';
   static const String monitorSelfNotifications = 'selfNotifications';
+
+  /// The flag by which monitor, notify:list and notify:fetch ask for
+  /// notifications from atSigns quarantined by the gate.
+  static const String quarantined = 'quarantined';
   static const String id = 'id';
   static const String operation = 'operation';
   static const String setOperation = 'setOperation';
@@ -135,4 +139,23 @@ class AtConstants {
   static const String defaultSelfEncryptionKey = 'default_self_enc_key';
   static const String enrollParams = 'enrollParams';
   static const String atServerReservedNamespace = '__atserver';
+  static const String gateDefault = 'gateDefault';
+  static const String gateDefaultMode = 'gateDefaultMode';
+  static const String gateRule = 'gateRule';
+  static const String gateRuleNamespace = 'gateRuleNamespace';
+  static const String gateOpen = 'gateOpen';
+  static const String gateSetting = 'gateSetting';
+  static const String gateSettingValue = 'gateSettingValue';
+  static const String gateClosed = 'gateClosed';
+  static const String gateNone = 'gateNone';
+  static const String gateAdmit = 'gateAdmit';
+  static const String gateSetOperation = 'gateSetOperation';
+  static const String gateSetNamespace = 'gateSetNamespace';
+  static const String gateSetAtSign = 'gateSetAtSign';
+  static const String gateShow = 'gateShow';
+  static const String gateShowNamespace = 'gateShowNamespace';
+  static const String gateCheck = 'gateCheck';
+  static const String gateCheckNamespace = 'gateCheckNamespace';
+  static const String gateCheckAtSign = 'gateCheckAtSign';
+  static const String gateList = 'gateList';
 }

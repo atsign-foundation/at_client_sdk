@@ -106,6 +106,25 @@ class IllegalStateException extends AtException {
   IllegalStateException(String message) : super(message);
 }
 
+/// Exception thrown when an atServer's gate does not accept an exchange: the
+/// namespace is closed to the other atSign, or denies it, or the exchange has
+/// no namespace and is not one the gate lets through.
+class NotAcceptedException extends AtException {
+  NotAcceptedException(String message) : super(message);
+}
+
+/// Exception thrown when a quarantined atSign has reached a quarantine limit
+/// of the namespace it is reaching.
+class QuarantineLimitException extends AtException {
+  QuarantineLimitException(String message) : super(message);
+}
+
+/// Exception thrown when a quarantined atSign's notification is larger than
+/// the namespace's size cap.
+class QuarantineSizeException extends AtException {
+  QuarantineSizeException(String message) : super(message);
+}
+
 /// Exception thrown when an atsign name provided is invalid.
 class InvalidAtSignException extends AtException {
   InvalidAtSignException(String message) : super(message);

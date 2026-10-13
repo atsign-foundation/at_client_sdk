@@ -24,7 +24,10 @@ const Map error_codes = {
   'AtThrottleLimitExceeded': 'AT0028',
   'AtInvalidEnrollmentException': 'AT0029',
   'AtEnrollmentRevokeException': 'AT0031',
-  'IllegalStateException': 'AT0032'
+  'IllegalStateException': 'AT0032',
+  'NotAcceptedException': 'AT0033',
+  'QuarantineLimitException': 'AT0034',
+  'QuarantineSizeException': 'AT0035'
 };
 
 // ignore: constant_identifier_names
@@ -58,4 +61,7 @@ const Map error_description = {
   'AT0030': 'Invalid Enrollment Status',
   'AT0031': 'Cannot revoke self enrollment',
   'AT0032': 'Illegal state exception',
+  'AT0033': 'Not accepted',
+  'AT0034': 'Quarantine limit reached',
+  'AT0035': 'Too large for quarantine',
 };
