@@ -1,3 +1,12 @@
+## 3.15.0-rc7
+
+- feat: `tryAcquireServerMutex` takes a short-lived lock that every client of
+  the atSign shares, held on the atServer for at most 15 minutes and recording
+  no commit; `holdsServerMutex` says whether this client's enrollment holds
+  one.
+- fix: `AtRpc`'s request mutex records no commit, so it no longer leaves an
+  entry behind for every client of the atSign to sync.
+
 ## 3.15.0-rc6
 
 - feat: each storage backend has its own import: `HiveAtClientStorage` comes
