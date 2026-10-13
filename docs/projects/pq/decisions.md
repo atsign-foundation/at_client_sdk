@@ -74,7 +74,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
-| [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-10-13        |
+| [18]  | `pq_signing_root` is the user-owned signing root                                            | 2026-08-03 | AMENDED 2026-10-13        |
 | [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
@@ -231,7 +231,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [15]: detail/decisions.md#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02
 [16]: detail/decisions.md#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02
 [17]: detail/decisions.md#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed
-[18]: detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03
+[18]: detail/decisions.md#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03
 [19]: detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03
 [20]: detail/decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03
 [21]: detail/decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03

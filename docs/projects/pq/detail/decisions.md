@@ -435,7 +435,7 @@ timeline rows).
 
 - **#A — signing-root interface freeze (P-3 vs SS-4).** ~~P-3 publishes/prefers
   `pqpublickey` in Wave 2~~ — withdrawn by
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): there is
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03): there is
   no atSign-level KEM key for P-3 to prefer, and enrollment conveyance seals to the
   enrollee's key package instead. What survives is the freeze itself, now over
   `public:pq_signing_root@<atSign>`: its **name + create-once contract** ahead of SS-4's
@@ -529,7 +529,7 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02).**
   Every advertised recipient/encapsulation key (the per-enrollment key package and the
   published `nskey` public half — the signing root is not one, per
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03))
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03))
   is APKAM-signed by its generating enrollment and verified against that enrollment's `_apsk` — the same
   way same-atSign and cross-atSign — superseding the "atServer vouches" stance. The
   atServer keeps `_apsk` present **and** write-restricted. See section 12 for the
@@ -699,7 +699,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-02** | **Seven nskey data-path rulings** from walking an Alice↔Bob message end to end against the built providers ([13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02), [14](#14-content-keys-are-scoped-per-recipient-2026-08-02), [15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)): the nskey is published **eagerly** to `public:__nskey.<ns>@<owner>` (mutable, lock-serialised, generation-tagged), superseding lazy publication; content keys are scoped **per recipient**; and the record owner (`sharedBy`, for `info`) is separated from the nskey owner (`sharedWith ?? sharedBy`, for key selection). | The walk surfaced three defects the doc set had not caught: cross-atSign reads could not work, because the key ring was looked up under the sender's atSign; the promotion trigger fired on *sending* while the key a sender needs is the *recipient's*, so a receive-only atSign cold-started forever; and `design.md` called the published half immutable while B5b required re-publishing it, leaving the revocation lever unimplementable. Rotation additionally had no signal reaching senders — a silent B6 revocation failure — and a post-rotation joiner could not open retained history. |
 | **2026-08-02** | **The sync push dropped `appMetadata`, and the fix deletes the duplicate serializer that dropped it** ([17](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)). `SyncServiceImpl` now delegates to `Metadata.toAtProtocolFragment` instead of hand-rolling the metadata fragment, and a guard parses a fully-populated fragment with `VerbSyntax.update`. Cross-atSign reads work; the e2e test is un-skipped. | This was first recorded as an atServer defect — that attribution was wrong, and the correction is the durable lesson: **an absent field indicts the writer before the reader.** The wire observation (a `lookup` returning no `appMetadata`) was accurate, but *absent from the response* was read as *withheld by the responder* when the field had never been stored. The probe that separates them is an authenticated `llookup:all:` against the **writer's own** atServer after sync. Blast radius was every provider's synced writes, including shipped 3.14 — not PQ-specific — because a duplicated wire serializer had silently lagged the canonical one. |
 
-| **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
+| **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
 | **2026-08-03** | **Nested-namespace nskey resolution walks up, most-specific-first** ([19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). A sender writing to `someid.d.c.b.a@alice` tries `d.c.b.a` … `a` and seals to the first nskey found; the CK is scoped to *that* namespace, so one conveyance serves every namespace beneath it. `appMetadata` gains `ns` (the record's own namespace) on every nskey-path record and `ckNs` (where the CK lives) on data values. Senders remember which namespaces an owner holds keys at, and that memo inherits `advertisementTtl` rather than adding a lifetime. | `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace cannot be recovered from the wire string — measured, not inferred. It never mattered because the legacy provider references `namespace` zero times; the nskey path references it 56, which is what makes the ambiguity newly critical. Exact-match was unavailable: AtCollection composes `<subName>.<parentId>.<ns>` per **item**, so it would need a keypair, an advertisement and a per-enrollment conveyance per item. Walking up is safe because it mirrors the atServer's own suffix authorisation, so the crypto gate never widens past the transport gate. `ckNs` is not redundant with `ns`: in the stale-sender window the reader would otherwise hunt for the conveyance in the wrong namespace and report "not yet synced" for an intact record, forever. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
@@ -892,7 +892,7 @@ leak (existence only; no CK, content, or key material). **Mitigation, adopted: l
 publication.** The public half stays an owner-only self at-key until the namespace is first
 shared cross-atSign; a purely-self namespace therefore never advertises itself. Inbound that
 arrives before promotion was to be bridged by cold-start to the atSign-level root (a bridge
-[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew, along
+[section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) withdrew, along
 with lazy publication itself — see section 13). This keeps the one-keypair simplification (one private, one
 rotation, one decapsulation path) while preserving namespace-existence privacy.
 
@@ -907,7 +907,7 @@ is foreclosed going forward.
 - `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey`, for self and
   inbound alike — the former self-nskey/public-nskey distinction is gone. (The cold-start
   `root-pqpublickey` variant this once also listed went with
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).)
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03).)
 - The reader decapsulates every `__ck` record with the one nskey private.
 - HPKE `info` binds `(namespace, owner)` so self and inbound flows stay domain-separated under
   the shared key.
@@ -937,7 +937,7 @@ the substrate's original design): the encapsulation target is now
   package is still advertised unsigned.
 
 *(This list once carried a third entry, the atSign-level root as a KEM target.
-[Section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew it:
+[Section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) withdrew it:
 the root is a signing key, so there is nothing to seal to it and nothing for a sender to
 authenticate before doing so. What anchors the root is key transparency, not an `_apsk`.)*
 
@@ -1139,7 +1139,7 @@ X-Wing operation per generation and degrades silently with every rotation.
 - **Cold-start survives but narrows sharply**: `recipientKind: root-pqpublickey` is now
   reached only when the recipient has never used the namespace *at all*, rather than
   whenever they have never sent in it. *(Withdrawn by
-  [18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): the root became
+  [18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03): the root became
   a signing key, nothing encapsulates to it, and cold start now simply fails —
   `recipientKind` has exactly one member, `nskey`.)*
 - Namespace-existence privacy rests on the `public:_` scan-hiding rule. That is a
@@ -1383,7 +1383,7 @@ misattribution above.)
 
 ---
 
-## 18. `pqpublickey` becomes the user-owned signing root (2026-08-03)
+## 18. `pq_signing_root` is the user-owned signing root (2026-08-03)
 
 **In brief:** *supersedes the KEM role in [design.md](../design.md) section 1.4*
 
@@ -1663,7 +1663,7 @@ the SDK's flagship API from ever being post-quantum.
 **Resolution walks up, most-specific-first.** A sender writing to `someid.d.c.b.a@alice`
 tries `d.c.b.a`, then `c.b.a`, then `b.a`, then `a`, and seals to the first nskey it finds.
 If none exists that is cold start, and it fails as
-[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) requires.
+[section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) requires.
 
 The walk is safe because it mirrors the atServer's own authorisation rule — an enrollment
 approved for `a` may access `d.c.b.a` (`SecretStore.namespaceAuthorizes`, and the server
@@ -2199,7 +2199,7 @@ left open as *"what the signing root signs beyond `_apsk`"*. The enrollment-to-e
 link is built ([23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) is its
 sibling ruling on conveyance); this is what the walk climbs *to*.
 
-[18.1](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already states the
+[18.1](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) already states the
 shape — *root → key package → `_apsk` → advertised keys* — but not how a verifier knows it
 has arrived.
 
@@ -2212,7 +2212,7 @@ lookup. It is not "another link with a different signer", and code that models i
 wrong before it is written.
 
 **Chains deeper than one hop genuinely exist.** Approving needs `__manage`; holding the root
-needs `rw` on `*` **and** `__manage` ([18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+needs `rw` on `*` **and** `__manage` ([18.2](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)).
 So an approver that cannot produce a root signature is an ordinary configuration, not an
 edge case, and the walk must climb.
 
@@ -2223,7 +2223,7 @@ edge case, and the walk must climb.
 | 1 | **A root link lives in its own `appMetadata` field** (`apskRootLink`), beside `apskChainLink`. A verifier looks for it first and never disambiguates: the field name already determines which algorithm to verify with and where the key comes from. A discriminator inside one field would make one shape mean two things, and the two are not variants of each other — see [24.1](#241-two-things-the-design-does-not-get-to-choose) |
 | 2 | **The root signs every *fully privileged* enrollment's `_apsk`** — exactly the set that holds the root private, so exactly the set that could produce such a signature anyway. Not one anchor: [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) makes a revoked signer break the chain below it, so a single anchor means one revocation leaves every enrollment on the atSign unanchored until a holder re-signs. Redundancy here is cheap and the failure it prevents is total |
 | 3 | **The walk returns a graded result, not a boolean:** anchored to root / chained but unanchored / unsigned. A bare `_apsk` is explicitly tolerated during the changeover, so a boolean forces every caller either to reject enrollments that are valid today or to lose the distinction that will matter once the changeover ends. The caller owns the policy; the walk reports what it found |
-| 4 | **Root links are self-signed, never conveyed.** [18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already puts the root *private* in every fully privileged enrollment, and by ruling 2 those are exactly the enrollments that get a root link — so each can sign its own, and `_apsk`'s writes-only-from-its-own-connection rule stops being an obstacle rather than needing to be worked around. **This corrects the ruling as first written**, which specified the parent-signs/child-publishes conveyance of [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) for a case self-signing simply does not have |
+| 4 | **Root links are self-signed, never conveyed.** [18.2](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) already puts the root *private* in every fully privileged enrollment, and by ruling 2 those are exactly the enrollments that get a root link — so each can sign its own, and `_apsk`'s writes-only-from-its-own-connection rule stops being an obstacle rather than needing to be worked around. **This corrects the ruling as first written**, which specified the parent-signs/child-publishes conveyance of [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) for a case self-signing simply does not have |
 | 5 | **A holder signs at mint, and every start re-checks.** The minter signs itself at mint, holding both the private and its own record at that moment. Every start then fills any gap, and that is what makes the retro case work without a migration: an enrollment that was privileged *before* the root existed anchors itself the next time it runs. One rule covers the minter, a privileged peer that predates the root, one approved after it, one approved by a non-root-holding approver, and a root minted late |
 
 ### 24.3 No atSign is bound into a link payload, and why that is safe
@@ -4107,7 +4107,7 @@ implementation.
 carries `v: 1` and a reserved `successor`, but the record cannot be rewritten,
 so the version field cannot save it: a later reader can *detect* a v1 root, and
 nobody can *replace* one. `successor` is the only migration path and it is
-unimplemented ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+unimplemented ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)).
 
 The format also disagrees with its own documentation. The code publishes
 `{"v":1,"keys":["<base64>"],"successor":null}` (`pq_signing_root.dart:208-211`)

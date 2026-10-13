@@ -275,7 +275,7 @@ immediately. See
 > and it is the user-owned root of trust. There is therefore no universal
 > cold-start recipient: PQ sharing requires the recipient to have used or
 > authorised the namespace. Ruled in
-> [decisions.md section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+> [decisions.md section 18](detail/decisions.md#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03).
 
 **The nskey's public half is published eagerly.** Minting writes
 `public:__nskey.app_1.my_apps@alice` there and then — before any data, before any
@@ -1972,7 +1972,7 @@ verifiability, witnessing and monitoring, not from trusting whoever runs the log
 holds **whoever hosts the atDirectory**, Atsign included.
 
 **What is logged.** The atSign's signing root, `public:pq_signing_root@<atSign>`
-([decisions.md 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)),
+([decisions.md 18](detail/decisions.md#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)),
 the user-owned anchor; the `nskey` and key-package publics chain to it through signatures
 ([section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)) and need not be logged
 one by one. The root changes far less often than the keys chained to it, so logging it

@@ -425,8 +425,7 @@ per keyfile/install):
     which. **Both are registered on every client**
     ([UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open)),
     because the KEM is the *recipient's* choice. `recipientKind` is
-    `nskey` and nothing else; self and inbound both seal to the one nskey. The
-    `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
+    `nskey` and nothing else; self and inbound both seal to the one nskey. `ns` is the
     resolved namespace the conveyance lives at.
   - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
     data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
