@@ -13,6 +13,7 @@ opened.
 
 ```dart
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
 final preference = AtClientPreference()
@@ -28,14 +29,15 @@ final client = await Atsign('@alice').open(
 // Onboard a newly registered atSign with its CRAM secret; the keys it mints
 // land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, preference: preference);
+    cramSecret: secret, keys: keys, preference: preference, storage: storage);
 
 // Enroll this app with an atSign whose keys another device holds. The
 // request is filed in `keys` as pending, so a restart resumes it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_namespace': 'rw'}, keys: keys,
     preference: preference);
-final enrolled = await pending.client(preference);   // waits for the approval
+final enrolled = await pending.client(preference,
+    storage: storage);                               // waits for the approval
 final resumed = await Atsign('@alice').resumeEnrollment(
     app: 'my_app', device: 'phone', keys: keys, preference: preference);
 
@@ -57,12 +59,17 @@ client comes back offline, 5 s by default).
 | `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
 | `AtEnrollmentException`         | `pending.client(...)`: the request was denied                                                            | Tell the user; a new `enroll` is a new request                |
+| `ArgumentError`                 | No `storage:`, and no `hiveStoragePath` or `isLocalStoreRequired` false                                  | Pass a storage                                                |
 
 ---
 
 ## 2. Storage
 
 A client holds one `AtClientStorage`, and one store is held by one live client.
+Each backend comes from its own import: `HiveAtClientStorage` from
+`package:at_client/hive.dart`, `SqliteAtClientStorage` from
+`package:at_client/sqlite.dart` and `InMemoryAtClientStorage` from
+`package:at_client/memory.dart`.
 
 ```dart
 HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true)
@@ -73,8 +80,10 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 - Omit it and the store is **borrowed**: `stop()` detaches from it and the
   caller closes it. Use this only when something else shares the store.
 - With no `storage:`, a Hive store opens under the deprecated
-  `preference.hiveStoragePath`. `commitLogPath` is deprecated and unread; the
-  client is commit-log-free.
+  `preference.hiveStoragePath`; with no path either, or with
+  `isLocalStoreRequired` false, the verb is refused with an `ArgumentError`
+  before it spends a CRAM secret or waits for an approval. `commitLogPath` is
+  deprecated and unread; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
   Hive location is refused; two processes on one location corrupt it.
 - The store also keeps the last atServer address the atDirectory answered, so
@@ -261,5 +270,5 @@ await client.stop();
 
 <!-- pyml disable-num-lines 3 md013-->
 - [packages/at_client/README.md](../../../../at_client/README.md) — "atSign lifecycle" and "In code: one import, four verbs"
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — the four flows, `_storage`, `_adopt`
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — the four flows, `_adopt`
 - [packages/at_client/example/bin/](../../../../at_client/example/bin/) — CLI programs opened through `CLIBase`

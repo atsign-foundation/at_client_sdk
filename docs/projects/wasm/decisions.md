@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-24 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-25 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -130,6 +130,12 @@ neutral barrel's import graph clean. Consumers add one import line.
 
 **Precedent:** `at_auth_io.dart` under the PQ program's S-5, and the existing
 `at_chops.dart` / `at_chops_ffi.dart` pair, which has held its separation successfully.
+
+**Amended 2026-10-07 — storage backends get a barrel each.** at_client's storage backends
+are not native code for `at_client_io.dart` to collect. Each has its own barrel
+(`package:at_client/hive.dart`, `sqlite.dart` and `memory.dart`), so an app picks a backend
+by its import (D-25). `at_client_io.dart` isn't built yet; when it comes with the WASM work,
+it re-exports the backend barrels along with the native implementations above.
 
 ### D-6 — The structural gate is primary; the compiler is not a gate (2026-08-13)
 
@@ -339,7 +345,8 @@ supplied"*, which is the property the browser lane needs.
    when a keystore is injected while `preference.isLocalStoreRequired` is false. Under a
    bundle that question stops being meaningful: the bundle *is* the store, and whether it
    happens to be durable is its own business. **X4 must not carry this guard onto the
-   factory it introduces.**
+   factory it introduces.** *(Built 2026-10-08, D-25: storage passed is used whatever the
+   flag says, at every entry point, and the guard on an injected keystore is gone.)*
 4. **`clear()` and the principal guard must survive a store with no durable half.** Both
    stay meaningful — an in-memory cache is still principal-specific, and `AT0009` is still
    the failure being designed out — but neither may assume there are records on disk to
@@ -659,7 +666,8 @@ reached"* to *"is supplied"*, which is strictly better for this design.
    `at_client_impl.dart:824` currently throws when a keystore is injected while
    `preference.isLocalStoreRequired` is false — exactly backwards for this design. Under a
    bundle the flag stops being the right question, so X4's factory must not inherit the
-   guard. This is D-12's amendment item 3, stated from this side.
+   guard. This is D-12's amendment item 3, stated from this side. *(Built 2026-10-08,
+   D-25.)*
 3. **`AtChops` must not be rebuilt from a store that never held the keys.** X4's
    measurement found 14 e2e tests dying with *"PKAM Keypair required for signing"* when a
    client was rebuilt on a reopened keystore. A remote-only bundle has no durable keystore
@@ -813,6 +821,38 @@ into **resume**.
 **Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
+
+### D-25 — Client storage is the app's choice; at_client keeps a Hive default until 4.0 (2026-10-07)
+
+An app chooses its local storage, and a platform package chooses a default for the apps
+that don't. at_client offers each backend from its own barrel (`package:at_client/hive.dart`,
+`sqlite.dart` and `memory.dart`, D-5 as amended), and its core holds none of them: outside
+the backend directories only `lib/src/storage/default_storage.dart` names Hive, which it
+opens for a client given no storage until 4.0. `test/storage/import_boundary_test.dart`
+holds that line for Hive and for SQLite. at_client_flutter's default is Hive under the
+app's support directory, where at_client_mobile's examples put `hiveStoragePath`, and
+at_onboarding_cli already chooses its own.
+
+Everything at_client creates lives on that storage. `AtSyncQueue` takes a `SyncQueueStore`
+from the backend and opens nothing itself, and the Hive queue box moves into the Hive
+backend with the 3.14 stray-queue recovery. The types a backend is written against stay
+internal, so an app wanting a backend of its own raises a feature request.
+
+Every client keeps local storage, even if only in memory. Storage passed is used whatever
+`isLocalStoreRequired` says, which completes D-12's amendment item 3, and a client with the
+flag false and no storage is refused. at_cli 3.1.1 builds exactly that client, so it needs a
+release passing `InMemoryAtClientStorage` once at_client 3.15.0 publishes.
+`AtClientImpl.create(localSecondaryKeyStore:)` and `AtClient.persistenceBundle` are
+deprecated; 4.0 removes them along with the default seam, `hiveStoragePath` and
+`isLocalStoreRequired`, after which storage is required at every door.
+
+The storage docs say one thing about what is on disk: end-to-end-encrypted values are
+stored in local storage as ciphertext, never in the clear. What each backend does at rest
+beyond that is left out of them, as it confused readers (gkc, 2026-10-09).
+
+**Why.** Which store suits an app is a platform question (a Flutter app, a command-line
+tool and a browser each want a different one), and a core that names one backend chooses
+for all of them. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327).
 
 ---
 
@@ -1166,3 +1206,5 @@ invent a number.
 | 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
+| 2026-10-07 | **D-25 ruled; D-5 amended.** Client storage is the app's choice, each backend from its own barrel, with a Hive default in one core file until 4.0; every client keeps local storage, and one with `isLocalStoreRequired` false and no storage is refused; the bare-keystore route and `persistenceBundle` are deprecated; each backend says what it protects at rest. D-12's amendment item 3 and D-18's consequence 2 built. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327). |
+| 2026-10-09 | **D-25 amended.** The storage docs no longer say what each backend protects at rest, which confused readers; they say only that end-to-end-encrypted values are stored in local storage as ciphertext, never in the clear (gkc). |

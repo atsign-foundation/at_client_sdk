@@ -48,22 +48,8 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
   final ringFiling = ring is PublishedNskeyKeyRing ? ring.privateFiling : null;
   if (ringFiling != null) return ringFiling.filePending(held);
 
-  return NskeyPrivateFiling(
-    keysIo: keysIo,
-    atSign: atSign,
-    publishedGeneration: (namespace, nskeyKid) async {
-      final advertised =
-          await (ring ?? PublishedNskeyKeyRing(atClient)).currentPublic(
-        atSign,
-        namespace,
-      );
-      // NOTE: matched against every entry, not the advertisement's default kid,
-      // which would answer "not published" for the other entry of a two-entry
-      // advertisement.
-      if (advertised == null || advertised.entryWithKid(nskeyKid) == null) {
-        return null;
-      }
-      return advertised;
-    },
-  ).filePending(held);
+  final lookup = ring ?? PublishedNskeyKeyRing(atClient);
+  return NskeyPrivateFiling.checkedAgainst(() => lookup,
+          keysIo: keysIo, atSign: atSign)
+      .filePending(held);
 }

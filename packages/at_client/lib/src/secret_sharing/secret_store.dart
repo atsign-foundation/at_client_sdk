@@ -62,6 +62,12 @@ class Secret {
 /// lifetime (platform keystore, biometric storage, etc. — the app's
 /// concern). Without one, the store is in-memory only.
 ///
+/// ⚠️ Not read by at_client: it keeps per-enrollment secrets through
+/// `AtKeysIo`, a client's start-up creates its `AtClientSecretSharing` with no
+/// persistence (so one an app passes to a later `forClient` call is ignored),
+/// and nothing calls [SecretStore.init] to load what was saved. It is kept for
+/// secrets that belong to one client rather than to its enrollment.
+///
 /// The SDK ships no implementation, and ⛔ **it writes key material here**:
 /// every held nskey private, the atSign-level signing-root **private** and
 /// every arriving conveyed secret reach this store, [SecretStore.putSecret]

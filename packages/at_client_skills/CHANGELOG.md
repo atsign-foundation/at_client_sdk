@@ -2,6 +2,11 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Storage: each backend comes from its own import, `HiveAtClientStorage` from
+  `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
+  `package:at_client/memory.dart`, and a Flutter app passing no storage gets
+  at_client_flutter's default, Hive in the app's support directory
+  (`SKILL.md`; `references/01`, `05`, `14`, `15`).
 - Stopping a client: `stop()` ends the client's timers and waits and closes
   every connection, work it cuts short fails with `StoppedException`, and a
   push the atServer accepted just before the stop is pushed again by the next

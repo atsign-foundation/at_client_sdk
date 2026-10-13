@@ -167,7 +167,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       perEnrollmentSecretRequestGate;
 
   /// Files a secret that just arrived durably, before the envelope carrying
-  /// it is deleted; a throw keeps the envelope for the next sweep.
+  /// it is deleted; a throw keeps the envelope, which is handled again at the
+  /// next start.
   Future<void> Function(Secret secret)? fileReceivedSecret;
 
   /// Anti-storm floor: the same (requester, secret-name) is answered at most
@@ -200,7 +201,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// such as crypto providers) read and write the same store. Wire persistence
   /// once, when the instance is created (e.g. via
   /// `AtClientSecretSharing.forClient(persistence: ...)`); consumers must not
-  /// re-assign it.
+  /// re-assign it. A client's own start-up creates the instance with none,
+  /// as [SecretStorePersistence] says.
   final SecretStore secretStore = SecretStore();
 
   /// Decrypted, verified payloads addressed to this client.

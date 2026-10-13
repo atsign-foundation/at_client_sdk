@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/sqlite.dart';
+import 'package:at_client/memory.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

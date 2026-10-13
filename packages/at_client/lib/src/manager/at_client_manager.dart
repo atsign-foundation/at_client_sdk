@@ -179,19 +179,29 @@ class AtClientManager {
       return this;
     }
 
+    final previousAtClient = _currentAtClient;
+    // NOTE: on a principal change one enrollment of this atSign succeeds
+    // another over the same store, so that store crosses the switch OPEN —
+    // the outgoing client hands it over instead of closing it.
+    final handsOverStorage = principalChange &&
+        previousAtClient is AtClientImpl &&
+        (storage == null || storage.isHeldBy(previousAtClient));
+    // NOTE: refused before the outgoing client stops, so a switch that cannot
+    // build its client leaves the current one running. A live client of the
+    // atSign is adopted rather than built, so there is nothing to refuse.
+    if (!handsOverStorage &&
+        storage == null &&
+        !AtClientImpl.holdsClientFor(atSign, except: previousAtClient)) {
+      AtClientImpl.refuseWithoutStorage(atSign, preference);
+    }
+
     _logger.info(
         'Switching atSigns ${_currentAtClient?.getCurrentAtSign()} -> $atSign');
 
     // Stop the outgoing atsign
     _atSign = atSign;
-    final previousAtClient = _currentAtClient;
-    // NOTE: on a principal change one enrollment of this atSign succeeds
-    // another over the same store, so that store crosses the switch OPEN —
-    // the outgoing client hands it over instead of closing it.
     final AtClientStorage? carried;
-    if (principalChange &&
-        previousAtClient is AtClientImpl &&
-        (storage == null || storage.isHeldBy(previousAtClient))) {
+    if (handsOverStorage) {
       carried = await previousAtClient.stopHandingOverStorage();
     } else {
       await previousAtClient?.stop();

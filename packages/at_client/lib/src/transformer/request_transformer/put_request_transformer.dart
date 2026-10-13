@@ -45,7 +45,8 @@ class PutRequestTransformer
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys.
     // NOTE: a `local:` key is excluded — it never leaves the device, so there
-    // is nothing for a peer to decrypt, and the keystore encrypts it at rest.
+    // is nothing for a peer to decrypt. It is stored as given, protected at
+    // rest only as far as the storage backend protects it.
     if (!_isPublicKey(metadata) && !atKey.isLocal && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =

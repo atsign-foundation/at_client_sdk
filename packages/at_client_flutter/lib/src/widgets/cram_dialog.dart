@@ -22,7 +22,8 @@ import 'package:flutter/material.dart';
 /// Optional Parameters:
 /// - [keys]: where the activation writes the atSign's first keys (default:
 ///   the platform keychain).
-/// - [storage]: the client's local storage.
+/// - [storage]: the client's local storage; with none, a Hive store under the
+///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [title]: A title string for the dialog (default: "Onboarding Atsign via cram").
 /// - [description]: A description shown while the activation is in progress,
 ///   until the first progress event arrives; thereafter the live progress
