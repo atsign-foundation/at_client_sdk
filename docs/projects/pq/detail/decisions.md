@@ -10360,6 +10360,10 @@ releases it, and
 [14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 item 18 ceased to exist rather than being fixed.
 
+On the client, `MintLock` has no release at all, and `withLock` refuses a lock
+key that carries no ttl: with nothing deleting the record, a lock without one
+would block minting for good.
+
 ### 105.4 Three client-side things the protocol needed — all three built
 
 Found while checking whether the protocol held against the tree as it stood.
@@ -10400,6 +10404,10 @@ the measurement.
    nskey never had one.
    ✅ **Fixed:** `_mintUnlessPublished` re-reads under the lock and **adopts**
    what a sibling published rather than overwriting it.
+   Only the cold-start mint adopts. `rotate` runs `_mint` directly and throws
+   when it loses the lock, because a rotation that took what it found would
+   have rotated nothing while reporting success
+   ([47.3](#473-losing-the-mint-lock-fails-a-rotation-it-resolves-a-mint)).
 3. **The requirement failed on a ttl overrun, and the bounded window in step 3
    did not cover it.** A takes the lock at T0, is still minting at T0+ttl, the
    lock expires, B wins the next election, re-checks, A has not published yet,
@@ -10408,7 +10416,9 @@ the measurement.
    ✅ **Fixed:** the holder carries a `MintLease` and refuses to publish once
    it is spent, so a slow A abandons rather than racing B — turning "two mints"
    into "one mint, by B", which is the requirement. The lease is stamped
-   *before* the take goes out, so the client errs early rather than late.
+   *before* the take goes out, so the client errs early rather than late. The
+   atServer starts the ttl when it stores the record, so a deadline taken from
+   the reply would outlive the lock.
 
 ### 105.5 The residual risks, and what would reopen the question
 
@@ -10462,6 +10472,11 @@ well as to the mint election. Two things follow, both built:
 rotation inside the mint lock's cooldown is refused*), with the control that
 makes the refusal mean something: the same client, same namespace, same call,
 accepted once the ttl has lapsed.
+
+Two changes to the cooldown were proposed and rejected on evidence: releasing
+the lock while the lease is unspent, and retrying a rotation the cooldown
+refused. [116](#116-proposals-rejected-on-evidence-2026-08-23) items 7 and 8
+say why.
 
 ---
 
