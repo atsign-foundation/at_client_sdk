@@ -57,6 +57,9 @@
 - fix: two subscriptions with the same regex but different `shouldDecrypt`
   each receive notifications as they asked; the second no longer shares the
   first one's stream and setting.
+- fix: `AtRpc` answers a request whose value it cannot parse with a NACK under
+  the request's id, and keeps serving; an error from a request or response
+  handler is logged and the listener carries on.
 - build: requires `at_chops` ^3.7.0.
 
 ## 3.15.0-rc6
