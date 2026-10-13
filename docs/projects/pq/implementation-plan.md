@@ -124,7 +124,7 @@ it stopped being parked.
 | **switch `_enrollmentById` to `enroll:fetch`** | at_server 3.16.5 returns `metadata` on `enroll:fetch`, so approval no longer needs to filter the whole roster client-side. Decide first how the client treats an older atServer whose response has no `metadata` key — fall back to `enroll:list`, or require the newer server; never read absent as empty — then switch. | Nothing |
 | **three client-startup paths read the whole roster to find their own record** | `NskeyRotation`, `NskeySeeding.authorisedNamespaces` and `selfRetrofit`'s signing-root step each fetch every enrollment to read one field of their own; redirect them to the memoised `LocalSecondary.getEnrollmentDetails()` (an `enroll:fetch` of the client's own enrollment), checking whether `selfRetrofit`'s freshly switched client can share the memo. On a grown roster each costs what the approval used to — 46.6s measured. | Nothing |
 | **`subscribe()` returns before the monitor attaches** | A notification sent in that window is accepted by the atServer (`delivered` means server-to-server) and never handed to the live monitor; the record survives for `monitor:<epoch>` replay. The harness now polls `NotificationService.listening`; the product question is open — await attachment in `subscribe()`, redeliver, or expose the readiness check where an app would look for it. | Nothing |
-| **tidy up the revoked enrollment backlog on `@ce2e1`–`@ce2e4`** | About 2,400 revoked enrollments per atSign from runs before `enrollment_setup.dart` gave each request a three-hour expiry. Deleting a revoked record releases its keypair for re-enrollment, which is why at_server will not reap them automatically and why this is a deliberate act. | gkc — he is taking it |
+| **tidy up the revoked enrollment backlog on `@ce2e1`–`@ce2e4`** | About 2,400 revoked enrollments per atSign from runs before `enrollment_setup.dart` gave each request a three-hour expiry. Deleting a revoked record releases its keypair for re-enrollment, which is why at_server will not reap them automatically and why this is a deliberate act. The same atSigns hold a revocation record for every enrollment the e2e teardown revoked from at_server #2781 (2026-09-01) until the teardown was removed ([ruling 156](detail/decisions.md#156-the-e2e-packs-enrollments-expire-on-their-own-and-nothing-tears-them-down-2026-10-13)): at_server keeps those with no ttl (`recordRevocationEvents`) and reaps none, and every `enroll:infons` reads them all. | gkc — he is taking it |
 | **the functional pack's CI time stepped up about 20%** | Every run carrying `9c84011df` (the 2026-09-07 trunk merge-back) measures 8m23s–11m35s on stable against 5m30s–9m52s before it; the posture flip is not the cause, since every functional client names its posture. Decide whether two minutes a run is worth chasing; if so, bisect within the merge-back. | Nothing |
 | **`useRemoteAtServer` on a key another atSign shared fails** | A receiver's `get` with `useRemoteAtServer = true` on a key another atSign shared issues an `llookup` of the uncached name against its own atServer and fails `key not found` (115 failures in one run) instead of a `lookup:` at the publisher. Decide whether the option resolves through `lookup:` or refuses the combination, and say so in its dartdoc. | Nothing |
 | **`apsk_server_side_test.dart` poisons the shared atSign for the rest of the run** | It leaves two records on `@alice🛠` — a non-base64 literal over the attacker enrollment's `_apsk`, and a healed enrollment whose key package stays signed by a key its `_apsk` dropped — so every later `listForNamespace` logs SEVERE (314 lines in one CI run). Give the file its own atSign, or restore what it overwrites and restart the healed client. | Nothing |
@@ -139,7 +139,6 @@ it stopped being parked.
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Item 11 — an APKAM rotation that lands and is not persisted locks the enrollment out — is the owed work and step 20's arm waits on it; item 35 lands in `atGettingStarted`; the rest of the open items are examined-and-left or not PQ. Re-derive the open list with the section's command. | Nothing |
 | **a retrofit leaves the enrolment record memo stale** | `LocalSecondary.getEnrollmentDetails()` memoises the record, `_settleEnrollmentIdentity` fills it with the predecessor's, and `_rederiveFromEnrollment` never clears it, so the client runs as the successor while the record describing what it may do is the predecessor's — benign only because a retrofit copies grants verbatim. Clear the memo on re-derivation. | Nothing |
 | **at_lookup `OutboundMessageListener.read` leaves a stale reply queued** | `AT0014 "Unexpected response found"` pops one entry and clears the buffer without draining `_queue` or closing the connection, unlike the timeout paths beside it, so a stale queued response is handed to the next command. Drain or close. | Nothing |
-| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments — a marker derived from `GITHUB_RUN_ID` that setup, suite and teardown can all read — so two overlapping CI runs stop tearing each other down ([#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197), five observations and one clean-room control). | Nothing |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`: green alone and in the full suite, red in one hand-constructed order nothing runs. Reproduce at rate before touching it. | a reproduction at rate |
 | **at_client README does not carry the send/receive asymmetry** | `packages/at_client/README.md`'s post-quantum section carries the goals, the rollout ladder, the posture tables and what each posture switches on, but not `ensureReachable` or the asymmetry an app meets first (you can send the moment you are up; you cannot receive until your key is published). Decide how much of that belongs in a README, then write it. | Nothing |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) **orphan growth** | Only ③'s orphan-growth half is owed — a decision before it is code; SS-4 resume was ruled NO RESUME. | the decision |
@@ -189,6 +188,8 @@ it stopped being parked.
 | **published versions the tree has moved past without a bump** | A version on pub.dev says nothing about whether the tree still matches it, so diff the archive (`https://pub.dev/api/archives/<pkg>-<version>.tar.gz`) against the package before calling it current. Measured 2026-10-03: at_policy 1.2.0's archive reports `packageVersion` as `1.0.0`; at_chat_flutter's `lib/` moved onto at_client_flutter `^0.1.2` under its published 3.1.0; at_follows_flutter fixes a log typo; at_commons changes a doc comment and at_auth its CHANGELOG; and at_contact, at_contacts_group_flutter, at_events_flutter, at_location_flutter, at_notify_flutter and at_sync_ui_flutter differ in pubspec, README, tests or examples only. Each ships only with a version bump. Not PQ. | gkc — a bump is his call |
 | **`isInSync()` answers true early on an atServer without at_server#2841** | For a namespace-restricted enrollment, an atServer before [at_server#2841](https://github.com/atsign-foundation/at_server/pull/2841) counts `stats:3` short of what `sync:from` sends, so at_client 3.15.0-rc3's `serverCommitId <= lastReceivedServerCommitId` rule reports in sync while entries are still to come. Nothing is owed client-side. The newest at_server release, p3.16.5 (2026-09-30), predates the fix: decide whether the stable 3.15.0's notes say so if no release carries it by then. | the stable at_client 3.15.0 |
 | **NoPorts: a device-level nskey as the PQ-capable signal** | In `sshnoports`, not here (gkc, 2026-10-04; [ruling 146](detail/decisions.md#146-keys-an-app-publishes-below-its-grants-are-its-own-and-ensurereachable-reports-holding-them-2026-10-04)). A client treats a daemon as post-quantum-capable when an nskey is advertised at exactly `<device>.sshnp` on the daemon's atSign; old daemons never publish one, so a fleet can mix. A daemon runs a seeding posture, calls `ensureReachable('$device.sshnp')` at every start, and replies in the scheme the request arrived in, passing the request's `AtNotification.receivedUnder` as the reply's `cryptoProviderId` ([ruling 149](detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05)), rather than asking whether the client's atSign advertises `sshnp`. A client checks that exact level with `PublishedNskeyKeyRing(atClient).publishedAdvertisement(<daemon>, '<device>.sshnp')`, which reads the record from the atServer and verifies it, since `CryptoRuntime.isReadyFor` and the resolver fall back to `sshnp`; sends legacy for every message to a daemon without one, since `ping.<device>` and the rest of `sshnp` seal to the `sshnp` key; and sends a request post-quantum only after `ensureReachable('sshnp')` reports `holdsPrivate`, so it can open the reply. Under `pqReady` a message is sent post-quantum with `cryptoProviderId: symmetricAesGcmCryptoProviderId`, and legacy with `CryptoRuntime.legacyProviderId`. A daemon reinstalled under a reused device name is conveyed the old key at approval only when its approver holds it ([ruling 147](detail/decisions.md#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04)), and one whose own result says it does not hold its device key's private has none: nothing in the SDK re-fetches or replaces that key at start, so NoPorts must not reuse device names across enrollments. | Nothing |
+| **each e2e run can restart the shared atServers under another run** | `end2end_tests_prep` runs trunk's `tools/<host>/update_ce2e_images.sh` on every run, and its `docker service update --image` replaces an @ce2e service whenever the `dev_env` or `canary` tag has moved since the last update, dropping the connections of any other run's tests on it. In the 100 runs from 2026-10-07 to 2026-10-13 six prep jobs replaced a service (one waits about five seconds at `0 out of 1 tasks`, a no-op does not), none while another run's e2e jobs were running; what a replacement costs a run mid-test is unmeasured. Decide whether the roll leaves the per-run prep, or shares a concurrency group with the e2e jobs. | Nothing |
+| **the e2e pack hears other runs' notifications** | Overlapping runs of one e2e job notify between the same two atSigns. `notify_with_isolate_test.dart` sends a fixed key and value and its receiver keeps any notification carrying that value, so it can pass on another run's; `key_stream_test.dart`'s KeyStream, Iterable and Map groups subscribe to the whole `e2e_test` namespace, so another run's notification landing in the milliseconds before their own events fails `emitsInOrder`. Make each run's keys, values and regexes run-unique. | Nothing |
 
 ### The four missing self-to-self mirrors
 
@@ -861,45 +862,6 @@ the analyzer knows which uses are of the deprecated member — and the credentia
 ladder's replacement is the `AtAuthenticator` seam in at_auth, whose constructors
 take the algorithms as required arguments so a migrated call site cannot inherit
 an algorithm it did not choose.
-
-### 14.50 The e2e teardown revokes enrollments belonging to other runs
-
-**The e2e teardown revokes enrollments belonging to other runs.**
-`tests/at_end2end_test/test/enrollment_teardown.dart` fetches *every*
-`EnrollmentStatus.approved` enrollment on the shared `@ce2e1`–`@ce2e4` atSigns
-and revokes each with `force: true`, and fetches every
-`EnrollmentStatus.pending` one and denies it — neither loop filters to what
-its own run created, so two overlapping CI runs tear each other down. A
-run-unique marker already exists: `enrollment_setup.dart:110` submits with
-`appName: 'wavi-$random'` (`random = Uuid().v4().hashCode`, line 101) and
-`Enrollment` exposes `appName`
-(`packages/at_client/lib/src/response/enrollment.dart`). What is missing is
-agreement between the two steps — setup, suite and teardown are **three**
-separate `dart test` invocations
-(`.github/workflows/at_client_sdk.yaml:324`, `:331` and `:340`) sharing no
-in-process state — so derive the marker from something both can read (`GITHUB_RUN_ID` is
-the obvious candidate) and filter both loops on it. ⚠️ Green CI runs are not
-evidence this is fixed: every green window since the diagnosis had no other
-run in flight, so the mechanism had no opportunity to fire — it is a rate, not
-a kind. ✅ **That sentence was CORROBORATED rather than falsified on
-2026-08-31**, when the concurrency was counted for the first time: the two red
-windows carried 4 and 3 concurrent `at_client_sdk` runs, both green windows
-carried the same single long-running one and nothing else, and a run dispatched
-with **zero** in flight went 11 of 11 green. The constant present in every
-window cannot be the discriminator, which is what makes it a differential
-rather than a tally.
-
-⛔ **The mechanism, the evidence and the proposed fix now live in
-[at_client_sdk#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197).**
-What stays here is the WORK, which is still owed; the captured instances and
-their timestamps belong in the issue. Do not let the two drift.
-
-⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** A "looks like a
-second defect and is not" ruling. If it goes, the next reader who sees
-`PathNotFoundException` in an `end2end_test_14` log opens a second
-investigation into a symptom that has already been attributed.
-
-
 
 ### 14.47 The at_client unit tree has a cross-file isolation flake
 
