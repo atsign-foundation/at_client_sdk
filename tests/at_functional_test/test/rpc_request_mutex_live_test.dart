@@ -116,6 +116,7 @@ void main() {
     }
     await requester.stop();
     await enrolled.stop();
+    await owner.stop();
   });
 
   test('Exactly one of two responders handles a request', () async {
@@ -148,7 +149,15 @@ void main() {
 
   test('A request\'s lock records no commit', () async {
     handled.clear();
-    final before = await serverCommitId();
+    // NOTE: the control first: if a committed write does not move the commit
+    // id read here, the zero below means nothing.
+    var before = await serverCommitId();
+    await owner.put(AtKey.fromString('committed.$namespace$alice'), 'control',
+        putRequestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..useRemoteAtServer = true);
+    expect(await serverCommitId() - before, greaterThan(0));
+    before = await serverCommitId();
 
     await rpcClient.call({'q': 'commit'}).timeout(Duration(minutes: 1));
     await Future<void>.delayed(Duration(seconds: 3));
