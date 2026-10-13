@@ -1083,14 +1083,13 @@ field). Open for the remaining capabilities.
 abstraction, or file transfer becomes a separate optional native-only `AtFileTransfer`.
 The second is smaller; the first is the better API. See [`design.md`](design.md) §2.8.
 
-**OQ-5 — Which VFS?** `IndexedDbFileSystem` (main thread, async flush) or OPFS (true
-sync, needs a dedicated web worker). Sets `at_client_web`'s execution model. **Not a
-measurement:** deferred by D-17 and constrained by D-21, which make it a product pick-two —
-see the status table below.
+**OQ-5 — Which VFS?** **Resolved by D-25:** `SimpleOpfsFileSystem` in a dedicated web
+worker, one directory per (atSign, enrollmentId). `IndexedDbFileSystem` is an opt-in fallback
+only with flush-before-ack and a single-tab guard.
 
 **OQ-6 — What is the acceptable WASM payload budget?** Compiled `.wasm` +
-JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). Informs whether the IndexedDB fallback is ever needed —
-[`design.md`](design.md) §5, gate X2. Record the number before deciding.
+JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). **Resolved by D-25 (W4):** +386 KB gz, fixed per app, accepted; D4 (raw IndexedDB) is not triggered —
+[`design.md`](design.md) §5, gate X2.
 
 **OQ-7 — Directory lookup from a browser.** `root.atsign.org:64` is a raw TLS socket.
 The `proxy:` convention and the injectable `SecondaryAddressFinder` unblock
@@ -1131,7 +1130,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 
 | Question | Now |
 | --- | --- |
-| **OQ-5** — which VFS | **Deferred by D-17** (the default V1 bundle needs no VFS; a consumer injecting a SQLite bundle does, which is why this is deferred rather than closed) and **constrained by D-21** (`WasmVfs` rejected; the remaining trade is a product decision, not a benchmark) |
+| **OQ-5** — which VFS | **Resolved by D-25** (2026-10-13): `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), dedicated worker. `WasmVfs` stays rejected (D-21). The V1 default bundle still needs no VFS (D-17); this applies to a consumer injecting a SQLite bundle |
 | **OQ-11** — instance-based `AtClientManager` | **Resolved by D-22** in the instance-based direction. The browser lane constructs its own manager; `getInstance()` is demoted over a major rather than deleted |
 | **OQ-12** — process-global factory registry | **Resolved by D-22** — instance-per-client |
 | **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |

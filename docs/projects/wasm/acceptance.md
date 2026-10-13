@@ -342,7 +342,7 @@ For everything T2 cannot reach: IndexedDB, the SQLite-wasm VFS, `WebSocket`,
 
 | ID   | Gate                                                                                                                                             | Done when       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the IndexedDB VFS. **V2** — the V1 default bundle has no storage backend (D-17), and which VFS is D-21's product call, not this gate's. | All tests pass. |
+| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the SimpleOPFS VFS (D-25). **V2** — the V1 default bundle has no storage backend (D-17). | All tests pass. |
 | T3.2 | Same for the `at_client_web` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
 | T3.3 | The whole T2 set re-run under Chrome, confirming no dart2js-vs-Chrome-WasmGC divergence.                                                         | All tests pass. |
 

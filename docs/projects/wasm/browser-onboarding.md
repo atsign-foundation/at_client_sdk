@@ -44,14 +44,14 @@ An app client running in a browser must:
 | Plaintext of `ct` | the full @keys JSON **including the PCAM private key** and its `signingAlgo` |
 | Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
 | IndexedDB | credential-ID hint (for `allowCredentials`) + local replica of this passkey's record only |
-| Server | the new at-keys module on the atSign's atServer: read by exact lookup key unauthenticated; write/refresh/delete PKAM-authenticated; carries `ttl` |
+| Server | the new at-keys module on the atSign's atServer: read by exact lookup key unauthenticated; write/refresh/delete PKAM-authenticated; carries `ttl`. **Interim** (no server change): a public hidden key `public:_<lookupHex>.atkeys@<atSign>` with `ttl`, in the `atkeys` namespace because one enrollment can span several app namespaces — whether it stays out of unauthenticated `scan` is to be verified |
 
 ### Bootstrap sources (how the first @keys arrive on a device)
 
 | Source | When |
 |---|---|
-| Passphrase envelope `_atkeys.<app>` cut by the portal (R-5) — written only by a cut, never by a browser | portal-onboarded users |
-| APKAM enrollment approved from an existing device; the browser generates the PCAM key pair | users who already have a device |
+| APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeys:rw`, approved by OTP or from an existing device; the browser generates the PCAM key pair | **primary** |
+| Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | secondary, for a user with no device to approve from (open) |
 
 Both converge on the same per-passkey record.
 
@@ -127,7 +127,7 @@ sequenceDiagram
 | D-2 | **PRF salt is constant, not derived from the atSign** — *changes Gary's model; needs his ack* | on recovery the atSign is unknown until the assertion returns `userHandle`, but the salt must be in the request; PRF output is already unique per credential, so a constant salt loses nothing |
 | D-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
 | D-4 | **PCAM private key inside the blob**; for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
-| D-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The PCAM key is a software key (D-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
+| D-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. The PCAM key is a software key (D-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
 | D-6 | **`ttl` refreshed on open** prunes dead passkeys | the browser cannot learn that a passkey was deleted; expiry needs no one to know (R6) |
 | D-7 | **Reads by exact lookup key, unauthenticated; writes PKAM-authenticated**; records never appear in `scan` | recovery must read before auth; writes need an owner; enumeration would break R5 |
 | D-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
@@ -154,6 +154,6 @@ sequenceDiagram
 |---|---|---|
 | Q-1 | `T` — record ttl (proposal: 90 days) | product |
 | Q-2 | at-keys module grammar on the atServer: verbs, exact-key read, no-scan, ttl refresh | me + atServer |
-| Q-3 | Bootstrap via APKAM enrollment: one enrollment per passkey (revocable per device) or the cut's shared enrollment | me + Gary |
+| Q-3 | ~~Bootstrap via APKAM enrollment~~ — **resolved 2026-10-13:** the browser enrolls, one enrollment per passkey; open: whether the portal envelope stays as a secondary bootstrap | me + Gary |
 | Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets D-5's current pick | me (probe) |
 | Q-5 | Which platforms return PRF results from `create()` — decides whether enrollment is one prompt or two | me (probe) |
