@@ -685,7 +685,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-30** | **Shared-master-seed nskey derivation rejected; the [section 1.3](../design.md#13-keys--key-shapes) derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
 | **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) — the one-keypair half stands; **lazy publication superseded 2026-08-02** by [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
-| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
+| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against another enrollment publishing in its name, while the atServers serve keys faithfully (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove the need to trust the atServers — the atServer serves the `_apsk` anchor (see section 12 + design.md *Trust model*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
 | **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md section 13](../implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
@@ -972,37 +972,34 @@ write-restricted.** Because verification depends entirely on `_apsk`, the atServ
 Both properties MUST be asserted by e2e tests (an approved enrollment's `_apsk` is
 fetchable without a client publish; a cross-enrollment overwrite is refused).
 
-**Trust model — what this does and does not remove from the confidentiality TCB.**
+**Trust model — what the signing rests on.**
 The verification chain is only as strong as its anchor, and the anchor for `_apsk` is
-the atServer that serves it. So the signing separates two adversaries sharply:
+the atServer that serves it. The atServers are trusted to serve keys faithfully, and
+under that trust the signing **works**: a legitimately enrolled client, whatever its
+privileges, cannot publish a key package, `nskey` or secret as if from another
+enrollment, because the atServer serves each enrollment's *real* `_apsk` and the
+signature lets the receiver tell an authorised minter from any other enrollment. This
+is the concrete win, and it holds same-atSign **and** cross-atSign.
 
-- **Against a malicious *insider* under an honest server** — a legitimately-enrolled
-  but rogue or lower-privileged client trying to inject a poisoned key package / secret
-  as if from another enrollment — signing **works**: the honest server serves each
-  enrollment's *real* `_apsk`, and the signature lets the receiver distinguish an
-  authorised minter from a rogue enrollment. This is the concrete win, and it holds
-  same-atSign **and** cross-atSign.
-- **Against a malicious atServer *operator*** — one that generates its own keypair,
-  serves the public half as the enrollment's `_apsk`, and serves a self-generated
-  advertised key signed by the matching private — signing gives **nothing**: the
-  operator controls both the signature key and the `_apsk` it is verified against, so
-  the chain is internally consistent but rooted in a key the operator chose. This is
-  true **same-atSign and cross-atSign alike** — do **not** claim signing removes the
-  operator from the TCB in either case.
+What the signing does not do is check the atServers themselves. The key an atServer
+serves as an enrollment's `_apsk` is the key the chain is rooted in, so an atSign's
+atServer is trusted for the keys others seal to that atSign and, since its clients fetch
+every peer's keys through it, for the keys that atSign seals to others — do **not**
+claim signing removes that trust, same-atSign or cross-atSign. That is **not new** and
+**not introduced by the substrate**: classical Atsign has the same trust (a sender
+fetches `public:publickey@alice` from @alice's atServer). Signing is *necessary
+infrastructure* for checking that trust — it chains advertised keys to `_apsk` — and
+becomes *sufficient* once the anchor (the atSign's identity→key binding) is distributed
+through a channel outside the atServers, which is key transparency
+([#2293](https://github.com/atsign-foundation/at_client_sdk/issues/2293)), on the
+roadmap. The trust model and the key-transparency design are in
+[`design.md` section 7](../design.md#7-trust-model).
 
-So the operator of an atSign's atServer is in the **confidentiality TCB for all data
-destined to that atSign** (inbound cross-atSign shares, and self-data where the client
-relies on server-served keys) and for the data that atSign sends out, since its
-clients fetch every peer's keys through it — a transparent, split-view MITM that this signing does
-not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
-classical Atsign has the same property (a sender fetches `public:publickey@alice` from
-@alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
-it chains advertised keys to `_apsk` — but becomes *sufficient* only once the anchor
-(the atSign's identity→key binding) is distributed through a channel the operator does
-not control. The full threat model, why it is undetectable to a targeted victim today,
-and the mitigation ladder (self-hosting, client self-audit, out-of-band fingerprints,
-atDirectory key transparency, root-anchored signatures, attestation) are in
-[`design.md`](../design.md) → *Trust boundary & residual threats*.
+**Amended 2026-10-13:** this block used to treat the atServer's operator as outside the
+trust the design rests on, with a threat model and a ladder of countermeasures in
+`design.md`. It is restated as the trust the atServers hold, with key transparency on
+the roadmap to check it (gkc: "atServers are trusted as faithful and key transparency is
+on the roadmap").
 
 The public/private **correspondence check** for a conveyed keypair secret (`nskey` /
 `pqpublickey` privates) remains a useful **secondary** check, subordinate to the
@@ -1012,9 +1009,9 @@ signature.
 resolution in `ApkamSigning` / `EnvelopeSigning`), needs no new key type (the ML-DSA
 APKAM signing key and the X-Wing encapsulation key are correctly distinct —
 [section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)), and
-raises the substrate's floor from "the atServer vouches" to "a non-operator adversary
-cannot forge advertised keys" — the remaining operator trust is addressed by the
-separate transparency work above, not by the substrate.
+raises the substrate's floor from "the atServer vouches" to "no enrollment can publish
+an advertised key in another's name" — the trust the atServers hold is checked by the
+separate key-transparency work above, not by the substrate.
 
 **Implementation status.** Target, not yet built: sign in the mint paths
 (**SS-2** key package, **SS-4** nskey / pqpublickey), verify on read (**SS-1c**); the
@@ -1411,16 +1408,24 @@ to publish it to a key transparency system at mint.
 
 Everything advertised by an atSign is verified against a per-enrollment `_apsk`
 ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)), and
-`_apsk` is served by the atServer, so an operator who can rewrite it can substitute any
-advertised key. That is recorded there as a known limit. The root closes it: approvers
-sign enrollees' key packages, so the chain runs root → key package → `_apsk` →
-advertised keys, and the anchor is something the operator cannot produce.
+`_apsk` is served by the atServer, so every advertised key rests on the atServer serving
+`_apsk` faithfully. That is recorded there as the trust model. The root moves the anchor
+to the user: approvers sign enrollees' key packages, so the chain runs root → key
+package → `_apsk` → advertised keys, the anchor is a key only the atSign's own fully
+privileged enrollments hold, and once key transparency publishes the root a client can
+check the anchor rather than rest on the atServer for it.
 
 Handing the root to the atServer was considered and rejected. Key transparency over an
-operator-held key records the operator's own signatures, correctly signed, so an auditor
-has nothing to catch. It would make the operator's position structural rather than a gap
-to close. Self-hosting makes operator and user the same party for some deployments, and
-the design should not assume it for the rest.
+atServer-held key would log the atServer's own signatures, so it would check nothing
+beyond what the atServers are already trusted for, and their place in the chain would
+become structural rather than something key transparency checks. Self-hosting makes the
+atServer's operator and the user the same party for some deployments, and the design
+should not assume it for the rest.
+
+**Amended 2026-10-13:** this described what an atServer's operator could do with
+`_apsk` and the root; it is restated as the trust the atServers hold, with key
+transparency on the roadmap to check it (gkc: "atServers are trusted as faithful and key
+transparency is on the roadmap").
 
 `public:signing_publickey@<atSign>` is atServer-to-atServer auth and unrelated to
 clients; the `public:pq_signing_publickey@<atSign>` that joins it is the atServer's, not
