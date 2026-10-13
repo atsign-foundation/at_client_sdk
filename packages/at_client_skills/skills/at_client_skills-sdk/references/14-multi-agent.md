@@ -38,6 +38,8 @@ live client: a second `open` on the same location in one process is refused,
 and two processes on one location corrupt it.
 
 ```dart
+import 'package:at_client/hive.dart';
+
 final dir = Directory.systemTemp.createTempSync('agent_').path;
 final prefs = AtClientPreference()..namespace = 'my_app';
 final storage = HiveAtClientStorage(
@@ -113,6 +115,7 @@ client-wide preference.
 
 ```dart
 import 'package:at_cli_commons/at_cli_commons.dart';  // NOT in at_client
+import 'package:at_client/hive.dart';
 
 final prefs = AtClientPreference()
   ..namespace = 'my_app'

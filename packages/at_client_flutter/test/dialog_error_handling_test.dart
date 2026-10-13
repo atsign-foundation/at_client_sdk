@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
 import 'package:at_client_flutter/src/widgets/cram_dialog.dart';
@@ -6,6 +7,9 @@ import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+import 'fake_path_provider.dart';
 
 class MockAtsignFlows extends Mock implements AtsignFlows {}
 
@@ -21,9 +25,11 @@ class FakeAtClientPreference extends Fake implements AtClientPreference {}
 /// failed future, which is how the stubs fail.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const supportPath = '/app/support';
   setUpAll(() {
     registerFallbackValue(InMemoryAtKeysIo());
     registerFallbackValue(FakeAtClientPreference());
+    PathProviderPlatform.instance = FakePathProvider(supportPath);
   });
 
   late MockAtsignFlows flows;
@@ -323,6 +329,74 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(result, same(client));
+      final storage = verify(
+        () => pending.client(any(), storage: captureAny(named: 'storage')),
+      ).captured.single;
+      expect(
+        storage,
+        isA<HiveAtClientStorage>()
+            .having((s) => s.storagePath, 'storagePath', supportPath)
+            .having((s) => s.atSign, 'atSign', '@alice')
+            .having((s) => s.closedByClient, 'closedByClient', isTrue),
+        reason:
+            'an app passing no storage gets this package\'s default, which '
+            'the client closes when it stops',
+      );
+      verifyNever(
+        () => flows.enroll(
+          any(),
+          otp: any(named: 'otp'),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          namespaces: any(named: 'namespaces'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          signingAlgo: any(named: 'signingAlgo'),
+          keyExchangeMode: any(named: 'keyExchangeMode'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      );
+    });
+    testWidgets('ApkamActivationDialog refuses a preference asking for no '
+        'local store before any request goes out', (tester) async {
+      // ignore: deprecated_member_use
+      final preference = AtClientPreference()..isLocalStoreRequired = false;
+      await pumpOpener(
+        tester,
+        (context) => ApkamActivationDialog(
+          atSign: '@alice',
+          rootDomain: AtRootDomain.atsignDomain,
+          appName: 'app',
+          deviceName: 'device',
+          namespaces: const {'*': 'rw'},
+          preference: preference,
+          keys: InMemoryAtKeysIo(),
+          themeData: ThemeData(),
+          flows: flows,
+        ),
+        (_) {},
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isA<ArgumentError>(),
+        reason:
+            'at_client refuses this client; the dialog says so before '
+            'the passcode is spent on a request, not after the approver '
+            'has approved it',
+      );
+      verifyNever(
+        () => flows.resumeEnrollment(
+          any(),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      );
       verifyNever(
         () => flows.enroll(
           any(),

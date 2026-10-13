@@ -14,7 +14,7 @@
     {
       "id": 3,
       "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
-      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, backupKeys: [KeychainAtKeysIo()]), passing storage only to override at_client_flutter's default Hive store in the app support directory, which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
     },
     {
       "id": 4,

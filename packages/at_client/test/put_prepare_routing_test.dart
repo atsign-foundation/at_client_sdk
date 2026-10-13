@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -46,17 +47,21 @@ void main() {
     when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
   });
 
-  Future<AtClientImpl> client(RemoteLocalPref remoteLocalPref) async =>
-      await AtClientImpl.create(
-          '@alice',
-          'wavi',
-          AtClientPreference()
-            // ignore: deprecated_member_use_from_same_package
-            ..isLocalStoreRequired = false
-            ..remoteLocalPref = remoteLocalPref
-            ..crypto = CryptoConfig(
-                defaultProviderId: provider.id, providers: [provider]),
-          remoteSecondary: remote) as AtClientImpl;
+  Future<AtClientImpl> client(RemoteLocalPref remoteLocalPref) async {
+    final built = await AtClientImpl.create(
+            '@alice',
+            'wavi',
+            AtClientPreference()
+              ..remoteLocalPref = remoteLocalPref
+              ..crypto = CryptoConfig(
+                  defaultProviderId: provider.id, providers: [provider]),
+            remoteSecondary: remote,
+            storage:
+                InMemoryAtClientStorage(atSign: '@alice', closedByClient: true))
+        as AtClientImpl;
+    addTearDown(built.stop);
+    return built;
+  }
 
   AtKey selfKey() =>
       AtKey.self('phone', namespace: 'wavi', sharedBy: '@alice').build();

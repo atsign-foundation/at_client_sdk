@@ -17,7 +17,8 @@ import 'package:flutter/material.dart';
 ///   when given.
 ///
 /// Optional Parameters:
-/// - [storage]: the client's local storage.
+/// - [storage]: the client's local storage; with none, a Hive store under the
+///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [backupKeys]: stores the keys are copied into once the client is open,
 ///   each skipped when it already holds an entry for the atSign.
 /// - [title]: A title string for the dialog (default: "Authenticating via pkam").

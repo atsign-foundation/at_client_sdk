@@ -15,7 +15,10 @@ void main() {
   runStorageContract(
       'sqlite',
       (atSign) =>
-          SqliteAtClientStorage.under(atSign: atSign, storagePath: dir.path));
+          SqliteAtClientStorage.under(atSign: atSign, storagePath: dir.path),
+      breakOpen: (atSign) => unreadable(
+          SqliteAtClientStorage.under(atSign: atSign, storagePath: dir.path)
+              .dbPath));
 
   test('sqlite: the queue survives close and reopen, in order', () async {
     AtClientStorage make() => SqliteAtClientStorage.under(
