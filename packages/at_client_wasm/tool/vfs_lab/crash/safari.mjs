@@ -69,7 +69,7 @@ const out = { safari: version, E3: {}, E4: [], E7: {} };
 const id = Date.now();
 if (!process.env.E7ONLY) for (const r of ['same-worker', 'same-dir', 'one-worker']) out.E3[r] = await run('e3.html', { run: r, id }, 60000);
 console.error('E3', JSON.stringify(out.E3));
-for (const vfs of process.env.E7ONLY ? [] : ['indexedDb', 'simpleOpfs']) {
+for (const vfs of process.env.E7ONLY || process.env.E3ONLY ? [] : ['indexedDb', 'simpleOpfs']) {
   for (const rows of [1000, 10000, 100000]) {
     const db = `e4_${vfs}_${rows}_${Date.now()}`;
     const populate = await run('e4.html', { vfs, db, n: rows, phase: 'populate' }, 300000);
@@ -79,7 +79,7 @@ for (const vfs of process.env.E7ONLY ? [] : ['indexedDb', 'simpleOpfs']) {
     console.error(vfs, rows, JSON.stringify(populate), JSON.stringify(opens[0]));
   }
 }
-for (const vfs of ['indexedDb', 'simpleOpfs']) {
+for (const vfs of process.env.E3ONLY ? [] : ['indexedDb', 'simpleOpfs']) {
   const db = `e7_${vfs}_${Date.now()}`;
   const q = (tag, extra) => `index.html?${new URLSearchParams({ vfs, db, tag, ...extra })}`;
   open(q(`a${vfs}`, { mode: 'write', flush: '1' }));
@@ -94,6 +94,7 @@ for (const vfs of ['indexedDb', 'simpleOpfs']) {
   out.E7[vfs] = { aAck, bAck, bOpenError: bResult && JSON.parse(bResult), verify: { ...verify, torn: verify.torn?.length } };
   console.error('E7', vfs, JSON.stringify(out.E7[vfs]));
 }
+if (process.env.SAFARI_DEBUG) console.error('reports', JSON.stringify([...reports], null, 0).slice(0, 3000));
 server.close();
 await mkdir(path.join(site, 'results'), { recursive: true });
 await writeFile(path.join(site, process.env.E7ONLY ? 'results/e7-safari.json' : 'results/e5-safari.json'), JSON.stringify(out, null, 1));
