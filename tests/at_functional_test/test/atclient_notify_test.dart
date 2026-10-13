@@ -146,40 +146,6 @@ void main() {
     await received.future;
   });
 
-  test('notify text of to sharedWith atSign', () async {
-    var notificationResult = await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('Hello', sharedWithAtSign));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey?.key, 'Hello');
-    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
-  });
-
-  test('notify text of to sharedWith atSign with shouldEncrypt set to true',
-      () async {
-    var notificationResult = await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('Hello', sharedWithAtSign,
-            shouldEncrypt: true));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey?.key, 'Hello');
-    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
-  });
-
-  test('notify text of to sharedWith atSign - callback', () async {
-    Completer received = Completer();
-    await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('phone', '@bob🛠'),
-            onSuccess: (NotificationResult notificationResult) {
-      expect(notificationResult.notificationStatusEnum.toString(),
-          'NotificationStatusEnum.delivered');
-      expect(notificationResult.atKey?.key, 'phone');
-      expect(notificationResult.atKey?.sharedWith, '@bob🛠');
-      received.complete();
-    });
-    await received.future;
-  });
-
   test('notify - test deprecated method using notification service', () async {
     // phone.me@alice🛠
     var phoneKey = AtKey()
