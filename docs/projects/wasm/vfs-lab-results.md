@@ -36,13 +36,13 @@ Fixed first-load cost. Parse/compile time **not measured**.
 - **Cost of that flush:** ~35% fewer transactions in the same window (median acked 206 → 136). SimpleOPFS managed 63 — it is synchronous-durable per commit, so slower than either IndexedDB arm.
 - **Fault model: a renderer kill only.** It does not model power loss, OS crash or a browser-process kill. Not tested; do not read it as proof against those.
 
-### E3 — multi-atSign on SimpleOPFS · Chromium, WebKit, Firefox
+### E3 — multi-atSign on SimpleOPFS · Chromium, WebKit, Firefox, Safari
 
 | Scenario | Result |
 | --- | --- |
 | Two directories + distinct `vfsName` in one worker | Both open; row counts isolated (5 vs 3), integrity ok |
 | One worker per database | Both open, independent |
-| Same directory opened twice | Second open fails (`NoModificationAllowedError` on Chromium and Firefox; `InvalidStateError` on WebKit) |
+| Same directory opened twice | Second open fails (`NoModificationAllowedError` on Chromium and Firefox; `InvalidStateError` on WebKit and Safari) |
 
 D-21's "exactly two files" is true **per `SimpleOpfsFileSystem` instance**, not per origin. `loadFromStorage(path, vfsName:)` takes a directory and a VFS name, so one instance per (atSign, enrollmentId) is supported. Same-directory exclusion is a feature: it is a single-writer lock.
 
@@ -52,7 +52,7 @@ D-21's "exactly two files" is true **per `SimpleOpfsFileSystem` instance**, not 
 | --- | --- | --- | --- |
 | 1k | 26 ms | 13 ms | 33 ms |
 | 10k | 43 ms | 13 ms | 77 ms |
-| 100k | **178 ms** (WebKit 349, Firefox 176) | **13 ms** (WebKit 18, Firefox 23) | 586 ms (WebKit 1,322, Firefox 440) |
+| 100k | **178 ms** (WebKit 349, Firefox 176, Safari 350) | **13 ms** (WebKit 18, Firefox 23, Safari 18) | 586 ms (WebKit 1,322, Firefox 440, Safari 1,764) |
 
 IndexedDB open grows with the database; SimpleOPFS open is flat. IndexedDB holds the whole file in memory (open cost tracks file size). Heap/RSS **not measured**.
 
@@ -62,9 +62,12 @@ IndexedDB open grows with the database; SimpleOPFS open is flat. IndexedDB holds
 | --- | --- | --- | --- | --- |
 | Chromium 156 | ✅ | ✅ | ✅ | ✅ |
 | WebKit 27.2 (Playwright build, **not real Safari**) | ✅ | ✅ | not run | not run (CDP crash is Chromium-only) |
+| Safari 27.0.1 (real, macOS) | ✅ | ✅ | **inconclusive** — SimpleOPFS second tab refused (`InvalidStateError`) once; IndexedDB integrity and verify never completed (see below) | not run |
 | Firefox 157.0.1 (stock) | ✅ | ✅ | ✅ — IndexedDB: `integrity_check` fails, 112 torn rows after two writers; SimpleOPFS: second tab refused, data intact | not run (no `Page.crash` equivalent) |
 
-Same verdict on all three engines wherever tested. **Gap:** real Safari, Safari/Chrome on iOS and Android, and E2 outside Chromium.
+Same verdict on all four engines wherever tested. **Gap:** Safari E7, Safari/Chrome on iOS and Android, and E2 outside Chromium.
+
+Safari notes: driven by `tool/vfs_lab/crash/safari.mjs` (`open -a Safari` plus an injected reporting shim, since `safaridriver --enable` needs an admin password and `osascript` hangs on an Apple Events prompt). E3/E4 reported fine. For E7 the first run showed the SimpleOPFS refusal, but the writers never stopped (background-tab timer throttling), so the IndexedDB outcome was not valid; after adding a self-stop, three reruns loaded the page and `sqlite3.wasm` but never reported, cause unknown. Treat Safari E7 as **untested**, a harness limit rather than a product finding.
 
 Firefox notes: Playwright's patched Firefox builds (1482, 1555) would not start here. Stock Firefox only starts through Launch Services (direct exec reports "Could not find profile folder"), so it was driven with geckodriver `--connect-existing` (`tool/vfs_lab/crash/ffdrive.mjs`). Navigating a tab away leaves its SimpleOPFS worker alive in the back/forward cache, still holding the access handles; the harness opens one tab per step and closes it. That is also a product point: a bfcache-parked tab can keep the lock (see "not settled").
 
@@ -84,7 +87,7 @@ This is the sharpest result. Atomicity under a crash (E2) does not protect Index
 ## What this does not settle
 
 - Power-loss / browser-process-kill durability (E2 models renderer death only).
-- Real Safari, mobile, and E2 outside Chromium.
+- Safari E7 (two tabs), mobile Safari/Chrome, and E2 outside Chromium.
 - `sqlite3.wasm` parse/compile time; memory.
 - A frozen or bfcache-parked tab still holding the SimpleOPFS lock: Firefox showed it does (above); whether the user-visible app handles it (`pagehide`/`pageshow` release and reacquire) needs its own test before V2 ships.
 - Worker/main-thread wiring for the real `AtKeyStore` (this lab drives SQLite directly).
