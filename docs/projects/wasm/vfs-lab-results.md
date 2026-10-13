@@ -62,12 +62,12 @@ IndexedDB open grows with the database; SimpleOPFS open is flat. IndexedDB holds
 | --- | --- | --- | --- | --- |
 | Chromium 156 | ✅ | ✅ | ✅ | ✅ |
 | WebKit 27.2 (Playwright build, **not real Safari**) | ✅ | ✅ | not run | not run (CDP crash is Chromium-only) |
-| Safari 27.0.1 (real, macOS) | ✅ | ✅ | **inconclusive** — SimpleOPFS second tab refused (`InvalidStateError`) once; IndexedDB integrity and verify never completed (see below) | not run |
+| Safari 27.0.1 (real, macOS) | ✅ | ✅ | ✅ SimpleOPFS: second tab refused (`InvalidStateError`), first tab's 306 commits intact, integrity ok. IndexedDB: **not recoverable**: the second tab never acked and the verify tab could not open the database within 60 s (a hang, not Chromium's explicit error) | not run |
 | Firefox 157.0.1 (stock) | ✅ | ✅ | ✅ — IndexedDB: `integrity_check` fails, 112 torn rows after two writers; SimpleOPFS: second tab refused, data intact | not run (no `Page.crash` equivalent) |
 
-Same verdict on all four engines wherever tested. **Gap:** Safari E7, Safari/Chrome on iOS and Android, and E2 outside Chromium.
+Same verdict on all four engines wherever tested. **Gap:** Safari/Chrome on iOS and Android, and E2 outside Chromium.
 
-Safari notes: driven by `tool/vfs_lab/crash/safari.mjs` (`open -a Safari` plus an injected reporting shim, since `safaridriver --enable` needs an admin password and `osascript` hangs on an Apple Events prompt). E3/E4 reported fine. For E7 the first run showed the SimpleOPFS refusal, but the writers never stopped (background-tab timer throttling), so the IndexedDB outcome was not valid; after adding a self-stop, later reruns loaded the page and `sqlite3.wasm` but sent no report at all, not even the shim's first beacon. E3, which passed earlier in the same session, then timed out too, and `screencapture` reported "could not create image from display" even after `caffeinate -u`: the display was asleep or locked, which suspends Safari page script. So the cause is the machine state, not the lab code. Treat Safari E7 as **untested**. To finish it, run `E7ONLY=1 node safari.mjs` from `tool/vfs_lab/crash` on a machine with an awake, unlocked display (about 4 minutes); `E3ONLY=1` is a quick health check first.
+Safari notes: driven by `tool/vfs_lab/crash/safari.mjs` (`open -a Safari` plus an injected reporting shim, since `safaridriver --enable` needs an admin password and `osascript` hangs on an Apple Events prompt). E3/E4/E7 all ran. The earlier "E7 inconclusive" runs were a harness bug of mine (an unclosed IIFE in the shim, so no tab ever reported), not Safari or the display. Caveat on the IndexedDB arm: the verify tab timed out rather than reporting `integrity_check`, so Safari shows the database was left unusable after two writers but not the exact damage (Chromium: unopenable; Firefox: 112 torn rows).
 
 Firefox notes: Playwright's patched Firefox builds (1482, 1555) would not start here. Stock Firefox only starts through Launch Services (direct exec reports "Could not find profile folder"), so it was driven with geckodriver `--connect-existing` (`tool/vfs_lab/crash/ffdrive.mjs`). Navigating a tab away leaves its SimpleOPFS worker alive in the back/forward cache, still holding the access handles; the harness opens one tab per step and closes it. That is also a product point: a bfcache-parked tab can keep the lock (see "not settled").
 
@@ -87,7 +87,7 @@ This is the sharpest result. Atomicity under a crash (E2) does not protect Index
 ## What this does not settle
 
 - Power-loss / browser-process-kill durability (E2 models renderer death only).
-- Safari E7 (two tabs), mobile Safari/Chrome, and E2 outside Chromium.
+- Mobile Safari/Chrome, and E2 outside Chromium.
 - `sqlite3.wasm` parse/compile time; memory.
 - A frozen or bfcache-parked tab still holding the SimpleOPFS lock: Firefox showed it does (above); whether the user-visible app handles it (`pagehide`/`pageshow` release and reacquire) needs its own test before V2 ships.
 - Worker/main-thread wiring for the real `AtKeyStore` (this lab drives SQLite directly).
