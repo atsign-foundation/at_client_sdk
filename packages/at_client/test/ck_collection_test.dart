@@ -417,11 +417,20 @@ void main() {
     });
 
     test('on a client that keeps no local store', () async {
-      final a = await withGarbage(
-          (client, _) => client.getPreferences().isLocalStoreRequired = false);
+      final a = await withGarbage((client, _) =>
+          when(() => client.getLocalSecondary()).thenReturn(null));
 
       expect(await a.manager.collectUnused(a.context), 0);
       expect(a.deleted, isEmpty);
+    });
+
+    test('but not on one whose preference asks for no local store', () async {
+      final a = await withGarbage(
+          (client, _) => client.getPreferences().isLocalStoreRequired = false);
+
+      expect(a.deleted, hasLength(2),
+          reason: 'the client keeps the store it was given whatever the '
+              'preference says, so that store answers completely');
     });
 
     test('on a client with no enrollment id', () async {

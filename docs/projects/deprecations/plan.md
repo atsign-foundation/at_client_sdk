@@ -254,6 +254,17 @@ own test files set `hiveStoragePath`; those are found by
 location together, with `closedByClient: true` where the client is meant to
 close it.
 
+Since [D-25](../wasm/decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)
+the flag is read only when a client is given no storage, and false is then
+refused, so a 3.x app that sets it false already has to pass storage. D-25
+also deprecated `AtClientImpl.create(localSecondaryKeyStore:)` and
+`AtClient.persistenceBundle`, both removed in 4.0 with the rest. Nothing
+outside at_client uses either; inside it, only tests use them, listed by
+`grep -rlE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
+`AtClientPreference.keyStoreSecret` is deprecated beside them, and nothing in
+this tree sets it. at_client 1.0.0 to 3.0.4 passed it to the Hive vault as its
+secret; nothing has read it since 3.0.5 (2021-11-15).
+
 ### F6, the `AtClientPreference` transport fields (declared in at_client)
 
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
@@ -559,6 +570,14 @@ before the algorithm is reached — which means the check can only fire on key
 material that disagrees with the algorithm its own envelope names. A signature
 made that way never verified against a reader that trusts the label, so the
 refusal turns a silent cross-implementation failure into a local error.
+
+PKAM sign-in is the one exception (gkc, 2026-10-12). at_auth's authenticators,
+from a keys file or a bare private key, sign the `from:` challenge with a
+1024-bit RSA PKAM key under `rsa2048`, so atSigns whose keys were cut at that
+size still authenticate; the atServer verifies an `rsa2048` PKAM signature
+whatever the key's size. Every other RSA size but 2048 is still refused there,
+and `RsaSignatureAlgo` itself, `signPkamChallenge` and the `enroll:update`
+possession proof are unchanged.
 
 **The public-data signature signs with the caller's encryption private key**,
 not with an APKAM signing key. The plan read `_signPublicData` as moving to
