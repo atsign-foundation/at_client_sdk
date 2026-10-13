@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const site = path.join(here, '../../../build/vfs_lab');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
-const SHIM = `<script>(()=>{const W=window.Worker,ws=[];window.Worker=function(u,o){const w=new W(u,o);ws.push(w);return w};window.Worker.prototype=W.prototype;
+const SHIM = `<script>addEventListener('error',e=>navigator.sendBeacon('/report?tag=err&kind=e',e.message+' @'+e.lineno+':'+e.colno));addEventListener('unhandledrejection',e=>navigator.sendBeacon('/report?tag=err&kind=r',String(e.reason)));navigator.sendBeacon('/report?tag=boot&kind=b','shim-start');</script><script>(()=>{const W=window.Worker,ws=[];window.Worker=function(u,o){const w=new W(u,o);ws.push(w);return w};window.Worker.prototype=W.prototype;
 const q=new URLSearchParams(location.search),tag=q.get('tag');
 const post=(kind,v)=>fetch('/report?tag='+tag+'&kind='+kind,{method:'POST',body:String(v)}).catch(()=>{});
 post('ua',navigator.userAgent);
@@ -20,7 +20,7 @@ window.lab_result=j=>{post('result',j).finally(()=>ws.forEach(w=>w.terminate()))
 const t0=Date.now();let done=0;
 window.lab_ack=i=>{window.__a=Math.max(window.__a||0,+i);
 if(q.get('mode')==='write'&&!done&&Date.now()-t0>6000){done=1;post('ack',window.__a).finally(()=>{ws.forEach(w=>w.terminate());location.href='about:blank'})}};
-</script>`;
+})();</script>`;
 
 const reports = new Map(); // tag -> {kind: value}
 const stops = new Set();

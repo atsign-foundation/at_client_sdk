@@ -1,0 +1,159 @@
+# Browser onboarding — problem definition and solution flow
+
+**Status:** draft for Gary · 2026-10-13
+**Supersedes:** the shared `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array (PB-5 H/J, live-tested in L step 0a)
+**Resolves:** OQ-19 (prf unlocks accumulate on the server copy)
+
+---
+
+## 1. Problem
+
+An app client running in a browser must:
+
+| # | Requirement |
+|---|---|
+| R1 | Hold the atSign's @keys without them ever being stored in plaintext in the browser |
+| R2 | Reopen on the same browser with one biometric/PIN prompt and no passphrase |
+| R3 | Recover after browser storage is cleared, with the passkey alone — no passphrase, no typing |
+| R4 | Not let a compromised atServer decrypt the stored keys |
+| R5 | Not let an outside reader learn how many devices an atSign has, or link a record to a passkey |
+| R6 | Not accumulate records for passkeys that no longer exist |
+| R7 | Sign with the strongest algorithm the browser offers today and pick up ML-DSA without a format change |
+
+### What the live test found (L step 0a, 2026-10-11)
+
+| Finding | Requirement broken |
+|---|---|
+| Every new passkey appends a prf unlock to one shared public record; nothing removes dead ones (the browser cannot enumerate passkeys) | R6 |
+| The record is a public key looked up by atSign — anyone can count the unlocks | R5 |
+| Each device's local copy carries every unlock and is merged back into the server copy, so a stale device re-adds entries that were removed | R6 |
+
+---
+
+## 2. Model
+
+**One encrypted record per passkey**, stored under a lookup key that only that passkey can derive.
+
+| Element | Value |
+|---|---|
+| PRF salt | **constant** per RP: `SHA-256("atsign:keys:lookup:v1")` — see D-2 |
+| PRF output `P` | one WebAuthn `get()` with `prf.eval.first = salt` |
+| Lookup key | `HKDF-SHA256(P, salt = ∅, info = "atkeys/lookup")` |
+| Blob key | `HKDF-SHA256(P, salt = R, info = "atkeys/blob")`, `R` = 32 random bytes chosen at enrollment |
+| Record | `{ v: 2, kdf: { alg: "HKDF-SHA256", salt: R }, content: { alg: "A256GCM", iv, ct } }` — **no atSign, no credential ID** |
+| Plaintext of `ct` | the full @keys JSON **including the PCAM private key** and its `signingAlgo` |
+| Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
+| IndexedDB | credential-ID hint (for `allowCredentials`) + local replica of this passkey's record only |
+| Server | the new at-keys module on the atSign's atServer: read by exact lookup key unauthenticated; write/refresh/delete PKAM-authenticated; carries `ttl` |
+
+### Bootstrap sources (how the first @keys arrive on a device)
+
+| Source | When |
+|---|---|
+| Passphrase envelope `_atkeys.<app>` cut by the portal (R-5) — written only by a cut, never by a browser | portal-onboarded users |
+| APKAM enrollment approved from an existing device; the browser generates the PCAM key pair | users who already have a device |
+
+Both converge on the same per-passkey record.
+
+---
+
+## 3. Flows
+
+### 3.1 Enrollment — first visit with a new passkey
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant B as Browser (at_client_web / wasm)
+    participant A as Authenticator / password manager
+    participant S as atServer (at-keys module)
+    U->>B: atSign
+    B->>S: bootstrap @keys (passphrase envelope, or APKAM enrollment)
+    B->>A: create(user.id = atSign, residentKey + UV required, prf)
+    A-->>B: credential ID (+ prf result, if the platform returns it at create)
+    opt create returned no prf result
+        B->>A: get(allowCredentials = [id], prf.eval.first = salt)
+        A-->>B: P
+    end
+    B->>B: lookup = HKDF(P,"lookup"); R = random; blobKey = HKDF(P,R,"blob")
+    B->>B: ct = AES-256-GCM(blobKey, @keys incl. PCAM private key)
+    B->>S: PKAM auth, then put(lookup, record, ttl = T)
+    B->>B: IndexedDB: credential-ID hint + record
+```
+
+### 3.2 Return — same browser
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as Authenticator
+    participant S as atServer
+    B->>A: get(allowCredentials = [hint], prf.eval.first = salt)
+    A-->>B: P, userHandle = atSign
+    B->>B: open local record with HKDF(P,R,"blob")
+    B->>S: PKAM auth; refresh ttl on lookup (at most once per day)
+```
+
+### 3.3 Recovery — browser storage cleared, passkey kept
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as Authenticator
+    participant S as atServer
+    B->>A: get(no allowCredentials, prf.eval.first = salt)
+    A-->>B: P, userHandle = atSign, credential ID
+    B->>S: lookup(HKDF(P,"lookup")) on atSign's atServer — unauthenticated
+    S-->>B: record
+    B->>B: open with HKDF(P,R,"blob"); store hint + record in IndexedDB
+    B->>S: PKAM auth; refresh ttl
+```
+
+### 3.4 Lifecycle
+
+| Event | Action |
+|---|---|
+| Rotation | enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old lookup key → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys |
+| Lost or wiped device | its record stops being refreshed and expires after `T`; revoke its APKAM enrollment if it had its own |
+| Portal re-cut | rotates the passphrase envelope; each per-passkey record keeps working until its keys are revoked |
+
+---
+
+## 4. Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| D-1 | **One PRF evaluation, two HKDF derivations** (lookup, blob) instead of two PRF evaluations | the random salt is only known after fetching the record — two evaluations means two biometric prompts on every recovery |
+| D-2 | **PRF salt is constant, not derived from the atSign** — *changes Gary's model; needs his ack* | on recovery the atSign is unknown until the assertion returns `userHandle`, but the salt must be in the request; PRF output is already unique per credential, so a constant salt loses nothing |
+| D-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
+| D-4 | **PCAM private key inside the blob**; for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
+| D-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The PCAM key is a software key (D-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
+| D-6 | **`ttl` refreshed on open** prunes dead passkeys | the browser cannot learn that a passkey was deleted; expiry needs no one to know (R6) |
+| D-7 | **Reads by exact lookup key, unauthenticated; writes PKAM-authenticated**; records never appear in `scan` | recovery must read before auth; writes need an owner; enumeration would break R5 |
+| D-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
+
+---
+
+## 5. Security properties
+
+| Property | Holds because |
+|---|---|
+| A compromised atServer cannot decrypt @keys | the blob key needs `P`, which needs the passkey plus platform authentication |
+| An outside reader cannot count devices or link a record to an atSign's passkeys | lookup keys are PRF-derived and records are not enumerable (D-7); records carry no atSign or credential ID |
+| The passkey private key never leaves the authenticator | WebAuthn |
+| Dead passkeys do not accumulate | D-6 |
+| A stale device cannot resurrect removed records | no shared record, nothing merged |
+
+**Does not hold:** an atServer can still see that *some* record was read on the atSign's own server — the lookup arrives over a connection to that atSign.
+
+---
+
+## 6. Open questions
+
+| # | Question | Owner |
+|---|---|---|
+| Q-1 | `T` — record ttl (proposal: 90 days) | product |
+| Q-2 | at-keys module grammar on the atServer: verbs, exact-key read, no-scan, ttl refresh | me + atServer |
+| Q-3 | Bootstrap via APKAM enrollment: one enrollment per passkey (revocable per device) or the cut's shared enrollment | me + Gary |
+| Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets D-5's current pick | me (probe) |
+| Q-5 | Which platforms return PRF results from `create()` — decides whether enrollment is one prompt or two | me (probe) |
