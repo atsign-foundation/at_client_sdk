@@ -132,7 +132,7 @@ void main() {
       // Present on BOTH stored keys and notification frames, with the no-ns
       // shapes: at/nskey/XWING ->
       //   {providerId, recipientKind, ckKid, nskeyKid};
-      // at/symmetric/AES/GCM -> {providerId, ckKid, iv}. A providerId names
+      // at/symmetric/AES/GCM -> {providerId, ckKid, iv, salt}. A providerId names
       // the scheme a reader routes to, so a scheme change is rollable rather
       // than a flag day.
       //
@@ -175,7 +175,7 @@ void main() {
           reason: 'the reader needs to know what kind of key this was sealed '
               'to before it can pick one to open it with');
 
-      // The value: at/symmetric/AES/GCM -> {providerId, ckKid, iv}. No sealed
+      // The value: at/symmetric/AES/GCM -> {providerId, ckKid, iv, salt}. No sealed
       // key inline — it CITES a conveyance.
       final value = key('treaty');
       await data.encrypt(context, value, 'the treaty text');
@@ -185,6 +185,10 @@ void main() {
       expect(valueMeta.additional?['iv'], isNotNull,
           reason: 'AES-GCM is unsafe under IV reuse, so the IV is per-record '
               'and has to travel with the record');
+      expect(valueMeta.additional?['salt'], isNotNull,
+          reason: 'each value is encrypted under a key derived from the '
+              'content key and its own salt, so the salt has to travel with '
+              'the record');
 
       for (final stamped in [conveyance, value]) {
         final fragment = stamped.metadata.toAtProtocolFragment();

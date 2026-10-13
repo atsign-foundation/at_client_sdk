@@ -66,7 +66,7 @@ class MintLock {
 
   /// Runs [mint] holding [lockKey], and returns its result.
   ///
-  /// Returns null when the lock is already held, without waiting — so a caller
+  /// Returns null when the lock cannot be taken, without waiting — so a caller
   /// whose [mint] can itself return null should return something non-null from
   /// it, or the two answers become one.
   ///
@@ -110,11 +110,11 @@ class MintLock {
     try {
       // NOTE: stamped before the request goes out — see [MintLease.expiresAt].
       final leaseFrom = DateTime.now();
-      if (!await _take(lockKey,
-          ownLockIsNotContention: ownLockIsNotContention)) {
-        _logger.info('$lockKey is already held; re-reading rather than '
-            'waiting for it. Whether the holder is another enrollment or '
-            'this one from an earlier run was not established');
+      final refused =
+          await _take(lockKey, ownLockIsNotContention: ownLockIsNotContention);
+      if (refused != null) {
+        _logger.info('Could not take $lockKey, so nothing is minted under it '
+            'this time: $refused');
         return null;
       }
       return await mint(
@@ -136,7 +136,9 @@ class MintLock {
   String get _holder =>
       atClient.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId;
 
-  Future<bool> _take(AtKey lockKey,
+  /// Creates [lockKey] on the atServer, and returns null when this client
+  /// holds it and otherwise the failure that means it does not.
+  Future<Object?> _take(AtKey lockKey,
       {required bool ownLockIsNotContention}) async {
     try {
       await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
@@ -146,14 +148,13 @@ class MintLock {
         // the interlock is the atServer refusing a second write to an immutable
         // record, which not committing leaves untouched.
         ..noCommit = true);
-      return true;
+      return null;
     } catch (e) {
       if (e is StoppedException) rethrow;
       // NOTE: the refusal of a second write is the contention signal, and any
       // other failure to take the lock is equally a reason not to mint.
-      _logger.finer('Could not take $lockKey: $e');
-      if (!ownLockIsNotContention) return false;
-      return _isOwnLock(lockKey);
+      if (ownLockIsNotContention && await _isOwnLock(lockKey)) return null;
+      return e;
     }
   }
 
