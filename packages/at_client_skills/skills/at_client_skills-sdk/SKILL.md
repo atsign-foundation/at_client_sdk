@@ -588,7 +588,8 @@ final AtClient atClient =
   `client.stop()` when the process is done.
 - **Multiple instances of one agent** coordinate via a server mutex
   (`atClient.tryAcquireServerMutex(key, ttl: …)`, which returns null when
-  another instance holds the lock and throws any other failure), or run
+  the lock's record already exists and throws any other failure; it needs an
+  atServer from p3.13.0), or run
   stateless with `Atsign(a).open(..., serviceFactory:
   ServiceFactoryWithNoOpSyncService())` (from `at_cli_commons`, NOT
   `at_client`) + remote operations.

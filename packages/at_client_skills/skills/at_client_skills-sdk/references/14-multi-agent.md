@@ -74,22 +74,35 @@ record on the atServer, which refuses a second create until the ttl runs out —
 so exactly one instance gets a lease, however many ask at once.
 
 ```dart
-Future<bool> tryAcquire(String taskId) async {
-  final lease = await atClient.tryAcquireServerMutex(
-      AtKey.fromString('lock.$taskId.my_app${atClient.getCurrentAtSign()}'),
-      ttl: const Duration(seconds: 30));
-  return lease != null; // null: another instance holds the lock
+Future<ServerMutexLease?> tryAcquire(String taskId) =>
+    atClient.tryAcquireServerMutex(
+        AtKey.fromString('lock.$taskId.my_app${atClient.getCurrentAtSign()}'),
+        ttl: const Duration(seconds: 30));
+
+// null: the lock's record exists, so skip the task
+final lease = await tryAcquire(taskId);
+if (lease != null && !lease.isSpent) {
+  // do the task, checking lease.isSpent before each write
 }
 ```
 
-- It returns null only when another instance holds the lock. Any other failure
-  (network, auth) is **thrown**, so you decide whether to go ahead without it.
+- It returns null when the lock's record already exists: another instance's
+  lock, or one this instance took itself within the ttl. Any other failure
+  (network, auth) is **thrown**, so you decide whether to go ahead without it;
+  a timeout can come after the atServer stored the record, and the lock then
+  stays held until its ttl runs out.
 - The ttl is the only release, so a crashed winner cannot hold the lock
   forever; it must be at least a millisecond and at most 15 minutes. Do the
-  task within the lease (`lease.isSpent` says when it has run out).
-- The lock is written straight to the atServer and records no commit, so it
-  never reaches the local store or any instance's sync. The key must be a self
-  key of the client's own atSign.
+  task within the lease: `lease.isSpent`, by this instance's clock, says when
+  it has run out.
+- The lock is written straight to the atServer, never to the local store, and
+  the key must be a self key of the client's own atSign, used as given (no
+  namespace is added).
+- **atServer version.** The lock needs an atServer from p3.13.0, the first to
+  parse `:nc`; an older one refuses every lock, so the call throws. The record
+  stays out of the commit log, and so out of every instance's sync, from
+  c3.16.3 and p3.16.5. An expired lock stops blocking at once from c3.16.2
+  and p3.16.5; before that it blocks for up to about ten and a half minutes.
 - If the coordination is specifically "N instances of one RPC responder", you
   don't need to write this yourself — `AtRpc.server(enableRequestMutex: true)`
   is this pattern, packaged (see [13-rpc.md](13-rpc.md)).
