@@ -32,6 +32,7 @@ paths:
   - test/long_lived_atsign_guard_test.dart
   - test/notify_test.dart
   - test/notify_with_isolate_test.dart
+  - test/run_scoped_enrollments_test.dart
   - test/sharing_key_test.dart
 
 tags:
