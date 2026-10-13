@@ -1,8 +1,5 @@
-## 5.21.0
+## 5.22.0
 
-- feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
-  `Atsign` refuse a longer one with `InvalidAtSignException`
-  (`AtMessage.tooLong`).
 - feat: `GateVerbBuilder` builds the `gate:` verb's commands, for reading and
   changing an atServer's gate.
 - feat: `VerbSyntax.gate` parses the `gate:` verb, with its parameters named
@@ -13,6 +10,12 @@
 - feat: `monitor`, `notify:list` and `notify:fetch` take a `:quarantined`
   flag (`AtConstants.quarantined`), by which a client asks for notifications
   from quarantined atSigns.
+
+## 5.21.0
+
+- feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
+  `Atsign` refuse a longer one with `InvalidAtSignException`
+  (`AtMessage.tooLong`).
 
 ## 5.20.0
 
