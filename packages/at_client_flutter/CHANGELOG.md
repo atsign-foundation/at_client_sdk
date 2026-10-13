@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 2.0.0-rc5
+## 2.0.0-rc6
 
 - feat: a dialog given no storage opens Hive in the app's support directory,
   or under `preference.hiveStoragePath` while that is set. An app that kept its
@@ -9,10 +9,13 @@
   `storage:`, as at_client now refuses a client with no local storage;
   `ApkamActivationDialog` refuses such an app when it opens, before any
   enrollment request goes out.
+- build: requires `at_client` ^3.15.0-rc7.
+
+## 2.0.0-rc5
+
 - fix: keychain writes made at the same moment no longer lose another
   atSign's keys, and `update` no longer fails or brings back an atSign
   removed meanwhile.
-- build: requires `at_client` ^3.15.0-rc6.
 
 ## 2.0.0-rc4
 

@@ -12,7 +12,7 @@ resolution: workspace
 dependencies:
   at_commons: ^5.18.0
   at_lookup: ^3.7.0-rc2
-  at_chops: ^3.6.0
+  at_chops: ^3.7.0
   crypton: ^2.2.1
   at_utils: ^3.0.19
   http: ^1.2.1

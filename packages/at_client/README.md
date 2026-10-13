@@ -565,6 +565,21 @@ What each posture switches on:
   `AtClientPreference.sealsToKeyAlgorithms`. The X-Wing hybrid (ML-KEM-768 +
   X25519) is the default; pure ML-KEM-1024 is selected with
   `keyEstablishmentAlgorithms`, and every build opens both.
+- **Writing in an atSign's own namespace.** Each value is encrypted under a
+  key of its own, derived from the content key and a fresh salt. A client
+  writes in its own namespace once it holds that namespace key's private half;
+  until then the write throws `NskeyPrivateNotHeldException`, and
+  `ensureReachable` reports `holdsPrivate`.
+- **Rotation.** A content key is replaced once it is a year old, and a
+  namespace key once its generation is a year old; `CryptoConfig`'s
+  `ckRotationPolicy` and `nskeyRotationPolicy` change that. A revocation
+  rotates the namespace keys the revoked enrollment held, and a content key a
+  client shares is replaced by a fresh one on its first write after it holds
+  the new generation.
+- **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
+  installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
+  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the
   approving client (`client.enrollments.approve`) seals the atSign's secrets
