@@ -50,6 +50,9 @@ void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
   String namespace = TestConstants.namespace;
   final marker = runMarker(Platform.environment);
+  // NOTE: tearDownAll ends the process before the runner reports, so the exit
+  // code it derives from this set is what the CI step reads.
+  final completed = <String>{};
 
   setUpAll(() async {
     for (var atSign in atSignList) {
@@ -178,6 +181,7 @@ void main() {
             atEnrollmentResponse.enrollmentId);
         print(
             'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');
+        completed.add(currentAtSign);
       });
     }
   });
@@ -188,6 +192,11 @@ void main() {
         .atClient
         .notificationService
         .stopAllSubscriptions();
-    exit(0);
+    final incomplete =
+        atSignList.where((atSign) => !completed.contains(atSign)).toList();
+    if (incomplete.isNotEmpty) {
+      print('Enrollment setup FAILED for $incomplete');
+    }
+    exit(incomplete.isEmpty ? 0 : 1);
   });
 }
