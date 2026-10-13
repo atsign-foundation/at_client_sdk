@@ -68,13 +68,13 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [9]   | APKAM keypair as key package: considered and rejected                                       | 2026-06-30 | LIVE                      |
 | [10]  | nskey derivation from a shared master seed: rejected                                        | 2026-06-30 | LIVE                      |
 | [11]  | Single nskey per namespace, lazily published                                                | 2026-06-30 | PARTLY SUPERSEDED by [13] |
-| [12]  | Advertised recipient keys are signed against `_apsk`                                        | 2026-07-02 | LIVE                      |
+| [12]  | Advertised recipient keys are signed against `_apsk`                                        | 2026-07-02 | AMENDED 2026-10-13        |
 | [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-09-30        |
 | [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | AMENDED 2026-09-30        |
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
-| [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-08-15        |
+| [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-10-13        |
 | [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
