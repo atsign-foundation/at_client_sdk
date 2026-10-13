@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-24 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-25 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -720,6 +720,8 @@ identity integration** ([D-16](#d-16--the-browser-lane-keeps-enterprise-identity
 
 Escalate the remaining trade as a **product** decision before V2 needs it.
 
+> **Amended 2026-10-13 by [D-25](#d-25--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13).** The table above is partly wrong: SimpleOPFS *is* multi-atSign (one instance per directory), and IndexedDB's gap is un-flushed durability, not torn transactions. The pick-two framing no longer holds; the `WasmVfs` rejection does.
+
 ---
 
 ### D-22 — No new process-global state; one client per atSign, created explicitly (2026-08-30)
@@ -813,6 +815,37 @@ into **resume**.
 **Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
+
+---
+
+### D-25 — Browser SQLite storage is **SimpleOPFS, one directory per (atSign, enrollmentId)**; W4 resolved (2026-10-13)
+
+Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) from a live lab, not a benchmark ([`vfs-lab-results.md`](vfs-lab-results.md)). It honours D-21's bound: nothing here is chosen on latency.
+
+**Ruled**
+
+- **W4.** `sqlite3.wasm` costs **+386 KB gz** (+363 KB br) over `remote_only` — a fixed per-app first-load cost. Accepted. D4 (raw IndexedDB) is not triggered; `design.md` §5's SQLite-wasm ruling stands.
+- **P1.** The browser SQLite bundle uses `SimpleOpfsFileSystem`, one instance per (atSign, enrollmentId) via `loadFromStorage(<dir>, vfsName: <unique>)`, hosted in a dedicated worker.
+- **Fallback.** `IndexedDbFileSystem` is acceptable only as an opt-in bundle where OPFS is unavailable, and **only with** (a) `await flush()` before acknowledging a write and (b) a Web Locks single-tab guard.
+
+**Why — evidence, Chromium unless noted**
+
+| Axis | `IndexedDbFileSystem` | `SimpleOpfsFileSystem` |
+| --- | --- | --- |
+| Renderer crash, 200 runs | atomic, but **200/200 lost acknowledged writes** (median 42 tx); 0 lost once flush is awaited | 200/200 clean |
+| Two tabs, one database | **database unusable** | second tab refused, data intact |
+| Multi-atSign | ✅ | ✅ (D-21 said ❌ — per-instance, not per-origin) |
+| Two tabs, Firefox | `integrity_check` fails | second tab refused, data intact |
+| Open at 100k rows | 178 ms (WebKit 349, Firefox 176), grows with size | 13 ms (WebKit 18, Firefox 23), flat |
+
+**Corrects D-21's table.** (1) `SimpleOpfsFileSystem` *does* support multi-atSign: "exactly two files" is per instance. (2) `IndexedDbFileSystem`'s weakness is un-flushed durability and multi-tab corruption, not torn transactions. D-21's `WasmVfs` rejection is unchanged.
+
+**Consequences**
+
+- SQLite runs in a **dedicated worker**; Dart stays on the main thread per D-19 and talks to it across the `AtKeyStore` boundary. A worker hop measured 0.02–0.06 ms.
+- The second tab must handle the open failure (UX: "already open in another tab"); that refusal is the single-writer lock.
+
+**Not covered (do not lean on this ruling for them).** Power loss and browser-process kill; real Safari and mobile (WebKit tested via Playwright's build, Firefox 157 stock; E2 crash test Chromium-only); a bfcache-parked tab holding the lock (seen on Firefox; the app's release/reacquire is unbuilt); `sqlite3.wasm` compile time and memory.
 
 ---
 
@@ -1166,3 +1199,4 @@ invent a number.
 | 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
+| 2026-10-13 | **D-25 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Real Safari, mobile and power-loss untested; Firefox 157 and WebKit agree on E3/E4/E7. |
