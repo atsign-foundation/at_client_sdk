@@ -2,3 +2,5 @@ atKeys
 config/config.yaml
 # Per-run legacy keyfiles minted by the retrofit rows (run-unique names).
 test/testData
+# Current certificates fetch_certs.sh copies out for certs-overlay.yaml.
+test/ve-certs
