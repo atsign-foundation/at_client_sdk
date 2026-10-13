@@ -152,8 +152,9 @@ Evidenced, not yet written up, and each still needs its citation re-checked:
 - `AtClientPreference.syncRegex` defaults to null, so the pull is unfiltered.
 - Record immutability is enforced by the atServer on the `delete` verb; the
   client keystore has no immutability guard on remove.
-- `DeleteVerbBuilder.force` emits `force:`; `:nc`/`noCommit` exists in
-  at_commons and is implemented by no atServer.
+- `DeleteVerbBuilder.force` emits `force:`; `:nc`/`noCommit` is honoured by
+  at_server from c3.16.3 and p3.16.5, and the server mutex
+  (`tryAcquireServerMutex`) sends it on every lock it takes.
 - `Secondary.executeVerb`'s `sync` parameter is inert on both implementations.
 - The keystore's `get()` does not filter expired records, and `nextExpiresAt()`
   has no cutoff where its sibling `nextAvailableAt()` does.

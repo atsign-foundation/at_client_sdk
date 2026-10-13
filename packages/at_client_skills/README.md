@@ -75,7 +75,7 @@ This requires `~/.pub-cache/bin` on your `PATH`.
 - Unit testing without a live atServer (`collections_test_hooks.dart`)
 - Architecture decision guide: `AtCollection<T>` vs Notifications + SQLite
 - RPC between atsigns (`AtRpc` / `AtRpcClient` request/response)
-- Headless agents and multi-instance coordination (`CLIBase`, immutable-mutex,
+- Headless agents and multi-instance coordination (`CLIBase`, server mutex,
   no-sync scaling)
 - Remote vs local atServer operations (`remoteLocalPref`, `useRemoteAtServer`,
   `bypassCache`)

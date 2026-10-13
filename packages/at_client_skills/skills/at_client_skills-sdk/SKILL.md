@@ -586,9 +586,9 @@ final AtClient atClient =
   one live client and a second open on it is refused. Use
   `Directory.systemTemp.createTempSync('agent_')` per instance, and
   `client.stop()` when the process is done.
-- **Multiple instances of one agent** coordinate via an immutable-mutex race
-  (`Metadata()..immutable = true` + remote put; the **losing `put()` throws** —
-  there is no typed exception, inspect the message for `'immutable'`), or run
+- **Multiple instances of one agent** coordinate via a server mutex
+  (`atClient.tryAcquireServerMutex(key, ttl: …)`, which returns null when
+  another instance holds the lock and throws any other failure), or run
   stateless with `Atsign(a).open(..., serviceFactory:
   ServiceFactoryWithNoOpSyncService())` (from `at_cli_commons`, NOT
   `at_client`) + remote operations.

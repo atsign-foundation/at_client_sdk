@@ -89,10 +89,11 @@ rpc.start();                   // subscribes to request notifications
 ## Multiple server instances
 
 Run N instances of the same responder atsign and set `enableRequestMutex:
-true`: each incoming request is raced through an immutable mutex key, so
-exactly one instance responds. This is the packaged form of the immutable-mutex
-pattern — read [14-multi-agent.md](14-multi-agent.md) when building
-multi-instance agents, RPC-based or not.
+true`: each incoming request is raced through a server mutex
+(`tryAcquireServerMutex`), so exactly one instance responds. This is the
+packaged form of the server-mutex pattern — read
+[14-multi-agent.md](14-multi-agent.md) when building multi-instance agents,
+RPC-based or not.
 
 ## AtCollection-first boundary
 
