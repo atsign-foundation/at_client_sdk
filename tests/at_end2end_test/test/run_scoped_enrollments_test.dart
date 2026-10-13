@@ -7,6 +7,7 @@ library;
 import 'dart:io';
 import 'dart:math';
 
+import 'package:at_end2end_test/src/client_stores.dart';
 import 'package:at_end2end_test/src/run_marker.dart';
 import 'package:test/test.dart';
 
@@ -160,5 +161,33 @@ void main() {
           reason: 'with $environment there is no complete run to name, so '
               'the label must not claim one');
     }
+  });
+
+  test(
+      "A client that never opened leaves notify_with_isolate's tearDown silent",
+      () {
+    final root = Directory.systemTemp.createTempSync('client_stores');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final opened = Directory('${root.path}/@ce2e1')..createSync();
+    File('${opened.path}/store.hive').writeAsStringSync('');
+    final neverOpened = '${root.path}/@ce2e4';
+
+    expect(deleteStoresThatExist([opened.path, neverOpened]), [opened.path]);
+    expect(opened.existsSync(), isFalse,
+        reason: 'a store the client did open is still deleted');
+
+    final tearDown = File('test/notify_with_isolate_test.dart')
+        .readAsStringSync()
+        .split('\n')
+        .skipWhile((l) => !l.contains('tearDown('))
+        .takeWhile((l) => l.trim() != '});')
+        .join('\n');
+    expect(tearDown, contains('deleteStoresThatExist('),
+        reason: "notify_with_isolate's tearDown no longer deletes its stores "
+            'through deleteStoresThatExist');
+    expect(tearDown, isNot(contains('deleteSync(')),
+        reason: "notify_with_isolate's tearDown deletes a directory without "
+            'checking it exists, so a client that never opened raises '
+            'PathNotFoundException over the failure that stopped it');
   });
 }
