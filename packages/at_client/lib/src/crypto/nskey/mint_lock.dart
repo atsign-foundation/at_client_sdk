@@ -41,7 +41,7 @@ class MintLock {
 
   /// Runs [mint] holding [lockKey], and returns its result.
   ///
-  /// Returns null when the lock is already held, without waiting — so a caller
+  /// Returns null when the lock cannot be taken, without waiting — so a caller
   /// whose [mint] can itself return null should return something non-null from
   /// it, or the two answers become one.
   ///
@@ -86,17 +86,17 @@ class MintLock {
       final ttl = Duration(milliseconds: ttlMillis);
       // NOTE: stamped before the request goes out, as a won lease is.
       final leaseFrom = DateTime.now();
-      final lease = await _take(lockKey, ttl) ??
+      final (lease, refused) = await _take(lockKey, ttl);
+      final held = lease ??
           (ownLockIsNotContention && await _isOwnLock(lockKey)
               ? ServerMutexLease(lockKey, leaseFrom.add(ttl))
               : null);
-      if (lease == null) {
-        _logger.info('$lockKey is already held; re-reading rather than '
-            'waiting for it. Whether the holder is another enrollment or '
-            'this one from an earlier run was not established');
+      if (held == null) {
+        _logger.info('Could not take $lockKey, so nothing is minted under it '
+            'this time: $refused');
         return null;
       }
-      return await mint(lease);
+      return await mint(held);
     } finally {
       // NOTE: released only once the mint has published, so a waiter that wakes
       // here re-reads an advertisement that is already on the atServer.
@@ -105,16 +105,18 @@ class MintLock {
     }
   }
 
-  /// Takes [lockKey] for [ttl], or returns null when it was not taken.
-  Future<ServerMutexLease?> _take(AtKey lockKey, Duration ttl) async {
+  /// Takes [lockKey] for [ttl], and returns the lease, or else why it could
+  /// not be taken.
+  Future<(ServerMutexLease?, Object?)> _take(
+      AtKey lockKey, Duration ttl) async {
     try {
-      return await atClient.tryAcquireServerMutex(lockKey, ttl: ttl);
+      final lease = await atClient.tryAcquireServerMutex(lockKey, ttl: ttl);
+      return (lease, lease == null ? 'another client holds it' : null);
     } catch (e) {
       if (e is StoppedException) rethrow;
       // NOTE: any failure to take the lock is as much a reason not to mint as
       // the lock being held.
-      _logger.finer('Could not take $lockKey: $e');
-      return null;
+      return (null, e);
     }
   }
 

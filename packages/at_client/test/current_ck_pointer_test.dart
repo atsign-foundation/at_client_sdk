@@ -43,8 +43,9 @@ void main() {
         () async {
       final c = client();
 
-      await const CurrentCkPointer()
-          .write(c.client, '@bob', namespace, 'ck-1', 'nskey-1');
+      await const CurrentCkPointer().write(
+          c.client, '@bob', namespace, 'ck-1', 'nskey-1',
+          ownNskeyKid: 'own-1');
 
       final (key, value, options) = c.puts.single;
       final command = (await PutRequestTransformer().transform(
@@ -61,7 +62,32 @@ void main() {
           command,
           'update:isEncrypted:false:'
           '__ckcur.bob.app_1.my_apps.enr-1.a.__e@alice '
-          '{"ckKid":"ck-1","nskeyKid":"nskey-1"}\n');
+          '{"ckKid":"ck-1","nskeyKid":"nskey-1","ownNskeyKid":"own-1"}\n');
+    });
+
+    test(
+        'a pointer for a key with no own generation is written as '
+        '{"ckKid":"ck-1","nskeyKid":"nskey-1","ownNskeyKid":null}', () async {
+      final c = client();
+
+      await const CurrentCkPointer()
+          .write(c.client, '@bob', namespace, 'ck-1', 'nskey-1');
+
+      final (key, value, options) = c.puts.single;
+      final command = (await PutRequestTransformer().transform(
+              Tuple<AtKey, dynamic>()
+                ..one = key
+                ..two = value,
+              requestOptions: options))
+          .buildCommand();
+      // NOTE: frozen — the null is written rather than left out, because a
+      // reader takes a pointer with no `ownNskeyKid` field as one that never
+      // recorded an own generation and refuses to resume it.
+      expect(
+          command,
+          'update:isEncrypted:false:'
+          '__ckcur.bob.app_1.my_apps.enr-1.a.__e@alice '
+          '{"ckKid":"ck-1","nskeyKid":"nskey-1","ownNskeyKid":null}\n');
     });
 
     test('is written to the atServer first', () async {
@@ -91,13 +117,19 @@ void main() {
         if (remote == true) {
           throw AtClientException.message('the atServer is unreachable');
         }
-        return AtValue()..value = '{"ckKid":"ck-1","nskeyKid":"nskey-1"}';
+        return AtValue()
+          ..value = '{"ckKid":"ck-1","nskeyKid":"nskey-1","ownNskeyKid":null}';
       });
 
       final read =
           await const CurrentCkPointer().read(c.client, '@bob', namespace);
 
-      expect(read, (ckKid: 'ck-1', nskeyKid: 'nskey-1'));
+      expect(read, (
+        ckKid: 'ck-1',
+        nskeyKid: 'nskey-1',
+        ownNskeyKid: null,
+        ownRecorded: true,
+      ));
       expect(routes, [true, false]);
     });
 
@@ -110,14 +142,41 @@ void main() {
         routes.add(
             (inv.namedArguments[#getRequestOptions] as GetRequestOptions?)
                 ?.useRemoteAtServer);
-        return AtValue()..value = '{"ckKid":"ck-2","nskeyKid":"nskey-1"}';
+        return AtValue()
+          ..value =
+              '{"ckKid":"ck-2","nskeyKid":"nskey-1","ownNskeyKid":"own-1"}';
       });
 
       final read =
           await const CurrentCkPointer().read(c.client, '@bob', namespace);
 
-      expect(read, (ckKid: 'ck-2', nskeyKid: 'nskey-1'));
+      expect(read, (
+        ckKid: 'ck-2',
+        nskeyKid: 'nskey-1',
+        ownNskeyKid: 'own-1',
+        ownRecorded: true,
+      ));
       expect(routes, [true]);
+    });
+
+    test(
+        'written before the own generation was recorded, reads as recording '
+        'none', () async {
+      final c = client();
+      when(() => c.client
+              .get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((_) async =>
+              AtValue()..value = '{"ckKid":"ck-1","nskeyKid":"nskey-1"}');
+
+      final read =
+          await const CurrentCkPointer().read(c.client, '@bob', namespace);
+
+      expect(read, (
+        ckKid: 'ck-1',
+        nskeyKid: 'nskey-1',
+        ownNskeyKid: null,
+        ownRecorded: false,
+      ));
     });
 
     test('is not kept by a client with no enrollment id', () async {

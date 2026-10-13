@@ -12,21 +12,33 @@ import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 /// Throws when the enrollment record cannot be read; the caller decides what
 /// an unknown answer means for it.
 Future<Set<String>> authorisedNamespacesOf(AtClient atClient,
-    {required String? ownNamespace}) async {
+        {required String? ownNamespace}) async =>
+    authorisedNamespacesIn(await ownGrantsOf(atClient),
+        ownNamespace: ownNamespace);
+
+/// The grants [atClient]'s own enrollment record holds, or null for the
+/// atSign's own credential, which no grant limits.
+///
+/// Throws when the enrollment record cannot be read.
+Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
+  final enrollmentId = atClient.enrollmentId;
+  if (isAtSignCredential(enrollmentId)) return null;
+  final mine = (await atClient.enrollmentService!.fetchEnrollmentRequests())
+      .where((e) => e.enrollmentId == enrollmentId);
+  return {for (final enrollment in mine) ...?enrollment.namespace};
+}
+
+/// The namespaces [grants] hold data in, as [authorisedNamespacesOf] reads
+/// them: [ownNamespace] alone for null [grants], the atSign's own credential.
+Set<String> authorisedNamespacesIn(Map<String, dynamic>? grants,
+    {required String? ownNamespace}) {
   final own = (ownNamespace == null || ownNamespace.isEmpty)
       ? const <String>{}
       : {ownNamespace};
-  final enrollmentId = atClient.enrollmentId;
-  if (isAtSignCredential(enrollmentId)) return own;
-
-  final mine = (await atClient.enrollmentService!.fetchEnrollmentRequests())
-      .where((e) => e.enrollmentId == enrollmentId);
-  final granted = {
-    for (final enrollment in mine) ...?enrollment.namespace?.keys
-  };
+  if (grants == null) return own;
   return {
-    ...granted.where(isSeedableNamespace),
-    if (granted.contains(EnrollmentConstants.allNamespaces)) ...own,
+    ...grants.keys.where(isSeedableNamespace),
+    if (grants.containsKey(EnrollmentConstants.allNamespaces)) ...own,
   };
 }
 

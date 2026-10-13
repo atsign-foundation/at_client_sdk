@@ -74,6 +74,21 @@ implementations, a documented reason why one cannot serve both platforms, an inj
 escape hatch, and a control. Anything short of that is the stub case, and D-1 still
 refuses it.
 
+**Amended 2026-10-13 — at_client's crypto backends, the one exception in a package `lib/`.**
+gkc chose a conditional export on 2026-10-09 for at_client's post-quantum backends:
+`lib/src/crypto/backends/crypto_backends.dart` exports `crypto_backends_dart.dart`, or
+`crypto_backends_native.dart` under `dart.library.ffi`, which takes X-Wing and value
+AES-256-GCM from at_chops's OpenSSL backends where the loaded libcrypto supports them.
+Of the burden above it meets two parts. Both branches are real implementations, the
+pure-Dart one complete, and the two are byte-compatible. The reason is recorded: the
+OpenSSL code needs `dart:ffi`, which a wasm build does not have, and at_client may not
+import `at_chops_ffi.dart` from anywhere a web build reaches
+([PQ design](../pq/design.md#openssl-backends-behind-a-conditional-export-at_client)).
+It has no injection escape hatch: `AT_CHOPS_LIBCRYPTO_PATH` chooses which libcrypto
+loads, not which implementation runs. And it has no control: at_client is not in the
+wasm gate, so neither branch is walked there; a local `dart compile wasm` of a program
+importing `package:at_client/at_client.dart` takes the pure-Dart branch.
+
 ### D-2 — No throwing stubs (2026-08-13)
 
 **A capability a platform lacks must be unreachable there, not reachable-and-explosive.**
