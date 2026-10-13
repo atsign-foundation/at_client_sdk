@@ -7,9 +7,9 @@
 /// builder produced, as a raw literal.
 library;
 
-import 'package:at_client/at_client.dart';
 import 'dart:convert';
 
+import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexHolder;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -230,6 +230,19 @@ void main() {
           throwsA(refusedNaming('key')));
       expect(sent, isEmpty, reason: 'nothing is sent to the atServer');
     });
+
+    test('a refusal names a key that names no owner with this atSign',
+        () async {
+      await expectLater(
+          clientOf([]).tryAcquireServerMutex(
+              AtKey()
+                ..key = 's1'
+                ..namespace = 'session_mutexes.sshnp'
+                ..metadata = (Metadata()..isPublic = true),
+              ttl: ttl),
+          throwsA(isA<ArgumentError>().having((e) => e.invalidValue,
+              'invalidValue', 'public:s1.session_mutexes.sshnp@alice')));
+    });
   });
 
   group('reading a lock back, for at_client\'s own use', () {
@@ -276,11 +289,37 @@ void main() {
     test(
         'gives a lease on this enrollment\'s own lock ending at the '
         'record\'s own expiry', () async {
+      final soon = DateTime.now().toUtc().add(const Duration(seconds: 10));
       final lease = await clientOf([],
-              onLookup: () async => record('e-1', expiresAt: expiry))
-          .ownServerMutexLease(lockKey);
+              onLookup: () async => record('e-1', expiresAt: soon))
+          .ownServerMutexLease(lockKey, ttl: ttl);
       expect(lease, isNotNull);
-      expect(lease!.expiresAt, expiry);
+      expect(lease!.expiresAt, soon);
+    });
+
+    test(
+        'caps a lease on a record expiring later than a fresh lease would, '
+        'at the ttl from the read', () async {
+      final began = DateTime.now();
+      final lease = await clientOf([],
+              onLookup: () async => record('e-1',
+                  expiresAt:
+                      DateTime.now().toUtc().add(const Duration(days: 1))))
+          .ownServerMutexLease(lockKey, ttl: ttl);
+      final ended = DateTime.now();
+      expect(lease!.expiresAt.isAfter(ended.add(ttl)), isFalse,
+          reason: 'never longer than a fresh lease taken at the read');
+      expect(lease.expiresAt.isBefore(began.add(ttl)), isFalse);
+    });
+
+    test('refuses a ttl a fresh lease would refuse, before reading', () async {
+      final looked = <String>[];
+      await expectLater(
+          clientOf(looked, onLookup: () async => record('e-1'))
+              .ownServerMutexLease(lockKey,
+                  ttl: const Duration(minutes: 15, milliseconds: 1)),
+          throwsA(refusedNaming('ttl')));
+      expect(looked, isEmpty);
     });
 
     test(
@@ -289,11 +328,11 @@ void main() {
       expect(
           await clientOf([],
                   onLookup: () async => record('e-2', expiresAt: expiry))
-              .ownServerMutexLease(lockKey),
+              .ownServerMutexLease(lockKey, ttl: ttl),
           isNull);
       expect(
           await clientOf([], onLookup: () async => record('e-1'))
-              .ownServerMutexLease(lockKey),
+              .ownServerMutexLease(lockKey, ttl: ttl),
           isNull,
           reason: 'a lease must end no later than its lock');
     });

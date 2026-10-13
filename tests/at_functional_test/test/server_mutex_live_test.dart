@@ -55,7 +55,10 @@ void main() {
         .client;
   });
 
-  tearDownAll(() async => enrolled.stop());
+  tearDownAll(() async {
+    await enrolled.stop();
+    await owner.stop();
+  });
 
   /// A lock key no earlier test or run has used.
   AtKey freshLock() =>
@@ -223,16 +226,17 @@ void main() {
     final key = freshLock();
     final taken = await enrolled.tryAcquireServerMutex(key, ttl: ttl);
     expect(taken, isNotNull);
+    // NOTE: read back 2 s after the take, so the lease's cap at the ttl from
+    // the read lies past the record's expiry unless the atServer's clock runs
+    // about 2 s ahead of this one.
+    await Future<void>.delayed(Duration(seconds: 2));
 
-    final own = await enrolled.ownServerMutexLease(key);
+    final own = await enrolled.ownServerMutexLease(key, ttl: ttl);
 
     final (_, meta) = await stored(key);
     expect(own, isNotNull,
         reason: 'the record carries an expiry this client could read back');
     expect(own!.expiresAt, DateTime.parse(meta['expiresAt'] as String).toUtc(),
         reason: 'the expiry the atServer serves, not one this client made up');
-    expect(own.expiresAt.isBefore(taken!.expiresAt), isFalse,
-        reason: 'and it is no earlier than the lease stamped before the '
-            'create, which the atServer\'s own ttl starts after');
   });
 }

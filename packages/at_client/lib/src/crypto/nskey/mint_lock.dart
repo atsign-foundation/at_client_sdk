@@ -95,8 +95,8 @@ class MintLock {
     try {
       final ttl = Duration(milliseconds: ttlMillis);
       final (lease, refused) = await _take(lockKey, ttl);
-      final held =
-          lease ?? (ownLockIsNotContention ? await _ownLease(lockKey) : null);
+      final held = lease ??
+          (ownLockIsNotContention ? await _ownLease(lockKey, ttl) : null);
       if (held == null) {
         _logger.info('Could not take $lockKey, so nothing is minted under it '
             'this time: $refused');
@@ -129,17 +129,18 @@ class MintLock {
   }
 
   /// A lease on the lock that refused us when this enrollment already holds
-  /// it, ending when the lock does; otherwise null.
+  /// it, ending when the lock does or [ttl] after the read, whichever is
+  /// sooner; otherwise null.
   ///
   /// The winner never releases — the ttl does — so a client that mints and then
   /// re-enters within the cooldown loses the election to itself; the cooldown
   /// covers an ordinary restart. Proceeding is safe only because every caller
   /// reads what is published before minting, and a read that cannot say whose
   /// lock it is answers null.
-  Future<ServerMutexLease?> _ownLease(AtKey lockKey) async {
+  Future<ServerMutexLease?> _ownLease(AtKey lockKey, Duration ttl) async {
     final ServerMutexLease? lease;
     try {
-      lease = await atClient.ownServerMutexLease(lockKey);
+      lease = await atClient.ownServerMutexLease(lockKey, ttl: ttl);
     } catch (e) {
       if (e is StoppedException || e is Error) rethrow;
       _logger.finer('Could not read $lockKey to check ownership: $e');

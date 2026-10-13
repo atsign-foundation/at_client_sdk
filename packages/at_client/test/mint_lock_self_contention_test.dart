@@ -143,6 +143,27 @@ void main() {
           reason: 'the lock was taken earlier, so a full ttl from now would '
               'outlive it');
     });
+
+    test(
+        'when the lock record expires later than a fresh lease would, then '
+        'the adopted lease ends a lock ttl after the read', () async {
+      const lockTtl = Duration(minutes: 2);
+      final began = DateTime.now();
+      ServerMutexLease? held;
+
+      await lockedBy(ours,
+              lookups: [],
+              expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)))
+          .withLock<String>(lockKey, (lease) async {
+        held = lease;
+        return 'minted';
+      }, ownLockIsNotContention: true);
+      final ended = DateTime.now();
+
+      expect(held!.expiresAt.isAfter(ended.add(lockTtl)), isFalse,
+          reason: 'never longer than a fresh lease on this lock');
+      expect(held!.expiresAt.isBefore(began.add(lockTtl)), isFalse);
+    });
   });
 
   group('Given a lock that expired before it could be read', () {

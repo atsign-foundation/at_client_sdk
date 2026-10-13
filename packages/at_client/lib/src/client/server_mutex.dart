@@ -14,9 +14,12 @@ class ServerMutexLease {
 
   /// When this lease stops being valid.
   ///
-  /// It never outlives the lock. A lease from
-  /// [ServerMutex.tryAcquireServerMutex] is stamped before the create was sent,
-  /// and the atServer starts the ttl when it stores the record.
+  /// A lease from [ServerMutex.tryAcquireServerMutex] ends no later than the
+  /// lock in elapsed time. One read back from the record ends at the atServer's
+  /// expiry, judged on this client's clock, so a client clock behind the
+  /// atServer's extends it, but never beyond a fresh lease's length from the
+  /// read. Neither is a fence: a write sent just before [isSpent] turns can land
+  /// after the lock expired.
   final DateTime expiresAt;
 
   const ServerMutexLease(this.key, this.expiresAt);
@@ -58,14 +61,7 @@ extension ServerMutex on AtClient {
   /// held until its ttl runs out.
   Future<ServerMutexLease?> tryAcquireServerMutex(AtKey key,
       {required Duration ttl}) async {
-    // NOTE: the ttl travels in whole milliseconds, and 0 never expires.
-    if (ttl.inMilliseconds < 1 || ttl > maxServerMutexTtl) {
-      throw ArgumentError.value(
-          ttl,
-          'ttl',
-          'must be at least a millisecond and no longer than '
-              '$maxServerMutexTtl');
-    }
+    _checkTtl(ttl);
     final record = _lockRecord(this, key)
       ..metadata = (Metadata()
         ..immutable = true
@@ -101,15 +97,34 @@ extension ServerMutexHolder on AtClient {
   }
 
   /// A lease on the lock [key] names when this client's enrollment already
-  /// holds it, ending at the record's own expiry; otherwise null.
+  /// holds it; otherwise null.
   ///
-  /// Null too when the record carries no expiry, since a lease must end no
-  /// later than its lock.
-  Future<ServerMutexLease?> ownServerMutexLease(AtKey key) async {
+  /// It ends at the record's own expiry, or [ttl] after the read began if that
+  /// is sooner, so it is never longer than a fresh lease. Null too when the
+  /// record carries no expiry, since a lease must end no later than its lock.
+  /// [ttl] is checked as [ServerMutex.tryAcquireServerMutex] checks it.
+  Future<ServerMutexLease?> ownServerMutexLease(AtKey key,
+      {required Duration ttl}) async {
+    _checkTtl(ttl);
+    final cap = DateTime.now().toUtc().add(ttl);
     final lock = await _readLock(this, key);
     if (lock == null || lock.holder != _holderOf(this)) return null;
     final expiresAt = lock.expiresAt;
-    return expiresAt == null ? null : ServerMutexLease(lock.record, expiresAt);
+    if (expiresAt == null) return null;
+    return ServerMutexLease(
+        lock.record, expiresAt.isBefore(cap) ? expiresAt : cap);
+  }
+}
+
+/// Throws when [ttl] is under a millisecond or over [maxServerMutexTtl].
+void _checkTtl(Duration ttl) {
+  // NOTE: the ttl travels in whole milliseconds, and 0 never expires.
+  if (ttl.inMilliseconds < 1 || ttl > maxServerMutexTtl) {
+    throw ArgumentError.value(
+        ttl,
+        'ttl',
+        'must be at least a millisecond and no longer than '
+            '$maxServerMutexTtl');
   }
 }
 
@@ -154,17 +169,19 @@ AtKey _lockRecord(AtClient client, AtKey key) {
   try {
     owner = key.sharedBy == null ? atSign : key.sharedBy!.toAtsign();
   } on InvalidAtSignException {
-    throw ArgumentError.value('$key', 'key', 'is not owned by $atSign');
+    throw ArgumentError.value(
+        _named(key, atSign), 'key', 'is not owned by $atSign');
   }
   if (owner != atSign) {
-    throw ArgumentError.value('$key', 'key', 'is not owned by $atSign');
+    throw ArgumentError.value(
+        _named(key, atSign), 'key', 'is not owned by $atSign');
   }
   if (key.sharedWith != null ||
       key.isLocal ||
       key.metadata.isPublic ||
       key.metadata.isCached ||
       key.metadata.isHidden) {
-    throw ArgumentError.value('$key', 'key', 'must be a self key');
+    throw ArgumentError.value(_named(key, atSign), 'key', 'must be a self key');
   }
   final record = AtKey()
     ..key = key.key
@@ -173,10 +190,22 @@ AtKey _lockRecord(AtClient client, AtKey key) {
   // NOTE: the flags above don't see a key name that itself names another
   // atSign; only the name as built does.
   if (AtKey.getKeyType(record.toString()) != KeyType.selfKey) {
-    throw ArgumentError.value('$key', 'key', 'must be a self key');
+    throw ArgumentError.value(_named(key, atSign), 'key', 'must be a self key');
   }
   return record;
 }
+
+/// [key] as the atServer names it, with [atSign] as its owner when it names
+/// none.
+String _named(AtKey key, Atsign atSign) => key.sharedBy != null
+    ? '$key'
+    : '${AtKey()
+      ..key = key.key
+      ..namespace = key.namespace
+      ..sharedWith = key.sharedWith
+      ..isLocal = key.isLocal
+      ..metadata = key.metadata
+      ..sharedBy = '$atSign'}';
 
 /// Whether [e] is the atServer refusing to create a record that exists.
 bool _isHeldElsewhere(AtException e) =>
