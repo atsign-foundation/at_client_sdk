@@ -9,7 +9,8 @@ library;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart' show IllegalStateException;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -25,7 +26,8 @@ void main() {
       nskeyMintLockKey(atSign, 'testing', ttl: const Duration(minutes: 2));
 
   /// An atServer holding [heldBy]'s lock on the one record these tests turn
-  /// on, refusing every take the way it refuses a second immutable create.
+  /// on, refusing every take the way it refuses a second immutable create,
+  /// and answering a read of the lock with its holder.
   ///
   /// A fresh `MintLock` per call on purpose: a restart is a new instance, and
   /// reusing one would let its in-process guard answer instead of the wire.
@@ -33,14 +35,19 @@ void main() {
     final atClient = MockAtClient();
     final remote = MockRemoteSecondary();
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+    when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.enrollmentId).thenReturn(ours);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync'))).thenAnswer(
-        (_) async => throw AtLookUpException(
-            'AT0023', 'Immutable records may not be updated'));
-    when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
+    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
-      lookups.add(inv.positionalArguments[0] as String);
-      return 'data:$heldBy';
+      final builder = inv.positionalArguments[0] as VerbBuilder;
+      if (builder is UpdateVerbBuilder) {
+        throw IllegalStateException('Immutable records may not be updated');
+      }
+      if (builder is LLookupVerbBuilder) {
+        lookups.add(builder.buildCommand());
+        return 'data:$heldBy';
+      }
+      throw StateError('unexpected verb: ${builder.runtimeType}');
     });
     return MintLock(atClient);
   }

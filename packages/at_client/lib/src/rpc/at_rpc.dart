@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_client/src/crypto/crypto.dart'
     show CryptoConfig, legacyCryptoProviderId;
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
@@ -535,19 +535,22 @@ class AtRpc {
     }
   }
 
+  /// How long a request mutex is held, which is also how long its request id
+  /// stays claimed.
+  static const Duration _requestMutexTtl = Duration(seconds: 30);
+
   Future<bool> _tryAcquireSessionMutex(int requestId, String atsign) async {
     var mutexKey = AtKey.fromString('$requestId.session_mutexes.'
-        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign')
-      ..metadata = (Metadata()
-        ..immutable = true // only one RPC client will succeed in doing this
-        ..ttl =
-            30000); // keeps the datastore clean + auto releases mutex after 30s
-    PutRequestOptions pro = PutRequestOptions()
-      ..shouldEncrypt = true
-      ..useRemoteAtServer = true;
+        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign');
 
     try {
-      await atClient.put(mutexKey, 'lock', putRequestOptions: pro);
+      final lease =
+          await atClient.tryAcquireServerMutex(mutexKey, ttl: _requestMutexTtl);
+      if (lease == null) {
+        logger.shout('Will not handle request from $atsign'
+            '; could not acquire mutex $mutexKey');
+        return false;
+      }
       logger.shout(
           '😎 Will handle request from $atsign; acquired mutex $mutexKey');
       return true;
@@ -556,13 +559,8 @@ class AtRpc {
         logger.warning('Not handling request from $atsign: the client stopped');
         return false;
       }
-      if (err.toString().toLowerCase().contains('immutable')) {
-        logger.shout('Will not handle request from $atsign'
-            '; could not acquire mutex $mutexKey');
-      } else {
-        logger.shout(
-            '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
-      }
+      logger.shout(
+          '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
       return false;
     }
   }

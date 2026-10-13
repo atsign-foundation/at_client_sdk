@@ -7,8 +7,7 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart'
-    show MintLease, MintLock;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -31,9 +30,10 @@ class _SpentLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(MintLease lease) mint,
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
           {bool ownLockIsNotContention = false}) =>
-      mint(MintLease(DateTime.now().subtract(const Duration(seconds: 1))));
+      mint(ServerMutexLease(
+          lockKey, DateTime.now().subtract(const Duration(seconds: 1))));
 }
 
 /// Minting a namespace key: the interlock between an atSign's own
