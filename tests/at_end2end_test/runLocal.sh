@@ -24,6 +24,10 @@ set -euo pipefail
 #   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
 #     ./runLocal.sh 26000 test/pq -t legacy-server
 #
+# A pinned image's certificates expire. When they have, the runner mounts
+# renewed ones from atsigncompany/virtualenv:dev_env over them
+# (test/fetch_certs.sh, test/certs-overlay.yaml).
+#
 # The default path `test` recurses into test/pq/, so a bare run covers both
 # sets. CI does not: `dart_test.yaml` allowlists what a bare `dart test` may
 # run and leaves the post-quantum files off it, because the CI e2e jobs point
@@ -90,8 +94,17 @@ if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
 else
   echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
 fi
+# A release-pinned image keeps the certificates it was built with, and they
+# expire. When they have, mount renewed ones over them.
+COMPOSE_FILES=(-f docker-compose.yaml)
+if ! docker run --rm --network none --entrypoint openssl "$VIRTUALENV_IMAGE" \
+    x509 -checkend 0 -noout -in /atsign/root/certs/fullchain.pem >/dev/null; then
+  echo "*** ${VIRTUALENV_IMAGE}'s certificates have expired; mounting renewed ones"
+  ./fetch_certs.sh
+  COMPOSE_FILES+=(-f certs-overlay.yaml)
+fi
 echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP_PORT})"
-docker compose up -d
+docker compose "${COMPOSE_FILES[@]}" up -d
 cd ..
 
 # `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
