@@ -6,6 +6,7 @@ library;
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/server_mutex.dart' show ServerMutexHolder;
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -67,8 +68,7 @@ void main() {
   Future<(String, Map<String, dynamic>)> stored(AtKey key) async {
     final remote = owner.getRemoteSecondary()!;
     final value = await remote.executeCommand('llookup:$key\n', auth: true);
-    final meta =
-        await remote.executeCommand('llookup:meta:$key\n', auth: true);
+    final meta = await remote.executeCommand('llookup:meta:$key\n', auth: true);
     return (
       value!.replaceFirst('data:', ''),
       jsonDecode(meta!.replaceFirst('data:', '')) as Map<String, dynamic>
@@ -140,12 +140,12 @@ void main() {
     final key = freshLock();
     await takeWithoutTheExtension(key);
 
-    expect(await enrolled.tryAcquireServerMutex(freshLock(), ttl: ttl),
-        isNotNull,
+    expect(
+        await enrolled.tryAcquireServerMutex(freshLock(), ttl: ttl), isNotNull,
         reason: 'the control: this client takes a lock no one holds');
     expect(
-        await enrolled.tryAcquireServerMutex(
-            AtKey.fromString('$key'), ttl: ttl),
+        await enrolled.tryAcquireServerMutex(AtKey.fromString('$key'),
+            ttl: ttl),
         isNull,
         reason: 'both name one record, so a client mid-upgrade still excludes '
             'one that has not upgraded');
@@ -187,14 +187,18 @@ void main() {
         reason: 'and never carries the lock');
   });
 
-  test('A client recognises a lock its own enrollment holds', () async {
+  test(
+      'Given a lock this enrollment took, when it reads the lock back, then '
+      'it holds it', () async {
     final key = freshLock();
     expect(await enrolled.tryAcquireServerMutex(key, ttl: ttl), isNotNull);
 
     expect(await enrolled.holdsServerMutex(key), isTrue);
   });
 
-  test('A lock held by another enrollment is not the client\'s own', () async {
+  test(
+      'Given a lock another enrollment took, when this one reads it back, '
+      'then it does not hold it', () async {
     final key = freshLock();
     expect(await owner.tryAcquireServerMutex(key, ttl: ttl), isNotNull);
     expect(holderOf(owner), isNot(holderOf(enrolled)),
@@ -205,9 +209,30 @@ void main() {
         reason: 'the control: the lock is there, and is the owner\'s');
   });
 
-  test('A lock that no longer exists is not held', () async {
+  test(
+      'Given no record for a lock, when a client reads it back, then it does '
+      'not hold it', () async {
     final key = freshLock();
 
     expect(await enrolled.holdsServerMutex(key), isFalse);
+  });
+
+  test(
+      'Given a lock this enrollment took, when it reads its own lease back, '
+      'then the lease ends at the record\'s own expiry', () async {
+    final key = freshLock();
+    final taken = await enrolled.tryAcquireServerMutex(key, ttl: ttl);
+    expect(taken, isNotNull);
+
+    final own = await enrolled.ownServerMutexLease(key);
+
+    final (_, meta) = await stored(key);
+    expect(own, isNotNull,
+        reason: 'the record carries an expiry this client could read back');
+    expect(own!.expiresAt, DateTime.parse(meta['expiresAt'] as String).toUtc(),
+        reason: 'the expiry the atServer serves, not one this client made up');
+    expect(own.expiresAt.isBefore(taken!.expiresAt), isFalse,
+        reason: 'and it is no earlier than the lease stamped before the '
+            'create, which the atServer\'s own ttl starts after');
   });
 }
