@@ -108,7 +108,7 @@ class KeyPackageMinting with ApkamSigning {
     final enrolment = atClient.enrollmentId;
     if (enrolment == null || isAtSignCredential(enrolment)) {
       logger.info('Not reconciling the key package for $atSign: the atSign\'s '
-          'own credential has no enrollment record to amend');
+          'own credential is not reconciled as an enrollment');
       return nothing;
     }
 

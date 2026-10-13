@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' show Random;
 import 'dart:convert' show base64Decode, jsonDecode, jsonEncode, utf8;
-import 'dart:typed_data' show Uint8List;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -34,8 +34,12 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// keypair of the same atSign.
 @experimental
 class ReceivedEnvelope {
-  /// The sender's key-package id ([KeyPackage.kpid]).
+  /// The key-package id the sender named. Only the handling of a secret
+  /// request checks it against the directory; [fromEnrollmentId] is what the
+  /// signature proves.
   final String fromKpid;
+
+  /// The enrollment whose APKAM key signed the envelope.
   final String fromEnrollmentId;
 
   /// The application namespace the envelope was addressed through (and which
@@ -56,7 +60,13 @@ class ReceivedEnvelope {
 @experimental
 class ReceivedSecret {
   final Secret secret;
+
+  /// The key-package id the sender named. Only the handling of a secret
+  /// request checks it against the directory; [fromEnrollmentId] is what the
+  /// signature proves.
   final String fromKpid;
+
+  /// The enrollment whose APKAM key signed the envelope.
   final String fromEnrollmentId;
 
   ReceivedSecret({
@@ -98,12 +108,52 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// owns the address format.
   static const String envelopeKeyMarker = EnvelopeAddressing.marker;
 
-  /// Domain-separation context bound into every sealed envelope's key
-  /// schedule (the `info` argument to at_chops `pqSeal`/`pqOpen`). Ties a
-  /// sealed payload to this substrate so it cannot be replayed into another
-  /// `pqSeal`-based protocol, and vice versa.
-  static final Uint8List sealInfo =
-      Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
+  /// The context bound into an envelope's key schedule (the `info` argument
+  /// to at_chops `pqSeal`/`pqOpen`): this substrate, the sending enrollment
+  /// and keypair, the recipient keypair and the namespace.
+  ///
+  /// A sealed body therefore opens only for the sending enrollment, recipient
+  /// and namespace it was sealed for, and the label separates it from every
+  /// other `pqSeal`-based protocol.
+  ///
+  /// Each component, the label `at_client/secret_sharing/v2` first, is its
+  /// UTF-8 length as two big-endian bytes followed by those bytes, so no two
+  /// sets of fields give the same info. Throws [ArgumentError] for a
+  /// component longer than 65535 bytes.
+  static Uint8List sealInfoFor({
+    required String fromEnrollmentId,
+    required String fromKpid,
+    required String toKpid,
+    required String appNamespace,
+  }) {
+    final info = BytesBuilder(copy: false);
+    for (final component in [
+      'at_client/secret_sharing/v2',
+      fromEnrollmentId,
+      fromKpid,
+      toKpid,
+      appNamespace,
+    ]) {
+      final bytes = utf8.encode(component);
+      if (bytes.length > 0xffff) {
+        throw ArgumentError('A seal info component is ${bytes.length} bytes; '
+            'the most it can be is 65535');
+      }
+      info
+        ..addByte(bytes.length >> 8)
+        ..addByte(bytes.length & 0xff)
+        ..add(bytes);
+    }
+    return info.takeBytes();
+  }
+
+  /// [sealInfoFor] with the parties and namespace [envelope] names.
+  static Uint8List sealInfoOf(SecretEnvelope envelope) => sealInfoFor(
+        fromEnrollmentId: envelope.fromEnrollmentId,
+        fromKpid: envelope.fromKpid,
+        toKpid: envelope.toKpid,
+        appNamespace: envelope.appNamespace,
+      );
 
   /// How long an unconsumed envelope lives on the atServer.
   Duration envelopeTtl = Duration(days: 7);
@@ -222,8 +272,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// for [appNamespace] — the atServer enforces this on write (here) and on
   /// read/sync (recipient side) respectively.
   ///
-  /// Throws [StateError] if [to] advertises no key with a mutually-supported
-  /// algorithm.
+  /// [appNamespace] is lowercased, as every at-key namespace is, so the
+  /// namespace the envelope signs is the one its key name carries.
+  ///
+  /// Throws [ArgumentError] for an empty [appNamespace] or a [sealInfoFor]
+  /// component longer than 65535 bytes, and [StateError] if [to] advertises no
+  /// key with a mutually-supported algorithm.
   /// [inReplyTo] correlates this envelope with the request it answers, and is
   /// [EnvelopeAddressing.unsolicited] for a request or an unsolicited push.
   Future<void> sendEnvelope(
@@ -232,6 +286,15 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     Map<String, dynamic> payload, {
     String inReplyTo = EnvelopeAddressing.unsolicited,
   }) async {
+    if (appNamespace.isEmpty) {
+      throw ArgumentError.value(appNamespace, 'appNamespace',
+          'an envelope is delivered through its namespace, so it needs one');
+    }
+    final namespace = appNamespace.toLowerCase();
+    // NOTE: read once — the seal binds these and the signed envelope states
+    // them, so a rotation landing between two reads would make it unopenable.
+    final fromKpid = kpid;
+    final fromEnrollmentId = enrollmentId;
     final sealsTo = atClient.getPreferences()?.sealsToKeyAlgorithms ??
         SecretSharingAlgos.keyAlgos;
     final PackageKey? recipientKey = to.bestKeyFor(sealsTo);
@@ -261,14 +324,20 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       kem,
       base64Decode(recipientKey.pub),
       Uint8List.fromList(utf8.encode(jsonEncode(payload))),
-      info: sealInfo,
+      info: sealInfoFor(
+        fromEnrollmentId: fromEnrollmentId,
+        fromKpid: fromKpid,
+        toKpid: recipientKey.kid,
+        appNamespace: namespace,
+      ),
       version: version,
     );
 
     final envelope = SecretEnvelope(
-      fromKpid: kpid,
-      fromEnrollmentId: enrollmentId,
+      fromKpid: fromKpid,
+      fromEnrollmentId: fromEnrollmentId,
       toKpid: recipientKey.kid,
+      appNamespace: namespace,
       suite: suite,
       kid: recipientKey.kid,
       sealed: sealed,
@@ -283,7 +352,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       msgId: Uuid().v4(),
       inReplyTo: inReplyTo,
       recipientKpid: recipientKey.kid,
-      appNamespace: appNamespace,
+      appNamespace: namespace,
       sharedBy: atClient.getCurrentAtSign(),
       ttl: envelopeTtl,
     );
@@ -305,7 +374,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     logger.finer('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
 
     if (sendWakeUpNotification) {
-      await _sendWakeUp(atKey, appNamespace);
+      await _sendWakeUp(atKey, namespace);
     }
   }
 
@@ -616,6 +685,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }
+    final addressedThrough = EnvelopeAddressing.appNamespaceOf(envelopeKey);
+    if (envelope.appNamespace != addressedThrough) {
+      logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
+          'sender signed it for ${envelope.appNamespace}; skipping');
+      return null;
+    }
     // Resolving the KEM doubles as the support check: a suite with no KEM
     // cannot be opened.
     final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
@@ -634,6 +709,15 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return null;
     }
 
+    final Uint8List info;
+    try {
+      info = sealInfoOf(envelope);
+    } on ArgumentError catch (e) {
+      logger.warning('Envelope $envelopeKey names a field too long to bind '
+          'into its seal ($e); skipping');
+      return null;
+    }
+
     // NOTE: the KEM instance must match the suite the envelope names — a
     // hybrid envelope decapsulated with ML-KEM fails indistinguishably from a
     // tampered one. Every PqOpenException here is deterministic, so a failed
@@ -644,7 +728,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         kem,
         held.secretKey,
         envelope.sealed,
-        info: sealInfo,
+        info: info,
       );
     } on PqOpenException catch (e) {
       logger.warning('Envelope $envelopeKey failed to open ($e); skipping');
@@ -654,7 +738,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     return ReceivedEnvelope(
       fromKpid: envelope.fromKpid,
       fromEnrollmentId: envelope.fromEnrollmentId,
-      appNamespace: EnvelopeAddressing.appNamespaceOf(envelopeKey),
+      appNamespace: envelope.appNamespace,
       payload: jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>,
     );
   }
@@ -996,8 +1080,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     try {
       secret = Secret.fromJson({
         ...received.payload,
-        // the namespace is taken from the (server-authorized) envelope key,
-        // not from the payload
+        // NOTE: the namespace the sender signed, never one the payload names.
         'namespace': received.appNamespace,
       });
     } on FormatException catch (e) {

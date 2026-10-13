@@ -60,7 +60,7 @@ class NskeySeeding {
     required this.ring,
     this.sharing,
     this.privateFiling,
-    this.rotationPolicy = neverRotateNskey,
+    this.rotationPolicy = rotateNskeyAfterOneYear,
   }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
   /// The namespaces this client should hold a key for; see
@@ -84,12 +84,34 @@ class NskeySeeding {
   /// Mints and publishes for every authorised namespace that has no key yet,
   /// then conveys each new private. Returns the namespaces this start published
   /// fresh material for — a cold-start mint, or a rotation a revocation owed.
+  ///
+  /// A namespace this enrollment may only read is skipped, since every step
+  /// here writes to it. One its grants let it write without naming it, such as
+  /// `chat.app` under a grant on `app`, is rotated where this client holds its
+  /// key and a revocation is owed there, and is otherwise left alone.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
 
+    final Map<String, dynamic>? grants;
+    try {
+      grants = await ownGrantsOf(atClient);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.info('Could not read this enrollment to find its namespaces, so '
+          'nothing is seeded this start: $e');
+      return const {};
+    }
+    final namespaces =
+        authorisedNamespacesIn(grants, ownNamespace: _ownNamespace);
+
     final minted = <String>{};
-    for (final namespace in await authorisedNamespaces()) {
+    final readOnly = <String>{};
+    for (final namespace in namespaces) {
+      if (!mayWriteIn(grants, namespace)) {
+        readOnly.add(namespace);
+        continue;
+      }
       try {
         // NOTE: before the seed, not after — a rotation mints every algorithm
         // this client is configured for, so seeding behind one would find
@@ -104,7 +126,44 @@ class NskeySeeding {
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
+    for (final namespace in await _writableHeld(grants, named: namespaces)) {
+      try {
+        if (await rotateIfRevoked(owner, namespace)) minted.add(namespace);
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        _logger.warning('Could not check $owner:$namespace for a revocation '
+            'it is owed this start: $e');
+      }
+    }
+    if (readOnly.isNotEmpty) {
+      _logger.info('Not minting or rotating the nskey for $owner in '
+          '${readOnly.join(', ')}: this enrollment may only read there, so '
+          'that is left to an enrollment that may write there');
+    }
     return minted;
+  }
+
+  /// The namespaces this client holds a key for and [grants] let it write,
+  /// other than those in [named]: `chat.app` under a grant on `app`.
+  ///
+  /// Empty for the atSign's own credential, whose start asks about no
+  /// revocation, and, logged, when the keyfile cannot be read.
+  Future<Set<String>> _writableHeld(Map<String, dynamic>? grants,
+      {required Set<String> named}) async {
+    final filing = privateFiling;
+    if (grants == null || filing == null) return const {};
+    try {
+      return (await filing.readAllWhere((namespace) =>
+              !named.contains(namespace) && mayWriteIn(grants, namespace)))
+          .keys
+          .toSet();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read which namespace keys this client holds, '
+          'so no namespace its grants reach without naming it is checked for '
+          'a revocation this start: $e');
+      return const {};
+    }
   }
 
   /// Mints, publishes and conveys the key for **one** namespace unless one is
