@@ -643,11 +643,17 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
+      # The pinned image keeps the certificates it was built with, and they
+      # expire; certs-overlay.yaml mounts dev_env's renewed ones over them.
+      - name: Fetch current certificates
+        working-directory: tests/at_end2end_test/test
+        run: ./fetch_certs.sh
+
       # VIRTUALENV_IMAGE above pins the pre-PQ release; docker-compose.yaml
       # reads it.
       - name: Start docker instance
         working-directory: tests/at_end2end_test/test
-        run: docker compose pull && docker compose up -d
+        run: docker compose pull && docker compose -f docker-compose.yaml -f certs-overlay.yaml up -d
 
       - name: Wait for supervisor
         working-directory: tests/at_end2end_test/test

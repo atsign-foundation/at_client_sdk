@@ -46,9 +46,10 @@ void main() {
       // NOTE: one queue serves every probe, so drain what the previous one
       // left behind rather than reading it as this atSign's answer.
       _queue.clear();
-      final socket = await _connect(rootServer, secondaryPort,
+      final (socket, lastError) = await _connect(rootServer, secondaryPort,
           maxTries: 30, retryIntervalSecs: 3);
-      expect(socket, isNotNull, reason: 'could not connect to $secondaryPort');
+      expect(socket, isNotNull,
+          reason: 'could not connect to $secondaryPort: $lastError');
       socket!.listen(_onData);
 
       // NOTE: pkamLoad writes pkaminstalled last, after the PKAM key and the
@@ -68,18 +69,21 @@ void main() {
   }
 }
 
-Future<SecureSocket?> _connect(String host, int port,
+/// The connected socket, or null and the error from the last try.
+Future<(SecureSocket?, Object?)> _connect(String host, int port,
     {int maxTries = 30, int retryIntervalSecs = 3}) async {
-  SecureSocket? socket;
-  for (var i = 0; socket == null && i < maxTries; i++) {
+  Object? lastError;
+  for (var i = 0; i < maxTries; i++) {
     try {
-      socket = await SecureSocket.connect(host, port);
+      final socket = await SecureSocket.connect(host, port);
       print('connected to $host:$port');
-    } catch (_) {
+      return (socket, null);
+    } catch (e) {
+      lastError = e;
       await Future.delayed(Duration(seconds: retryIntervalSecs));
     }
   }
-  return socket;
+  return (null, lastError);
 }
 
 /// Queues each answer without the prompt the atServer appends after it, so a
