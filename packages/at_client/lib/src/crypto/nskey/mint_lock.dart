@@ -8,16 +8,6 @@ import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
 
-/// [ttl], checked as a mint lock's ttl: at least a millisecond and no longer
-/// than [maxServerMutexTtl], or an [ArgumentError] naming [name].
-Duration checkedMintLockTtl(Duration ttl, String name) {
-  if (ttl.inMilliseconds < 1 || ttl > maxServerMutexTtl) {
-    throw ArgumentError.value(ttl, name,
-        'must be at least a millisecond and no longer than $maxServerMutexTtl');
-  }
-  return ttl;
-}
-
 /// Serialises minting a key record between an atSign's own enrollments.
 ///
 /// The records this guards are mutable, so the interlock cannot be their own

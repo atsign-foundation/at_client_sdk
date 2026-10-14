@@ -9,7 +9,8 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
+import 'package:at_client/src/client/server_mutex.dart'
+    show ServerMutexLease, checkedServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -230,7 +231,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
     Stream<DataEvent> Function()? ownChanges,
-  })  : lockTtl = checkedMintLockTtl(lockTtl, 'lockTtl'),
+  })  : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
         verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
         _requestConveyance = requestConveyance,

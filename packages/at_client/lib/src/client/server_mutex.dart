@@ -72,7 +72,7 @@ extension ServerMutex on AtClient {
   /// held until its ttl runs out.
   Future<ServerMutexLease?> tryAcquireServerMutex(AtKey key,
       {required Duration ttl}) async {
-    _checkTtl(ttl);
+    checkedServerMutexTtl(ttl, 'ttl');
     final record = _lockRecord(this, key)
       ..metadata = (Metadata()
         ..immutable = true
@@ -122,7 +122,7 @@ extension ServerMutexHolder on AtClient {
   /// [ttl] is checked as [ServerMutex.tryAcquireServerMutex] checks it.
   Future<ServerMutexLease?> ownServerMutexLease(AtKey key,
       {required Duration ttl}) async {
-    _checkTtl(ttl);
+    checkedServerMutexTtl(ttl, 'ttl');
     final cap = DateTime.now().toUtc().add(ttl);
     final lock = await _readLock(this, key);
     if (lock == null || lock.holder != _holderOf(this)) return null;
@@ -133,16 +133,18 @@ extension ServerMutexHolder on AtClient {
   }
 }
 
-/// Throws when [ttl] is under a millisecond or over [maxServerMutexTtl].
-void _checkTtl(Duration ttl) {
+/// [ttl], checked as a server mutex's ttl: at least a millisecond and no
+/// longer than [maxServerMutexTtl], or an [ArgumentError] naming [name].
+Duration checkedServerMutexTtl(Duration ttl, String name) {
   // NOTE: the ttl travels in whole milliseconds, and 0 never expires.
   if (ttl.inMilliseconds < 1 || ttl > maxServerMutexTtl) {
     throw ArgumentError.value(
         ttl,
-        'ttl',
+        name,
         'must be at least a millisecond and no longer than '
-            '$maxServerMutexTtl');
+        '$maxServerMutexTtl');
   }
+  return ttl;
 }
 
 /// This client's identity in a lock record: its enrollment, or the primary
