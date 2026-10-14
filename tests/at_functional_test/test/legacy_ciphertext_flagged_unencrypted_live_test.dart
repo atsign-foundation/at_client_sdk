@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 /// A get, against a live atServer, of a record written the way at_client
-/// before 3.2.1 wrote it: legacy ciphertext with no isEncrypted and no
+/// 3.2.0 wrote it: legacy ciphertext with no isEncrypted and no
 /// ivNonce.
 ///
 /// Catalogue: features/at_client/get_legacy_ciphertext_flagged_unencrypted.feature
