@@ -1146,21 +1146,15 @@ class NotificationServiceImpl extends NotificationService {
     return atNotificationStream.stream as Stream<AtNotification>;
   }
 
-  /// Ensures that distinct [NotificationConfig.regex] exists in the key
-  /// Compares the [NotificationConfig] object with [NotificationConfig.regex]
-  /// If regex's are equals, returns true; else false.
+  /// Whether two subscriptions are the same one: the same regex, asking for
+  /// the same decryption.
   static bool _compareNotificationConfig(NotificationConfig notificationConfig1,
-      NotificationConfig notificationConfig2) {
-    if (notificationConfig1.regex == notificationConfig2.regex) {
-      return true;
-    }
-    return false;
-  }
+          NotificationConfig notificationConfig2) =>
+      notificationConfig1.regex == notificationConfig2.regex &&
+      notificationConfig1.shouldDecrypt == notificationConfig2.shouldDecrypt;
 
-  /// Returns the hashcode for the [NotificationConfig.regex]
-  static int _generateHashCode(NotificationConfig notificationConfig) {
-    return notificationConfig.regex.hashCode;
-  }
+  static int _generateHashCode(NotificationConfig notificationConfig) =>
+      Object.hash(notificationConfig.regex, notificationConfig.shouldDecrypt);
 
   @override
   Future<NotificationResult> getStatus(String notificationId) async {
