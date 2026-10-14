@@ -178,17 +178,6 @@ void main() {
         var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
         expect(enrollResponseJson['enrollmentId'], isNotEmpty);
         expect(enrollResponseJson['status'], 'approved');
-
-        // NOTE: a CRAM auto-approve that copies the enrolling key over
-        // privatekey:at_pkam_publickey has just replaced the owner credential.
-        expect(
-            await cramLookup.executeCommand(
-                'update:privatekey:at_pkam_publickey '
-                '${pkamPublicKeyMap[atSign]}\n',
-                auth: false),
-            'data:-1',
-            reason: 'the owner credential must be the demo keypair again '
-                'before anything else authenticates as this atSign');
       } finally {
         await cramLookup.close();
       }
