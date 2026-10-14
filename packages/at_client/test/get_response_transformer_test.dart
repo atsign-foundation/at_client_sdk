@@ -125,7 +125,7 @@ void main() {
     });
 
     test(
-        'A test to verify explicit isEncrypted=false returns the raw value without attempting decryption',
+        'A test to verify explicit isEncrypted=false returns a value without legacy ciphertext\'s shape as stored, without attempting decryption',
         () async {
       final keyName = 'phone';
       final atKey = AtKey()
@@ -138,8 +138,8 @@ void main() {
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
 
-      // Even if a provider WOULD strip the value, explicit isEncrypted=false
-      // means the value was deliberately stored unencrypted: return it as-is.
+      // Even if a provider WOULD strip the value, a value flagged false that is
+      // not shaped like legacy ciphertext is returned as stored.
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('abcdecrypted_data'));
