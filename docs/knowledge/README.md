@@ -156,6 +156,7 @@ Evidenced, not yet written up, and each still needs its citation re-checked:
   at_commons 5.10.0 (atServer p3.13.0; an older atServer refuses the command)
   and honoured by at_server from c3.16.3 and p3.16.5. The server mutex
   (`tryAcquireServerMutex`) sends it on every lock it takes.
-- `Secondary.executeVerb`'s `sync` parameter is inert on both implementations.
+- `Secondary.executeVerb`'s `sync` parameter is inert in both `LocalSecondary`
+  and `RemoteSecondary`.
 - The keystore's `get()` does not filter expired records, and `nextExpiresAt()`
   has no cutoff where its sibling `nextAvailableAt()` does.
