@@ -29,6 +29,7 @@ void main() {
   setUpAll(() {
     logs.installOn();
     registerFallbackValue(FakeLocalLookUpVerbBuilder());
+    registerFallbackValue(FakeLookupVerbBuilder());
   });
 
   setUp(() {
@@ -66,6 +67,34 @@ void main() {
   test('A plain value flagged isEncrypted false comes back unchanged',
       () async {
     expect(await get(selfRecord(), group), group);
+    verifyNever(() => local.getEncryptionSelfKey());
+  });
+
+  test(
+      'Given a plain base64 value flagged false whose decoded length is not a '
+      'multiple of 16, when it is read, then it comes back unchanged without '
+      'a decryption attempt', () async {
+    const plain = 'true';
+
+    expect(await get(selfRecord(), plain), plain);
+    verifyNever(() => local.getEncryptionSelfKey());
+  });
+
+  test(
+      'Given a plain local record flagged true that decodes as base64 but not '
+      'to a multiple of 16 bytes, when it is read, then it comes back '
+      'unchanged without a decryption attempt', () async {
+    final key = AtKey.fromString('local:2.groups.policy.sshnp@alice');
+    const plain = 'true';
+    final tuple = Tuple<AtKey, String>()
+      ..one = key
+      ..two = jsonEncode({
+        'key': '$key',
+        'data': plain,
+        'metaData': {'isEncrypted': true},
+      });
+
+    expect((await transformer.transform(tuple)).value, plain);
     verifyNever(() => local.getEncryptionSelfKey());
   });
 
@@ -165,6 +194,42 @@ void main() {
   });
 
   test(
+      'Given a shaped value flagged false shared with another atSign and no '
+      'shared key, when it is read, then it comes back as stored and a warning '
+      'names the key', () async {
+    final remote = MockRemoteSecondary();
+    when(() => client.getRemoteSecondary()).thenReturn(remote);
+    when(() => local.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:null');
+    when(() => remote.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:null');
+    final key = AtKey.fromString('@bob:6.groups.policy.sshnp@alice');
+    final stored = EncryptionUtil.encryptValue(group, selfKey);
+
+    expect(await get(key, stored), stored);
+    expect(logs.at('WARNING'), contains(contains('$key')));
+    expect(logs.at('INFO'), isNot(contains(contains('$key'))));
+  });
+
+  test(
+      'Given a shaped value flagged false from another atSign and no '
+      'shared key, when it is read, then it comes back as stored and a warning '
+      'names the key', () async {
+    final remote = MockRemoteSecondary();
+    when(() => client.getRemoteSecondary()).thenReturn(remote);
+    when(() => local.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:null');
+    when(() => remote.executeVerb(any<LookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:null');
+    final key = AtKey.fromString('@alice:7.groups.policy.sshnp@bob');
+    final stored = base64Encode(List<int>.generate(32, (i) => 255 - i));
+
+    expect(await get(key, stored), stored);
+    expect(logs.at('WARNING'), contains(contains('$key')));
+    expect(logs.at('INFO'), isNot(contains(contains('$key'))));
+  });
+
+  test(
       'Given a shaped value flagged false, when the client stops while it is '
       'being decrypted, then the get throws StoppedException rather than '
       'returning it as stored', () async {
@@ -212,10 +277,13 @@ void main() {
       'Given a shaped value flagged false that decrypts under the self key to '
       'bytes that are not UTF-8, when it is read, then it comes back '
       'unchanged', () async {
+    final key = selfRecord();
     final stored = base64Encode(EncryptionUtil.encryptBytes(
         List<int>.generate(20, (i) => 0xff - i), selfKey));
 
-    expect(await get(selfRecord(), stored), stored);
+    expect(await get(key, stored), stored);
     verify(() => local.getEncryptionSelfKey()).called(1);
+    expect(logs.at('INFO'), contains(contains('$key')));
+    expect(logs.at('WARNING'), isNot(contains(contains('$key'))));
   });
 }
