@@ -58,12 +58,9 @@ void main() {
 
   /// Counts the request notifications [client] receives, decrypted or not.
   void countArrivals(AtClient client, String label) {
-    // NOTE: the notification service keys subscriptions by regex string alone,
-    // so this must not be AtRpc's own regex, or AtRpc is handed this
-    // undecrypted stream.
     listening.add(client.notificationService
         .subscribe(
-            regex: 'request\\.\\d+\\.$domain\\.__rpcs\\.$namespace@',
+            regex: 'request.\\d+.$domain.__rpcs.$namespace@',
             shouldDecrypt: false)
         .listen((_) => arrived[label] = arrived[label]! + 1));
   }
