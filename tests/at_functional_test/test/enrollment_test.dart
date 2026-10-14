@@ -156,8 +156,8 @@ void main() {
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
 
       // 1. Cram auth, on a connection of the test's own.
-      // NOTE: a cram goes on a connection that has not authenticated, never
-      // on the client's own, which has.
+      // NOTE: a cram may not follow a pkam on one connection, and the
+      // client's own has authenticated with pkam.
       final cramLookup = TestUtils.unauthenticatedLookUp(atSign);
       try {
         var fromResponse =
