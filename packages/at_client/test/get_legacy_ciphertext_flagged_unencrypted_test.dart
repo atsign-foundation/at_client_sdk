@@ -107,7 +107,7 @@ void main() {
     verify(() => local.getEncryptionSelfKey()).called(1);
   });
 
-  test('A record shared before at_client 3.2.1 is decrypted by its recipient',
+  test('A record shared before at_client 3.2.2 is decrypted by its recipient',
       () async {
     final alice = RSAKeypair.fromRandom();
     final sharedKey = AESKey.generate(32).key;

@@ -61,9 +61,8 @@ class GetResponseTransformer
             await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
       }
     } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
-      // NOTE: a client before at_client 3.2.1 sent no flag, or false, with a
-      // value it had encrypted, and the atServer stores a missing flag as
-      // false.
+      // NOTE: at_client 3.0.10 to 3.2.1 sent no flag, or false, with a value
+      // it had encrypted, and the atServer stores a missing flag as false.
       if (_hasLegacyCiphertextShape(tuple.one, atValue.value)) {
         atValue.value =
             await _decryptOrKeep(cryptoRuntime, tuple.one, atValue.value);
