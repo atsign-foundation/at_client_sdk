@@ -213,6 +213,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [153] | An arriving nskey private is checked against what is published, else named by length         | 2026-10-08 | LIVE               |
 | [154] | A shared content key follows the sender's own namespace key too                              | 2026-10-09 | AMENDED 2026-10-13 |
 | [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
+| [156] | The e2e pack's enrollments expire on their own, and nothing tears them down                  | 2026-10-13 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -370,3 +371,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [153]: detail/decisions.md#153-an-arriving-nskey-private-is-checked-against-what-is-published-else-named-by-its-length-2026-10-08
 [154]: detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09
 [155]: detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09
+[156]: detail/decisions.md#156-the-e2e-packs-enrollments-expire-on-their-own-and-nothing-tears-them-down-2026-10-13
