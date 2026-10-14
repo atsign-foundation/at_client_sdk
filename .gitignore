@@ -137,3 +137,11 @@ citations.jsonl
 # Rendered by tools/acceptance_ledger.sh from a run's own reports — a
 # measurement of one set of runs, never a committed artefact.
 acceptance-ledger.md
+plans/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
