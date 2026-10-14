@@ -60,7 +60,7 @@
 - fix: `AtRpc` answers a request whose value it cannot parse with a NACK under
   the request's id, and keeps serving; an error from a request or response
   handler is logged and the listener carries on.
-- fix: `get` decrypts data that at_client before 3.2.1 wrote, which from
+- fix: `get` decrypts data that at_client 3.0.10 to 3.2.1 wrote, which from
   3.13.0 came back still encrypted.
 - fix: a `get`, `put` or notification whose shared key does not unwrap
   under this atSign's key throws an `AtException`, as other decryption
