@@ -2382,8 +2382,10 @@ it — five uses of this shape are signed by one key.
 A client using the atSign's own keys, which publishes at `_apsk.primary`,
 stamps `enid: "primary"`: the sentinel is deliberate and never absent
 ([`decisions.md` 116](detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23)
-item 15). `enid` is absent only on a key package signed at `enroll:request`,
-before there is an id to stamp.
+item 15). `enid` is absent on a key package signed at `enroll:request`, before
+there is an id to stamp, and on a key package re-published at `enroll:update`,
+which signs without the enrollment id it has in scope. Its readers pass the id
+in explicitly, so it still verifies.
 
 There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `enid`, where the signature covers them. A
