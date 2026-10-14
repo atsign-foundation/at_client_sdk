@@ -122,8 +122,7 @@ void main() {
       if (builder is UpdateVerbBuilder) {
         if (builder.atKey.key == pqSigningRootMintLockRecordName) {
           if (lockHeldElsewhere) {
-            throw AtLookUpException(
-                'AT0023', 'Immutable records may not be updated');
+            throw IllegalStateException('Immutable records may not be updated');
           }
           return 'data:1';
         }

@@ -7,14 +7,12 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart'
-    show MintLease, MintLock;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
@@ -31,9 +29,10 @@ class _SpentLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(MintLease lease) mint,
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
           {bool ownLockIsNotContention = false}) =>
-      mint(MintLease(DateTime.now().subtract(const Duration(seconds: 1))));
+      mint(ServerMutexLease(
+          lockKey, DateTime.now().subtract(const Duration(seconds: 1))));
 }
 
 /// Minting a namespace key: the interlock between an atSign's own
@@ -154,12 +153,24 @@ void main() {
         }
         if (builder.atKey.key == '_nskeylock' && lockAlreadyHeld) {
           // What the atServer says to the loser of the race.
-          throw AtLookUpException(
-              'AT0023', 'Immutable records may not be updated');
+          throw IllegalStateException('Immutable records may not be updated');
         }
         if (builder.atKey.key == '__nskey') {
           advertised[builder.atKey.namespace!] = builder.value as String;
         }
+      }
+      if (builder is LLookupVerbBuilder && builder.operation == 'all') {
+        // A lock another enrollment holds, as llookup:all serves it.
+        return 'data:${jsonEncode({
+              'key': '${builder.atKey}',
+              'data': 'another-enrollment',
+              'metaData': {
+                'expiresAt': DateTime.now()
+                    .toUtc()
+                    .add(const Duration(minutes: 2))
+                    .toIso8601String()
+              }
+            })}';
       }
       return 'data:1';
     });

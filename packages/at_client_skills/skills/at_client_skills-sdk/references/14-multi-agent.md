@@ -66,42 +66,46 @@ one machine.
 
 Two patterns, chosen by whether instances keep state.
 
-### Pattern 1 (default): immutable-mutex race
+### Pattern 1 (default): a server mutex per task
 
-First instance to write an immutable key wins the task; the others skip it.
-Requires raw `put`: collections don't expose immutable metadata, and the write
-must target the server for *this one operation*
-(`PutRequestOptions..useRemoteAtServer`) — a race against a local copy would
-not be a race at all.
+The first instance to take a task's lock does the task; the others skip it.
+`atClient.tryAcquireServerMutex` takes the lock by creating an immutable self
+record on the atServer, which refuses a second create until the ttl runs out —
+so exactly one instance gets a lease, however many ask at once.
 
 ```dart
-Future<bool> tryAcquire(String taskId) async {
-  final mutexKey = AtKey.fromString(
-      'lock.$taskId.my_app${atClient.getCurrentAtSign()}')
-    ..metadata = (Metadata()
-      ..immutable = true   // first writer wins
-      ..ttl = 30000);      // auto-releases the lock after 30 s
-  try {
-    await atClient.put(mutexKey, 'lock',
-        putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
-    return true;                       // we own the task
-  } catch (err) {
-    // Contention has NO typed exception — the losing put() THROWS, and the
-    // only reliable signal is the error text:
-    if (err.toString().toLowerCase().contains('immutable')) {
-      return false;                    // another instance won the race
-    }
-    rethrow;                           // network/auth error — not contention
-  }
+Future<ServerMutexLease?> tryAcquire(String taskId) =>
+    atClient.tryAcquireServerMutex(
+        AtKey.fromString('lock.$taskId.my_app${atClient.getCurrentAtSign()}'),
+        ttl: const Duration(seconds: 30));
+
+// null: the lock's record exists, so skip the task
+final lease = await tryAcquire(taskId);
+if (lease != null && !lease.isSpent) {
+  // do the task, checking lease.isSpent before each write
 }
 ```
 
-- The losing `put()` **throws**; it does not return false. Detect contention by
-  inspecting the message, exactly as the SDK itself does
-  (`AtRpc._tryAcquireSessionMutex`).
-- Always set a `ttl` so a crashed winner cannot hold the lock forever. TTL
-  expiry is also the release mechanism: deleting an immutable key early needs
-  the protocol-level `force` flag, which `atClient.delete` does not expose.
+- It returns null when an immutable record already exists at the lock's key:
+  another instance's lock, or one this instance took itself within the ttl. A
+  mutable record there is overwritten and taken, so don't keep data under a
+  lock's key. Any other failure
+  (network, auth) is **thrown**, so you decide whether to go ahead without it;
+  a timeout can come after the atServer stored the record, and the lock then
+  stays held until its ttl runs out.
+- The ttl is the only release, so a crashed winner cannot hold the lock
+  forever; it must be at least a millisecond and at most 15 minutes. Do the
+  task within the lease: `lease.isSpent` says when it has run out, counting
+  the time elapsed since the lease was taken, so a change to the wall clock
+  does not move it.
+- The lock is written straight to the atServer, never to the local store, and
+  the key must be a self key of the client's own atSign, used as given (no
+  namespace is added).
+- **atServer version.** The lock needs an atServer from p3.13.0, the first to
+  parse `:nc`; an older one refuses every lock, so the call throws. The record
+  stays out of the commit log, and so out of every instance's sync, from
+  c3.16.3 and p3.16.5. An expired lock stops blocking at once from c3.16.2
+  and p3.16.5; before that it blocks for up to about ten and a half minutes.
 - If the coordination is specifically "N instances of one RPC responder", you
   don't need to write this yourself — `AtRpc.server(enableRequestMutex: true)`
   is this pattern, packaged (see [13-rpc.md](13-rpc.md)).
@@ -141,7 +145,7 @@ final client = await Atsign(atSign).open(
 
 | Instances…                          | Pattern                                    |
 | ----------------------------------- | ------------------------------------------ |
-| Keep state / use collections        | 1 — immutable-mutex race per task          |
+| Keep state / use collections        | 1 — a server mutex per task                |
 | Stateless request/response workers  | 2 — no-op sync + remote ops                |
 | N instances of one `AtRpc` server   | `enableRequestMutex: true` (packaged 1)    |
 
@@ -164,10 +168,9 @@ The Flutter-side enrollment flows (the requesting device) are in
 
 Collections remain the home for the agent's *data* — what it produces,
 consumes, and shares. The raw-key usage in this reference is confined to
-*infrastructure*: mutex keys (immutable metadata and per-operation remote
-writes are not available through the collection API — by design; a
-`remoteLocalPref = remoteOnly` client routes collection ops remote too) and
-the no-sync scaling pattern.
+*infrastructure*: mutex keys (taken with `tryAcquireServerMutex`, since a
+lock is not app data and the collection API does not take one) and the no-sync
+scaling pattern.
 Give such keys a distinct key-name prefix within your app's namespace (e.g.
 `lock.`, as `AtRpc` does with `session_mutexes.`) so they never collide with
 collection keys.
