@@ -46,7 +46,9 @@ class PutRequestOptions extends RequestOptions {
   /// With this false the value is stored as given, and a value encrypted
   /// outside the SDK is not supported: the put drops the encryption fields on
   /// the key's metadata, such as `isEncrypted` and `ivNonce`, so the value is
-  /// treated as plain.
+  /// stored flagged unencrypted. A get returns it as stored, unless it has
+  /// legacy ciphertext's shape (base64 of a positive multiple of 16 bytes)
+  /// and decrypts under this client's legacy keys.
   bool shouldEncrypt = true;
 
   /// Whether the value was encrypted before this put, under the metadata its

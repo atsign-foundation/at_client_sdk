@@ -166,6 +166,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/local_secondary.dart',
   'package:at_client/src/client/remote_secondary.dart',
   'package:at_client/src/client/request_options.dart',
+  // AtClient.tryAcquireServerMutex and its lease.
+  'package:at_client/src/client/server_mutex.dart',
   // The storage interface only: each backend has its own barrel, so an app
   // names the one it chooses.
   'package:at_client/src/storage/at_client_storage.dart',

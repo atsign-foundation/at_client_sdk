@@ -160,6 +160,7 @@ void main() {
       final atClient = MockAtClient();
       final remote = MockRemoteSecondary();
       when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => atClient.enrollmentId).thenReturn('e-1');
       when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
           .thenAnswer((inv) async {
