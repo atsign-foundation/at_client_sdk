@@ -57,16 +57,17 @@ class ServerMutexLease {
 /// stops blocking at once from c3.16.2 and p3.16.5; before that it blocks
 /// until the atServer's expiry sweep, up to about ten and a half minutes.
 extension ServerMutex on AtClient {
-  /// Takes the lock [key] names for [ttl], or returns null when its record
-  /// already exists.
+  /// Takes the lock [key] names for [ttl], or returns null when an immutable
+  /// record already exists at [key]; a mutable record there is overwritten
+  /// and taken.
   ///
-  /// That record may be another client's lock, or one this client took within
-  /// its ttl. [key] must be a self key of this client's atSign, and is used as
+  /// The immutable record may be another client's lock, or one this client
+  /// took within its ttl. [key] must be a self key of this client's atSign, and is used as
   /// given: no namespace is added to it. [ttl] must be at least a millisecond
   /// and no longer than [maxServerMutexTtl]; either mistake throws an
   /// [ArgumentError] before anything is sent.
   ///
-  /// Every failure other than the record existing is thrown, so the caller
+  /// Every failure other than that record existing is thrown, so the caller
   /// decides whether to go ahead without the lock. A failure such as a timeout
   /// can come after the atServer stored the record, and the lock then stays
   /// held until its ttl runs out.

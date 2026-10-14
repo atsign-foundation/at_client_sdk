@@ -86,8 +86,10 @@ if (lease != null && !lease.isSpent) {
 }
 ```
 
-- It returns null when the lock's record already exists: another instance's
-  lock, or one this instance took itself within the ttl. Any other failure
+- It returns null when an immutable record already exists at the lock's key:
+  another instance's lock, or one this instance took itself within the ttl. A
+  mutable record there is overwritten and taken, so don't keep data under a
+  lock's key. Any other failure
   (network, auth) is **thrown**, so you decide whether to go ahead without it;
   a timeout can come after the atServer stored the record, and the lock then
   stays held until its ttl runs out.

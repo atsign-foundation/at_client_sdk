@@ -47,6 +47,12 @@ Feature: Server mutex on AtClient
     When a client asks for the same lock through the extension
     Then it gets no lease
 
+  Scenario: A lock over an existing mutable record takes it
+    Given a mutable self record exists at the lock's key
+    When a client asks for the lock
+    Then it takes the lock
+    And the record is now immutable, with the lock's ttl
+
   Scenario: The lock frees itself when its ttl runs out
     Given a client took a lock with a ttl of 2 seconds
     When another client asks for the same lock 3 seconds later
