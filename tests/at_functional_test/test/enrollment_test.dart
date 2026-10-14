@@ -169,7 +169,8 @@ void main() {
             await cramLookup.executeCommand('cram:$cramDigest\n', auth: false);
         expect(cramResult, 'data:success');
 
-        // 2. Send enroll request which will be auto approved (Because connection is CRAM Authenticated).
+        // 2. Send an enroll request, auto-approved because the connection is
+        // CRAM-authenticated.
         var enrollResponseFromServer =
             await cramLookup.executeCommand(enrollRequest, auth: false);
         expect(enrollResponseFromServer, isNotEmpty);
