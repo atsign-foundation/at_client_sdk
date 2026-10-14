@@ -129,6 +129,18 @@ void main() {
       expect(lease.expiresAt.isBefore(began.add(ttl)), isFalse);
       expect(lease.isSpent, isFalse);
     });
+
+    test(
+        'gives a lease spent once the ttl has passed since the create was '
+        'sent', () async {
+      final lease = await clientOf([], onUpdate: () async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        return 'data:-1';
+      }).tryAcquireServerMutex(lockKey, ttl: const Duration(milliseconds: 100));
+      expect(lease!.isSpent, isTrue,
+          reason: 'the atServer started the ttl before the answer came back, '
+              'so the lease is counted from the send, not the answer');
+    });
   });
 
   group('the answer', () {
@@ -295,6 +307,20 @@ void main() {
           .ownServerMutexLease(lockKey, ttl: ttl);
       expect(lease, isNotNull);
       expect(lease!.expiresAt, soon);
+    });
+
+    test(
+        'gives a lease on this enrollment\'s own lock spent once the record '
+        'has expired', () async {
+      final soon =
+          DateTime.now().toUtc().add(const Duration(milliseconds: 100));
+      final lease = await clientOf([],
+              onLookup: () async => record('e-1', expiresAt: soon))
+          .ownServerMutexLease(lockKey, ttl: ttl);
+      expect(lease!.isSpent, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(lease.isSpent, isTrue,
+          reason: 'the lease ends with the record, not a ttl after the read');
     });
 
     test(
