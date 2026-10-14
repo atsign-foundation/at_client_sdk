@@ -32,6 +32,7 @@ void main() {
   });
 
   setUp(() {
+    logs.records.clear();
     client = MockAtClient();
     local = MockLocalSecondary();
     when(() => client.getCurrentAtSign()).thenReturn('@alice');
@@ -135,6 +136,29 @@ void main() {
     when(() => local.getEncryptionSelfKey()).thenAnswer((_) async => null);
     final key = selfRecord();
     final stored = EncryptionUtil.encryptValue(group, selfKey);
+
+    expect(await get(key, stored), stored);
+    expect(logs.at('WARNING'), contains(contains('$key')));
+  });
+
+  test(
+      'Given a shaped value flagged false from another atSign and no '
+      'encryption private key, when it is read, then it comes back as stored '
+      'and a warning names the key', () async {
+    final alice = RSAKeypair.fromRandom();
+    final sharedKey = AESKey.generate(32).key;
+    stubEncryptionKeyPair(
+        local,
+        '@alice',
+        RsaKeyPair.create(
+            alice.publicKey.toString(), alice.privateKey.toString()));
+    when(() => local.getEncryptionPrivateKey()).thenAnswer((_) async => null);
+    final sealedForAlice =
+        EncryptionUtil.encryptKey(sharedKey, alice.publicKey.toString());
+    when(() => local.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:$sealedForAlice');
+    final key = AtKey.fromString('@alice:5.groups.policy.sshnp@bob');
+    final stored = EncryptionUtil.encryptValue(group, sharedKey);
 
     expect(await get(key, stored), stored);
     expect(logs.at('WARNING'), contains(contains('$key')));

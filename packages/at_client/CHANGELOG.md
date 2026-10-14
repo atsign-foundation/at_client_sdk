@@ -62,9 +62,9 @@
   handler is logged and the listener carries on.
 - fix: `get` decrypts data that at_client before 3.2.1 wrote, which from
   3.13.0 came back still encrypted.
-- fix: a `get` whose shared key does not unwrap under this atSign's key
-  throws an `AtException`, as other decryption failures do, not an
-  `ArgumentError`.
+- fix: a `get`, `put` or notification whose shared key does not unwrap
+  under this atSign's key throws an `AtException`, as other decryption
+  failures do, not an `ArgumentError`.
 - build: requires `at_chops` ^3.7.0.
 
 ## 3.15.0-rc6

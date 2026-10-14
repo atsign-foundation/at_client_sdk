@@ -153,8 +153,9 @@ class GetResponseTransformer
     } on StoppedException {
       rethrow;
     } on Exception catch (e) {
-      final keyUnavailable =
-          e is SelfKeyNotFoundException || e is SharedKeyNotFoundException;
+      final keyUnavailable = e is SelfKeyNotFoundException ||
+          e is SharedKeyNotFoundException ||
+          e is AtPrivateKeyNotFoundException;
       if (!keyUnavailable &&
           (e is AtDecryptionException || e is FormatException)) {
         _logger.info('$atKey is flagged unencrypted and shaped like legacy '
