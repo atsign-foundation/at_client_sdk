@@ -159,6 +159,8 @@ void main() {
       // NOTE: a cram may not follow a pkam on one connection, and the
       // client's own has authenticated with pkam.
       final cramLookup = TestUtils.unauthenticatedLookUp(atSign);
+      var cramAuthenticated = false;
+      String? restoreResponse;
       try {
         var fromResponse =
             await cramLookup.executeCommand('from:$atSign\n', auth: false);
@@ -168,6 +170,7 @@ void main() {
         var cramResult =
             await cramLookup.executeCommand('cram:$cramDigest\n', auth: false);
         expect(cramResult, 'data:success');
+        cramAuthenticated = true;
 
         // 2. Send enroll request which will be auto approved (Because connection is CRAM Authenticated).
         var enrollResponseFromServer =
@@ -178,20 +181,24 @@ void main() {
         var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
         expect(enrollResponseJson['enrollmentId'], isNotEmpty);
         expect(enrollResponseJson['status'], 'approved');
-
+      } finally {
         // NOTE: a CRAM auto-approve that copies the enrolling key over
-        // privatekey:at_pkam_publickey has just replaced the owner credential.
-        expect(
-            await cramLookup.executeCommand(
+        // privatekey:at_pkam_publickey replaces the owner credential; it is
+        // written back even when an expectation above has failed.
+        try {
+          if (cramAuthenticated) {
+            restoreResponse = await cramLookup.executeCommand(
                 'update:privatekey:at_pkam_publickey '
                 '${pkamPublicKeyMap[atSign]}\n',
-                auth: false),
-            'data:-1',
-            reason: 'the owner credential must be the demo keypair again '
-                'before anything else authenticates as this atSign');
-      } finally {
-        await cramLookup.close();
+                auth: false);
+          }
+        } finally {
+          await cramLookup.close();
+        }
       }
+      expect(restoreResponse, 'data:-1',
+          reason: 'the owner credential must be the demo keypair again '
+              'before anything else authenticates as this atSign');
 
       // 3. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
