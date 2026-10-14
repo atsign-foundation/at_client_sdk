@@ -92,4 +92,27 @@ void main() {
         await get(AtKey.fromString('@alice:2.groups.policy.sshnp@bob'), stored),
         group);
   });
+
+  test(
+      'Given a shaped value flagged false from another atSign whose shared key '
+      'does not unwrap under this client\'s key, when it is read, then it '
+      'comes back unchanged', () async {
+    final alice = RSAKeypair.fromRandom();
+    final someoneElse = RSAKeypair.fromRandom();
+    stubEncryptionKeyPair(
+        local,
+        '@alice',
+        RsaKeyPair.create(
+            alice.publicKey.toString(), alice.privateKey.toString()));
+    final sealedForSomeoneElse = EncryptionUtil.encryptKey(
+        AESKey.generate(32).key, someoneElse.publicKey.toString());
+    when(() => local.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((_) async => 'data:$sealedForSomeoneElse');
+    final stored = base64Encode(List<int>.generate(32, (i) => 255 - i));
+
+    expect(
+        await get(AtKey.fromString('@alice:2.groups.policy.sshnp@bob'), stored),
+        stored);
+    verify(() => local.executeVerb(any<LLookupVerbBuilder>())).called(1);
+  });
 }
