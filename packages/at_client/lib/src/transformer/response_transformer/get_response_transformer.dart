@@ -11,6 +11,9 @@ import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final _logger = AtSignLogger('GetResponseTransformer');
 
 /// Class responsible for transforming the Get response
 /// Transform's the Get Response to [AtValue]
@@ -42,16 +45,9 @@ class GetResponseTransformer
       return _handlePublicData(atValue, tuple);
     }
     final cryptoRuntime = CryptoRuntime(_atClient);
-    // The wire-level isEncrypted is tri-state, but Metadata.isEncrypted is a
-    // non-nullable bool and AtClientUtil.prepareMetadata collapses absent to
-    // false. Capture the wire value before that collapse:
-    //  - true  : encrypted by the SDK (at_client >= 3.2.1 sets it on put)
-    //  - false : deliberately stored unencrypted
-    //            (PutRequestOptions.shouldEncrypt = false); only emitted by
-    //            at_commons >= 5.0.0, by which time puts set the flag
-    //            truthfully - so explicit false is trustworthy
-    //  - absent: legacy data written before the flag was emitted; may or may
-    //            not be encrypted - see the try-decrypt fallback below
+    // NOTE: the wire's isEncrypted is tri-state, and
+    // AtClientUtil.prepareMetadata collapses absent to false, so it is read
+    // before that collapse.
     final Object? wireIsEncrypted = (decodedResponse['metaData']
         as Map<String, dynamic>?)?[AtConstants.isEncrypted];
     if (_shouldDecrypt(atValue.metadata)) {
@@ -65,11 +61,12 @@ class GetResponseTransformer
             await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
       }
     } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
-      // isEncrypted was explicitly false: the value was deliberately stored
-      // unencrypted; return it as-is (decoding if required). Skipping
-      // decryption here is also what keeps PutRequestOptions.shouldEncrypt =
-      // false a true no-crypto path on the read side.
-      if (atValue.metadata?.encoding != null) {
+      // NOTE: a client before at_client 3.2.1 encrypted without sending the
+      // flag, and the atServer stores a missing flag as false.
+      if (_hasLegacyCiphertextShape(tuple.one, atValue.value)) {
+        atValue.value =
+            await _decryptOrKeep(cryptoRuntime, tuple.one, atValue.value);
+      } else if (atValue.metadata?.encoding != null) {
         atValue.value = AtDecoderImpl()
             .decodeData(atValue.value, atValue.metadata!.encoding!);
       }
@@ -121,18 +118,43 @@ class GetResponseTransformer
   /// encoded value is plain. Legacy ciphertext is AES with PKCS7 padding,
   /// base64 encoded: a value that does not decode to a positive multiple of 16
   /// bytes cannot be one.
-  static bool _isPlainLocalValue(AtKey atKey, dynamic value) {
-    if (!atKey.isLocal || value is! String) return false;
-    final providerId = atKey.metadata.appMetadata?.providerId;
-    if (providerId != null && providerId != legacyCryptoProviderId) {
-      return false;
-    }
-    if (atKey.metadata.encoding != null) return true;
+  static bool _isPlainLocalValue(AtKey atKey, dynamic value) =>
+      atKey.isLocal &&
+      value is String &&
+      _isLegacyOrUnmarked(atKey) &&
+      !_hasLegacyCiphertextShape(atKey, value);
+
+  /// Whether [value] could be legacy ciphertext for [atKey]: a string, not
+  /// encoded, under no provider other than legacy, and base64 of a positive
+  /// multiple of 16 bytes.
+  static bool _hasLegacyCiphertextShape(AtKey atKey, dynamic value) {
+    if (value is! String || !_isLegacyOrUnmarked(atKey)) return false;
+    if (atKey.metadata.encoding != null) return false;
     try {
       final bytes = base64Decode(value);
-      return bytes.isEmpty || bytes.length % 16 != 0;
+      return bytes.isNotEmpty && bytes.length % 16 == 0;
     } on FormatException {
-      return true;
+      return false;
+    }
+  }
+
+  static bool _isLegacyOrUnmarked(AtKey atKey) {
+    final providerId = atKey.metadata.appMetadata?.providerId;
+    return providerId == null || providerId == legacyCryptoProviderId;
+  }
+
+  /// [value] decrypted for [atKey], or [value] unchanged when it does not
+  /// decrypt.
+  static Future<dynamic> _decryptOrKeep(
+      CryptoRuntime cryptoRuntime, AtKey atKey, String value) async {
+    try {
+      return await cryptoRuntime.decryptForGet(atKey, value);
+    } on StoppedException {
+      rethrow;
+    } on Exception catch (e) {
+      _logger.info('$atKey is flagged unencrypted and shaped like legacy '
+          'ciphertext but did not decrypt, so it is returned as stored: $e');
+      return value;
     }
   }
 
