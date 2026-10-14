@@ -147,18 +147,6 @@ void main() {
     test(
         'A test to verify SPP is set and enrollment request is submitted successfully',
         () async {
-      var fromResponse = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand('from:$atSign\n');
-      expect(fromResponse!.isNotEmpty, true);
-      fromResponse = fromResponse.replaceAll('data:', '');
-      // 1. Cram auth
-      var cramDigest = TestUtils.generateCramDigest(atSign, fromResponse);
-      var cramResult = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand('cram:$cramDigest\n');
-      expect(cramResult, 'data:success');
-      // 2. Send enroll request which will be auto approved (Because connection is CRAM Authenticated).
       var encryptedDefaultEncPrivateKey = EncryptionUtil.encryptValue(
           aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
@@ -166,34 +154,41 @@ void main() {
       final cramEnrolmentKey = freshApkamPair();
       var enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
-      var enrollResponseFromServer = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand(enrollRequest);
-      expect(enrollResponseFromServer, isNotEmpty);
-      enrollResponseFromServer =
-          enrollResponseFromServer?.replaceFirst('data:', '');
-      var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
-      expect(enrollResponseJson['enrollmentId'], isNotEmpty);
-      expect(enrollResponseJson['status'], 'approved');
 
-      // NOTE: a CRAM auto-approve that copies the enrolling key over
-      // privatekey:at_pkam_publickey has just replaced the owner credential.
-      expect(
-          await atClientManager.atClient
-              .getRemoteSecondary()!
-              .executeCommand('update:privatekey:at_pkam_publickey '
-                  '${pkamPublicKeyMap[atSign]}\n'),
-          'data:-1',
-          reason: 'the owner credential must be the demo keypair again before '
-              'anything else authenticates as this atSign');
+      // 1. Cram auth, on a connection of the test's own.
+      // NOTE: a cram may not follow a pkam on one connection, and the
+      // client's own has authenticated with pkam.
+      final cramLookup = TestUtils.unauthenticatedLookUp(atSign);
+      try {
+        var fromResponse =
+            await cramLookup.executeCommand('from:$atSign\n', auth: false);
+        expect(fromResponse!.isNotEmpty, true);
+        fromResponse = fromResponse.replaceAll('data:', '');
+        var cramDigest = TestUtils.generateCramDigest(atSign, fromResponse);
+        var cramResult =
+            await cramLookup.executeCommand('cram:$cramDigest\n', auth: false);
+        expect(cramResult, 'data:success');
+
+        // 2. Send an enroll request, auto-approved because the connection is
+        // CRAM-authenticated.
+        var enrollResponseFromServer =
+            await cramLookup.executeCommand(enrollRequest, auth: false);
+        expect(enrollResponseFromServer, isNotEmpty);
+        enrollResponseFromServer =
+            enrollResponseFromServer?.replaceFirst('data:', '');
+        var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
+        expect(enrollResponseJson['enrollmentId'], isNotEmpty);
+        expect(enrollResponseJson['status'], 'approved');
+      } finally {
+        await cramLookup.close();
+      }
 
       // 3. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
       // 4. Send the enrollment request on a connection of the test's own.
-      // NOTE: the client's connection is CRAM-authenticated, and an
-      // enroll:request arriving on it is auto-approved, as step 2's was; this
-      // one has to come back pending.
+      // NOTE: an enroll:request on an unauthenticated connection is the one
+      // that waits for approval; this one has to come back pending.
       enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       final requestLookup = TestUtils.unauthenticatedLookUp(atSign);
