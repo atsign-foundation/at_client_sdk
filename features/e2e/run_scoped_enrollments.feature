@@ -36,6 +36,11 @@ Feature: The e2e pack's enrollments on the long-lived @ce2e atSigns belong to th
     When enrollment_setup.dart submits an enrollment on @ce2e1
     Then the enrollment's appName begins "wavi-38415451898-2-"
 
+  Scenario: A setup that leaves an atSign without an enrollment fails its step
+    Given enrollment_setup.dart did not complete the enrollment on @ce2e2
+    When its tearDownAll ends the process
+    Then the process exits 1 naming @ce2e2
+
   Scenario: The job leaves its enrollments to expire
     Given run A's enrollment_setup.dart approved enrollment E_A on @ce2e1
     When run A's end2end_test_14 job ends
