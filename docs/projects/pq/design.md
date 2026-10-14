@@ -2377,11 +2377,13 @@ signature over one document meant the same thing in every context that read
 it — five uses of this shape are signed by one key.
 
 `kid` names the signing **key**: the advertised `_apsk` entry's own kid,
-`SHA256(publicKey)` truncated. `enid` names the signing enrollment, and is
-absent when the signer holds no enrollment id: a client using the atSign's own
-keys, which publishes at `_apsk.primary`, or a key package signed at
-`enroll:request`, before there is an id to stamp. Both were ruled by
+`SHA256(publicKey)` truncated. `enid` names the signing enrollment, ruled by
 [`decisions.md` 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31).
+A client using the atSign's own keys, which publishes at `_apsk.primary`,
+stamps `enid: "primary"`: the sentinel is deliberate and never absent
+([`decisions.md` 116](detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23)
+item 15). `enid` is absent only on a key package signed at `enroll:request`,
+before there is an id to stamp.
 
 There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `enid`, where the signature covers them. A
