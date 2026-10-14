@@ -146,6 +146,25 @@ void main() {
     });
 
     test(
+        'A test to verify explicit isEncrypted=false with valid base64 but not a multiple of 16 bytes is not decrypted',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "true", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('true'));
+    });
+
+    test(
         'A test to verify isEncrypted absent still decrypts via the legacy fallback (for old data)',
         () async {
       final keyName = 'phone';
