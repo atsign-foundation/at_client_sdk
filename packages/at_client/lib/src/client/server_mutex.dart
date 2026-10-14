@@ -112,8 +112,13 @@ extension ServerMutexHolder on AtClient {
   /// holds it; otherwise null.
   ///
   /// It ends at the record's own expiry, or [ttl] after the read began if that
-  /// is sooner, so it is never longer than a fresh lease. Null too when the
-  /// record carries no expiry, since a lease must end no later than its lock.
+  /// is sooner, so it is never longer than a fresh lease. It can still outlast
+  /// the lock: the expiry is the atServer's, read on this client's clock, and
+  /// a client clock behind the atServer's extends the lease by the difference,
+  /// up to [ttl]. The atServer's own time is not available to correct for
+  /// that, so a caller re-reads what it guards before writing rather than
+  /// relying on the lease to exclude. Null too when the record carries no
+  /// expiry, since a lease must end no later than its lock.
   /// [ttl] is checked as [ServerMutex.tryAcquireServerMutex] checks it.
   Future<ServerMutexLease?> ownServerMutexLease(AtKey key,
       {required Duration ttl}) async {

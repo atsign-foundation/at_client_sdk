@@ -129,8 +129,9 @@ class MintLock {
   }
 
   /// A lease on the lock that refused us when this enrollment already holds
-  /// it, ending when the lock does or [ttl] after the read, whichever is
-  /// sooner; otherwise null.
+  /// it, ending at the lock's expiry as this client's clock reads it or [ttl]
+  /// after the read, whichever is sooner; otherwise null. A client clock
+  /// behind the atServer's lets that lease outlast the lock by the difference.
   ///
   /// The winner never releases — the ttl does — so a client that mints and then
   /// re-enters within the cooldown loses the election to itself; the cooldown
