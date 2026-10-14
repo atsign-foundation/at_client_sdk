@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops_ffi.dart';
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
@@ -13,8 +13,10 @@ Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
 void main() {
   group('an algorithm id resolves to the KEM that realises it', () {
     test('each id names a distinct implementation', () {
+      // NOTE: X-Wing is whichever backend at_chops selects for this platform,
+      // OpenSSL or pure Dart; crypto_backends_test.dart pins which.
       expect(SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing),
-          same(XWingPureDartAlgo.instance));
+          same(AtPqc.xWing));
       expect(SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024),
           same(MlKem1024PureDartAlgo.instance));
     });
@@ -34,7 +36,7 @@ void main() {
           reason: 'a retired suite must resolve to no KEM, so an envelope '
               'claiming it is refused rather than decapsulated');
       expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.xWingRfc9180),
-          same(XWingPureDartAlgo.instance));
+          same(AtPqc.xWing));
       expect(
           SecretSharingAlgos.kemForSuite(SecretSharingAlgos.mlKem1024Rfc9180),
           same(MlKem1024PureDartAlgo.instance));

@@ -389,55 +389,6 @@ void main() {
     });
 
     test(
-        'A test to validate notification request with text return verb builder',
-        () async {
-      var notificationParams =
-          NotificationParams.forText('Hi How are you', '@bob');
-      var notifyVerbBuilder =
-          await NotificationRequestTransformer(mockAtClientImpl)
-              .transform(notificationParams);
-      //upper case should be preserved in forText notifications
-      expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
-      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
-      // ignore: deprecated_member_use
-      expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
-      expect(notifyVerbBuilder.priority, PriorityEnum.low);
-      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
-    });
-
-    test(
-        'A test to validate notification request with text with shouldEncrypt set to true return verb builder',
-        () async {
-      var notificationParams = NotificationParams.forText(
-          'Hi How are you', '@bob',
-          shouldEncrypt: true);
-      var notifyVerbBuilder =
-          await NotificationRequestTransformer(mockAtClientImpl)
-              .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'abcHi How are you');
-      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
-      // ignore: deprecated_member_use
-      expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
-      expect(notifyVerbBuilder.priority, PriorityEnum.low);
-      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
-    });
-
-    test(
-        'A test to verify notification is not sent when encryption service throws exception',
-        () async {
-      registerFallbackValue(FakeAtKey());
-      var notificationParams = NotificationParams.forText(
-          'Hi How are you', '@bob',
-          shouldEncrypt: true);
-
-      var notificationRequestTransformer =
-          NotificationRequestTransformer(mockAtClientImpl);
-      var transformed =
-          await notificationRequestTransformer.transform(notificationParams);
-      expect(transformed.atKey.sharedWith, '@bob');
-    });
-
-    test(
         'A test to validate encrypted value and shared encryption key is set in verb builder when isEncrypted is set to true in metadata',
         () async {
       var notificationParams = NotificationParams.forUpdate(
@@ -1188,27 +1139,6 @@ void main() {
           throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
     });
 
-    test('A test to verify buffer over flow exception for messageType text',
-        () async {
-      when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
-
-      var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
-
-      NotificationParams notificationParams =
-          NotificationParams.forText('Hello bob', '@bob');
-      NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
-        ..useAtKeyToString = true
-        ..atKey.key = '@bob:Hello bob';
-
-      expect(
-          () => notificationServiceImpl.notificationValueValidation(
-              notificationParams, notifyVerbBuilder),
-          throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
-    });
-
     test(
         'A test to verify unauthorized exception is thrown when sharedBy atSign is different from currentAtSign',
         () async {
@@ -1398,14 +1328,14 @@ void main() {
     });
 
     test(
-        'NotificationService subscribe returns an existing stream for a same regex',
-        () async {
+        'NotificationService subscribe returns an existing stream for the same '
+        'regex and shouldDecrypt', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
-          regex: '.wavi', shouldDecrypt: false);
+          regex: '.wavi', shouldDecrypt: true);
       notificationStream.listen((event) async {
         print(event);
       });
@@ -1416,6 +1346,25 @@ void main() {
         print(event);
       });
       expect(notificationServiceImpl.getStreamListenersCount(), 1);
+      notificationServiceImpl.stopAllSubscriptions();
+    });
+
+    test(
+        'NotificationService subscribe returns a new stream for the same regex '
+        'with the other shouldDecrypt', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: false)
+          .listen((_) {});
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: true)
+          .listen((_) {});
+      expect(notificationServiceImpl.getStreamListenersCount(), 2,
+          reason: 'a subscription asking for decrypted values must not share '
+              'one asking for values as they arrived');
       notificationServiceImpl.stopAllSubscriptions();
     });
   });

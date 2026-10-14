@@ -1,4 +1,4 @@
-## 3.15.0-rc6
+## 3.15.0-rc7
 
 - feat: each storage backend has its own import: `HiveAtClientStorage` comes
   from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
@@ -33,6 +33,37 @@
 - fix: local storage the client cannot open, such as a file it may not read,
   fails with an exception the app can catch, and no longer also ends a
   command-line program with an unhandled error.
+- fix: a secret shared between an atSign's own clients is filed under the
+  namespace it was sent through, and credited to the client that sent it.
+- fix: each post-quantum value is encrypted under a key of its own, so a
+  content key can encrypt any number of values.
+- fix: a client writes post-quantum data in its own namespace once it holds
+  that namespace's private key; until the key arrives the write throws
+  `NskeyPrivateNotHeldException`.
+- fix: once an atSign's namespace key rotates, including after a revocation,
+  each content key its clients share with other atSigns is replaced by a fresh
+  one sealed to the new key, on the client's first write after it holds that
+  key.
+- fix: revoking an enrollment rotates the namespace key of every namespace its
+  grants cover, including one nested under a granted namespace, such as
+  `chat.app` under `app`.
+- feat: by default a content key is replaced once it is a year old (it was a
+  week), and a namespace key once it was minted a year ago (it was never).
+  `rotateCkAfterOneWeek` and `neverRotateNskey` remain for an app that wants
+  the old behaviour.
+- feat: on macOS and Linux, where OpenSSL 3 is installed, post-quantum
+  encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
+  several times faster. Elsewhere it stays pure Dart.
+- fix: two subscriptions with the same regex but different `shouldDecrypt`
+  each receive notifications as they asked; the second no longer shares the
+  first one's stream and setting.
+- fix: `AtRpc` answers a request whose value it cannot parse with a NACK under
+  the request's id, and keeps serving; an error from a request or response
+  handler is logged and the listener carries on.
+- build: requires `at_chops` ^3.7.0.
+
+## 3.15.0-rc6
+
 - fix: an enrollment sent an ML-KEM-1024 namespace key can read that
   namespace, including one it received under an earlier 3.15.0 prerelease,
   and a namespace key that doesn't match what its atSign publishes for that

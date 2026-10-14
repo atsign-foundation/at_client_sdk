@@ -98,13 +98,15 @@ class EnvelopeAddressing {
   /// the `.__ssenv.` marker and the atSign. `AtKey.namespace` only carries
   /// the last dot segment, which would truncate dotted app namespaces
   /// (`examples.demos` would arrive as `demos`).
-  static String appNamespaceOf(AtKey envelopeKey) {
-    final String keyString = envelopeKey.toString();
-    final int markerIndex = keyString.indexOf('.$marker.');
-    final int atIndex = keyString.lastIndexOf('@');
-    if (markerIndex < 0 || atIndex <= markerIndex) {
-      return envelopeKey.namespace ?? '';
-    }
-    return keyString.substring(markerIndex + '.$marker.'.length, atIndex);
+  static String appNamespaceOf(AtKey envelopeKey) =>
+      appNamespaceOfName(envelopeKey.toString()) ?? envelopeKey.namespace ?? '';
+
+  /// [appNamespaceOf] for an envelope key held only as its string form, or
+  /// null when [keyName] is not an envelope address.
+  static String? appNamespaceOfName(String keyName) {
+    final int markerIndex = keyName.indexOf('.$marker.');
+    final int atIndex = keyName.lastIndexOf('@');
+    if (markerIndex < 0 || atIndex <= markerIndex) return null;
+    return keyName.substring(markerIndex + '.$marker.'.length, atIndex);
   }
 }

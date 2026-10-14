@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops_ffi.dart'
+    show XWingFfiAlgo, libCryptoSupportsMlKem768, tryLoadLibCrypto;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:mocktail/mocktail.dart';
@@ -207,6 +209,170 @@ void main() {
         wrongClient.decrypt(context, syncedConveyance(conveyanceKey), sealedCk),
         throwsA(isA<AtDecryptionException>()),
       );
+    });
+  });
+
+  group('own keys are sealed to only when this client holds the private', () {
+    test('a served public half alone is refused, by name', () async {
+      final ring = InMemoryNskeyKeyRing();
+      final kid = ring.seedPublicOnly(owner, namespace,
+          publicKey: nskeyPair.publicKeyBytes);
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(_randomKeyBytes());
+
+      await expectLater(
+          provider.encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64()),
+          throwsA(isA<NskeyPrivateNotHeldException>()
+              .having((e) => e.nskeyKid, 'nskeyKid', kid)
+              .having((e) => e, 'type',
+                  isNot(isA<NamespaceKeyUnavailableException>()))),
+          reason: 'the legacy fallback catches NamespaceKeyUnavailable, so '
+              'this refusal must not be one or it would downgrade to RSA');
+    });
+
+    test('the same key with its private held is sealed to', () async {
+      // NOTE: positive control — the refusal above is about the missing
+      // private and nothing else.
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      final sealed = await alice1.nskey
+          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+      expect(sealed, isNotEmpty);
+    });
+
+    test("a peer's key is sealed to from its public half alone", () async {
+      final ring = InMemoryNskeyKeyRing()
+        ..seedPublicOnly('@bob', namespace,
+            publicKey: nskeyPair.publicKeyBytes);
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(_randomKeyBytes());
+      final share = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..sharedWith = '@bob'
+        ..metadata = Metadata();
+
+      expect(await provider.encrypt(context, share, ck.toBase64()), isNotEmpty,
+          reason: 'no client holds a peer\'s private, so the rule is for '
+              'this atSign\'s own keys only');
+    });
+  });
+
+  group('each value is encrypted under its own key', () {
+    /// alice1 with a current CK, and alice2 already holding that CK.
+    Future<(_Client, _Client, ContentKey)> twoClients() async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
+      final alice2 = authorisedClient();
+      alice2.cache.put(owner, namespace, ck);
+      return (alice1, alice2, ck);
+    }
+
+    AtKey withAdditional(String name, Map<String, dynamic> additional) =>
+        dataKey(name)
+          ..metadata.appMetadata = AppMetadata(
+              providerId: symmetricAesGcmCryptoProviderId,
+              additional: additional);
+
+    test('two values under one content key carry different salts', () async {
+      final (alice1, _, _) = await twoClients();
+      final first = dataKey('a');
+      final second = dataKey('b');
+      await alice1.data.encrypt(context, first, 'same text');
+      await alice1.data.encrypt(context, second, 'same text');
+
+      String saltOf(AtKey k) =>
+          k.metadata.appMetadata!.additional!['salt'] as String;
+      expect(base64Decode(saltOf(first)),
+          hasLength(SymmetricAesGcmProvider.saltLength));
+      expect(saltOf(first), isNot(saltOf(second)),
+          reason: 'one salt per value is what gives each value its own key');
+    });
+
+    test('a value with no salt, encrypted under the content key itself, reads',
+        () async {
+      final (_, alice2, ck) = await twoClients();
+      final iv = InitialisationVector.random(12);
+      final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+          .encrypt(
+              Uint8List.fromList(utf8.encode('written by an earlier client')),
+              iv: iv,
+              aad:
+                  utf8.encode('at/symmetric/AES/GCM:@alice::older.$namespace'));
+
+      expect(
+          await alice2.data.decrypt(
+              context,
+              withAdditional('older', {
+                'ckKid': ck.ckKid,
+                'iv': base64Encode(iv.ivBytes),
+                'ns': namespace,
+                'ckNs': namespace,
+              }),
+              base64Encode(ciphertext)),
+          'written by an earlier client');
+    });
+
+    test('a value whose salt was altered does not decrypt', () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      // NOTE: positive control — unaltered, the same value decrypts.
+      expect(
+          await alice2.data
+              .decrypt(context, withAdditional('v', additional), ciphertext),
+          'text');
+
+      final salt = base64Decode(additional['salt'] as String);
+      salt[0] ^= 1;
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {...additional, 'salt': base64Encode(salt)}),
+              ciphertext),
+          throwsA(isA<AtDecryptionException>()),
+          reason: 'the salt chooses the key, so changing it must not decrypt');
+    });
+
+    test('a salt that is not base64 is refused as a decryption failure',
+        () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {...additional, 'salt': '!!not base64!!'}),
+              ciphertext),
+          throwsA(isA<AtDecryptionException>()
+              .having((e) => e.message, 'message', contains('not base64'))));
+    });
+
+    test('a salt of the wrong length is refused by name', () async {
+      final (alice1, alice2, _) = await twoClients();
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      await expectLater(
+          alice2.data.decrypt(
+              context,
+              withAdditional('v', {
+                ...additional,
+                'salt': base64Encode(List<int>.filled(16, 1)),
+              }),
+              ciphertext),
+          throwsA(isA<AtDecryptionException>()
+              .having((e) => e.message, 'message', contains('16-byte salt'))));
     });
   });
 
@@ -504,6 +670,180 @@ void main() {
       expect(recovered, asString);
     });
   });
+
+  group('Given a value whose salt is malformed', () {
+    test(
+        'when it is read, then it fails with AtDecryptionException before its '
+        'content key is looked up', () async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
+      final written = dataKey('v');
+      final ciphertext = await alice1.data.encrypt(context, written, 'text');
+      final additional =
+          Map<String, dynamic>.from(written.metadata.appMetadata!.additional!);
+
+      final cache = _CountingCache();
+      final reader = SymmetricAesGcmProvider(cache: cache);
+      final mockAtClient = MockAtClient();
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => mockAtClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(AtKeyNotFoundException('not here'));
+      final readerContext = CryptoContext(atClient: mockAtClient);
+
+      for (final (salt, refusal) in [
+        (42, 'not a string'),
+        ('!!not base64!!', 'not base64'),
+        (base64Encode(List<int>.filled(16, 1)), '16-byte salt'),
+      ]) {
+        await expectLater(
+            reader.decrypt(
+                readerContext,
+                dataKey('v')
+                  ..metadata.appMetadata = AppMetadata(
+                      providerId: symmetricAesGcmCryptoProviderId,
+                      additional: {...additional, 'salt': salt}),
+                ciphertext),
+            throwsA(isA<AtDecryptionException>()
+                .having((e) => e.message, 'message', contains(refusal))),
+            reason: 'the salt is refused for what it is: $salt');
+      }
+      expect(cache.lookups, 0,
+          reason: 'a salt that cannot key the value is refused before the CK '
+              'is looked up');
+      verifyNever(() => mockAtClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions')));
+
+      // NOTE: positive control — with its own salt the same value does reach
+      // the lookups, so the zeros above are not counters that never count.
+      await expectLater(
+          reader.decrypt(
+              readerContext,
+              dataKey('v')
+                ..metadata.appMetadata = AppMetadata(
+                    providerId: symmetricAesGcmCryptoProviderId,
+                    additional: additional),
+              ciphertext),
+          throwsA(isA<ContentKeyUnavailableException>()));
+      expect(cache.lookups, greaterThan(0));
+      verify(() => mockAtClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(2);
+    });
+  });
+
+  group(
+      'Given a KEM that fails with a StateError, as the OpenSSL backend does '
+      'on a malformed key or ciphertext', () {
+    /// A reader holding @alice's nskey for [namespace], opening with [kem].
+    NskeyProvider readerWith(AtKemAlgorithm kem) {
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair(owner, namespace,
+            publicKey: nskeyPair.publicKeyBytes,
+            privateKey: nskeyPair.privateKeyBytes);
+      return NskeyProvider(keyRing: ring, cache: ContentKeyCache(), kem: kem);
+    }
+
+    test(
+        'when a content-key conveyance is opened, then the read fails with '
+        'AtDecryptionException', () async {
+      final ck = ContentKey(_randomKeyBytes());
+      final conveyanceKey = ckConveyanceKey(ck.ckKid);
+      final sealedCk = await authorisedClient()
+          .nskey
+          .encrypt(context, conveyanceKey, ck.toBase64());
+
+      await expectLater(
+          readerWith(_StateErrorKem())
+              .decrypt(context, syncedConveyance(conveyanceKey), sealedCk),
+          throwsA(isA<AtDecryptionException>().having(
+              (e) => e.message, 'message', contains('EVP_PKEY_derive failed'))),
+          reason: 'a KEM failure is a decryption failure whichever backend '
+              'raised it, and the message names the KEM as its cause');
+    });
+
+    test(
+        'when a content key is sealed to it, then sealing fails with '
+        'PqSealException', () async {
+      final ck = ContentKey(_randomKeyBytes());
+
+      await expectLater(
+          readerWith(_StateErrorKem())
+              .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64()),
+          throwsA(isA<PqSealException>().having((e) => e.message, 'message',
+              contains('EVP_PKEY_fromdata failed'))),
+          reason: 'pqSealToBase64 promises every failure as PqSealException');
+    });
+
+    final libCrypto = tryLoadLibCrypto();
+    final opensslXWing =
+        libCrypto != null && libCryptoSupportsMlKem768(libCrypto);
+
+    test(
+        'when a conveyance whose X-Wing ciphertext carries a low-order X25519 '
+        'half is opened, then the read fails with AtDecryptionException, as it '
+        'does in pure Dart', () async {
+      final ck = ContentKey(_randomKeyBytes());
+      final conveyanceKey = ckConveyanceKey(ck.ckKid);
+      final sealedCk = await authorisedClient()
+          .nskey
+          .encrypt(context, conveyanceKey, ck.toBase64());
+      final openssl = readerWith(XWingFfiAlgo.fromLib(libCrypto!));
+
+      // NOTE: positive control — untouched, the envelope opens under OpenSSL,
+      // so the refusal below is about the X25519 half and nothing else.
+      expect(
+          await openssl.decrypt(
+              context, syncedConveyance(conveyanceKey), sealedCk),
+          ck.toBase64());
+
+      // NOTE: the envelope is ver(1) || ctLen(2) || kemCt || body, the X25519
+      // half is kemCt's last 32 bytes, and all zeros is a low-order point.
+      final envelope = base64Decode(sealedCk);
+      final kemCtEnd = 3 + ((envelope[1] << 8) | envelope[2]);
+      envelope.fillRange(kemCtEnd - 32, kemCtEnd, 0);
+      final lowOrder = base64Encode(envelope);
+
+      await expectLater(
+          readerWith(XWingPureDartAlgo.instance)
+              .decrypt(context, syncedConveyance(conveyanceKey), lowOrder),
+          throwsA(isA<AtDecryptionException>()),
+          reason: 'the reference: pure Dart refuses it as an AEAD failure');
+      await expectLater(
+          openssl.decrypt(context, syncedConveyance(conveyanceKey), lowOrder),
+          throwsA(isA<AtDecryptionException>()),
+          reason: 'OpenSSL must refuse it as pure Dart does');
+    },
+        skip: opensslXWing
+            ? false
+            : 'the loaded libcrypto does not do X-Wing, so there is no OpenSSL '
+                'backend to compare with pure Dart');
+  });
+}
+
+/// A [ContentKeyCache] that counts how often a content key is looked up.
+class _CountingCache extends ContentKeyCache {
+  int lookups = 0;
+
+  @override
+  ContentKey? get(String owner, String namespace, String ckKid) {
+    lookups++;
+    return super.get(owner, namespace, ckKid);
+  }
+}
+
+/// A KEM that fails as the OpenSSL backend does on a malformed key or
+/// ciphertext: with a raw [StateError].
+class _StateErrorKem extends Fake implements AtKemAlgorithm {
+  @override
+  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
+          Uint8List publicKey) async =>
+      throw StateError('EVP_PKEY_fromdata failed');
+
+  @override
+  Future<Uint8List> decapsulate(
+          Uint8List secretKey, Uint8List ciphertext) async =>
+      throw StateError('EVP_PKEY_derive failed');
 }
 
 /// A [ContentKey] forced to claim a kid it did not derive, so the cache's

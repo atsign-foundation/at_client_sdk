@@ -435,7 +435,7 @@ timeline rows).
 
 - **#A — signing-root interface freeze (P-3 vs SS-4).** ~~P-3 publishes/prefers
   `pqpublickey` in Wave 2~~ — withdrawn by
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): there is
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03): there is
   no atSign-level KEM key for P-3 to prefer, and enrollment conveyance seals to the
   enrollee's key package instead. What survives is the freeze itself, now over
   `public:pq_signing_root@<atSign>`: its **name + create-once contract** ahead of SS-4's
@@ -529,7 +529,7 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02).**
   Every advertised recipient/encapsulation key (the per-enrollment key package and the
   published `nskey` public half — the signing root is not one, per
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03))
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03))
   is APKAM-signed by its generating enrollment and verified against that enrollment's `_apsk` — the same
   way same-atSign and cross-atSign — superseding the "atServer vouches" stance. The
   atServer keeps `_apsk` present **and** write-restricted. See section 12 for the
@@ -685,7 +685,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-30** | **Shared-master-seed nskey derivation rejected; the [section 1.3](../design.md#13-keys--key-shapes) derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
 | **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) — the one-keypair half stands; **lazy publication superseded 2026-08-02** by [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
-| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
+| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against another enrollment publishing in its name, while the atServers serve keys faithfully (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove the need to trust the atServers — the atServer serves the `_apsk` anchor (see section 12 + design.md *Trust model*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
 | **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md section 13](../implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
@@ -699,7 +699,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-02** | **Seven nskey data-path rulings** from walking an Alice↔Bob message end to end against the built providers ([13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02), [14](#14-content-keys-are-scoped-per-recipient-2026-08-02), [15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)): the nskey is published **eagerly** to `public:__nskey.<ns>@<owner>` (mutable, lock-serialised, generation-tagged), superseding lazy publication; content keys are scoped **per recipient**; and the record owner (`sharedBy`, for `info`) is separated from the nskey owner (`sharedWith ?? sharedBy`, for key selection). | The walk surfaced three defects the doc set had not caught: cross-atSign reads could not work, because the key ring was looked up under the sender's atSign; the promotion trigger fired on *sending* while the key a sender needs is the *recipient's*, so a receive-only atSign cold-started forever; and `design.md` called the published half immutable while B5b required re-publishing it, leaving the revocation lever unimplementable. Rotation additionally had no signal reaching senders — a silent B6 revocation failure — and a post-rotation joiner could not open retained history. |
 | **2026-08-02** | **The sync push dropped `appMetadata`, and the fix deletes the duplicate serializer that dropped it** ([17](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)). `SyncServiceImpl` now delegates to `Metadata.toAtProtocolFragment` instead of hand-rolling the metadata fragment, and a guard parses a fully-populated fragment with `VerbSyntax.update`. Cross-atSign reads work; the e2e test is un-skipped. | This was first recorded as an atServer defect — that attribution was wrong, and the correction is the durable lesson: **an absent field indicts the writer before the reader.** The wire observation (a `lookup` returning no `appMetadata`) was accurate, but *absent from the response* was read as *withheld by the responder* when the field had never been stored. The probe that separates them is an authenticated `llookup:all:` against the **writer's own** atServer after sync. Blast radius was every provider's synced writes, including shipped 3.14 — not PQ-specific — because a duplicated wire serializer had silently lagged the canonical one. |
 
-| **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
+| **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
 | **2026-08-03** | **Nested-namespace nskey resolution walks up, most-specific-first** ([19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). A sender writing to `someid.d.c.b.a@alice` tries `d.c.b.a` … `a` and seals to the first nskey found; the CK is scoped to *that* namespace, so one conveyance serves every namespace beneath it. `appMetadata` gains `ns` (the record's own namespace) on every nskey-path record and `ckNs` (where the CK lives) on data values. Senders remember which namespaces an owner holds keys at, and that memo inherits `advertisementTtl` rather than adding a lifetime. | `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace cannot be recovered from the wire string — measured, not inferred. It never mattered because the legacy provider references `namespace` zero times; the nskey path references it 56, which is what makes the ambiguity newly critical. Exact-match was unavailable: AtCollection composes `<subName>.<parentId>.<ns>` per **item**, so it would need a keypair, an advertisement and a per-enrollment conveyance per item. Walking up is safe because it mirrors the atServer's own suffix authorisation, so the crypto gate never widens past the transport gate. `ckNs` is not redundant with `ns`: in the stale-sender window the reader would otherwise hunt for the conveyance in the wrong namespace and report "not yet synced" for an intact record, forever. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
@@ -892,7 +892,7 @@ leak (existence only; no CK, content, or key material). **Mitigation, adopted: l
 publication.** The public half stays an owner-only self at-key until the namespace is first
 shared cross-atSign; a purely-self namespace therefore never advertises itself. Inbound that
 arrives before promotion was to be bridged by cold-start to the atSign-level root (a bridge
-[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew, along
+[section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) withdrew, along
 with lazy publication itself — see section 13). This keeps the one-keypair simplification (one private, one
 rotation, one decapsulation path) while preserving namespace-existence privacy.
 
@@ -907,7 +907,7 @@ is foreclosed going forward.
 - `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey`, for self and
   inbound alike — the former self-nskey/public-nskey distinction is gone. (The cold-start
   `root-pqpublickey` variant this once also listed went with
-  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).)
+  [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03).)
 - The reader decapsulates every `__ck` record with the one nskey private.
 - HPKE `info` binds `(namespace, owner)` so self and inbound flows stay domain-separated under
   the shared key.
@@ -937,7 +937,7 @@ the substrate's original design): the encapsulation target is now
   package is still advertised unsigned.
 
 *(This list once carried a third entry, the atSign-level root as a KEM target.
-[Section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew it:
+[Section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) withdrew it:
 the root is a signing key, so there is nothing to seal to it and nothing for a sender to
 authenticate before doing so. What anchors the root is key transparency, not an `_apsk`.)*
 
@@ -972,37 +972,34 @@ write-restricted.** Because verification depends entirely on `_apsk`, the atServ
 Both properties MUST be asserted by e2e tests (an approved enrollment's `_apsk` is
 fetchable without a client publish; a cross-enrollment overwrite is refused).
 
-**Trust model — what this does and does not remove from the confidentiality TCB.**
+**Trust model — what the signing rests on.**
 The verification chain is only as strong as its anchor, and the anchor for `_apsk` is
-the atServer that serves it. So the signing separates two adversaries sharply:
+the atServer that serves it. The atServers are trusted to serve keys faithfully, and
+under that trust the signing **works**: a legitimately enrolled client, whatever its
+privileges, cannot publish a key package, `nskey` or secret as if from another
+enrollment, because the atServer serves each enrollment's *real* `_apsk` and the
+signature lets the receiver tell an authorised minter from any other enrollment. This
+is the concrete win, and it holds same-atSign **and** cross-atSign.
 
-- **Against a malicious *insider* under an honest server** — a legitimately-enrolled
-  but rogue or lower-privileged client trying to inject a poisoned key package / secret
-  as if from another enrollment — signing **works**: the honest server serves each
-  enrollment's *real* `_apsk`, and the signature lets the receiver distinguish an
-  authorised minter from a rogue enrollment. This is the concrete win, and it holds
-  same-atSign **and** cross-atSign.
-- **Against a malicious atServer *operator*** — one that generates its own keypair,
-  serves the public half as the enrollment's `_apsk`, and serves a self-generated
-  advertised key signed by the matching private — signing gives **nothing**: the
-  operator controls both the signature key and the `_apsk` it is verified against, so
-  the chain is internally consistent but rooted in a key the operator chose. This is
-  true **same-atSign and cross-atSign alike** — do **not** claim signing removes the
-  operator from the TCB in either case.
+What the signing does not do is check the atServers themselves. The key an atServer
+serves as an enrollment's `_apsk` is the key the chain is rooted in, so an atSign's
+atServer is trusted for the keys others seal to that atSign and, since its clients fetch
+every peer's keys through it, for the keys that atSign seals to others — do **not**
+claim signing removes that trust, same-atSign or cross-atSign. That is **not new** and
+**not introduced by the substrate**: classical Atsign has the same trust (a sender
+fetches `public:publickey@alice` from @alice's atServer). Signing is *necessary
+infrastructure* for checking that trust — it chains advertised keys to `_apsk` — and
+becomes *sufficient* once the anchor (the atSign's identity→key binding) is distributed
+through a channel outside the atServers, which is key transparency
+([#2293](https://github.com/atsign-foundation/at_client_sdk/issues/2293)), on the
+roadmap. The trust model and the key-transparency design are in
+[`design.md` section 7](../design.md#7-trust-model).
 
-So the operator of an atSign's atServer is in the **confidentiality TCB for all data
-destined to that atSign** (inbound cross-atSign shares, and self-data where the client
-relies on server-served keys) and for the data that atSign sends out, since its
-clients fetch every peer's keys through it — a transparent, split-view MITM that this signing does
-not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
-classical Atsign has the same property (a sender fetches `public:publickey@alice` from
-@alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
-it chains advertised keys to `_apsk` — but becomes *sufficient* only once the anchor
-(the atSign's identity→key binding) is distributed through a channel the operator does
-not control. The full threat model, why it is undetectable to a targeted victim today,
-and the mitigation ladder (self-hosting, client self-audit, out-of-band fingerprints,
-atDirectory key transparency, root-anchored signatures, attestation) are in
-[`design.md`](../design.md) → *Trust boundary & residual threats*.
+**Amended 2026-10-13:** this block used to treat the atServer's operator as outside the
+trust the design rests on, with a threat model and a ladder of countermeasures in
+`design.md`. It is restated as the trust the atServers hold, with key transparency on
+the roadmap to check it (gkc: "atServers are trusted as faithful and key transparency is
+on the roadmap").
 
 The public/private **correspondence check** for a conveyed keypair secret (`nskey` /
 `pqpublickey` privates) remains a useful **secondary** check, subordinate to the
@@ -1012,9 +1009,9 @@ signature.
 resolution in `ApkamSigning` / `EnvelopeSigning`), needs no new key type (the ML-DSA
 APKAM signing key and the X-Wing encapsulation key are correctly distinct —
 [section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)), and
-raises the substrate's floor from "the atServer vouches" to "a non-operator adversary
-cannot forge advertised keys" — the remaining operator trust is addressed by the
-separate transparency work above, not by the substrate.
+raises the substrate's floor from "the atServer vouches" to "no enrollment can publish
+an advertised key in another's name" — the trust the atServers hold is checked by the
+separate key-transparency work above, not by the substrate.
 
 **Implementation status.** Target, not yet built: sign in the mint paths
 (**SS-2** key package, **SS-4** nskey / pqpublickey), verify on read (**SS-1c**); the
@@ -1142,7 +1139,7 @@ X-Wing operation per generation and degrades silently with every rotation.
 - **Cold-start survives but narrows sharply**: `recipientKind: root-pqpublickey` is now
   reached only when the recipient has never used the namespace *at all*, rather than
   whenever they have never sent in it. *(Withdrawn by
-  [18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): the root became
+  [18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03): the root became
   a signing key, nothing encapsulates to it, and cold start now simply fails —
   `recipientKind` has exactly one member, `nskey`.)*
 - Namespace-existence privacy rests on the `public:_` scan-hiding rule. That is a
@@ -1386,7 +1383,7 @@ misattribution above.)
 
 ---
 
-## 18. `pqpublickey` becomes the user-owned signing root (2026-08-03)
+## 18. `pq_signing_root` is the user-owned signing root (2026-08-03)
 
 **In brief:** *supersedes the KEM role in [design.md](../design.md) section 1.4*
 
@@ -1411,16 +1408,24 @@ to publish it to a key transparency system at mint.
 
 Everything advertised by an atSign is verified against a per-enrollment `_apsk`
 ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)), and
-`_apsk` is served by the atServer, so an operator who can rewrite it can substitute any
-advertised key. That is recorded there as a known limit. The root closes it: approvers
-sign enrollees' key packages, so the chain runs root → key package → `_apsk` →
-advertised keys, and the anchor is something the operator cannot produce.
+`_apsk` is served by the atServer, so every advertised key rests on the atServer serving
+`_apsk` faithfully. That is recorded there as the trust model. The root moves the anchor
+to the user: approvers sign enrollees' key packages, so the chain runs root → key
+package → `_apsk` → advertised keys, the anchor is a key only the atSign's own fully
+privileged enrollments hold, and once key transparency publishes the root a client can
+check the anchor rather than rest on the atServer for it.
 
 Handing the root to the atServer was considered and rejected. Key transparency over an
-operator-held key records the operator's own signatures, correctly signed, so an auditor
-has nothing to catch. It would make the operator's position structural rather than a gap
-to close. Self-hosting makes operator and user the same party for some deployments, and
-the design should not assume it for the rest.
+atServer-held key would log the atServer's own signatures, so it would check nothing
+beyond what the atServers are already trusted for, and their place in the chain would
+become structural rather than something key transparency checks. Self-hosting makes the
+atServer's operator and the user the same party for some deployments, and the design
+should not assume it for the rest.
+
+**Amended 2026-10-13:** this described what an atServer's operator could do with
+`_apsk` and the root; it is restated as the trust the atServers hold, with key
+transparency on the roadmap to check it (gkc: "atServers are trusted as faithful and key
+transparency is on the roadmap").
 
 `public:signing_publickey@<atSign>` is atServer-to-atServer auth and unrelated to
 clients; the `public:pq_signing_publickey@<atSign>` that joins it is the atServer's, not
@@ -1658,7 +1663,7 @@ the SDK's flagship API from ever being post-quantum.
 **Resolution walks up, most-specific-first.** A sender writing to `someid.d.c.b.a@alice`
 tries `d.c.b.a`, then `c.b.a`, then `b.a`, then `a`, and seals to the first nskey it finds.
 If none exists that is cold start, and it fails as
-[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) requires.
+[section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) requires.
 
 The walk is safe because it mirrors the atServer's own authorisation rule — an enrollment
 approved for `a` may access `d.c.b.a` (`SecretStore.namespaceAuthorizes`, and the server
@@ -2194,7 +2199,7 @@ left open as *"what the signing root signs beyond `_apsk`"*. The enrollment-to-e
 link is built ([23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) is its
 sibling ruling on conveyance); this is what the walk climbs *to*.
 
-[18.1](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already states the
+[18.1](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) already states the
 shape — *root → key package → `_apsk` → advertised keys* — but not how a verifier knows it
 has arrived.
 
@@ -2207,7 +2212,7 @@ lookup. It is not "another link with a different signer", and code that models i
 wrong before it is written.
 
 **Chains deeper than one hop genuinely exist.** Approving needs `__manage`; holding the root
-needs `rw` on `*` **and** `__manage` ([18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+needs `rw` on `*` **and** `__manage` ([18.2](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)).
 So an approver that cannot produce a root signature is an ordinary configuration, not an
 edge case, and the walk must climb.
 
@@ -2218,7 +2223,7 @@ edge case, and the walk must climb.
 | 1 | **A root link lives in its own `appMetadata` field** (`apskRootLink`), beside `apskChainLink`. A verifier looks for it first and never disambiguates: the field name already determines which algorithm to verify with and where the key comes from. A discriminator inside one field would make one shape mean two things, and the two are not variants of each other — see [24.1](#241-two-things-the-design-does-not-get-to-choose) |
 | 2 | **The root signs every *fully privileged* enrollment's `_apsk`** — exactly the set that holds the root private, so exactly the set that could produce such a signature anyway. Not one anchor: [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) makes a revoked signer break the chain below it, so a single anchor means one revocation leaves every enrollment on the atSign unanchored until a holder re-signs. Redundancy here is cheap and the failure it prevents is total |
 | 3 | **The walk returns a graded result, not a boolean:** anchored to root / chained but unanchored / unsigned. A bare `_apsk` is explicitly tolerated during the changeover, so a boolean forces every caller either to reject enrollments that are valid today or to lose the distinction that will matter once the changeover ends. The caller owns the policy; the walk reports what it found |
-| 4 | **Root links are self-signed, never conveyed.** [18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already puts the root *private* in every fully privileged enrollment, and by ruling 2 those are exactly the enrollments that get a root link — so each can sign its own, and `_apsk`'s writes-only-from-its-own-connection rule stops being an obstacle rather than needing to be worked around. **This corrects the ruling as first written**, which specified the parent-signs/child-publishes conveyance of [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) for a case self-signing simply does not have |
+| 4 | **Root links are self-signed, never conveyed.** [18.2](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) already puts the root *private* in every fully privileged enrollment, and by ruling 2 those are exactly the enrollments that get a root link — so each can sign its own, and `_apsk`'s writes-only-from-its-own-connection rule stops being an obstacle rather than needing to be worked around. **This corrects the ruling as first written**, which specified the parent-signs/child-publishes conveyance of [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) for a case self-signing simply does not have |
 | 5 | **A holder signs at mint, and every start re-checks.** The minter signs itself at mint, holding both the private and its own record at that moment. Every start then fills any gap, and that is what makes the retro case work without a migration: an enrollment that was privileged *before* the root existed anchors itself the next time it runs. One rule covers the minter, a privileged peer that predates the root, one approved after it, one approved by a non-root-holding approver, and a root minted late |
 
 ### 24.3 No atSign is bound into a link payload, and why that is safe
@@ -2666,16 +2671,26 @@ Cheapest first, because the common case must not pay for the rare one.
 1. **Already holds it** → return. Settles the question with no round trip, and is true for every
    enrollment that was online when it was approved.
 2. **No enrollment id** → return. Such a client authenticates with the atSign's own keys. It
-   does not ask: it is the atSign, so its route to a missing root is to mint one. **Amended
-   2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
+   does not ask: it advertises no key package, so no holder could seal the answer to it. The
+   atServer has held a `primary` enrollment record since 3.16.4, but the only two writers of a
+   key package into a record are `enroll:request`'s metadata, which `primary` never sends, and
+   `reconcileKeyPackage`, which skips the atSign's own credential. **Amended 2026-10-09.**
+   This item used to give the reason as "it is the atSign, so its route to a missing root is to
+   mint one". That holds only at activation and in a retrofit: on an ordinary start
+   `mintIfAbsent` refuses once a root is published, so this client neither asks nor mints and
+   stays unanchored. gkc ruled on 2026-10-09 that `primary` keeps this route. Under `legacy`
+   the post-quantum start-up steps do not run, and under `pqReady` and `pqActive` a client on
+   the atSign's own rsa2048 keys retrofits at start into a fully privileged ML-DSA enrollment
+   before they run, and that enrollment asks. What reaches this guard is a start whose retrofit
+   failed, which the next start retries, or a custom `PqPosture` that keeps rsa2048
+   authentication with post-quantum providers. **Amended 2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
    refused a connection without APKAM authentication, observed against the atServer of
    2026-08-04. Since at_server 3.16.4 a legacy `pkam:` connection is judged as the `primary`
    enrollment and `enroll:listns` answers it, measured on 2026-09-12 against the `dev_env` image
    the functional pack runs in CI: the roster came back naming `primary`, and the same verb on an
    unauthenticated connection was refused with AT0401 as the control. So the guard is a
-   client-side choice rather than a server constraint, and whether `primary` should ask a holder
-   rather than mint is the question the PQ table's `primary` signing-root row holds open for
-   gkc. The guard was added after the first live run, where its absence made every legacy PKAM
+   client-side choice rather than a server constraint; the 2026-10-09 amendment above says why
+   it stays. The guard was added after the first live run, where its absence made every legacy PKAM
    client broadcast and be refused by the atServer of that day.
 
    **The first version of this guard was dead code.** It tested
@@ -4092,7 +4107,7 @@ implementation.
 carries `v: 1` and a reserved `successor`, but the record cannot be rewritten,
 so the version field cannot save it: a later reader can *detect* a v1 root, and
 nobody can *replace* one. `successor` is the only migration path and it is
-unimplemented ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+unimplemented ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)).
 
 The format also disagrees with its own documentation. The code publishes
 `{"v":1,"keys":["<base64>"],"successor":null}` (`pq_signing_root.dart:208-211`)
@@ -12753,6 +12768,11 @@ event log, so 121's record SHAPE survives and only its writer changed.
 
 ## 122. Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy (2026-08-28)
 
+**Partly superseded by [155](#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09) (2026-10-09):** its defaults. The CK default is a
+year, not 7 days, and the nskey default, `rotateNskeyAfterOneYear`, answers yes once a
+generation is a year old, so age is a trigger for the SDK's default policy where this
+said it was not. The policy shape, and the two points at which it is asked, stand.
+
 **In brief:** *age is not an nskey trigger; the CK lever consults an injectable
 policy, age-based and 7 days by default*
 
@@ -13711,9 +13731,10 @@ everybody.
    takes a fresh server stamp**. `updatedAt` then means *when this generation was
    minted*, which is the question being asked.
 7. **A revocation-driven rotation is unconditional.** It does not consult
-   `NskeyRotationPolicy`, whose shipped default `neverRotateNskey` returns false
-   unconditionally and would leave the mechanism inert for everyone who has not
-   opted in. That lever governs *discretionary* rotation; a revocation is an
+   `NskeyRotationPolicy`, whose default would leave the mechanism inert for a
+   revocation that falls before the policy says yes. **Amended 2026-10-13:** this
+   said the shipped default was `neverRotateNskey`, which returns false
+   unconditionally; since [155](#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09) it is `rotateNskeyAfterOneYear`. That lever governs *discretionary* rotation; a revocation is an
    obligation.
 8. **The check rides the fetch `seed()` already makes.**
    `NskeySeeding.authorisedNamespaces()` calls the namespace roster at every
@@ -14411,7 +14432,7 @@ is stamped onto the legacy shape.
 ## 142. Content keys: recipients cache shared conveyances, siblings open every key, and a key goes once nothing cites it and its grace is over (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
-work-through (the P0 row *PQ key writing and fetching* in
+work-through (the section *PQ key writing and fetching* in
 [`implementation-plan.md`](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 items 1–6, which record the behaviour each part replaces). 142.1 is built in
 `ckConveyanceKey` and `SymmetricAesGcmProvider._resolveFromConveyance`, and
@@ -14562,7 +14583,7 @@ explicitly scan and view them if it wishes to"); the proposed switch is
 ## 143. Namespace-key advertisements: no ttr, a not-found is final, and a client's own advertisement refreshes (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, in the advertisement area of the key-caching
-work-through (items 7–13 of the P0 row's
+work-through (items 7–13 of the implementation plan's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 which record the behaviour each part replaces). 143.1 is pinned: the command
 every mint, rotation and add sends is asserted raw in
@@ -14681,7 +14702,7 @@ failure: mutual exclusion holds, and the delay ends on its own.
 ## 144. The _apsk record: a fixed verifier cache, links cleared on republish, and refusals that say why (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
-work-through (items 14–17 of the P0 row's
+work-through (items 14–17 of the implementation plan's
 [section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
 144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
 after a cached key fails, and one cache per AtClient. 144.2 is built in
@@ -14693,7 +14714,7 @@ naming why, and the walk reports `ChainVerdict.revoked` or `ChainVerdict.deleted
 change: a revoke moves `_apsk` to `.r.__e` and the atServer serves it to any
 reader, proven live against the published `vip` image by
 `apsk_server_side_test` (a peer atSign and a sibling enrollment both refused as
-revoked). 144.4 is at_server work and not built yet.
+revoked). 144.4 is built on the atServer, in at_server#2858.
 
 ### 144.1 The verifier's _apsk cache: fixed five minutes, refetch on failure, one per AtClient
 
@@ -14773,38 +14794,85 @@ location).
 ### 144.4 The atServer moves an expired enrollment's data on first sight
 
 An at_server change: when a lookup of a per-enrollment key finds its enrollment
-expired, the atServer moves that enrollment's data to `.d.__e` then, as the
-lookup handlers' comment — the fetch "ensures that expired enrollment keys are in
-the right place" — already claims; the expiry sweep stays as the backstop. This
-closes the window, 10 seconds to about 10.5 minutes, in which an expired
-enrollment's `_apsk` was still accepted at `.a.__e`.
+expired, the atServer removes that enrollment then, as the expired-keys pass
+would, so its data is at `.d.__e` before the lookup answers; the pass stays as
+the backstop. A verifier that then looks for the key at `.d.__e` finds it and is
+told the signer was deleted or expired, as 144.3 says.
 
-## 145. A reader's atServer caches no post-quantum key records, and the client bypasses its cache for them (2026-09-30)
+⚠️ **AMENDED 2026-10-10 by gkc, before it was built.** at_server#2853 (in
+c3.17.0) closed the window in which an expired enrollment's `_apsk` was still
+accepted at `.a.__e` another way: `lookup`, `llookup` and an HTTP GET answer
+not-found for `.a.__e` data whose enrollment no longer reads as approved. It
+moves nothing, so until the pass runs a verifier gets a bare not-found, since
+`.d.__e` is still empty. gkc kept the move owed so the refusal stays the same
+either way: "we need to be careful during implementation as we've gone around on
+this a few times now". Before at_server 3.16.4 a read of an expired enrollment
+removed it, which is what the lookup handlers' comment — the fetch "ensures that
+expired enrollment keys are in the right place" — relied on; 3.16.4 stopped
+that, because enrollments are read on every verb and every authorisation check,
+outside the atSign's enrollment-mutation critical section. So the move is built
+under three constraints:
+
+- only `lookup`, `llookup` and an HTTP GET of an enrollment's own data trigger
+  it, never the enrollment read every verb shares;
+- the data moves inside that critical section, as every removal's does, so a
+  lookup overlapping the pass, an owner's delete or another lookup moves it once;
+- moving a removed enrollment's data to `.d.__e` commits nothing, since no
+  client of that enrollment can connect again, no other enrollment reads its
+  private data, and its public `_apsk` is read from the atServer; moves to
+  `.r.__e` on a revoke, and back to `.a.__e`, still commit.
+
+Built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
+3.17.1: the `lookup`, `llookup` and HTTP GET handlers call
+`EnrollmentManager.moveExpiredEnrollmentData`, which removes the enrollment when
+its record's expiry has passed, and the removal's pre-remove hook moves the data
+inside the critical section, committing nothing for `.d.__e`. Pinned by the
+scenarios in at_server's `features/enrollment/expired_enrollment_data.feature`.
+
+## 145. A reader's atServer caches no public record without a ttr (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
-(the P0 row's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
-The client half is built: `LookUpBuilderManager.get` sets `bypassCache` on every
-lookup of either record, pinned in `test/verb_builder_test.dart`. The atServer
-half lands in at_server.
+(the implementation plan's
+[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)),
+and widened by him on 2026-10-10. The client half is built:
+`LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
+`__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
+built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
+3.17.1, and pinned by the scenarios in at_server's `features/caching/`.
 
-**The atServer (at_server).** A reader's atServer writes no `cached:public:`
-copy of an `_apsk` or `__nskey` record. It wrote one, with a 24-hour ttl, at
-every lookup — "for backwards compatibility, we will temporarily cache other
-public data with a ttl of 24 hours" — committed it and synced it to the reader's
-clients, yet never served it, because a lookup serves a cached copy only with
-`ttr -1` or before its `refreshAt`, and nothing on the client reads those
-records by their cached name. The 24-hour copy stays for other public data with
-no `ttr`, which an application may read by asking for the `cached:public:` key
-explicitly. Three defects are fixed with it:
+**The atServer (at_server).** A reader's atServer keeps no `cached:public:` copy
+of another atSign's public record whose owner gave it no ttr, or a ttr of 0.
+Another atSign's encryption public key is still kept with `ttr -1`, and a record
+with a ttr is still copied and served within it. Copies kept before, which are
+`cached:public:` copies with no ttr, go at the next lookup of the record, and the
+daily refresh deletes the rest without fetching them; a copy of a record another
+atSign shared (`cached:@<reader>:…`) is not touched. With it:
 
 - a lookup miss commits a DELETE of the cached name only when a cached copy
   existed, rather than every time;
-- a cache refresh that finds a changed value keeps the copy's ttl, rather than
-  re-putting it with none, which left it expiring only when the next lookup
-  re-stamped it;
-- `runRefreshJobHour` is honoured when set; the random start hour, which spreads
-  the refresh load across atServers, stays the default.
+- a refresh that finds a copy's value unchanged re-writes it, committing as a
+  lookup's re-write does, so its `refreshAt` moves on and it is served again,
+  where it used to be left past its `refreshAt`, unserved;
+- `runRefreshJobHour` is honoured when an operator sets the environment variable
+  or `refreshJob.runJobHour` in the yaml, and otherwise the hour is random from
+  0 to 23, which spreads the refresh load across atServers. The `runJobHour: 3`
+  every shipped config.yaml carried goes, since honouring it would have run
+  every atServer's refresh at 03:00, and a value that is not an hour is logged
+  and ignored.
+
+⚠️ **AMENDED 2026-10-10 by gkc**, when the at_server work was spec'd. This read
+"A reader's atServer writes no `cached:public:` copy of an `_apsk` or `__nskey`
+record … The 24-hour copy stays for other public data with no `ttr`", and its
+second defect was a refresh that dropped the copy's ttl. gkc removed the 24-hour
+copy for every record: at_server added it in fd79068d (2023-03-05),
+"temporarily", when a missing ttr stopped meaning "cache forever"; no lookup ever
+served one, and nothing in the SDKs reads one (at_follows_flutter reads cached
+profile fields and falls back to a plookup). The ttl defect went with it, since
+the only ttl a refresh dropped was the reader's own 24 hours: a copy with a ttr
+is re-written correctly, measured in-process. He also asked whether these records
+should carry `ttr -1`, and kept [143.1](#1431-the-advertisement-carries-no-ttr):
+a reader's atServer would serve such a copy forever, and its refresh never
+re-checks one.
 
 **The client, in the interim (gkc).** The client sets `bypassCache` on every
 `_apsk` and `__nskey` fetch. That does not stop the copies being written: a
@@ -15133,3 +15201,111 @@ Pinned by `test/nskey_filing_published_key_test.dart`, for the start-up
 bootstrap's filing, a key ring's own and a rotation's, and by the seed-length
 tests in `test/nskey_private_filing_test.dart`, which also hold the reading of a
 mislabelled seed.
+
+## 154. A shared content key follows the sender's own namespace key too (2026-10-09)
+
+**Decided by gkc on 2026-10-09**, in a grill of how content keys should rotate. Asked
+what should make a sender replace its outgoing CK, he chose "Own generation changed";
+then that the generation is recorded in the cache and the pointer, that the comparison
+is with the newest own generation both advertised and held, and that it is
+"Unconditional".
+
+**What it adds.** Every enrollment cuts its own CK per destination and namespace, and
+conveys each one twice: to the recipient, and as a sibling copy sealed to its own
+atSign's nskey. `CkManager.ensureCurrent` replaces a CK when the *destination's*
+generation moves, and now also when the *sender's own* does, so a revocation, which
+rotates the owner's nskeys, moves the CKs the remaining enrollments share with other
+atSigns as well as their own.
+
+**What was built.**
+- `ContentKeyCache` and `CurrentCkPointer` record `ownNskeyKid`, the own generation a
+  shared CK's sibling copy was sealed to, null when it has none.
+- `ensureCurrent` compares it with the newest own generation this enrollment both sees
+  advertised and holds the private for, and cuts a fresh CK when they differ, before
+  `ckRotationPolicy` is asked.
+- While a new own generation is advertised and its private has not arrived, the CK is
+  kept, and the check's `privateHalf` call asks the atSign's other enrollments for it.
+- A CK cut inside that window for another reason (a first write, the destination
+  rotating, the policy) seals its sibling copy to the own generation this enrollment's
+  keys in that namespace already rest on, re-derived from the held seed by the ring's
+  new `heldPublic`. When none records one, the share goes without a copy until the
+  private arrives. gkc chose that over the latest-filed seed: nothing filed orders
+  generations, and every generation before the new one is one the revoked enrollment
+  holds, so the choice decides only whether the atSign's other enrollments can open the
+  copy. The cut seals to that held generation, so it succeeds where the advertised
+  generation's private has not yet arrived.
+- A restart resumes a pointer only when it names the own generation the sender holds.
+  A pointer written before the field existed names none.
+- A queued cut re-checks inside its turn: one queued behind a cut that already replaced
+  the key it found current returns that key, so racing writes share one fresh CK
+  (gkc: "Re-check in the turn"), for a destination's rotation too. **Amended
+  2026-10-13:** the re-check also requires the key to rest on the own generation the
+  later write holds.
+
+**Why advertised AND held.** Triggering on the advertisement alone cuts a key that still
+rests on the old generation: inside the window the sibling copy is sealed to a
+generation this enrollment holds, so the cut replaces the key without moving it.
+**Amended 2026-10-13:** this said such a cut would fail, because `NskeyProvider.encrypt`
+refuses an own generation whose private is not held; a cut in the window seals its
+sibling copy to a held generation instead, as the fourth bullet above says, so it
+succeeds. Triggering on the private alone seals the
+fresh copy to the old generation, which the ring still advertises until sync lands the
+new one.
+
+**Not built.** The grill's answer also had `privatesFiled` force a re-read of the own
+advertisement. It would change nothing: the re-read goes to local storage first, which
+holds the old advertisement until sync lands the new one, and `ownChanges` already
+re-reads at that moment.
+
+**Out of scope.** gkc: "At this time, we must assume atServers are trustworthy." Which
+generation a sender seals to rests on the advertisements its atServer serves, on either
+side.
+
+Pinned by `ck_manager_test.dart`'s group "Given a content key shared with @bob, whose
+sibling copy rests on this enrollment's own generation G1", and catalogued as
+[UC-A5.7](../acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
+
+## 155. Content keys and namespace keys rotate yearly by default (2026-10-09)
+
+**Decided by gkc on 2026-10-09.** For content keys he first leaned to 90 days, then to
+never, then asked that the choice be "defensible to an expert cryptography auditor", and
+chose "About 1 year". For namespace keys he chose "About 1 year (Recommended)". The
+defaults become `rotateCkAfterOneYear` (`age >= 365 days`) and `rotateNskeyAfterOneYear`
+(365 days from the advertisement's own `createdAt`). `rotateCkAfterOneWeek` and
+`neverRotateNskey` remain for applications that want them.
+
+**Why a content key needs no short period.** The weekly default served two purposes,
+and each now has its own mechanism:
+- **It kept a content key under AES-GCM's random-IV limit.** Per-value keys took that
+  over. Each value is encrypted under HKDF-SHA256-Expand(CK, label ‖ 32-byte salt) with a
+  fresh 12-byte IV, so nonce reuse needs the same value key and the same IV: at most
+  2^-255 · 2^-96 = 2^-351 per pair. At SP 800-38D's 2^-32 target that is 2^160 values.
+  At an absurd 2^30 writes a second for a year (2^54.9 values), p(nonce reuse) ≤ 2^-242,
+  and p(two values sharing a key) ≤ 2^-146.
+- **It replaced a shared CK after its sender's own namespace key rotated.**
+  [Ruling 154](#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09)
+  now does that on the rotation itself.
+
+**Why a year rather than never.** With per-value keys a CK is a key-derivation key, and
+NIST SP 800-57 Part 1 Rev 5 (section 5.3.6 item 9, Table 1) suggests "about 1 year" for
+one. Its periods are "rough order-of-magnitude guidelines", and a longer one needs
+"serious consideration … of the risks (see Section 5.3.1)". Never was defensible against
+those factors, because a CK exists in the clear only in the memory of a client that also
+holds the nskey it is sealed under, so a timed rotation heals nothing on a compromised
+device. But it was a documented deviation, and an auditor would still have listed a CK
+disclosed on its own. A year costs one cut per enrollment, destination and namespace a year,
+and needs no defence.
+
+**Namespace keys.** Under `neverRotateNskey` only revocation and the application
+replaced a namespace key; the yearly default replaces it on its own as well. An nskey is a KEM keypair senders encapsulate CKs to, and the nearest
+SP 800-57 rows are a public key-transport key (1 to 2 years) and a private one (under
+2 years; its footnote 61 allows the private to outlive that where stored messages are
+decrypted later, as the ring does by keeping old privates). A rotation conveys to every
+authorised enrollment and makes each peer cut one CK, which once a year is small; an
+enrollment that misses the envelope pulls the generation at its next start
+(`requestMissingPrivates`) or on a read miss. Revocation-driven rotation still asks no
+policy (UC-G2.5).
+
+Pinned by `rotation_policy_test.dart` (both periods as raw literals, inclusive, and that
+`CryptoConfig`, `CryptoConfig.nskey` and `readsNskeyWritesLegacy` all carry them), and
+catalogued under UC-A5.4 and UC-A5.5.

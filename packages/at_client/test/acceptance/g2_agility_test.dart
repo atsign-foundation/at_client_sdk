@@ -250,6 +250,14 @@ void main() {
         clauses: ['without coordinating with another'],
       );
       provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'when E3, granted `app`, starts after the revocation, then it rotates '
+            '`chat.app` as well as `app` where neither has moved since',
+        proves: 'the start-time comparison reaches a namespace nested under a '
+            'granted one that this client holds a key for and may write',
+        clauses: ['without coordinating with another'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',
         proves:
