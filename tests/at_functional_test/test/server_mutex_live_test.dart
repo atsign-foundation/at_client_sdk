@@ -154,6 +154,28 @@ void main() {
             'one that has not upgraded');
   });
 
+  test('A lock over an existing mutable record takes it', () async {
+    final key = freshLock();
+    await owner.put(key, 'data',
+        putRequestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..useRemoteAtServer = true);
+    final (prior, before) = await stored(key);
+    expect(prior, 'data', reason: 'the control: the record exists');
+    expect(before['immutable'], isNot(isTrue),
+        reason: 'the control: the record is mutable');
+
+    final lease = await enrolled.tryAcquireServerMutex(AtKey.fromString('$key'),
+        ttl: ttl);
+
+    expect(lease, isNotNull);
+    final (value, meta) = await stored(key);
+    expect(meta['immutable'], isTrue);
+    expect(meta['ttl'], 30000);
+    expect(value, enrolled.enrollmentId,
+        reason: 'the lock replaced the record\'s value');
+  });
+
   test('The lock frees itself when its ttl runs out', () async {
     final key = freshLock();
     expect(await owner.tryAcquireServerMutex(key, ttl: Duration(seconds: 2)),
