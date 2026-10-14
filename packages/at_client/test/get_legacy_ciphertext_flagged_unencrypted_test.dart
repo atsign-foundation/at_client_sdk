@@ -9,9 +9,10 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 /// A get of a value the atServer serves with `isEncrypted: false`, written by
-/// a client that encrypted without sending the flag.
+/// a client that encrypted it and sent no flag, or false.
 ///
 /// Catalogue: features/at_client/get_legacy_ciphertext_flagged_unencrypted.feature
 void main() {
@@ -20,11 +21,13 @@ void main() {
   // ciphertext under it.
   final selfKey = base64Encode(List<int>.generate(32, (i) => i));
 
+  final logs = RecordedLogs();
   late MockAtClient client;
   late MockLocalSecondary local;
   late GetResponseTransformer transformer;
 
   setUpAll(() {
+    logs.installOn();
     registerFallbackValue(FakeLocalLookUpVerbBuilder());
   });
 
@@ -38,14 +41,15 @@ void main() {
   });
 
   /// The value of [key] as a get returns it, from a response serving [data]
-  /// with `isEncrypted: false` and no ivNonce.
-  Future<dynamic> get(AtKey key, String data) async {
+  /// with `isEncrypted: false`, no ivNonce, and [metaData] besides.
+  Future<dynamic> get(AtKey key, String data,
+      {Map<String, dynamic> metaData = const {}}) async {
     final tuple = Tuple<AtKey, String>()
       ..one = key
       ..two = jsonEncode({
         'key': '$key',
         'data': data,
-        'metaData': {'isEncrypted': false},
+        'metaData': {'isEncrypted': false, ...metaData},
       });
     return (await transformer.transform(tuple)).value;
   }
@@ -114,5 +118,80 @@ void main() {
         await get(AtKey.fromString('@alice:2.groups.policy.sshnp@bob'), stored),
         stored);
     verify(() => local.executeVerb(any<LLookupVerbBuilder>())).called(1);
+  });
+
+  test(
+      'Given a shaped value flagged false and no self encryption key, when it '
+      'is read, then it comes back as stored and a warning names the key',
+      () async {
+    final notCiphertext = AtKey.fromString('3.groups.policy.sshnp@alice');
+    final junk = base64Encode(List<int>.generate(32, (i) => 255 - i));
+    expect(await get(notCiphertext, junk), junk);
+    expect(logs.at('INFO'), contains(contains('$notCiphertext')),
+        reason: 'the control: the recorder sees this logger');
+    expect(logs.at('WARNING'), isNot(contains(contains('$notCiphertext'))),
+        reason: 'a value that does not decrypt is not a missing key');
+
+    when(() => local.getEncryptionSelfKey()).thenAnswer((_) async => null);
+    final key = selfRecord();
+    final stored = EncryptionUtil.encryptValue(group, selfKey);
+
+    expect(await get(key, stored), stored);
+    expect(logs.at('WARNING'), contains(contains('$key')));
+  });
+
+  test(
+      'Given a shaped value flagged false, when the client stops while it is '
+      'being decrypted, then the get throws StoppedException rather than '
+      'returning it as stored', () async {
+    when(() => local.getEncryptionSelfKey())
+        .thenThrow(StoppedException('the client stopped'));
+
+    await expectLater(
+        get(selfRecord(), EncryptionUtil.encryptValue(group, selfKey)),
+        throwsA(isA<StoppedException>()));
+  });
+
+  test(
+      'Given a shaped value flagged false under a provider other than legacy, '
+      'when it is read, then it comes back unchanged without a decryption '
+      'attempt', () async {
+    final key = AtKey.fromString('4.groups.policy.sshnp@alice');
+    final stored = EncryptionUtil.encryptValue(group, selfKey);
+    final otherProvider =
+        Metadata.encodeAppMetadata(AppMetadata(providerId: 'other'));
+
+    expect(
+        await get(key, stored,
+            metaData: {AtConstants.appMetadata: otherProvider}),
+        stored);
+    verifyNever(() => local.getEncryptionSelfKey());
+    final messages = logs.records.map((r) => r.message);
+    expect(messages, isNot(contains(contains('$key'))),
+        reason: 'every attempt on this path logs a line naming the key');
+  });
+
+  test(
+      'Given a value flagged false with an encoding, when it is read, then it '
+      'comes back decoded without a decryption attempt', () async {
+    const plain = 'thirty-two bytes of plain text!!';
+    final stored = base64Encode(utf8.encode(plain));
+
+    expect(
+        await get(selfRecord(), stored,
+            metaData: {AtConstants.encoding: 'base64'}),
+        plain);
+    verifyNever(() => local.getEncryptionSelfKey());
+  });
+
+  test(
+      'Given a shaped value flagged false that decrypts under the self key to '
+      'bytes that are not UTF-8, when it is read, then it comes back '
+      'unchanged', () async {
+    final stored = base64Encode(EncryptionUtil.encryptBytes(
+        List<int>.generate(20, (i) => 0xff - i), selfKey));
+
+    expect(await get(selfRecord(), stored), stored);
+    verify(() => local.getEncryptionSelfKey()).called(1);
   });
 }

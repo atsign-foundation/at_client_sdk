@@ -61,8 +61,9 @@ class GetResponseTransformer
             await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
       }
     } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
-      // NOTE: a client before at_client 3.2.1 encrypted without sending the
-      // flag, and the atServer stores a missing flag as false.
+      // NOTE: a client before at_client 3.2.1 sent no flag, or false, with a
+      // value it had encrypted, and the atServer stores a missing flag as
+      // false.
       if (_hasLegacyCiphertextShape(tuple.one, atValue.value)) {
         atValue.value =
             await _decryptOrKeep(cryptoRuntime, tuple.one, atValue.value);
@@ -152,8 +153,17 @@ class GetResponseTransformer
     } on StoppedException {
       rethrow;
     } on Exception catch (e) {
-      _logger.info('$atKey is flagged unencrypted and shaped like legacy '
-          'ciphertext but did not decrypt, so it is returned as stored: $e');
+      final keyUnavailable =
+          e is SelfKeyNotFoundException || e is SharedKeyNotFoundException;
+      if (!keyUnavailable &&
+          (e is AtDecryptionException || e is FormatException)) {
+        _logger.info('$atKey is flagged unencrypted and shaped like legacy '
+            'ciphertext but did not decrypt, so it is returned as stored: $e');
+      } else {
+        _logger.warning('$atKey is flagged unencrypted and shaped like legacy '
+            'ciphertext, but no key to decrypt it was available, so it is '
+            'returned as stored: $e');
+      }
       return value;
     }
   }
