@@ -14,6 +14,8 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
+  /// - Calls with the same [regex] and [shouldDecrypt] share one subscription;
+  /// a call with the same [regex] and the other [shouldDecrypt] gets its own.
   /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no

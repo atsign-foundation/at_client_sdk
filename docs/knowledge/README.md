@@ -154,6 +154,7 @@ Evidenced, not yet written up, and each still needs its citation re-checked:
   client keystore has no immutability guard on remove.
 - `DeleteVerbBuilder.force` emits `force:`; `:nc`/`noCommit` exists in
   at_commons and is implemented by no atServer.
-- `Secondary.executeVerb`'s `sync` parameter is inert on both implementations.
+- `Secondary.executeVerb`'s `sync` parameter is inert in both `LocalSecondary`
+  and `RemoteSecondary`.
 - The keystore's `get()` does not filter expired records, and `nextExpiresAt()`
   has no cutoff where its sibling `nextAvailableAt()` does.
