@@ -1328,14 +1328,14 @@ void main() {
     });
 
     test(
-        'NotificationService subscribe returns an existing stream for a same regex',
-        () async {
+        'NotificationService subscribe returns an existing stream for the same '
+        'regex and shouldDecrypt', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
-          regex: '.wavi', shouldDecrypt: false);
+          regex: '.wavi', shouldDecrypt: true);
       notificationStream.listen((event) async {
         print(event);
       });
@@ -1346,6 +1346,25 @@ void main() {
         print(event);
       });
       expect(notificationServiceImpl.getStreamListenersCount(), 1);
+      notificationServiceImpl.stopAllSubscriptions();
+    });
+
+    test(
+        'NotificationService subscribe returns a new stream for the same regex '
+        'with the other shouldDecrypt', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: false)
+          .listen((_) {});
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: true)
+          .listen((_) {});
+      expect(notificationServiceImpl.getStreamListenersCount(), 2,
+          reason: 'a subscription asking for decrypted values must not share '
+              'one asking for values as they arrived');
       notificationServiceImpl.stopAllSubscriptions();
     });
   });
