@@ -499,8 +499,9 @@ jobs:
       VIRTUALENV_BASE_PORT: 26000
       VE_TOP_PORT: 26099
       # The TRUNK-TRACKING atServer build. These are the post-quantum e2e
-      # files, so they need server behaviour that is on trunk before it is
-      # released; the published `vip` cannot run them.
+      # files, which need an atServer that verifies ML-DSA PKAM and stores
+      # enrollment metadata: trunk does, and so does every release from
+      # p3.16.5.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

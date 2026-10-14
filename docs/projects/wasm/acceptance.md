@@ -432,6 +432,10 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
 
+The key-sources design in [`../key-sources/design.md`](../key-sources/design.md#8-the-browser)
+places these gates beside a passkey-derived key and an atServer-held keys document,
+where the WebCrypto key becomes a local cache or a fallback.
+
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 
 | # | Gate | Proves |
