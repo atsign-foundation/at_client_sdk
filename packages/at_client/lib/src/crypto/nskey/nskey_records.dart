@@ -79,9 +79,9 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// what stops a holder that dies mid-mint blocking its own atSign forever.
 ///
 /// It is also the winner's own budget: a holder carries the matching
-/// [MintLease] and refuses to publish once this has elapsed, so an overrunning
-/// mint abandons rather than writing over the enrollment that won the next
-/// election.
+/// `ServerMutexLease` and refuses to publish once this has elapsed, so an
+/// overrunning mint abandons rather than writing over the enrollment that won
+/// the next election.
 ///
 /// ⚠️ Sizing a lock purely against "how long a mint can legitimately take"
 /// ignores the other thing the ttl decides: how long a client that took the
@@ -103,8 +103,8 @@ const Duration mintLockTtl = Duration(minutes: 2);
 /// a short-lived client relaunching is.
 ///
 /// **The floor is how long a mint may legitimately take**, because the winner
-/// carries the matching `MintLease` and abandons rather than publishing once
-/// it is spent — keygen, filing and the publish call, with room for several
+/// carries the matching `ServerMutexLease` and abandons rather than publishing
+/// once it is spent — keygen, filing and the publish call, with room for several
 /// round trips on a slow link and a far slower CPU. An overrun costs a retry
 /// at the next start, not damage.
 const Duration signingRootMintLockTtl = Duration(seconds: 15);
@@ -157,9 +157,10 @@ const String pqSigningRootMintLockRecordName = '_rootlock';
 ///
 /// A self key with **no namespace**, matching the record it guards: the root
 /// is atSign-level, which is exactly what distinguishes it from an nskey. The
-/// single underscore hides it from every scan and keeps it out of the commit
-/// log, which is right for a record whose only reader is the atServer's own
-/// refusal — it is taken remotely, expires remotely, and must never ride sync.
+/// single underscore hides it from every scan, and as a server mutex it is
+/// taken with no commit, which is right for a record whose only reader is the
+/// atServer's own refusal — it is taken remotely, expires remotely, and must
+/// never ride sync.
 ///
 /// The metadata is contract, not tuning, for the same reason
 /// [nskeyMintLockKey]'s is: the refusal of a second **immutable** create is

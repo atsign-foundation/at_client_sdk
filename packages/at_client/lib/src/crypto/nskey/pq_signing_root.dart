@@ -21,8 +21,9 @@ import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart'
-    show MintLease, MintLock;
+import 'package:at_client/src/client/server_mutex.dart'
+    show ServerMutexLease, checkedServerMutexTtl;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
@@ -118,8 +119,11 @@ class PqSigningRoot {
   final MintLock mintLock;
 
   PqSigningRoot(this.atClient,
-      {this.keysIo, MintLock? mintLock, this.lockTtl = signingRootMintLockTtl})
-      : mintLock = mintLock ?? MintLock(atClient);
+      {this.keysIo,
+      MintLock? mintLock,
+      Duration lockTtl = signingRootMintLockTtl})
+      : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        mintLock = mintLock ?? MintLock(atClient);
 
   /// How long this client holds the root's mint lock once it has taken it.
   ///
@@ -277,7 +281,7 @@ class PqSigningRoot {
   /// lock held. A null `publicKey` means this client published nothing;
   /// without [mintFresh] it only finishes publishing.
   Future<({Uint8List? publicKey})> _mintUnderLock(
-      String atSign, MintLease lease,
+      String atSign, ServerMutexLease lease,
       {bool mintFresh = true}) async {
     // NOTE: this re-read is not redundant — [mintIfAbsent] checked absence
     // before the lock was taken, and with a mutable record, minting on a stale
@@ -346,8 +350,8 @@ class PqSigningRoot {
   ///
   /// The pair under [slot] is retired unless the record cannot be read at all,
   /// and a spent [lease] stops the write before it is attempted.
-  Future<Uint8List?> _publish(
-      String atSign, String slot, Uint8List publicKey, MintLease lease) async {
+  Future<Uint8List?> _publish(String atSign, String slot, Uint8List publicKey,
+      ServerMutexLease lease) async {
     if (lease.isSpent) {
       await _retireSlot(atSign, slot);
       _logger.warning('Abandoned the signing root mint for $atSign: the mint '

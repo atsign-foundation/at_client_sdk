@@ -9,6 +9,8 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/client/server_mutex.dart'
+    show ServerMutexLease, checkedServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -224,12 +226,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
     MintLock? mintLock,
-    this.lockTtl = mintLockTtl,
+    Duration lockTtl = mintLockTtl,
     NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
     Stream<DataEvent> Function()? ownChanges,
-  })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
+  })  : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
         _requestConveyance = requestConveyance,
         _ownChanges = ownChanges,
@@ -440,7 +443,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// look for. Adopting is right only for the cold-start mint; [rotate] runs
   /// [_mint] directly.
   Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
-      String namespace, MintLease lease, _PreparedMint prepared) async {
+      String namespace, ServerMutexLease lease, _PreparedMint prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
     if (published == null) {
       final filed = await _filedUnpublished(owner, namespace);
@@ -701,7 +704,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
-    MintLease lease,
+    ServerMutexLease lease,
     _PreparedMint prepared, {
     DateTime? assertUpdatedAt,
   }) async {

@@ -16,7 +16,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
@@ -115,14 +114,26 @@ void main() {
         if (key == '_nskeylock') {
           if (lockHeld) {
             // What the atServer says to the loser of the race.
-            throw AtLookUpException(
-                'AT0023', 'Immutable records may not be updated');
+            throw IllegalStateException('Immutable records may not be updated');
           }
         } else if (key.startsWith('__nskey')) {
           trace.add('publish:${builder.atKey.namespace}');
           published.add(builder.value as String);
           advertised[builder.atKey.namespace!] = builder.value as String;
         }
+      }
+      if (builder is LLookupVerbBuilder && builder.operation == 'all') {
+        // A lock another enrollment holds, as llookup:all serves it.
+        return 'data:${jsonEncode({
+              'key': '${builder.atKey}',
+              'data': 'another-enrollment',
+              'metaData': {
+                'expiresAt': DateTime.now()
+                    .toUtc()
+                    .add(const Duration(minutes: 2))
+                    .toIso8601String()
+              }
+            })}';
       }
       return 'data:1';
     });
