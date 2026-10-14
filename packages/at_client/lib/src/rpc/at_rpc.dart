@@ -228,7 +228,9 @@ class AtRpc {
   /// the same request: each request's id is held as a server mutex
   /// (`tryAcquireServerMutex`) for 30 seconds by the one responder that takes
   /// it. It needs an atServer from p3.13.0; an older one refuses every lock,
-  /// so a responder with this on handles no requests.
+  /// so a responder with this on handles no requests. If taking it fails after
+  /// the atServer stored it, such as on a timeout, no responder handles that
+  /// request and none sends a nack; the requester's own timeout ends it.
   final bool enableRequestMutex;
 
   factory AtRpc.server({
@@ -456,13 +458,15 @@ class AtRpc {
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
-  /// - parses and validates
-  /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
-  /// - sends an [AtRpcRespType.nack] response otherwise
-  /// - Acquires session mutex if [enableRequestMutex] is true
-  /// - sends an [AtRpcRespType.nack] response if mutex cannot be acquired
-  /// - calls [AtRpcCallbacks.handleRequest]
-  /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
+  /// - ignores a request from a sender not on [allowList], unless [allowAll]
+  /// - ignores one whose key carries no request id
+  /// - sends an [AtRpcRespType.nack] response when the payload cannot be
+  ///   parsed, or names a different request id
+  /// - with [enableRequestMutex], takes the request's mutex, and leaves the
+  ///   request alone when it cannot, since the responder that took it answers
+  /// - sends an [AtRpcRespType.ack], calls [AtRpcCallbacks.handleRequest], and
+  ///   sends its response with [sendResponse], or an [AtRpcRespType.nack] if
+  ///   it throws
   @visibleForTesting
   Future<void> handleRequestNotification(AtNotification notification) async {
     if (!allowList.contains(notification.from)) {
