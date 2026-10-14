@@ -1,5 +1,16 @@
 ## 3.15.0-rc7
 
+- feat: `tryAcquireServerMutex` takes a short-lived lock that every client of
+  the atSign shares, held on the atServer for at most 15 minutes; before
+  c3.16.2 and p3.16.5 an expired lock blocks until the atServer's expiry sweep,
+  up to about ten and a half minutes. It needs an atServer from p3.13.0, and
+  from c3.16.3 and p3.16.5 the lock records no commit.
+- fix: `AtRpc`'s request mutex records no commit on an atServer from c3.16.3
+  or p3.16.5, so it no longer leaves an entry behind for every client of the
+  atSign to sync. It now needs an atServer from p3.13.0: on an older one, a
+  responder with `enableRequestMutex` handles no requests.
+- fix: `PublishedNskeyKeyRing` and `PqSigningRoot` refuse a `lockTtl` over 15
+  minutes when built.
 - feat: each storage backend has its own import: `HiveAtClientStorage` comes
   from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
   `package:at_client/memory.dart`, no longer from `at_client.dart` and
@@ -60,6 +71,11 @@
 - fix: `AtRpc` answers a request whose value it cannot parse with a NACK under
   the request's id, and keeps serving; an error from a request or response
   handler is logged and the listener carries on.
+- fix: `get` decrypts data that at_client 3.0.10 to 3.2.1 wrote, which from
+  3.13.0 came back still encrypted.
+- fix: a `get`, `put` or notification whose shared key does not unwrap
+  under this atSign's key throws an `AtException`, as other decryption
+  failures do, not an `ArgumentError`.
 - build: requires `at_chops` ^3.7.0.
 
 ## 3.15.0-rc6

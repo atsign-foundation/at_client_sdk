@@ -1514,10 +1514,17 @@ CryptoProvider { id; encrypt(CryptoContext, AtKey, String) → String; decrypt(C
 - **No `CryptoRegistry` / `CryptoPolicy` / `CryptoStorage`** and **no `cryptoRegistry`
   getter on the `AtClient` spec.**
 
-**Get-path invariants.** `get` respects the `isEncrypted` tri-state (explicit
-`false` skips decryption; absent = try-decrypt fallback; `true` decrypts via the
-routed provider). `shouldEncrypt = false` is a true no-crypto path on write and
-read — secret-sharing envelopes and key-package copies are stored that way.
+**Get-path invariants.** `get` respects the `isEncrypted` tri-state (`true`
+decrypts via the routed provider; absent = try-decrypt fallback; explicit `false`
+skips decryption unless the value has legacy ciphertext's shape — base64 of a
+positive multiple of 16 bytes, unencoded, under no provider but legacy — and then
+tries a legacy decryption, returning the value as stored if that fails). The
+shape test exists because at_client 3.0.10 to 3.2.1 sent no flag, or
+`false`, with a value it had encrypted, and the atServer stores a missing flag
+as `false`.
+`shouldEncrypt = false` is a no-crypto path on write; on read, the SDK's own such
+records — secret-sharing envelopes (JSON), content-key copies (which name their
+provider), CK pointers and watermarks — never have that shape.
 
 ### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
