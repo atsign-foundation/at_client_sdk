@@ -1,7 +1,7 @@
 Feature: get reads legacy ciphertext stored with isEncrypted false
-  Clients before at_client 3.2.1 encrypted values without sending isEncrypted, and the atServer stores a missing flag as false. A get decrypts such a value when it has legacy ciphertext's shape (base64 of a non-zero multiple of 16 bytes, no provider other than legacy) and returns any other value flagged false unchanged.
+  Clients before at_client 3.2.1 sent no isEncrypted, or false, with values they had encrypted, and the atServer stores a missing flag as false. A get decrypts such a value when it has legacy ciphertext's shape (base64 of a non-zero multiple of 16 bytes, no provider other than legacy) and returns any other value flagged false unchanged.
 
-  Races: none; a get reads one record. Replay: no new message or token. DoS: at most one extra legacy decryption per value flagged false with that shape. Forgery and impersonation: unchanged; the decryption uses this client's own keys, and the record comes from its own atServer.
+  Races: none; a get reads one record. Replay: no new message or token. DoS: one legacy decryption attempt per get of a value flagged false with that shape, which for a record another atSign shared can include fetching that atSign's shared key; a value with no flag already costs the same. Forgery and impersonation: unchanged; the decryption uses this client's own keys, or the shared key the record's owner made for it, and a writer who can store a value flagged false could already store it flagged true.
 
   Scenario: Legacy ciphertext flagged isEncrypted false is decrypted
     Given a self record whose value is legacy ciphertext, stored with isEncrypted false

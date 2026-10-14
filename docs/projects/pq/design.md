@@ -1519,8 +1519,9 @@ decrypts via the routed provider; absent = try-decrypt fallback; explicit `false
 skips decryption unless the value has legacy ciphertext's shape — base64 of a
 positive multiple of 16 bytes, unencoded, under no provider but legacy — and then
 tries a legacy decryption, returning the value as stored if that fails). The
-shape test exists because a client before at_client 3.2.1 encrypted without
-sending the flag, and the atServer stores a missing flag as `false`.
+shape test exists because a client before at_client 3.2.1 sent no flag, or
+`false`, with a value it had encrypted, and the atServer stores a missing flag
+as `false`.
 `shouldEncrypt = false` is a no-crypto path on write; on read, the SDK's own such
 records — secret-sharing envelopes (JSON), content-key copies (which name their
 provider), CK pointers and watermarks — never have that shape.
