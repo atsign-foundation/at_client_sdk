@@ -332,6 +332,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   final Map<String, NskeyDecapsulationKey> _ownPrivates = {};
 
+  /// The public half of each generation this ring minted, beside its private
+  /// in [_ownPrivates].
+  final Map<String, PackageKey> _mintedPublics = {};
+
   /// Advertisements this ring has read or published, with when and, where
   /// known, the verified bytes they came from.
   final Map<String, _CachedAdvertisement> _remote = {};
@@ -768,8 +772,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       payload: payload,
     );
     for (final key in prepared.minted) {
-      _ownPrivates[_generation(owner, namespace, nskeyKidOf(key.publicKey))] =
-          NskeyDecapsulationKey(key.secretKey);
+      final generation =
+          _generation(owner, namespace, nskeyKidOf(key.publicKey));
+      _ownPrivates[generation] = NskeyDecapsulationKey(key.secretKey);
+      _mintedPublics[generation] = PackageKey.fromBytes(
+          use: SecretSharingAlgos.useEnc, alg: key.keyAlgo, pub: key.publicKey);
     }
     return advertisement;
   }
@@ -996,6 +1003,28 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return null;
   }
 
+  @override
+  Future<PackageKey?> heldPublic(
+      String owner, String namespace, String nskeyKid) async {
+    if (owner != _atClient.getCurrentAtSign()) return null;
+    final minted = _mintedPublics[_generation(owner, namespace, nskeyKid)];
+    if (minted != null) return minted;
+    final filed = (await privateFiling?.filedFor(namespace))
+        ?.where((f) => f.nskeyKid == nskeyKid)
+        .firstOrNull;
+    if (filed == null) return null;
+    final kem = SecretSharingAlgos.kemFor(filed.keyAlgo);
+    if (kem == null) return null;
+    final pair = await kem.keyPairFromSeed(filed.seed.bytes);
+    final derived = PackageKey.fromBytes(
+        use: SecretSharingAlgos.useEnc,
+        alg: filed.keyAlgo,
+        pub: pair.publicKey);
+    // NOTE: a seed that re-derives some other kid is not this generation, and
+    // sealing to it would leave a copy nobody opens under the kid it names.
+    return derived.kid == nskeyKid ? derived : null;
+  }
+
   /// What [privateHalf] answers, without asking the atSign's other enrollments
   /// for a private this client does not hold.
   Future<NskeyDecapsulationKey?> heldPrivateHalf(
@@ -1051,14 +1080,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _logger.info('Asked the other enrollments for the nskey private '
           '$namespace:$nskeyKid; the answer is filed when a holder replies');
     }).catchError((Object e) {
-      // NOTE: clear the stamp, so the next miss re-asks rather than waiting out
-      // a cooldown earned by a request that never went out.
-      _askedConveyance.remove(generation);
+      // NOTE: the stamp stays, so an ask that keeps failing goes out at most
+      // once per [askCooldown].
       logSwallowed(
           _logger,
           e,
           'Could not request the missing nskey private for '
-          '$namespace:$nskeyKid, and the next read miss will ask again: $e',
+          '$namespace:$nskeyKid, and a read miss once the ask cooldown has '
+          'passed asks again: $e',
           routine: true);
     }));
   }

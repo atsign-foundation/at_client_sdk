@@ -68,7 +68,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload unit-at-client acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-unit-at-client-${{ matrix.dart-channel }}
           path: |
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-${{ matrix.dart-channel }}
           path: ve-logs
@@ -191,7 +191,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload functional acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-functional-${{ matrix.dart-channel }}
           path: tests/at_functional_test/acceptance-report.json
@@ -266,7 +266,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-${{ matrix.storage }}
           path: ve-logs
@@ -333,7 +333,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-upgrade
           path: ve-logs
@@ -342,7 +342,7 @@ jobs:
       # `if: always()` for the same reason as the functional job's report.
       - name: Upload upgrade acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-functional-upgrade
           path: tests/at_functional_test/acceptance-report.json
@@ -593,7 +593,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload pqe2e acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-pqe2e
           path: tests/at_end2end_test/acceptance-report.json
@@ -718,7 +718,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload legacy-server acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-legacy-server
           path: tests/at_end2end_test/acceptance-report.json

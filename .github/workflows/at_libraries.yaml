@@ -95,7 +95,7 @@ jobs:
       # carrying the leg's index, or the legs overwrite one another.
       - name: Upload acceptance reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-lib-${{ strategy.job-index }}
           path: packages/*/acceptance-report.json
@@ -179,6 +179,21 @@ jobs:
         run: |
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
+
+      # The hosted runner's OpenSSL has no ML-KEM, so at_client's OpenSSL route
+      # for X-Wing runs only here.
+      - name: run at_client's post-quantum backend tests with libcrypto available
+        working-directory: packages/at_client
+        env:
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.LIBCRYPTO_REAL_PATH }}
+          LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
+        run: |
+          dart pub get
+          dart test --concurrency=1 test/crypto_backends_test.dart \
+            test/kem_selection_test.dart test/nskey_kem_selection_test.dart \
+            test/nskey_data_path_test.dart test/nskey_self_heal_test.dart \
+            test/pairwise_secret_sharing_test.dart \
+            test/enrollment_symmetric_key_test.dart test/wire_literal_pins_test.dart
 
   # The gate tooling's own tests. wasm_ratchet needs this, so a broken walk
   # reports here once rather than as a failure in every gated package.

@@ -134,7 +134,7 @@ Three rules make this work, and they are rulings rather than style —
 [`decisions.md`](decisions.md) D-1, D-2, D-5:
 
 1. **No `if (dart.library.*)` in a neutral package.** The core must not know platforms
-   differ.
+   differ. at_client's crypto backends are the one recorded exception (D-1).
 2. **No default that names an implementation.** `x ??= NativeThing()` re-imports the
    native graph regardless of what the caller injects, and is the single most common
    way a barrel split silently fails. Require injection instead.

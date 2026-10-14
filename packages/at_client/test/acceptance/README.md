@@ -121,7 +121,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**108 rows** — one scenario per catalogue use case (UC-A5.1 splits and UC-C1.3
+**109 rows** — one scenario per catalogue use case (UC-A5.1 splits and UC-C1.3
 is withdrawn, both below), plus the cross-cutting invariants.
 
 ⚠️ **This said "the catalogue's 53 use cases become 53 scenarios" until
@@ -142,7 +142,7 @@ git grep -cP '^#{2,4} +(?:[\d.]+ +)?UC-[ABCG]\d+\.\d+[a-z]? +— ' \
 | A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅, A2.5 ⏳, A2.6 ⏳ | KE-2 |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
-| A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
+| A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅, A5.4 ✅, A5.5 ✅, A5.6 ✅, A5.7 ✅ | — |
 | B0 · atServer prerequisite    | B0.1 ✅                           | —            |
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅, B1.4 ✅, B1.5 ✅, B1.6 ✅, B1.7 ✅ | — |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
@@ -174,7 +174,7 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**0 of the 108** rows are skipped. The burn-down went back above zero on
+**0 of the 109** rows are skipped. The burn-down went back above zero on
 2026-08-10 rather than drifting there — `enroll:update` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it, UC-A2.5 and UC-A2.6, so the catalogue grew by two use cases

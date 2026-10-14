@@ -288,7 +288,7 @@ class AtRpc {
       _requestStream = atClient.notificationService
           .subscribe(regex: requestsRegex, shouldDecrypt: true);
 
-      _requestStream!.listen(handleRequestNotification,
+      _requestStream!.listen((n) => _handle(n, handleRequestNotification),
           onError: _onNotificationError,
           onDone: () => logger.info('RPC request listener stopped'));
     }
@@ -302,11 +302,25 @@ class AtRpc {
       _responseStream = atClient.notificationService
           .subscribe(regex: responsesRegex, shouldDecrypt: true);
 
-      _responseStream!.listen(handleResponseNotification,
+      _responseStream!.listen((n) => _handle(n, handleResponseNotification),
           onError: _onNotificationError, onDone: () {
         logger.info('RPC response listener stopped');
         if (!_responsesEnded.isCompleted) _responsesEnded.complete();
       });
+    }
+  }
+
+  /// Runs [handler] on [notification] and logs whatever it throws, so an
+  /// error handling one notification neither reaches the zone nor stops the
+  /// listener.
+  Future<void> _handle(AtNotification notification,
+      Future<void> Function(AtNotification) handler) async {
+    try {
+      await handler(notification);
+    } catch (e, st) {
+      logger.severe('Exception $e handling notification ${notification.key} '
+          'from ${notification.from}');
+      logger.severe(st);
     }
   }
 
@@ -482,18 +496,21 @@ class AtRpc {
     }
 
     // print('Received request with id ${notification.key} and value ${chalk.brightGreen.bold(notification.value)}');
-    late AtRpcReq request;
+    final AtRpcReq request;
 
     try {
       request = AtRpcReq.fromJson(jsonDecode(notification.value!));
     } catch (e, st) {
-      var message =
-          'Failed to deserialize AtRpcReq from ${notification.value}: $e';
-      logger.warning(message);
+      logger.warning(
+          'Failed to deserialize AtRpcReq from ${notification.value}: $e');
       logger.warning(st);
-      // send NACK
-      await sendResponse(notification, request,
-          AtRpcResp.nack(request: request, message: message));
+      final unparsed = AtRpcReq(reqId: requestId, payload: {});
+      await sendResponse(
+          notification,
+          unparsed,
+          AtRpcResp.nack(
+              request: unparsed,
+              message: 'The request could not be parsed as an AtRpcReq'));
       return;
     }
 

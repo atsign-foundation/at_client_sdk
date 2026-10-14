@@ -264,4 +264,11 @@ class _WidenedRing implements NskeyKeyRing {
     final secret = _privates[nskeyKid];
     return secret == null ? null : NskeyDecapsulationKey(secret);
   }
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      _privates.containsKey(nskeyKid)
+          ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
+          : null;
 }
