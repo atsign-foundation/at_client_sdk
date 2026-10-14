@@ -93,8 +93,9 @@ if (lease != null && !lease.isSpent) {
   stays held until its ttl runs out.
 - The ttl is the only release, so a crashed winner cannot hold the lock
   forever; it must be at least a millisecond and at most 15 minutes. Do the
-  task within the lease: `lease.isSpent`, by this instance's clock, says when
-  it has run out.
+  task within the lease: `lease.isSpent` says when it has run out, counting
+  the time elapsed since the lease was taken, so a change to the wall clock
+  does not move it.
 - The lock is written straight to the atServer, never to the local store, and
   the key must be a self key of the client's own atSign, used as given (no
   namespace is added).

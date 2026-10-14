@@ -12,7 +12,8 @@ class ServerMutexLease {
   /// The record the lock is held on.
   final AtKey key;
 
-  /// When this lease stops being valid.
+  /// When this lease stops being valid, by this client's wall clock as it read
+  /// when the lease was made.
   ///
   /// A lease from [ServerMutex.tryAcquireServerMutex] ends no later than the
   /// lock in elapsed time. One read back from the record ends at the atServer's
@@ -22,10 +23,20 @@ class ServerMutexLease {
   /// after the lock expired.
   final DateTime expiresAt;
 
-  const ServerMutexLease(this.key, this.expiresAt);
+  final Stopwatch _held;
+  final Duration _length;
 
-  /// Whether the lease has run out, by this client's wall clock.
-  bool get isSpent => !DateTime.now().isBefore(expiresAt);
+  /// A lease on [key] that ends at [expiresAt], counted from now in elapsed
+  /// time.
+  ServerMutexLease(this.key, this.expiresAt)
+      : _held = Stopwatch()..start(),
+        _length = expiresAt.difference(DateTime.now());
+
+  ServerMutexLease._(this.key, this.expiresAt, this._held, this._length);
+
+  /// Whether the lease has run out, by the time elapsed since it was made, so
+  /// a change to the wall clock neither extends nor shortens it.
+  bool get isSpent => _held.elapsed >= _length;
 }
 
 /// Short-lived locks shared by every client of an atSign, held on its
@@ -66,6 +77,7 @@ extension ServerMutex on AtClient {
       ..metadata = (Metadata()
         ..immutable = true
         ..ttl = ttl.inMilliseconds);
+    final held = Stopwatch()..start();
     final leaseFrom = DateTime.now();
     try {
       await getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
@@ -76,7 +88,7 @@ extension ServerMutex on AtClient {
       if (_isHeldElsewhere(e)) return null;
       rethrow;
     }
-    return ServerMutexLease(record, leaseFrom.add(ttl));
+    return ServerMutexLease._(record, leaseFrom.add(ttl), held, ttl);
   }
 }
 
