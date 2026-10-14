@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart';
 
 /// The longest a server mutex may be held.
 const Duration maxServerMutexTtl = Duration(minutes: 15);
@@ -32,7 +33,10 @@ class ServerMutexLease {
       : _held = Stopwatch()..start(),
         _length = expiresAt.difference(DateTime.now());
 
-  ServerMutexLease._(this.key, this.expiresAt, this._held, this._length);
+  /// A lease on [key] stamped [expiresAt], spent once the stopwatch it is
+  /// given has run for the length it is given.
+  @visibleForTesting
+  ServerMutexLease.timed(this.key, this.expiresAt, this._held, this._length);
 
   /// Whether the lease has run out, by the time elapsed since it was made, so
   /// a change to the wall clock neither extends nor shortens it.
@@ -89,7 +93,7 @@ extension ServerMutex on AtClient {
       if (_isHeldElsewhere(e)) return null;
       rethrow;
     }
-    return ServerMutexLease._(record, leaseFrom.add(ttl), held, ttl);
+    return ServerMutexLease.timed(record, leaseFrom.add(ttl), held, ttl);
   }
 }
 
