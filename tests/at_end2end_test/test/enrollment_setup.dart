@@ -15,6 +15,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/run_marker.dart';
+import 'package:at_end2end_test/src/setup_outcome.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -192,11 +193,6 @@ void main() {
         .atClient
         .notificationService
         .stopAllSubscriptions();
-    final incomplete =
-        atSignList.where((atSign) => !completed.contains(atSign)).toList();
-    if (incomplete.isNotEmpty) {
-      print('Enrollment setup FAILED for $incomplete');
-    }
-    exit(incomplete.isEmpty ? 0 : 1);
+    exit(setupExitCode(atSignList.cast<String>(), completed));
   });
 }

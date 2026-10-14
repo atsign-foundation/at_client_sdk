@@ -9,6 +9,7 @@ import 'dart:math';
 
 import 'package:at_end2end_test/src/client_stores.dart';
 import 'package:at_end2end_test/src/run_marker.dart';
+import 'package:at_end2end_test/src/setup_outcome.dart';
 import 'package:test/test.dart';
 
 /// Each spelling of a call or verb that revokes an enrollment.
@@ -78,6 +79,10 @@ String _end2endTest14Job() {
       (l) => RegExp(r'^  [A-Za-z0-9_-]+:\s*$').hasMatch(l), start + 1);
   return lines.sublist(start, end < 0 ? lines.length : end).join('\n');
 }
+
+/// The source of `enrollment_setup.dart`, which runs only against the
+/// long-lived atSigns, so its wiring is read rather than run.
+String _setupSource() => File('test/enrollment_setup.dart').readAsStringSync();
 
 /// The paths `dart_test.yaml` allows a bare `dart test` to run.
 List<String> _allowlist() {
@@ -161,6 +166,50 @@ void main() {
           reason: 'with $environment there is no complete run to name, so '
               'the label must not claim one');
     }
+
+    final setup = _setupSource();
+    expect(
+        setup,
+        contains(RegExp(
+            r'final\s+marker\s*=\s*runMarker\(\s*Platform\.environment\s*\)')),
+        reason: 'enrollment_setup.dart no longer takes its marker from the '
+            "run's environment, so its enrollments stop naming the run");
+    expect(
+        setup, contains(RegExp(r'appName:\s*enrollmentAppName\(\s*marker\s*,')),
+        reason: 'enrollment_setup.dart no longer submits its enrollments '
+            'under the run marker');
+  });
+
+  test('A setup that leaves an atSign without an enrollment fails its step',
+      () {
+    final logged = <String>[];
+    expect(
+        setupExitCode(['@ce2e1', '@ce2e2'], {'@ce2e1', '@ce2e2'},
+            log: logged.add),
+        0);
+    expect(logged, isEmpty);
+    expect(setupExitCode(['@ce2e1', '@ce2e2'], {'@ce2e1'}, log: logged.add), 1,
+        reason: 'an atSign whose enrollment did not complete must fail the '
+            'setup step, not surface later as a missing keyfile');
+    expect(logged.single, contains('@ce2e2'));
+
+    final setup = _setupSource();
+    expect(RegExp(r'\bexit\s*\(').allMatches(setup), hasLength(1),
+        reason: 'enrollment_setup.dart ends its process in more than one '
+            'place, so the setup step can exit without its outcome');
+    expect(
+        setup,
+        contains(RegExp(
+            r'\bexit\s*\(\s*setupExitCode\(\s*atSignList\b[^;]*,\s*completed\s*\)\s*\)')),
+        reason: "enrollment_setup.dart's exit code no longer comes from "
+            'setupExitCode over every atSign and the ones completed');
+    final added = RegExp(r'\bcompleted\.add\(\s*currentAtSign\s*\)');
+    expect(added.allMatches(setup), hasLength(1),
+        reason: 'enrollment_setup.dart no longer records each atSign it '
+            'completes exactly once');
+    expect(setup.indexOf(added), greaterThan(setup.indexOf('authenticatesAs(')),
+        reason: 'enrollment_setup.dart records an atSign as completed before '
+            'its keyfile authenticates as the enrollment');
   });
 
   test(
