@@ -3,6 +3,9 @@
 - feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
   atServer's `info` lists text notifications; an atServer that refuses them
   lists it as `Retired`.
+- feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
+  `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
+  withdraw one. The atServer decides who may use them.
 
 ## 5.21.0
 
