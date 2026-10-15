@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 import 'package:cryptography/cryptography.dart';
 
@@ -71,6 +72,28 @@ PrfSecret _secretFrom(Uint8List? prfFirst) {
   }
 }
 
+/// A registered passkey and its PRF output.
+typedef PasskeyRegistration = ({Uint8List credentialId, PrfSecret secret});
+
+/// An asserted passkey, its PRF output, and the canonical atSign in its
+/// `userHandle`, or null when it carries none that is valid.
+typedef PasskeyUnlock = ({
+  Uint8List credentialId,
+  PrfSecret secret,
+  String? atSign,
+});
+
+String? _atSignFrom(Uint8List? userHandle) {
+  if (userHandle == null) return null;
+  try {
+    return utf8.decode(userHandle).toAtsign();
+  } on FormatException {
+    return null;
+  } on InvalidAtSignException {
+    return null;
+  }
+}
+
 /// A key encryption key (KEK) that leverages passkey PRF for secret derivation.
 class PasskeyKek {
   /// Initializes the KEK with the given passkey [port].
@@ -79,11 +102,11 @@ class PasskeyKek {
   /// The passkey port used to perform ceremonies.
   final PasskeyPort port;
 
-  /// Registers a passkey; returns its id and the PrfSecret for the new `prf` unlock.
-  Future<({Uint8List credentialId, PrfSecret secret})> register(
-      String atSign) async {
-    final result =
-        await port.create(atSign: atSign, evalInput: await recordPrfSalt());
+  /// Registers a passkey whose user is the canonical [atSign]; returns its id
+  /// and PRF output.
+  Future<PasskeyRegistration> register(String atSign) async {
+    final result = await port.create(
+        atSign: atSign.toAtsign(), evalInput: await recordPrfSalt());
     return (
       credentialId: result.credentialId,
       secret: _secretFrom(result.prfFirst)
@@ -91,13 +114,13 @@ class PasskeyKek {
   }
 
   /// Asserts and returns the PrfSecret; [credentialId] narrows allowCredentials.
-  Future<({Uint8List credentialId, PrfSecret secret})> unlock(
-      {Uint8List? credentialId}) async {
+  Future<PasskeyUnlock> unlock({Uint8List? credentialId}) async {
     final result = await port.get(
         evalInput: await recordPrfSalt(), allowCredential: credentialId);
     return (
       credentialId: result.credentialId,
-      secret: _secretFrom(result.prfFirst)
+      secret: _secretFrom(result.prfFirst),
+      atSign: _atSignFrom(result.userHandle),
     );
   }
 }

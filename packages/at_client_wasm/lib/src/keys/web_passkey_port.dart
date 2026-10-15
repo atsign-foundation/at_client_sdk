@@ -66,7 +66,7 @@ class WebPasskeyPort implements PasskeyPort {
 
   /// Gets a passkey assertion and evaluates the PRF extension.
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> get(
+  Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
     final challenge = randomBytes(32);
 
@@ -95,8 +95,12 @@ class WebPasskeyPort implements PasskeyPort {
 
     final credential =
         await passkeyCeremony(window.navigator.credentials.get(options));
-    final credentialId = credential.rawId.toDart.asUint8List();
+    final response = credential.response as AuthenticatorAssertionResponse;
 
-    return (credentialId: credentialId, prfFirst: _prfFirst(credential));
+    return (
+      credentialId: credential.rawId.toDart.asUint8List(),
+      prfFirst: _prfFirst(credential),
+      userHandle: response.userHandle?.toDart.asUint8List(),
+    );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
@@ -12,6 +13,7 @@ class FakePasskeyPort implements PasskeyPort {
   Uint8List? lastGetAllowCredential;
 
   Uint8List? resultPrfFirst;
+  Uint8List? resultUserHandle;
   Uint8List resultCredentialId = Uint8List.fromList([1, 2, 3]);
 
   @override
@@ -23,11 +25,15 @@ class FakePasskeyPort implements PasskeyPort {
   }
 
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> get(
+  Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
     lastGetEvalInput = evalInput;
     lastGetAllowCredential = allowCredential;
-    return (credentialId: resultCredentialId, prfFirst: resultPrfFirst);
+    return (
+      credentialId: resultCredentialId,
+      prfFirst: resultPrfFirst,
+      userHandle: resultUserHandle,
+    );
   }
 }
 
@@ -139,6 +145,41 @@ void main() {
 
       final kek = PasskeyKek(port);
       expect(kek.unlock(), throwsA(isA<PrfUnavailableException>()));
+    });
+
+    test('register names the passkey user with the canonical atSign', () async {
+      final port = FakePasskeyPort()
+        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+      await PasskeyKek(port).register('Ali.ce');
+      expect(port.lastCreateAtSign, '@alice');
+    });
+
+    test('unlock without a credentialId asks for any discoverable passkey',
+        () async {
+      final port = FakePasskeyPort()
+        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+      await PasskeyKek(port).unlock();
+      expect(port.lastGetAllowCredential, isNull);
+    });
+
+    group('unlock reads the atSign from userHandle', () {
+      final cases = <String, (List<int>?, String?)>{
+        'a canonical handle': (utf8.encode('@alice'), '@alice'),
+        'a non-canonical handle': (utf8.encode('Alice'), '@alice'),
+        'no handle': (null, null),
+        'a handle that is not UTF-8': ([0xff, 0xfe], null),
+        'a handle that is not an atSign': (utf8.encode('@al ice'), null),
+      };
+      for (final MapEntry(key: name, value: (handle, atSign))
+          in cases.entries) {
+        test(name, () async {
+          final port = FakePasskeyPort()
+            ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i))
+            ..resultUserHandle =
+                handle == null ? null : Uint8List.fromList(handle);
+          expect((await PasskeyKek(port).unlock()).atSign, atSign);
+        });
+      }
     });
 
     test('unlock throws PrfUnavailableException on 31 bytes', () async {

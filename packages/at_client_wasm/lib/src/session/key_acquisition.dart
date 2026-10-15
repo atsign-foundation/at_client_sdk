@@ -54,7 +54,7 @@ Future<AcquiredKeys> acquireKeys({
 
   final passphrase = await promptPassphrase(atSign);
   final opened = await codec.open(atSign, bytes, passphrase);
-  final ({Uint8List credentialId, PrfSecret secret}) registered;
+  final PasskeyRegistration registered;
   try {
     registered = await kek.register(atSign);
   } on PrfUnavailableException {
@@ -127,13 +127,9 @@ Future<AcquiredKeys> _inMemory(String atSign, Uint8List bytes,
 }
 
 /// The passkey unlock that opens [bytes], or null when no passkey yields one.
-Future<({Uint8List credentialId, PrfSecret secret})?> _openWithPasskey(
-    String atSign,
-    Uint8List bytes,
-    PasskeyKek kek,
-    KeyEnvelopeCodec codec,
-    Uint8List? hint) async {
-  final ({Uint8List credentialId, PrfSecret secret}) unlocked;
+Future<PasskeyUnlock?> _openWithPasskey(String atSign, Uint8List bytes,
+    PasskeyKek kek, KeyEnvelopeCodec codec, Uint8List? hint) async {
+  final PasskeyUnlock unlocked;
   try {
     unlocked = await kek.unlock(credentialId: hint);
   } on PasskeyCeremonyException {

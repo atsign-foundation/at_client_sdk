@@ -104,11 +104,11 @@ class FakePasskeyPort implements PasskeyPort {
   }
 
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> get(
+  Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
     lastAllowCredential = allowCredential;
     if (getError case final e?) throw e;
-    return (credentialId: credentialId, prfFirst: prfFirst);
+    return (credentialId: credentialId, prfFirst: prfFirst, userHandle: null);
   }
 }
 
