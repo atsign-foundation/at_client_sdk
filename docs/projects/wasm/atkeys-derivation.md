@@ -1,0 +1,64 @@
+# at-keys derivation — decisions
+
+**Status:** decided · 2026-10-15
+**Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, D-1, D-2, D-9 · circulate to Gary, Xavier and Jeremy S.
+**Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
+
+## Summary
+
+| # | Decision | Departs from |
+|---|---|---|
+| A | **Constant PRF salt**: `SHA-256("atsign:keys:lookup:v1")`; recovery is typing-free | Gary's model (salt derived from the atSign); pb5 `prfEvalInput(atSign)` |
+| B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
+| C1 | **atSign in both HKDF labels** | — |
+| C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
+| C4 | **Restored public keys must match the published ones before PKAM** | — |
+| — | Rejected: a per-write data key (C3) | #2295 |
+
+## Derivation and record
+
+```
+salt  = SHA-256("atsign:keys:lookup:v1")
+P     = WebAuthn get(prf.eval.first = salt)                 // one prompt
+lookup = HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id|<atSign>")   → 64 lowercase hex
+kek    = HKDF-SHA256(P, salt = ∅, info = "atkeys-kek|<atSign>")
+
+record = { v: 2, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
+AAD    = canonical JSON of the record without ct   (v, alg, kdf, iv)
+ct     = AES-256-GCM(kek, iv, @keys JSON, AAD)
+```
+
+- `<atSign>` comes from `userHandle`, so it is known before any derivation.
+- These label strings are canonical. They replace `atkeys/lookup` and `atkeys/blob`.
+
+## Why
+
+### A — constant salt
+
+`get()` runs locally **before** any network call and returns `userHandle` = atSign. That atSign then drives the root lookup, the unauthenticated `lookup:` (no `from:`), and finally `from:` + PKAM. The salt has to be in the `get()` request, so it can't depend on an atSign that isn't known yet. PRF output is already unique per credential.
+
+### B — no stored salt
+
+| Where a random `R` could go | Result |
+|---|---|
+| PRF input (two calls) | `R` sits outside the ciphertext, so the server controls it. Setting `R` = the predictable salt makes the passkey return the lookup key, which the server knows because it's the record name. The server can then forge a record the client accepts. It also costs a second prompt. |
+| HKDF salt | Harmless but redundant. `P` is already 256 uniform bits, and salts defend low-entropy inputs. |
+
+Freshness per write comes from the random IV.
+
+### C — hardening
+
+| | Stops |
+|---|---|
+| C1 atSign in labels | Linking or splicing records if a passkey is ever paired with two atSigns |
+| C2 AAD = clear header | Downgrade attacks via edits to `v`, `alg` or `kdf` |
+| C4 public-key check | **Rollback**: the server replays an older valid record whose keys have since been rotated |
+| C3 per-write data key (rejected) | Nothing here. Its job is letting several passkeys unlock one shared key, the `unlocks[]` pattern this design removes. |
+
+## Cost of changing later
+
+| Point | Cost |
+|---|---|
+| A — salt | High. A return flow can migrate in one prompt with `prf.eval.second`; devices that next appear via recovery must re-enroll. |
+| B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
+| C2 — record format | Low. `v` migrates on the next open. |
