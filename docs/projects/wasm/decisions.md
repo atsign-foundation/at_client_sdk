@@ -855,8 +855,9 @@ internal, so an app wanting a backend of its own raises a feature request.
 
 Every client keeps local storage, even if only in memory. Storage passed is used whatever
 `isLocalStoreRequired` says, which completes D-12's amendment item 3, and a client with the
-flag false and no storage is refused. at_cli 3.1.1 builds exactly that client, so it needs a
-release passing `InMemoryAtClientStorage` once at_client 3.15.0 publishes.
+flag false and no storage is refused. at_cli 3.1.1 builds exactly that client, but its
+constraints (Dart below 3.0, at_commons 3.x) never resolve at_client 3.15.0, and at_tools has
+since removed at_cli, which at_repl replaces (gkc, 2026-10-15).
 `AtClientImpl.create(localSecondaryKeyStore:)` and `AtClient.persistenceBundle` are
 deprecated; 4.0 removes them along with the default seam, `hiveStoragePath` and
 `isLocalStoreRequired`, after which storage is required at every door.
