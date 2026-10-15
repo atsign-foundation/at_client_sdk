@@ -19,3 +19,24 @@ Future<({Uint8List envelope, PassphraseSecret passphrase})> cutEnvelope(
   final envelope = await codec.seal(atSignStr, plaintext, [passphrase]);
   return (envelope: envelope, passphrase: passphrase);
 }
+
+final _keyFileName = RegExp(r'(?:^|[/\\])(@[^/\\]+)_key\.atKeys$');
+
+/// The atSign to cut for: [explicit], else the one [keys] names, else the
+/// `@x_key.atKeys` convention in [atKeysPath]; null when none applies.
+///
+/// Throws [ArgumentError] when [explicit] contradicts the atSign [keys] names.
+Atsign? resolveAtSign(AtKeys keys, String atKeysPath, {String? explicit}) {
+  final named = keys.atsign;
+  if (explicit != null) {
+    final atSign = Atsign(explicit);
+    if (named != null && named != atSign) {
+      throw ArgumentError.value(
+          explicit, 'explicit', 'keyfile belongs to $named');
+    }
+    return atSign;
+  }
+  if (named != null) return named;
+  final match = _keyFileName.firstMatch(atKeysPath);
+  return match == null ? null : Atsign(match.group(1)!);
+}

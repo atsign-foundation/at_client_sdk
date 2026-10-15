@@ -83,4 +83,38 @@ void main() {
       expect(() => updateCommand('alice', 'myapp', envelope), throwsStateError);
     });
   });
+
+  group('resolveAtSign', () {
+    test('uses the atSign the keyfile names', () {
+      final keys = legacyAtKeys(atsign: Atsign('@alice'));
+      expect(resolveAtSign(keys, '/k/whatever.atKeys'), Atsign('@alice'));
+    });
+
+    test('falls back to the @x_key.atKeys filename', () {
+      expect(resolveAtSign(legacyAtKeys(), '/k/@webdev_key.atKeys'),
+          Atsign('@webdev'));
+    });
+
+    test('keeps underscores and non-ASCII inside the filename atSign', () {
+      expect(resolveAtSign(legacyAtKeys(), '/k/@a_b🛠_key.atKeys'),
+          Atsign('@a_b🛠'));
+    });
+
+    test('an explicit atSign wins over the filename', () {
+      expect(
+          resolveAtSign(legacyAtKeys(), '/k/@webdev_key.atKeys',
+              explicit: '@bob'),
+          Atsign('@bob'));
+    });
+
+    test('an explicit atSign that contradicts the keyfile throws', () {
+      final keys = legacyAtKeys(atsign: Atsign('@alice'));
+      expect(() => resolveAtSign(keys, '/k/x.atKeys', explicit: '@bob'),
+          throwsArgumentError);
+    });
+
+    test('null when nothing names an atSign', () {
+      expect(resolveAtSign(legacyAtKeys(), '/k/keys.atKeys'), isNull);
+    });
+  });
 }
