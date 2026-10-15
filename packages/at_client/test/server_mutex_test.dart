@@ -358,14 +358,16 @@ void main() {
     test(
         'spends a lease on this enrollment\'s own lock once the record has '
         'expired', () async {
+      // The false check runs well inside the 500 ms window, so a slow runner
+      // cannot spend the lease before it is asserted to be live.
       final lease = await clientOf([],
               onLookup: () async => record('e-1',
                   expiresAt: DateTime.now()
                       .toUtc()
-                      .add(const Duration(milliseconds: 50))))
+                      .add(const Duration(milliseconds: 500))))
           .ownServerMutexLease(lockKey, ttl: ttl);
       expect(lease!.isSpent, isFalse);
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 600));
       expect(lease.isSpent, isTrue,
           reason: 'a lease must end no later than its lock');
     });
