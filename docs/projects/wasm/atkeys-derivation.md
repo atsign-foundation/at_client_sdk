@@ -29,6 +29,11 @@ ct     = AES-256-GCM(kek, iv, @keys JSON, AAD)
 ```
 
 - `<atSign>` comes from `userHandle`, so it is known before any derivation.
+- `<atSign>` in the labels is canonical, as at_commons `toAtsign()` produces it: lowercase, leading `@`, dots removed. `@Alice`, `alice` and `@ali.ce` all derive the same keys.
+- Test vector (`P` = bytes `00..1f`, atSign `@alice`):
+  - salt `e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620`
+  - lookup `7086a5038ed92fcd20309c479df67581a64cf9f8caf802ef81e7ecec8e4272fe`
+  - kek `338114674b5a98898fe30e20b4e29e96907ac6ec58b615bc0a298e759cd520b0`
 - These label strings are canonical. They replace `atkeys/lookup` and `atkeys/blob`.
 
 ## Why
