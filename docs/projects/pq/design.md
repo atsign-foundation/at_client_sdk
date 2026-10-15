@@ -2360,9 +2360,9 @@ ruling 12.
 {
   "payload": "<base64url(JSON)>",
   "signatures": [
-    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"},
-    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"}
   ]
 }
@@ -2383,14 +2383,27 @@ carries the same value, and an envelope naming none is refused. Without it a
 signature over one document meant the same thing in every context that read
 it — five uses of this shape are signed by one key.
 
+`kid` names the signing **key**: the advertised `_apsk` entry's own kid,
+`SHA256(publicKey)` truncated. `enid` names the signing enrollment, ruled by
+[`decisions.md` 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31).
+A client using the atSign's own keys, which publishes at `_apsk.primary`,
+stamps `enid: "primary"`: the sentinel is deliberate and never absent
+([`decisions.md` 116](detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23)
+item 15). `enid` is absent on a key package signed at `enroll:request`, before
+there is an id to stamp, and on a key package re-published at `enroll:update`,
+which signs without the enrollment id it has in scope. Its readers pass the id
+in explicitly, so it still verifies.
+
 There is no top-level `v` or `enrollmentId`: both live **inside** each
-`protected` header, as `v` and `kid`, where the signature covers them. A
+`protected` header, as `v` and `enid`, where the signature covers them. A
 version or signer claim outside the signature is one an attacker can edit.
 
-There is no legacy branch: **nothing released reads or writes an envelope** (no
-release ships `lib/src/signing/`; at_client 3.14.0, the latest, has no such
-directory). The bare-string `_apsk` is
-the released thing in this area, and it is a *record*, not an envelope — see
+There is no legacy branch, by decision. at_client 3.14.0 ships a flat
+`{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` envelope in
+`lib/src/mixins/envelope_signing.dart`, read only through the `@experimental`
+`AtClientSecretSharing`; this shape replaces it rather than reading it, and the
+3.15.0 release candidates ship this shape. The bare-string `_apsk` is a
+*record*, not an envelope — see
 [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 3.
 
@@ -2404,18 +2417,59 @@ weaker one. Falling through to whichever signature happens to verify hands the
 choice of algorithm to whoever tampered with the envelope, and it would read as
 success in every log.
 
-One algorithm can name **several** advertised keys, and every one of them is
-tried before the refusal. An enrollment that mints its own signing key keeps
-advertising the APKAM authentication key it used to sign with, and for a
-post-quantum-native enrollment both are ML-DSA — so a verifier that took the
-first entry for the algorithm would refuse every envelope signed before the
-split. This is not the fallback the paragraph above forbids: that one is about
-dropping to a weaker *algorithm*, which is already fixed here, and each key
-tried is one this signer published under it.
+One algorithm can name **several** advertised keys. An enrollment that mints
+its own signing key keeps advertising the APKAM authentication key it used to
+sign with, and for a post-quantum-native enrollment both are ML-DSA. The
+algorithm picks the signature entry, and that entry's `kid` then picks the key
+within the algorithm, which is checked once. An entry naming no key, or a key
+the advertisement does not carry, is refused, and the refusal names the key it
+asked for.
 
 An envelope naming an algorithm with no matching `_apsk` entry is refused for
 that reason specifically, which is the failure a rollout-2 sender produces
 against a fleet that has not reached rollout 1.
+
+**In code the envelope is a type, not a map.** `SignedEnvelope`, in
+`packages/at_client/lib/src/signing/envelope_signature.dart`, holds the payload
+and one `EnvelopeSignature` per entry, and both compare by value.
+`SignedEnvelope.fromJson` is called wherever an envelope is read, on the
+decoded JSON map, and refuses anything that is not structurally an envelope: a
+payload that is not a string, a missing or empty `signatures` array, an entry
+whose protected header does not decode. `toJson()` is called wherever an
+envelope is written into a JSON structure, rather than putting the object there
+and relying on `jsonEncode` to call it, since every in-process reader of that
+structure would then meet an object where it expects a map. A change to the
+shape is a compile error at every reader, where a string-keyed map compiles and
+fails at runtime.
+
+**The wire text is kept as it arrived.** The payload and each entry's
+`protected` and `signature` are held as the base64url text they were received
+as, never decoded and re-encoded; the decoded header and payload are read from
+that text. The signing input is those received characters, so no canonical
+JSON form is needed, as long as nothing re-encodes them. `toJson()` therefore
+reproduces what `fromJson` was given byte for byte, and
+`jws_envelope_test.dart` pins that. A test that needs an altered envelope
+builds a new one through `fromJson`, so what it alters still passes the
+structural checks a received envelope does.
+
+**One signer and one purpose per envelope.** `fromJson` refuses an envelope
+whose entries name more than one `enid`, or more than one `typ`. A verifier
+picks its entry by algorithm, so entries that disagreed about the signer or the
+purpose would let the entry that verified and the entry a caller reads be
+different entries. Do not relax either refusal: a writer that only ever signs
+once does not stop a second entry being appended. Two accessors read the first
+entry rather than the one a verifier checked: `.signature` is the first entry,
+and `.signerEnrollmentId` is its `enid`, which every entry shares.
+
+**A root link is not a `SignedEnvelope`, by design.** It is a map,
+`{v, alg, kid?, payload, signature}`, verified against the signing root
+published at `public:pq_signing_root@<atSign>`, and stamped into the `_apsk`
+record's `apskRootLink` field, where a chain link is a `SignedEnvelope` in
+`apskChainLink`. Having no protected header to carry a `typ`, it signs
+`at-root-link:` ahead of its payload instead
+([`decisions.md` 103.4](detail/decisions.md#1034-the-root-link-is-not-a-jws-so-it-gets-a-prefix)),
+through one codec, `PqSigningChain.rootLinkSignableBytes`, used by the signer
+and both verifiers.
 
 ### 9.5 `enroll:update`
 
