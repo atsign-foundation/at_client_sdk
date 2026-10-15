@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_lookup/at_lookup.dart'
-    show AtLookUpException, SecondaryAddressFinder;
+import 'package:at_lookup/at_lookup.dart' show SecondaryAddressFinder;
 
+import 'public_lookup.dart';
 import 'server_copy.dart';
 
 /// Reads the server copy with an unauthenticated `lookup:` on a connection
@@ -22,25 +22,13 @@ class LookupServerCopyReader implements ServerCopyReader {
   /// The envelope, or null when the key is not found or holds null.
   @override
   Future<Uint8List?> fetch(String atSign, String app) async {
-    final lookUp = lookUps(
-        atSign: atSign,
+    final text = await publicLookup(
+        lookUps: lookUps,
         rootDomain: rootDomain,
-        authenticator: null,
-        secondaryAddressFinder: secondaryAddressFinder);
-    try {
-      final response = await lookUp
-          .executeCommand('lookup:${atKeysRecordKey(atSign, app)}\n');
-      if (response == null || !response.startsWith('data:')) {
-        throw StateError('unexpected lookup response: $response');
-      }
-      final text = response.substring('data:'.length).trim();
-      return text == 'null' ? null : Uint8List.fromList(utf8.encode(text));
-    } on AtLookUpException catch (e) {
-      if (e.errorCode == 'AT0015') return null;
-      rethrow;
-    } finally {
-      await lookUp.close();
-    }
+        secondaryAddressFinder: secondaryAddressFinder,
+        atSign: atSign,
+        key: atKeysRecordKey(atSign, app));
+    return text == null ? null : Uint8List.fromList(utf8.encode(text));
   }
 }
 
