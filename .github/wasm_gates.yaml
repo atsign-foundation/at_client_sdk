@@ -60,15 +60,15 @@ at_auth:
       because: the filesystem code it exists to quarantine
 
 at_client:
-  # Gated since PB-3 stage5; at_client.dart holds no dart:io. The two
-  # blocked packages are inherited through at_lookup_io.dart: at_lookup, and
-  # chalkdart beneath it. It is reached from lib/src/lifecycle/lookups.dart
-  # and the three CacheableSecondaryAddressFinder defaults. Hive and SQLite
-  # sit behind hive.dart / sqlite.dart and a conditional default.
+  # Gated since PB-3 stage5; at_client.dart holds no dart:io. The one blocked
+  # package, chalkdart, is inherited through package:at_utils/at_progress.dart,
+  # which at_auth's enrollment and lib/src/lifecycle import. Hive, SQLite and
+  # the TLS transport sit behind hive.dart / sqlite.dart / at_client_io.dart
+  # and conditional defaults.
   ratchets:
     - barrel: package:at_client/at_client.dart
       allowed_offenders: []
-      max_blocked_packages: 2
+      max_blocked_packages: 1
       min_files_walked: 1100
   probe:
     - package:at_client/at_client.dart
