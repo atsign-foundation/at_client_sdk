@@ -5,7 +5,7 @@ import 'package:at_client/at_client.dart';
 import 'package:web/web.dart' as web;
 
 import '../keys/indexeddb_store.dart';
-import '../keys/passkey_kek.dart';
+import '../keys/passkey_record_keys.dart';
 import '../keys/unlock_secret.dart';
 import '../keys/web_passkey_port.dart';
 import '../session/portal_session.dart';

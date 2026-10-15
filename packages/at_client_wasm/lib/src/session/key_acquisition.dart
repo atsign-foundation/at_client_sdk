@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart';
 import '../keys/envelope_exceptions.dart';
 import '../keys/key_bytes_store.dart';
 import '../keys/key_envelope.dart';
-import '../keys/passkey_kek.dart';
+import '../keys/passkey_record_keys.dart';
 import '../keys/passkey_port.dart';
 import '../keys/unlock_secret.dart';
 import '../keys/web_at_keys_io.dart';
@@ -135,7 +135,7 @@ Future<({Uint8List credentialId, PrfSecret secret})?> _openWithPasskey(
     Uint8List? hint) async {
   final ({Uint8List credentialId, PrfSecret secret}) unlocked;
   try {
-    unlocked = await kek.unlock(atSign, credentialId: hint);
+    unlocked = await kek.unlock(credentialId: hint);
   } on PasskeyCeremonyException {
     return null;
   } on PrfUnavailableException {

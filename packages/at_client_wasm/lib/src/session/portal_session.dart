@@ -3,7 +3,7 @@ import 'package:at_utils/at_logger.dart';
 
 import '../keys/key_bytes_store.dart';
 import '../keys/key_envelope.dart';
-import '../keys/passkey_kek.dart';
+import '../keys/passkey_record_keys.dart';
 import '../keys/unlock_secret.dart';
 import 'key_acquisition.dart';
 import 'lookup_server_copy.dart';
