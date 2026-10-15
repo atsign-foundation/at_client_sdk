@@ -3,9 +3,11 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/mocks.dart';
 import '../test_utils/recorded_logs.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
@@ -80,6 +82,7 @@ void main() {
     registerFallbackValue(NotificationParams());
     registerFallbackValue(AtKey());
     registerFallbackValue(PutRequestOptions());
+    registerFallbackValue(FakeUpdateVerbBuilder());
   });
 
   setUp(() {
@@ -94,11 +97,17 @@ void main() {
     when(() => atClient.getPreferences()).thenReturn(AtClientPreference());
     when(() => atClient.notificationService).thenReturn(notifications);
     when(() => atClient.isStopped).thenReturn(false);
-    when(() => atClient.put(any(), any(),
-            putRequestOptions: any(named: 'putRequestOptions')))
+    final remote = MockRemoteSecondary();
+    when(() => atClient.enrollmentId).thenReturn('e-1');
+    when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
-      mutexes.add((inv.positionalArguments[0] as AtKey).toString());
-      return true;
+      final builder = inv.positionalArguments[0] as VerbBuilder;
+      if (builder is! UpdateVerbBuilder) {
+        throw StateError('unexpected verb: ${builder.runtimeType}');
+      }
+      mutexes.add('${builder.atKey}');
+      return 'data:-1';
     });
     when(() => notifications.subscribe(
             regex: any(named: 'regex'),

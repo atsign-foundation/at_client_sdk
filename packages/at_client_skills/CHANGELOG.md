@@ -2,6 +2,8 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Multiple instances of one agent take their lock with
+  `tryAcquireServerMutex`.
 - Storage: each backend comes from its own import, `HiveAtClientStorage` from
   `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
   `package:at_client/memory.dart`, and a Flutter app passing no storage gets

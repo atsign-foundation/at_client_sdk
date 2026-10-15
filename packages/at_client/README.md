@@ -42,6 +42,19 @@ is the main entry point once authentication is complete.
 - `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
   the keystore. You should almost never need to do this if you are using 
   AtCollections.
+- `tryAcquireServerMutex(key, ttl:)` — a short-lived lock that every client of
+  the atSign shares, held on the atServer for at most 15 minutes; `AtRpc`'s
+  `enableRequestMutex` uses it
+  ([`lib/src/client/server_mutex.dart`](lib/src/client/server_mutex.dart)).
+
+**atServer version for the server mutex.** It needs an atServer from p3.13.0
+(at_commons 5.10.0), the first to parse `:nc`; an older one refuses every
+lock, so `tryAcquireServerMutex` throws and an `AtRpc` responder with
+`enableRequestMutex` handles no requests. A lock stays out of the commit log
+from c3.16.3 and p3.16.5; between p3.13.0 and those, the atServer records the
+commit anyway. An expired lock stops blocking at once from c3.16.2 and
+p3.16.5; before that it blocks until the atServer's expiry sweep, up to about
+ten and a half minutes. The client doesn't check the version.
 
 
 

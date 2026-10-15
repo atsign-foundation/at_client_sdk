@@ -10375,6 +10375,10 @@ releases it, and
 [14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 item 18 ceased to exist rather than being fixed.
 
+On the client, `MintLock` has no release at all, and `withLock` refuses a lock
+key that carries no ttl: with nothing deleting the record, a lock without one
+would block minting for good.
+
 ### 105.4 Three client-side things the protocol needed — all three built
 
 Found while checking whether the protocol held against the tree as it stood.
@@ -10415,6 +10419,10 @@ the measurement.
    nskey never had one.
    ✅ **Fixed:** `_mintUnlessPublished` re-reads under the lock and **adopts**
    what a sibling published rather than overwriting it.
+   Only the cold-start mint adopts. `rotate` runs `_mint` directly and throws
+   when it loses the lock, because a rotation that took what it found would
+   have rotated nothing while reporting success
+   ([47.3](#473-losing-the-mint-lock-fails-a-rotation-it-resolves-a-mint)).
 3. **The requirement failed on a ttl overrun, and the bounded window in step 3
    did not cover it.** A takes the lock at T0, is still minting at T0+ttl, the
    lock expires, B wins the next election, re-checks, A has not published yet,
@@ -10423,7 +10431,9 @@ the measurement.
    ✅ **Fixed:** the holder carries a `MintLease` and refuses to publish once
    it is spent, so a slow A abandons rather than racing B — turning "two mints"
    into "one mint, by B", which is the requirement. The lease is stamped
-   *before* the take goes out, so the client errs early rather than late.
+   *before* the take goes out, so the client errs early rather than late. The
+   atServer starts the ttl when it stores the record, so a deadline taken from
+   the reply would outlive the lock.
 
 ### 105.5 The residual risks, and what would reopen the question
 
@@ -10477,6 +10487,11 @@ well as to the mint election. Two things follow, both built:
 rotation inside the mint lock's cooldown is refused*), with the control that
 makes the refusal mean something: the same client, same namespace, same call,
 accepted once the ttl has lapsed.
+
+Two changes to the cooldown were proposed and rejected on evidence: releasing
+the lock while the lease is unspent, and retrying a rotation the cooldown
+refused. [116](#116-proposals-rejected-on-evidence-2026-08-23) items 7 and 8
+say why.
 
 ---
 
@@ -12658,11 +12673,13 @@ Contained, and the enumeration was cross-checked by two instruments agreeing on
 
 ⛔ **But the multi-signature READER must stay, and this is the asymmetry to get
 right.** `SignedEnvelope.fromJson` refuses an envelope whose signature entries
-carry differing `kid`s or differing `typ`s. Those refusals exist to stop an
-attacker **appending** an entry to an envelope in flight — and nothing about a
+carry differing `enid`s or differing `typ`s (it compared `kid`s until
+[131](#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31)
+moved the enrollment into `enid`). Those refusals keep an entry **appended** to
+an envelope in flight from being read as part of it — and nothing about a
 single-key *writer* makes an appended second entry impossible. **The writer can
 lose plurality; the parser cannot.** A change that removed both because "we no
-longer sign twice" would open exactly the hole those guards close.
+longer sign twice" would undo what those refusals are for.
 
 **Status:** ruled, unbuilt. Step 3's lever does not exist; steps 1 and 2 are
 expressible today. Removing the writer is contained but is **not** part of this
@@ -15292,3 +15309,59 @@ policy (UC-G2.5).
 Pinned by `rotation_policy_test.dart` (both periods as raw literals, inclusive, and that
 `CryptoConfig`, `CryptoConfig.nskey` and `readsNskeyWritesLegacy` all carry them), and
 catalogued under UC-A5.4 and UC-A5.5.
+
+## 156. The e2e pack's enrollments expire on their own, and nothing tears them down (2026-10-13)
+
+**Decided by gkc on 2026-10-13**, for
+[#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197): remove
+the e2e enrollment teardown rather than scope it to the run that created the
+enrollments.
+
+1. **No step denies or revokes an enrollment on `@ce2e1`..`@ce2e4`.**
+   `end2end_test_14`'s teardown step, `enrollment_teardown.dart` and its unit
+   test are gone. Every workflow run shares those atSigns, and the teardown
+   denied every pending enrollment and revoked every approved one except the
+   atSign's root, whichever run had made it. On 2026-10-09 the teardown of run
+   37990903461 revoked the four enrollments run 37991056660 had approved about
+   30 seconds earlier, and every connection that second run made afterwards
+   failed `AT0027 ... is revoked`.
+2. **The atServer retires them.** A pending enrollment expires after the
+   atServer's `enrollmentExpiryInHours` (48 by default); approval resets the
+   expiry to the request's `apkamKeysExpiryDuration`, which
+   `enrollment_setup.dart` sets to three hours; a deny or a revoke keeps the
+   expiry it finds, so the teardown never shortened a record's life. Read in
+   `enroll_verb_handler.dart` and `enrollment_manager.dart` on at_server trunk
+   and c3.17.0. Setup now fetches
+   each enrollment it approves and fails unless its `expiresAt` is no later
+   than three hours after the approval, so the pack's reliance on that expiry
+   is checked on every run.
+3. **Why the run-scoped teardown was not built.** It was the issue's proposal:
+   a marker derived from `GITHUB_RUN_ID`, and a record of the enrollment ids
+   setup created, so that teardown touched only those. With the expiry
+   retiring every enrollment anyway, its one remaining effect would be the
+   revoke, and since at_server #2781 every revoke stores a revocation record
+   with no ttl (`recordRevocationEvents`), which every `enroll:infons` reads in
+   full. A scoped teardown would still add at least one such record per atSign
+   per run, on atSigns nothing recycles. What removing it costs: a run's
+   approved enrollments stay valid until they expire, while their keys exist
+   only on the runner, which is discarded when the job ends.
+4. **The appName labels the run.** Setup submits
+   `wavi-<GITHUB_RUN_ID>-<GITHUB_RUN_ATTEMPT>-<n>`, or
+   `wavi-local-<random>-<n>` outside GitHub Actions, so an atSign's roster
+   says which run made each enrollment. It is a label and authorises nothing:
+   whoever submits an enrollment request chooses its appName.
+5. **A `PathNotFoundException: Deletion failed, path = 'test/hive/@ce2eN'` in
+   an `end2end_test_14` log is never a second defect.** It came from
+   `notify_with_isolate_test.dart`'s tearDown, which deleted both atSigns'
+   hive directories unconditionally. A directory is absent only when that
+   atSign's client failed before opening its store, so the exception always
+   followed an earlier failure in the same test (on 2026-08-22, an `AT0027`
+   from a revoked enrollment): read that test's first error. The tearDown now
+   skips a store that is not there.
+
+The scenarios are `features/e2e/run_scoped_enrollments.feature`.
+`tests/at_end2end_test/test/run_scoped_enrollments_test.dart` proves the four
+that hold without an atServer, and the group of the expiry scenario's name in
+`enrollment_setup.dart` proves that one against the long-lived atServers. That
+two overlapping runs leave each other's enrollments alone is observable only
+in CI.
