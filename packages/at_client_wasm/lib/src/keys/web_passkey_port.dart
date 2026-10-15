@@ -1,18 +1,13 @@
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:web/web.dart';
 
+import 'aes_gcm.dart';
 import 'passkey_ceremony.dart';
 import 'passkey_port.dart';
-
-Uint8List _randomBytes(int length) {
-  final random = Random.secure();
-  return Uint8List.fromList(List.generate(length, (_) => random.nextInt(256)));
-}
 
 Uint8List? _prfFirst(PublicKeyCredential credential) {
   final extensions = credential.getClientExtensionResults() as JSObject;
@@ -35,7 +30,7 @@ class WebPasskeyPort implements PasskeyPort {
   @override
   Future<({Uint8List credentialId, Uint8List? prfFirst})> create(
       {required String atSign, required Uint8List evalInput}) async {
-    final challenge = _randomBytes(32);
+    final challenge = randomBytes(32);
 
     final options = {
       'publicKey': {
@@ -73,7 +68,7 @@ class WebPasskeyPort implements PasskeyPort {
   @override
   Future<({Uint8List credentialId, Uint8List? prfFirst})> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
-    final challenge = _randomBytes(32);
+    final challenge = randomBytes(32);
 
     final allowCredentialsList = allowCredential == null
         ? []

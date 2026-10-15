@@ -1,15 +1,12 @@
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:cryptography/cryptography.dart';
 
+import 'aes_gcm.dart';
 import 'envelope_exceptions.dart';
 import 'unlock_secret.dart';
-
-/// An AES-GCM nonce and its ciphertext with the 16-byte tag appended.
-typedef _Sealed = ({Uint8List iv, Uint8List ct});
 
 /// One way into an envelope: the content key wrapped under a KEK derived from
 /// an [UnlockSecret] with [salt] and, for a passphrase, [params].
@@ -17,11 +14,9 @@ typedef _Unlock = ({
   String kind,
   Uint8List salt,
   KdfParams? params,
-  _Sealed wrap
+  Sealed wrap
 });
 
-final _gcm = AesGcm.with256bits();
-const _macLength = 16;
 const _hkdfAlg = 'hkdf-sha256';
 
 /// Seals a JSON document under a random content key, wrapped once per
@@ -54,7 +49,7 @@ class KeyEnvelopeCodec {
     if (secrets.isEmpty) {
       throw ArgumentError.value(secrets, 'secrets', 'at least one is required');
     }
-    final contentKey = _randomBytes(32);
+    final contentKey = randomBytes(32);
     final unlocks = [
       for (final secret in secrets)
         await _wrap(atSign, secret, contentKey, passphraseParams)
@@ -74,10 +69,9 @@ class KeyEnvelopeCodec {
       String atSign, Uint8List envelope, UnlockSecret secret) async {
     final (content, unlocks) = _parse(atSign, envelope);
     final contentKey = await _unwrapContentKey(atSign, unlocks, secret);
-    final plaintext =
-        await _gcmOpen(contentKey, content, _contentAad(atSign)) ??
-            (throw EnvelopeUnlockFailedException(
-                'the content of $atSign\'s envelope failed authentication'));
+    final plaintext = await gcmOpen(contentKey, content, _contentAad(atSign)) ??
+        (throw EnvelopeUnlockFailedException(
+            'the content of $atSign\'s envelope failed authentication'));
     return OpenedEnvelope._(
         atSign,
         jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>,
@@ -90,14 +84,14 @@ class KeyEnvelopeCodec {
 Future<_Unlock> _wrap(String atSign, UnlockSecret secret, Uint8List contentKey,
     KdfParams? passphraseParams) async {
   final kind = _kindOf(secret);
-  final salt = _randomBytes(16);
+  final salt = randomBytes(16);
   final params = secret is PassphraseSecret ? passphraseParams : null;
   final kek = await _kek(secret, salt, params);
   return (
     kind: kind,
     salt: salt,
     params: params,
-    wrap: await _gcmSeal(kek, contentKey, _wrapAad(atSign, kind, salt, params)),
+    wrap: await gcmSeal(kek, contentKey, _wrapAad(atSign, kind, salt, params)),
   );
 }
 
@@ -137,8 +131,7 @@ final class OpenedEnvelope {
   /// not open under this envelope's content key.
   Future<Uint8List> mergeUnlocksFrom(Uint8List other) async {
     final (otherContent, otherUnlocks) = _parse(atSign, other);
-    if (await _gcmOpen(_contentKey, otherContent, _contentAad(atSign)) ==
-        null) {
+    if (await gcmOpen(_contentKey, otherContent, _contentAad(atSign)) == null) {
       throw EnvelopeContentKeyMismatchException(
           'the other envelope is not sealed under this content key');
     }
@@ -162,7 +155,7 @@ Future<Uint8List> _unwrapContentKey(
   }
   for (final unlock in candidates) {
     final kek = await _kek(secret, unlock.salt, unlock.params);
-    final contentKey = await _gcmOpen(kek, unlock.wrap,
+    final contentKey = await gcmOpen(kek, unlock.wrap,
         _wrapAad(atSign, unlock.kind, unlock.salt, unlock.params));
     if (contentKey != null) return contentKey;
   }
@@ -210,42 +203,14 @@ Future<Uint8List> _hkdf(Uint8List prfOutput, Uint8List salt) async {
   return Uint8List.fromList(await key.extractBytes());
 }
 
-Future<_Sealed> _gcmSeal(
-    List<int> key, List<int> plaintext, List<int> aad) async {
-  final box = await _gcm.encrypt(plaintext,
-      secretKey: SecretKey(key), nonce: _randomBytes(12), aad: aad);
-  return (
-    iv: Uint8List.fromList(box.nonce),
-    ct: Uint8List.fromList([...box.cipherText, ...box.mac.bytes]),
-  );
-}
-
-/// The plaintext, or null when [sealed] fails authentication under [key].
-Future<Uint8List?> _gcmOpen(
-    List<int> key, _Sealed sealed, List<int> aad) async {
-  if (sealed.ct.length < _macLength) return null;
-  final split = sealed.ct.length - _macLength;
-  try {
-    return Uint8List.fromList(await _gcm.decrypt(
-        SecretBox(sealed.ct.sublist(0, split),
-            nonce: sealed.iv, mac: Mac(sealed.ct.sublist(split))),
-        secretKey: SecretKey(key),
-        aad: aad));
-  } on SecretBoxAuthenticationError {
-    return null;
-  } on ArgumentError {
-    return null;
-  }
-}
-
 Future<Uint8List> _encode(String atSign, Map<String, dynamic> plaintext,
     Uint8List contentKey, List<_Unlock> unlocks) async {
-  final content = await _gcmSeal(
+  final content = await gcmSeal(
       contentKey, utf8.encode(jsonEncode(plaintext)), _contentAad(atSign));
   return _encodeSealed(atSign, content, unlocks);
 }
 
-Uint8List _encodeSealed(String atSign, _Sealed content, List<_Unlock> unlocks) {
+Uint8List _encodeSealed(String atSign, Sealed content, List<_Unlock> unlocks) {
   return utf8.encode(jsonEncode({
     'v': 1,
     'atSign': atSign,
@@ -265,10 +230,10 @@ Uint8List _encodeSealed(String atSign, _Sealed content, List<_Unlock> unlocks) {
   }));
 }
 
-Map<String, String> _sealedJson(_Sealed s) =>
+Map<String, String> _sealedJson(Sealed s) =>
     {'iv': base64Encode(s.iv), 'ct': base64Encode(s.ct)};
 
-(_Sealed, List<_Unlock>) _parse(String atSign, Uint8List envelope) {
+(Sealed, List<_Unlock>) _parse(String atSign, Uint8List envelope) {
   final Object? json;
   try {
     json = jsonDecode(utf8.decode(envelope));
@@ -332,7 +297,7 @@ KdfParams _kdfParams(Map<String, Object?> json) {
   }
 }
 
-_Sealed _sealed(String iv, String ct) => (iv: _b64(iv), ct: _b64(ct));
+Sealed _sealed(String iv, String ct) => (iv: _b64(iv), ct: _b64(ct));
 
 Uint8List _b64(String value) {
   try {
@@ -340,9 +305,4 @@ Uint8List _b64(String value) {
   } on FormatException {
     throw UnsupportedEnvelopeException('not base64: $value');
   }
-}
-
-Uint8List _randomBytes(int length) {
-  final random = Random.secure();
-  return Uint8List.fromList(List.generate(length, (_) => random.nextInt(256)));
 }
