@@ -8824,7 +8824,7 @@ table, not from here; `git log` says what closed each.
 | **a pull cut by `stop()` keeps none of its batches' progress** | `_syncFromServer` persists the pull cursor once, in a `finally` after the last batch, and the stop-path guard skips that persist, so a client stopped mid-pull re-pulls from its previous cursor at the next start. Measured on the atServer logs CI keeps (`ve-atserver-logs-stable` of run 34200675382): the twenty clients `enrollment_test.dart` built in a row each pulled from `-1` (711 commits, 29 batches). Not a regression of the guard: the beta log of run 34160882867, before the guard existed, shows three consecutive clients in the same file pulling from 237 — the `finally` reached a closed store and persisted nothing either. Persisting after each batch makes progress durable at batch granularity, so a fresh install with a long history stopped mid-pull resumes rather than restarts. Reproduce from such a log: list the first `sync:from:N` verb each inbound connection id sends (fields split on the bar character; the id is the fourth). | Nothing |
 | **the detail file has five broken table rows** | ✅ The diary half is done 2026-09-08: the P0 row is shrunk to what is unread and its body moved to the detail file. What remains is the five rows, plus three links in that file that resolve to nothing because they were written relative to the plan's directory (`design.md` twice, `roadmap.md`; found 2026-09-08 by resolving every link in both files). A cold read of the P0 row `the CI logs carry hundreds of errors that are not test failures` on 2026-09-08 found it usable but hard: its measurements and its remedies share one cell, so the same fact appears in two tenses ("forces" as the pre-fix world and "forces … only for an app-sourced request" as the post-fix one), and four words carry two senses within it — *round* (a sync round, a network round trip), *key* (a record, key material), *stop* (the lifecycle call, plain ceasing), *primary* (the enrollment id, the house word for important). Three verbs there read either way — *holds* ("the atServer holds it"), *bails* (to which boolean?), *stands down* (returns early, or hands off?) — and *system-sourced* is used in the P2 `bypassCache` row before the P0 row defines it. What is owed: demote the measurement narrative (the clusters, the four factors, the before/after figures) to `detail/implementation-plan.md` and leave the row stating only what is still owed (clusters 4, 8 and 9), with each ambiguous word qualified at its use. Separately, `detail/implementation-plan.md` has five table rows whose cell count disagrees with their header (lines 1015, 2797, 3941, 8490, 8493 on 2026-09-08 — the table hook names them on any edit to the file), all older than this session; rebuild each from its cells. | Nothing |
 | **an invariant nobody wrote down: no ML-DSA-authenticating client without a data signing key** | Flagged during the design discussion as "worth naming" and then not named — it appears in no doc and no comment (grepped 2026-08-30). It follows from ruling 113's coherence rules rather than from any single decision, which is exactly why it has no home: `AtClientPreference` refuses an empty `dataSigningKeyAlgorithms` beside a non-rsa2048 authentication key, so the combination cannot be constructed. Worth one sentence in [113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18), because a reader meeting the refusal has no way to see that it is an invariant rather than a validation quirk. | Nothing |
-| **at_server: revoking the first enrollment does not retire its key material** | ⚠️ **A READING, not a measurement — three files on at_server `origin/trunk` at `5c0e603c`, and deliberately not probed.** The CRAM branch writes `privatekey:at_pkam_publickey` = the first enrollment's APKAM public key (`enroll_verb_handler.dart:387-389`). Exactly two references to that record exist in all of `at_secondary_server/lib` — that put and `pkam_verb_handler.dart:74`'s get — so nothing else writes it, revoke included. A holder of the first enrollment's private key can therefore present it with **no** enrollment id, land on the `pkamLegacy` branch, and be granted **full unscoped access**, because `isAuthorized` returns true unconditionally for a null enrollment id (`abstract_verb_handler.dart:216-219`) — after that enrollment has been revoked. **Settle it with a probe before treating it as true**: enrol, revoke, then authenticate with the same keypair and no enrollment id. If it holds, the fix is a decision, not a derivation — the record cannot simply be cleared on revoke, because on a pre-enrollment atSign it is the only credential there is, and clearing it locks the owner out. Surfaced 2026-08-30 while measuring commit 7's route ([why](#why-commit-7-needs-no-atserver-change)), which is where the reading of each of those three files is recorded. | Nothing, except that it lands in `at_server` |
+| **at_server: revoking the first enrollment does not retire its key material** | ⛔ **A reading of at_server before c3.16.4, already stale when this table was snapshotted.** From c3.16.4 and p3.16.5 (at_server #2787) nothing writes `privatekey:at_pkam_publickey`: the CRAM branch no longer copies the enrolling key, a CRAM `update` of the record is redirected into the `primary` enrollment, the atServer moves a stored flat key into `primary` or deletes it at startup, a PKAM with no enrollment id is answered as `primary`, and a connection carrying no enrollment id is refused unless it is CRAM. What follows is the reading as it was made. ⚠️ **A READING, not a measurement — three files on at_server `origin/trunk` at `5c0e603c`, and deliberately not probed.** The CRAM branch wrote `privatekey:at_pkam_publickey` = the first enrollment's APKAM public key (`enroll_verb_handler.dart:387-389`). Exactly two references to that record existed in all of `at_secondary_server/lib` — that put and `pkam_verb_handler.dart:74`'s get — so nothing else wrote it, revoke included. A holder of the first enrollment's private key could therefore present it with **no** enrollment id, land on the `pkamLegacy` branch, and be granted **full unscoped access**, because `isAuthorized` returned true unconditionally for a null enrollment id (`abstract_verb_handler.dart:216-219`) — after that enrollment had been revoked. **Settle it with a probe before treating it as true**: enrol, revoke, then authenticate with the same keypair and no enrollment id. If it holds, the fix is a decision, not a derivation — the record cannot simply be cleared on revoke, because on a pre-enrollment atSign it is the only credential there is, and clearing it locks the owner out. Surfaced 2026-08-30 while measuring commit 7's route ([why](#why-commit-7-needs-no-atserver-change)), which is where the reading of each of those three files is recorded. | Nothing, except that it lands in `at_server` |
 | **at_server: a String `apsk` on any enroll verb returns an internal error** | Measured 2026-08-30 against a live atServer: `enroll:update:{"enrollmentId":"…","apsk":"x"}` answers `Internal server error : type 'String' is not a subtype of type 'Map<String, dynamic>?' in type cast` instead of an `IllegalArgumentException`. `EnrollParams.fromJson` casts `json['apsk'] as Map<String, dynamic>?`, and that parse runs at `enroll_verb_handler.dart:109`, **before** `_validateParams` at `:114` and before the OTP check — and `enroll:request` is allowed on an unauthenticated connection (`:94`), so an unauthenticated caller reaches it. Low severity: a Dart type name is all that leaks. It is still an unhandled cast on a public verb, and `apskLegacy`'s `as String?` has the same shape. Found in passing while probing commit 7's route. | Nothing, except that it lands in `at_server` |
 | **at_lookup major: deleting the ladder makes a keystore mandatory** | Moved into this list 2026-08-27 — previously reachable only from `MEMORY.md`, so a session reading the repo concluded it was not owed. ⛔ **Gates the later at_lookup MAJOR, not D1**; the consolidation itself is finished and shipped as a minor. [Measured](../../at-lookup-consolidation/plan.md#blocks-the-major--deletion-does-not-remove-the-ladder-it-makes-a-keystore-mandatory) by attributing 107 ladder authentications: the remaining traffic is **not un-migrated code**, it is callers who supply **no `AtKeysIo`** and correctly get no authenticator. So deleting the ladder makes a keystore **required** to authenticate — breaking for every consumer that builds a client from a preference alone, and at_tools' `at_cli` is named as exactly such a consumer, outside this tree. A bridge exists and the ladder shows it: its legacy leg signs with an empty public half, a shape at_auth already builds elsewhere | Nothing. A decision about the bridge before it is code |
 | **at_lookup major: `atLookUp.enrollmentId` has 51 uses, not 7** | Moved into this list 2026-08-27, same reason. ⛔ **Gates the later at_lookup MAJOR.** [51 uses across 34 files](../../at-lookup-consolidation/plan.md#blocks-the-major--atlookupenrollmentid-has-51-uses-not-the-7-first-recorded) workspace-wide, from `dart analyze` rather than a grep. ⚠️ **Two denominators, and quoting one for the other is the error already made**: "how many modules ask the lookup which enrollment they are" is 7; "how many uses break when the member goes" is 51. ⛔ **Do not re-derive with a grep on the member name** — it is reached through at least eight differently-named receivers, so a bare `enrollmentId` grep over-counts wildly and `atLookUp.enrollmentId` **under**-counts, returning 9. Only the analyzer separates them by receiver type | Nothing |
@@ -8846,6 +8846,14 @@ table, not from here; `git log` says what closed each.
 | **a functional client built on an empty keys store** | Found 2026-09-07: `tests/at_functional_test/test/crypto_era_default_test.dart` builds its client through `TestUtils.initAtClient` on an `InMemoryAtKeysIo` holding nothing for the atSign, relying on the injected AtChops. The construction-time read that decides the enrollment ([ruling 132](decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)) now logs "Could not read the keys" at warning — once per functional run, measured — and the client runs as the caller's id, null. Either write the demo keys into that store or stop passing one: a warning that fires on every run of a fixture is noise that hides the real case. | Nothing |
 
 ### Why commit 7 needs no atServer change
+
+⛔ **This section describes at_server as it was before c3.16.4.** From c3.16.4
+and p3.16.5 (at_server #2787) a bare `pkam:` is answered as the `primary`
+enrollment and `isAuthorized` refuses a connection carrying no enrollment id
+unless it is CRAM, so the no-enrollment-id branch it reads no longer leaves a
+connection without one;
+[the primary migration](#the-primary-migration-row-as-it-stood-on-2026-09-08)
+records what replaced it.
 
 ⛔ **This section used to propose an atServer change and leave its central
 question open. Both were wrong, and both were settled by measurement on
@@ -8935,20 +8943,23 @@ root — it is the one credential this server cannot re-issue, so retiring it st
 the owner's explicit act. On both paths the atSign's root credential survives its
 own retrofit, by design.
 
-**On a CRAM-onboarded atSign the flat key IS the first enrollment's key.** The
-CRAM branch writes `at_pkam_publickey` = the first enrollment's APKAM public key
+**On an atSign CRAM-onboarded by at_server c3.16.3 or earlier, the flat key IS
+the first enrollment's key.** Up to c3.16.3 the CRAM branch wrote
+`at_pkam_publickey` = the first enrollment's APKAM public key
 (`enroll_verb_handler.dart:387-389`, *"store this apkam as default pkam public
-key for old clients"*). Exactly two references to that record exist in all of
-`at_secondary_server/lib` — that put and the pkam handler's get — so nothing
-else ever touches it. The two cases are one case.
+key for old clients"*), and that put and the pkam handler's get were the only
+code in `at_secondary_server/lib` that read or wrote the record by name, so the
+two cases were one case. From c3.16.4 and p3.16.5 the CRAM branch writes nothing
+there (at_server 97724627).
 
-**The owner's act exists today and is one verb.** `at_pkam_publickey` is a
-protected key: a scoped enrollment is refused, a `*:rw` enrollment without
-`__manage` is refused, and **a root enrollment may write it** — three tests in
-at_server's `root_key_authz_test.dart`, each asserting the stored value rather
-than merely the throw. A pre-enrollment retrofit produces a root enrollment, so
-the owner can retire the legacy credential whenever they choose. Measured on
-`@bob🛠`, its own atSign because the last step destroys shared state:
+**In c3.16.3 the owner's act was one verb.** `at_pkam_publickey` was a
+protected key: a scoped enrollment was refused, a `*:rw` enrollment without
+`__manage` was refused, and **a root enrollment could write it** — three tests
+in at_server's `root_key_authz_test.dart`, each asserting the stored value
+rather than merely the throw. A pre-enrollment retrofit produces a root
+enrollment, so the owner could retire the legacy credential whenever they chose.
+Measured on `@bob🛠` on 2026-08-30, against an atServer built before c3.16.4,
+its own atSign because the last step destroys shared state:
 
 | step | measured |
 | ---- | -------- |
@@ -8957,9 +8968,20 @@ the owner can retire the legacy credential whenever they choose. Measured on
 | the flat key again | `AT0401 pkam authentication failed` |
 | the new enrollment again | authenticates |
 
-⛔ **Overwrite, never delete.** `delete:privatekey:at_pkam_publickey` is refused
-as a syntax error — the delete grammar requires an atSign and this record has
-none. Writing a public key nobody holds the private half of is what retires it.
+⛔ **Up to c3.16.3: overwrite, never delete.** `delete:privatekey:at_pkam_publickey`
+is refused as a syntax error — the delete grammar requires an atSign and this
+record has none. Writing a public key nobody holds the private half of was what
+retired it.
+
+⛔ **From c3.16.4 and p3.16.5 there is no flat key to retire.** A write of
+`at_pkam_publickey` is refused for every enrollment, a CRAM `update` of it is
+redirected into the `primary` enrollment, and the atServer keeps no flat key: at
+startup it moves a stored one into `primary` or deletes it, and a PKAM with no
+enrollment id is answered as `primary` (at_server #2787;
+[the primary migration](#the-primary-migration-row-as-it-stood-on-2026-09-08)).
+The owner's act is then `enroll:revoke primary`, which the atServer refuses,
+from an enrollment's connection, when no permanent fully privileged enrollment
+would survive it.
 
 ⛔ **And it must NOT be part of the retrofit.** Sibling clones of one
 pre-enrollment keyfile share the flat keypair, and the retrofit mints a *fresh*
