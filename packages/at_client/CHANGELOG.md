@@ -1,3 +1,5 @@
+## 3.15.0-rc8
+
 ## 3.15.0-rc7
 
 - feat: `tryAcquireServerMutex` takes a short-lived lock that every client of

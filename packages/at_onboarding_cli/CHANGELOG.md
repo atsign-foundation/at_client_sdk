@@ -1,3 +1,8 @@
+## 2.0.0-rc8
+
+- build: requires `at_client` ^3.15.0-rc8, whose `Enrollment` reports the
+  expiry a request asks for.
+
 ## 2.0.0-rc7
 
 - build: requires `at_client` ^3.15.0-rc7, which serves
