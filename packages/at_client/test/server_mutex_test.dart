@@ -129,6 +129,17 @@ void main() {
       expect(lease.expiresAt.isBefore(began.add(ttl)), isFalse);
       expect(lease.isSpent, isFalse);
     });
+
+    test('gives a lease already spent when the create outlives the ttl',
+        () async {
+      final lease = await clientOf([], onUpdate: () async {
+        await Future.delayed(const Duration(milliseconds: 60));
+        return 'data:-1';
+      }).tryAcquireServerMutex(lockKey, ttl: const Duration(milliseconds: 20));
+      expect(lease!.isSpent, isTrue,
+          reason: 'the atServer starts the ttl once it has the command, so '
+              'the lease counts from before the send');
+    });
   });
 
   group('the answer', () {
@@ -343,6 +354,34 @@ void main() {
               .holdsServerMutex(lockKey),
           throwsA(isA<FormatException>()));
     });
+
+    test(
+        'spends a lease on this enrollment\'s own lock once the record has '
+        'expired', () async {
+      // The false check runs well inside the 500 ms window, so a slow runner
+      // cannot spend the lease before it is asserted to be live.
+      final lease = await clientOf([],
+              onLookup: () async => record('e-1',
+                  expiresAt: DateTime.now()
+                      .toUtc()
+                      .add(const Duration(milliseconds: 500))))
+          .ownServerMutexLease(lockKey, ttl: ttl);
+      expect(lease!.isSpent, isFalse);
+      await Future.delayed(const Duration(milliseconds: 600));
+      expect(lease.isSpent, isTrue,
+          reason: 'a lease must end no later than its lock');
+    });
+
+    test('spends a capped lease once the ttl from the read has passed',
+        () async {
+      final lease = await clientOf([],
+              onLookup: () async => record('e-1',
+                  expiresAt:
+                      DateTime.now().toUtc().add(const Duration(days: 1))))
+          .ownServerMutexLease(lockKey, ttl: const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
+      expect(lease!.isSpent, isTrue);
+    });
   });
 
   group('the local store', () {
@@ -374,6 +413,25 @@ void main() {
       await atClient.put(control, 'a value',
           putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
       expect((await atClient.get(control)).value, 'a value');
+    });
+  });
+
+  group('the lease', () {
+    test('runs out on elapsed time, not on the wall clock', () {
+      final behind = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().subtract(const Duration(hours: 1)),
+          Stopwatch()..start(),
+          const Duration(minutes: 1));
+      expect(behind.isSpent, isFalse,
+          reason: 'a wall clock moved past expiresAt does not end it');
+      final ahead = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().add(const Duration(hours: 1)),
+          Stopwatch()..start(),
+          Duration.zero);
+      expect(ahead.isSpent, isTrue,
+          reason: 'a wall clock short of expiresAt does not extend it');
     });
   });
 }
