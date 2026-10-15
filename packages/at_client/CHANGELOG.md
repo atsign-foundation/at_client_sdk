@@ -11,6 +11,14 @@
   `secondaryAddressFinder` throws a `StateError` naming it.
 - build: requires `at_lookup` ^4.0.0-rc1; `RemoteSecondary` authenticates only
   through the lookup's `AtAuthenticator`.
+- fix: `get` on a `RemoteOnlyAtClientStorage` client returns the value instead of
+  throwing a `TypeError`.
+- BREAKING: `AtClientStorage.replicatesServer` is a new member; storages extending
+  `AtClientStorageBase` inherit `true`.
+- fix: a client on `RemoteOnlyAtClientStorage` no longer runs sync, and stops logging
+  "Unexpected exception in sync".
+- fix: a `RemoteOnlyAtClientStorage` client starts without `isLocalStoreRequired = false`,
+  and keeps working after its enrollment changes.
 
 ## 3.15.0-rc4
 

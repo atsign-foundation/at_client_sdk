@@ -1,11 +1,11 @@
 // Unit tests for RemoteOnlyAtClientStorage — the AtClientStorage that composes
 // stage2a's NoopSyncQueueStore and stage2b's RemoteWriteThroughKeyStore into
 // the concrete Mode E backend `implementation-plan.md` names as not yet
-// written. Closes X-R1 (constructs with no local database) and X-R2 (proves
-// composition wiring; true cross-client interop against a live atServer is a
-// functional test, not this suite). See plans/wasm/spike/pb3-stage2c-plan.md.
+// written. Closes X-R1 (constructs with no local database) and the
+// composition half of X-R2; cross-client interop is x_r2_interop_test.dart.
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/write_through_sync_service.dart';
 import 'package:at_client/remote_only.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -202,5 +202,47 @@ void main() {
             'supplies the concrete non-Hive storage that fills it');
 
     await client.stop();
+  });
+
+  group('sync', () {
+    Future<AtClientImpl> build(String atSign) async {
+      when(() =>
+              remoteSecondary.executeCommand(any(), auth: any(named: 'auth')))
+          .thenAnswer((_) async => 'data:1');
+      return await buildAtClient(
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: AtClientPreference()
+            ..isLocalStoreRequired = false
+            ..namespace = 'wavi'
+            ..monitorAutoStart = false,
+          storage: RemoteOnlyAtClientStorage(
+              atSign: atSign, remoteSecondary: remoteSecondary),
+          atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys()),
+          lookUps: _recording) as AtClientImpl;
+    }
+
+    test('buildAtClient gives a remote-only client a WriteThroughSyncService',
+        () async {
+      final client = await build('@remoteonly7');
+
+      expect(client.syncService, isA<WriteThroughSyncService>(),
+          reason: 'a write-through store has no local replica to reconcile');
+      expect(await client.syncService.isInSync(), isTrue);
+
+      await client.stop();
+    });
+
+    test('DefaultAtServiceFactory gives a remote-only client the same',
+        () async {
+      final client = await build('@remoteonly8');
+
+      final sync = await DefaultAtServiceFactory().syncService(
+          client, AtClientManager.getInstance(), client.notificationService);
+
+      expect(sync, isA<WriteThroughSyncService>());
+
+      await client.stop();
+    });
   });
 }

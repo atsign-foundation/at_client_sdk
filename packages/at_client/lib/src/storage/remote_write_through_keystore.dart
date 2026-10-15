@@ -6,7 +6,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 
 class RemoteWriteThroughKeyStore
     implements AtKeyValueStore<String, AtData, AtMetaData?> {
-  final RemoteSecondary remoteSecondary;
+  RemoteSecondary remoteSecondary;
   final int maxAttempts;
 
   final Map<String, AtData> _local = {};
@@ -98,7 +98,7 @@ class RemoteWriteThroughKeyStore
         await _withRetry(() => remoteSecondary.executeVerb(builder));
     final cleanResponse = response.replaceFirst(RegExp('^data:'), '');
     final decoded = jsonDecode(cleanResponse) as Map<String, dynamic>;
-    return AtData().fromJson(decoded);
+    return AtData().fromJson(decoded)..key = key;
   }
 
   @override
