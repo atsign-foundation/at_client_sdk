@@ -154,6 +154,15 @@ void main() {
       expect(port.lastCreateAtSign, '@alice');
     });
 
+    test('register refuses an atSign longer than 64 UTF-8 bytes', () async {
+      final port = FakePasskeyPort()
+        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+      expect(PasskeyKek(port).register('@${'🐱' * 16}'), throwsArgumentError);
+      expect(port.lastCreateAtSign, isNull);
+      await PasskeyKek(port).register('@${'a' * 55}');
+      expect(port.lastCreateAtSign, '@${'a' * 55}');
+    });
+
     test('unlock without a credentialId asks for any discoverable passkey',
         () async {
       final port = FakePasskeyPort()

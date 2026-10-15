@@ -104,9 +104,17 @@ class PasskeyKek {
 
   /// Registers a passkey whose user is the canonical [atSign]; returns its id
   /// and PRF output.
+  ///
+  /// Throws [ArgumentError] when the canonical atSign exceeds the 64 UTF-8
+  /// bytes WebAuthn allows in `user.id`.
   Future<PasskeyRegistration> register(String atSign) async {
-    final result = await port.create(
-        atSign: atSign.toAtsign(), evalInput: await recordPrfSalt());
+    final canonical = atSign.toAtsign();
+    if (utf8.encode(canonical).length > 64) {
+      throw ArgumentError.value(
+          atSign, 'atSign', 'longer than 64 UTF-8 bytes for a passkey user.id');
+    }
+    final result =
+        await port.create(atSign: canonical, evalInput: await recordPrfSalt());
     return (
       credentialId: result.credentialId,
       secret: _secretFrom(result.prfFirst)
