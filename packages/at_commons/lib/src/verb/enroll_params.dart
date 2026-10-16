@@ -1,5 +1,6 @@
 import 'package:at_commons/at_commons.dart';
 import 'package:json_annotation/json_annotation.dart';
+import 'package:meta/meta.dart';
 
 part 'enroll_params.g.dart';
 
@@ -128,6 +129,7 @@ class EnrollParams {
   /// `expect` is a copy of the link the caller found on that key when it read
   /// the record, or null when it found none, and is sent as null rather than
   /// left out.
+  @experimental
   Map<String, dynamic>? links;
 
   EnrollParams();

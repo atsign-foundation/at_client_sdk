@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 enum OperationEnum { update, delete, append, remove }
 
 String getOperationName(OperationEnum? d) => '$d'.split('.').last;
@@ -38,9 +40,9 @@ enum EnrollOperationEnum {
   /// can invoke on itself must not be able to widen its own grant.
   update,
 
-  /// Links that vouch for an enrollment's signing keys, one per `kid`, stored
-  /// on that enrollment's `_apsk` record; each written only over the link the
-  /// caller found on that key.
+  /// Writes links that vouch for an enrollment's signing keys, one per `kid`.
+  /// See `EnrollParams.links`.
+  @experimental
   link
 }
 

@@ -1,8 +1,8 @@
-## 5.23.0
+## 5.23.0-rc1
 
-- feat: `enroll:link`, for writing links that vouch for an enrollment's
-  signing keys: `EnrollOperationEnum.link`, and `links` on `EnrollParams` and
-  `EnrollVerbBuilder`.
+- feat: `enroll:link` (experimental), for writing links that vouch for an
+  enrollment's signing keys: `EnrollOperationEnum.link`, and `links` on
+  `EnrollParams` and `EnrollVerbBuilder`.
 
 ## 5.22.0
 

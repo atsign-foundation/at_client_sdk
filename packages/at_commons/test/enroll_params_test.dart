@@ -307,8 +307,6 @@ void main() {
   });
 
   group('A group of tests to verify enroll:link', () {
-    // Raw-literal pins, as for enroll:update: the operation token and the
-    // field name are what the atServer matches and reads.
     test('the operation token is "link"', () {
       expect(getEnrollOperation(EnrollOperationEnum.link), 'link');
     });
@@ -341,6 +339,10 @@ void main() {
         expect(match?.namedGroup('operation'), op,
             reason: 'operation "$op" must still capture as itself');
       }
+    });
+
+    test('the enroll grammar refuses a truncated operation token', () {
+      expect(RegExp(VerbSyntax.enroll).firstMatch('enroll:li:{}'), isNull);
     });
 
     test('links survive a wire round trip under that name, a null expect kept',

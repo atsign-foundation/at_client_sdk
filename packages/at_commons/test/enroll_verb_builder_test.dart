@@ -210,6 +210,15 @@ void main() {
           '{"0123456789abcdef":{"link":{"v":2},"expect":null}}}\n');
     });
 
+    test('a link call with an empty links map sends no links', () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.link
+        ..enrollmentId = '123'
+        ..links = {};
+      expect(enrollVerbBuilder.buildCommand(),
+          'enroll:link:{"enrollmentId":"123"}\n');
+    });
+
     test('an operation other than link sends no links', () {
       var enrollVerbBuilder = EnrollVerbBuilder()
         ..operation = EnrollOperationEnum.approve
