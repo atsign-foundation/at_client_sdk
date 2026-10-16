@@ -1,21 +1,27 @@
+# Proposed, awaiting agreement: the scenarios tagged @proposed, and in the
+# description the bidirectional formatting characters, the line and paragraph
+# separators, the DoS bound of six times, and "reorder or split".
 Feature: AtSignLogger hands its LoggingHandler printable text
 
   Each record an AtSignLogger hands its LoggingHandler, built-in or custom,
   carries its message and logger name with every control character (C0, DEL,
-  C1) written as a visible escape (`\r`, `\x1b`), except that each LF in the
-  message is kept and followed by two spaces. Only a record's first line
-  starts at the margin, and the only control character a handler is handed is
-  that LF.
+  C1), every bidirectional formatting character (U+061C, U+200E, U+200F,
+  U+202A to U+202E, U+2066 to U+2069) and the line and paragraph separators
+  (U+2028, U+2029) written as a visible escape (`\r`, `\x1b`, `\u202e`),
+  except that each LF in the message is kept and followed by two spaces. Only
+  a record's first line starts at the margin, and the only control character
+  a handler is handed is that LF.
 
   Races: none arise; the escape is a function of one record, applied before
   the handler is called.
   Replay: none arises; nothing is issued or checked.
-  DoS: an escaped message is at most four times the length of the message
-  logged (`\x9b` for one character), so a call site logging text from outside
-  the process still bounds its length.
+  DoS: an escaped message is at most six times the length of the message
+  logged (`\u202e` for one character), so a call site logging text from
+  outside the process still bounds its length.
   Forgery: text logged from outside the process cannot start a record of its
-  own, nor move a terminal's cursor or clear its screen, in what a handler is
-  handed (the scenarios tagged @forgery).
+  own, move a terminal's cursor, clear its screen, nor reorder or split the
+  line a viewer shows it on, in what a handler is handed (the scenarios
+  tagged @forgery).
   Impersonation: a message cannot pass as another logger's record, since none
   of its lines can start a record; the name an AtSignLogger is given is its
   creator's choice and outside this feature.
@@ -32,6 +38,21 @@ Feature: AtSignLogger hands its LoggingHandler printable text
   Scenario: A line in a message cannot start a record
     When it logs at info the message "a", LF, "INFO|x"
     Then the handler is handed the message "a", LF, two spaces, "INFO|x"
+
+  @forgery @proposed
+  Scenario: A message's bidirectional formatting characters reach the handler as visible escapes
+    When it logs at info the message "a", U+202E, "b", U+2066, "c"
+    Then the handler is handed the message `a\u202eb\u2066c`
+
+  @forgery @proposed
+  Scenario: A line or paragraph separator in a message cannot start a line
+    When it logs at info the message "a", U+2028, "INFO|x", U+2029, "y"
+    Then the handler is handed the message `a\u2028INFO|x\u2029y`
+
+  @proposed
+  Scenario: An emoji sequence in a message reaches the handler unchanged
+    When it logs at info a message holding an emoji joined by U+200D and a flag built from tag characters
+    Then the handler is handed that message unchanged
 
   Scenario: A backslash in a message reaches the handler unchanged
     When it logs at info the message `C:\logs\x1b`
