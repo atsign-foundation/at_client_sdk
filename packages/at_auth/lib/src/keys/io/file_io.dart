@@ -9,6 +9,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
+import 'package:at_auth/src/keys/serialization/json_text.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -165,7 +166,14 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   Future<Map<String, dynamic>> _readAtRestDocument(File file) async {
-    final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final text = await file.readAsString();
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw FormatException(notValidJson('the atKeys file ${file.path}', e));
+    }
+    final json = decoded as Map<String, dynamic>;
     if (!passphraseCodec.isEnvelope(json)) return json;
     return passphraseCodec.decode(json, passPhrase: passPhrase);
   }
