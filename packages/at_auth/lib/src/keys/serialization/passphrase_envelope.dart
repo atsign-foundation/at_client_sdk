@@ -172,12 +172,10 @@ class AtKeysPassphraseEnvelopeCodec {
           hashParams: readParams);
       final plaintext = aes.decrypt(content, iv: InitialisationVector(ivBytes));
       // jsonDecode must stay inside the try: the cipher is unauthenticated,
-      // so an incorrect passphrase does not fail decrypt() -- it yields
-      // arbitrary bytes. Whether those bytes parse as a JSON object is
-      // effectively random per file (the IV varies per write), so a wrong
-      // passphrase otherwise escapes as an uncaught FormatException (invalid
-      // JSON) or a cast error (valid non-object JSON) instead of the
-      // documented AtDecryptionException.
+      // so an incorrect passphrase usually fails decrypt() on its padding but
+      // sometimes yields arbitrary text, which would otherwise escape as an
+      // uncaught FormatException (invalid JSON) or a cast error (valid
+      // non-object JSON) instead of the documented AtDecryptionException.
       final Object? decodedJson;
       try {
         decodedJson = jsonDecode(plaintext);
