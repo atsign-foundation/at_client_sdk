@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/holds_none_of.dart';
@@ -43,14 +44,14 @@ void main() {
     return text.substring(0, text.indexOf(selfEncryptionKey) + 20);
   }
 
-  Future<String> errorReading(String text, {String? passPhrase}) async {
+  Future<Object> errorReading(String text, {String? passPhrase}) async {
     final path = '${dir.path}/@alice_key.atKeys';
     await File(path).writeAsString(text);
     try {
       await FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase)
           .read('@alice');
     } catch (e) {
-      return '$e';
+      return e;
     }
     fail('the read succeeded');
   }
@@ -64,10 +65,11 @@ void main() {
 
       final error = await errorReading(text);
 
-      expect(error, holdsNoneOf(text),
+      expect('$error', holdsNoneOf(text),
           reason: 'the error holds none of the file\'s text');
-      expect(error, contains('is not valid JSON'));
-      expect(error, contains('(at character ${text.length + 1})'));
+      expect(error, isA<FormatException>());
+      expect('$error', contains('is not valid JSON'));
+      expect('$error', contains('(at character ${text.length + 1})'));
     });
   });
 
@@ -85,10 +87,11 @@ void main() {
 
       final error = await errorReading(envelope, passPhrase: passPhrase);
 
-      expect(error, holdsNoneOf(plaintext),
+      expect('$error', holdsNoneOf(plaintext),
           reason: 'the error holds none of the decrypted text');
-      expect(error, contains('is not valid JSON'));
-      expect(error, contains('(at character ${plaintext.length + 1})'));
+      expect(error, isA<AtDecryptionException>());
+      expect('$error', contains('is not valid JSON'));
+      expect('$error', contains('(at character ${plaintext.length + 1})'));
     });
   });
 }
