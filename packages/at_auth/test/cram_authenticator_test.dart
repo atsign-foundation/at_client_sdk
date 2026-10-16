@@ -6,6 +6,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/fake_cram_at_server.dart';
 import 'test_utils/holds_none_of.dart';
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
@@ -54,10 +55,11 @@ void main() {
       final secret =
           List.generate(128, (_) => random.nextInt(16).toRadixString(16))
               .join();
-      final reason = 'refused ${random.nextInt(1 << 32)}';
-      final atLookUp = MockAtLookupImpl();
-      when(() => atLookUp.cramAuthenticate(secret))
-          .thenThrow(UnAuthenticatedException(reason));
+      final reason =
+          'error:AT0401-Exception: refused ${random.nextInt(1 << 32)}';
+      final atServer = FakeCramAtServer(atSign, cramReply: reason);
+      final atLookUp = atServer.lookUp();
+      addTearDown(atLookUp.close);
 
       final thrown = await CramAuthenticator()
           .authenticate(atSign, secret, atLookUp)
@@ -65,6 +67,11 @@ void main() {
 
       expect('$thrown', holdsNoneOf(secret),
           reason: 'the exception holds none of the secret');
+      final cram = atServer.written.where((c) => c.startsWith('cram:'));
+      expect(cram, hasLength(1),
+          reason: 'the refusal answers the one cram: the client sent');
+      expect('$thrown', holdsNoneOf(cram.single.substring('cram:'.length)),
+          reason: 'the exception holds none of the digest');
       expect(thrown, isA<UnAuthenticatedException>());
       expect('$thrown', contains(atSign));
       expect('$thrown', contains(reason));
