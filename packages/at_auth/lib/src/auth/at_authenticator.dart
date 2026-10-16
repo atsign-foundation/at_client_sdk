@@ -304,9 +304,8 @@ Future<bool> _pkam(
   throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
 }
 
-/// Ported from at_lookup's own `cramAuthenticate`, verbatim - including that it
-/// does NOT pass the challenge through [validatedFromChallenge], where PKAM
-/// does.
+/// Ported from at_lookup's own `cramAuthenticate`, including that it does NOT
+/// pass the challenge through [validatedFromChallenge], where PKAM does.
 ///
 /// That asymmetry is preserved deliberately rather than resolved here: a port
 /// that quietly adds a check is a behaviour change hiding inside a refactor,
@@ -340,7 +339,8 @@ Future<bool> _cram(
     _logger.info('cram auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException('Auth failed');
+  throw UnAuthenticatedException(
+      'Cram authentication failed for $atSign: $cramResponse');
 }
 
 /// Signs [challenge] as a PKAM proof with [keyPair], returning the base64 the
