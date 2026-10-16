@@ -1,8 +1,3 @@
-# Proposed, awaiting agreement: the scenarios tagged @proposed, and in the
-# description the bidirectional formatting characters, the line and paragraph
-# separators, the limit to the message and logger name, the copy's time and
-# sequence number, the DoS bound of six times, and the Forgery line's
-# reordering and splitting.
 Feature: AtSignLogger hands its LoggingHandler printable text
 
   Each record an AtSignLogger hands its LoggingHandler, built-in or custom,
@@ -44,17 +39,16 @@ Feature: AtSignLogger hands its LoggingHandler printable text
     When it logs at info the message "a", LF, "INFO|x"
     Then the handler is handed the message "a", LF, two spaces, "INFO|x"
 
-  @forgery @proposed
+  @forgery
   Scenario: A message's bidirectional formatting characters reach the handler as visible escapes
     When it logs at info the message "a", U+202E, "b", U+2066, "c"
     Then the handler is handed the message `a\u202eb\u2066c`
 
-  @forgery @proposed
+  @forgery
   Scenario: A line or paragraph separator in a message cannot start a line
     When it logs at info the message "a", U+2028, "INFO|x", U+2029, "y"
     Then the handler is handed the message `a\u2028INFO|x\u2029y`
 
-  @proposed
   Scenario: An emoji sequence in a message reaches the handler unchanged
     When it logs at info a message holding an emoji joined by U+200D and a flag built from tag characters
     Then the handler is handed that message unchanged
