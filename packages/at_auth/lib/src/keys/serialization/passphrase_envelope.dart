@@ -161,7 +161,7 @@ class AtKeysPassphraseEnvelopeCodec {
 
     final HashParams? readParams = _paramsForDecode(json);
     final ivBytes = decodeBase64Field(iv, 'iv', AtDecryptionException.new);
-    // NOTE: a malformed content fails here, by field name, not inside the
+    // NOTE: malformed content fails here, by field name, not inside the
     // cipher.
     decodeBase64Field(content, 'content', AtDecryptionException.new);
 
