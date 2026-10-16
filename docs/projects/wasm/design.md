@@ -423,11 +423,11 @@ first.
 
 The interface is right; its packaging is not.
 
-- `at_utils/lib/src/logging/handlers.dart:9-12` — `LoggingHandler { void call(LogRecord) }`,
+- `at_utils/lib/src/logging/handlers.dart` `LoggingHandler` — `LoggingHandler { void call(LogRecord) }`,
   with four implementations.
 - `at_utils/lib/src/logging/handlers.dart:1` — `import 'dart:io';` **in the same file**,
-  so importing the logger at all drags `dart:io` in. `FileLoggingHandler` (`:34-48`),
-  `StdErrLoggingHandler` (`:53-59`) and `CLILoggingHandler` (`:71-97`) are the users.
+  so importing the logger at all drags `dart:io` in. `FileLoggingHandler`,
+  `StdErrLoggingHandler` and `CLILoggingHandler` are the users.
 - `at_utils/lib/src/logging/atsignlogger.dart:14-22` — a mutable process-global static
   `defaultLoggingHandler`, defaulting to `ConsoleLoggingHandler` → `print`.
 
