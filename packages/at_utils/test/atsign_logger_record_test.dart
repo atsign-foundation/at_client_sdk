@@ -83,7 +83,8 @@ void main() {
   test('A record\'s error and stack trace reach the handler unchanged', () {
     final StateError error = StateError('bad\nthing');
     final StackTrace stackTrace = StackTrace.current;
-    logger.severe('failed', error, stackTrace);
+    logger.severe('fail\red', error, stackTrace);
+    expect(handler.records.single.message, r'fail\red');
     expect(handler.records.single.error, same(error));
     expect(handler.records.single.stackTrace, same(stackTrace));
   });

@@ -78,8 +78,8 @@ Feature: AtSignLogger hands its LoggingHandler printable text
     Then the handler is handed the logger name `sync\nINFO`
 
   Scenario: A record's error and stack trace reach the handler unchanged
-    When it logs at severe the message "failed" with an error whose text holds LF, and a stack trace
-    Then the handler is handed that error object and that stack trace
+    When it logs at severe the message "fail", CR, "ed" with an error whose text holds LF, and a stack trace
+    Then the handler is handed the message `fail\red`, that error object and that stack trace
 
   Scenario: A listener on the underlying logger is handed the message as logged
     Given a listener on the AtSignLogger's logger.onRecord
