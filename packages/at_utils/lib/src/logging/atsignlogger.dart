@@ -78,16 +78,19 @@ class AtSignLogger {
       return text;
     }
     final StringBuffer escaped = StringBuffer();
-    for (final int codeUnit in text.codeUnits) {
-      if (keepingLineBreaks && codeUnit == 0x0a) {
-        escaped.write('\n  ');
-      } else if (_isEscaped(codeUnit)) {
-        escaped.write(_escape(codeUnit));
-      } else {
-        escaped.writeCharCode(codeUnit);
+    int start = 0;
+    for (int i = 0; i < text.length; i++) {
+      final int codeUnit = text.codeUnitAt(i);
+      if (_isEscaped(codeUnit)) {
+        escaped
+          ..write(text.substring(start, i))
+          ..write(keepingLineBreaks && codeUnit == 0x0a
+              ? '\n  '
+              : _escape(codeUnit));
+        start = i + 1;
       }
     }
-    return escaped.toString();
+    return (escaped..write(text.substring(start))).toString();
   }
 
   /// Whether [codeUnit] is a control character (C0, DEL, C1), a bidirectional
