@@ -1,8 +1,12 @@
+import 'dart:math';
+
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import 'test_utils/holds_none_of.dart';
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
@@ -37,6 +41,33 @@ void main() {
           () async => await cramAuthenticator.authenticate(
               atSign, cramSecret, mockAtLookup),
           throwsA(isA<UnAuthenticatedException>()));
+    });
+  });
+
+  group('Given an atSign and its CRAM secret', () {
+    test(
+        'when the atServer refuses CRAM authentication, then the exception '
+        'names the atSign and the atServer\'s reason, and its text doesn\'t '
+        'contain the secret', () async {
+      final random = Random.secure();
+      final atSign = '@cram${random.nextInt(1 << 32)}';
+      final secret =
+          List.generate(128, (_) => random.nextInt(16).toRadixString(16))
+              .join();
+      final reason = 'refused ${random.nextInt(1 << 32)}';
+      final atLookUp = MockAtLookupImpl();
+      when(() => atLookUp.cramAuthenticate(secret))
+          .thenThrow(UnAuthenticatedException(reason));
+
+      final thrown = await CramAuthenticator()
+          .authenticate(atSign, secret, atLookUp)
+          .then<Object?>((_) => null, onError: (Object e) => e);
+
+      expect('$thrown', holdsNoneOf(secret),
+          reason: 'the exception holds none of the secret');
+      expect(thrown, isA<UnAuthenticatedException>());
+      expect('$thrown', contains(atSign));
+      expect('$thrown', contains(reason));
     });
   });
 }
