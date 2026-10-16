@@ -29,9 +29,11 @@ class AtSignLogger {
   ///
   /// The loggingHandler defaults to the value of [defaultLoggingHandler].
   ///
-  /// The loggingHandler is handed each record with every control character in
-  /// its message and logger name written as a visible escape (`\r`, `\x1b`),
-  /// except that each LF in the message is kept and followed by two spaces.
+  /// The loggingHandler is handed each record with every control character,
+  /// bidirectional formatting character and line or paragraph separator in its
+  /// message and logger name written as a visible escape (`\r`, `\x1b`,
+  /// `\u202e`), except that each LF in the message is kept and followed by two
+  /// spaces.
   ///
   /// To customize the logging behavior based on your specific requirements, create an
   /// instance of a class that implements the [LoggingHandler] interface and pass this
@@ -55,8 +57,8 @@ class AtSignLogger {
     level = _root_level;
   }
 
-  /// [record], or, when its message or logger name holds a control character,
-  /// a copy of it with those escaped.
+  /// [record], or, when its message or logger name holds a character to
+  /// escape, a copy of it with those escaped.
   static logging.LogRecord _printable(logging.LogRecord record) {
     final String message = _escaped(record.message, keepingLineBreaks: true);
     final String loggerName =
@@ -69,17 +71,17 @@ class AtSignLogger {
         record.stackTrace, record.zone, record.object);
   }
 
-  /// [text] with each control character written as a visible escape, or,
+  /// [text] with each character to escape written as a visible escape, or,
   /// when [keepingLineBreaks], each LF kept and followed by two spaces.
   static String _escaped(String text, {required bool keepingLineBreaks}) {
-    if (!text.codeUnits.any(_isControl)) {
+    if (!text.codeUnits.any(_isEscaped)) {
       return text;
     }
     final StringBuffer escaped = StringBuffer();
     for (final int codeUnit in text.codeUnits) {
       if (keepingLineBreaks && codeUnit == 0x0a) {
         escaped.write('\n  ');
-      } else if (_isControl(codeUnit)) {
+      } else if (_isEscaped(codeUnit)) {
         escaped.write(_escape(codeUnit));
       } else {
         escaped.writeCharCode(codeUnit);
@@ -88,14 +90,23 @@ class AtSignLogger {
     return escaped.toString();
   }
 
-  static bool _isControl(int codeUnit) =>
-      codeUnit < 0x20 || (codeUnit >= 0x7f && codeUnit <= 0x9f);
+  /// Whether [codeUnit] is a control character (C0, DEL, C1), a bidirectional
+  /// formatting character, or a line or paragraph separator.
+  static bool _isEscaped(int codeUnit) =>
+      codeUnit < 0x20 ||
+      (codeUnit >= 0x7f && codeUnit <= 0x9f) ||
+      codeUnit == 0x061c ||
+      codeUnit == 0x200e ||
+      codeUnit == 0x200f ||
+      (codeUnit >= 0x2028 && codeUnit <= 0x202e) ||
+      (codeUnit >= 0x2066 && codeUnit <= 0x2069);
 
   static String _escape(int codeUnit) => switch (codeUnit) {
         0x09 => r'\t',
         0x0a => r'\n',
         0x0d => r'\r',
-        _ => '\\x${codeUnit.toRadixString(16).padLeft(2, '0')}',
+        < 0x100 => '\\x${codeUnit.toRadixString(16).padLeft(2, '0')}',
+        _ => '\\u${codeUnit.toRadixString(16).padLeft(4, '0')}',
       };
 
   String? get level {

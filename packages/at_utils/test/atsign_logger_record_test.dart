@@ -30,6 +30,25 @@ void main() {
     expect(handler.records.single.message, 'a\n  INFO|x');
   });
 
+  test(
+      'A message\'s bidirectional formatting characters reach the handler as'
+      ' visible escapes', () {
+    logger.info('a\u202eb\u2066c');
+    expect(handler.records.single.message, r'a\u202eb\u2066c');
+  });
+
+  test('A line or paragraph separator in a message cannot start a line', () {
+    logger.info('a\u2028INFO|x\u2029y');
+    expect(handler.records.single.message, r'a\u2028INFO|x\u2029y');
+  });
+
+  test('An emoji sequence in a message reaches the handler unchanged', () {
+    const String emoji = '@\u{1F469}\u200d\u{1F4BB} \u2764\ufe0f'
+        ' \u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}';
+    logger.info(emoji);
+    expect(handler.records.single.message, emoji);
+  });
+
   test('A backslash in a message reaches the handler unchanged', () {
     logger.info(r'C:\logs\x1b');
     expect(handler.records.single.message, r'C:\logs\x1b');
@@ -94,6 +113,32 @@ void main() {
       logger.info('\t\x00\x1f \x7e\x7f\x85\x9f\xa0');
       expect(handler.records.single.message,
           r'\t\x00\x1f' ' \x7e' r'\x7f\x85\x9f' '\xa0');
+    });
+
+    test(
+        'when a message holds characters at each edge of the bidirectional and'
+        ' separator ranges, then only the characters in those ranges reach the'
+        ' handler as escapes', () {
+      logger.info('\u061b\u061c\u061d\u200d\u200e\u200f\u2010'
+          '\u2027\u2028\u202e\u202f\u2065\u2066\u2069\u206a');
+      expect(
+          handler.records.single.message,
+          '\u061b'
+          r'\u061c'
+          '\u061d\u200d'
+          r'\u200e\u200f'
+          '\u2010\u2027'
+          r'\u2028\u202e'
+          '\u202f\u2065'
+          r'\u2066\u2069'
+          '\u206a');
+    });
+
+    test(
+        'when a logger name holds a bidirectional formatting character, then'
+        ' the handler is handed it as a visible escape', () {
+      AtSignLogger('sync\u202e', loggingHandler: handler).info('hello');
+      expect(handler.records.single.loggerName, r'sync\u202e');
     });
   });
 
