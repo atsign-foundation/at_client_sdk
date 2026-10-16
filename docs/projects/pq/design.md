@@ -45,7 +45,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [4. Subsystem D — structural design (CryptoProvider seam, AtKeys/AtKeysIo & key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)
 - [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
-- [7. Trust boundary & residual threats](#7-trust-boundary--residual-threats)
+- [7. Trust model](#7-trust-model)
 - [8. Subsystem F — inter-server PQ authentication (IS-1)](#8-subsystem-f--inter-server-pq-authentication-is-1)
 - [9. Subsystem G — signature agility (the auth/signing key split)](#9-subsystem-g--signature-agility-the-authsigning-key-split)
 
@@ -145,7 +145,7 @@ Layer 3 per data write.
 |---|---|---|---|
 | `legacy` | legacy data + inline-wrapped key (modern values never inline a key) | RSA-2048 + AES (monolithic) | RSA keypair. **Bare-name default** for an *absent* `providerId` (pre-convention data) |
 | `at/nskey/XWING` | a **CK-conveyance record** (a sealed content key, cited by `ckKid`) | `X-Wing-seal` (the CK encapsulated to an nskey public half) — via `pqSeal`/`pqOpen` ([§3](#3-subsystem-c--at_chops-pq-primitives)) | the recipient's **nskey** — the owner's own nskey (self data) or another atSign's nskey (shared) |
-| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
+| `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a key derived per value from a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
 
 Notes:
 
@@ -191,7 +191,7 @@ content-key kids. Working names marked.
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **signing-root mint lock** *(working)* | `_rootlock@alice` (self key, immutable create, short ttl — no namespace, matching the record it guards) | no | n/a | serialises minting the signing root between the owner's own privileged enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
-| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
+| **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a key derived per value from a CK, cites `ckKid` |
 | **substrate envelope** *(working)* | `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
 | **APKAM key package** | per [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) | (enrollment record) | the APKAM keypair | recipient unit for Layer-1 |
 
@@ -275,7 +275,7 @@ immediately. See
 > and it is the user-owned root of trust. There is therefore no universal
 > cold-start recipient: PQ sharing requires the recipient to have used or
 > authorised the namespace. Ruled in
-> [decisions.md section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+> [decisions.md section 18](detail/decisions.md#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03).
 
 **The nskey's public half is published eagerly.** Minting writes
 `public:__nskey.app_1.my_apps@alice` there and then — before any data, before any
@@ -417,8 +417,15 @@ disclosure — the namespace is already plaintext in the key name.
   `appMetadata.ckKid`. The value is the `pqSeal` envelope wrapping the CK (KEM ct +
   AEAD body) — **no separate `iv`/`kemCt`** on the conveyance.
 - On an `at/symmetric/AES/GCM` **data value**:
-  `{ providerId: "at/symmetric/AES/GCM", ckKid, iv, ns, ckNs }`. `iv` is the base64
-  12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
+  `{ providerId: "at/symmetric/AES/GCM", ckKid, salt, iv, ns, ckNs }`. `salt` is 32
+  base64 bytes of fresh randomness per value, and the value is encrypted under
+  `HKDF-SHA256-Expand(prk = CK, info = "at/symmetric/AES/GCM/value-key/v2" ‖ salt, L = 32)`
+  rather than under the CK itself, so no `(key, nonce)` pair can repeat however many
+  values share a CK. The CK is already a uniform 256-bit key, so it keys the expand step
+  directly (RFC 5869 section 3.3), and each value key rests on HMAC-SHA256's PRF
+  security under the CK rather than on HKDF-Extract keyed by a public salt. A value
+  carrying no `salt` is read under the CK directly. `iv` is
+  the base64 12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
   the value's **own** full namespace — it is what the AAD binds, so two items under
   different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
   namespace the CK and its conveyance live at, which differs from `ns` whenever
@@ -486,7 +493,7 @@ Without this, a sender keeps sealing to a pre-rotation generation that a revoked
 enrollment can still open, and **B6 revocation silently fails for inbound
 cross-atSign data**. The advertisement carries no `ttr`, and the client fetches it
 with `bypassCache`, so a reader's atServer never serves a cached copy of it
-([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-post-quantum-key-records-and-the-client-bypasses-its-cache-for-them-2026-09-30)).
+([ruling 145](detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30)).
 For self data the owner's own advertisement is read
 local-first, which sync keeps current, through the same cache, cleared early when sync
 pulls a change, and a re-read of bytes already verified is not verified again, so her
@@ -519,8 +526,8 @@ crypto:
    recipient's key was found, unless the application turned
    `seedNamespaceKeys` off
    ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
-3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under the CK; stamp
-   `ckKid` (+ `iv`) in `appMetadata`.
+3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under a key derived from
+   the CK and a fresh per-value salt; stamp `ckKid`, `salt` and `iv` in `appMetadata`.
 
 A cross-atSign share therefore writes one ciphertext and two conveyances, the
 recipient's and the sibling copy. An application that wants a separate self-copy
@@ -613,10 +620,43 @@ every `ensureCurrent`, from its cache while that is fresh, and re-cuts its CK on
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)). Exposure is bounded by
 `advertisementTtl` plus `advertisementStaleGrace`.
 
+**So must the sender's own side.** A shared CK is conveyed twice: to the recipient, and
+as a sibling copy sealed to the sender's own nskey, so the sender's other enrollments
+can open what it shares, and a revocation on the sender's atSign rotates its own
+namespace keys just as one on the recipient's atSign rotates the recipient's. So `ensureCurrent` also compares the own generation the sibling copy was sealed to
+(`ownNskeyKid`) with the newest own generation this enrollment both sees advertised and
+holds the private for, and cuts a fresh CK when they differ. It does so unconditionally,
+before the rotation policy is asked, as it does for the destination. While a new own
+generation is advertised and its private has not arrived, the current CK is kept until
+it does, and the check's `privateHalf` call pulls the missing private from the atSign's
+other enrollments. A CK cut
+in that window for another reason (a first write, the destination rotating, the policy)
+seals its sibling copy to the own generation this enrollment's keys in that namespace
+already rest on, its public half re-derived from the held seed (`heldPublic`), or goes
+without a copy when none records one, rather than failing on the unheld generation. Cuts
+queue behind one another, and one queued behind a cut that already replaced the key it
+found current returns that key rather than cutting a second, so racing writes share one
+fresh CK; an explicit `rotateContentKey` always cuts. The
+current-CK pointer records both generations, and a restart resumes only a pointer
+naming the own generation the sender holds; one written before `ownNskeyKid` existed
+names none
+([ruling 154](detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09),
+[UC-A5.7](acceptance.md#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)).
+
 Rotation buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation
 lever. It does **not** give per-message FS or history re-encryption (the old nskey
 private retained → history-on). Coarse FS comes from B5a, not from this.
+
+**When each lever fires by default.** Revocation rotates the namespace keys the revoked
+enrollment held, and a CK follows either namespace key it rests on, without asking any
+policy. Beyond that, both levers ask an application policy, and the defaults are a year:
+`rotateCkAfterOneYear`, since with per-value keys a CK is a key-derivation key with no
+usage limit, and `rotateNskeyAfterOneYear`, measured from the advertisement's own mint
+date, which is what heals a compromise nobody detected. A year is NIST SP 800-57 Part 1's
+suggested cryptoperiod for a key-derivation key, and inside its 1-to-2-year range for a
+public key-transport key
+([ruling 155](detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09)).
 
 **(B6) Revocation wiring.** Composes: (1) enrollment revocation (`enroll:revoke` —
 APKAM, free, cuts future server access); (2) nskey-keypair rotation **excluding**
@@ -799,10 +839,14 @@ The full built/gap inventory with `file:line` evidence is in
 
 **Envelope key shape.** `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@<owner>` — a
 self key,
-`shouldEncrypt=false` (the value is already ciphertext). The body is raw `pqSeal`
+`shouldEncrypt=false` (the value is already ciphertext). The body is an
+APKAM-signed `SecretEnvelope` (version 2) naming the sender's enrollment and kpid,
+the recipient kpid and the namespace `<ns>`, whose `sealed` member holds `pqSeal`
 bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
-[seal-spec.md](seal-spec.md) — HKDF info domain-separation
-`'at_client/secret_sharing/v1'`).
+[seal-spec.md](seal-spec.md)) under an HKDF info of five components: the label
+`at_client/secret_sharing/v2`, `<fromEnrollmentId>`, `<fromKpid>`, `<toKpid>`
+and `<ns>`, each written as its UTF-8 length in two big-endian bytes followed by
+those bytes, so no two sets of fields give the same info.
 The same envelope carries both the *request* (pull) and the *response*.
 
 **Two gates protect every copy:**
@@ -820,6 +864,12 @@ it: discovery/sealing mistakes cannot leak. Gate = defence in depth; seal = boun
 **Sign / verify-before-decrypt.** Each envelope is **APKAM-signed**; the receiver
 **verifies before decrypt** (`_consume`), proving a genuine owner-client wrote it.
 Per-enrollment `_apsk` signing-key resolution drives the verify.
+
+**The namespace and the parties are signed and sealed, not read off the key name.**
+The receiver refuses an envelope whose signed namespace differs from the `<ns>` in
+its key, and files a received secret under the signed one. Because the HKDF info
+names the sender and recipient as well, a sealed body opens only for the sending
+enrollment, recipient and namespace it was sealed for. Only version 2 is read.
 
 **Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) [section 6](detail/decisions.md#6-resolved--open-execution-decisions-af)).**
 Every *advertised recipient key* — the per-enrollment **key package** (Layer 1) and the
@@ -869,15 +919,14 @@ rsa→mldsa65 upgrade of an existing enrollment's signing key is recommended aga
 (the enrollment-upgrade path reaches the same end state with mechanics that exist);
 ratified 2026-08-05: [decisions 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05) item 8 ratifies the "no" on an in-place rsa→mldsa65 upgrade, and item 9 freezes the tagged format.
 
-**Trust nuance.** The signature is verified against `_apsk`, which the atServer serves —
-so it authenticates against a rogue *insider* enrollment (under an honest server) but
-**not** against a malicious atServer *operator*, which controls both the signature key
-and the `_apsk` it is checked against. This holds same-atSign and cross-atSign alike;
-the operator of an atSign's atServer stays in the confidentiality TCB for data destined
-to that atSign until the anchor is distributed independently. See
-[§7 Trust boundary & residual threats](#7-trust-boundary--residual-threats) for the full
-model and the mitigation ladder — do **not** describe signing as removing the atServer
-from the TCB.
+**Trust nuance.** The signature is verified against `_apsk`, which the atServer serves,
+so while the atServers serve keys faithfully it tells a reader which enrollment
+published a key, and no enrollment can publish one in another's name. This holds
+same-atSign and cross-atSign alike. It does not check the atServers themselves: an
+atSign's atServer stays trusted for the keys others seal to that atSign until the anchor
+is distributed outside it, which key transparency is on the roadmap to do. See
+[section 7](#7-trust-model) for the trust model and the key-transparency design — do
+**not** describe signing as removing the need to trust the atServers.
 *(Status: **both advertised keys are signed and verified.** The published `nskey` —
 `PublishedNskeyKeyRing.mintAndPublish` wraps its advertisement with `wrapAndSign` and
 `ApkamSignedAdvertisedKeys` verifies a peer's, cross-atSign on the live wire. The **key
@@ -1465,10 +1514,17 @@ CryptoProvider { id; encrypt(CryptoContext, AtKey, String) → String; decrypt(C
 - **No `CryptoRegistry` / `CryptoPolicy` / `CryptoStorage`** and **no `cryptoRegistry`
   getter on the `AtClient` spec.**
 
-**Get-path invariants.** `get` respects the `isEncrypted` tri-state (explicit
-`false` skips decryption; absent = try-decrypt fallback; `true` decrypts via the
-routed provider). `shouldEncrypt = false` is a true no-crypto path on write and
-read — secret-sharing envelopes and key-package copies are stored that way.
+**Get-path invariants.** `get` respects the `isEncrypted` tri-state (`true`
+decrypts via the routed provider; absent = try-decrypt fallback; explicit `false`
+skips decryption unless the value has legacy ciphertext's shape — base64 of a
+positive multiple of 16 bytes, unencoded, under no provider but legacy — and then
+tries a legacy decryption, returning the value as stored if that fails). The
+shape test exists because at_client 3.0.10 to 3.2.1 sent no flag, or
+`false`, with a value it had encrypted, and the atServer stores a missing flag
+as `false`.
+`shouldEncrypt = false` is a no-crypto path on write; on read, the SDK's own such
+records — secret-sharing envelopes (JSON), content-key copies (which name their
+provider), CK pointers and watermarks — never have that shape.
 
 ### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
@@ -1541,6 +1597,25 @@ errors on any `dart:io` reachable from the entry point, so:
   builds no connection of its own — the caller hands it an `AtLookupMuxable`, and
   its atServer check is at_lookup's neutral `checkAtSignServer` over that lookup,
   so no reachability probe is left to extract.
+
+### OpenSSL backends behind a conditional export (at_client)
+
+at_client's post-quantum data path takes its X-Wing KEM (`SecretSharingAlgos.kemFor`
+and `kemForSuite`) and its value AES-256-GCM (`SymmetricAesGcmProvider`) from
+`lib/src/crypto/backends/crypto_backends.dart`, which applies the FFI
+auto-resolve default ([`decisions.md`, rulings of 2026-07-02](detail/decisions.md#rulings--2026-07-02))
+to at_client without at_client importing `at_chops_ffi.dart` from anywhere a web
+build reaches:
+
+- It is a conditional export, `if (dart.library.ffi)`. A native build uses at_chops's
+  OpenSSL backends where the loaded libcrypto supports the algorithm (AES-256-GCM with
+  any OpenSSL 3, X-Wing with OpenSSL 3.5 or later) and pure Dart otherwise; a web or
+  wasm build takes the pure-Dart branch and never reaches `dart:ffi`.
+- Every backend takes the persisted seed as its secret key, so a record written on a
+  device with OpenSSL opens on one without, and back. ML-KEM-1024 has no OpenSSL
+  backend and stays pure Dart, as does the AEAD inside `pqSeal`, which at_chops selects.
+- Pinned by `packages/at_client/test/crypto_backends_test.dart`: which backend each
+  algorithm takes, and that each direction opens under the other.
 
 ### File partition
 
@@ -1724,7 +1799,7 @@ all published.
 
 | Capability | Evidence (`file:line`) |
 |---|---|
-| X-Wing `pqSeal`/`pqOpen` of `__ssenv` (HPKE + AES-256-GCM, HKDF info `'at_client/secret_sharing/v1'`) | `pairwise_secret_sharing.dart:191,398,99`; `pq_hpke.dart:80` |
+| `pqSeal`/`pqOpen` of `__ssenv` (RFC 9180 at the suite the version byte names; HKDF info labelled `at_client/secret_sharing/v2`, length-prefixed components binding sender, recipient and namespace) | `pairwise_secret_sharing.dart` `sealInfoFor`, `sendEnvelope`, `_consume`; `pq_hpke.dart:152` |
 | Per-envelope APKAM sign + verify-before-decrypt; per-enrollment `_apsk` resolution | `mixins/envelope_signing.dart:74,152`; verify precedes open `pairwise_secret_sharing.dart:366` |
 | `kpid` addressing throughout (envelopes and fan-out keyed by the key-package kid) | `secret_envelope.dart` `toKpid`/`fromKpid`; `key_package.dart:29` |
 | Per-APKAM `KeyPackage` keyed by `(enrollmentId, apkamId)`; crypto-agile parse + `bestKeyFor` | `key_package.dart:76,108,156`; `algo_ids.dart:34,46` |
@@ -1826,214 +1901,162 @@ Given/When/Then test plan + harness mapping is in [`acceptance.md`](acceptance.m
 
 ---
 
-## 7. Trust boundary & residual threats
+## 7. Trust model
 
-This section records the confidentiality trust boundary honestly, so nothing elsewhere
-in the doc set overclaims what the advertised-key signing ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
-[decisions.md §12](decisions.md)) achieves. The headline: **the operator of an atSign's
-atServer is in the confidentiality TCB for all data destined to that atSign, and for the
-data that atSign sends to others**, and the signing does not, by itself, change that. The last subsection sketches the key-transparency
-direction that would.
+The atServers are trusted to serve keys faithfully. This section records what rests on
+that trust, so nothing elsewhere in the doc set claims more for the advertised-key
+signing ([section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
+[decisions.md §12](decisions.md)) than it gives. Key transparency
+([#2293](https://github.com/atsign-foundation/at_client_sdk/issues/2293)) is on the
+roadmap as the way a client checks that trust instead of resting on it
+([section 7.4](#74-key-transparency-is-on-the-roadmap)).
 
-### 7.1 The anchor problem: an atServer is the de-facto CA for its own atSign
+None of this is specific to post-quantum keys. They make the bytes harvest-resistant;
+whom a client trusts for keys is a separate question, and classical Atsign answers it the
+same way: a sender fetches `public:publickey@alice` from @alice's atServer and encrypts
+to whatever it returns.
 
-D1 encryption is only as trustworthy as the binding *atSign → recipient public key*. A
-sender obtains that binding from the recipient's atServer (directly, or proxied through
-its own). Advertised-key signing chains the recipient key to the enrollment's `_apsk`,
-but **`_apsk` is itself served by the same atServer** — so the anchor of the whole chain
-is a key the atServer supplies. In effect, an atServer is the certificate authority for
-its own atSign's keys. This is a property of the Atsign Protocol, not of the substrate:
-classical Atsign has it too (a sender fetches `public:publickey@alice` from @alice's
-atServer and encrypts to whatever it returns).
+### 7.1 What the atServers are trusted for
 
-### 7.2 The malicious-operator attack (transparent, split-view MITM)
+- **An atSign's keys.** A client gets @alice's advertised keys from @alice's atServer:
+  her `nskey` publics and, for an approver, an enrollee's key package, along with the
+  `_apsk` each is signed against. Signing chains each advertised key to `_apsk`, and the
+  same atServer serves `_apsk`, so the chain's anchor is a key the atServer serves. In
+  effect an atSign's atServer is the certificate authority for that atSign's keys.
+- **Both directions of an atSign's traffic.** @alice's clients fetch every peer's keys
+  through her atServer, which looks them up on the peer's (`plookup`), so a share
+  between two atSigns rests on both their atServers, whichever way it goes.
+- **The sender of an unsigned payload.** nskey data values and their content-key
+  conveyances carry no sender signature, and `pqSeal` is RFC 9180 Base mode, which
+  authenticates no sender, so a reader takes the `sharedBy` a record names from the
+  atServer that served it, self-data included.
 
-A maliciously-operated @alice-atServer can read data sent *to* @alice:
+### 7.2 What the signing adds
 
-1. It generates its own keypair `EVIL`.
-2. It serves `EVIL_pub` as an @alice enrollment's `_apsk`.
-3. It serves an advertised recipient key (a `nskey` public / key package)
-   that it generated, **signed with `EVIL_priv`**.
-4. A sender (a peer `@bob`, or one of @alice's own clients) fetches the advertised key,
-   verifies its signature against the `_apsk` — which is `EVIL_pub` — and it **passes**,
-   because the server controls both halves of the chain.
-5. The sender seals the content key to the server's key; the server decapsulates and reads.
+While the atServers are faithful, no enrollment can publish a key in another
+enrollment's name, in its own atSign or another. The atServer lets only the owning
+enrollment write its `_apsk`; a client checks the APKAM signature on a peer's `nskey`
+advertisement (`ApkamSignedAdvertisedKeys`), and an approver on an enrollee's key
+package (`VerbEnrollmentDirectory`), against the `_apsk` served for the enrollment that
+signed it. The signing does not check the atServers themselves; that is what key
+transparency is for ([section 7.4](#74-key-transparency-is-on-the-roadmap)).
 
-It is **transparent to both ends**: after reading, the server re-seals the plaintext to
-@alice's *real* recipient key (which it holds — @alice's own client published it) and
-stores that, so @alice's client decrypts normally. The sender saw a signature that
-"verified"; @alice received a message that decrypts. Neither observes an anomaly.
+### 7.3 Self-data
 
-The signing gives the sender **zero** protection here, because the sender's only source
-for the `_apsk` it verifies against is the same server that forged the signature — the
-trust is circular for any party whose sole path to @alice's keys is @alice's atServer.
+A client seals to its own atSign's `nskey` only for a generation whose private it holds,
+and only to the public half that private derives, never to the one it was served;
+without the private it refuses the write with `NskeyPrivateNotHeldException`. So the
+confidentiality of self-data, and of the sender's own copy of a shared content key,
+rests on keys the client holds rather than on what its atServer serves; their sender
+still rests on the atServer ([section 7.1](#71-what-the-atservers-are-trusted-for)).
+The cost is that an enrollment authorised for a namespace cannot write there until its
+private arrives, which `holdsPrivate` reports.
 
-The same applies to what @alice sends *out*. Her clients fetch a peer's keys only through
-her atServer, which proxies the lookup to the peer's
-([section 7.1](#71-the-anchor-problem-an-atserver-is-the-de-facto-ca-for-its-own-atsign)),
-so the keys @alice seals to are also only as trustworthy as her atServer.
+### 7.4 Key transparency is on the roadmap
 
-### 7.3 Impact scope — precisely what an operator can and cannot do
+Key transparency ([#2293](https://github.com/atsign-foundation/at_client_sdk/issues/2293))
+moves the anchor outside the atServers in two steps. First, a client pins a peer's
+signing root on first contact and checks every later advertisement through the chain
+back to it; `verifyChain` can walk a chain, but only tests call it. Then each signing
+root is published to a transparency log on the atDirectory
+([section 7.5](#75-key-transparency-on-the-atdirectory)), so first contact is checked
+too; that step is multi-repo.
 
-- **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
-  — inbound cross-atSign shares, and self-data where the client relies on server-served
-  keys rather than locally-held ones — by substituting the *recipient* key. The same holds
-  for data those atSigns send out, since their clients fetch every peer key through it,
-  so the trust covers both directions of an atSign's traffic.
-- **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
-  read is a pass-through re-seal, so any *sender* signature inside the payload survives
-  unchanged and still verifies. To silently **modify**, the operator must also defeat that
-  sender signature — which for a [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means substituting the *sender's*
-  signing key **as the recipient's client sees it**. It can (it mediates that client's
-  lookups too), so modify is achievable — but it needs a **second** substitution and is
-  defeated the moment the recipient anchors the sender's key independently (out-of-band
-  pin / KT). An unsigned or self-data payload is silently modifiable with the single
-  recipient-key substitution. So: read depends on one substitution; silent modify depends
-  on two (and both collapse under an independent anchor).
-- **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
-  substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
-  (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
-  break); or MITM traffic between atSigns it does not host.
-- **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
-  the matching public and should seal self-data to the **locally-held** key, never a
-  server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD
-  prefer locally-held keys over server-served keys wherever they hold the private.
+Signing content-key conveyances waits on the same anchor: until it exists, a sender
+signature would be checked against an `_apsk` the same atServers serve.
 
-### 7.4 Detectability — undetectable to a *targeted* victim today
+### 7.5 Key transparency on the atDirectory
 
-- **Untargeted** substitution (the server shows `EVIL` to everyone, including @alice's own
-  clients) is **detectable**: an @alice client knows its own real public key (it holds the
-  private), so a **self-audit** — fetch my own `_apsk` / `public:__nskey.<ns>@alice` as served and
-  compare to what I published — catches it. Cheap; catches the lazy attacker immediately.
-- **Targeted** substitution (the server shows the *real* keys to @alice's authenticated
-  clients and `EVIL` only to remote lookups) is **effectively undetectable by @alice's
-  clients**, because they never observe the response the server gives a peer. The server
-  discriminates trivially — it knows whether a lookup arrives on @alice's authenticated
-  APKAM connection or as a remote/proxied request. This is a classic **split-view** attack;
-  it is caught only by a mechanism that cross-checks the two sides' views (an out-of-band
-  fingerprint, or a gossiped transparency log — [§7.6](#76-key-transparency-on-the-atdirectory)).
+> **Status: design sketch for
+> [#2293](https://github.com/atsign-foundation/at_client_sdk/issues/2293), not a D1
+> decision.** It belongs to a separate effort (identity and transparency), not the D1
+> substrate.
 
-### 7.5 Mitigation ladder
+The atDirectory already maps *atSign → atServer address*. Key transparency (KT) adds a
+second job: the **atSign → signing-root binding**, published so that a client can check
+the keys it is served against it rather than take them on trust. What KT gives comes from
+verifiability, witnessing and monitoring, not from trusting whoever runs the log, so it
+holds **whoever hosts the atDirectory**, Atsign included.
 
-Ordered roughly cheapest/soonest → strongest/longest. These compose; they are not
-exclusive.
-
-1. **Self-hosting (Atsign-native, strongest for a privacy-critical atSign).** If @alice
-   runs her own atServer, the operator *is* @alice — no third party in her inbound TCB.
-   First-class in the platform; residual risk moves to the resolution path (a malicious
-   atDirectory, or the peer's own atServer), addressed by 3–4 below.
-2. **Client self-audit of own advertised keys.** Each client periodically fetches its own
-   `_apsk` / `nskey` public / key package as a remote party would and compares to the
-   locally-held truth. Cheap; defeats *untargeted* substitution and forces an attacker to
-   target, which raises cost and risk.
-3. **Out-of-band fingerprint / safety number (TOFU-then-verify, the Signal model).** Peers
-   compare a fingerprint of the atSign's identity key over an independent channel (QR,
-   voice, printed code) and pin it. Catches *targeted* split views; needs **no** trust in
-   the server implementation. Natural fit for pairwise relationships (NoPorts device pairs,
-   at_talk contacts). Weakness: first-contact and user friction.
-4. **atDirectory Key Transparency + root-anchored signatures ([§7.6](#76-key-transparency-on-the-atdirectory)).**
-   The structural answer for *hosted* atSigns: publish atSign→identity-key bindings to an
-   append-only, gossiped, auditable log; sign advertised keys with the atSign's long-term
-   **root** identity key (not just the per-enrollment `_apsk`); serve an inclusion proof
-   alongside each key. Makes operator substitution *detectable and attributable* without
-   trusting any binary.
-5. **Attestation / audit of the atServer implementation.** Remote attestation (TEE) or
-   reproducible-build + independent audit proves the deployed instance runs honest,
-   unmodified code. The only family that gives *prevention with full user-transparency
-   while still trusting a third-party host* — but the heaviest: TEEs move trust to the
-   silicon vendor and carry side-channel/rollback risk; audit proves the *source* honest,
-   not that the *running instance* is that source (needs attestation to bridge the gap).
-
-**Note on `disallowLegacyEncryption` / PQ scope:** none of the above is a PQ-specific
-problem — it is the standard end-to-end trust-root problem, present classically. PQ makes
-the *bytes* harvest-resistant; the anchor problem is orthogonal and is not solved (or
-worsened) by the D1 work. It is called out here so the doc set does not imply otherwise.
-
-### 7.6 Key transparency on the atDirectory
-
-> **Status: forward-looking design sketch, not a D1 decision.** Recorded so the
-> operator-in-TCB gap has a credible answer on file. Belongs to a separate effort
-> (identity / transparency), not the D1 substrate.
-
-The atDirectory already maps *atSign → atServer address*. Key Transparency (KT) adds a
-second job: **atSign → identity-key binding**, published so that misbehaviour is
-*detectable* rather than *preventable-only-by-trust*. The security comes from
-verifiability, witnessing, and monitoring — **not** from trusting the log operator — so it
-holds **even if Atsign hosts the atDirectory**.
-
-**What is logged.** The atSign's long-term **root identity public key** (the onboarding
-PKAM key in the `.atKeys`) — the stable anchor; the volatile `nskey` / key-package
-publics then chain to it via signatures ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify))
-and need not be logged individually. Logging the stable root minimises churn.
+**What is logged.** The atSign's signing root, `public:pq_signing_root@<atSign>`
+([decisions.md 18](detail/decisions.md#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)),
+the user-owned anchor; the `nskey` and key-package publics chain to it through signatures
+([section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)) and need not be logged
+one by one. The root changes far less often than the keys chained to it, so logging it
+keeps churn low.
 
 **Structure (CONIKS / Key-Transparency lineage).** A **verifiable key directory**: a
 Merkle prefix tree keyed by atSign, giving each atSign an efficient proof of *its current
 binding* and of *absence of any other binding*. Each **epoch** the directory publishes a
 **signed tree head (STH)** committing to the whole tree; STHs form a hash chain (each
-commits to the previous) so the operator cannot silently rewrite history — the log is
-append-only and that is *provable*. A **VRF over the atSign** gives the tree a private
-index, so the log does not enumerate atSigns (their names stay confidential — important
-given atSigns are identifiers); only a party who already knows `@alice` can request and
-verify her proof.
+commits to the previous), so the log is append-only and that is *provable*: history
+cannot be rewritten without it showing. A **VRF over the atSign** gives the tree a
+private index, so the log does not enumerate atSigns (their names stay confidential —
+important given atSigns are identifiers); only a party who already knows `@alice` can
+request and verify her proof.
 
-**Why it holds even when Atsign runs the atDirectory — three interdependent checks.**
-No single check prevents substitution; together they force any substitution to go
-*through the witnessed, append-only log*, where it is *caught*. (KT is **detection**, not
-prevention — see the Net effect below.)
+**How a client checks a binding — three checks that work together.** No single check is
+enough; together they mean every key a client accepts is backed by a binding in the
+witnessed, append-only log, where its owner can see it. KT shows a binding its owner did
+not make; it does not stop a key under that binding being served (see *What KT gives*
+below).
 
-1. **Inclusion proof on every key fetch** forces substitution on-log. When a sender
-   fetches @alice's advertised key (from her atServer), it also obtains a KT **inclusion
-   proof** binding @alice → root in a recent STH, plus the signature chain root → advertised
-   key, and accepts the key only if all verify. A malicious atServer therefore cannot serve
-   a rogue key that is *not* backed by a rogue root **in the log** — it can no longer
-   substitute *undetectably* off-log; it must get a rogue root inserted (checks 2–3).
-2. **Witness co-signing defeats split views.** A set of **independent witnesses**
-   (community members, self-hosters, an org's own nodes — *not* only Atsign) co-sign each
-   STH; clients accept an STH only with a quorum of witness signatures. Atsign alone then
-   cannot produce a valid STH, so it cannot show a *different* tree to a targeted victim
-   than to everyone else without colluding with the witnesses. Gossip of STHs (piggybacked
-   on ordinary atServer-to-atServer traffic) reinforces this — a split view surfaces the
-   moment two parties compare roots.
-3. **Per-atSign monitoring makes insertion loud.** A malicious atDirectory *can* insert a
-   rogue @alice root and produce a valid inclusion proof for it — checks 1–2 do not prevent
-   that. What stops it being *silent* is monitoring: @alice (or monitors she delegates to)
-   watches the log for any binding under @alice she did not create, and the append-only log
-   guarantees she detects a rogue insertion by the next epoch. Security reduces from "trust
-   Atsign" to "Atsign cannot cheat @alice without @alice (or her monitor) noticing."
+1. **An inclusion proof on every key fetch** ties each key to the log. When a sender
+   fetches @alice's advertised key (from her atServer), it also gets a KT **inclusion
+   proof** binding @alice → root in a recent STH, plus the signature chain root →
+   advertised key, and accepts the key only if all of them verify. A key not backed by a
+   root **in the log** is refused, so every accepted key traces to a logged root; checks
+   2–3 cover what the log holds.
+2. **Witness co-signing gives every client the same tree.** A set of **independent
+   witnesses** (community members, self-hosters, an org's own nodes — *not* only Atsign)
+   co-sign each STH; clients accept an STH only with a quorum of witness signatures. No
+   single party, Atsign included, can then produce a valid STH alone, or show one client a
+   different tree from everyone else without the witnesses co-signing it. Gossip of STHs
+   (piggybacked on ordinary atServer-to-atServer traffic) reinforces this: two parties
+   comparing roots see any difference at once.
+3. **Per-atSign monitoring shows the owner every binding.** Checks 1–2 do not stop a
+   root @alice never made being logged under her name with a valid inclusion proof.
+   Monitoring shows it: @alice (or monitors she delegates to) watches the log for any
+   binding under @alice she did not create, and the append-only log means she sees one
+   by the next epoch. Trust in the atDirectory then reduces to this: nothing is bound to @alice
+   without @alice, or her monitor, seeing it.
 
-**Net effect — detection, not TCB removal.** With KT anchoring the root and
-[§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) signatures chaining advertised keys
-to it, a cheating operator is made **detectable and attributable** rather than removed from
-the TCB: it converts an *undetectable* confidentiality adversary into one that is *caught*,
-which deters sustained abuse — but a one-shot attacker can still read a single epoch's
-traffic before the rogue binding is exposed, so the operator is **not** removed from the
-confidentiality TCB (do not claim otherwise — that is the same detection-as-prevention
-overclaim [section 7](#7-trust-boundary--residual-threats) exists to avoid). The residual is "Atsign *and* a witness quorum collude, *or*
-@alice is not (or does not delegate) monitoring, for one epoch." Self-hosting the atDirectory
-+ witnesses (split-horizon, already supported) removes Atsign entirely for a closed
-ecosystem; pairing KT with out-of-band fingerprints ([§7.5](#75-mitigation-ladder) item 3)
-closes the one-epoch window for the highest-assurance pairs.
+**What KT gives — checking, not prevention.** With KT anchoring the root and
+[section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)'s signatures chaining
+advertised keys to it, a key served under a binding its owner did not make becomes
+**visible and attributable**: the binding is in the log, signed and witnessed. KT does not
+stop such a key being served and sealed to during the epoch before its owner sees the
+binding, so it checks the trust the atServers and the atDirectory hold rather than
+removing it (do not claim otherwise; [section 7](#7-trust-model) exists so the doc set
+does not claim more than the design gives). What is left is: Atsign *and* a witness
+quorum act together, *or* @alice does not monitor (or delegate monitoring), for one
+epoch. Self-hosting the atDirectory and the witnesses (split-horizon, already supported)
+takes Atsign out of it entirely for a closed ecosystem; comparing a root's fingerprint
+over another channel (QR, voice, printed code) when it is pinned on first contact closes
+the one-epoch window for the pairs that need it most.
 
-**Honest limits (this is a sketch — these are the open problems a real design must close).**
+**Open problems (this is a sketch; a real design must close these).**
 
-- **First contact is TOFU.** KT protects the *continuity* of a binding, not the initial
-  root publication (trust-on-first-use unless verified out-of-band, [§7.5](#75-mitigation-ladder)
-  item 3).
-- **Assurance = witness independence.** A handful of genuinely independent witnesses makes
-  targeted equivocation hard; Atsign-only witnesses make it weak.
-- **Detection, not prevention** (restated because it is the crux): a cheating operator is
-  *caught*, which deters, but a one-shot attacker may still read one epoch before exposure.
-  Out-of-band fingerprints close that last window for the highest-assurance pairs.
-- **Root rotation / revocation is unspecified here.** Logging only the stable root means a
-  compromised or rotated root needs a *monitored key-change entry* and defined
-  revocation/rotation semantics; without them a stolen root stays a valid chain anchor.
-- **STH freshness / liveness is unspecified here.** Clients must reject stale STHs (bound
-  the max STH age), or a freeze/rollback that pins a victim to an old epoch hides a
-  legitimate rotation and delays exposure of a rogue insertion.
-- **Monitoring is the element most users won't run themselves.** For a typical end user the
-  *delegated-monitor* path is the one that actually carries the guarantee — an atSign with
-  no monitor (self- or delegated) gets **zero** KT protection. A real design must make
-  independent delegated monitoring the default, not an opt-in.
+- **First contact is trust on first use.** KT protects the *continuity* of a binding, not
+  the initial root publication, unless the root's fingerprint is compared over another
+  channel when it is pinned.
+- **What KT gives is as strong as its witnesses are independent.** A handful of genuinely
+  independent witnesses make it hard to show different clients different trees;
+  Atsign-only witnesses do not.
+- **Checking, not prevention** (restated because it is the crux): a binding its owner did
+  not make is seen, but a key under it can be sealed to for one epoch before it is. A
+  fingerprint compared over another channel closes that window for the pairs that need
+  it most.
+- **Root rotation and revocation are unspecified here.** Logging the root means a root
+  that is rotated, or lost, needs a *monitored key-change entry* and defined rotation and
+  revocation semantics; without them a lost root stays a valid chain anchor.
+- **STH freshness is unspecified here.** Clients must reject stale STHs (bound the maximum
+  STH age); a client held at an old epoch would miss a legitimate rotation and see a
+  binding its owner did not make later than it should.
+- **Monitoring is the element most users won't run themselves.** For a typical end user
+  the *delegated-monitor* path is the one that actually carries the guarantee — an
+  atSign with no monitor (self- or delegated) gets **nothing** from KT. A real design
+  must make independent delegated monitoring the default, not an opt-in.
 
 ---
 
@@ -2337,9 +2360,9 @@ ruling 12.
 {
   "payload": "<base64url(JSON)>",
   "signatures": [
-    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"},
-    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"}
   ]
 }
@@ -2360,14 +2383,27 @@ carries the same value, and an envelope naming none is refused. Without it a
 signature over one document meant the same thing in every context that read
 it — five uses of this shape are signed by one key.
 
+`kid` names the signing **key**: the advertised `_apsk` entry's own kid,
+`SHA256(publicKey)` truncated. `enid` names the signing enrollment, ruled by
+[`decisions.md` 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31).
+A client using the atSign's own keys, which publishes at `_apsk.primary`,
+stamps `enid: "primary"`: the sentinel is deliberate and never absent
+([`decisions.md` 116](detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23)
+item 15). `enid` is absent on a key package signed at `enroll:request`, before
+there is an id to stamp, and on a key package re-published at `enroll:update`,
+which signs without the enrollment id it has in scope. Its readers pass the id
+in explicitly, so it still verifies.
+
 There is no top-level `v` or `enrollmentId`: both live **inside** each
-`protected` header, as `v` and `kid`, where the signature covers them. A
+`protected` header, as `v` and `enid`, where the signature covers them. A
 version or signer claim outside the signature is one an attacker can edit.
 
-There is no legacy branch: **nothing released reads or writes an envelope** (no
-release ships `lib/src/signing/`; at_client 3.14.0, the latest, has no such
-directory). The bare-string `_apsk` is
-the released thing in this area, and it is a *record*, not an envelope — see
+There is no legacy branch, by decision. at_client 3.14.0 ships a flat
+`{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` envelope in
+`lib/src/mixins/envelope_signing.dart`, read only through the `@experimental`
+`AtClientSecretSharing`; this shape replaces it rather than reading it, and the
+3.15.0 release candidates ship this shape. The bare-string `_apsk` is a
+*record*, not an envelope — see
 [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 3.
 
@@ -2381,18 +2417,59 @@ weaker one. Falling through to whichever signature happens to verify hands the
 choice of algorithm to whoever tampered with the envelope, and it would read as
 success in every log.
 
-One algorithm can name **several** advertised keys, and every one of them is
-tried before the refusal. An enrollment that mints its own signing key keeps
-advertising the APKAM authentication key it used to sign with, and for a
-post-quantum-native enrollment both are ML-DSA — so a verifier that took the
-first entry for the algorithm would refuse every envelope signed before the
-split. This is not the fallback the paragraph above forbids: that one is about
-dropping to a weaker *algorithm*, which is already fixed here, and each key
-tried is one this signer published under it.
+One algorithm can name **several** advertised keys. An enrollment that mints
+its own signing key keeps advertising the APKAM authentication key it used to
+sign with, and for a post-quantum-native enrollment both are ML-DSA. The
+algorithm picks the signature entry, and that entry's `kid` then picks the key
+within the algorithm, which is checked once. An entry naming no key, or a key
+the advertisement does not carry, is refused, and the refusal names the key it
+asked for.
 
 An envelope naming an algorithm with no matching `_apsk` entry is refused for
 that reason specifically, which is the failure a rollout-2 sender produces
 against a fleet that has not reached rollout 1.
+
+**In code the envelope is a type, not a map.** `SignedEnvelope`, in
+`packages/at_client/lib/src/signing/envelope_signature.dart`, holds the payload
+and one `EnvelopeSignature` per entry, and both compare by value.
+`SignedEnvelope.fromJson` is called wherever an envelope is read, on the
+decoded JSON map, and refuses anything that is not structurally an envelope: a
+payload that is not a string, a missing or empty `signatures` array, an entry
+whose protected header does not decode. `toJson()` is called wherever an
+envelope is written into a JSON structure, rather than putting the object there
+and relying on `jsonEncode` to call it, since every in-process reader of that
+structure would then meet an object where it expects a map. A change to the
+shape is a compile error at every reader, where a string-keyed map compiles and
+fails at runtime.
+
+**The wire text is kept as it arrived.** The payload and each entry's
+`protected` and `signature` are held as the base64url text they were received
+as, never decoded and re-encoded; the decoded header and payload are read from
+that text. The signing input is those received characters, so no canonical
+JSON form is needed, as long as nothing re-encodes them. `toJson()` therefore
+reproduces what `fromJson` was given byte for byte, and
+`jws_envelope_test.dart` pins that. A test that needs an altered envelope
+builds a new one through `fromJson`, so what it alters still passes the
+structural checks a received envelope does.
+
+**One signer and one purpose per envelope.** `fromJson` refuses an envelope
+whose entries name more than one `enid`, or more than one `typ`. A verifier
+picks its entry by algorithm, so entries that disagreed about the signer or the
+purpose would let the entry that verified and the entry a caller reads be
+different entries. Do not relax either refusal: a writer that only ever signs
+once does not stop a second entry being appended. Two accessors read the first
+entry rather than the one a verifier checked: `.signature` is the first entry,
+and `.signerEnrollmentId` is its `enid`, which every entry shares.
+
+**A root link is not a `SignedEnvelope`, by design.** It is a map,
+`{v, alg, kid?, payload, signature}`, verified against the signing root
+published at `public:pq_signing_root@<atSign>`, and stamped into the `_apsk`
+record's `apskRootLink` field, where a chain link is a `SignedEnvelope` in
+`apskChainLink`. Having no protected header to carry a `typ`, it signs
+`at-root-link:` ahead of its payload instead
+([`decisions.md` 103.4](detail/decisions.md#1034-the-root-link-is-not-a-jws-so-it-gets-a-prefix)),
+through one codec, `PqSigningChain.rootLinkSignableBytes`, used by the signer
+and both verifiers.
 
 ### 9.5 `enroll:update`
 
@@ -2673,16 +2750,22 @@ so renaming it changes what verifies.
 
 **Every verification of it is a whole-string comparison** — five of them in
 `PqSigningChain`. Any republish that changes the `_apsk` value therefore
-invalidates a link signed over the old one, and the publish does not merely
-invalidate it: a republish removes the link fields from the record's
-`appMetadata`, which the atServer would otherwise keep, so the enrollment goes
-from `chained` to `unsigned` rather than `broken`
+invalidates a link signed over the old one, and what becomes of that link
+depends on the path that republishes. The atSign's own credential publishes
+with `publishPublicSigningKey`, which removes the link fields from the record's
+`appMetadata`, so the enrollment goes from `chained` to `unsigned` rather than
+`broken`
 ([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
-An enrollment holding the signing root re-anchors in the same write; any other
-is re-conveyed by the next fully privileged start's sweep, as a root link over
-the new value. A link that still vouches for the value being published is kept.
-This is why the mint must be inert at first start, and
-why 9.8.2's two composers must agree.
+One holding the signing root re-anchors in the same write, and any other is
+re-conveyed by the next fully privileged start's sweep, as a root link over the
+new value. An ordinary enrollment republishes through `enroll:update` instead,
+which carries no `appMetadata`, and the atServer keeps what is stored, so a
+link over the old value rides the new one and the walk reads it `broken`. The
+sweep then sends a chain-linked enrollment a root link, which anchors it, but
+skips one whose stale root link fills the field, and that one stays `broken`;
+both were observed against the atServer on 2026-10-08. A link that still
+vouches for the value being published is kept. This is why the mint must be
+inert at first start, and why 9.8.2's two composers must agree.
 
 #### 9.8.4 What the approver conveys is a three-way branch
 
@@ -2713,7 +2796,9 @@ enrollment id, or `primary` — is fully privileged by construction, with no
 roster lookup.
 
 **The approver never writes the enrollee's `_apsk`.** It conveys the link as a
-sealed secret and the enrollee stamps it at startup.
+sealed secret and the enrollee stamps it as it arrives; a link it cannot stamp
+yet keeps its envelope on the atServer for the next start
+([`decisions.md` 152](detail/decisions.md#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08)).
 
 #### 9.8.5 Two coherence rules on the preference
 
@@ -2757,8 +2842,8 @@ dropping its own authentication key.
   own credential (no enrollment id, or `primary`).** One was proposed and
   dropped by
   [`decisions.md` 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30):
-  publishing `_apsk` directly under `primary`, with no enrollment record to
-  route it through, is a working, pinned capability, and skipping the mint
+  publishing `_apsk` directly under `primary`, without routing it through an
+  enrollment record, is a working, pinned capability, and skipping the mint
   would delete it. The residual that guard
   was aimed at is recorded there as open.
 

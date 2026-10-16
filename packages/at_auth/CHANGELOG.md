@@ -1,3 +1,10 @@
+## 4.0.0-rc6
+
+- fix: an atSign whose RSA PKAM key is 1024 bits authenticates again, rather
+  than failing with "Cannot sign with a 1024-bit key". RSA PKAM keys of other
+  sizes than 1024 or 2048 bits are still refused.
+- build: requires `at_chops` ^3.7.0.
+
 ## 4.0.0-rc5
 
 - feat: `RegistrarService.registerAtSign` (v4 `/register-atsign/`).

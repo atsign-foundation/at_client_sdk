@@ -2,11 +2,15 @@
 // deprecated one, so its types are named here on purpose.
 // ignore_for_file: deprecated_member_use
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
+import 'package:crypton/crypton.dart' show RSAKeypair;
 import 'package:test/test.dart';
 import 'test_utils/pkam_pin.dart';
 
@@ -326,6 +330,85 @@ void main() {
 
       await expectLater(() => authenticatorFor(io, atSign)(executor),
           throwsA(isA<UnAuthenticatedException>()));
+    });
+  });
+
+  /// A keyfile whose PKAM key pair is [pkam].
+  AtKeys keysHolding(RSAKeypair pkam) => signingKeys()
+    ..apkamPublicKey = AtBytes.fromString(pkam.publicKey.toString())
+    ..apkamPrivateKey = AtBytes.fromString(pkam.privateKey.toString());
+
+  group('Given an atSign whose RSA PKAM key pair is 1024-bit', () {
+    late RSAKeypair pkam;
+
+    setUpAll(() => pkam = RSAKeypair.fromRandom(keySize: 1024));
+
+    /// The signature [command] carries, checked against the PKAM public key
+    /// by the call an atServer makes to verify an rsa2048 `pkam:`.
+    Future<bool> verifies(String command) async {
+      final match = RegExp(r'^pkam:signingAlgo:rsa2048:hashingAlgo:sha256:'
+              r'(?<signature>[^:\n]+)\n$')
+          .firstMatch(command);
+      expect(match, isNotNull,
+          reason: 'the command carries rsa2048 and sha256: $command');
+      final input = AtSigningVerificationInput(
+          Uint8List.fromList(utf8.encode(challenge)),
+          base64Decode(match!.namedGroup('signature')!),
+          pkam.publicKey.toString())
+        ..signingAlgoType = SigningAlgoType.rsa2048
+        ..hashingAlgoType = HashingAlgoType.sha256
+        ..signingMode = AtSigningMode.pkam;
+      return await AtChopsImpl(AtChopsKeys.create(null, null))
+          .verify(input)
+          .result;
+    }
+
+    test(
+        'when it authenticates from its keys file, then the pkam: command '
+        'carries signingAlgo rsa2048 and a signature over the from: challenge '
+        'that verifies against its PKAM public key', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, keysHolding(pkam));
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      expect(await authenticatorFor(io, atSign)(executor), isTrue);
+      expect(executor.sent, hasLength(2));
+      expect(await verifies(executor.sent.last), isTrue,
+          reason: 'the 1024-bit key signs the challenge, checked as an '
+              'atServer checks an rsa2048 pkam:');
+    });
+
+    test(
+        'when it authenticates with its bare private key, then the pkam: '
+        'command carries signingAlgo rsa2048 and a signature over the from: '
+        'challenge that verifies against its PKAM public key', () async {
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      expect(
+          await authenticatorForPrivateKey(atSign, pkam.privateKey.toString())(
+              executor),
+          isTrue);
+      expect(executor.sent, hasLength(2));
+      expect(await verifies(executor.sent.last), isTrue,
+          reason: 'the 1024-bit key signs the challenge, checked as an '
+              'atServer checks an rsa2048 pkam:');
+    });
+  });
+
+  group('Given an atSign whose RSA PKAM key pair is 4096-bit', () {
+    test(
+        'when it authenticates from its keys file, then it throws '
+        'AtSigningException and sends no pkam: command', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, keysHolding(RSAKeypair.fromRandom(keySize: 4096)));
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      await expectLater(
+          () => authenticatorFor(io, atSign)(executor),
+          throwsA(isA<AtSigningException>()
+              .having((e) => e.message, 'message', contains('4096-bit'))));
+      expect(executor.sent, hasLength(1),
+          reason: 'only 1024- and 2048-bit RSA keys sign a PKAM challenge');
     });
   });
 }

@@ -383,12 +383,12 @@ class NotificationServiceImpl extends NotificationService {
 
   /// How every write of the last-received-notification watermark is routed.
   ///
-  /// The watermark is a `local:` record — never synced, and already encrypted
-  /// at rest by the keystore — so there is nothing for value-level encryption
-  /// to protect. Saying so explicitly keeps these writes off the shared-data
-  /// crypto path, where every post-quantum provider declines a local key and
-  /// the fallback from that decline is the legacy provider, which a client that
-  /// refuses it then refuses outright.
+  /// The watermark is a `local:` record, never synced and holding nothing
+  /// sensitive, so there is nothing for value-level encryption to protect.
+  /// Saying so explicitly keeps these writes off the shared-data crypto path,
+  /// where every post-quantum provider declines a local key and the fallback
+  /// from that decline is the legacy provider, which a client that refuses it
+  /// then refuses outright.
   ///
   /// A fresh instance per call: [PutRequestOptions] is mutable and the put
   /// pipeline may rewrite the options it is handed.
@@ -1146,21 +1146,15 @@ class NotificationServiceImpl extends NotificationService {
     return atNotificationStream.stream as Stream<AtNotification>;
   }
 
-  /// Ensures that distinct [NotificationConfig.regex] exists in the key
-  /// Compares the [NotificationConfig] object with [NotificationConfig.regex]
-  /// If regex's are equals, returns true; else false.
+  /// Whether two subscriptions are the same one: the same regex, asking for
+  /// the same decryption.
   static bool _compareNotificationConfig(NotificationConfig notificationConfig1,
-      NotificationConfig notificationConfig2) {
-    if (notificationConfig1.regex == notificationConfig2.regex) {
-      return true;
-    }
-    return false;
-  }
+          NotificationConfig notificationConfig2) =>
+      notificationConfig1.regex == notificationConfig2.regex &&
+      notificationConfig1.shouldDecrypt == notificationConfig2.shouldDecrypt;
 
-  /// Returns the hashcode for the [NotificationConfig.regex]
-  static int _generateHashCode(NotificationConfig notificationConfig) {
-    return notificationConfig.regex.hashCode;
-  }
+  static int _generateHashCode(NotificationConfig notificationConfig) =>
+      Object.hash(notificationConfig.regex, notificationConfig.shouldDecrypt);
 
   @override
   Future<NotificationResult> getStatus(String notificationId) async {

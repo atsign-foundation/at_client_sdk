@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeType;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:mocktail/mocktail.dart';
@@ -13,6 +15,7 @@ import 'package:test/test.dart';
 
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 import 'test_utils/test_keypairs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 
@@ -72,7 +75,14 @@ void main() {
   final Uint8List seedC =
       Uint8List.fromList(List<int>.generate(32, (i) => 64 + i));
 
+  final logs = RecordedLogs();
+
+  /// The warnings logged about the envelope at [key].
+  List<String> warningsAbout(String key) =>
+      logs.at('WARNING').where((m) => m.contains(key)).toList();
+
   setUpAll(() {
+    logs.installOn();
     registerFallbackValue(AtKey());
     registerFallbackValue(FakeSyncProgressListener());
     registerFallbackValue(NotificationParams.forUpdate(AtKey()));
@@ -190,6 +200,7 @@ void main() {
   late TestSharer sharerB;
 
   setUp(() async {
+    logs.records.clear();
     remoteData = {};
     putOptions = {};
     scanRoutedRemote = [];
@@ -408,8 +419,23 @@ void main() {
   group('FROZEN FOREVER: the pairwise seal binding, read from real output', () {
     /// The exact bytes each substrate binds, as raw literals: reading the
     /// constants would follow one of them being changed into the other.
-    final pairwiseInfo =
-        Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
+    /// The pairwise binding names the sender's enrollment and keypair, the
+    /// recipient keypair and the namespace, in that order, after the label,
+    /// each as a two-byte big-endian length and then its UTF-8.
+    Uint8List pairwiseInfo({String ns = 'myapp', String? fromKpid}) =>
+        Uint8List.fromList([
+          for (final component in [
+            'at_client/secret_sharing/v2',
+            'enroll-a',
+            fromKpid ?? sharerA.kpid,
+            sharerB.kpid,
+            ns,
+          ]) ...[
+            utf8.encode(component).length >> 8,
+            utf8.encode(component).length & 0xff,
+            ...utf8.encode(component),
+          ],
+        ]);
     final nskeyInfo = Uint8List.fromList(utf8.encode('at/nskey:@alice:myapp'));
 
     /// The `sealed` bytes off the envelope A actually wrote to B.
@@ -424,7 +450,7 @@ void main() {
     }
 
     test('the two substrates bind different bytes', () {
-      expect(pairwiseInfo, isNot(nskeyInfo));
+      expect(pairwiseInfo(), isNot(nskeyInfo));
     });
 
     test('a real envelope opens under this substrate\'s info and not the other',
@@ -440,8 +466,19 @@ void main() {
       // NOTE: positive control — without a green open here the refusal below
       // is equally explained by a wrong key, KEM or version.
       final opened =
-          await pqOpen(kem, recipient.secretKey, sealed, info: pairwiseInfo);
+          await pqOpen(kem, recipient.secretKey, sealed, info: pairwiseInfo());
       expect(jsonDecode(utf8.decode(opened))['hello'], 'b');
+
+      for (final other in [
+        pairwiseInfo(ns: 'otherapp'),
+        pairwiseInfo(fromKpid: sharerB.kpid),
+      ]) {
+        await expectLater(pqOpen(kem, recipient.secretKey, sealed, info: other),
+            throwsA(isA<PqOpenException>()),
+            reason: 'the binding names the namespace and the sender, so a '
+                'sealed body opens only in the envelope it was sealed for: '
+                '${utf8.decode(other)}');
+      }
 
       await expectLater(
           pqOpen(kem, recipient.secretKey, sealed, info: nskeyInfo),
@@ -449,6 +486,234 @@ void main() {
           reason: 'the cross-substrate replay control: an envelope sealed by '
               'this substrate must not open under the at/nskey binding, or an '
               'envelope from one could be replayed into the other');
+    });
+  });
+
+  group('an envelope opens only where its sender sealed it', () {
+    /// The key A's envelope to B was written under.
+    String sentKey() => remoteData.keys
+        .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
+
+    test(
+        'found under a namespace other than the one it was sent through, it is '
+        'skipped and retained', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+      final original = sentKey();
+      final moved =
+          original.replaceFirst('.__ssenv.myapp@', '.__ssenv.otherapp@');
+      remoteData[moved] = remoteData.remove(original)!;
+
+      expect(await sharerB.sweepOnce(), 0,
+          reason: 'the namespace the envelope sits in is not the one A signed');
+      expect(remoteData.containsKey(moved), isTrue);
+
+      // NOTE: positive control — the same bytes back where A put them open, so
+      // the refusal above is about the move and nothing else.
+      remoteData[original] = remoteData.remove(moved)!;
+      expect(await sharerB.sweepOnce(), 1);
+    });
+
+    test('its sealed body opens only inside the envelope its sender signed',
+        () async {
+      final sharerC = buildSharer('enroll-c', seedC);
+      directory.seed('enroll-c', await sharerC.register());
+      addTearDown(sharerC.stopListening);
+
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+      final fromA = SecretEnvelope.fromJson(SignedEnvelope.fromJson(
+              jsonDecode(remoteData.remove(sentKey())!) as Map)
+          .payload);
+      final lifted = SecretEnvelope(
+        fromKpid: sharerC.kpid,
+        fromEnrollmentId: 'enroll-c',
+        toKpid: fromA.toKpid,
+        appNamespace: fromA.appNamespace,
+        suite: fromA.suite,
+        kid: fromA.kid,
+        sealed: fromA.sealed,
+      );
+      remoteData['lifted.0.${sharerB.kpid}.__ssenv.myapp@alice'] =
+          await sharerC.wrapAndSignAndJsonEncode(lifted.toJson(),
+              type: EnvelopeType.secretEnvelope);
+
+      expect(await sharerB.sweepOnce(), 0,
+          reason: 'C signed it, but A sealed the body for an envelope from A');
+
+      // NOTE: positive control — an envelope C seals itself is delivered, so
+      // C's signature and key package are not what refused the lifted one.
+      await sharerC.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 2});
+      final received = <ReceivedEnvelope>[];
+      final sub = sharerB.receivedEnvelopes.listen(received.add);
+      expect(await sharerB.sweepOnce(), 1);
+      await Future.delayed(Duration.zero);
+      await sub.cancel();
+      expect(received.single.fromEnrollmentId, 'enroll-c');
+      expect(received.single.payload, {'n': 2});
+    });
+
+    test('a namespace sent in mixed case is delivered, under lower case',
+        () async {
+      // NOTE: AtKey lowercases a namespace, so the key name is always lower
+      // case; the signed namespace has to agree with it or nothing opens.
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'MyApp', {'n': 1});
+      final received = <ReceivedEnvelope>[];
+      final sub = sharerB.receivedEnvelopes.listen(received.add);
+      expect(await sharerB.sweepOnce(), 1);
+      await Future.delayed(Duration.zero);
+      await sub.cancel();
+      expect(received.single.appNamespace, 'myapp');
+    });
+
+    test('an empty namespace is refused before anything is written', () async {
+      await expectLater(
+          sharerA.sendEnvelope(sharerB.myKeyPackage, '', {'n': 1}),
+          throwsA(isA<ArgumentError>()));
+      expect(remoteData.keys.where((k) => k.contains('__ssenv')), isEmpty);
+    });
+
+    test('a version 1 envelope is refused at parse', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+      final json = Map<String, Object?>.from(
+          SignedEnvelope.fromJson(jsonDecode(remoteData[sentKey()]!) as Map)
+              .payload as Map);
+
+      // NOTE: positive control — the envelope as written parses.
+      expect(SecretEnvelope.fromJson(json).appNamespace, 'myapp');
+      expect(() => SecretEnvelope.fromJson({...json, 'v': 1}),
+          throwsFormatException,
+          reason: 'only version 2 is read');
+    });
+  });
+
+  /// A third client of the atSign, enrolled for the same namespace.
+  Future<TestSharer> enrolledSharerC() async {
+    final sharerC = buildSharer('enroll-c', seedC);
+    directory.seed('enroll-c', await sharerC.register());
+    addTearDown(sharerC.stopListening);
+    return sharerC;
+  }
+
+  group("Given an envelope C seals and signs whose body names A's enrollment",
+      () {
+    test('when B sweeps, then it is refused, by name', () async {
+      final sharerC = await enrolledSharerC();
+      final toB = sharerB.myKeyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+      final sealed = await pqSeal(XWingPureDartAlgo.instance,
+          base64Decode(toB.pub), Uint8List.fromList(utf8.encode('{"n":1}')),
+          info: PairwiseSecretSharing.sealInfoFor(
+              fromEnrollmentId: 'enroll-a',
+              fromKpid: sharerA.kpid,
+              toKpid: toB.kid,
+              appNamespace: 'myapp'),
+          version: 0x02);
+      final claimingA = SecretEnvelope(
+        fromKpid: sharerA.kpid,
+        fromEnrollmentId: 'enroll-a',
+        toKpid: toB.kid,
+        appNamespace: 'myapp',
+        suite: SecretSharingAlgos.xWingRfc9180,
+        kid: toB.kid,
+        sealed: base64Encode(sealed),
+      );
+      final keyName = 'claims-a.0.${toB.kid}.__ssenv.myapp@alice';
+      remoteData[keyName] = await sharerC.wrapAndSignAndJsonEncode(
+          claimingA.toJson(),
+          type: EnvelopeType.secretEnvelope);
+
+      expect(await sharerB.sweepOnce(), 0,
+          reason: 'C signed it, and its body names enroll-a as the sender');
+      expect(
+          warningsAbout(keyName),
+          [
+            contains('signer enrollment enroll-c does not match claimed sender '
+                'enrollment enroll-a')
+          ],
+          reason: 'C sealed the body under the binding that names A, so only '
+              'the check of signer against sender refuses it');
+      expect(remoteData.containsKey(keyName), isTrue);
+    });
+  });
+
+  group("Given A's sealed body re-signed by C with A's kpid kept", () {
+    test('when B sweeps, then it is refused', () async {
+      final sharerC = await enrolledSharerC();
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+      final sentByA = remoteData.keys
+          .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
+      final signedByA = remoteData.remove(sentByA)!;
+      final fromA = SecretEnvelope.fromJson(
+          SignedEnvelope.fromJson(jsonDecode(signedByA) as Map).payload);
+      final reSigned = SecretEnvelope(
+        fromKpid: fromA.fromKpid,
+        fromEnrollmentId: 'enroll-c',
+        toKpid: fromA.toKpid,
+        appNamespace: fromA.appNamespace,
+        suite: fromA.suite,
+        kid: fromA.kid,
+        sealed: fromA.sealed,
+      );
+      final keyName = 're-signed.0.${sharerB.kpid}.__ssenv.myapp@alice';
+      remoteData[keyName] = await sharerC.wrapAndSignAndJsonEncode(
+          reSigned.toJson(),
+          type: EnvelopeType.secretEnvelope);
+
+      expect(await sharerB.sweepOnce(), 0,
+          reason: 'A sealed the body for an envelope from enroll-a, and this '
+              'one names enroll-c');
+      expect(warningsAbout(keyName), [contains('failed to open')]);
+      expect(remoteData.containsKey(keyName), isTrue);
+
+      // NOTE: positive control — the same body in the envelope A signed opens,
+      // so the refusal above is about the sending enrollment it names.
+      remoteData.remove(keyName);
+      remoteData[sentByA] = signedByA;
+      expect(await sharerB.sweepOnce(), 1);
+    });
+  });
+
+  group(
+      'Given an envelope signed by A with a seal-info component longer than '
+      '65535 bytes', () {
+    test(
+        'when B sweeps, then the envelope is refused with a warning naming it, '
+        'and the sweep goes on to the next envelope', () async {
+      final oversized = SecretEnvelope(
+        fromKpid: 'k' * 0x10000,
+        fromEnrollmentId: 'enroll-a',
+        toKpid: sharerB.kpid,
+        appNamespace: 'myapp',
+        suite: SecretSharingAlgos.xWingRfc9180,
+        kid: sharerB.kpid,
+        sealed: 'xx',
+      );
+      final keyName = 'oversized.0.${sharerB.kpid}.__ssenv.myapp@alice';
+      remoteData[keyName] = await sharerA.wrapAndSignAndJsonEncode(
+          oversized.toJson(),
+          type: EnvelopeType.secretEnvelope);
+      await sharerA
+          .sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 'behind it'});
+      expect(
+          remoteData.keys.where((k) => k.contains('.__ssenv.')).first, keyName,
+          reason:
+              'the premise: the sweep reaches the oversized envelope first');
+
+      final received = <ReceivedEnvelope>[];
+      final sub = sharerB.receivedEnvelopes.listen(received.add);
+      expect(await sharerB.sweepOnce(), 1);
+      await Future.delayed(Duration.zero);
+      await sub.cancel();
+
+      expect(received.single.payload, {'n': 'behind it'},
+          reason: 'the sweep goes on to the next envelope');
+      expect(
+          warningsAbout(keyName),
+          [
+            allOf(contains('too long to bind into its seal'),
+                endsWith('skipping'))
+          ],
+          reason: 'a component no seal can bind is a refusal of this envelope, '
+              'not a failure to process it');
+      expect(remoteData.containsKey(keyName), isTrue);
     });
   });
 
@@ -635,17 +900,22 @@ void main() {
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: sharerB.kpid,
+        appNamespace: 'myapp',
         suite: 'x-wing-hpke-v99',
         kid: sharerB.kpid,
         sealed: 'xx',
       );
-      final signedJson =
-          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
+      final signedJson = await sharerA.wrapAndSignAndJsonEncode(
+          envelope.toJson(),
+          type: EnvelopeType.secretEnvelope);
       final keyName = 'future-msg.${sharerB.kpid}.__ssenv.myapp@alice';
       remoteData[keyName] = signedJson;
 
       expect(await sharerB.sweepOnce(), 0);
       expect(remoteData.containsKey(keyName), isTrue);
+      expect(warningsAbout(keyName),
+          [contains('uses unsupported sealing suite x-wing-hpke-v99')],
+          reason: 'refused by the suite check, not by anything before it');
     });
 
     test(
@@ -655,16 +925,26 @@ void main() {
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: 'some-other-kpid', // payload disagrees with the key name below
+        appNamespace: 'myapp',
         suite: SecretSharingAlgos.xWingRfc9180,
         kid: sharerB.kpid,
         sealed: 'xx',
       );
-      final signedJson =
-          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
-      remoteData['mismatch-msg.${sharerB.kpid}.__ssenv.myapp@alice'] =
-          signedJson;
+      final signedJson = await sharerA.wrapAndSignAndJsonEncode(
+          envelope.toJson(),
+          type: EnvelopeType.secretEnvelope);
+      final keyName = 'mismatch-msg.${sharerB.kpid}.__ssenv.myapp@alice';
+      remoteData[keyName] = signedJson;
 
       expect(await sharerB.sweepOnce(), 0);
+      expect(
+          warningsAbout(keyName),
+          [
+            contains(
+                'is addressed to some-other-kpid, not to any key this client '
+                'holds')
+          ],
+          reason: 'refused by the addressee check, not by anything before it');
     });
   });
 
@@ -747,16 +1027,26 @@ void main() {
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: 'a-kpid-nobody-here-holds',
+        appNamespace: 'myapp',
         suite: SecretSharingAlgos.xWingRfc9180,
         kid: 'a-kpid-nobody-here-holds',
         sealed: 'xx',
       );
-      remoteData['x.${rotated.kpid}.__ssenv.myapp@alice'] =
-          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
+      final keyName = 'x.${rotated.kpid}.__ssenv.myapp@alice';
+      remoteData[keyName] = await sharerA.wrapAndSignAndJsonEncode(
+          envelope.toJson(),
+          type: EnvelopeType.secretEnvelope);
 
       expect(await rotated.sweepOnce(), 0,
           reason: 'widening "is it mine" from one address to a set must not '
               'widen it to any address at all');
+      expect(
+          warningsAbout(keyName),
+          [
+            contains('is addressed to a-kpid-nobody-here-holds, not to any key '
+                'this client holds')
+          ],
+          reason: 'refused by the addressee check, not by anything before it');
     });
 
     test('an envelope whose suite and key name different KEMs is skipped',
@@ -764,16 +1054,30 @@ void main() {
       // NOTE: deliberately unguarded — a wrong-length secret key surfaces as
       // the PqOpenException the open already catches, so the sweep skips this
       // envelope instead of losing the rest of the batch with it.
+      final mlKem = MlKem1024PureDartAlgo.instance;
+      final mlKemPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final mlKemSealed = await pqSeal(
+          mlKem, mlKemPair.publicKey, Uint8List.fromList(utf8.encode('{}')),
+          info: PairwiseSecretSharing.sealInfoFor(
+              fromEnrollmentId: 'enroll-a',
+              fromKpid: sharerA.kpid,
+              toKpid: oldKpid,
+              appNamespace: 'myapp'),
+          version: SecretSharingAlgos.sealVersionFor(
+              SecretSharingAlgos.mlKem1024Rfc9180)!);
       final envelope = SecretEnvelope(
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: oldKpid,
+        appNamespace: 'myapp',
         suite: SecretSharingAlgos.mlKem1024Rfc9180,
         kid: oldKpid,
-        sealed: 'xx',
+        sealed: base64Encode(mlKemSealed),
       );
-      remoteData['y.$oldKpid.__ssenv.myapp@alice'] =
-          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
+      final keyName = 'y.$oldKpid.__ssenv.myapp@alice';
+      remoteData[keyName] = await sharerA.wrapAndSignAndJsonEncode(
+          envelope.toJson(),
+          type: EnvelopeType.secretEnvelope);
       await sharerA.sendEnvelope(staleView, 'myapp', {'hello': 'behind it'});
 
       final received = <ReceivedEnvelope>[];
@@ -782,6 +1086,14 @@ void main() {
       await sub.cancel();
       expect(received.single.payload, {'hello': 'behind it'},
           reason: 'the good envelope beside it is still delivered');
+      expect(
+          warningsAbout(keyName),
+          [
+            allOf(contains('failed to open'),
+                contains('decapsulation rejected the input'))
+          ],
+          reason: 'refused where the ML-KEM-1024 suite meets the X-Wing key, '
+              'not by anything before it');
     });
   });
 

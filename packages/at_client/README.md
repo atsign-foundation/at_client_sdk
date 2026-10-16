@@ -42,6 +42,19 @@ is the main entry point once authentication is complete.
 - `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
   the keystore. You should almost never need to do this if you are using 
   AtCollections.
+- `tryAcquireServerMutex(key, ttl:)` — a short-lived lock that every client of
+  the atSign shares, held on the atServer for at most 15 minutes; `AtRpc`'s
+  `enableRequestMutex` uses it
+  ([`lib/src/client/server_mutex.dart`](lib/src/client/server_mutex.dart)).
+
+**atServer version for the server mutex.** It needs an atServer from p3.13.0
+(at_commons 5.10.0), the first to parse `:nc`; an older one refuses every
+lock, so `tryAcquireServerMutex` throws and an `AtRpc` responder with
+`enableRequestMutex` handles no requests. A lock stays out of the commit log
+from c3.16.3 and p3.16.5; between p3.13.0 and those, the atServer records the
+commit anyway. An expired lock stops blocking at once from c3.16.2 and
+p3.16.5; before that it blocks until the atServer's expiry sweep, up to about
+ten and a half minutes. The client doesn't check the version.
 
 
 
@@ -107,7 +120,7 @@ summary is:
    compromised scoped key can only damage data in its granted
    namespaces.
 
-### In code: one import, four verbs
+### In code: four verbs
 
 `at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
 (a `.atKeys` file, the platform keychain, or memory) and asks the atSign
@@ -115,11 +128,17 @@ for a client; every verb hands back an `AtClient` the app owns and stops.
 
 ```dart
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+
+// Every client keeps local storage, here Hive in a directory the app picks.
+AtClientStorage storage() => HiveAtClientStorage(
+    atSign: '@alice', storagePath: '/data/alice', closedByClient: true);
 
 // Log in: a client on keys the app already holds. It comes back online,
 // offline or refused, and says which; offline it serves its local store.
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    storage: storage(),
     preference: AtClientPreference()..namespace = 'todos');
 client.connection.current;                  // online | offline | refused
 client.connection.changes.listen((state) => print(state));
@@ -128,19 +147,21 @@ await client.connection.awaitOnline();      // wait, with a budget
 // Onboard: activate a newly registered atSign with its CRAM secret. The
 // keys it mints land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, preference: preference);
+    cramSecret: secret, keys: keys, storage: storage(), preference: preference);
 
 // Enroll: ask the atSign's owner to approve this app. The request is filed
 // in `keys` as pending, so a restart resumes it rather than repeating it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
     preference: preference);
-final enrolled = await pending.client(preference);      // waits for approval
+final enrolled = await pending.client(preference,
+    storage: storage());                                 // waits for approval
 final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
     device: 'phone', keys: keys, preference: preference);
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.
 final requests = await owner.enrollments.pending();
+print(requests.first.apkamKeysExpiryDuration);  // the key expiry it asks for
 await owner.enrollments.approve(requests.first.enrollmentId!);
 owner.enrollments.requests.listen((request) => print(request.appName));
 final passcode = await owner.enrollments.otp();
@@ -151,13 +172,18 @@ AtClientManager.getInstance().use(client);
 
 Three things are the platform's to supply, and every verb takes them the
 same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
-Flutter keychain, memory); **`storage:`**, the client's local store
-(`HiveAtClientStorage`, or a bundle of your own); and **`lookUps:`**, how
+Flutter keychain, memory); **`storage:`**, the client's local store, each
+backend from its own import (`HiveAtClientStorage` from
+`package:at_client/hive.dart`, `SqliteAtClientStorage` from
+`package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
+`package:at_client/memory.dart`); and **`lookUps:`**, how
 the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
 monitor's - so a transport or a proxy convention is chosen once:
 
 ```dart
+import 'package:at_client/hive.dart';
+
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
@@ -173,6 +199,18 @@ With no `lookUps`, connections are TLS on TCP with the defaults;
 routes on `from:` is what that is for). A factory of your own can hand back
 any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath` are deprecated in favour of the factory's config.
+
+Every client keeps local storage, even if only in memory. A client given none
+opens Hive under `preference.hiveStoragePath` until 4.0. One given none and
+no path, or none with `isLocalStoreRequired` false, is refused with an
+`ArgumentError` before anything irreversible, such as spending a CRAM secret
+or waiting for an approval; `InMemoryAtClientStorage` keeps nothing on
+disk.
+End-to-end-encrypted values are stored in local storage as their ciphertext,
+never in the clear. A backend of your own
+needs types at_client doesn't export, so raise a
+[feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
+for it.
 
 `Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
 enrollment a keys store authenticates as without building a client.
@@ -541,6 +579,21 @@ What each posture switches on:
   `AtClientPreference.sealsToKeyAlgorithms`. The X-Wing hybrid (ML-KEM-768 +
   X25519) is the default; pure ML-KEM-1024 is selected with
   `keyEstablishmentAlgorithms`, and every build opens both.
+- **Writing in an atSign's own namespace.** Each value is encrypted under a
+  key of its own, derived from the content key and a fresh salt. A client
+  writes in its own namespace once it holds that namespace key's private half;
+  until then the write throws `NskeyPrivateNotHeldException`, and
+  `ensureReachable` reports `holdsPrivate`.
+- **Rotation.** A content key is replaced once it is a year old, and a
+  namespace key once its generation is a year old; `CryptoConfig`'s
+  `ckRotationPolicy` and `nskeyRotationPolicy` change that. A revocation
+  rotates the namespace keys the revoked enrollment held, and a content key a
+  client shares is replaced by a fresh one on its first write after it holds
+  the new generation.
+- **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
+  installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
+  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the
   approving client (`client.enrollments.approve`) seals the atSign's secrets

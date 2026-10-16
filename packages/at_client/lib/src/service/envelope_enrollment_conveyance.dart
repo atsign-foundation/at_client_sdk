@@ -138,7 +138,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
 
     // NOTE: the link vouching for this enrollment is conveyed rather than
     // published, because `_apsk` accepts writes only from its own
-    // enrollment's connection, so the child stamps it on first run. An
+    // enrollment's connection, so the child stamps it when it arrives. An
     // approver holding neither the signing-root private nor a data signing key
     // of its own conveys no link at all: `signingKeys` falls back to the APKAM
     // authentication key, which is dropped from the advertisement rather than
@@ -217,10 +217,13 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final keysIo = _atClient.atKeysIo;
     if (keysIo != null) {
       try {
-        final filing = NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+        late final PublishedNskeyKeyRing ring;
+        final filing = NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo, atSign: atSign);
+        ring = PublishedNskeyKeyRing(_atClient, privateFiling: filing);
         final sent = await NskeySeeding(
           atClient: _atClient,
-          ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
+          ring: ring,
           sharing: sharing,
           privateFiling: filing,
         ).conveyHeldPrivatesTo(package, enrollment.namespace ?? const {},
@@ -320,7 +323,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     }
     if (conveyed > 0) {
       _logger.info('Swept root links to $conveyed unanchored enrollment(s); '
-          'each stamps its own _apsk at its next start');
+          'each stamps its own _apsk when it arrives');
     }
     return conveyed;
   }

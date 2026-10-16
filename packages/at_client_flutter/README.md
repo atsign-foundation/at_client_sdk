@@ -151,13 +151,16 @@ app's to use and, when it is done, to `stop()`. An app whose screens read
 `AtClientManager.getInstance().atClient` makes it current with
 `AtClientManager.getInstance().use(client)`; an app that passes the client around
 needs no `AtClientManager` at all, and `EnrollmentRequestList` takes an
-`atClient` for that case. The details (the chosen storage directory, the
-namespace) are all in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart)
-in the `_storage(...)` and `_adopt(...)` functions.
+`atClient` for that case. The details (the namespace, making the client
+current) are in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart),
+in the `_preference()` and `_adopt(...)` functions.
 
 The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
-the client opens on; with no storage a Hive store opens under
-`preference.hiveStoragePath`. They also take `lookUps:`, at_client's
+the client opens on. With none, they open a Hive store in the app's support
+directory (`getApplicationSupportDirectory()`), or under
+`preference.hiveStoragePath` while the app still sets it. An app that kept its
+store anywhere else passes it as `storage:` before at_client 4.0 removes
+`hiveStoragePath`. They also take `lookUps:`, at_client's
 `AtLookUpFactory`, for an app that chooses its transport or reaches its
 atServers through a proxy: every connection the client they hand back opens
 comes from it. With none, TLS on TCP with the defaults. Together with
@@ -263,16 +266,11 @@ failure to reach the atServer as a failed login; a 2.0 app decides.
 ### Before and after
 
 The things a 1.x app commonly did, each as it was and as it is now. The 2.0
-side shares two helpers:
+side shares one preference, and passes no storage: the dialogs open Hive in the
+app's support directory, where a 1.x app that set `hiveStoragePath` to it kept
+its store.
 
 ```dart
-// Where this app keeps the atSign's local store. closedByClient: the client
-// closes it when it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
-}
-
 final preference = AtClientPreference()..namespace = 'my_app';
 ```
 
@@ -304,7 +302,6 @@ final client = await PkamDialog.show(context,
   rootDomain: rootDomain,
   keys: KeychainAtKeysIo(),
   preference: preference,
-  storage: await _storage(atSign),
 );
 if (client == null) return;                       // cancelled, or the dialog failed
 AtClientManager.getInstance().use(client);        // if screens read the manager
@@ -332,7 +329,6 @@ final client = await CramDialog.show(context,
   rootDomain: selection.rootDomain,
   cramKey: cramKey!,
   preference: preference,
-  storage: await _storage(selection.atSign),
 );
 if (client == null) return;
 AtClientManager.getInstance().use(client);
@@ -359,7 +355,6 @@ final client = await ApkamActivationDialog.show(context,
   deviceName: 'default', namespaces: {'my_app': 'rw'},
   preference: preference,
   keys: KeychainAtKeysIo(),
-  storage: await _storage(atSign),
 );
 if (client == null) return;
 AtClientManager.getInstance().use(client);
@@ -403,7 +398,7 @@ await AtClientManager.getInstance().setCurrentAtSign(nextAtSign, 'my_app', acp, 
 // so every sign-in stops the previous client first.
 await client.stop();
 final next = await PkamDialog.show(context, atSign: nextAtSign, keys: KeychainAtKeysIo(),
-    preference: preference, storage: await _storage(nextAtSign));
+    preference: preference);
 if (next != null) AtClientManager.getInstance().use(next);
 ```
 

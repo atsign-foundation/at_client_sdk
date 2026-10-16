@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 
 class AtSignPreference {

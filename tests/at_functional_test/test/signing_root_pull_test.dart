@@ -23,7 +23,8 @@ import 'test_utils.dart';
 /// keyfile — is not driven here, because it needs two principals and this
 /// file has one: a seeker that lacks the root and a holder that has it. The
 /// atSign's own credential, which is what this file authenticates with, does
-/// not ask for a root, since its route to a missing one is to mint one.
+/// not ask for a root, since it advertises no key package for a holder to
+/// seal the answer to.
 /// `signing_root_pull_two_enrollments_test.dart` drives the round trip between
 /// two APKAM enrollments and proves UC-B5.1.
 ///

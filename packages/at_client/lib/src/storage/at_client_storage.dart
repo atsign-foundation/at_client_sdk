@@ -4,6 +4,17 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:meta/meta.dart';
 
 /// The local storage one [AtClient] holds: its keystore and its sync queue.
+///
+/// An app chooses a backend from its own import: `HiveAtClientStorage` from
+/// `package:at_client/hive.dart`, `SqliteAtClientStorage` from
+/// `package:at_client/sqlite.dart`, or `InMemoryAtClientStorage` from
+/// `package:at_client/memory.dart`. An app wanting a backend of its own
+/// raises a feature request at
+/// https://github.com/atsign-foundation/at_client_sdk/issues, since the types
+/// a backend is written against are not exported.
+///
+/// End-to-end-encrypted values are stored as their ciphertext, never in the
+/// clear.
 abstract class AtClientStorage {
   /// Claims this storage for [owner].
   ///
@@ -56,6 +67,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
   String? _lastPrincipal;
   bool _closed = false;
 
+  /// The client whose [attach] is under way, and its outcome.
+  ({AtClient owner, Future<void> done})? _attaching;
+
   /// The storages whose backend is open, keyed by [location].
   ///
   /// Two storages over one location are one store on disk, so the second is
@@ -82,7 +96,22 @@ abstract class AtClientStorageBase implements AtClientStorage {
   String get location;
 
   @override
-  Future<void> attach(AtClient owner) async {
+  Future<void> attach(AtClient owner) {
+    final under = _attaching;
+    if (under != null) {
+      if (identical(under.owner, owner)) return under.done;
+      return Future.error(StateError('this storage is held by '
+          '${principalOf(under.owner)}; a client cannot attach to storage '
+          'another client holds'));
+    }
+    final done = _attach(owner);
+    _attaching = (owner: owner, done: done);
+    return done.whenComplete(() {
+      _attaching = null;
+    });
+  }
+
+  Future<void> _attach(AtClient owner) async {
     if (identical(_owner, owner)) return;
     if (_closed) {
       throw StateError('this storage has been closed and cannot be reopened');

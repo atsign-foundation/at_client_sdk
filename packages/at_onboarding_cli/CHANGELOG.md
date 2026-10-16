@@ -1,3 +1,15 @@
+## 2.0.0-rc8
+
+- feat: `at_activate list` shows the key expiry each enrollment asked for and
+  when its record expires, and `at_activate fetch` prints both.
+- build: requires `at_client` ^3.15.0-rc8, whose `Enrollment` reports the
+  expiry a request asks for.
+
+## 2.0.0-rc7
+
+- build: requires `at_client` ^3.15.0-rc7, which serves
+  `HiveAtClientStorage` from `package:at_client/hive.dart`.
+
 ## 2.0.0-rc6
 
 - fix: the package no longer includes keyfiles that local test runs leave in

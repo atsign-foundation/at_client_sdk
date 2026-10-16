@@ -269,6 +269,16 @@ abstract class NskeyKeyRing {
   /// pulling that generation over the substrate.
   Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid);
+
+  /// The public half of a *named generation* of `(owner, namespace)` whose
+  /// private this client holds, taken from what it holds rather than read
+  /// from an advertisement, or null when it holds no such private.
+  ///
+  /// What this client seals its own atSign's content keys to, including a
+  /// sibling copy while a newer own generation is advertised and its private
+  /// has not reached this client.
+  Future<PackageKey?> heldPublic(
+      String owner, String namespace, String nskeyKid);
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
@@ -279,6 +289,7 @@ abstract class NskeyKeyRing {
 class InMemoryNskeyKeyRing implements NskeyKeyRing {
   final Map<String, NskeyAdvertisement> _current = {};
   final Map<String, NskeyDecapsulationKey> _private = {};
+  final Map<String, PackageKey> _public = {};
 
   static String _scope(String owner, String namespace) => '$owner|$namespace';
 
@@ -302,6 +313,8 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
         publicKey: publicKey, keyAlgo: keyAlgo);
     _private[_generation(owner, namespace, kid)] =
         NskeyDecapsulationKey(privateKey);
+    _public[_generation(owner, namespace, kid)] =
+        _current[_scope(owner, namespace)]!.keys.single;
     return kid;
   }
 
@@ -336,4 +349,9 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
   Future<NskeyDecapsulationKey?> privateHalf(
           String owner, String namespace, String nskeyKid) async =>
       _private[_generation(owner, namespace, nskeyKid)];
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      _public[_generation(owner, namespace, nskeyKid)];
 }
