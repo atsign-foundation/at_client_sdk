@@ -9,7 +9,8 @@ Feature: An approver app sees the expiry a request asks for
   prints both. A notification announces a request; enroll:fetch is the
   record of what it asks. Approving returns the enrollment as the atServer
   holds it afterwards, with the term the atServer recorded and when the
-  enrollment expires.
+  enrollment expires, and at_activate's approve and auto_approve print when
+  it expires, or that it has since been revoked.
 
   Races: approving and reading B afterwards are two commands, so another
   approver can revoke B in between, or B can expire or be deleted. approve
@@ -97,3 +98,27 @@ Feature: An approver app sees the expiry a request asks for
     Given @alice's enrollment B is pending, asking for an expiry of 1 hour
     When at_activate fetch runs for B
     Then the record it prints carries the 1-hour expiry B asked for and when its record expires
+
+  Scenario Outline: at_activate prints when an enrollment it approves expires
+    Given @alice's enrollment B is pending
+    And @alice's atServer's record of B, read after the approval, carries expiresAt "2026-10-17T07:00:00.000Z"
+    When at_activate <command> approves B
+    Then it prints that it approved B, and that B expires at 2026-10-17T07:00:00.000Z
+
+    Examples:
+      | command      |
+      | approve      |
+      | auto_approve |
+
+  Scenario: at_activate approve, when the atServer does not say when B expires
+    Given @alice's enrollment B is pending
+    And @alice's atServer's record of B, read after the approval, carries no expiresAt
+    When at_activate approve approves B
+    Then it prints that it approved B, and nothing about when B expires
+
+  @race
+  Scenario: at_activate approve, when B is revoked before the read after the approval
+    Given @alice's enrollment B is pending
+    And another approver revokes B as soon as it is approved
+    When at_activate approve approves B
+    Then it prints that it approved B, and that B has since been revoked
