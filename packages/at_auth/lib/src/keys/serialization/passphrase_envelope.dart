@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -159,13 +160,16 @@ class AtKeysPassphraseEnvelopeCodec {
     }
 
     final HashParams? readParams = _paramsForDecode(json);
+    final ivBytes = decodeBase64Field(iv, 'iv', AtDecryptionException.new);
+    // NOTE: a malformed content fails here, by field name, not inside the
+    // cipher.
+    decodeBase64Field(content, 'content', AtDecryptionException.new);
 
     try {
       final aes = await _encryptorForPassphrase(
           passPhrase!, HashingAlgoType.fromString(hashingAlgoName),
           hashParams: readParams);
-      final plaintext =
-          aes.decrypt(content, iv: InitialisationVector(base64Decode(iv)));
+      final plaintext = aes.decrypt(content, iv: InitialisationVector(ivBytes));
       // jsonDecode must stay inside the try: the cipher is unauthenticated,
       // so an incorrect passphrase does not fail decrypt() -- it yields
       // arbitrary bytes. Whether those bytes parse as a JSON object is
@@ -210,7 +214,7 @@ class AtKeysPassphraseEnvelopeCodec {
           'a version $currentVersion atKeys envelope must carry a salt');
     }
 
-    final params = ArgonHashParams()..salt = base64Decode(salt);
+    final params = ArgonHashParams()..salt = decodeBase64Field(salt, 'salt');
     final kdfParams = json['kdfParams'];
     if (kdfParams is! Map) {
       throw AtDecryptionException(
