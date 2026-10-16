@@ -75,6 +75,17 @@ Feature: AtSignLogger hands its LoggingHandler printable text
     When it logs at severe the message "fail", CR, "ed" with an error whose text holds LF, and a stack trace
     Then the handler is handed the message `fail\red`, that error object and that stack trace
 
+  @forgery
+  Scenario: A logger built without a LoggingHandler hands defaultLoggingHandler the escaped message
+    Given AtSignLogger.defaultLoggingHandler is that LoggingHandler
+    And an AtSignLogger built without a LoggingHandler
+    When the second logs at info the message "a", LF, "INFO|x"
+    Then the handler is handed the message "a", LF, two spaces, "INFO|x"
+
+  Scenario: A record logged in another zone and copied for its escapes keeps what it was logged with
+    When it logs at severe, from a zone other than the one it was built in, a message object whose text is "a", CR, "b", with an error and a stack trace
+    Then the handler is handed the message `a\rb`, with level severe, that error, that stack trace, that zone and that message object
+
   Scenario: A listener on the underlying logger is handed the message as logged
     Given a listener on the AtSignLogger's logger.onRecord
     When it logs at info the message "k", CR, "yy"
