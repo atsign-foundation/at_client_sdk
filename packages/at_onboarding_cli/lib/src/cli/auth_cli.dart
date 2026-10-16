@@ -1030,8 +1030,13 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
         ' and deviceName "${er.deviceName}"');
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.
-    await atClient.enrollments.approve(eId);
-    stdout.writeln('Approved $eId');
+    final record = await atClient.enrollments.approve(eId);
+    final expiresAt = record.expiresAt;
+    stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
+        ? 'Approved $eId, but it has since been revoked'
+        : expiresAt == null
+            ? 'Approved $eId'
+            : 'Approved $eId, which expires at ${expiresAt.toIso8601String()}');
 
     approved++;
 
@@ -1108,8 +1113,14 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
       // NOTE: approving is also when this atSign's secrets are sealed to the
       // new device's key package, which is why it goes through the client.
-      await atClient.enrollments.approve(eId);
-      stdout.writeln('Approval successful.');
+      final record = await atClient.enrollments.approve(eId);
+      final expiresAt = record.expiresAt;
+      stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
+          ? 'Approval successful, but $eId has since been revoked'
+          : expiresAt == null
+              ? 'Approval successful.'
+              : 'Approval successful; $eId expires at '
+                  '${expiresAt.toIso8601String()}');
 
       // increment approved count
       approved++;
