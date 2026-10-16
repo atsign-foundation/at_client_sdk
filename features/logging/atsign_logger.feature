@@ -1,6 +1,8 @@
 # Proposed, awaiting agreement: the scenarios tagged @proposed, and in the
 # description the bidirectional formatting characters, the line and paragraph
-# separators, the DoS bound of six times, and "reorder or split".
+# separators, the limit to the message and logger name, the copy's time and
+# sequence number, the DoS bound of six times, and the Forgery line's
+# reordering and splitting.
 Feature: AtSignLogger hands its LoggingHandler printable text
 
   Each record an AtSignLogger hands its LoggingHandler, built-in or custom,
@@ -8,9 +10,11 @@ Feature: AtSignLogger hands its LoggingHandler printable text
   C1), every bidirectional formatting character (U+061C, U+200E, U+200F,
   U+202A to U+202E, U+2066 to U+2069) and the line and paragraph separators
   (U+2028, U+2029) written as a visible escape (`\r`, `\x1b`, `\u202e`),
-  except that each LF in the message is kept and followed by two spaces. Only
-  a record's first line starts at the margin, and the only control character
-  a handler is handed is that LF.
+  except that each LF in the message is kept and followed by two spaces. In
+  the message and logger name a handler is handed, only the message's first
+  line starts at the margin, and the only control character is that LF. A
+  record with something to escape is handed over as a copy, which has its
+  own time and sequence number.
 
   Races: none arise; the escape is a function of one record, applied before
   the handler is called.
@@ -19,9 +23,10 @@ Feature: AtSignLogger hands its LoggingHandler printable text
   logged (`\u202e` for one character), so a call site logging text from
   outside the process still bounds its length.
   Forgery: text logged from outside the process cannot start a record of its
-  own, move a terminal's cursor, clear its screen, nor reorder or split the
-  line a viewer shows it on, in what a handler is handed (the scenarios
-  tagged @forgery).
+  own, move a terminal's cursor, clear its screen, reorder the line with
+  bidirectional formatting characters, nor split it with a line or paragraph
+  separator, in the message and logger name a handler is handed (the
+  scenarios tagged @forgery).
   Impersonation: a message cannot pass as another logger's record, since none
   of its lines can start a record; the name an AtSignLogger is given is its
   creator's choice and outside this feature.
