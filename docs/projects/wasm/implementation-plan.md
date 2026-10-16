@@ -1030,9 +1030,9 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   every consumer. `PseudoServerSocket` is used by `at_server` for ALPN multiplexing —
   **split, do not delete.**
 - **I2 — Split `at_utils/lib/src/logging/handlers.dart`.** `ConsoleLoggingHandler`
-  (`print`) stays neutral; `FileLoggingHandler` (`:34-48`), `StdErrLoggingHandler`
-  (`:53-59`) and `CLILoggingHandler` (`:71-97`) move to `at_utils_io.dart`. The
-  `dart:io` import at `:1` is what currently poisons the whole logger.
+  (`print`) stays neutral; `FileLoggingHandler`, `StdErrLoggingHandler` and
+  `CLILoggingHandler` move to `at_utils_io.dart`. The `dart:io` import at `:1` is
+  what currently poisons the whole logger.
 - **I3 — `app_config.dart` into `at_utils_io.dart`,** or inject the config.
 - **I4 — Publish `at_utils` 4.0.0.**
 - **I5 — Connectivity.** Replace `internet_connection_checker` behind an injectable
