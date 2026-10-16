@@ -192,5 +192,36 @@ void main() {
       expect(enrollVerbBuilder.buildCommand(),
           'enroll:delete:{"enrollmentId":"4785"}\n');
     });
+
+    test('a link call carries its links to the wire, a null expect included',
+        () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.link
+        ..enrollmentId = '123'
+        ..links = {
+          '0123456789abcdef': {
+            'link': {'v': 2},
+            'expect': null,
+          }
+        };
+      expect(
+          enrollVerbBuilder.buildCommand(),
+          'enroll:link:{"enrollmentId":"123","links":'
+          '{"0123456789abcdef":{"link":{"v":2},"expect":null}}}\n');
+    });
+
+    test('an operation other than link sends no links', () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.approve
+        ..enrollmentId = '123'
+        ..links = {
+          '0123456789abcdef': {
+            'link': {'v': 2},
+            'expect': null,
+          }
+        };
+      expect(enrollVerbBuilder.buildCommand(),
+          'enroll:approve:{"enrollmentId":"123"}\n');
+    });
   });
 }

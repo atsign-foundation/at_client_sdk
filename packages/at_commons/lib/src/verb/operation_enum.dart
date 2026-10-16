@@ -36,7 +36,12 @@ enum EnrollOperationEnum {
   /// enrollment id must equal the target's — and it never reaches
   /// `namespaces` or the approval state, because an operation an enrollment
   /// can invoke on itself must not be able to widen its own grant.
-  update
+  update,
+
+  /// Links that vouch for an enrollment's signing keys, one per `kid`, stored
+  /// on that enrollment's `_apsk` record; each written only over the link the
+  /// caller found on that key.
+  link
 }
 
 String getEnrollOperation(EnrollOperationEnum? enrollOperationEnum) =>

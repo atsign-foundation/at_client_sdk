@@ -86,6 +86,10 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   Duration? apkamKeysExpiryDuration;
 
+  /// The links an [EnrollOperationEnum.link] writes. See [EnrollParams.links]
+  /// for the shape; no other operation sends them.
+  Map<String, dynamic>? links;
+
   @override
   String buildCommand() {
     var sb = StringBuffer();
@@ -114,7 +118,8 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..apkamPublicKeySignature = apkamPublicKeySignature
       ..metadata = metadata
       ..enrollmentStatusFilter = enrollmentStatusFilter
-      ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
+      ..apkamKeysExpiryDuration = apkamKeysExpiryDuration
+      ..links = links;
 
     Map<String, dynamic> enrollParamsJson = enrollParams.toJson();
     enrollParamsJson.removeWhere(_removeElements);
@@ -144,6 +149,9 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
     // Remove it from enrollParamsJson for any operation other than list
     if (key == 'enrollmentStatusFilter' &&
         operation != EnrollOperationEnum.list) {
+      return true;
+    }
+    if (key == 'links' && operation != EnrollOperationEnum.link) {
       return true;
     }
     return false;

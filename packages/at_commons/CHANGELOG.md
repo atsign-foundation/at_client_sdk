@@ -1,3 +1,9 @@
+## 5.23.0
+
+- feat: `enroll:link`, for writing links that vouch for an enrollment's
+  signing keys: `EnrollOperationEnum.link`, and `links` on `EnrollParams` and
+  `EnrollVerbBuilder`.
+
 ## 5.22.0
 
 - feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
