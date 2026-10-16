@@ -120,7 +120,8 @@ void main() {
         ' separator ranges, then only the characters in those ranges reach the'
         ' handler as escapes', () {
       logger.info('\u061b\u061c\u061d\u200d\u200e\u200f\u2010'
-          '\u2027\u2028\u202e\u202f\u2065\u2066\u2069\u206a');
+          '\u2027\u2028\u202a\u202d\u202e\u202f\u2065'
+          '\u2066\u2067\u2068\u2069\u206a');
       expect(
           handler.records.single.message,
           '\u061b'
@@ -128,9 +129,9 @@ void main() {
           '\u061d\u200d'
           r'\u200e\u200f'
           '\u2010\u2027'
-          r'\u2028\u202e'
+          r'\u2028\u202a\u202d\u202e'
           '\u202f\u2065'
-          r'\u2066\u2069'
+          r'\u2066\u2067\u2068\u2069'
           '\u206a');
     });
 
@@ -139,6 +140,25 @@ void main() {
         ' the handler is handed it as a visible escape', () {
       AtSignLogger('sync\u202e', loggingHandler: handler).info('hello');
       expect(handler.records.single.loggerName, r'sync\u202e');
+    });
+
+    test(
+        'when a message holds every character in the escaped ranges, then the'
+        ' handler is handed none of them except LF', () {
+      final Set<int> escapedRanges = {
+        for (int c = 0x00; c <= 0x1f; c++) c,
+        for (int c = 0x7f; c <= 0x9f; c++) c,
+        0x061c,
+        0x200e,
+        0x200f,
+        for (int c = 0x2028; c <= 0x202e; c++) c,
+        for (int c = 0x2066; c <= 0x2069; c++) c,
+      };
+      logger.info(String.fromCharCodes(escapedRanges));
+      expect(
+          handler.records.single.message.codeUnits
+              .where((int c) => c != 0x0a && escapedRanges.contains(c)),
+          isEmpty);
     });
   });
 
