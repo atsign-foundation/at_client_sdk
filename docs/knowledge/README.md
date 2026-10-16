@@ -56,8 +56,10 @@ into its own level once, in the constructor. A logger already built never
 follows a later `root_level` change.
 **Matters because:** raising the level after a client exists changes nothing,
 and the resulting miss reads as "the code never logged that".
-**Evidence:** `packages/at_utils/lib/src/logging/atsignlogger.dart:47-53,82-87`
-**Checked:** `8cf542b97`, 2026-08-20
+**Evidence:**
+- `.` -> `packages/at_utils/lib/src/logging/atsignlogger.dart` -> `logger = logging.Logger.detached(name);`
+- `.` -> `packages/at_utils/lib/src/logging/atsignlogger.dart` -> `level = _root_level;`
+**Checked:** `e6edec423`, 2026-10-16
 ```
 
 - **Is** — the fact, in one or two sentences.
