@@ -161,7 +161,10 @@ final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.
 final requests = await owner.enrollments.pending();
-await owner.enrollments.approve(requests.first.enrollmentId!);
+print(requests.first.apkamKeysExpiryDuration);  // the key expiry it asks for
+final approved =
+    await owner.enrollments.approve(requests.first.enrollmentId!);
+print(approved.expiresAt);                      // when it now expires
 owner.enrollments.requests.listen((request) => print(request.appName));
 final passcode = await owner.enrollments.otp();
 

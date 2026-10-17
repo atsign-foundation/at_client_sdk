@@ -1,3 +1,11 @@
+## 3.15.0-rc8
+
+- feat: `Enrollment` reports the key expiry a request asked for, as
+  `apkamKeysExpiryDuration` (zero or less for none, null when the atServer
+  does not say), and when its record expires, as `expiresAt`.
+- feat: `client.enrollments.approve` returns the approved enrollment as the
+  atServer now holds it, including when it expires.
+
 ## 3.15.0-rc7
 
 - feat: `tryAcquireServerMutex` takes a short-lived lock that every client of
