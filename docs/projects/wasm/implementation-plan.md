@@ -2,7 +2,9 @@
 
 **Status:** working execution plan (prescriptive). Task status as of 2026-09-13,
 against `gkc-client-lifecycle` (the transport leg, T9); the `trunk` baseline is
-`9d9e5f7d7`, 2026-08-27.
+`9d9e5f7d7`, 2026-08-27. **§5b (the PB-3…PB-7 build, which delivers phases 3–5 in
+practice) is current as of 2026-10-18** and is the authoritative status; where the task
+lists below disagree with it, §5b wins.
 **Scope:** the phase sequence and the task backlog for the implementation-neutral
 `AtClient` work, across `at_client_sdk` and `at_server`'s
 `at_persistence_secondary_server`.
@@ -21,6 +23,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 - [4. Phase 2 — transport (T)](#4-phase-2--transport-t)
 - [5. Phase 3 — persistence (P)](#5-phase-3--persistence-p)
 - [5a. Client storage bundle (X)](#5a-client-storage-bundle-x)
+- [5b. The browser-lane build, PB-3…PB-7 (2026-10-18)](#5b-the-browser-lane-build-pb-3pb-7-2026-10-18)
 - [6. Phase 4 — the sweep (I) and crypto (C)](#6-phase-4--the-sweep-i-and-crypto-c)
 - [7. Phase 5 — `at_client_web` (W)](#7-phase-5--at_client_web-w)
 - [8. Phase 6 — the JS/TS facade (J)](#8-phase-6--the-jsts-facade-j)
@@ -43,7 +46,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 > | Group | Status |
 > | --- | --- |
 > | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
-> | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. `decisions.md` D-21 constrains the VFS choice for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
+> | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. the VFS is settled by `decisions.md` D-25 (SimpleOPFS, one directory per atSign and enrollment) for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
 > | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
 > | Key-storage tasks | **unchanged, and now the whole storage story** |
 > | JS packaging tasks | **re-specified by D-23** — author the facade once in TypeScript; generate both `.js` and `.d.ts` |
@@ -319,11 +322,10 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
 > **V2, tracked as [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754).** V1 ships remote-only
 > ([`decisions.md`](decisions.md) D-17), so no task here is on V1's path; a SQLite bundle in
 > a browser waits on all of them. Re-verified 2026-09-14 on at_server trunk `1c51474d`:
-> P1–P4 not started, P5 done.
+> P1 and P5 done; P2–P4 not started.
 
-- **P1 — Decide the VFS** (`IndexedDbFileSystem` vs OPFS) as a product pick-two, not on a
-  measurement (D-21), and record it. Blocks P2's web path and sets `at_client_web`'s
-  execution model. OQ-5.
+- **P1 — VFS: done (D-25).** `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId),
+  in a dedicated worker; this sets `at_client_web`'s execution model. OQ-5.
 - **P2 — Split `src/impl/sqlite/sqlite_database.dart`'s `open`.** Prerequisite and the
   bulk of the work: retype the `_db` field and `raw` getter from `Database` to
   `CommonDatabase`, and repoint the five importers (the four stores and `sqlite_schema.dart`)
@@ -434,7 +436,8 @@ D-12. Independent of the P series, which is `at_server`-side.
     client. The guard firing is the evidence that the sharing was real and unnoticed.
   - **A child isolate is a separate heap**, so `sync_multiple_client_test`'s two clients
     cannot be handed a bundle at all — that isolate builds its own from the path string it
-    is sent. The third client in that file opens on `InMemoryAtClientStorage`.
+    is sent. The third client in that file sets `isLocalStoreRequired` false and opens no
+    local store.
   - **`setCurrentAtSign` treated any storage argument as a change** and took the
     destructive stop/recreate path, which would have altered the client lifecycle at every
     site the pack touches. Re-offering the bundle a client already holds is now not a
@@ -1021,6 +1024,36 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ---
 
+## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
+
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. Every PR below is **open and unmerged**; PR state was read with `gh` on 2026-10-18. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+
+| Stack | Delivers | Nearest task ids | PRs | State |
+| --- | --- | --- | --- | --- |
+| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | open; stages 4, 5 draft. [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
+| PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T8 | #2223 | open, draft |
+| PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | open, draft |
+| PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
+| PB-4/5 D | WebAuthn PRF spike (OQ-P1) → K-7 | — | #2269 | open, draft |
+| PB-5 E, F | `packages/at_client_wasm`: key envelope, `WebAtKeysIo` | W1 (keys leg) | #2267 | open, draft |
+| PB-5 G, K | IndexedDB store, `PasskeyKek` over a port; dev portal-cutter | W1 (keys leg) | #2271, #2272 | open, draft |
+| PB-5 H | Portal and ephemeral sessions; `HealOutcome` | W1 | #2338 | open |
+| PB-5 J | `@JSExport` dev harness + `build.sh` (js and wasm compiles required) | J1 (dev only) | #2341 | open |
+| PB-5 N | Per-passkey records replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-9 |
+| PB-5 M | Notifications in the browser, D-24 `window(1h)` | — | not started | draft plan |
+| PB-6 | `@atsign/at-client-web` TypeScript facade | J1–J8 | not started | draft plan; gated on OQ-16 |
+| PB-7 / L | First live browser session on a real hostname; the five live paths | W3 → T4.1, T4.2 | not started | step 0a (paths 1–3) passed on Chrome headless + local atServer; step 0a′ reruns after N |
+| R-5 | Portal requirements letter (the never-filed PB-0 routing) | D2 | not started | draft |
+
+**What changed against the task lists above.**
+
+- **W1's package name.** Layer B/C landed as `packages/at_client_wasm`; D-4 and W1 say `at_client_web`. The JS facade (PB-6) is named `@atsign/at-client-web`. Which of the two Dart package names ships is not ruled — settle it before the publish ladder (§10).
+- **W4 is done** (D-25): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
+- **D2 (browser onboarding) is no longer deferred.** It is K-1..K-9 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
+- **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.
+
+---
+
 ## 6. Phase 4 — the sweep (I) and crypto (C)
 
 ### I — the `dart:io` sweep
@@ -1030,9 +1063,9 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   every consumer. `PseudoServerSocket` is used by `at_server` for ALPN multiplexing —
   **split, do not delete.**
 - **I2 — Split `at_utils/lib/src/logging/handlers.dart`.** `ConsoleLoggingHandler`
-  (`print`) stays neutral; `FileLoggingHandler`, `StdErrLoggingHandler` and
-  `CLILoggingHandler` move to `at_utils_io.dart`. The `dart:io` import at `:1` is
-  what currently poisons the whole logger.
+  (`print`) stays neutral; `FileLoggingHandler` (`:34-48`), `StdErrLoggingHandler`
+  (`:53-59`) and `CLILoggingHandler` (`:71-97`) move to `at_utils_io.dart`. The
+  `dart:io` import at `:1` is what currently poisons the whole logger.
 - **I3 — `app_config.dart` into `at_utils_io.dart`,** or inject the config.
 - **I4 — Publish `at_utils` 4.0.0.**
 - **I5 — Connectivity.** Replace `internet_connection_checker` behind an injectable
@@ -1048,21 +1081,16 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 - **I7 — Inject an `http.Client` into `file_transfer_service.dart`** (`:14,31,40,50`,
   top-level `http.post`/`get` with no seam). Worth doing independently of I6 — it is
   also the only way to test that service.
-- **I8 — The app chooses its storage.** ✅ Done, #2327 (D-25). Each backend comes from
-  its own barrel and is passed as `storage:`; outside the backends only
-  `default_storage.dart` names Hive, the default until 4.0, and `StorageManager` is folded
-  into `HiveAtClientStorage`. (First written as a backend chosen on `AtClientPreference`
-  with an opaque storage location, which D-12 rejected.)
-  `AtClientPreference.keyStoreSecret`, which nothing reads, is deprecated for 4.0.
-- **I9 — Backend-neutral `AtSyncQueue`.** ✅ Done, #2327 (D-25). `AtSyncQueue` takes a
-  `SyncQueueStore` from the storage backend and opens nothing itself; the Hive box store
-  lives in the Hive backend and the SQLite one beside it. (First written as building on
-  S3's plumbing, which D-12 superseded.)
-- **I10 — The direct `hive` dependency stays** while `hive.dart` lives in at_client
-  (D-25); every at_client app resolves `hive` through at_persistence_secondary_server
-  anyway. Until 4.0 removes the default seam, core compiles Hive in every build, so OQ-9
-  still decides whether the browser lane can carry it. (First written as dropping the
-  dependency once I8 and I9 landed.)
+- **I8 — Storage backend selectable from `AtClientPreference`.**
+  `storage_manager.dart:16` hardcodes `HiveAtPersistenceFactory()` and requires
+  `hiveStoragePath`. Introduce the backend choice (`AtPersistenceBackendId` already has
+  `hive` and `sqlite`) and an opaque storage location. Remove the unused
+  `keyStoreSecret` parameter while in the file. Resolve OQ-3 here.
+- **I9 — Backend-neutral `AtSyncQueue`.** Replace the direct `Hive.openBox` at
+  `at_sync_queue.dart:121` with a small spec interface plus Hive and SQLite
+  implementations, building on S3's plumbing.
+- **I10 — Drop the direct `hive: ^2.2.3` dependency** from `at_client`'s pubspec once
+  I8 and I9 land. OQ-9 determines whether this is required or merely tidy.
 - **I11 — Publish `at_client` 4.0.0.** → T0 green, T1, T2.4
 
 ### C — crypto verification
@@ -1112,8 +1140,8 @@ Now verified **by execution** under T2.3 rather than by compile.
 - **W3 — First live browser session.** → T4.1, T4.2
 - **W4 — Payload measurement.** Compiled output + JS glue, plus `sqlite3.wasm` for a
   SQLite bundle (D-17), gzipped and
-  Brotli, for **both** compile targets. Record **before** revisiting the IndexedDB
-  question. → X2
+  Brotli, for **both** compile targets. → X2. **Done (D-25):** +386 KB gz / +363 KB br / +375 KB
+  dart2js gz, fixed per app; accepted.
 
 ---
 
@@ -1186,12 +1214,12 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 ## 9. Phase 7 — deferred (D)
 
 - **D1 — File-transfer web implementation** via `package:web` File/Blob.
-- **D2 — Browser onboarding and key-import UX.** The `.atKeys` *file* does not exist in
+- **D2 — Browser onboarding and key-import UX.** *Un-deferred 2026-10: see §5b and K-1..K-9.* The `.atKeys` *file* does not exist in
   a browser; the flow needs paste, upload or QR feeding bytes into the existing decode
   path.
 - **D3 — Argon2id performance work,** driven by C4.
 - **D4 — Raw IndexedDB backend** (V2, as all local storage is under D-17), only if W4's payload measurement rules `sqlite3.wasm`
-  out.
+  out. **Not triggered:** W4 accepted `sqlite3.wasm` (D-25).
 - **D5 — `at_client_cli` and `at_client_flutter` as true platform implementers.**
   Deferred under [`decisions.md`](decisions.md) D-4; the `_io` barrels serve until then.
 - **D6 — A `Clock` / `RandomSource` seam.** Portable under WASM, so not a port
@@ -1213,7 +1241,7 @@ Dependency order, one major per package:
 | 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **S5 (#2162) published in 1.1.2-rc2**                                            |
 | 5a | `at_persistence_secondary_server` | minor | P | none — additive web open path ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)). **V2** |
 | 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
-| 7 | `at_client_web`    | 1.0.0     | W        | new                                                                                                               |
+| 7 | `at_client_web` / `at_client_wasm` | 1.0.0 | W | new — package name unruled, see §5b |
 | 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
 
 **Coordinate step 8 with the PQ program's S-6**, which bumps the same consumers for
