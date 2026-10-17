@@ -37,6 +37,10 @@ void main() {
 
     Uint8List randomKey() => makeAlgo().generateKey();
 
+    test('reports the pure-Dart backend\'s identifier', () {
+      expect(makeAlgo().name, AesGcm256EncryptionAlgo().name);
+    });
+
     test('encrypt then decrypt returns the plaintext', () async {
       final Uint8List key = randomKey();
       final AesGcm256FfiAlgo algo = makeAlgo();
