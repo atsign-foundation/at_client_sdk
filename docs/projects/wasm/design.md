@@ -124,7 +124,7 @@ export 'src/io/secure_socket_transport.dart';  // the only file naming dart:io
 **In the platform package**, the web implementation:
 
 ```dart
-// package:at_client_web/at_client_web.dart
+// package:at_client_wasm/at_client_wasm.dart
 class WebSocketTransport implements AtTransport {
   // ...
 }
@@ -180,7 +180,7 @@ implementation can be handed in entire; retyping the three is what makes
 
 **Implementers.** `at_lookup_io.dart` wraps `SecureSocket` and absorbs
 `secure_socket_util.dart` whole (certs and TLS keylog are native-only concerns).
-`at_client_web` wraps `WebSocket` from `package:web`, targeting
+`at_client_wasm` wraps `WebSocket` from `package:web`, targeting
 `wss://<host>:<port>/ws`. Framing is unchanged, so the response parser is reused as-is.
 
 **Breaking-change blast radius.** `Socket getSocket()` is on a public interface;
@@ -397,7 +397,7 @@ Its one flaw is the shape rule 2 warns about: `at_auth_impl.dart:227` still does
 `atOnboardingRequest.atKeysIo ??= FileAtKeysIo()`, which pulls `dart:io` into the graph
 no matter what the caller injects. **The PQ program's S-5 removes it.**
 
-`at_client_web` adds a web `WrittenAtKeysIo` subtype. Because `InMemoryAtKeysIo`
+`at_client_wasm` adds a web `WrittenAtKeysIo` subtype. Because `InMemoryAtKeysIo`
 already handles the decode path, this should reduce to a thin persistence wrapper over
 IndexedDB or WebCrypto-wrapped storage — a new subtype, not a new abstraction.
 
@@ -650,7 +650,7 @@ platform type: a service takes the legs through its constructor, the way
 handed instances. Each leg has exactly one default seam in the core, named in the
 table, which is what a platform package replaces and what the `_io` split of at_client
 will move out. And a platform implementer is three objects handed to the doors, no
-fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
+fork of at_client: `at_client_wasm` is a WebSocket `AtLookupMuxable` behind a factory, a
 SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
 this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
 as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather

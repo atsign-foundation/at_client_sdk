@@ -25,7 +25,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 - [5a. Client storage bundle (X)](#5a-client-storage-bundle-x)
 - [5b. The browser-lane build, PB-3…PB-7 (2026-10-18)](#5b-the-browser-lane-build-pb-3pb-7-2026-10-18)
 - [6. Phase 4 — the sweep (I) and crypto (C)](#6-phase-4--the-sweep-i-and-crypto-c)
-- [7. Phase 5 — `at_client_web` (W)](#7-phase-5--at_client_web-w)
+- [7. Phase 5 — `at_client_wasm` (W)](#7-phase-5--at_client_wasm-w)
 - [8. Phase 6 — the JS/TS facade (J)](#8-phase-6--the-jsts-facade-j)
 - [9. Phase 7 — deferred (D)](#9-phase-7--deferred-d)
 - [10. Publish ladder](#10-publish-ladder)
@@ -95,7 +95,7 @@ S1..S6        T1..T8          P1..P5         C1..C4
                     at_client 4.0.0 · at_utils 4.0.0
                            │
                            ▼
-                     W1..W4 (at_client_web)
+                     W1..W4 (at_client_wasm)
                            │
                            ▼
                         T4 gates
@@ -216,7 +216,7 @@ Design in [`design.md`](design.md) §2.1.
 **Where phase T stands after T9 (2026-09-13,
 [`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)).** The app-facing half is done: an
 application hands `lookUps:` to at_client's doors and every connection the client opens
-comes from it, at_client names the TLS transport in one file, and `at_client_web` can
+comes from it, at_client names the TLS transport in one file, and `at_client_wasm` can
 implement `AtLookupMuxable` whole behind its factory without waiting for anything below.
 What remains is at_lookup's own major — T3, T4, T5 and T8 — which is what lets a web
 transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw sockets and T7's
@@ -281,7 +281,7 @@ break; it stays as ruled.
   [`storage:`](#5a-client-storage-bundle-x); `AtClientImpl.lookUps` holds it, and
   `buildRemoteSecondary`, `SyncServiceImpl.remoteSecondaryFor` and the monitor (through
   `NotificationServiceImpl.create(lookUps:)`) all build through it, so every connection
-  a client opens travels the way the app chose. `at_client_web` hands in a factory
+  a client opens travels the way the app chose. `at_client_wasm` hands in a factory
   returning a WebSocket-backed `AtLookupMuxable` once T4 gives it one to construct.
   **What is still hardcoded, re-measured 2026-09-13: three sites, all in at_auth** —
   `at_auth_impl.dart`'s activation lookup, `enroll/enrollment_handshake.dart`'s
@@ -325,7 +325,7 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
 > P1 and P5 done; P2–P4 not started.
 
 - **P1 — VFS: done (D-25).** `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId),
-  in a dedicated worker; this sets `at_client_web`'s execution model. OQ-5.
+  in a dedicated worker; this sets `at_client_wasm`'s execution model. OQ-5.
 - **P2 — Split `src/impl/sqlite/sqlite_database.dart`'s `open`.** Prerequisite and the
   bulk of the work: retype the `_db` field and `raw` getter from `Database` to
   `CommonDatabase`, and repoint the five importers (the four stores and `sqlite_schema.dart`)
@@ -1047,7 +1047,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 
 **What changed against the task lists above.**
 
-- **W1's package name.** Layer B/C landed as `packages/at_client_wasm`; D-4 and W1 say `at_client_web`. The JS facade (PB-6) is named `@atsign/at-client-web`. Which of the two Dart package names ships is not ruled — settle it before the publish ladder (§10).
+- **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (Layer B/C already live at `packages/at_client_wasm`). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
 - **W4 is done** (D-25): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
 - **D2 (browser onboarding) is no longer deferred.** It is K-1..K-9 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
 - **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.
@@ -1126,7 +1126,7 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ---
 
-## 7. Phase 5 — `at_client_web` (W)
+## 7. Phase 5 — `at_client_wasm` (W)
 
 - **W1 — New package.** The three legs of the platform bundle
   ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
@@ -1150,13 +1150,13 @@ Now verified **by execution** under T2.3 rather than by compile.
 Design in [`js-api.md`](js-api.md) and in the Layer A/B/C design note (the Dart-side
 facade split, held as working notes outside this repo); rulings D-7..D-11 in
 [`decisions.md`](decisions.md).
-Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
+Builds on W1. Adds no Dart package — everything lands inside `at_client_wasm`.
 
 **Rewritten 2026-08-18 for the collections pivot (D-10, D-11).** J1 previously described
 a flat ~25-method surface; that surface is removed, not extended. `AtCollection<T>`
 (`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
 
-- **J1 — Layer B, the collections-shaped facade.** `packages/at_client_web/lib/at_easy.dart`
+- **J1 — Layer B, the collections-shaped facade.** `packages/at_client_wasm/lib/at_easy.dart`
   (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection<T>()`,
   `AtEasyCollection<T>` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem<T>`
   (`data`, not `obj` — the ergonomic fix), `AtEasyQuery<T>`. `where(path, op, value)` builds
@@ -1185,10 +1185,10 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
   interface, so Node consumers supply storage without a Dart package. Owned jointly with
   the browser key-storage design note. → T6.6
-- **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
+- **J5 — Entry point.** `packages/at_client_wasm/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
-- **J6 — npm package.** `packages/at_client_web/npm/` — `package.json` **generated**, not
+- **J6 — npm package.** `packages/at_client_wasm/npm/` — `package.json` **generated**, not
   hand-committed (verified dart-sass practice, `js-api.md` §8); `index.js` sets
   `globalThis.self` before load (or every Promise hangs on Node) **and wraps the raw
   `@JSExport` object in a real ES class** (private constructor, static `create()`) so
@@ -1241,7 +1241,7 @@ Dependency order, one major per package:
 | 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **S5 (#2162) published in 1.1.2-rc2**                                            |
 | 5a | `at_persistence_secondary_server` | minor | P | none — additive web open path ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)). **V2** |
 | 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
-| 7 | `at_client_web` / `at_client_wasm` | 1.0.0 | W | new — package name unruled, see §5b |
+| 7 | `at_client_wasm` | 1.0.0 | W | new — name ruled, see §5b |
 | 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
 
 **Coordinate step 8 with the PQ program's S-6**, which bumps the same consumers for

@@ -110,6 +110,8 @@ not an API-compatibility commitment.
 
 ### D-4 — `at_client_web` is the only new package for now (2026-08-13)
 
+**Amended 2026-10-18 — the package is `at_client_wasm`.** The Dart package is named `at_client_wasm`; every `at_client_web` in D-4, D-8 and D-11 and in the log below means it. The npm facade stays `@atsign/at-client-web`.
+
 Flutter and CLI platform-implementer packages are named as the eventual shape and
 deferred. `at_client_flutter` is in scope as a breaking-change **consumer**;
 `at_onboarding_cli` and `at_cli_commons` likewise.
@@ -1236,3 +1238,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-13 | **K-8 ruled; OQ-19 raised.** Live test L step 0a showed the shared `unlocks[]` copy leaks device count and accumulates dead entries; [`browser-onboarding.md`](browser-onboarding.md) proposes one record per passkey. PCAM private key moves inside the blob. |
 | 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
 | 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
+| 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |
