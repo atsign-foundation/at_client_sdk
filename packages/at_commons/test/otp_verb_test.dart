@@ -49,4 +49,45 @@ void main() {
       expect(verbParams['ttl'], '123');
     });
   });
+
+  group('A group of tests to verify otp:list and otp:delete regex', () {
+    test('A test to verify otp:list regex', () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:list');
+      expect(verbParams[AtConstants.operation], 'list');
+      expect(verbParams['otp'], null);
+    });
+
+    test('A test to verify otp:list does not accept a passcode', () {
+      expect(
+          () => getVerbParams(VerbSyntax.otp, 'otp:list:abc123'),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+
+    test('A test to verify otp:delete regex with an OTP', () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:delete:ABC123');
+      expect(verbParams[AtConstants.operation], 'delete');
+      expect(verbParams['otp'], 'ABC123');
+    });
+
+    test('A test to verify otp:delete:spp regex', () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:delete:spp');
+      expect(verbParams[AtConstants.operation], 'delete');
+      expect(verbParams['otp'], 'spp');
+    });
+
+    test(
+        'A test to verify otp:delete throws error if otp is not 6 character length',
+        () {
+      expect(
+          () => getVerbParams(VerbSyntax.otp, 'otp:delete:abc12'),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+  });
 }
