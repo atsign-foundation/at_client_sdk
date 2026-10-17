@@ -89,22 +89,38 @@ void main() {
     expect(handler.records.single.stackTrace, same(stackTrace));
   });
 
+  test(
+      'A logger built without a LoggingHandler hands defaultLoggingHandler the'
+      ' escaped message', () {
+    final LoggingHandler previous = AtSignLogger.defaultLoggingHandler;
+    addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+    AtSignLogger.defaultLoggingHandler = handler;
+    AtSignLogger('default').info('a\nINFO|x');
+    expect(handler.records.single.message, 'a\n  INFO|x');
+  });
+
   group(
       'Given an AtSignLogger whose LoggingHandler keeps each record it is'
       ' handed', () {
     test(
-        'when a record is copied for its escapes, then the copy keeps the level,'
-        ' error, stack trace, zone and object it was logged with', () {
+        'when a record logged in another zone is copied for its escapes, then'
+        ' the copy keeps the level, error, stack trace, zone and object it was'
+        ' logged with', () {
       final _Shown shown = _Shown('a\rb');
       final StateError error = StateError('bad');
       final StackTrace stackTrace = StackTrace.current;
-      logger.severe(shown, error, stackTrace);
+      late Zone loggedIn;
+      runZoned(() {
+        loggedIn = Zone.current;
+        logger.severe(shown, error, stackTrace);
+      });
       final LogRecord handed = handler.records.single;
       expect(handed.message, r'a\rb');
       expect(handed.level, Level.SEVERE);
       expect(handed.error, same(error));
       expect(handed.stackTrace, same(stackTrace));
-      expect(handed.zone, same(Zone.current));
+      expect(loggedIn, isNot(same(Zone.current)));
+      expect(handed.zone, same(loggedIn));
       expect(handed.object, same(shown));
     });
 
