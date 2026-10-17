@@ -29,5 +29,24 @@ void main() {
               signature: signature, publicKey: other.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
     });
+    group('a 128-byte signature that is not hex', () {
+      final message = Uint8List.fromList('Hello World'.codeUnits);
+      final cases = {
+        'non-hex characters': 'z' * 128,
+        'a sign prefix on a byte pair': '-1${'00' * 63}',
+        'multi-byte characters': '\u00e9' * 128,
+      };
+      for (final entry in cases.entries) {
+        test('is rejected as a verification failure: ${entry.key}', () async {
+          final eccAlgo = EccSigningAlgo();
+          final (:publicKey, secretKey: _) = await eccAlgo.generateKeyPair();
+          await expectLater(
+              eccAlgo.verifyBytes(message,
+                  signature: Uint8List.fromList(entry.value.codeUnits),
+                  publicKey: publicKey),
+              throwsA(isA<AtSigningVerificationException>()));
+        });
+      }
+    });
   });
 }
