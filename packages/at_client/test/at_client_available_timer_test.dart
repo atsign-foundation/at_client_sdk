@@ -42,10 +42,6 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSignStr);
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
-    // A LocalSecondary built without an explicit keyStore resolves it
-    // from the client's persistence bundle — the 'keystore-cache reuse'
-    // test relies on a fresh LocalSecondary sharing this keystore.
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     // NOTE: LocalSecondary asks the sync service to drain after every
     // eligible write, so an unstubbed one answers null into a non-nullable
     // SyncService and the write reports that instead of triggering.
@@ -232,7 +228,8 @@ void main() {
       // walk.
       await local.executeVerb(put('p1', 'v', ttbMs: 3600 * 1000));
 
-      final fresh = LocalSecondary(atClient, onEvent: events.add);
+      final fresh = LocalSecondary(atClient,
+          keyStore: local.keyStore, onEvent: events.add);
       expect(await fresh.nextAvailableAt(), isNotNull);
       expect(
         approximate((await fresh.nextAvailableAt())!,

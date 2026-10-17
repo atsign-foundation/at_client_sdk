@@ -325,6 +325,8 @@ final AtChops chops = response.atChops!;
 // 4.0: the client, whose connection and keys those were
 final client = await Atsign(atSign).open(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
+    storage: HiveAtClientStorage(                // package:at_client/hive.dart
+        atSign: atSign, storagePath: storagePath, closedByClient: true),
     preference: AtClientPreference()..namespace = 'my_app');
 client.connection.current;                       // did the atServer accept the keys
 final keys = await client.atKeysIo!.read(atSign); // the material, from the store

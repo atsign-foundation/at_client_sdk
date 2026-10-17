@@ -28,7 +28,8 @@ import 'package:at_utils/at_progress.dart';
 ///
 /// ```dart
 /// final client = await Atsign('@alice').open(
-///     keys: FileAtKeysIo(), preference: AtClientPreference());
+///     keys: FileAtKeysIo(), storage: storage,
+///     preference: AtClientPreference());
 /// client.connection.current;          // online, offline or refused
 /// client.connection.changes.listen((state) { ... });
 /// AtClientManager.getInstance().use(client);
@@ -36,7 +37,7 @@ import 'package:at_utils/at_progress.dart';
 /// final pending = await Atsign('@alice').enroll(otp: otp, app: 'wavi',
 ///     device: 'phone', namespaces: {'wavi': 'rw'}, keys: FileAtKeysIo(),
 ///     preference: preference);
-/// final client = await pending.client(preference);
+/// final client = await pending.client(preference, storage: storage);
 /// // after a restart:
 /// final resumed = await Atsign('@alice').resumeEnrollment(app: 'wavi',
 ///     device: 'phone', keys: FileAtKeysIo(), preference: preference);
@@ -63,7 +64,8 @@ extension AtsignLifecycle on Atsign {
   ///
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`;
-  /// with none, a Hive store opens under `preference.hiveStoragePath`.
+  /// with none, a Hive store opens under `preference.hiveStoragePath`, and
+  /// with no path either the open is refused with an [ArgumentError].
   /// [lookUps] builds every connection the client opens - its own, its
   /// sync's, its monitor's - and is how an application chooses the transport
   /// or a proxy convention; with none, TLS on TCP from the preference.
@@ -168,6 +170,9 @@ extension AtsignLifecycle on Atsign {
   /// answers or [provisioningBudget] is spent, five minutes with none, and
   /// then throws [AtTimeoutException].
   ///
+  /// A client it could not build for want of local storage is refused with
+  /// an [ArgumentError] before the [cramSecret] is spent.
+  ///
   /// See [open] for [namespace], [storage], [lookUps], [atLookUp] and
   /// [connectBudget]; the activation runs on a connection [lookUps] builds,
   /// or on a supplied [atLookUp], which is taken as having already reached
@@ -189,6 +194,7 @@ extension AtsignLifecycle on Atsign {
     AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
+    AtClientImpl.refuseWithoutStorage(this, preference, storage: storage);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
@@ -268,6 +274,10 @@ extension AtsignLifecycle on Atsign {
   /// one, and the client the enrollment opens takes it over as [open] does.
   /// The request itself travels unauthenticated, since this device holds no
   /// credential yet.
+  ///
+  /// It takes no storage, so the request goes out before any storage is
+  /// checked; the [PendingEnrollment]'s `client` refuses a client it could not
+  /// build before it waits for the decision.
   Future<PendingEnrollment> enroll({
     required String otp,
     required String app,

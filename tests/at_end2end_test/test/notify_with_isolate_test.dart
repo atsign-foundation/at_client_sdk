@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_end2end_test/src/client_stores.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -69,9 +70,8 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   tearDown(() {
-    // Remove hive directories
-    Directory('test/hive/$currentAtSign').deleteSync(recursive: true);
-    Directory('test/hive/$sharedWithAtSign').deleteSync(recursive: true);
+    deleteStoresThatExist(
+        ['test/hive/$currentAtSign', 'test/hive/$sharedWithAtSign']);
   });
 }
 

@@ -13,6 +13,9 @@ class InfoFeature {
 
   /// The `notify:all` verb.
   static const String notifyAll = 'notify.all';
+
+  /// `messageType:text` on notify.
+  static const String notifyText = 'notify.text';
 }
 
 /// The statuses an atServer gives a feature in its `info` `features`, spelt

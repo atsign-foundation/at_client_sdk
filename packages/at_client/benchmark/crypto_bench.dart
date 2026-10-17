@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops_ffi.dart';
 
 /// Measured cost of one operation, in microseconds.
 class Timing {
@@ -58,6 +58,42 @@ Future<Timing> measure(
     samples.add(sw.elapsedMicroseconds);
   }
   return Timing(name, basis, samples);
+}
+
+/// Times [bodyA] and [bodyB] in the same loop, alternating which goes first,
+/// so neither arm runs on a machine the other has left warmer or cooler.
+Future<(Timing, Timing)> measureInterleaved(
+  String nameA,
+  Future<void> Function() bodyA,
+  String nameB,
+  Future<void> Function() bodyB, {
+  required String basis,
+  required int iterations,
+  int warmup = 25,
+}) async {
+  for (var i = 0; i < warmup; i++) {
+    await bodyA();
+    await bodyB();
+  }
+  final a = <int>[];
+  final b = <int>[];
+  Future<void> timeInto(List<int> into, Future<void> Function() body) async {
+    final sw = Stopwatch()..start();
+    await body();
+    sw.stop();
+    into.add(sw.elapsedMicroseconds);
+  }
+
+  for (var i = 0; i < iterations; i++) {
+    if (i.isEven) {
+      await timeInto(a, bodyA);
+      await timeInto(b, bodyB);
+    } else {
+      await timeInto(b, bodyB);
+      await timeInto(a, bodyA);
+    }
+  }
+  return (Timing(nameA, basis, a), Timing(nameB, basis, b));
 }
 
 /// The cost of the harness itself — an empty timed body.
@@ -195,6 +231,64 @@ Future<List<Timing>> perConveyance(int iterations) async {
   return results;
 }
 
+/// Times each operation at_client can run on OpenSSL against its pure-Dart
+/// equivalent, or says which the loaded libcrypto cannot run.
+Future<(List<Timing>, List<String>)> perBackend(int iterations) async {
+  final results = <Timing>[];
+  final skipped = <String>[];
+  final lib = tryLoadLibCrypto();
+
+  final xwing = AtPqc.xWing;
+  if (xwing is XWingFfiAlgo) {
+    final pure = XWingPureDartAlgo.instance;
+    final pair = await pure.generateKeyPair();
+    final ck = payload(32);
+    final envelope =
+        await pqSeal(pure, pair.publicKey, ck, info: conveyanceInfo);
+    final (sealFfi, sealDart) = await measureInterleaved(
+        'openssl X-Wing pqSeal',
+        () async => pqSeal(xwing, pair.publicKey, ck, info: conveyanceInfo),
+        'dart    X-Wing pqSeal',
+        () async => pqSeal(pure, pair.publicKey, ck, info: conveyanceInfo),
+        basis: 'per (owner, namespace)',
+        iterations: iterations);
+    final (openFfi, openDart) = await measureInterleaved(
+        'openssl X-Wing pqOpen',
+        () async =>
+            pqOpen(xwing, pair.secretKey, envelope, info: conveyanceInfo),
+        'dart    X-Wing pqOpen',
+        () async =>
+            pqOpen(pure, pair.secretKey, envelope, info: conveyanceInfo),
+        basis: 'per (owner, namespace)',
+        iterations: iterations);
+    results.addAll([sealFfi, sealDart, openFfi, openDart]);
+  } else {
+    skipped.add('X-Wing: the loaded libcrypto has no ML-KEM-768 '
+        '(OpenSSL 3.5 or later), so at_client uses pure Dart');
+  }
+
+  if (lib != null && libCryptoSupportsAesGcm(lib)) {
+    final gcmIv = InitialisationVector(payload(12));
+    final ffi = AesGcm256FfiAlgo.fromLib(lib, aesKey());
+    final pure = AesGcm256EncryptionAlgo(aesKey());
+    for (final size in [64, 4096, 65536]) {
+      final data = payload(size);
+      final (encFfi, encDart) = await measureInterleaved(
+          'openssl AES-256-GCM encrypt ${size}B',
+          () async => ffi.encrypt(data, iv: gcmIv),
+          'dart    AES-256-GCM encrypt ${size}B',
+          () async => pure.encrypt(data, iv: gcmIv),
+          basis: 'per record',
+          iterations: iterations);
+      results.addAll([encFfi, encDart]);
+    }
+  } else {
+    skipped.add('AES-256-GCM: no libcrypto with AES-256-GCM loaded, so '
+        'at_client uses pure Dart');
+  }
+  return (results, skipped);
+}
+
 /// Times signing and verifying one PKAM challenge, the whole of what an
 /// authentication costs.
 Future<List<Timing>> perAuth(int iterations) async {
@@ -268,6 +362,7 @@ Future<void> main(List<String> args) async {
   final record = await perRecord(iterations);
   final conveyance = await perConveyance(iterations);
   final auth = await perAuth(iterations);
+  final (backend, backendSkipped) = await perBackend(iterations);
 
   if (asJson) {
     stdout.writeln(const JsonEncoder.withIndent('  ').convert({
@@ -279,6 +374,8 @@ Future<void> main(List<String> args) async {
       'perRecord': record.map((t) => t.toJson()).toList(),
       'perConveyance': conveyance.map((t) => t.toJson()).toList(),
       'perAuthentication': auth.map((t) => t.toJson()).toList(),
+      'perBackend': backend.map((t) => t.toJson()).toList(),
+      'perBackendSkipped': backendSkipped,
     }));
     return;
   }
@@ -302,6 +399,18 @@ Future<void> main(List<String> args) async {
       conveyance);
   report('PER AUTHENTICATION — the PKAM signature swap',
       'Paid once per connection, not per operation.', auth);
+  report(
+      'PER BACKEND — OpenSSL against pure Dart, timed in one interleaved loop',
+      'Compare each openssl line with the dart line below it, nothing else.',
+      backend);
+  for (final reason in backendSkipped) {
+    stdout.writeln('  not measured: $reason');
+  }
+  for (var i = 0; i + 1 < backend.length; i += 2) {
+    final speedUp = backend[i + 1].median / max(1, backend[i].median);
+    stdout.writeln('  ${backend[i].name.substring(8).padRight(32)}  '
+        'OpenSSL ${speedUp.toStringAsFixed(1)}x the pure-Dart rate');
+  }
 
   stdout.writeln('');
   stdout.writeln('Three bases, never mixed. A single "PQ is N% slower" number '

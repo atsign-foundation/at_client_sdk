@@ -56,8 +56,10 @@ into its own level once, in the constructor. A logger already built never
 follows a later `root_level` change.
 **Matters because:** raising the level after a client exists changes nothing,
 and the resulting miss reads as "the code never logged that".
-**Evidence:** `packages/at_utils/lib/src/logging/atsignlogger.dart:47-53,82-87`
-**Checked:** `8cf542b97`, 2026-08-20
+**Evidence:**
+- `.` -> `packages/at_utils/lib/src/logging/atsignlogger.dart` -> `logger = logging.Logger.detached(name);`
+- `.` -> `packages/at_utils/lib/src/logging/atsignlogger.dart` -> `level = _root_level;`
+**Checked:** `e6edec423`, 2026-10-16
 ```
 
 - **Is** — the fact, in one or two sentences.
@@ -152,8 +154,11 @@ Evidenced, not yet written up, and each still needs its citation re-checked:
 - `AtClientPreference.syncRegex` defaults to null, so the pull is unfiltered.
 - Record immutability is enforced by the atServer on the `delete` verb; the
   client keystore has no immutability guard on remove.
-- `DeleteVerbBuilder.force` emits `force:`; `:nc`/`noCommit` exists in
-  at_commons and is implemented by no atServer.
-- `Secondary.executeVerb`'s `sync` parameter is inert on both implementations.
+- `DeleteVerbBuilder.force` emits `force:`; `:nc`/`noCommit` is parsed from
+  at_commons 5.10.0 (atServer p3.13.0; an older atServer refuses the command)
+  and honoured by an atServer from c3.16.3 and p3.16.5. The server mutex
+  (`tryAcquireServerMutex`) sends it on every lock it takes.
+- `Secondary.executeVerb`'s `sync` parameter is inert in both `LocalSecondary`
+  and `RemoteSecondary`.
 - The keystore's `get()` does not filter expired records, and `nextExpiresAt()`
   has no cutoff where its sibling `nextAvailableAt()` does.

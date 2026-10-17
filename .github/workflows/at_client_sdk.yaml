@@ -68,7 +68,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload unit-at-client acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-unit-at-client-${{ matrix.dart-channel }}
           path: |
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-${{ matrix.dart-channel }}
           path: ve-logs
@@ -191,7 +191,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload functional acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-functional-${{ matrix.dart-channel }}
           path: tests/at_functional_test/acceptance-report.json
@@ -266,7 +266,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-${{ matrix.storage }}
           path: ve-logs
@@ -333,7 +333,7 @@ jobs:
 
       - name: Upload atServer logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ve-atserver-logs-upgrade
           path: ve-logs
@@ -342,7 +342,7 @@ jobs:
       # `if: always()` for the same reason as the functional job's report.
       - name: Upload upgrade acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-functional-upgrade
           path: tests/at_functional_test/acceptance-report.json
@@ -449,6 +449,10 @@ jobs:
       # `dart run` reports exit 0 even when its tests fail, so a timed-out
       # enrollment would pass this gate and surface later as a missing keyfile.
       # The exit code is the whole point of a setup gate.
+      #
+      # Every run shares these atSigns, so no step denies or revokes an
+      # enrollment: each one expires on the atServer three hours after its
+      # approval, and setup fails if the atServer says otherwise.
       - name: Submit and approve enrollment request
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1 -r expanded test/enrollment_setup.dart
@@ -459,15 +463,6 @@ jobs:
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1
-
-      # Makes all the enrollment requests inactive. The pending enrollment request are set to denied state and
-      # the approved enrollment requests are set to revoked state.
-      - name: Enrollment setup teardown
-        # Even if the tests fail in the above step, we need to clean up the enrollments.
-        # Therefore, we set this to "!cancelled()" to ensure this step runs regardless of the outcome of the previous step.
-        if: ${{ !cancelled() }}
-        working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1 -r expanded test/enrollment_teardown.dart
 
   # The post-quantum half of the end-to-end suite, against a virtualenv
   # container this job starts and throws away.
@@ -593,7 +588,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload pqe2e acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-pqe2e
           path: tests/at_end2end_test/acceptance-report.json
@@ -643,11 +638,17 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
+      # The pinned image keeps the certificates it was built with, and they
+      # expire; certs-overlay.yaml mounts dev_env's renewed ones over them.
+      - name: Fetch current certificates
+        working-directory: tests/at_end2end_test/test
+        run: ./fetch_certs.sh
+
       # VIRTUALENV_IMAGE above pins the pre-PQ release; docker-compose.yaml
       # reads it.
       - name: Start docker instance
         working-directory: tests/at_end2end_test/test
-        run: docker compose pull && docker compose up -d
+        run: docker compose pull && docker compose -f docker-compose.yaml -f certs-overlay.yaml up -d
 
       - name: Wait for supervisor
         working-directory: tests/at_end2end_test/test
@@ -712,7 +713,7 @@ jobs:
       # exactly when knowing which rows lost their proof matters most.
       - name: Upload legacy-server acceptance report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report-legacy-server
           path: tests/at_end2end_test/acceptance-report.json

@@ -31,6 +31,19 @@ class Enrollment {
   /// `enroll:list` and `enroll:listns` return it.
   Map<String, dynamic>? metadata;
 
+  /// The key expiry this enrollment's request asked for, from
+  /// `apkamKeysExpiryInMillis`: [Duration.zero] or less when it asked for
+  /// none, and null when the atServer did not say, which means unknown.
+  ///
+  /// Once approved, the term the atServer recorded for it.
+  Duration? apkamKeysExpiryDuration;
+
+  /// When the atServer stops serving this record: for a pending request,
+  /// when the request lapses, and once approved, when the enrollment
+  /// expires. Null when it never does, or when the read did not carry it,
+  /// as a notification never does.
+  DateTime? expiresAt;
+
   /// [status] as the atServer's vocabulary, or null when the record carries
   /// none.
   EnrollmentStatus? get enrollmentStatus {
@@ -64,6 +77,12 @@ class Enrollment {
       ..status = json['status']
       ..metadata = json['metadata'] is Map<String, dynamic>
           ? json['metadata'] as Map<String, dynamic>
+          : null
+      ..apkamKeysExpiryDuration = json['apkamKeysExpiryInMillis'] is int
+          ? Duration(milliseconds: json['apkamKeysExpiryInMillis'] as int)
+          : null
+      ..expiresAt = json['expiresAt'] is String
+          ? DateTime.tryParse(json['expiresAt'] as String)?.toUtc()
           : null;
   }
 
@@ -76,6 +95,10 @@ class Enrollment {
     map['encryptedAPKAMSymmetricKey'] = encryptedAPKAMSymmetricKey;
     map['status'] = status;
     if (metadata != null) map['metadata'] = metadata;
+    if (apkamKeysExpiryDuration != null) {
+      map['apkamKeysExpiryInMillis'] = apkamKeysExpiryDuration!.inMilliseconds;
+    }
+    if (expiresAt != null) map['expiresAt'] = expiresAt!.toIso8601String();
 
     return map;
   }

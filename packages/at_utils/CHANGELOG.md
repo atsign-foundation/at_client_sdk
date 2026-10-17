@@ -1,3 +1,11 @@
+## 3.5.0
+- feat: AtSignLogger hands its LoggingHandler each record's message and logger
+  name with control characters, bidirectional formatting characters and line
+  and paragraph separators written as visible escapes (`\x1b`, `\u202e`), and
+  each line after a message's first indented by two spaces
+## 3.4.2
+- fix: `AtUtils.fixAtSign` refuses an atSign with more than 55 characters
+  after its `@`, as `toAtsign` does
 ## 3.4.1
 - fix: ConsoleLoggingHandler no longer prints an empty line after every record
 ## 3.4.0

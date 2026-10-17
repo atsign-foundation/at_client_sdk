@@ -49,7 +49,10 @@ Future<String> decryptStringFromBase64(
     plainBytes = algorithm is SymmetricEncryptionAlgorithm<Uint8List, Uint8List>
         ? await algorithm.decrypt(cipherBytes, iv: iv!)
         : await algorithm.decrypt(cipherBytes);
-  } on Exception catch (e) {
+  } catch (e) {
+    // NOTE: the cipher reports input it cannot use, such as a block sealed to
+    // another RSA key, as an ArgumentError.
+    if (e is! Exception && e is! ArgumentError) rethrow;
     throw AtDecryptionException(e.toString())
       ..stack(AtChainedException(Intent.decryptData,
           ExceptionScenario.decryptionFailed, 'Failed to decrypt $e'));

@@ -10,7 +10,8 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
-import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_client/src/secret_sharing/secret_store.dart'
+    show Secret, SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -86,11 +87,14 @@ class NskeyRotation {
           'process — leaving every peer sealing to a generation this atSign '
           'can no longer open');
     }
-    final filing =
-        privateFiling ?? NskeyPrivateFiling(keysIo: keysIo!, atSign: atSign);
+    late final PublishedNskeyKeyRing ring;
+    final filing = privateFiling ??
+        NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo!, atSign: atSign);
+    ring = PublishedNskeyKeyRing(atClient, privateFiling: filing);
     return NskeyRotation(
       atClient: atClient,
-      ring: PublishedNskeyKeyRing(atClient, privateFiling: filing),
+      ring: ring,
       privateFiling: filing,
       sharing: sharing ?? AtClientSecretSharing.forClient(atClient),
     );
@@ -178,6 +182,11 @@ class NskeyRotation {
   /// Revokes [enrollmentId], then rotates every namespace it could read,
   /// excluding it, and returns one outcome per namespace rotated.
   ///
+  /// Given no [namespaces], those are the namespaces its grants name and every
+  /// namespace they cover that this client holds a key for, such as `chat.app`
+  /// under a grant on `app`. A covered namespace whose key this client does
+  /// not hold is not rotated here.
+  ///
   /// Revoking first is the enforcement — it drops the enrollment out of
   /// `enroll:listns` before any rotation runs, which is why the namespaces are
   /// read beforehand and why a namespace that fails to rotate is logged at
@@ -229,12 +238,15 @@ class NskeyRotation {
             'no enrollment $enrollmentId on $owner to revoke — nothing was '
             'revoked and nothing was rotated');
       }
-      final granted = target.namespace?.keys.toSet() ?? const <String>{};
-      rotatable = granted.where(isRotatable).toSet();
-      if (granted.contains('*')) {
-        _logger.warning('Enrollment $enrollmentId holds "*", so the '
-            'namespaces it could read are not a list this can enumerate; '
-            'rotating only ${rotatable.isEmpty ? 'nothing' : rotatable.join(', ')}. '
+      final grants = target.namespace ?? const <String, dynamic>{};
+      rotatable = {...grants.keys, ...await _heldCoveredBy(grants, owner)}
+          .where(isRotatable)
+          .toSet();
+      if (grants.containsKey('*')) {
+        _logger.warning('Enrollment $enrollmentId holds "*", so it could read '
+            'namespaces this client holds no key for, and those are not '
+            'rotated; rotating '
+            '${rotatable.isEmpty ? 'nothing' : rotatable.join(', ')}. '
             'Name the namespaces explicitly to rotate the rest');
       }
     }
@@ -259,6 +271,27 @@ class NskeyRotation {
       }
     }
     return outcomes;
+  }
+
+  /// The namespaces [grants] cover, as [SecretStore.namespaceAuthorizes] reads
+  /// a grant, that this client holds a key for.
+  ///
+  /// Empty, logged at `severe`, when the keyfile cannot be read: the revoke
+  /// goes ahead and rotates the namespaces the grants name.
+  Future<Set<String>> _heldCoveredBy(
+      Map<String, dynamic> grants, String owner) async {
+    try {
+      return (await privateFiling.readAllWhere((namespace) =>
+              SecretStore.namespaceAuthorizes(grants, namespace)))
+          .keys
+          .toSet();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.severe('Could not read which namespace keys this client holds '
+          'for $owner, so a namespace the revoked enrollment\'s grants cover '
+          'without naming it is not rotated. Rotate those explicitly: $e');
+      return const {};
+    }
   }
 
   /// Whether [namespace] names something with an nskey to rotate.

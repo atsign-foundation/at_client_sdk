@@ -29,6 +29,12 @@ class AtSignLogger {
   ///
   /// The loggingHandler defaults to the value of [defaultLoggingHandler].
   ///
+  /// The loggingHandler is handed each record with every control character,
+  /// bidirectional formatting character and line or paragraph separator in its
+  /// message and logger name written as a visible escape (`\r`, `\x1b`,
+  /// `\u202e`), except that each LF in the message is kept and followed by two
+  /// spaces.
+  ///
   /// To customize the logging behavior based on your specific requirements, create an
   /// instance of a class that implements the [LoggingHandler] interface and pass this
   /// instance to the loggingHandler argument
@@ -46,11 +52,65 @@ class AtSignLogger {
   /// ```
   AtSignLogger(String name, {LoggingHandler? loggingHandler}) {
     logger = logging.Logger.detached(name);
-    loggingHandler ??= defaultLoggingHandler;
-    // ignore: implicit_call_tearoffs
-    logger.onRecord.listen(loggingHandler);
+    final LoggingHandler handler = loggingHandler ?? defaultLoggingHandler;
+    logger.onRecord.listen((record) => handler(_printable(record)));
     level = _root_level;
   }
+
+  /// [record], or, when its message or logger name holds a character to
+  /// escape, a copy of it with those escaped.
+  static logging.LogRecord _printable(logging.LogRecord record) {
+    final String message = _escaped(record.message, keepingLineBreaks: true);
+    final String loggerName =
+        _escaped(record.loggerName, keepingLineBreaks: false);
+    if (identical(message, record.message) &&
+        identical(loggerName, record.loggerName)) {
+      return record;
+    }
+    return logging.LogRecord(record.level, message, loggerName, record.error,
+        record.stackTrace, record.zone, record.object);
+  }
+
+  /// [text] with each character to escape written as a visible escape, or,
+  /// when [keepingLineBreaks], each LF kept and followed by two spaces.
+  static String _escaped(String text, {required bool keepingLineBreaks}) {
+    if (!text.codeUnits.any(_isEscaped)) {
+      return text;
+    }
+    final StringBuffer escaped = StringBuffer();
+    int start = 0;
+    for (int i = 0; i < text.length; i++) {
+      final int codeUnit = text.codeUnitAt(i);
+      if (_isEscaped(codeUnit)) {
+        escaped
+          ..write(text.substring(start, i))
+          ..write(keepingLineBreaks && codeUnit == 0x0a
+              ? '\n  '
+              : _escape(codeUnit));
+        start = i + 1;
+      }
+    }
+    return (escaped..write(text.substring(start))).toString();
+  }
+
+  /// Whether [codeUnit] is a control character (C0, DEL, C1), a bidirectional
+  /// formatting character, or a line or paragraph separator.
+  static bool _isEscaped(int codeUnit) =>
+      codeUnit < 0x20 ||
+      (codeUnit >= 0x7f && codeUnit <= 0x9f) ||
+      codeUnit == 0x061c ||
+      codeUnit == 0x200e ||
+      codeUnit == 0x200f ||
+      (codeUnit >= 0x2028 && codeUnit <= 0x202e) ||
+      (codeUnit >= 0x2066 && codeUnit <= 0x2069);
+
+  static String _escape(int codeUnit) => switch (codeUnit) {
+        0x09 => r'\t',
+        0x0a => r'\n',
+        0x0d => r'\r',
+        < 0x100 => '\\x${codeUnit.toRadixString(16).padLeft(2, '0')}',
+        _ => '\\u${codeUnit.toRadixString(16).padLeft(4, '0')}',
+      };
 
   String? get level {
     return LogLevel.level.keys

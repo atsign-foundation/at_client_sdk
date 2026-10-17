@@ -14,7 +14,7 @@
     {
       "id": 3,
       "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
-      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, backupKeys: [KeychainAtKeysIo()]), passing storage only to override at_client_flutter's default Hive store in the app support directory, which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
     },
     {
       "id": 4,
@@ -109,7 +109,7 @@
     {
       "id": 22,
       "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
-      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process; hiveStoragePath/commitLogPath are deprecated) and stops its client when done."
+      "expected_output": "Shows the server mutex: atClient.tryAcquireServerMutex(key, ttl: ...) on a self key of the client's own atSign, which returns a lease to the one instance that takes the lock and null when its record already exists (another instance's, or its own within the ttl), and throws any other failure; it needs an atServer from p3.13.0. Mentions that the ttl (at most 15 minutes) is the only release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process; hiveStoragePath/commitLogPath are deprecated) and stops its client when done."
     },
     {
       "id": 23,

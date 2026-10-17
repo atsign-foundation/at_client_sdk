@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 enum OperationEnum { update, delete, append, remove }
 
 String getOperationName(OperationEnum? d) => '$d'.split('.').last;
@@ -36,7 +38,12 @@ enum EnrollOperationEnum {
   /// enrollment id must equal the target's — and it never reaches
   /// `namespaces` or the approval state, because an operation an enrollment
   /// can invoke on itself must not be able to widen its own grant.
-  update
+  update,
+
+  /// Writes links that vouch for an enrollment's signing keys, one per `kid`.
+  /// See `EnrollParams.links`.
+  @experimental
+  link
 }
 
 String getEnrollOperation(EnrollOperationEnum? enrollOperationEnum) =>

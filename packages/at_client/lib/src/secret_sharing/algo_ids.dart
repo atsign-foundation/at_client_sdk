@@ -1,6 +1,8 @@
 import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart'
     show AtKemAlgorithm, MlKem1024PureDartAlgo, XWingPureDartAlgo;
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show xWingKem;
 import 'package:meta/meta.dart' show experimental;
 
 /// Registry of the algorithm identifiers used in per-APKAM key packages and
@@ -115,14 +117,17 @@ class SecretSharingAlgos {
     ];
   }
 
-  /// The pure-Dart KEM implementation a key-establishment algorithm id names,
-  /// or null for an id this build does not implement.
+  /// The KEM implementation a key-establishment algorithm id names, or null
+  /// for an id this build does not implement.
   ///
-  /// Pure Dart because the FFI backends return an opaque process-lifetime
-  /// handle as an ML-KEM secret key, and every key reached through here has to
-  /// survive a restart.
+  /// X-Wing goes through OpenSSL where a native build loads one supporting
+  /// ML-KEM-768, and pure Dart otherwise; ML-KEM-1024 has no OpenSSL backend
+  /// and is pure Dart. Every backend here takes the persisted seed as its
+  /// secret key, so a key reached through it survives a restart (the raw
+  /// ML-KEM-768 OpenSSL backend would not, as its secret key is a
+  /// process-lifetime handle).
   static AtKemAlgorithm? kemFor(String keyAlgo) => switch (keyAlgo) {
-        xWing => XWingPureDartAlgo.instance,
+        xWing => xWingKem,
         mlKem1024 => MlKem1024PureDartAlgo.instance,
         _ => null,
       };
@@ -139,6 +144,17 @@ class SecretSharingAlgos {
         _ => null,
       };
 
+  /// The key algorithm whose seeds are [length] bytes, or null when no
+  /// algorithm this build implements has seeds that long.
+  ///
+  /// Unambiguous only while no two KEMs [kemFor] implements share a seed
+  /// length, which a test holds. Must stay in step with [kemFor].
+  static String? keyAlgoForSeedLength(int length) => switch (length) {
+        XWingPureDartAlgo.seedLength => xWing,
+        MlKem1024PureDartAlgo.seedLength => mlKem1024,
+        _ => null,
+      };
+
   /// The KEM that opens an envelope produced under [suite], or null for a
   /// suite this build does not implement.
   ///
@@ -146,7 +162,7 @@ class SecretSharingAlgos {
   /// caller's to supply, and an envelope sealed under one KEM handed to the
   /// other fails as an indistinguishable AEAD error.
   static AtKemAlgorithm? kemForSuite(String suite) => switch (suite) {
-        xWingRfc9180 => XWingPureDartAlgo.instance,
+        xWingRfc9180 => xWingKem,
         mlKem1024Rfc9180 => MlKem1024PureDartAlgo.instance,
         _ => null,
       };

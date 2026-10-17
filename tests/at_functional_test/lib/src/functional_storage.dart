@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/sqlite.dart';
 
 /// A storage backend the functional pack can run its clients on.

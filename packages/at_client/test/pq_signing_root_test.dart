@@ -122,8 +122,7 @@ void main() {
       if (builder is UpdateVerbBuilder) {
         if (builder.atKey.key == pqSigningRootMintLockRecordName) {
           if (lockHeldElsewhere) {
-            throw AtLookUpException(
-                'AT0023', 'Immutable records may not be updated');
+            throw IllegalStateException('Immutable records may not be updated');
           }
           return 'data:1';
         }
@@ -1514,10 +1513,10 @@ void main() {
           ),
           0);
       expect(broadcast.requests, isEmpty,
-          reason: 'such a client does not ask: it is the atSign, so its route '
-              'to a missing root is to mint one. Without this guard every '
-              'legacy PKAM client would broadcast a request for a root it '
-              'can mint itself, on each start');
+          reason: 'such a client does not ask: it advertises no key package, '
+              'so no holder could seal the answer to it. Without this guard '
+              'every legacy PKAM client would broadcast a request nobody can '
+              'answer, on each start');
     });
 
     test('the privilege check is not consulted before the cheaper one',

@@ -207,9 +207,21 @@ Future<String?> _openIfSymmetricKey(
   // membership test against `SecretSharingAlgos.suites` would be a second list
   // that has to agree with this one.
   final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
-  if (envelope.toKpid != kpid ||
-      signedEnvelope.signerEnrollmentId != envelope.fromEnrollmentId ||
-      kem == null ||
+  final addressedThrough = EnvelopeAddressing.appNamespaceOfName(envelopeKey);
+  if (envelope.appNamespace != addressedThrough) {
+    _logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
+        'sender signed it for ${envelope.appNamespace}; skipping');
+    return null;
+  }
+  if (envelope.toKpid != kpid) return null;
+  final signerClaim = signedEnvelope.signerEnrollmentId;
+  if (signerClaim != envelope.fromEnrollmentId) {
+    _logger.warning('Envelope $envelopeKey: signer enrollment $signerClaim '
+        'does not match claimed sender enrollment '
+        '${envelope.fromEnrollmentId}; skipping');
+    return null;
+  }
+  if (kem == null ||
       // NOTE: a sender that picked the other KEM produced something [secretKey]
       // cannot decapsulate, and pqOpen would report an AEAD failure rather than
       // the addressing mistake it is.
@@ -223,7 +235,7 @@ Future<String?> _openIfSymmetricKey(
       kem,
       secretKey,
       envelope.sealed,
-      info: PairwiseSecretSharing.sealInfo,
+      info: PairwiseSecretSharing.sealInfoOf(envelope),
     );
   } catch (e) {
     _logger.warning('Envelope $envelopeKey failed to open; skipping: $e');

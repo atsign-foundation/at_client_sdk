@@ -1,3 +1,21 @@
+## 5.23.0-rc1
+
+- feat: `enroll:link` (experimental), for writing links that vouch for an
+  enrollment's signing keys: `EnrollOperationEnum.link`, and `links` on
+  `EnrollParams` and `EnrollVerbBuilder`.
+
+## 5.22.0
+
+- feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
+  atServer's `info` lists text notifications; an atServer that refuses them
+  lists it as `Retired`.
+
+## 5.21.0
+
+- feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
+  `Atsign` refuse a longer one with `InvalidAtSignException`
+  (`AtMessage.tooLong`).
+
 ## 5.20.0
 
 - feat: `AtConstants.atTelemetrySigningPrivateKey`

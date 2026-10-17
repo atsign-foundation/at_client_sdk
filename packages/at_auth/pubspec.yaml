@@ -1,6 +1,6 @@
 name: at_auth
 description: Package that implements common logic for onboarding/authenticating an atsign to a secondary server
-version: 4.0.0-rc5
+version: 4.0.0-rc6
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_auth
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -12,7 +12,8 @@ resolution: workspace
 dependencies:
   at_commons: ^5.18.0
   at_lookup: ^3.7.0-rc2
-  at_chops: ^3.6.0
+  at_chops: ^3.7.0
+  crypton: ^2.2.1
   at_utils: ^3.0.19
   http: ^1.2.1
   meta: ^1.16.0
@@ -20,7 +21,6 @@ dependencies:
 dev_dependencies:
   args: ^2.6.0 # used in example
   at_demo_data: ^1.2.0
-  crypton: ^2.2.1 # test-only: RSA keypair fixtures in enrollment_test
   lints: ^6.0.0
   test: ^1.25.0
   mocktail: ^1.0.4

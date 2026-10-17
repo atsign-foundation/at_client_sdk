@@ -10,6 +10,7 @@ void main() {
     expect(InfoFeature.notifyEph, 'notify.eph');
     expect(InfoFeature.notifyEAtn, 'notify.eAtn');
     expect(InfoFeature.notifyAll, 'notify.all');
+    expect(InfoFeature.notifyText, 'notify.text');
     expect(InfoFeatureStatus.preview, 'Preview');
     expect(InfoFeatureStatus.beta, 'Beta');
     expect(InfoFeatureStatus.ga, 'GA');

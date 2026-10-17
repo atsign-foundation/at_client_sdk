@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_builders.dart';
@@ -180,13 +181,12 @@ void main() {
           .thenAnswer((_) async => UpdateVerbBuilder()..value = value);
 
       AtClientImpl atClientImpl = await AtClientImpl.create(
-          '@bob',
-          'wavi',
-          AtClientPreference()
-            // ignore: deprecated_member_use_from_same_package
-            ..isLocalStoreRequired = false
-            ..maxDataSize = 1,
-          remoteSecondary: mockRemoteSecondary) as AtClientImpl;
+              '@bob', 'wavi', AtClientPreference()..maxDataSize = 1,
+              remoteSecondary: mockRemoteSecondary,
+              storage:
+                  InMemoryAtClientStorage(atSign: '@bob', closedByClient: true))
+          as AtClientImpl;
+      addTearDown(atClientImpl.stop);
       atClientImpl.putRequestTransformer = mockPutRequestTransformer;
 
       expect(

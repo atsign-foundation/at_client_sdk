@@ -208,8 +208,6 @@ void main() {
     service
         .subscribe(regex: r'discover_response', shouldDecrypt: true)
         .listen((n) => decrypting.add(n.value));
-    // A different regex: subscriptions are keyed by regex, so the same one
-    // would hand back the first subscription's stream.
     service
         .subscribe(regex: r'discover_response\.sshrvd')
         .listen((n) => raw.add(n.value));
@@ -220,6 +218,102 @@ void main() {
     expect(raw, [_ciphertext],
         reason: 'shouldDecrypt: false asks for the value as it arrived, '
             'whatever an earlier subscriber did with its own copy');
+  });
+
+  group('Given two subscribers on one client asking for the same regex', () {
+    test(
+        'when the first asks for the value as it arrived and the second for it '
+        'decrypted, then each gets what it asked for, from one decryption',
+        () async {
+      final raw = <String?>[];
+      final decrypting = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: false)
+          .listen((n) => raw.add(n.value));
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => decrypting.add(n.value));
+
+      await deliver(_frame(key));
+
+      expect(raw, [_ciphertext]);
+      expect(decrypting, [_plaintext],
+          reason: 'shouldDecrypt: true asks for the value decrypted, whatever '
+              'an earlier subscription on the same regex asked for');
+      expect(provider.decrypts, 1);
+    });
+
+    test(
+        'when the first asks for it decrypted and the second for it as it '
+        'arrived, then each gets what it asked for', () async {
+      final decrypting = <String?>[];
+      final raw = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => decrypting.add(n.value));
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: false)
+          .listen((n) => raw.add(n.value));
+
+      await deliver(_frame(key));
+
+      expect(decrypting, [_plaintext]);
+      expect(raw, [_ciphertext],
+          reason: 'shouldDecrypt: false asks for the value as it arrived, so '
+              'a subscriber that asked for that must not be handed plaintext');
+      expect(provider.decrypts, 1);
+    });
+
+    test(
+        'when both ask for the same decryption, then they share one '
+        'subscription and both receive the notification', () async {
+      final first = <String?>[];
+      final second = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => first.add(n.value));
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => second.add(n.value));
+
+      await deliver(_frame(key));
+
+      expect(service.getStreamListenersCount(), 1);
+      expect(first, [_plaintext]);
+      expect(second, [_plaintext]);
+      expect(provider.decrypts, 1);
+    });
+
+    test(
+        'when the decrypting one must wait for its key, then the raw one is '
+        'served at once and the decrypting one is re-driven with the plaintext '
+        'once the key is filed', () async {
+      provider.filed = false;
+      final raw = <String?>[];
+      final decrypting = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: false)
+          .listen((n) => raw.add(n.value));
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => decrypting.add(n.value));
+
+      await deliver(_frame(key));
+      expect(raw, [_ciphertext]);
+      expect(decrypting, isEmpty,
+          reason: 'the decrypting subscriber waits for its key rather than '
+              'being handed the value as it arrived');
+      expect(service.parkedCount, 1);
+
+      provider.filed = true;
+      ring.announce();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(decrypting, [_plaintext]);
+      expect(raw, [_ciphertext],
+          reason: 'the re-drive is for the subscriber that waited, not the '
+              'one already served');
+    });
   });
 
   test('each subscriber gets its own copy', () async {
@@ -236,27 +330,6 @@ void main() {
     expect(second, [_plaintext],
         reason: 'sharing one decryption must not mean sharing one mutable '
             'object between subscribers');
-  });
-
-  test(
-      'an encrypted text message is matched against its decrypted text, and '
-      'decrypted once', () async {
-    final byText = <String>[];
-    final byOther = <String>[];
-    service.subscribe(regex: r'ipaddr').listen((n) => byText.add(n.key));
-    service
-        .subscribe(regex: r'"port"', shouldDecrypt: true)
-        .listen((n) => byOther.add(n.key));
-
-    await deliver(_frame('@alice:$_ciphertext',
-        // ignore: deprecated_member_use
-        messageType: MessageTypeEnum.text));
-
-    expect(byText, ['@alice:$_plaintext'],
-        reason: 'a text message\'s key is its ciphertext, so the regex is '
-            'matched against the decrypted text');
-    expect(byOther, ['@alice:$_plaintext']);
-    expect(provider.decrypts, 1);
   });
 
   test(
