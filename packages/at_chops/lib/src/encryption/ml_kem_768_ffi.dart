@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/ffi/secret_buffer.dart';
 import 'package:at_chops/src/spec/ml_kem_768_spec.dart';
 import 'package:at_chops/src/spec/output_length.dart';
 import 'package:ffi/ffi.dart';
@@ -208,7 +209,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     } finally {
       if (ctx != null) _ctxFree(ctx);
       if (params != null) _paramFree(params);
-      calloc.free(seedBuf);
+      freeSecret(seedBuf, seed.length);
       calloc.free(paramName);
       calloc.free(algName);
       calloc.free(pkeyPtr);
@@ -250,7 +251,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
             );
           } finally {
             calloc.free(ctBuf);
-            calloc.free(ssBuf);
+            freeSecret(ssBuf, ssLen.value);
           }
         } finally {
           calloc.free(ctLen);
@@ -299,7 +300,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
               operation: 'EVP_PKEY_decapsulate', label: 'shared secret');
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
-          calloc.free(ssBuf);
+          freeSecret(ssBuf, ssLen.value);
         }
       } finally {
         calloc.free(ssLen);

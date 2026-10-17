@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/ffi/secret_buffer.dart';
 import 'package:at_chops/src/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
@@ -224,7 +225,7 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
         }
         return Uint8List.fromList(buf.asTypedList(lenPtr.value));
       } finally {
-        calloc.free(buf);
+        freeSecret(buf, lenPtr.value);
       }
     } finally {
       calloc.free(lenPtr);
@@ -243,7 +244,7 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
       }
       return pkey;
     } finally {
-      calloc.free(buf);
+      freeSecret(buf, keyBytes.length);
       calloc.free(algName);
     }
   }
