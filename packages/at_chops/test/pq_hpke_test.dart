@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops_ffi.dart';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:test/test.dart';
 
@@ -188,6 +188,22 @@ void main() {
       expect(() => pqOpen(xwing, XWingVector1.seed, bad, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
+
+    test('a low-order X25519 point in the KEM ciphertext → malformedEnvelope',
+        () async {
+      final kem = AtPqc.xWing;
+      final kp = await kem.generateKeyPair();
+      final envelope =
+          await pqSeal(kem, kp.publicKey, _utf8('payload'), info: _noInfo);
+      final ctLen = (envelope[1] << 8) | envelope[2];
+      final bad = Uint8List.fromList(envelope)
+        ..fillRange(3 + ctLen - 32, 3 + ctLen, 0);
+      expect(() => pqOpen(kem, kp.secretKey, bad, info: _noInfo),
+          _opensWith(PqOpenFailure.malformedEnvelope));
+    },
+        skip: AtPqc.xWing is XWingPureDartAlgo
+            ? 'the pure-Dart backend does not reject low-order points'
+            : null);
 
     test('a secret key of the wrong length → malformedEnvelope', () async {
       final kp = await xwing.generateKeyPair();

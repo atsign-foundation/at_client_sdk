@@ -245,16 +245,17 @@ Future<Uint8List> pqOpen(
   final Uint8List aeadBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
   // Decapsulation rejects a wrong-length secret key or KEM ciphertext with an
-  // ArgumentError. That is still a malformed envelope from the caller's side,
-  // and letting it escape would break the documented contract that every
-  // failure arrives as a PqOpenException — leaving a caller who catches the
-  // documented type with an uncaught error on a bad input.
+  // ArgumentError, and an FFI backend reports a ciphertext OpenSSL refuses
+  // (a low-order X25519 point) as a StateError. Both are a malformed envelope
+  // from the caller's side, and letting either escape would break the
+  // documented contract that every failure arrives as a PqOpenException.
   final Uint8List ss;
   try {
     ss = await kem.decapsulate(recipientSecretKey, kemCt);
   } on ArgumentError catch (e) {
-    throw PqOpenException(PqOpenFailure.malformedEnvelope,
-        'decapsulation rejected the input: $e');
+    throw _decapsulationRejected(e);
+  } on StateError catch (e) {
+    throw _decapsulationRejected(e);
   }
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
@@ -266,6 +267,10 @@ Future<Uint8List> pqOpen(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
   }
 }
+
+PqOpenException _decapsulationRejected(Object cause) => PqOpenException(
+    PqOpenFailure.malformedEnvelope,
+    'decapsulation rejected the input: $cause');
 
 /// The AEAD key and nonce [pqSeal] derives from a KEM shared secret, exposed so
 /// a conformance suite can check the schedule directly.
