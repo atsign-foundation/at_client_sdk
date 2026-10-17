@@ -48,6 +48,31 @@ void main() {
       expect(verbParams['otp'], 'abc123');
       expect(verbParams['ttl'], '123');
     });
+
+    test('A test to verify otp:put without a passcode parses, as before', () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:put');
+      expect(verbParams[AtConstants.operation], 'put');
+      expect(verbParams['otp'], null);
+      expect(verbParams['ttl'], null);
+    });
+
+    test('A test to verify otp:put:ttl without a passcode parses, as before',
+        () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:put:ttl:100');
+      expect(verbParams[AtConstants.operation], 'put');
+      expect(verbParams['otp'], null);
+      expect(verbParams['ttl'], '100');
+    });
+
+    test('A test to verify otp:put accepts an OTP longer than 6 characters',
+        () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:put:abc1234');
+      expect(verbParams[AtConstants.operation], 'put');
+      expect(verbParams['otp'], 'abc1234');
+    });
   });
 
   group('A group of tests to verify otp:list and otp:delete regex', () {
@@ -80,8 +105,31 @@ void main() {
       expect(verbParams['otp'], 'spp');
     });
 
+    test('A test to verify otp:delete accepts an OTP longer than 6 characters',
+        () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:delete:ABC1234');
+      expect(verbParams[AtConstants.operation], 'delete');
+      expect(verbParams['otp'], 'ABC1234');
+    });
+
+    test('A test to verify otp:delete:SPP names the SPP, as verbs ignore case',
+        () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:delete:SPP');
+      expect(verbParams[AtConstants.operation], 'delete');
+      expect(verbParams['otp'], 'SPP');
+    });
+
+    test('A test to verify otp:delete reads spp123 as an OTP, not the SPP', () {
+      Map<dynamic, dynamic> verbParams =
+          getVerbParams(VerbSyntax.otp, 'otp:delete:spp123');
+      expect(verbParams[AtConstants.operation], 'delete');
+      expect(verbParams['otp'], 'spp123');
+    });
+
     test(
-        'A test to verify otp:delete throws error if otp is not 6 character length',
+        'A test to verify otp:delete throws error if otp is shorter than 6 characters',
         () {
       expect(
           () => getVerbParams(VerbSyntax.otp, 'otp:delete:abc12'),
@@ -89,5 +137,25 @@ void main() {
               e is InvalidSyntaxException &&
               e.message == 'command does not match the regex')));
     });
+
+    for (final command in [
+      'otp:delete',
+      'otp:delete:ttl:5',
+      'otp:delete:ABC123:ttl:5',
+      'otp:delete:spp:ttl:5',
+      'otp:list:ttl:5',
+      'otp:list:spp',
+      'otp:get:ABC123',
+      'otp:put:spp',
+      'otp:get:ttl:abc',
+    ]) {
+      test('A test to verify $command is refused', () {
+        expect(
+            () => getVerbParams(VerbSyntax.otp, command),
+            throwsA(predicate((dynamic e) =>
+                e is InvalidSyntaxException &&
+                e.message == 'command does not match the regex')));
+      });
+    }
   });
 }

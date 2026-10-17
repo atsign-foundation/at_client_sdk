@@ -4,14 +4,19 @@
   enrollment's signing keys: `EnrollOperationEnum.link`, and `links` on
   `EnrollParams` and `EnrollVerbBuilder`.
 
+- feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
+  `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
+  withdraw one. `otp:delete` must name what it deletes, and `:ttl:` follows
+  only `get` and `put`. An atServer that accepts them lists
+  `InfoFeature.otpList` (`otp.list`) and `InfoFeature.otpDelete`
+  (`otp.delete`) in its `info` features; one that does not refuses them as a
+  syntax error.
+
 ## 5.22.0
 
 - feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
   atServer's `info` lists text notifications; an atServer that refuses them
   lists it as `Retired`.
-- feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
-  `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
-  withdraw one. The atServer decides who may use them.
 
 ## 5.21.0
 

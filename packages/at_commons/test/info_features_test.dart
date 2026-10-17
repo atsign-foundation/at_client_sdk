@@ -11,6 +11,8 @@ void main() {
     expect(InfoFeature.notifyEAtn, 'notify.eAtn');
     expect(InfoFeature.notifyAll, 'notify.all');
     expect(InfoFeature.notifyText, 'notify.text');
+    expect(InfoFeature.otpList, 'otp.list');
+    expect(InfoFeature.otpDelete, 'otp.delete');
     expect(InfoFeatureStatus.preview, 'Preview');
     expect(InfoFeatureStatus.beta, 'Beta');
     expect(InfoFeatureStatus.ga, 'GA');

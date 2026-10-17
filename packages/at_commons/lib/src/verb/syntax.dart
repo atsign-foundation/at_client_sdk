@@ -157,8 +157,13 @@ class VerbSyntax {
   static const enroll =
       // The non-capturing group (?::)? matches ":" if the operation is request|approve|deny|revoke
       r'^enroll:(?<operation>(?:(request|approve|deny|revoke|listns|infons|list|fetch|unrevoke|delete|update|link)))(:(?<force>force))?(:(?<listNamespace>[^:{\n]+))?(?::)?((?<enrollParams>.+)|(<=list:)<enrollParams>.?)?$';
-  static const otp =
-      r'^otp:(?<operation>get|put|list|delete)(:(?<otp>(?<=put:)\w{6,}|(?<=delete:)(?:spp|\w{6,})))?(:(?:ttl:(?<ttl>\d+)))?$';
+  static const otp = r'^otp:(?<operation>get|put|list|delete)'
+      // A passcode only after put: or delete: (where spp names the SPP)
+      r'(:(?<otp>(?<=put:)\w{6,}|(?<=delete:)(?:spp|\w{6,})))?'
+      // delete must have taken a passcode
+      r'(?<=get|put|put:\w{6,}|list|delete:spp|delete:\w{6,})'
+      // :ttl: only after get and put
+      r'(:(?:(?<=(?:get|put|put:\w{6,}):)ttl:(?<ttl>\d+)))?$';
   static const keys = r'^keys:((?<operation>put|get|delete):?)'
       r'(?:(?<visibility>public|private|self):?)?'
       r'(?:namespace:(?<namespace>[a-zA-Z0-9_]+):?)?'
