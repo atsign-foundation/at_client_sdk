@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:test/test.dart';
+import 'exception_matchers.dart';
 
 Uint8List _hex(String s) {
   final Uint8List out = Uint8List(s.length ~/ 2);
@@ -129,7 +130,7 @@ void main() {
       await expectLater(
           algo.decrypt(Uint8List(AesGcm256FfiAlgo.tagLength + 1), key128,
               iv: InitialisationVector.random(12)),
-          throwsA(isA<AtDecryptionException>()));
+          throwsDecryption('256-bit key'));
     });
 
     group('AAD', () {
@@ -197,7 +198,8 @@ void main() {
         final Uint8List plain =
             Uint8List.fromList(List<int>.generate(100, (i) => i % 256));
 
-        final Uint8List ffiEncrypted = await ffiAlgo.encrypt(plain, key, iv: iv);
+        final Uint8List ffiEncrypted =
+            await ffiAlgo.encrypt(plain, key, iv: iv);
         final Uint8List pureDecrypted =
             await pureAlgo.decrypt(ffiEncrypted, key, iv: iv);
         expect(pureDecrypted, plain);
