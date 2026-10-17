@@ -19,7 +19,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/asn1/rsa_key_codec.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:pointycastle/asn1.dart';
+import 'package:pointycastle/asymmetric/api.dart';
 import 'package:test/test.dart';
 
 /// `The quick brown fox jumps over the lazy dog` — 43 bytes, deliberately not a
@@ -184,6 +187,21 @@ void main() {
       expect(keyPair.secretKey.sublist(4, 7), _hex('020100'));
       expect(keyPair.secretKey.sublist(7, 22),
           _hex('300d06092a864886f70d0101010500'));
+    });
+  });
+
+  group('RSA private-key encoding (captured from at_chops 3.x)', () {
+    test('encodePrivateKey reproduces the 3.x PKCS#8 bytes', () {
+      final der = base64Decode(_rsaPrivateKeyBase64);
+      final privateKeyInfo = ASN1Parser(der).nextObject() as ASN1Sequence;
+      final pkcs1 = ASN1Parser((privateKeyInfo.elements![2] as ASN1OctetString)
+              .octets!)
+          .nextObject() as ASN1Sequence;
+      BigInt field(int i) => (pkcs1.elements![i] as ASN1Integer).integer!;
+
+      final key = RSAPrivateKey(field(1), field(3), field(4), field(5));
+
+      expect(RsaKeyCodec.encodePrivateKey(key), der);
     });
   });
 
