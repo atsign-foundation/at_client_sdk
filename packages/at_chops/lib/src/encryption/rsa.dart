@@ -33,6 +33,7 @@ class RsaEncryptionAlgo implements ASymmetricEncryptionAlgorithm {
           true,
           PublicKeyParameter<RSAPublicKey>(
               RsaKeyCodec.decodePublicKey(publicKey)));
+    if (plainData.isEmpty) return cipher.process(plainData);
     return _processInBlocks(cipher, plainData);
   }
 
