@@ -29,6 +29,13 @@ void main() {
               signature: signature, publicKey: other.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
     });
+    test('generateKeyPair writes an uncompressed SEC1 point and a 32-byte scalar',
+        () async {
+      final (:publicKey, :secretKey) = await EccSigningAlgo().generateKeyPair();
+      expect(publicKey, hasLength(65));
+      expect(publicKey.first, 0x04);
+      expect(secretKey, hasLength(32));
+    });
     group('a 128-byte signature that is not hex', () {
       final message = Uint8List.fromList('Hello World'.codeUnits);
       final cases = {

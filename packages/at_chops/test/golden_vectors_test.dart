@@ -251,10 +251,6 @@ void main() {
 
     test('a freshly written signature verifies against the pinned public key',
         () async {
-      // Signature bytes deliberately aren't pinned: pointycastle picks a
-      // random nonce, so only the (key encoding, signature encoding, curve,
-      // digest) tuple is a compatibility surface — and that is what verifying
-      // across the two exercises.
       final fresh =
           await EccSigningAlgo().signBytes(plainText, secretKey: privateKey);
       await expectLater(
@@ -263,12 +259,21 @@ void main() {
           completes);
       expect(fresh, hasLength(128)); // ASCII hex of the 64-byte compact form
     });
+  });
 
-    test('key and signature encodings keep their fixed widths', () {
-      expect(publicKey, hasLength(65)); // uncompressed SEC1: 0x04 || X || Y
-      expect(publicKey.first, 0x04);
-      expect(privateKey, hasLength(32)); // big-endian scalar
-      expect(base64Decode(signature), hasLength(128)); // hex(compact R || S)
+  group('ECDSA P-256 / SHA-256 deterministic nonce (RFC 6979 section A.2.5)',
+      () {
+    final privateKey = _hex(
+        'c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721');
+
+    test('signing "sample" writes the RFC signature as ASCII hex', () async {
+      final signature = await EccSigningAlgo().signBytes(
+          Uint8List.fromList(utf8.encode('sample')),
+          secretKey: privateKey);
+      expect(
+          utf8.decode(signature),
+          'efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716'
+          'f7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8');
     });
   });
 
