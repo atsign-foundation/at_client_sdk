@@ -1,0 +1,38 @@
+<html><body style="font-family:Arial,sans-serif"><h1>Trusted devices — architectural review</h1>
+<p><strong>Status:</strong> proposal, for review. Implementation detail lives in <code>design.md</code> alongside this file.</p>
+<hr/>
+<h2>The idea</h2>
+<p>A device that has already been enrolled should not be treated as a stranger the next time it asks. At enrollment, the device registers a credential of its own on the enrollment record. Later, when it needs to enrol again, it proves possession of that credential and the one-time passcode is waived. Any device that cannot produce one is challenged exactly as today.</p>
+<p>The credential is held by the platform authenticator — Touch ID, Windows Hello, an authenticator app — not by the web page. That is the whole trick: it survives the thing that caused the problem.</p>
+<h2>What prompted it</h2>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><td>Where the keys live</td><td>A web app keeps its atKeys in browser storage (IndexedDB)</td></tr>
+<tr><td>What goes wrong</td><td>Browsers evict that storage — on space pressure, on privacy settings, on a cleared profile. It is routine, not an edge case</td></tr>
+<tr><td>What it costs today</td><td>Recovery is a fresh enrollment, and a fresh enrollment needs a new one-time passcode carried to the device by a human</td></tr>
+<tr><td>What it does <strong>not</strong> cost</td><td>Data access is already restored on re-enrollment — the approver re-seals the user&#x27;s keys onto the new record. <strong>This is a UX change, not a new capability.</strong> Nothing becomes reachable that was not reachable before</td></tr>
+</table>
+<p>The friction is the human hop, repeated every time a browser reclaims disk space. On a phone that is the same person walking to a second device to read six digits, over and over.</p>
+<h2>The one rule</h2>
+<p><strong>A fingerprint is an identifier, not a secret.</strong> Anything the page can read, an observer can read once and replay forever. So the waiver is never a stored-string comparison — it is a signature over a challenge the server issues fresh each time. Screen resolution, canvas hashes, user-agent strings and MAC-style device IDs all fail this test and none of them are in the design.</p>
+<p>Three properties are non-negotiable, and dropping any one makes the scheme weaker than the passcode it replaces:</p>
+<ul><li><strong>Device-bound</strong> — the credential must not sync to other machines or a vendor cloud, or &quot;this device&quot; means nothing.</li><li><strong>User verification required</strong> — biometric or PIN at each use, or a stolen unlocked laptop re-enrols silently.</li><li><strong>Origin-verified server-side</strong> — or any website can present the credential.</li></ul>
+<h2>How it works</h2>
+<ol><li>At enrollment, the device creates a credential in its authenticator and registers the public half on the enrollment record.</li><li>Storage is later evicted. The app has no keys and cannot authenticate.</li><li>The app asks the atServer for a challenge — a single-use, short-lived nonce.</li><li>The authenticator signs the nonce <strong>together with the atSign and the new enrollment key</strong>, after a biometric or PIN prompt.</li><li>The app submits the enrollment request with that signature instead of a passcode.</li><li>The server matches the credential, checks the origin, verifies the signature — and accepts the request with no passcode. Anything that fails returns one indistinguishable error and the passcode path resumes.</li></ol>
+<p>Step 4 matters more than it looks: signing the nonce alone would let a relaying attacker have the user&#x27;s own credential vouch for a key the attacker controls. Binding the atSign and the enrollment key into the signed bytes closes that.</p>
+<h2>Optional enhancements</h2>
+<p>The same seam takes more than one credential provider. One adapter, several instances.</p>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Provider</th><th>Audience</th><th>Fit</th></tr>
+<tr><td><strong>Platform passkey</strong> (Touch ID, Windows Hello)</td><td>Consumer, default</td><td>Baseline. Caveat: consumer passkeys are <strong>synced by default</strong> via iCloud Keychain and Google Password Manager, so device-binding must be requested explicitly</td></tr>
+<tr><td><strong>Microsoft Authenticator</strong></td><td>Personal users who want a portable holder</td><td>Its passkeys are <strong>device-bound only</strong> — no sync. Same credential model, different holder, and it moves the trust anchor off the laptop that got wiped onto a phone the user already carries</td></tr>
+<tr><td><strong>Entra ID / Okta</strong></td><td>Enterprise tenants</td><td>The strongest of the three. An OIDC assertion is already a signed, audience-bound, short-lived proof — a real credential, not an identifier. The tenant&#x27;s existing device-compliance and conditional-access policy becomes the trust decision, at no cost to us</td></tr>
+</table>
+<p>The enterprise case has a standing constraint from the identity work: no vendor-specific IdP code in the SDK. Entra and Okta arrive through generic OIDC, or they do not arrive.</p>
+<h2>What it would take</h2>
+<ul><li><strong>Registration is free</strong> — the enrollment record already carries an opaque metadata slot. No wire-format change, no atServer release.</li><li><strong>The challenge step is the real work</strong> — one new server-side operation to issue and verify nonces, plus signature and origin verification. That lands in the atServer team&#x27;s repo, not ours, and is the external dependency for the whole feature.</li><li><strong>Client-side</strong> — a small provider abstraction so passkey and OIDC sit behind one interface, and fallback to the passcode is code with tests rather than a hope.</li></ul>
+<h2>Open for this call</h2>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Question</th><th>Why it matters</th></tr>
+<tr><td><strong>Does a verified waiver also auto-approve the enrollment?</strong></td><td>If not, approval still needs a privileged connection — the passcode goes away but the walk to the second device does not. If so, a device credential grants namespace access unattended. This decides whether the feature delivers the outcome we are describing</td></tr>
+<tr><td><strong>Who can see the registered credentials?</strong></td><td>Enrollment discovery returns each record&#x27;s metadata to every app sharing the namespace today. That would let one app learn every other device&#x27;s credential and count them. Either the server filters per caller, or we accept the exposure knowingly</td></tr>
+</table></body></html>

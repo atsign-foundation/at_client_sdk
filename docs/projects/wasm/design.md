@@ -697,7 +697,7 @@ spec surface makes it a straightforward backend implementation rather than a mig
 that decision can be revisited late, on the measured number from
 [`acceptance.md`](acceptance.md) X2, rather than committed to up front.
 
-**VFS choice** — `IndexedDbFileSystem` (main thread, loads on open, flushes
-asynchronously; no worker) vs **OPFS** (true synchronous access, requires a dedicated
-web worker). This sets `at_client_web`'s execution model and is deferred to a
-measurement; open question in [`decisions.md`](decisions.md).
+**VFS choice** — `SimpleOpfsFileSystem` in a dedicated web worker, one directory per
+(atSign, enrollmentId) ([D-25](decisions.md)). SQLite runs in the worker; Dart stays on the
+main thread (D-19) and reaches it across the async `AtKeyStore` boundary.
+`IndexedDbFileSystem` is an opt-in fallback only with flush-before-ack and a single-tab guard.

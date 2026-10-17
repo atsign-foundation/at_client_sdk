@@ -45,7 +45,7 @@ the second is on the path to first release. The default bundle also touches neit
 two process globals we do not own.
 
 Everything in the storage lane below remains correct; it is **deferred, not withdrawn**, and
-`decisions.md` D-21 constrains the VFS choice for when it resumes.
+the VFS is settled by `decisions.md` D-25 (SimpleOPFS, one directory per atSign and enrollment).
 
 ---
 
@@ -180,9 +180,8 @@ at_client is not forked, and nothing below its doors names a platform type.
   SQLite-wasm over IndexedDB — stands, and under **D-12** a SQLite bundle stays injectable —
   in a browser once
   [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) gives it a
-  web open path — and becomes the default in V2. Its **VFS** half is a separate and
-  still-open question: **D-21** makes it pick-two, so nothing in §5 settles
-  which VFS V2 gets.)*
+  web open path — and becomes the default in V2. Its **VFS** half is settled
+  separately by **D-25**: SimpleOPFS in a dedicated worker.)*
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
   `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though

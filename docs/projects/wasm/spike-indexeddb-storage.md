@@ -1,6 +1,6 @@
 # Spike: raw-IndexedDB local replica (W4 / D4 input)
 
-**Status:** spike complete · 2026-09-29 · branch `st/wasm/spike-idb-storage` (off `st/wasm/stage6d-x-r2-interop`) · not committed
+**Status:** spike complete; superseded on W4 and the VFS by [D-25](decisions.md) and [`vfs-lab-results.md`](vfs-lab-results.md) (+386 KB gz accepted, D4 not triggered) · 2026-09-29 · branch `st/wasm/spike-idb-storage` (off `st/wasm/stage6d-x-r2-interop`) · not committed
 
 ## 1. Verdict
 
