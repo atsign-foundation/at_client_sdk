@@ -441,6 +441,7 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K6 | A record whose `v`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
 | X-K7 | A valid older record whose public keys no longer match the published ones is refused before PKAM | K-5: rollback |
 | X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
+| X-K9 | After a successful open the credential hint and local record are rewritten, and `navigator.storage.persist()` is requested once; with the replica deleted, the passkey alone restores it | K-6 clarification: eviction is a UX cost, not a loss |
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 

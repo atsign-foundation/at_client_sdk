@@ -92,6 +92,7 @@ sequenceDiagram
     A-->>B: P, userHandle = atSign
     B->>B: open local record with kek
     B->>S: PKAM auth; refresh ttl on lookup (at most once per day)
+    B->>B: rewrite hint + local record; storage.persist() once
 ```
 
 ### 3.3 Recovery — browser storage cleared, passkey kept
@@ -115,6 +116,7 @@ sequenceDiagram
 | Event | Action |
 |---|---|
 | Rotation | enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old lookup key → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys |
+| Browser storage eviction | every open rewrites the hint and the local record and requests `storage.persist()`; an evicted replica is rebuilt by the recovery flow (3.3), costing one extra passkey tap |
 | Lost or wiped device | its record stops being refreshed and expires after `T`; revoke its APKAM enrollment if it had its own |
 | Portal re-cut | rotates the passphrase envelope; each per-passkey record keeps working until its keys are revoked |
 
