@@ -113,7 +113,6 @@ it stopped being parked.
 | **`retiredAt` on the `_apsk` advertisement** | Ruled 2026-08-31: `ApskSigningKey` gains a retirement timestamp, stamped when an entry moves to `retired`, so a verifier can date a key. A wire and at-rest change to `_apsk`, so the doc sweep lands in the same commit and every atServer implementation's tests move with it; a record's `createdAt` is a caller assertion, not a clock to design against. | Nothing |
 | **statements the revocation cascade falsified** | at_server #2781 shipped the cascade ([ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)), so reword what was written for the world before it: `published_nskey_key_ring.dart`'s "the conveyance excludes nobody" dartdoc, `pairwise_secret_sharing_test.dart`'s "rotation buys nothing" `reason:`, UC-A5.2's `provenIn` filing roster-membership as proof of a hazard, and this table's orphaned-enrolment row; and [ruling 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 2 must carry 129's guard that an un-revoke behind an unapproved predecessor is refused. | Nothing |
 | **a v(N-1) `.atKeys` migration test** ([#2154](https://github.com/atsign-foundation/at_client_sdk/issues/2154)) | Nothing reads a keyfile written by the previously published at_auth (3.3.0, which `tests/pq_matrix/published/` resolves) or proves that build reads a version 1 document — the direction auth_cli's `pqReady` approver default ([ruling 137](detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08)) now exercises on every operator's keyfile. Check in a captured fixture with its version recorded, round-trip every field, and add a mutation that reddens when a reader drops a legacy field. | Nothing |
-| **a stale link rides an `enroll:update` republish** | An enrollment that adds or retires a signing key republishes `_apsk` through `enroll:update`, which carries no `appMetadata`, so the link over the old value stays and the chain walk reads `broken`, and the sweep never repairs a stale root link ([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)'s finding of 2026-10-08, seen live). Per-key links replace the mechanism rather than today's links being fixed (gkc, 2026-10-16): a link vouches for one key, and every other write of `_apsk` keeps the links for the keys it still lists ([UC-G3.12](acceptance.md#uc-g312--a-link-vouches-for-one-key-so-a-change-to-another-key-leaves-it-standing), [UC-G3.17](acceptance.md#uc-g317--any-other-write-of-bs-_apsk-keeps-bs-links)), so this row closes when the client half lands. | the client half of per-key links |
 
 ### P2 — should be done if there is time
 
@@ -559,7 +558,7 @@ and built on `gkc-pq-key-caching`*
     that tag reports), beside `design.md`.
 
 *`_apsk` — ruled by gkc on 2026-09-30 in
-[ruling 144](detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30);
+[ruling 144](detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-and-refusals-that-say-why-2026-09-30);
 items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
 
 14. **The verifier cache: fixed five minutes, refetch on failure, one per
@@ -572,16 +571,14 @@ items 14–16 are built on `gkc-pq-key-caching`, and item 17 is at_server work*
     and fetched once more; and the cache is the AtClient's, shared by every
     signer built on it, the per-call ones included. Proven in
     `envelope_signing_test`.
-15. **A republish clears the links; a root holder re-anchors (144.2).** Found:
-    `publishPublicSigningKey` sent no `appMetadata`, the atServer kept the stored
-    one, and the chain read `broken`. Done: the republish sends `appMetadata`
-    without a link that does not vouch for the new value
-    (`PqSigningChain.republishedAppMetadata`), and a client holding the signing
-    root re-signs a root link the record carried, in the same write; the
-    unit-test fake merges as the atServer does. Re-conveyance needed nothing
-    new: with the stale link gone, the next fully privileged start's sweep
-    conveys a root link over the new value. Proven in `pq_signing_chain_test`
-    and `chain_sweep_test.dart`.
+15. **A republish left a link vouching for nothing (144.2).** Found: a link
+    signed the whole `_apsk` value, so a republish under a new value left it
+    reading `broken`. Superseded by per-key links
+    ([ruling 157](detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16)):
+    a link vouches for one key, and every write of `_apsk` but `enroll:link`
+    keeps the links for the keys it still lists, so nothing clears or re-signs
+    a link. Proven in `pq_signing_chain_test` and
+    `per_key_links_live_test.dart`.
 16. **Every move of `_apsk` stands, and verification tells the locations apart
     (144.3).** Found: a moved `_apsk` gave a bare lookup failure, and ruling 134
     and UC-G2.7 claimed the record was deleted by nothing. Done: a signature

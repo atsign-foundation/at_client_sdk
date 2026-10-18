@@ -78,9 +78,9 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
-| [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | LIVE                      |
+| [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | PARTLY SUPERSEDED by [157] |
 | [23]  | UC-A2.1: reversing the enrollment key exchange                                              | 2026-08-04 | LIVE                      |
-| [24]  | How the approval chain terminates at the root                                               | 2026-08-04 | LIVE                      |
+| [24]  | How the approval chain terminates at the root                                               | 2026-08-04 | AMENDED 2026-10-16        |
 | [25]  | The substrate's arrival path had never run                                                  | 2026-08-04 | LIVE                      |
 | [26]  | UC-A4.4: a conveyance that loses the race to its own announcement                           | 2026-08-04 | AMENDED 2026-08-18        |
 | [27]  | The era default: read the new scheme everywhere, write it once                              | 2026-08-04 | LIVE                      |
@@ -201,7 +201,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
 | [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-10-04 |
 | [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
-| [144] | The _apsk record: a fixed verifier cache, links cleared on republish, refusals say why       | 2026-09-30 | AMENDED 2026-10-10 |
+| [144] | The _apsk record: a fixed verifier cache, and refusals that say why                         | 2026-09-30 | PARTLY SUPERSEDED by [157] |
 | [145] | A reader's atServer caches no public record without a ttr                                    | 2026-09-30 | AMENDED 2026-10-10 |
 | [146] | Keys an app publishes below its grants are its own; ensureReachable reports holding          | 2026-10-04 | LIVE               |
 | [147] | An nskey reaches every enrollment with access: at its mint, and at approval                  | 2026-10-04 | LIVE               |
@@ -209,11 +209,12 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [149] | How a shared value was protected is read from metadata, and replies go in kind               | 2026-10-05 | AMENDED 2026-10-06 |
 | [150] | The startup seeds the namespace the client was built with                                    | 2026-10-05 | LIVE               |
 | [151] | AtRpc request ids are random 53-bit integers                                                 | 2026-10-05 | LIVE               |
-| [152] | A conveyed link is stamped as it arrives, its envelope kept until then                       | 2026-10-08 | AMENDED 2026-10-08 |
+| [152] | ~~A conveyed link is stamped as it arrives, its envelope kept until then~~                   | 2026-10-08 | SUPERSEDED by [157]       |
 | [153] | An arriving nskey private is checked against what is published, else named by length         | 2026-10-08 | LIVE               |
 | [154] | A shared content key follows the sender's own namespace key too                              | 2026-10-09 | AMENDED 2026-10-13 |
 | [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
 | [156] | The e2e pack's enrollments expire on their own, and nothing tears them down                  | 2026-10-13 | LIVE               |
+| [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -359,7 +360,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [141]: detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14
 [142]: detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30
 [143]: detail/decisions.md#143-namespace-key-advertisements-no-ttr-a-not-found-is-final-and-a-clients-own-advertisement-refreshes-2026-09-30
-[144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-links-cleared-on-republish-and-refusals-that-say-why-2026-09-30
+[144]: detail/decisions.md#144-the-_apsk-record-a-fixed-verifier-cache-and-refusals-that-say-why-2026-09-30
 [145]: detail/decisions.md#145-a-readers-atserver-caches-no-public-record-without-a-ttr-2026-09-30
 [146]: detail/decisions.md#146-keys-an-app-publishes-below-its-grants-are-its-own-and-ensurereachable-reports-holding-them-2026-10-04
 [147]: detail/decisions.md#147-an-nskey-reaches-every-enrollment-with-access-to-its-namespace-when-it-is-minted-and-when-that-enrollment-is-approved-2026-10-04
@@ -372,3 +373,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [154]: detail/decisions.md#154-a-shared-content-key-follows-the-senders-own-namespace-key-too-2026-10-09
 [155]: detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09
 [156]: detail/decisions.md#156-the-e2e-packs-enrollments-expire-on-their-own-and-nothing-tears-them-down-2026-10-13
+[157]: detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16

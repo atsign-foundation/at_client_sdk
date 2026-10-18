@@ -4281,7 +4281,8 @@ Threats, answered for the whole set:
 #### UC-G3.25 — the approver's view shows whether each enrollment is anchored
   *Given* enrollments whose keys read **anchored**, **unsigned** and
   **broken**, including one with an anchored key and a new key not yet linked.
-  *When* `at_activate list` runs, and when `EnrollmentRequestList` shows them.
+  *When* `at_activate list` runs, and when `EnrollmentRequestList` lists them
+  below its pending requests.
   *Then* a row shows **anchored** when every key the enrollment signs with
   walks to the root, **unsigned** when it has no linked key, and otherwise the
   walk's verdict for a key that fails, naming that key.

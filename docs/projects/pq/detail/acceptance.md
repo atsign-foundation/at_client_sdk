@@ -1411,7 +1411,7 @@ reading the test.
 | **UC-A1.1** | c5 | `nskey_data_path_live_test.dart` — a write to a namespace with no nskey fails, saying which |
 | **UC-A1.1** | c6 | `pq_legacy_interop_live_test.dart` — UC-B4.2 opt-out · an atSign that refused legacy material is no |
 | **UC-A1.1** | c2 | `pq_signing_root_mint_lock_test.dart` — a second signing-root mint lock create is refused |
-| **UC-A2.1** | c3 | `pq_signing_chain_test.dart` — climbs a chain link to an anchored parent *(in-process)* |
+| **UC-A2.1** | c3 | `pq_signing_chain_test.dart` — when the walk runs, then it continues from that key and reads anchored through it *(in-process)* |
 | **UC-A2.1** | c2 | `enrollment_chain_link_live_test.dart` — the root private reaches a privileged enrollment and no other |
 | **UC-A2.1** | c5 | `nskey_rotation_live_test.dart` — UC-A5.2/A5.3 · a revoked enrollment cannot authenticate |
 | **UC-A2.4** | c3 | `key_package_amendment_live_test.dart` — UC-A2.5 · a sender picks by its own order and stamps the match |
