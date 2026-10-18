@@ -208,7 +208,7 @@ class TestUtils {
   /// the client opened on. Most files here open a shared atSign on a keyfile
   /// that dies with the file, which would leave every later file a root whose
   /// private nobody holds. A test about that step names its gates.
-  static const packStartupGates = PqStartupGates(publishRootLink: false);
+  static const packStartupGates = PqStartupGates(anchorOwnKeys: false);
 
   /// A preference for [atsign] at [posture], carrying no storage path: what
   /// opens the store is the bundle passed to `open`, so a call site that

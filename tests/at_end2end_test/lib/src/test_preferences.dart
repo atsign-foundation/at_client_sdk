@@ -48,7 +48,7 @@ class TestPreferences {
   /// the client opened on. Files here open shared atSigns on keyfiles that die
   /// with the file, which would leave every later file a root whose private
   /// nobody holds.
-  static const packStartupGates = PqStartupGates(publishRootLink: false);
+  static const packStartupGates = PqStartupGates(anchorOwnKeys: false);
 
   static PqStartupGates? _gatesFor(PqPosture posture) =>
       posture.configuresPqProviders ? packStartupGates : null;

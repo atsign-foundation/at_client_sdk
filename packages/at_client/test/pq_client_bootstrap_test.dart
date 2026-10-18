@@ -333,7 +333,7 @@ void main() {
         seedNamespaceKeys: false,
         requestRootPrivate: false,
         requestMissingPrivates: false,
-        publishRootLink: false,
+        anchorOwnKeys: false,
         sweepUnanchoredEnrollments: false,
         reconcileEnrollmentSnapshot: false,
         askOnReadMiss: false,
@@ -385,7 +385,7 @@ void main() {
           reconcileKeyPackage: false,
           seedNamespaceKeys: false,
           requestMissingPrivates: false,
-          publishRootLink: false,
+          anchorOwnKeys: false,
           sweepUnanchoredEnrollments: false,
           reconcileEnrollmentSnapshot: false,
           askOnReadMiss: false,
@@ -462,7 +462,7 @@ void main() {
         gates: const PqStartupGates(
           requestRootPrivate: false,
           requestMissingPrivates: false,
-          publishRootLink: false,
+          anchorOwnKeys: false,
           sweepUnanchoredEnrollments: false,
           askOnReadMiss: false,
         ),
@@ -636,7 +636,7 @@ void main() {
       'seedNamespaceKeys',
       'requestRootPrivate',
       'requestMissingPrivates',
-      'publishRootLink',
+      'anchorOwnKeys',
       'sweepUnanchoredEnrollments',
       // Last: nothing reads the enrollment snapshot, so this step can only
       // delay a step that heals key material, never enable one.

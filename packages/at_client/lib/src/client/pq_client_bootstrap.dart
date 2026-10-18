@@ -48,7 +48,7 @@ class PqStartupGates {
     this.seedNamespaceKeys = true,
     this.requestRootPrivate = true,
     this.requestMissingPrivates = true,
-    this.publishRootLink = true,
+    this.anchorOwnKeys = true,
     this.sweepUnanchoredEnrollments = true,
     this.reconcileEnrollmentSnapshot = true,
     this.askOnReadMiss = true,
@@ -65,7 +65,7 @@ class PqStartupGates {
         seedNamespaceKeys = false,
         requestRootPrivate = false,
         requestMissingPrivates = false,
-        publishRootLink = false,
+        anchorOwnKeys = false,
         sweepUnanchoredEnrollments = false,
         reconcileEnrollmentSnapshot = false,
         askOnReadMiss = false;
@@ -111,7 +111,7 @@ class PqStartupGates {
   /// Active: links this enrollment's keys through `enroll:link`, minting the
   /// signing root first when this enrollment is fully privileged and the
   /// atSign publishes none.
-  final bool publishRootLink;
+  final bool anchorOwnKeys;
 
   /// Active: a holder of the signing root's private key root-links every key
   /// on the atSign's other approved enrollments that lacks a sound root link.
@@ -162,7 +162,7 @@ class PqStartupGates {
         'seedNamespaceKeys': seedNamespaceKeys,
         'requestRootPrivate': requestRootPrivate,
         'requestMissingPrivates': requestMissingPrivates,
-        'publishRootLink': publishRootLink,
+        'anchorOwnKeys': anchorOwnKeys,
         'sweepUnanchoredEnrollments': sweepUnanchoredEnrollments,
         'reconcileEnrollmentSnapshot': reconcileEnrollmentSnapshot,
         'askOnReadMiss': askOnReadMiss,
@@ -377,7 +377,7 @@ class PqClientBootstrap {
         (name: 'seedNamespaceKeys', run: _seedNamespaceKeys),
         (name: 'requestRootPrivate', run: _requestRootPrivate),
         (name: 'requestMissingPrivates', run: _requestMissingPrivates),
-        (name: 'publishRootLink', run: _publishRootLink),
+        (name: 'anchorOwnKeys', run: _anchorOwnKeys),
         (name: 'sweepUnanchoredEnrollments', run: _sweepUnanchoredEnrollments),
         (
           name: 'reconcileEnrollmentSnapshot',
@@ -607,8 +607,8 @@ class PqClientBootstrap {
   /// holder of the root's private key root-links any of its keys that lacks a
   /// sound root link, and any other enrollment links a key it lacks a link
   /// for with one of its keys that walks to the root.
-  Future<void> _publishRootLink() async {
-    if (!_gates.publishRootLink) return;
+  Future<void> _anchorOwnKeys() async {
+    if (!_gates.anchorOwnKeys) return;
     try {
       if (_keysIo != null &&
           await _privilege.isFullyPrivileged() &&
@@ -631,8 +631,8 @@ class PqClientBootstrap {
   /// The sweep: a fully privileged client root-links the keys on the atSign's
   /// other approved enrollments that lack a sound root link.
   ///
-  /// Gated on privilege here as well as inside, because only a fully
-  /// privileged enrollment holds the root's private key.
+  /// Gated on privilege here, because the sweep leaves privilege to its caller
+  /// and only a fully privileged enrollment holds the root's private key.
   Future<void> _sweepUnanchoredEnrollments() async {
     if (!_gates.sweepUnanchoredEnrollments) return;
     try {

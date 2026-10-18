@@ -105,7 +105,7 @@ void main() {
         preference: TestUtils.getPreference(atSign,
             posture: legacyPlusPqProviders,
             pqStartupGates: const PqStartupGates(
-                publishRootLink: false, sweepUnanchoredEnrollments: false))
+                anchorOwnKeys: false, sweepUnanchoredEnrollments: false))
           ..namespace = namespace,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));

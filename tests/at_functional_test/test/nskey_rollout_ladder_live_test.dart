@@ -74,7 +74,7 @@ void main() {
     hydrateHeldSecrets: false,
     startEnvelopeListener: false,
     requestMissingPrivates: false,
-    publishRootLink: false,
+    anchorOwnKeys: false,
   );
 
   setUpAll(() async {
