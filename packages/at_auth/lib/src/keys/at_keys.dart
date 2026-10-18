@@ -1,5 +1,6 @@
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_chops/at_chops.dart' hide AtPublicKey, AtPrivateKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -1231,31 +1232,20 @@ class AtKeys {
   }
 
   static AtKeys _fromLegacyJson(Map<String, dynamic> json, {AtKeys? existing}) {
+    AtBytes? bytesAt(String field) => _existsAndNotNull(json, field)
+        ? AtBytes(decodeBase64Field(json[field], field))
+        : null;
     var keys = existing ?? AtKeys();
     keys
-      ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
-          ? AtBytes.fromString(json[auth_constants.apkamPublicKey])
-          : null
-      ..apkamPrivateKey =
-          _existsAndNotNull(json, auth_constants.apkamPrivateKey)
-              ? AtBytes.fromString(json[auth_constants.apkamPrivateKey])
-              : null
-      ..defaultEncryptionPublicKey = _existsAndNotNull(
-              json, auth_constants.defaultEncryptionPublicKey)
-          ? AtBytes.fromString(json[auth_constants.defaultEncryptionPublicKey])
-          : null
-      ..defaultEncryptionPrivateKey = _existsAndNotNull(
-              json, auth_constants.defaultEncryptionPrivateKey)
-          ? AtBytes.fromString(json[auth_constants.defaultEncryptionPrivateKey])
-          : null
-      ..defaultSelfEncryptionKey = _existsAndNotNull(
-              json, auth_constants.defaultSelfEncryptionKey)
-          ? AtBytes.fromString(json[auth_constants.defaultSelfEncryptionKey])
-          : null
-      ..apkamSymmetricKey =
-          _existsAndNotNull(json, auth_constants.apkamSymmetricKey)
-              ? AtBytes.fromString(json[auth_constants.apkamSymmetricKey])
-              : null
+      ..apkamPublicKey = bytesAt(auth_constants.apkamPublicKey)
+      ..apkamPrivateKey = bytesAt(auth_constants.apkamPrivateKey)
+      ..defaultEncryptionPublicKey =
+          bytesAt(auth_constants.defaultEncryptionPublicKey)
+      ..defaultEncryptionPrivateKey =
+          bytesAt(auth_constants.defaultEncryptionPrivateKey)
+      ..defaultSelfEncryptionKey =
+          bytesAt(auth_constants.defaultSelfEncryptionKey)
+      ..apkamSymmetricKey = bytesAt(auth_constants.apkamSymmetricKey)
       ..enrollmentId =
           _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
     for (var entry in json.entries) {

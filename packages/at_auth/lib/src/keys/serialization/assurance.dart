@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtKeysAssuranceException extends AtKeysValidationException {
@@ -86,12 +87,8 @@ class AtKeysAssurance {
 
   AtBytes expectBytes(Object? value, String fieldName) {
     final token = expectNonEmptyString(value, fieldName);
-    try {
-      base64Decode(token);
-    } on FormatException catch (e) {
-      throw AtKeysValidationException('Malformed base64 at $fieldName: $e');
-    }
-    return AtBytes.fromString(token);
+    return AtBytes(
+        decodeBase64Field(token, fieldName, AtKeysValidationException.new));
   }
 
   T expectEnum<T extends Enum>(
