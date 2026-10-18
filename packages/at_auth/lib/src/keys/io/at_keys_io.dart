@@ -17,6 +17,11 @@ sealed class AtKeysIo {
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
+///
+/// ⚠️ **The store a client runs on MUST be durable**: what is written to it
+/// survives the process. A client files key material there that exists nowhere
+/// else, the atSign's signing root among it, so a store that forgets strands
+/// it. [InMemoryAtKeysIo] is the exception, for tests.
 abstract class WrittenAtKeysIo extends AtKeysIo {
   /// Create-only initial persist (fresh onboard); implementations throw if
   /// the target already exists. Use [flush] to persist later mutations.

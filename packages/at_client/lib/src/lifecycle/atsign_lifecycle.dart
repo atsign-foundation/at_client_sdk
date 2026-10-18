@@ -302,8 +302,12 @@ extension AtsignLifecycle on Atsign {
     // signed by another.
     final advertisedSigningKey =
         await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
+    // NOTE: a scratch store; the enrollment's keys are filed into [keys].
     final session = AtAuthSession(
-        atSign: this, rootDomain: rootDomain, atKeysIo: InMemoryAtKeysIo());
+        atSign: this,
+        rootDomain: rootDomain,
+        // ignore: invalid_use_of_visible_for_testing_member
+        atKeysIo: InMemoryAtKeysIo());
     final AtEnrollmentRequest request;
     if (mode == EnrollmentKeyExchangeMode.pq) {
       request = AtEnrollmentRequest.pq(

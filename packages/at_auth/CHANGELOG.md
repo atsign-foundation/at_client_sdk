@@ -11,6 +11,9 @@
   base64 is refused with `AtDecryptionException`, as its `iv` and `content`
   are.
 - build: requires `at_lookup` ^3.7.0-rc4.
+- chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
+  warning: nothing it holds survives the process, and the store a client runs
+  on must be durable.
 
 ## 4.0.0-rc6
 

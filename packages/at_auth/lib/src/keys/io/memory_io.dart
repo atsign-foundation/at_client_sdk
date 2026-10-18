@@ -2,18 +2,23 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/atsign.dart';
+import 'package:meta/meta.dart';
 
-/// Stores [AtKeys] in process memory.
+/// Stores [AtKeys] in process memory, for tests.
 ///
-/// This implementation is useful for tests and short-lived flows where the keys
-/// have already been loaded or generated elsewhere. It does not encrypt,
-/// serialize, or persist keys beyond the lifetime of this object.
+/// ⚠️ **Nothing it holds survives the process, so an application never runs a
+/// client on it.** A client files key material into its keyfile that exists
+/// nowhere else: a fully privileged client at a post-quantum posture mints the
+/// atSign's signing root there, and a root whose private key is lost can never
+/// be replaced. Keep an application's keys in a durable [WrittenAtKeysIo], such
+/// as [FileAtKeysIo].
 class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// Keys are indexed by normalized [Atsign] (via `toAtsign()`), so the
   /// `String`-typed [read]/[write] and the [Atsign]-typed [flush] all resolve
   /// to the same entry.
   final Map<Atsign, AtKeys> _internal = {};
 
+  @visibleForTesting
   InMemoryAtKeysIo();
 
   /// An in-memory store already holding [atKeys] for [atsign].
@@ -22,6 +27,7 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// authenticate from, which is what [AtAuthRequest] takes. at_auth wraps a
   /// fixed key set exactly this way internally, so this is the same object
   /// the authentication would have built.
+  @visibleForTesting
   factory InMemoryAtKeysIo.holding(String atsign, AtKeys atKeys) {
     final io = InMemoryAtKeysIo();
     io._internal[atsign.toAtsign()] = atKeys;
