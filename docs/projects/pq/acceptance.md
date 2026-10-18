@@ -1840,8 +1840,9 @@ map and be refused rather than obeyed.
   legacy-interop **opt-out** refuses it — deliberately, and loudly.
 - **Impl/verify:**
   `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
-  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
-  signing root — asserted against the PQ-native one as a control), a PQ-native
+  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, and
+  the pack's clients skip the start-time root step, so no signing root —
+  asserted against the PQ-native one as a control), a PQ-native
   one, and a PQ-native one activated with `mintLegacyMaterial: false`. Inbound,
   outbound (refused by name, then opted-in and stamped legacy, then read by the
   peer) and the opt-out all covered. It is in the **functional** pack, not

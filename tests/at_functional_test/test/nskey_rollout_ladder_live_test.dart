@@ -68,10 +68,13 @@ void main() {
   /// miss — and the holder is already listening, which makes this file's own
   /// `startListening` a no-op. `askOnReadMiss` stays on: state 1's own read
   /// must still broadcast the ask that state 2 waits for.
+  ///
+  /// The start-time root step is off as [TestUtils.packStartupGates] has it.
   const handDrivenConveyance = PqStartupGates(
     hydrateHeldSecrets: false,
     startEnvelopeListener: false,
     requestMissingPrivates: false,
+    publishRootLink: false,
   );
 
   setUpAll(() async {

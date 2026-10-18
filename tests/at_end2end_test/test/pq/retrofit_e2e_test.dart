@@ -177,8 +177,13 @@ void main() {
       // Its own store location: the owner client holds the atSign's, and
       // nothing carries across, so this is a second principal rather than a
       // succession, opened beside the owner client.
+      // NOTE: an authentication key takes no link, so an enrollment anchors
+      // only through a client data signing key, and the legacy posture names
+      // none.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
-          posture: PqPosture.legacy, device: 'rf-e1-$runId'),
+          posture: PqPosture.legacy,
+          device: 'rf-e1-$runId',
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}),
       storage: TestPreferences.getInstance()
           .storageForCoLocatedClient(atSign, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
@@ -254,7 +259,9 @@ void main() {
       // Its own store location, as a clone on another host has: the owner
       // client holds the atSign's, and B1.1's retrofit holds its own.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
-          posture: PqPosture.legacy, device: 'rf-e1-clone-$runId'),
+          posture: PqPosture.legacy,
+          device: 'rf-e1-clone-$runId',
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}),
       storage: TestPreferences.getInstance()
           .storageForCoLocatedClient(atSign, device: 'rf-e1-clone-$runId'),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
