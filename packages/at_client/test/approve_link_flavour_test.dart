@@ -154,8 +154,9 @@ void main() {
   group('Given an approver whose own key walks to the root', () {
     for (final privileged in [false, true]) {
       test(
-          'when it approves B${privileged ? ', fully privileged' : ''}, then '
-          'the links are chain links signed with that key', () async {
+          'when it approves B, then the links are chain links signed with that '
+          'key (${privileged ? 'fully privileged' : 'not fully privileged'})',
+          () async {
         final (enrollee, enrollment) = await enrolleeWithTwoKeys();
         final approver = await approverWithLinkedKey();
 

@@ -174,9 +174,10 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**20 of the 127** rows are skipped, all against `perKeyLinks`: the per-key
-links ruling withdrew UC-G3.4, rewrote UC-G3.5 and added UC-G3.12 to UC-G3.30,
-none of which anything implements yet. The burn-down went above zero the same
+**0 of the 127** rows are skipped. The per-key links ruling withdrew UC-G3.4,
+rewrote UC-G3.5 and added UC-G3.12 to UC-G3.30, and the twenty rows sat skipped
+against a `perKeyLinks` blocker until at_client's half landed and each was
+cited to the tests that prove it. The burn-down went above zero the same
 way on 2026-08-10, rather than drifting there — `enroll:update` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it, UC-A2.5 and UC-A2.6, so the catalogue grew by two use cases

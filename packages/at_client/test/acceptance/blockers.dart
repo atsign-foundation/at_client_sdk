@@ -27,10 +27,3 @@
 /// `catalogue_test.dart` enforces both directions — a `skip:` with nothing
 /// declaring it, and a constant guarding nothing, are each a failure.
 library;
-
-/// The client half of per-key links: approvers, an enrollment adding a key and
-/// a root holder's sweep all writing through `enroll:link`, the walk by key,
-/// and the conveyed links going. Its rows are proven in at_client's unit layer
-/// and in the functional pack, against an atServer that carries `enroll:link`.
-const perKeyLinks = 'blocked: the client half of per-key links '
-    '· unit and functional';

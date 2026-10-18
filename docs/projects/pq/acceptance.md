@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**96 PROVEN · 20 BLOCKED · 2 WITHDRAWN** across 118 use cases and 127 scenarios —
+**116 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 118 use cases and 127 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -164,32 +164,32 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G3.2  | The algorithm minted is the one kept, so the first start rewrites nothing          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.3  | The `_apsk` form follows the algorithm, and nothing else decides it                | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.4  | WITHDRAWN — a link was bound to the exact `_apsk` string                           | WITHDRAWN | — |
-| UC-G3.5  | An approver links each key of the enrollment it approves, straight after           | BLOCKED   | `g3_data_signing_key_test.dart` |
+| UC-G3.5  | An approver links each key of the enrollment it approves, straight after           | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.6  | A legacy enrollment's authentication keypair signs data in memory only             | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.7  | The reconcile treats rsa2048 as already held, and only rsa2048                     | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.8  | No signer waits on a mint                                                          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.9  | Two coherence rules, refused at construction before any I/O                        | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.10 | A no-PQ-provider client refuses the work and leaves the enrolment repairable       | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.11 | A pre-enrollment atSign gives itself a first enrollment                            | PROVEN    | `g3_data_signing_key_test.dart` |
-| UC-G3.12 | A link vouches for one key, so a change to another key leaves it standing          | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.13 | The kind of a link follows from its signer                                         | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.14 | `enroll:link` admits only the target or a caller that could approve it             | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.15 | `enroll:link` checks structure, and writes all or nothing                          | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.16 | A link replaces only the link its writer found                                     | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.17 | Any other write of an `_apsk` keeps its links                                      | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.18 | An enrollment links a key it adds, with one already linked, first                  | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.19 | A chain link is signed only by a linked key, a root link only by the root          | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.20 | Content is signed with the keys that have links, while there are any               | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.21 | An enrollment's authentication key takes no links, and gives none                  | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.22 | A fully privileged enrollment mints a missing root at start, and anchors           | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.23 | A root holder's sweep gives every key without a sound root link one                | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.24 | The walk follows keys, and stops at a cycle                                        | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.25 | The approver's view shows whether each enrollment is anchored                      | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.26 | Links never travel by envelope, and the old link fields are gone                   | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.27 | Without `enroll:link` on the atServer, nothing is linked and all else works        | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.28 | A bare RSA client data signing key is linked like a listed one                     | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.29 | An `enroll:update` cannot make B's client data signing key its authentication key  | BLOCKED   | `g3_data_signing_key_test.dart` |
-| UC-G3.30 | A link vouches for the key it names, not for every key under its `kid`             | BLOCKED   | `g3_data_signing_key_test.dart` |
+| UC-G3.12 | A link vouches for one key, so a change to another key leaves it standing          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.13 | The kind of a link follows from its signer                                         | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.14 | `enroll:link` admits only the target or a caller that could approve it             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.15 | `enroll:link` checks structure, and writes all or nothing                          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.16 | A link replaces only the link its writer found                                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.17 | Any other write of an `_apsk` keeps its links                                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.18 | An enrollment links a key it adds, with one already linked, first                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.19 | A chain link is signed only by a linked key, a root link only by the root          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.20 | Content is signed with the keys that have links, while there are any               | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.21 | An enrollment's authentication key takes no links, and gives none                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.22 | A fully privileged enrollment mints a missing root at start, and anchors           | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.23 | A root holder's sweep gives every key without a sound root link one                | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.24 | The walk follows keys, and stops at a cycle                                        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.25 | The approver's view shows whether each enrollment is anchored                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.26 | Links never travel by envelope, and the old link fields are gone                   | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.27 | Without `enroll:link` on the atServer, nothing is linked and all else works        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.28 | A bare RSA client data signing key is linked like a listed one                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.29 | An `enroll:update` cannot make B's client data signing key its authentication key  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.30 | A link vouches for the key it names, not for every key under its `kid`             | PROVEN    | `g3_data_signing_key_test.dart` |
 
 ---
 
