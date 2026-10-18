@@ -670,6 +670,41 @@ void main() {
 
   group('Given two entries listed under one kid whose keys differ', () {
     test(
+        'when the first entry under the kid is one whose status no longer '
+        'vouches, then the entry after it takes no link either, and the other '
+        'keys are linked', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final k1 = RsaKeyPair.generate().atPublicKey.publicKey;
+      final k1b = RsaKeyPair.generate().atPublicKey.publicKey;
+      final k2 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final kid = publicKeyKidOfBase64(k1);
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey(
+            kid: kid,
+            alg: SigningAlgoType.rsa2048,
+            pub: k1,
+            status: KeyEntryStatus.of('revoked')),
+        ApskSigningKey(kid: kid, alg: SigningAlgoType.rsa2048, pub: k1b),
+        k2,
+      ]));
+      remoteMetadata[apsk] = Metadata();
+      expect((await record(b, 'b-1')).keys.map((k) => k.pub), [k1b, k2.pub],
+          reason: 'the premise: the client reads the second entry under the '
+              'kid, the atServer the first');
+
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [k2.kid]);
+      expect(linkCalls.single.links!.keys, [k2.kid]);
+    });
+
+    test(
         'when a root voucher links the record, then it links only the first '
         'entry under that kid, as the atServer reads it, and the other keys '
         'all the same', () async {
@@ -1066,6 +1101,38 @@ void main() {
 
       expect(linked, [bEntry.kid]);
       expect((await walk(b, 'b-1')).verdict, ChainVerdict.anchored);
+    });
+
+    test(
+        'when the key carries a JWS whose signature names a root kid, then a '
+        'chain voucher leaves it for a root holder', () async {
+      final root = await newRoot();
+      final f = await anchoredA(root);
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      final original = SignedEnvelope.fromJson(
+          await f.voucher.sign(PqSigningChain.linkPayload('b-1', bEntry)));
+      final header =
+          jsonDecode(unb64u(original.signature.toJson()['protected'] as String))
+              as Map<String, Object?>;
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          original.claiming(
+              {...header, 'kid': publicKeyKidOfBase64(rootPair.pub)}).toJson());
+      expect((await walk(b, 'b-1')).reason, contains('is not a root link'),
+          reason: 'the premise: its signer kid makes it a root link that '
+              'fails its check');
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(f.a).linkKeysOf(
+          await record(f.a, 'b-1'), f.voucher,
+          authenticationKey: null, verifier: signerOf(f.a));
+
+      expect(linked, isEmpty);
+      expect(linkCalls, isEmpty);
     });
 
     test(
@@ -1469,6 +1536,9 @@ void main() {
             authenticationKey: null, verifier: signerOf(b));
 
         expect(linked, isEmpty);
+        expect(linkCalls, hasLength(1),
+            reason: 'a refusal that leaves the record as it was is not asked '
+                'again');
         expect((await walk(b, 'b-1')).verdict, ChainVerdict.unsigned);
       });
     }

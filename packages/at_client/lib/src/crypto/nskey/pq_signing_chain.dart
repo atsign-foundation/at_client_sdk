@@ -612,10 +612,12 @@ class PqSigningChain {
   /// a key with no link gets one; a root voucher replaces anything but a root
   /// link that passes its check; a chain voucher replaces only a chain link
   /// that does not walk to the root, never a root link, and links no key its
-  /// own key's chain passes through. Only the first entry under a `kid` is
-  /// linked, as the atServer reads the record. Each link states the one it
-  /// found; when the atServer refuses the call, the record is read again and,
-  /// if it has changed, the call made once more on what it now holds.
+  /// own key's chain passes through. A key is linked only when it is the entry
+  /// the atServer reads under its `kid`: the first in the record carrying a
+  /// string `kid`, `alg` and `pub`, whatever its status. Each link states the
+  /// one it found; when the atServer refuses the call, the record is read
+  /// again and, if it has changed, the call made once more on what it now
+  /// holds.
   Future<List<String>> linkKeysOf(
     ApskRecord target,
     LinkVoucher voucher, {
@@ -623,16 +625,20 @@ class PqSigningChain {
     required EnvelopeSigning verifier,
   }) async {
     final signed = <String, Map<String, Object?>>{};
+    List<ApskSigningKey>? roots;
+    Future<List<ApskSigningKey>> rootsOnce() async =>
+        roots ??= await _rootCandidates();
     var record = target;
     for (var attempt = 1; attempt <= 2; attempt++) {
       final writes = <String, LinkWrite>{};
-      final kids = <String>{};
+      final read = _readByAtServer(record.value);
       for (final key in record.keys) {
-        if (!kids.add(key.kid)) continue;
+        if (read[key.kid] != key.pub) continue;
         if (!_takesLink(record, key, authenticationKey, voucher)) continue;
         final found = record.links[key.kid];
         if (found != null &&
-            !await _replaces(voucher, record, key, found, verifier)) {
+            !await _replaces(
+                voucher, record, key, found, verifier, await rootsOnce())) {
           continue;
         }
         final link = signed[key.kid] ??=
@@ -701,14 +707,16 @@ class PqSigningChain {
     return !voucher.keysWalked.contains('${record.enrollmentId}/${key.kid}');
   }
 
-  /// Whether [voucher]'s link should replace [found], the link on [key].
+  /// Whether [voucher]'s link should replace [found], the link on [key];
+  /// [roots] are the signing root's keys.
   Future<bool> _replaces(
       LinkVoucher voucher,
       ApskRecord record,
       ApskSigningKey key,
       Map<String, Object?> found,
-      EnvelopeSigning verifier) async {
-    final foundIsRoot = await _isRootLink(found);
+      EnvelopeSigning verifier,
+      List<ApskSigningKey> roots) async {
+    final foundIsRoot = _isRootLink(found, roots);
     if (voucher.isRoot) {
       if (!foundIsRoot) return true;
       final walk = await walkFrom(verifier, record, key);
@@ -719,9 +727,10 @@ class PqSigningChain {
     return walk.verdict != ChainVerdict.anchored;
   }
 
-  /// Whether [link] is a root link: one whose signer `kid` is a key of the
-  /// signing root, whatever its shape.
-  Future<bool> _isRootLink(Map<String, Object?> link) async {
+  /// Whether [link] is a root link: one whose signer `kid` is one of [roots],
+  /// whatever its shape.
+  static bool _isRootLink(
+      Map<String, Object?> link, List<ApskSigningKey> roots) {
     final Iterable<Object?> kids;
     if (link['payload'] is Map) {
       kids = [link[rootLinkKidField]];
@@ -732,8 +741,37 @@ class PqSigningChain {
         return false;
       }
     }
-    final roots = await _rootCandidates();
     return kids.any((kid) => roots.any((r) => r.kid == kid));
+  }
+
+  /// The public key the atServer reads under each `kid` of an `_apsk` [value]:
+  /// for the list form the first entry carrying a string `kid`, `alg` and
+  /// `pub`, whatever its status; for a bare value, that value.
+  static Map<String, String> _readByAtServer(String value) {
+    if (!value.trimLeft().startsWith('{')) {
+      try {
+        return {publicKeyKidOfBase64(value): value};
+      } on FormatException {
+        return const {};
+      }
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(value);
+    } on FormatException {
+      return const {};
+    }
+    final entries = decoded is Map ? decoded['keys'] : null;
+    if (entries is! List) return const {};
+    final read = <String, String>{};
+    for (final entry in entries) {
+      if (entry is! Map) continue;
+      final kid = entry['kid'], alg = entry['alg'], pub = entry['pub'];
+      if (kid is String && alg is String && pub is String) {
+        read.putIfAbsent(kid, () => pub);
+      }
+    }
+    return read;
   }
 
   /// Whether [a] and [b] hold the same value and the same links.
