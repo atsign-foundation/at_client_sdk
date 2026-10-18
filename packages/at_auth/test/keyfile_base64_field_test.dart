@@ -14,14 +14,15 @@ import 'test_utils/at_keys.dart';
 import 'test_utils/holds_none_of.dart';
 
 /// A keyfile document in which [field] does not decode as base64, every form
-/// of that field's value the error must not hold, and the offset of the first
-/// character a decoder rejects.
+/// of that field's value the error must not hold, the offset of the first
+/// character a decoder rejects, and the type the read must refuse it with.
 typedef Corrupted = ({
   Map<String, dynamic> document,
   String field,
   List<String> values,
   int at,
   String? passPhrase,
+  TypeMatcher<Exception> refusedAs,
 });
 
 const _selfEncryptedFields = [
@@ -81,7 +82,10 @@ void main() {
           Uint8List.fromList(utf8.encode(plaintext)),
           iv: InitialisationVector.legacy()));
 
-  Future<Corrupted> replacing(String field, {String? passPhrase}) async {
+  Future<Corrupted> replacing(String field,
+      {String? passPhrase,
+      TypeMatcher<Exception> refusedAs =
+          const TypeMatcher<FormatException>()}) async {
     final bad = notBase64();
     final Map<String, dynamic> document;
     if (passPhrase != null) {
@@ -97,6 +101,7 @@ void main() {
       values: [bad.value],
       at: bad.at,
       passPhrase: passPhrase,
+      refusedAs: refusedAs,
     );
   }
 
@@ -114,6 +119,7 @@ void main() {
         values: [bad.value],
         at: bad.at,
         passPhrase: null,
+        refusedAs: isA<AtKeysValidationException>(),
       );
     },
     for (final field in _selfEncryptedFields)
@@ -133,6 +139,7 @@ void main() {
         values: [bad.value],
         at: bad.at,
         passPhrase: null,
+        refusedAs: isA<FormatException>(),
       );
     },
     'apkamSymmetricKey': () => replacing(auth_constants.apkamSymmetricKey),
@@ -148,14 +155,18 @@ void main() {
           values: [bad.value, stored],
           at: bad.at,
           passPhrase: null,
+          refusedAs: isA<FormatException>(),
         );
       },
-    for (final field in ['iv', 'salt', 'content'])
-      'the passphrase envelope\'s $field': () =>
-          replacing(field, passPhrase: randomBase64(12)),
+    for (final field in ['iv', 'content'])
+      'the passphrase envelope\'s $field': () => replacing(field,
+          passPhrase: randomBase64(12),
+          refusedAs: isA<AtDecryptionException>()),
+    'the passphrase envelope\'s salt': () =>
+        replacing('salt', passPhrase: randomBase64(12)),
   };
 
-  Future<String> errorReading(Corrupted corrupted) async {
+  Future<Object> errorReading(Corrupted corrupted) async {
     final path = '${dir.path}/@alice_key.atKeys';
     await File(path).writeAsString(jsonEncode(corrupted.document));
     try {
@@ -163,7 +174,7 @@ void main() {
               filePath: (_) => path, passPhrase: corrupted.passPhrase)
           .read('@alice');
     } catch (e) {
-      return '$e';
+      return e;
     }
     fail('the read succeeded');
   }
@@ -176,17 +187,20 @@ void main() {
         test(
             'when at_auth reads it, then the error names the field and says '
             'it isn\'t valid base64, with the position of the first bad '
-            'character, and holds none of the field\'s value', () async {
+            'character, holds none of the field\'s value, and is of the type '
+            'that field is refused with', () async {
           final corrupted = await corrupt();
 
           final error = await errorReading(corrupted);
+          final message = '$error';
 
+          expect(error, corrupted.refusedAs);
           for (final value in corrupted.values) {
-            expect(error, holdsNoneOf(value),
+            expect(message, holdsNoneOf(value),
                 reason: 'the error holds none of the field\'s value');
           }
-          expect(error, contains('${corrupted.field} is not valid base64'));
-          expect(error, contains('(at offset ${corrupted.at})'));
+          expect(message, contains('${corrupted.field} is not valid base64'));
+          expect(message, contains('(at offset ${corrupted.at})'));
         });
       });
     }
