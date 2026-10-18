@@ -44,6 +44,12 @@ class Enrollment {
   /// as a notification never does.
   DateTime? expiresAt;
 
+  /// The public half of this enrollment's APKAM authentication keypair, the
+  /// client authentication signing key. `enroll:list` serves it to a caller
+  /// that may approve, and to an enrollment listing its own record; it is
+  /// null in other reads, `enroll:fetch` among them.
+  String? apkamPublicKey;
+
   /// [status] as the atServer's vocabulary, or null when the record carries
   /// none.
   EnrollmentStatus? get enrollmentStatus {
@@ -83,6 +89,9 @@ class Enrollment {
           : null
       ..expiresAt = json['expiresAt'] is String
           ? DateTime.tryParse(json['expiresAt'] as String)?.toUtc()
+          : null
+      ..apkamPublicKey = json['apkamPublicKey'] is String
+          ? json['apkamPublicKey'] as String
           : null;
   }
 
@@ -99,6 +108,7 @@ class Enrollment {
       map['apkamKeysExpiryInMillis'] = apkamKeysExpiryDuration!.inMilliseconds;
     }
     if (expiresAt != null) map['expiresAt'] = expiresAt!.toIso8601String();
+    if (apkamPublicKey != null) map['apkamPublicKey'] = apkamPublicKey;
 
     return map;
   }

@@ -1,64 +1,64 @@
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, AtKeysIo, apskSigningKeys, publicKeyKidOfBase64;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/crypto_runtime.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, AtKeysIo;
-import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
+import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
+    show PqSigningRoot;
 import 'package:at_client/src/mixins/apkam_signing.dart'
-    show serialiseApskWrite;
+    show rememberOwnLinkedKids;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning, WithdrawnSigningKeyException, withdrawnApskLocation;
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show EnvelopeType, SignedEnvelope, signableTextOf;
-import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
-    show AtClientSecretSharing;
-import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
-    show PairwiseSecretSharing;
-import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+    show
+        ApkamSigningKeys,
+        EnvelopeType,
+        SignedEnvelope,
+        signEnvelope,
+        signableTextOf,
+        signsUnder;
+import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:meta/meta.dart' show experimental;
 
-/// How far up the approval chain a verifier got.
-///
-/// Graded rather than boolean because a bare `_apsk` is tolerated during the
-/// changeover, and a caller has to be able to tell that apart from a chain
-/// that failed.
+/// How far up the chain a walk from one key got.
 @experimental
 enum ChainVerdict {
   /// Reached a root link that verifies against the atSign's signing root.
   anchored,
 
-  /// Every link walked verified, but the chain ran out before the root.
+  /// Every link walked verified, but a key on the way carries none, so the
+  /// walk stopped below the root.
   chained,
 
-  /// The starting enrollment publishes no link at all.
+  /// The key the walk started from carries no link.
   unsigned,
 
-  /// A link was present and wrong — a failed signature, a link describing
-  /// another enrollment or another key, a cycle, or a chain too long to walk.
+  /// A link was present and wrong: a failed signature, a link naming another
+  /// key, a cycle, or a chain too long to walk.
   ///
-  /// Distinct from [chained]: an absent link means nobody has vouched yet, a
+  /// Distinct from [unsigned]: an absent link means nobody has vouched yet, a
   /// bad one means something claimed to and the claim does not hold.
   broken,
 
-  /// A key the walk depends on — the enrollment's own, or a signer's — was
-  /// revoked, or superseded by a successor enrollment: the atServer moved its
-  /// `_apsk` to `.r.__e`.
+  /// A key the walk depends on belongs to an enrollment that was revoked or
+  /// superseded: the atServer moved its `_apsk` to `.r.__e`.
   revoked,
 
-  /// A key the walk depends on was deleted, or expired: the atServer moved its
-  /// `_apsk` to `.d.__e`.
+  /// A key the walk depends on belongs to an enrollment that was deleted or
+  /// expired: the atServer moved its `_apsk` to `.d.__e`.
   deleted,
 }
 
-/// What [PqSigningChain.verifyChain] found.
+/// What a walk found.
 @experimental
 class ChainResult {
   final ChainVerdict verdict;
@@ -69,20 +69,139 @@ class ChainResult {
   /// Why the walk stopped, when that is not self-evident.
   final String? reason;
 
-  ChainResult(this.verdict, this.path, this.reason);
+  /// The key the verdict is about: the one the walk started from, or the key
+  /// that failed when the verdict is an enrollment's. Null when no key was
+  /// walked.
+  final String? kid;
+
+  /// The keys walked, as `<enrollmentId>/<kid>`, in order.
+  final List<String> keysWalked;
+
+  ChainResult(this.verdict, this.path, this.reason,
+      {this.kid, this.keysWalked = const []});
 
   @override
   String toString() => 'ChainResult(${verdict.name}, path: $path'
+      '${kid == null ? '' : ', kid: $kid'}'
       '${reason == null ? '' : ', $reason'})';
 }
 
-/// The approval chain: every enrollment's published `_apsk` value is signed
-/// by the enrollment that approved it, up to the atSign's signing root.
+/// One enrollment's `_apsk` record as a walk or a voucher reads it: the keys
+/// it lists and the links stored on it.
+@experimental
+class ApskRecord {
+  /// The enrollment the record belongs to.
+  final String enrollmentId;
+
+  /// The record's value, verbatim.
+  final String value;
+
+  /// Every listed key this build can read and whose status still vouches for
+  /// what it signed, in listed order. A bare value is one `rsa2048` key.
+  final List<ApskSigningKey> keys;
+
+  /// The links stored on the record, keyed by the `kid` each vouches for.
+  final Map<String, Map<String, Object?>> links;
+
+  ApskRecord(this.enrollmentId, this.value, this.keys, this.links);
+
+  /// Reads [value] and the link map in [appMetadata] for [enrollmentId].
+  factory ApskRecord.parse(
+      String enrollmentId, String value, AppMetadata? appMetadata) {
+    final stored = appMetadata?.additional?[PqSigningChain.linksField];
+    return ApskRecord(enrollmentId, value, _keysOf(value), {
+      if (stored is Map)
+        for (final entry in stored.entries)
+          if (entry.key is String && entry.value is Map)
+            entry.key as String: (entry.value as Map).cast<String, Object?>()
+    });
+  }
+
+  static List<ApskSigningKey> _keysOf(String value) {
+    if (!value.trimLeft().startsWith('{')) {
+      try {
+        return [
+          ApskSigningKey(
+              kid: publicKeyKidOfBase64(value),
+              alg: SigningAlgoType.rsa2048,
+              pub: value)
+        ];
+      } on FormatException {
+        return const [];
+      }
+    }
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! Map<String, dynamic>) return const [];
+      return apskSigningKeys(decoded)
+          .where((k) => k.vouchesForPastOperations)
+          .toList();
+    } on FormatException {
+      return const [];
+    }
+  }
+}
+
+/// A link this client has signed for one key, with the link it found on that
+/// key when it read the record, or null when it found none.
+typedef LinkWrite = ({Map<String, Object?> link, Map<String, Object?>? expect});
+
+/// What a client vouches for another key with: the signing root's private
+/// key, or one of its own keys that already has a link.
+@experimental
+class LinkVoucher {
+  /// A voucher signing root links with the root private named by [kid].
+  LinkVoucher.root({required Uint8List private, required String kid})
+      : _rootPrivate = private,
+        _rootKid = kid,
+        _key = null,
+        _enrollmentId = null,
+        keysWalked = const [];
+
+  /// A voucher signing chain links with [key], which [enrollmentId] lists and
+  /// which walks to the root through [keysWalked].
+  LinkVoucher.chain(
+      {required ApkamSigningKeys key,
+      required String enrollmentId,
+      required this.keysWalked})
+      : _key = key,
+        _enrollmentId = enrollmentId,
+        _rootPrivate = null,
+        _rootKid = null;
+
+  final Uint8List? _rootPrivate;
+  final String? _rootKid;
+  final ApkamSigningKeys? _key;
+  final String? _enrollmentId;
+
+  /// The keys this voucher's own key chains through, as
+  /// `<enrollmentId>/<kid>`; empty for a root voucher.
+  final List<String> keysWalked;
+
+  /// Whether this voucher signs root links.
+  bool get isRoot => _rootPrivate != null;
+
+  /// A link over [payload], signed as this voucher signs.
+  Future<Map<String, Object?>> sign(Map<String, Object?> payload) async {
+    final rootPrivate = _rootPrivate;
+    if (rootPrivate != null) {
+      return PqSigningChain.signRootLink(payload,
+          rootPrivate: rootPrivate, rootKid: _rootKid!);
+    }
+    return PqSigningChain.signChainLink(payload,
+        key: _key!, signerEnrollmentId: _enrollmentId!);
+  }
+}
+
+/// The links that vouch for each key an enrollment's `_apsk` lists, and the
+/// walk from a key up to the atSign's signing root.
 ///
-/// The parent signs and the child publishes, because `_apsk` writes are
-/// restricted to the owning enrollment's own authenticated connection: the
-/// approver conveys the link over the substrate, and until the child stamps
-/// it onto its own record verifiers see a bare key.
+/// A link names one key, `{v: 2, enrollmentId, kid, alg, pub}`, and the `kid`
+/// of the key that signed it. When that `kid` is a key of the signing root it
+/// is a root link, checked against that key only; otherwise it is a chain link
+/// signed by a key of another enrollment, and the walk goes on from that key.
+/// Links are stored in the record's `appMetadata` under [linksField], and
+/// written only through `enroll:link`.
 @experimental
 class PqSigningChain {
   /// One chain view per client; the wire vocabulary stays static because it
@@ -94,748 +213,525 @@ class PqSigningChain {
   final AtClient _atClient;
   final AtSignLogger _logger;
 
-  /// Reserved [Secret] name for a conveyed chain link.
-  ///
-  /// Per-enrollment, so it is never forwarded on: a link vouches for one
-  /// enrollment's key and means nothing attached to another's.
-  static const String linkSecretName =
-      '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apskChainLink';
+  /// The `appMetadata.additional` field holding an `_apsk` record's links,
+  /// keyed by the `kid` each vouches for.
+  static const String linksField = 'apskLinks';
 
-  /// The `appMetadata.additional` field the child stamps the link into.
-  static const String linkField = 'apskChainLink';
+  /// The version of the link payload.
+  static const int linkVersion = 2;
 
-  /// The `appMetadata.additional` field a **root** link lives in.
-  ///
-  /// Its own field, not a variant of [linkField]: a root link is ML-DSA-65
-  /// verified against `public:pq_signing_root@<atSign>` where a chain link is
-  /// RSA verified against an `_apsk`, so the field name settles which of the
-  /// two a verifier is holding before it reads anything else.
-  static const String rootLinkField = 'apskRootLink';
-
-  /// Reserved [Secret] name for a conveyed **root** link.
-  ///
-  /// Which flavour arrived decides which validation runs and which field is
-  /// stamped, and the name settles that before anything is decoded.
-  static const String rootLinkSecretName =
-      '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apskRootLink';
-
-  /// Signature algorithm marker on a root link — the same `mldsa65` the root
+  /// Signature algorithm marker on a root link: the same `mldsa65` the root
   /// record and the keyfile use.
-  ///
-  /// Write-only: both root-link verifiers dispatch through
-  /// `PqSigningRoot.verifierFor` on the algorithm of the *advertised entry*
-  /// they are checking against, not on this field.
   static const String rootLinkAlgo = 'mldsa65';
 
-  /// Top-level field naming the advertised root entry that signed the link.
-  ///
-  /// It sits beside `alg` and never inside `payload`, which is the signed
-  /// region shared verbatim with the chain link ([linkPayload]), and it is
-  /// omitted rather than null or empty when the signer cannot name its own
-  /// key.
+  /// Top-level field of a root link naming the root key that signed it.
   static const String rootLinkKidField = 'kid';
 
-  /// The domain tag a root link's signature covers, ahead of the payload.
-  ///
-  /// A prefix on the signed bytes rather than a field in `payload`, which is
-  /// shared verbatim with the chain link ([linkPayload]), so a root link's
-  /// signature is bytes no other thing this build signs can produce. Frozen,
-  /// and pinned in `test/wire_literal_pins_test.dart`.
+  /// The domain tag a root link's signature covers, ahead of the payload, so a
+  /// root link's signature is bytes no other thing this build signs can
+  /// produce. Frozen, and pinned in `test/wire_literal_pins_test.dart`.
   static const String rootLinkDomain = 'at-root-link:';
 
-  /// The exact bytes a root link's signature covers, for the signer and both
-  /// verifiers alike.
+  /// The longest walk, in keys, before a chain reads [ChainVerdict.broken].
+  static const int maxDepth = 16;
+
+  /// The exact bytes a root link's signature covers.
   static Uint8List rootLinkSignableBytes(Map<String, Object?> payload) =>
       Uint8List.fromList(
           utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
 
-  /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-  /// signing advertisement lives, in the reserved namespace only that
-  /// enrollment may write.
+  /// `public:_apsk.<enrollmentId>.a.__e@<atSign>`.
   static String apskUri(String atSign, String enrollmentId) =>
       envelope_signature.apskUri(atSign, enrollmentId);
 
-  /// The payload a parent signs to vouch for [childEnrollmentId], binding the
-  /// enrollment id in alongside the key so the signature cannot be replayed
-  /// onto another enrollment's record.
-  ///
-  /// ⚠️ `apkamPublicKey` is a misleading name — the field carries the child's
-  /// whole `_apsk` record value — and it cannot be corrected, because it is a
-  /// member of the signed preimage and renaming it changes what verifies.
-  static Map<String, Object?> linkPayload({
-    required String childEnrollmentId,
-    required String childApkamPublicKey,
-  }) =>
+  /// The payload a link signs to vouch that [key] belongs to [enrollmentId].
+  static Map<String, Object?> linkPayload(
+          String enrollmentId, ApskSigningKey key) =>
       {
-        'v': 1,
-        'childEnrollmentId': childEnrollmentId,
-        'apkamPublicKey': childApkamPublicKey,
+        'v': linkVersion,
+        'enrollmentId': enrollmentId,
+        'kid': key.kid,
+        'alg': key.alg.name,
+        'pub': key.pub,
       };
 
-  /// Signs a link vouching for [childEnrollmentId], over the child's published
-  /// `_apsk` value rather than the enrollment request, for the approver to
-  /// convey.
-  ///
-  /// Returns null when that value is not readable, leaving the enrollment
-  /// unsigned rather than failing the approval.
-  Future<SignedEnvelope?> signLinkFor(
-    EnvelopeSigning signer,
-    String childEnrollmentId,
-  ) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final String childKey;
-    try {
-      final value = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, childEnrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-      childKey = value.value as String;
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('No readable _apsk for enrollment $childEnrollmentId, '
-          'so no chain link was signed for it; it stays unsigned: $e');
-      return null;
-    }
-
-    return await signer.wrapAndSign(
-      linkPayload(
-        childEnrollmentId: childEnrollmentId,
-        childApkamPublicKey: childKey,
-      ),
-      type: EnvelopeType.chainLink,
-    );
-  }
-
-  /// Signs a **root** link vouching for [childEnrollmentId], over the child's
-  /// key as the atServer published it, anchoring that enrollment to the
-  /// signing root in one hop for a fully privileged client to convey.
-  ///
-  /// Returns null when the child's `_apsk` is not readable; [rootKid] names
-  /// the advertised root entry [rootPrivate] is, and must name the key that
-  /// actually signed rather than whichever the record advertises.
-  Future<Map<String, Object?>?> signRootLinkFor(
-    String childEnrollmentId, {
+  /// A root link over [payload], signed with [rootPrivate], the root key
+  /// [rootKid] names.
+  static Future<Map<String, Object?>> signRootLink(
+    Map<String, Object?> payload, {
     required Uint8List rootPrivate,
-    String? rootKid,
+    required String rootKid,
   }) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final String childKey;
-    try {
-      final value = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, childEnrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-      childKey = value.value as String;
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning('No readable _apsk for enrollment $childEnrollmentId, '
-          'so no root link was signed for it; it stays unsigned: $e');
-      return null;
-    }
-
-    return _rootLinkOver(
-      linkPayload(
-        childEnrollmentId: childEnrollmentId,
-        childApkamPublicKey: childKey,
-      ),
-      rootPrivate,
-      kid: rootKid,
-    );
-  }
-
-  /// The published root-link shape over [payload].
-  static Future<Map<String, Object?>> _rootLinkOver(
-    Map<String, Object?> payload,
-    Uint8List rootPrivate, {
-    String? kid,
-  }) async {
-    final signature = await MlDsa65PureDartAlgo().signBytes(
-      rootLinkSignableBytes(payload),
-      secretKey: rootPrivate,
-    );
+    final signature = await MlDsa65PureDartAlgo()
+        .signBytes(rootLinkSignableBytes(payload), secretKey: rootPrivate);
     return {
-      'v': 1,
+      'v': linkVersion,
       'alg': rootLinkAlgo,
-      if (kid != null && kid.isNotEmpty) rootLinkKidField: kid,
+      rootLinkKidField: rootKid,
       'payload': payload,
       'signature': base64Encode(signature),
     };
   }
 
-  /// Stamps a conveyed [link] onto this enrollment's own `_apsk`, rewriting
-  /// the record with its value unchanged and the link added to
-  /// `appMetadata.additional`.
-  ///
-  /// Serialised against every other `_apsk` write this client makes, as
-  /// [serialiseApskWrite] describes.
-  Future<void> publishLink(String enrollmentId, SignedEnvelope link) =>
-      serialiseApskWrite(_atClient, () => _stampLink(enrollmentId, link));
+  /// A chain link over [payload], signed with [key] alone, which
+  /// [signerEnrollmentId]'s `_apsk` lists.
+  static Map<String, Object?> signChainLink(
+    Map<String, Object?> payload, {
+    required ApkamSigningKeys key,
+    required String signerEnrollmentId,
+  }) =>
+      signEnvelope(payload,
+              keys: [key],
+              type: EnvelopeType.chainLink,
+              enrollmentId: signerEnrollmentId)
+          .toJson();
 
-  /// [publishLink] for a caller already holding [serialiseApskWrite].
-  Future<void> _stampLink(String enrollmentId, SignedEnvelope link,
-      {AtValue? current}) async {
-    await _publishInto(enrollmentId, linkField, link.toJson(),
-        current: current);
-    _logger.info('Published chain link for $enrollmentId, signed by enrollment '
-        '${link.signerEnrollmentId}');
-  }
-
-  /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
-  /// leaving the record's value and any other field alone.
-  ///
-  /// A put replaces the record, so its current state is re-sent: [current]
-  /// when the caller has already read it, so its checks and this write come
-  /// from one snapshot, else a read here.
-  ///
-  /// The caller holds [serialiseApskWrite] from its read of [current] through
-  /// this write, or a republish landing in between is put back to the value
-  /// read.
-  Future<void> _publishInto(
-    String enrollmentId,
-    String field,
-    Map<String, Object?> value, {
-    AtValue? current,
-  }) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final uri = apskUri(atSign, enrollmentId);
-
-    current ??= await _atClient.get(
-      AtKey.fromString(uri),
-      getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-    );
-
-    final atKey = AtKey.fromString(uri);
-    atKey.metadata.appMetadata = AppMetadata(
-      providerId: CryptoRuntime.legacyProviderId,
-      additional: {
-        ...?current.metadata?.appMetadata?.additional,
-        field: value,
-      },
-    );
-
-    await _atClient.put(
-      atKey,
-      current.value,
-      putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
-    );
-  }
-
-  /// The `appMetadata` a republish of [enrollmentId]'s `_apsk` under [value]
-  /// sends over the [stored] one, or null when that needs no change.
-  ///
-  /// A link that does not vouch for [value] is removed, and a root link is
-  /// signed afresh over [value] when this client holds the signing root; an
-  /// enrollment with no root link gets none here. Sent explicitly because an
-  /// atServer keeps the stored `appMetadata` for an update carrying none, so a
-  /// link over the old key would ride the new one and read broken.
-  static Future<AppMetadata?> republishedAppMetadata(AtClient atClient,
-      String enrollmentId, AppMetadata? stored, String value) async {
-    final additional = stored?.additional;
-    if (additional == null) return null;
-    final chainLink = additional[linkField];
-    final rootLink = additional[rootLinkField];
-    final chainStale = chainLink != null &&
-        !_vouchesFor(_envelopePayload(chainLink), enrollmentId, value);
-    final rootStale = rootLink != null &&
-        !_vouchesFor(
-            rootLink is Map ? rootLink['payload'] : null, enrollmentId, value);
-    if (!chainStale && !rootStale) return null;
-
-    final kept = Map<String, dynamic>.of(additional);
-    if (chainStale) kept.remove(linkField);
-    if (rootStale) {
-      kept.remove(rootLinkField);
-      final signer = await PqSigningRoot(atClient, keysIo: atClient.atKeysIo)
-          .signingKey(atClient.getCurrentAtSign()!);
-      if (signer != null) {
-        kept[rootLinkField] = await _rootLinkOver(
-          linkPayload(
-              childEnrollmentId: enrollmentId, childApkamPublicKey: value),
-          signer.private,
-          kid: signer.kid,
-        );
-      }
-    }
-    return AppMetadata(
-        providerId: stored!.providerId, additional: kept.isEmpty ? null : kept);
-  }
-
-  /// Whether a link [payload] vouches for [value] as [enrollmentId]'s key.
-  static bool _vouchesFor(Object? payload, String enrollmentId, String value) =>
-      payload is Map &&
-      payload['childEnrollmentId'] == enrollmentId &&
-      payload['apkamPublicKey'] == value;
-
-  /// The payload of a chain link as stored, or null when it does not parse.
-  static Object? _envelopePayload(Object? link) {
-    if (link is! Map) return null;
+  /// The payload [link] signs, or null when it carries none that reads.
+  static Map<String, Object?>? payloadOf(Map<String, Object?> link) {
+    final payload = link['payload'];
+    if (payload is Map) return payload.cast<String, Object?>();
     try {
-      return SignedEnvelope.fromJson(link).payload;
-    } on Exception {
+      final decoded = SignedEnvelope.fromJson(link).payload;
+      return decoded is Map ? decoded.cast<String, Object?>() : null;
+    } on AtSigningVerificationException {
       return null;
     }
   }
 
-  /// The chain link an enrollment has published, or null if it has none.
-  ///
-  /// An absent link is ordinary, so this reports absence rather than failing.
-  Future<SignedEnvelope?> readLink(
-    String enrollmentId,
-  ) async {
-    final field = await _readField(enrollmentId, linkField);
-    return field == null ? null : SignedEnvelope.fromJson(field);
-  }
+  /// Whether [payload] names [key] as one of [enrollmentId]'s.
+  static bool names(Map<String, Object?>? payload, String enrollmentId,
+          ApskSigningKey key) =>
+      payload != null &&
+      payload['v'] == linkVersion &&
+      payload['enrollmentId'] == enrollmentId &&
+      payload['kid'] == key.kid &&
+      payload['alg'] == key.alg.name &&
+      payload['pub'] == key.pub;
 
-  Future<Map<String, Object?>?> _readField(
-    String enrollmentId,
-    String field,
-  ) async {
-    final atSign = _atClient.getCurrentAtSign()!;
+  String get _atSign => _atClient.getCurrentAtSign()!;
+
+  /// [enrollmentId]'s `_apsk` record, or null when the atServer holds none at
+  /// `.a.__e`.
+  Future<ApskRecord?> readRecord(String enrollmentId) async {
+    final AtValue value;
     try {
-      final value = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, enrollmentId)),
+      value = await _atClient.get(
+        AtKey.fromString(apskUri(_atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
-      return _fieldFrom(value, field);
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.info('No _apsk readable for enrollment $enrollmentId: $e');
+    } on AtKeyNotFoundException {
       return null;
+    } on KeyNotFoundException {
+      return null;
+    }
+    final text = value.value;
+    if (text is! String) return null;
+    return ApskRecord.parse(enrollmentId, text, value.metadata?.appMetadata);
+  }
+
+  /// Walks from [key], one of [record]'s keys, up to the signing root.
+  ///
+  /// Each link is checked against the key it is stored on, `kid`, `alg` and
+  /// `pub` alike. A cycle, or a chain longer than [maxDepth] keys, reads
+  /// [ChainVerdict.broken].
+  Future<ChainResult> walkFrom(
+      EnvelopeSigning verifier, ApskRecord record, ApskSigningKey key) async {
+    final path = <String>[];
+    final walked = <String>[];
+    List<ApskSigningKey>? roots;
+    var current = record;
+    var currentKey = key;
+
+    ChainResult result(ChainVerdict verdict, String? reason) =>
+        ChainResult(verdict, List.of(path), reason,
+            kid: key.kid, keysWalked: List.of(walked));
+
+    while (true) {
+      final at = '${current.enrollmentId}/${currentKey.kid}';
+      final where = 'key ${currentKey.kid} of enrollment '
+          '${current.enrollmentId}';
+      if (walked.contains(at)) {
+        return result(ChainVerdict.broken,
+            'the chain revisits $where, so it does not terminate');
+      }
+      if (walked.length >= maxDepth) {
+        return result(ChainVerdict.broken,
+            'the chain from key ${key.kid} is longer than $maxDepth keys');
+      }
+      walked.add(at);
+      if (path.lastOrNull != current.enrollmentId) {
+        path.add(current.enrollmentId);
+      }
+
+      final link = current.links[currentKey.kid];
+      if (link == null) {
+        return result(
+            walked.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
+            '$where carries no link, so the walk stops below the root');
+      }
+      if (!names(payloadOf(link), current.enrollmentId, currentKey)) {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where does not name that key: its payload must '
+            'carry this enrollment and the kid, alg and pub the record lists');
+      }
+
+      final rootShaped = link['payload'] is Map;
+      SignedEnvelope? envelope;
+      if (!rootShaped) {
+        try {
+          envelope = SignedEnvelope.fromJson(link);
+        } on AtSigningVerificationException catch (e) {
+          return result(
+              ChainVerdict.broken, 'the link on $where is not a link: $e');
+        }
+        if (envelope.signatures.length != 1) {
+          return result(
+              ChainVerdict.broken,
+              'the link on $where carries ${envelope.signatures.length} '
+              'signatures, and a link carries the one its signer made');
+        }
+      }
+      final signerKid =
+          rootShaped ? link[rootLinkKidField] : envelope!.signature.kid;
+      if (signerKid is! String || signerKid.isEmpty) {
+        return result(
+            ChainVerdict.broken, 'the link on $where names no signer key');
+      }
+
+      roots ??= await _rootCandidates();
+      final root = roots.where((r) => r.kid == signerKid).firstOrNull;
+      if (root != null) {
+        if (!rootShaped) {
+          return result(
+              ChainVerdict.broken,
+              'the link on $where names root key $signerKid but is not a '
+              'root link, so it cannot be checked against that key');
+        }
+        return await _rootLinkVerifies(link, root)
+            ? result(ChainVerdict.anchored, null)
+            : result(
+                ChainVerdict.broken,
+                'the link on $where does not verify against root key '
+                '$signerKid');
+      }
+      if (rootShaped) {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where names key $signerKid, which is no key of the '
+            'signing root, and names no signer enrollment');
+      }
+
+      final signerId = envelope!.signerEnrollmentId;
+      if (signerId == null || signerId.isEmpty) {
+        return result(ChainVerdict.broken,
+            'the link on $where names no signer enrollment');
+      }
+      try {
+        await verifier.verifyEnvelopeSignature(envelope,
+            signerAtSign: _atSign,
+            signerEnrollmentId: signerId,
+            expecting: EnvelopeType.chainLink);
+      } on WithdrawnSigningKeyException catch (e) {
+        return result(_verdictFor(e.location),
+            'the link on $where was signed by enrollment $signerId: ${e.message}');
+      } on AtSigningVerificationException catch (e) {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where does not verify against enrollment '
+            '$signerId: ${e.message}');
+      } on AtKeyNotFoundException {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where names enrollment $signerId, which publishes no '
+            '_apsk');
+      } on KeyNotFoundException {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where names enrollment $signerId, which publishes no '
+            '_apsk');
+      }
+
+      final signerRecord = await readRecord(signerId);
+      final signerKey = signerRecord?.keys
+          .where((k) =>
+              k.kid == signerKid && signsUnder(k.alg, envelope!.signature.alg))
+          .firstOrNull;
+      if (signerRecord == null || signerKey == null) {
+        return result(
+            ChainVerdict.broken,
+            'the link on $where names key $signerKid of enrollment $signerId, '
+            'which that enrollment does not list');
+      }
+      current = signerRecord;
+      currentKey = signerKey;
     }
   }
 
-  /// The link under [field] in an already-read `_apsk` [value], or null.
-  static Map<String, Object?>? _fieldFrom(AtValue value, String field) {
-    final link = value.metadata?.appMetadata?.additional?[field];
-    if (link is Map) return link.cast<String, Object?>();
+  /// Whether [enrollmentId] is anchored: every key it signs with walks to the
+  /// root.
+  ///
+  /// The keys it signs with are its active keys that carry a link; with none,
+  /// it reads [ChainVerdict.unsigned]. Otherwise the verdict is
+  /// [ChainVerdict.anchored], or the first failing key's, naming that key.
+  Future<ChainResult> verifyChain(
+      EnvelopeSigning verifier, String enrollmentId) async {
+    final record = await readRecord(enrollmentId);
+    if (record == null) {
+      final location =
+          await withdrawnApskLocation(_atClient, _atSign, enrollmentId);
+      if (location != null) {
+        return ChainResult(
+            _verdictFor(location),
+            [enrollmentId],
+            'enrollment $enrollmentId\'s keys are no longer published: the '
+            'atServer moved its _apsk to .$location');
+      }
+      return ChainResult(ChainVerdict.unsigned, [enrollmentId],
+          'enrollment $enrollmentId publishes no _apsk');
+    }
+    final signing = [
+      for (final key in record.keys)
+        if (key.offeredForNewOperations && record.links.containsKey(key.kid))
+          key
+    ];
+    if (signing.isEmpty) {
+      return ChainResult(ChainVerdict.unsigned, [enrollmentId],
+          'enrollment $enrollmentId has no active key that carries a link');
+    }
+    for (final key in signing) {
+      final walk = await walkFrom(verifier, record, key);
+      if (walk.verdict != ChainVerdict.anchored) return walk;
+    }
+    return ChainResult(ChainVerdict.anchored, [enrollmentId], null);
+  }
+
+  /// What this client vouches with: the signing root when it holds the root's
+  /// private key and [isFullyPrivileged] says so, else the strongest of its
+  /// own active client data signing keys that walks to the root, else null.
+  ///
+  /// [signer] is this client's own: its keyfile supplies the keys, and an
+  /// authentication key is never one of them. [alsoVouchWith] are keys the
+  /// caller holds that may vouch although the record already lists them as
+  /// retired: a key handing its link on to the key replacing it. The root's
+  /// private key is read from [keysIo], else from the client's own.
+  Future<LinkVoucher?> voucher(EnvelopeSigning signer,
+      {required Future<bool> Function() isFullyPrivileged,
+      List<ApkamSigningKeys> alsoVouchWith = const [],
+      AtKeysIo? keysIo}) async {
+    final root =
+        await PqSigningRoot(_atClient, keysIo: keysIo ?? _atClient.atKeysIo)
+            .signingKey(_atSign);
+    if (root != null) {
+      final kid = root.kid;
+      if (kid == null) {
+        _logger.warning('This client holds the signing root private but no '
+            'public half beside it, so it cannot name the root key a root link '
+            'is signed with, and signs none');
+      } else if (await isFullyPrivileged()) {
+        return LinkVoucher.root(private: root.private, kid: kid);
+      } else {
+        _logger.warning('This enrollment holds the signing root private but is '
+            'not fully privileged, so it signs no root link with it');
+      }
+    }
+
+    final ownId = _atClient.enrollmentId;
+    if (ownId == null) return null;
+    final own = await readRecord(ownId);
+    if (own == null) return null;
+    final handingOn = {for (final key in alsoVouchWith) key.publicKey};
+    for (final held in [...await signer.heldSigningKeys, ...alsoVouchWith]) {
+      final kid = publicKeyKidOfBase64(held.publicKey);
+      final listed = own.keys
+          .where((k) =>
+              k.kid == kid &&
+              k.pub == held.publicKey &&
+              k.alg == held.algorithm &&
+              (k.offeredForNewOperations || handingOn.contains(k.pub)))
+          .firstOrNull;
+      if (listed == null || !own.links.containsKey(kid)) continue;
+      final walk = await walkFrom(signer, own, listed);
+      if (walk.verdict == ChainVerdict.anchored) {
+        return LinkVoucher.chain(
+            key: held, enrollmentId: ownId, keysWalked: walk.keysWalked);
+      }
+    }
     return null;
   }
 
-  /// Signs and publishes this enrollment's **root** link if it is entitled to
-  /// one and does not already have it, returning whether it published.
+  /// Reads this enrollment's own `_apsk` and records which of its keys have a
+  /// link, for content signing to prefer; returns the record, or null when it
+  /// has none.
+  Future<ApskRecord?> refreshOwnLinks() async {
+    final id = _atClient.enrollmentId;
+    if (id == null) return null;
+    final own = await readRecord(id);
+    rememberOwnLinkedKids(_atClient, {...?own?.links.keys});
+    return own;
+  }
+
+  /// Links this enrollment's own keys with what this client vouches with,
+  /// as [linkKeysOf] decides, and returns the `kid`s linked.
   ///
-  /// [isFullyPrivileged] is required rather than inferred from holding the
-  /// root private, so the invariant that only a fully privileged enrollment
-  /// carries a root link holds even if the two ever diverge.
-  Future<bool> publishOwnRootLink({
-    required Future<bool> Function() isFullyPrivileged,
-    AtKeysIo? keysIo,
+  /// [signer] is this client's own; [alsoVouchWith] and [keysIo] are as
+  /// [voucher] takes them.
+  Future<List<String>> linkOwnKeys(EnvelopeSigning signer,
+      {required Future<bool> Function() isFullyPrivileged,
+      List<ApkamSigningKeys> alsoVouchWith = const [],
+      AtKeysIo? keysIo}) async {
+    final own = await refreshOwnLinks();
+    if (own == null) return const [];
+    final by = await voucher(signer,
+        isFullyPrivileged: isFullyPrivileged,
+        alsoVouchWith: alsoVouchWith,
+        keysIo: keysIo);
+    if (by == null) return const [];
+    final linked = await linkKeysOf(own, by,
+        authenticationKey: (await signer.authenticationSigningKey)?.publicKey,
+        verifier: signer);
+    if (linked.isNotEmpty) await refreshOwnLinks();
+    return linked;
+  }
+
+  /// Links each of [target]'s keys that [voucher] should, through one
+  /// `enroll:link`, and returns the `kid`s the atServer reports linked.
+  ///
+  /// A key equal to [authenticationKey], the target's APKAM authentication
+  /// key, or not spelt in padded standard base64, takes no link. Of the rest,
+  /// a key with no link gets one; a root voucher replaces anything but a root
+  /// link that passes its check; a chain voucher replaces only a chain link
+  /// that does not walk to the root, never a root link, and links no key its
+  /// own key's chain passes through. Each link states the one it found, so a
+  /// refusal means another voucher wrote first: the record is read again and
+  /// the call made once more on what it now holds.
+  Future<List<String>> linkKeysOf(
+    ApskRecord target,
+    LinkVoucher voucher, {
+    required String? authenticationKey,
+    required EnvelopeSigning verifier,
   }) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final enrollmentId =
-        AtClientSecretSharing.forClient(_atClient).enrollmentId;
-
-    final signer =
-        await PqSigningRoot(_atClient, keysIo: keysIo).signingKey(atSign);
-    if (signer == null) return false;
-
-    if (!await isFullyPrivileged()) {
-      _logger.warning('This enrollment holds the signing root private but is '
-          'not fully privileged, so it is not anchoring itself. The two should '
-          'never diverge; that they have is worth investigating.');
-      return false;
-    }
-
-    return serialiseApskWrite(_atClient, () async {
-      final AtValue current;
+    final signed = <String, Map<String, Object?>>{};
+    var record = target;
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      final writes = <String, LinkWrite>{};
+      for (final key in record.keys) {
+        if (!_takesLink(record, key, authenticationKey, voucher)) continue;
+        final found = record.links[key.kid];
+        if (found != null &&
+            !await _replaces(voucher, record, key, found, verifier)) {
+          continue;
+        }
+        final link = signed[key.kid] ??=
+            await voucher.sign(linkPayload(record.enrollmentId, key));
+        writes[key.kid] = (link: link, expect: found);
+      }
+      if (writes.isEmpty) return const [];
       try {
-        current = await _atClient.get(
-          AtKey.fromString(apskUri(atSign, enrollmentId)),
-          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-        );
-      } catch (e) {
+        return await writeLinks(record.enrollmentId, writes);
+      } on Exception catch (e) {
         if (e is StoppedException) rethrow;
-        _logger.info('No _apsk published for $enrollmentId yet, so there is '
-            'nothing to anchor: $e');
-        return false;
+        final reread = await readRecord(record.enrollmentId);
+        final raced = reread != null &&
+            writes.entries.any((w) => !const DeepCollectionEquality()
+                .equals(reread.links[w.key], w.value.expect));
+        if (!raced || attempt == 2) {
+          _logger.warning('enroll:link for enrollment ${record.enrollmentId} '
+              'was refused, so keys ${writes.keys.join(', ')} have no new '
+              'link: $e');
+          return const [];
+        }
+        record = reread;
       }
-
-      final existing = _fieldFrom(current, rootLinkField);
-      if (existing != null &&
-          await _rootLinkStillHolds(atSign, enrollmentId, existing, current)) {
-        return false;
-      }
-      if (existing != null) {
-        _logger.warning('The root link on $enrollmentId no longer holds, so '
-            'this enrollment is re-anchoring itself');
-      }
-
-      final link = await _rootLinkOver(
-        linkPayload(
-          childEnrollmentId: enrollmentId,
-          childApkamPublicKey: current.value as String,
-        ),
-        signer.private,
-        kid: signer.kid,
-      );
-
-      await _publishInto(enrollmentId, rootLinkField, link, current: current);
-      _logger.info('Anchored $enrollmentId to the signing root');
-      return true;
-    });
+    }
+    return const [];
   }
 
-  /// Whether the root link already on this enrollment's record is one a
-  /// verifier can still follow: it describes the key [current] publishes, and
-  /// its signature checks out under a root the atSign still advertises.
+  /// Sends one `enroll:link` for [enrollmentId] carrying [links], and returns
+  /// the `kid`s the atServer reports linked.
   ///
-  /// Only a definite failure answers false; an unreadable root record answers
-  /// true, since that is a fact about the read rather than about the link.
-  Future<bool> _rootLinkStillHolds(
-    String atSign,
-    String enrollmentId,
-    Map<String, Object?> link,
-    AtValue current,
-  ) async {
-    final payload = link['payload'];
-    if (payload is! Map ||
-        payload['childEnrollmentId'] != enrollmentId ||
-        payload['apkamPublicKey'] != current.value) {
+  /// Throws when the atServer refuses the call, and when its answer carries no
+  /// `linked` list: only a reply naming what it linked counts as success.
+  Future<List<String>> writeLinks(
+      String enrollmentId, Map<String, LinkWrite> links) async {
+    final builder = EnrollVerbBuilder()
+      // ignore: experimental_member_use
+      ..operation = EnrollOperationEnum.link
+      ..enrollmentId = enrollmentId
+      // ignore: experimental_member_use
+      ..links = {
+        for (final entry in links.entries)
+          entry.key: {'link': entry.value.link, 'expect': entry.value.expect}
+      };
+    final response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
+    if (!response.startsWith('data:')) {
+      throw AtEnrollmentException(
+          'enroll:link for enrollment $enrollmentId was refused: $response');
+    }
+    final decoded = jsonDecode(response.substring('data:'.length).trim());
+    final linked = decoded is Map ? decoded['linked'] : null;
+    if (linked is! List) {
+      throw AtEnrollmentException('enroll:link for enrollment $enrollmentId '
+          'was answered without saying what it linked: $response');
+    }
+    return [
+      for (final kid in linked)
+        if (kid is String) kid
+    ];
+  }
+
+  /// Whether [key] on [record] is one [voucher] may link at all.
+  bool _takesLink(ApskRecord record, ApskSigningKey key,
+      String? authenticationKey, LinkVoucher voucher) {
+    if (!_isCanonical(key.pub)) return false;
+    if (authenticationKey != null && sameKey(key.pub, authenticationKey)) {
       return false;
     }
+    return !voucher.keysWalked.contains('${record.enrollmentId}/${key.kid}');
+  }
 
-    final candidates = await _rootCandidates(atSign);
-    if (candidates.isEmpty) return true;
-
-    try {
-      return await _verifiesUnderAny(
-        rootLinkSignableBytes(payload.cast<String, Object?>()),
-        link['signature'] as String,
-        _narrowedTo(link, candidates),
-      );
-    } catch (e) {
-      _logger.info('Could not check the root link already on $enrollmentId, so '
-          'leaving it alone: $e');
-      return true;
+  /// Whether [voucher]'s link should replace [found], the link on [key].
+  Future<bool> _replaces(
+      LinkVoucher voucher,
+      ApskRecord record,
+      ApskSigningKey key,
+      Map<String, Object?> found,
+      EnvelopeSigning verifier) async {
+    final foundIsRoot = found['payload'] is Map;
+    if (voucher.isRoot) {
+      if (!foundIsRoot) return true;
+      final walk = await walkFrom(verifier, record, key);
+      return walk.verdict != ChainVerdict.anchored;
     }
+    if (foundIsRoot) return false;
+    final walk = await walkFrom(verifier, record, key);
+    return walk.verdict != ChainVerdict.anchored;
   }
 
-  /// The root link an enrollment has published, or null if it has none.
-  Future<Map<String, Object?>?> readRootLink(
-    String enrollmentId,
-  ) async =>
-      _readField(enrollmentId, rootLinkField);
-
-  /// Whether [secretName] names a conveyed link of either flavour.
-  static bool isLinkSecret(String secretName) =>
-      secretName == linkSecretName || secretName == rootLinkSecretName;
-
-  /// Stamps a link conveyed to this enrollment as it arrives.
-  ///
-  /// Throws when the link may yet be stamped but cannot be now, such as when
-  /// this enrollment's `_apsk` cannot be read, so the envelope carrying it is
-  /// kept and handled again at the next start. A link that is stamped, or
-  /// never can be, returns normally and its envelope goes.
-  Future<void> stampConveyedLink(Secret secret) async {
-    final Map<String, Object?> link;
-    try {
-      link = decodeConveyedLink(secret.value);
-    } catch (e) {
-      _logger.warning('Conveyed ${secret.name} is malformed; not publishing '
-          'it: $e');
-      return;
+  /// Whether [a] and [b] are one public key: equal bytes when both decode as
+  /// base64, in either alphabet, else equal text once trimmed.
+  static bool sameKey(String a, String b) {
+    final ab = _decoded(a), bb = _decoded(b);
+    if (ab != null && bb != null) {
+      return const DeepCollectionEquality().equals(ab, bb);
     }
-    final outcome = switch (secret.name) {
-      linkSecretName => await _stampChainLink(link),
-      rootLinkSecretName => await _stampRootLink(link),
-      _ => _Stamp.settled,
-    };
-    if (outcome == _Stamp.retry) {
-      throw AtException('The conveyed ${secret.name} cannot be stamped yet, so '
-          'its envelope is kept for the next start');
-    }
+    return a.trim() == b.trim();
   }
 
-  /// Publishes the links this enrollment was conveyed — a root link, a chain
-  /// link, or both — if any is waiting in the secret store and its key does
-  /// not already carry it, returning whether anything was published.
-  ///
-  /// A link arriving after this runs is stamped as it arrives, by
-  /// [stampConveyedLink].
-  Future<bool> publishPendingLink() async {
-    final rootPublished =
-        await _publishHeld(rootLinkSecretName, _stampRootLink);
-    final chainPublished = await _publishHeld(linkSecretName, _stampChainLink);
-    return rootPublished || chainPublished;
-  }
-
-  Future<bool> _publishHeld(String secretName,
-      Future<_Stamp> Function(Map<String, Object?> link) stamp) async {
-    final link = _heldLink(secretName);
-    return link != null && await stamp(link) == _Stamp.published;
-  }
-
-  /// The link the secret store holds under [secretName], or null.
-  Map<String, Object?>? _heldLink(String secretName) {
-    final secret = AtClientSecretSharing.forClient(_atClient)
-        .secretStore
-        .listSecrets()
-        .where((s) => s.name == secretName)
-        .firstOrNull;
-    if (secret == null) return null;
+  static List<int>? _decoded(String key) {
     try {
-      return decodeConveyedLink(secret.value);
-    } catch (e) {
-      _logger.warning('Conveyed $secretName is malformed; not publishing: $e');
+      return base64Decode(base64
+          .normalize(key.trim().replaceAll('-', '+').replaceAll('_', '/')));
+    } on FormatException {
       return null;
     }
   }
 
-  /// Stamps a conveyed **root** link, after verifying it the way a downstream
-  /// verifier will.
-  ///
-  /// The conveyance channel authenticates the *sender*, and the sender is not
-  /// the root, so the link is verified against the published signing root
-  /// before it is stamped, plus the same two checks every link gets: it names
-  /// **this** enrollment, and it vouches for the key actually published.
-  Future<_Stamp> _stampRootLink(Map<String, Object?> link) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final enrollmentId =
-        AtClientSecretSharing.forClient(_atClient).enrollmentId;
-
-    final payload = link['payload'];
-    if (payload is! Map) {
-      _logger.warning('Conveyed root link is malformed; not publishing it');
-      return _Stamp.settled;
-    }
-
-    if (payload['childEnrollmentId'] != enrollmentId) {
-      _logger.warning('Conveyed root link vouches for enrollment '
-          '${payload['childEnrollmentId']}, not for $enrollmentId; not '
-          'publishing it here');
-      return _Stamp.settled;
-    }
-
-    final signature = link['signature'];
-    if (signature is! String) {
-      _logger.warning('Conveyed root link carries no signature; not '
-          'publishing it');
-      return _Stamp.settled;
-    }
-
-    final candidates = await _rootCandidates(atSign);
-    if (candidates.isEmpty) {
-      _logger.warning('A root link was conveyed but $atSign publishes no '
-          'signing root to verify it against; not publishing an unverifiable '
-          'link');
-      return _Stamp.retry;
-    }
-    final bool verifies;
+  static bool _isCanonical(String pub) {
     try {
-      // NOTE: the candidates are already fetched, so nothing here reaches the
-      // network and a throw means the link itself cannot be read.
-      verifies = await _verifiesUnderAny(
-        rootLinkSignableBytes(payload.cast<String, Object?>()),
-        signature,
-        _narrowedTo(link, candidates),
-      );
-    } catch (e) {
-      _logger.warning('Conveyed root link cannot be checked; not '
-          'publishing it: $e');
-      return _Stamp.settled;
-    }
-    if (!verifies) {
-      _logger.warning('Conveyed root link does not verify against the '
-          "atSign's signing root, so publishing it would advertise a link no "
-          'verifier can follow');
-      return _Stamp.settled;
-    }
-
-    return serialiseApskWrite(_atClient, () async {
-      final AtValue current;
-      try {
-        current = await _atClient.get(
-          AtKey.fromString(apskUri(atSign, enrollmentId)),
-          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-        );
-      } catch (e) {
-        if (e is StoppedException) rethrow;
-        _logger.warning('This enrollment has no readable _apsk to publish a '
-            'root link onto: $e');
-        return _Stamp.retry;
-      }
-
-      if (payload['apkamPublicKey'] != current.value) {
-        _logger.warning('Conveyed root link vouches for a key that is not the '
-            'one published for $enrollmentId; not publishing it');
-        return _Stamp.settled;
-      }
-
-      final existing = _fieldFrom(current, rootLinkField);
-      if (existing != null && _sameLink(existing, link)) {
-        return _Stamp.settled;
-      }
-
-      await _publishInto(enrollmentId, rootLinkField, link, current: current);
-      _logger.info('Anchored $enrollmentId to the signing root via a conveyed '
-          'root link');
-      return _Stamp.published;
-    });
-  }
-
-  /// Stamps a conveyed chain link.
-  ///
-  /// Refused unless all three hold: the link names **this** enrollment, it
-  /// verifies against the parent it names, and it vouches for the key actually
-  /// published.
-  Future<_Stamp> _stampChainLink(Map<String, Object?> json) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final sharing = AtClientSecretSharing.forClient(_atClient);
-    final enrollmentId = sharing.enrollmentId;
-
-    final SignedEnvelope link;
-    final Map payload;
-    try {
-      link = SignedEnvelope.fromJson(json);
-      payload = link.payload as Map;
-    } catch (e) {
-      _logger.warning('Conveyed chain link is malformed; not publishing: $e');
-      return _Stamp.settled;
-    }
-
-    if (payload['childEnrollmentId'] != enrollmentId) {
-      _logger.warning('Conveyed chain link vouches for enrollment '
-          '${payload['childEnrollmentId']}, not for $enrollmentId; not '
-          'publishing it here');
-      return _Stamp.settled;
-    }
-
-    try {
-      await sharing.verifyEnvelopeSignature(link,
-          signerAtSign: atSign, expecting: EnvelopeType.chainLink);
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      // NOTE: a signature that fails, or a signer whose key is withdrawn or
-      // absent from its atServer, never verifies; anything else may be the
-      // network, and is tried again.
-      final never = e is AtSigningVerificationException ||
-          e is AtKeyNotFoundException ||
-          e is KeyNotFoundException;
-      if (never) {
-        _logger.warning('Conveyed chain link does not verify against the '
-            'enrollment it names as signer, so publishing it would advertise '
-            'a link no verifier can follow: $e');
-        return _Stamp.settled;
-      }
-      _logger.warning('Conveyed chain link could not be checked now; it is '
-          'tried again: $e');
-      return _Stamp.retry;
-    }
-
-    return serialiseApskWrite(_atClient, () async {
-      final AtValue current;
-      try {
-        current = await _atClient.get(
-          AtKey.fromString(apskUri(atSign, enrollmentId)),
-          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-        );
-      } catch (e) {
-        if (e is StoppedException) rethrow;
-        _logger.warning('This enrollment has no readable _apsk to publish a '
-            'chain link onto: $e');
-        return _Stamp.retry;
-      }
-
-      if (payload['apkamPublicKey'] != current.value) {
-        _logger.warning('Conveyed chain link vouches for a key that is not the '
-            'one published for $enrollmentId; not publishing it');
-        return _Stamp.settled;
-      }
-
-      final existing = _fieldFrom(current, linkField);
-      if (existing != null && _sameLink(existing, link.toJson())) {
-        return _Stamp.settled;
-      }
-
-      await _stampLink(enrollmentId, link, current: current);
-      return _Stamp.published;
-    });
-  }
-
-  /// Whether [a] and [b] are the same link, compared whole.
-  ///
-  /// Whole rather than by a signature member, because this serves both link
-  /// flavours: a chain link's signature lives inside its `signatures` array,
-  /// where a top-level `['signature']` comparison reads null on both sides and
-  /// silently makes every existing link match every new one.
-  static bool _sameLink(Map<String, Object?> a, Map<String, Object?> b) =>
-      const DeepCollectionEquality().equals(a, b);
-
-  /// Walks upward from [enrollmentId] — stopping at a root link verified
-  /// against `public:pq_signing_root@<atSign>`, else following chain links
-  /// from parent to parent — and reports how far the chain holds.
-  ///
-  /// A cycle, or a chain longer than [maxDepth], ends the walk as
-  /// [ChainVerdict.broken] rather than as merely unanchored.
-  Future<ChainResult> verifyChain(
-    EnvelopeSigning verifier,
-    String enrollmentId, {
-    int maxDepth = 16,
-  }) async {
-    final atSign = _atClient.getCurrentAtSign()!;
-    final path = <String>[];
-    final seen = <String>{};
-    String current = enrollmentId;
-
-    while (true) {
-      if (!seen.add(current)) {
-        return ChainResult(ChainVerdict.broken, path,
-            'the chain revisits enrollment $current, so it does not terminate');
-      }
-      path.add(current);
-
-      final rootLink = await readRootLink(current);
-      if (rootLink != null) {
-        return await _checkRootLink(atSign, current, rootLink, path);
-      }
-
-      final link = await readLink(current);
-      if (link == null) {
-        if (await _publishedKey(atSign, current) == null) {
-          final location =
-              await withdrawnApskLocation(_atClient, atSign, current);
-          if (location != null) {
-            return ChainResult(
-                _verdictFor(location),
-                path,
-                'enrollment $current\'s key is no longer published: the '
-                'atServer moved its _apsk to .$location');
-          }
-        }
-        return ChainResult(
-            path.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
-            path,
-            'enrollment $current publishes no link, so the walk stops below '
-            'the root');
-      }
-
-      final String? failure;
-      try {
-        failure = await _checkChainLink(verifier, atSign, current, link);
-      } on WithdrawnSigningKeyException catch (e) {
-        return ChainResult(
-            _verdictFor(e.location),
-            path,
-            'the link on $current was signed by ${link.signerEnrollmentId}: '
-            '${e.message}');
-      }
-      if (failure != null) {
-        return ChainResult(ChainVerdict.broken, path, failure);
-      }
-
-      final parent = link.signerEnrollmentId;
-      if (parent == null || parent.isEmpty) {
-        return ChainResult(
-            ChainVerdict.broken,
-            path,
-            'enrollment $current names no signer, so there is nowhere to '
-            'walk to');
-      }
-      if (path.length >= maxDepth) {
-        return ChainResult(ChainVerdict.broken, path,
-            'the chain from $enrollmentId is longer than $maxDepth hops');
-      }
-      current = parent;
+      return pub.isNotEmpty && base64Encode(base64Decode(pub)) == pub;
+    } on FormatException {
+      return false;
     }
   }
 
@@ -845,164 +741,28 @@ class PqSigningChain {
           ? ChainVerdict.revoked
           : ChainVerdict.deleted;
 
-  /// Null when [link] is sound for [enrollmentId]; otherwise why it is not.
-  Future<String?> _checkChainLink(
-    EnvelopeSigning verifier,
-    String atSign,
-    String enrollmentId,
-    SignedEnvelope link,
-  ) async {
-    try {
-      await verifier.verifyEnvelopeSignature(link,
-          signerAtSign: atSign, expecting: EnvelopeType.chainLink);
-    } catch (e) {
-      if (e is StoppedException || e is WithdrawnSigningKeyException) rethrow;
-      return 'the link on $enrollmentId does not verify against the '
-          'enrollment it names as signer: $e';
-    }
-    final payload = link.payload;
-    if (payload is! Map) return 'the link on $enrollmentId has no payload';
-    if (payload['childEnrollmentId'] != enrollmentId) {
-      return 'the link on $enrollmentId vouches for '
-          '${payload['childEnrollmentId']} instead';
-    }
-    final published = await _publishedKey(atSign, enrollmentId);
-    if (published != payload['apkamPublicKey']) {
-      return 'the link on $enrollmentId vouches for a key other than the one '
-          'published for it';
-    }
-    return null;
-  }
+  /// Every root key the record advertises that this build can check a
+  /// signature with, active first, then retired, since a root link is checked
+  /// long after it was signed.
+  Future<List<ApskSigningKey>> _rootCandidates() async =>
+      (await PqSigningRoot.publishedRoots(_atClient, _atSign))
+          .where((r) => r.vouchesForPastOperations)
+          .toList();
 
-  Future<ChainResult> _checkRootLink(
-    String atSign,
-    String enrollmentId,
-    Map<String, Object?> link,
-    List<String> path,
-  ) async {
-    final candidates = await _rootCandidates(atSign);
-    if (candidates.isEmpty) {
-      return ChainResult(
-          ChainVerdict.broken,
-          path,
-          'enrollment $enrollmentId claims a root link but $atSign publishes '
-          'no signing root to check it against');
-    }
+  /// Whether root link [link] verifies against [root].
+  static Future<bool> _rootLinkVerifies(
+      Map<String, Object?> link, ApskSigningKey root) async {
     final payload = link['payload'];
-    if (payload is! Map ||
-        payload['childEnrollmentId'] != enrollmentId ||
-        payload['apkamPublicKey'] !=
-            await _publishedKey(atSign, enrollmentId)) {
-      return ChainResult(
-          ChainVerdict.broken,
-          path,
-          'the root link on $enrollmentId does not describe that '
-          "enrollment's published key");
-    }
-    final bool ok;
+    final signature = link['signature'];
+    final algo = PqSigningRoot.verifierFor(root.alg);
+    if (payload is! Map || signature is! String || algo == null) return false;
     try {
-      ok = await _verifiesUnderAny(
-        rootLinkSignableBytes(payload.cast<String, Object?>()),
-        link['signature'] as String,
-        _narrowedTo(link, candidates),
-      );
-    } catch (e) {
-      return ChainResult(ChainVerdict.broken, path,
-          'the root link on $enrollmentId could not be checked: $e');
-    }
-    return ok
-        ? ChainResult(ChainVerdict.anchored, path, null)
-        : ChainResult(
-            ChainVerdict.broken,
-            path,
-            'the root link on $enrollmentId does not verify against the '
-            "atSign's signing root");
-  }
-
-  Future<String?> _publishedKey(String atSign, String enrollmentId) async {
-    try {
-      final value = await _atClient.get(
-        AtKey.fromString(apskUri(atSign, enrollmentId)),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-      return value.value as String?;
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      return null;
+      return await algo.verifyBytes(
+          rootLinkSignableBytes(payload.cast<String, Object?>()),
+          signature: base64Decode(signature),
+          publicKey: base64Decode(root.pub));
+    } on FormatException {
+      return false;
     }
   }
-
-  /// Every root the record advertises that this build can check a signature
-  /// with — active first, then retired, since a root link is checked long
-  /// after it was signed.
-  ///
-  /// An entry whose status this build does not understand is not a candidate,
-  /// which is the fail-closed answer, and the list is empty for absent and
-  /// unreadable alike.
-  Future<List<ApskSigningKey>> _rootCandidates(String atSign) async {
-    try {
-      final roots = await PqSigningRoot.publishedRoots(_atClient, atSign);
-      return roots.where((r) => r.vouchesForPastOperations).toList();
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.info('No readable signing root for $atSign: $e');
-      return const [];
-    }
-  }
-
-  /// The candidates a link narrows itself to.
-  ///
-  /// A [rootLinkKidField] names the key that signed the link, so only that
-  /// entry is tried and an unmatched kid narrows to nothing rather than
-  /// falling back to trying everything; a link with no kid is tried against
-  /// every candidate.
-  static Iterable<ApskSigningKey> _narrowedTo(
-    Map<String, Object?> link,
-    Iterable<ApskSigningKey> candidates,
-  ) {
-    final kid = link[rootLinkKidField];
-    if (kid is! String || kid.isEmpty) return candidates;
-    return candidates.where((c) => c.kid == kid);
-  }
-
-  /// Whether [signature] over [signable] verifies under any of [candidates].
-  ///
-  /// An entry whose algorithm this build has no verifier for is skipped, not
-  /// failed: a record may legitimately carry a root that a client predating
-  /// that algorithm cannot check.
-  static Future<bool> _verifiesUnderAny(
-    Uint8List signable,
-    String signature,
-    Iterable<ApskSigningKey> candidates,
-  ) async {
-    final bytes = base64Decode(signature);
-    for (final candidate in candidates) {
-      final algo = PqSigningRoot.verifierFor(candidate.alg);
-      if (algo == null) continue;
-      if (await algo.verifyBytes(signable,
-          signature: bytes, publicKey: base64Decode(candidate.pub))) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// Decodes a link that arrived over the substrate as a [Secret] value.
-  static Map<String, Object?> decodeConveyedLink(String secretValue) =>
-      (jsonDecode(secretValue) as Map).cast<String, Object?>();
-
-  /// Encodes a link for conveyance as a [Secret] value.
-  static String encodeLink(Map<String, Object?> link) => jsonEncode(link);
-}
-
-/// What became of one attempt to stamp a conveyed link.
-enum _Stamp {
-  /// Stamped onto this enrollment's `_apsk`.
-  published,
-
-  /// Already stamped, or never can be: nothing more to do with it.
-  settled,
-
-  /// Not stamped for now, and worth trying again.
-  retry,
 }

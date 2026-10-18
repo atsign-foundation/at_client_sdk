@@ -224,8 +224,10 @@ void main() {
             'it with');
 
     final sharing = AtClientSecretSharing.forClient(client);
-    expect(await PqSigningChain(client).readRootLink(client.enrollmentId!),
-        isNotNull);
+    expect(
+        (await PqSigningChain(client).readRecord(client.enrollmentId!))
+            ?.links,
+        isNotEmpty);
     final verdict =
         await PqSigningChain(client).verifyChain(sharing, client.enrollmentId!);
     expect(verdict.verdict, ChainVerdict.anchored,
@@ -349,10 +351,8 @@ void main() {
             'also proves what arrived is the real key rather than something '
             'a holder happened to send');
 
-    expect(
-        await PqSigningChain(clone).publishOwnRootLink(
-            isFullyPrivileged: () async => true, keysIo: cloneSession.atKeysIo),
-        isTrue);
+    await PqSigningChain(clone).linkOwnKeys(cloneSharing,
+        isFullyPrivileged: () async => true, keysIo: cloneSession.atKeysIo);
     final verdict = await PqSigningChain(clone)
         .verifyChain(cloneSharing, clone.enrollmentId!);
     expect(verdict.verdict, ChainVerdict.anchored,
@@ -427,9 +427,11 @@ void main() {
             'that vouches for every enrollment on the atSign — asking would '
             'be refused, and asking anyway announces to every holder that '
             'something unentitled is looking for it');
-    expect(
-        await PqSigningChain(scoped).readRootLink(scoped.enrollmentId!), isNull,
-        reason: 'it cannot anchor itself: its route to the chain is a link '
-            'signed for it by a privileged enrollment');
+    final voucher = await PqSigningChain(scoped).voucher(
+        AtClientSecretSharing.forClient(scoped),
+        isFullyPrivileged: () async => false);
+    expect(voucher?.isRoot ?? false, isFalse,
+        reason: 'it cannot root-link anything: its route to the root is a '
+            'link a holder of the root writes for it');
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

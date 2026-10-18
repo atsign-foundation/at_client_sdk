@@ -673,7 +673,6 @@ void main() {
         gates.requestRootPrivate,
         gates.requestMissingPrivates,
         gates.publishRootLink,
-        gates.publishChainLink,
         gates.sweepUnanchoredEnrollments,
         gates.reconcileEnrollmentSnapshot,
         gates.askOnReadMiss,
@@ -708,7 +707,7 @@ void main() {
               .toList();
       expect(fields, isNotEmpty,
           reason: 'if this finds nothing the count below proves nothing');
-      expect(fields, hasLength(13),
+      expect(fields, hasLength(12),
           reason: 'PqStartupGates gained or lost a gate. Add it to the inert '
               'arm above and to PqStartupGates.inert(), then move this number '
               '— the gates are: ${fields.join(', ')}');
@@ -734,7 +733,6 @@ void main() {
         gates.requestRootPrivate,
         gates.requestMissingPrivates,
         gates.publishRootLink,
-        gates.publishChainLink,
         gates.sweepUnanchoredEnrollments,
         gates.reconcileEnrollmentSnapshot,
         gates.askOnReadMiss,

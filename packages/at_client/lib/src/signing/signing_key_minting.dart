@@ -6,12 +6,17 @@ import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/enrollment_update_request.dart';
 import 'package:at_client/src/enroll/enrollment_updater.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show PqSigningChain;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show ApkamSigning, serialiseApskWrite;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf, bareApskValueOf;
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
+    show AtClientSecretSharing;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 
@@ -25,7 +30,9 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// it; the other order could leave a key advertised that nothing holds. A
 /// signer in between signs under a key the advertisement names only once the
 /// publish lands. A withdrawal from service is filed after the publish, so an
-/// outgoing key is never unadvertised while it is still what signs.
+/// outgoing key is never unadvertised while it is still what signs. A minted
+/// key is linked once it is published, by a key this enrollment already has
+/// linked, before any outgoing key is retired.
 class SigningKeyMinting with ApkamSigning {
   /// Reconciles [atClient]'s signing keys, publishing through [updater] when
   /// one is supplied and a fresh [EnrollmentUpdater] otherwise.
@@ -112,6 +119,7 @@ class SigningKeyMinting with ApkamSigning {
       await _publish(
           _strongestFirst([...minted, ...keeping], (key) => key.algorithm),
           retiring: superseded);
+      if (minted.isNotEmpty) await _linkMinted(handingOn: held);
       for (final key in superseded) {
         await _retire(io, atSign, key.algorithm);
       }
@@ -187,6 +195,28 @@ class SigningKeyMinting with ApkamSigning {
             signingKeys: bare == null ? entries : null,
             apskLegacy: bare),
         atLookUp!);
+  }
+
+  /// Links the keys this reconcile just published, signing with one this
+  /// enrollment already has linked; [handingOn] may vouch although the
+  /// advertisement now lists it as retired.
+  ///
+  /// A failure leaves them unlinked: this enrollment signs content with its
+  /// linked keys meanwhile, and the next start links them.
+  Future<void> _linkMinted({required List<ApkamSigningKeys> handingOn}) async {
+    try {
+      // NOTE: chain links only, even for a holder of the signing root, whose
+      // own keys the start's root-linking step then links to the root.
+      await PqSigningChain(atClient).linkOwnKeys(
+          AtClientSecretSharing.forClient(atClient),
+          isFullyPrivileged: () async => false,
+          alsoVouchWith: handingOn);
+    } on Exception catch (e) {
+      if (e is StoppedException) rethrow;
+      logger.warning('Could not link the key(s) just minted for '
+          '$enrollmentId; it signs content with its linked keys meanwhile, '
+          'and the next start links them: $e');
+    }
   }
 
   Future<void> _file(

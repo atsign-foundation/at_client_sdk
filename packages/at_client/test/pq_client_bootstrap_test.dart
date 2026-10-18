@@ -334,7 +334,6 @@ void main() {
         requestRootPrivate: false,
         requestMissingPrivates: false,
         publishRootLink: false,
-        publishChainLink: false,
         sweepUnanchoredEnrollments: false,
         reconcileEnrollmentSnapshot: false,
         askOnReadMiss: false,
@@ -387,7 +386,6 @@ void main() {
           seedNamespaceKeys: false,
           requestMissingPrivates: false,
           publishRootLink: false,
-          publishChainLink: false,
           sweepUnanchoredEnrollments: false,
           reconcileEnrollmentSnapshot: false,
           askOnReadMiss: false,
@@ -465,7 +463,6 @@ void main() {
           requestRootPrivate: false,
           requestMissingPrivates: false,
           publishRootLink: false,
-          publishChainLink: false,
           sweepUnanchoredEnrollments: false,
           askOnReadMiss: false,
         ),
@@ -640,7 +637,6 @@ void main() {
       'requestRootPrivate',
       'requestMissingPrivates',
       'publishRootLink',
-      'publishChainLink',
       'sweepUnanchoredEnrollments',
       // Last: nothing reads the enrollment snapshot, so this step can only
       // delay a step that heals key material, never enable one.

@@ -564,9 +564,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      single active `rsa2048` entry, and the `{v, keys:[…]}` **array** otherwise — which
      a pq-native E2 is, since it advertises `mldsa65`
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
-     postures). What chains it to the root is the **approval-chain link** `alice1` signs
-     and conveys, which E2 stamps onto its own `_apsk` **metadata** as it arrives — the
-     value itself is untouched either way.
+     postures). What chains it to the root are the **links** `alice1` writes for each
+     of E2's keys through `enroll:link` straight after approving — root links when it
+     holds the signing root, chain links otherwise — into the record's **metadata**;
+     the value itself is untouched either way.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -587,10 +588,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
     `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
     namespace-scoped E2 — the root is held only by fully privileged enrollments.
-  - E2's `_apsk` carries a chain link that `verifyChain` walks to the signing
-    root, so a reader can chain an advertised key back to the atSign's own
-    anchor rather than to whatever the atServer served — the link rides the record's
-    **metadata**, leaving the `_apsk` **value** exactly what apps already parse.
+  - E2's `_apsk` carries a link for each key E2 signs with, which `verifyChain`
+    walks to the signing root, so a reader can chain an advertised key back to the
+    atSign's own anchor rather than to whatever the atServer served — the links ride
+    the record's **metadata**, leaving the `_apsk` **value** exactly what apps
+    already parse.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -4072,7 +4074,7 @@ and is the rule the two composers were breaking.
   consumer base64-decodes — and both spell anything else as the **array**.
   *And* a second condition on either side is a defect, not a refinement: the
   client republishes on any difference, so a disagreement rewrites the record
-  and discards whatever was bound to its old value.
+  at the client's first start.
 
   ⚠️ **A second condition fires only on the case it is wrong about.** Forcing
   the array whenever a key package is present, on the grounds that a bare value
@@ -4081,7 +4083,7 @@ and is the rule the two composers were breaking.
   is not, the algorithm having already chosen the array. What is left is an
   rsa2048-advertising enrollment in pq key-exchange mode, which
   `--posture legacy --key-exchange pq` reaches: the client rewrites `_apsk` at
-  its first start and discards the chain link the approver just conveyed.
+  its first start.
 
 ### 18.2 Links, one per key
 

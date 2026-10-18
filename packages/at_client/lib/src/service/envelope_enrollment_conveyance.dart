@@ -95,15 +95,17 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         inReplyTo: EnvelopeAddressing.unsolicited);
   }
 
-  /// Seals every secret [enrollment]'s namespaces authorise to the key package
-  /// it advertised on its `enroll:request`, so the newly approved device can
-  /// read what it has just been authorised for.
+  /// Links [enrollment]'s keys, then seals every secret its namespaces
+  /// authorise to the key package it advertised on its `enroll:request`, so
+  /// the newly approved device can read what it has just been authorised for.
   ///
   /// Runs **after** the approval, because the atServer publishes the
-  /// enrollment's `_apsk` at that point and the package cannot be verified
-  /// before it exists.
+  /// enrollment's `_apsk` at that point and neither the keys nor the package
+  /// can be read before it exists.
   @override
   Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) async {
+    await _linkKeysOf(enrollment);
+
     final advertised = enrollment.metadata?['keyPackage'];
     if (advertised == null) return KeyPackageStatus.absent;
 
@@ -136,62 +138,10 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     late final envelopeNamespace =
         _conveyanceNamespaceFor(enrollment, ownGrants);
 
-    // NOTE: the link vouching for this enrollment is conveyed rather than
-    // published, because `_apsk` accepts writes only from its own
-    // enrollment's connection, so the child stamps it when it arrives. An
-    // approver holding neither the signing-root private nor a data signing key
-    // of its own conveys no link at all: `signingKeys` falls back to the APKAM
-    // authentication key, which is dropped from the advertisement rather than
-    // retired, so a link signed with it becomes permanently unverifiable.
-    final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
-    final rootSigner = await root.signingKey(atSign);
-    final rootPrivate = rootSigner?.private;
-
-    /// The provisional link, signed with whatever signing key this approver
-    /// holds.
-    Future<void> conveyChainLink() async {
-      final link = await PqSigningChain(_atClient)
-          .signLinkFor(sharing, enrollment.enrollmentId!);
-      if (link != null) {
-        await sharing.shareSecretWith(
-            package,
-            Secret(
-              namespace: envelopeNamespace,
-              name: PqSigningChain.linkSecretName,
-              value: PqSigningChain.encodeLink(link.toJson()),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-      }
-    }
-
-    if (await _privilege.isFullyPrivileged()) {
-      if (rootPrivate != null) {
-        final link = await PqSigningChain(_atClient).signRootLinkFor(
-            enrollment.enrollmentId!,
-            rootPrivate: rootPrivate,
-            rootKid: rootSigner!.kid);
-        if (link != null) {
-          await sharing.shareSecretWith(
-              package,
-              Secret(
-                namespace: envelopeNamespace,
-                name: PqSigningChain.rootLinkSecretName,
-                value: PqSigningChain.encodeLink(link),
-              ),
-              inReplyTo: EnvelopeAddressing.unsolicited);
-        }
-      } else if ((await sharing.heldSigningKeys).isNotEmpty) {
-        await conveyChainLink();
-      } else {
-        _logger.info('Not conveying a link for ${enrollment.enrollmentId}: '
-            'this fully privileged approver holds neither the signing-root '
-            'private nor a data signing key of its own, and a link signed '
-            'with the APKAM authentication key would stop verifying the '
-            'moment that key leaves the advertisement');
-      }
-    } else {
-      await conveyChainLink();
-    }
+    final rootPrivate =
+        (await PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo)
+                .signingKey(atSign))
+            ?.private;
 
     // NOTE: the signing root's private half goes only to a fully privileged
     // enrollment, and under a per-enrollment name so shareAllSecretsWith never
@@ -247,27 +197,68 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     return status;
   }
 
-  /// The anchoring sweep — see
+  /// Links [enrollment]'s keys through `enroll:link`, with the signing root
+  /// when this approver holds it and is fully privileged, else with one of its
+  /// own keys that walks to the root.
+  ///
+  /// Never fails the approval: an approver with neither links nothing, and a
+  /// refused or failed write is logged, leaving a root holder's sweep to link
+  /// the enrollment.
+  Future<void> _linkKeysOf(Enrollment enrollment) async {
+    final id = enrollment.enrollmentId!;
+    try {
+      final chain = PqSigningChain(_atClient);
+      final sharing = AtClientSecretSharing.forClient(_atClient);
+      final voucher = await chain.voucher(sharing,
+          isFullyPrivileged: _privilege.isFullyPrivileged);
+      if (voucher == null) {
+        _logger.info('Not linking the keys of enrollment $id: this approver '
+            'holds neither the signing root nor a key of its own that walks '
+            'to it, so a root holder\'s sweep links them');
+        return;
+      }
+      var record = await chain.readRecord(id);
+      for (var attempt = 1;
+          record == null && attempt < verifyAttempts && !_atClient.isStopped;
+          attempt++) {
+        await Future<void>.delayed(verifyRetryPause);
+        record = await chain.readRecord(id);
+      }
+      if (record == null) {
+        _logger.warning('Enrollment $id is approved but its _apsk could not '
+            'be read, so none of its keys was linked; a root holder\'s sweep '
+            'links them');
+        return;
+      }
+      final linked = await chain.linkKeysOf(record, voucher,
+          authenticationKey: enrollment.apkamPublicKey, verifier: sharing);
+      if (linked.isNotEmpty) {
+        _logger.info('Linked key(s) ${linked.join(', ')} of enrollment $id '
+            'with ${voucher.isRoot ? 'the signing root' : 'a key of this '
+                'approver'}');
+      }
+    } on Exception catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not link the keys of enrollment $id; a root '
+          'holder\'s sweep links them: $e');
+    }
+  }
+
+  /// The anchoring sweep: see
   /// [EnrollmentConveyance.sweepUnanchoredEnrollments] for why it exists and
   /// who may run it.
   ///
-  /// Signs **root** links only, from a private read out of this client's
-  /// keys: a client that has not received that private conveys nothing this
-  /// pass, and the sweep runs again at every privileged start.
+  /// Writes **root** links only: a client that does not hold the signing root
+  /// links nothing this pass, and the sweep runs again at every privileged
+  /// start.
   @override
   Future<int> sweepUnanchoredEnrollments() async {
+    final chain = PqSigningChain(_atClient);
     final sharing = AtClientSecretSharing.forClient(_atClient);
-    if (!sharing.isRegistered) {
-      _logger.info('Not sweeping root links: this client has no registered '
-          'key package to seal conveyances from');
-      return 0;
-    }
-
-    final atSign = _atClient.getCurrentAtSign()!;
-    final rootSigner =
-        await PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo)
-            .signingKey(atSign);
-    if (rootSigner == null) {
+    // NOTE: privilege is the caller's to check, as the interface says.
+    final voucher =
+        await chain.voucher(sharing, isFullyPrivileged: () async => true);
+    if (voucher == null || !voucher.isRoot) {
       _logger.warning('Not sweeping root links: this client holds no '
           'published signing-root private yet; its next start pulls or '
           'publishes one first');
@@ -275,57 +266,29 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     }
 
     final ownEnrollmentId = _atClient.enrollmentId;
-
     final approved = await _listEnrollments(
         enrollmentListParams: EnrollmentListRequestParam()
           ..enrollmentListFilter = [EnrollmentStatus.approved]);
 
-    final chain = PqSigningChain(_atClient);
-    int conveyed = 0;
+    var linked = 0;
     for (final enrollment in approved) {
       final id = enrollment.enrollmentId;
       if (id == null || id == ownEnrollmentId) continue;
       try {
-        // NOTE: only a root anchor is terminal. A chain link alone does not
-        // skip — it is provisional, and upgrading it is as much this sweep's
-        // job as anchoring the unsigned.
-        if (await chain.readRootLink(id) != null) continue;
-
-        final advertised = enrollment.metadata?['keyPackage'];
-        if (advertised == null) continue;
-        final (keyPackage, status) = await verifyAdvertisedKeyPackage(
-          advertised,
-          signer: AtClientEnvelopeSigner(_atClient),
-          signerAtSign: atSign,
-          enrollmentId: id,
-        );
-        if (keyPackage == null || status == KeyPackageStatus.rejected) {
-          continue;
-        }
-
-        final link = await chain.signRootLinkFor(id,
-            rootPrivate: rootSigner.private, rootKid: rootSigner.kid);
-        if (link == null) continue;
-        await sharing.shareSecretWith(
-            keyPackage,
-            Secret(
-              namespace:
-                  _conveyanceNamespaceFor(enrollment, await _ownGrants()),
-              name: PqSigningChain.rootLinkSecretName,
-              value: PqSigningChain.encodeLink(link),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-        conveyed++;
-      } catch (e) {
+        final record = await chain.readRecord(id);
+        if (record == null) continue;
+        final kids = await chain.linkKeysOf(record, voucher,
+            authenticationKey: enrollment.apkamPublicKey, verifier: sharing);
+        if (kids.isNotEmpty) linked++;
+      } on Exception catch (e) {
         if (e is StoppedException) rethrow;
-        _logger.warning('Could not sweep a root link for enrollment $id: $e');
+        _logger.warning('Could not sweep root links for enrollment $id: $e');
       }
     }
-    if (conveyed > 0) {
-      _logger.info('Swept root links to $conveyed unanchored enrollment(s); '
-          'each stamps its own _apsk when it arrives');
+    if (linked > 0) {
+      _logger.info('Root-linked keys on $linked enrollment(s)');
     }
-    return conveyed;
+    return linked;
   }
 
   /// A namespace [enrollment] may read and this approver, granted [own], may

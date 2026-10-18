@@ -88,15 +88,7 @@ void main() {
         proves: 'the republish-on-any-difference half, with its sibling '
             'writes nothing when the published value already matches as the '
             'control that makes it a discriminator',
-        clauses: ['discards whatever was bound to its old value']);
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'clears the chain link, so the chain reads unsigned, not broken',
-        proves: 'the DISCARD: from a record carrying a conveyed chain link, a '
-            'republish under a different value removes the link bound to the '
-            'old one, against a fixture that merges metadata as the atServer '
-            'does; "a republish restoring the key a link describes keeps the '
-            'link" is the control',
-        clauses: ['discards whatever was bound to its old value']);
+        clauses: ['rewrites the record at the client']);
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'an rsa2048 APKAM key with a key package is spelled BARE',
         proves: 'the at_auth side, in the shape that was WRONG until '
