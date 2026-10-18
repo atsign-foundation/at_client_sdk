@@ -7,6 +7,9 @@
 - fix: a keyfile, or a passphrase-protected keyfile's decrypted content, that
   is not valid JSON is reported with the parser's reason and the character
   where it stopped.
+- fix: a passphrase-protected keyfile whose envelope `salt` is not valid
+  base64 is refused with `AtDecryptionException`, as its `iv` and `content`
+  are.
 - build: requires `at_lookup` ^3.7.0-rc4.
 
 ## 4.0.0-rc6
