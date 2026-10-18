@@ -701,3 +701,5 @@ that decision can be revisited late, on the measured number from
 (atSign, enrollmentId) ([D-25](decisions.md)). SQLite runs in the worker; Dart stays on the
 main thread (D-19) and reaches it across the async `AtKeyStore` boundary.
 `IndexedDbFileSystem` is an opt-in fallback only with flush-before-ack and a single-tab guard.
+
+**Key custody is not in this store.** The credential hint and the per-passkey record replica stay in plain IndexedDB, outside the storage bundle (K-6 clarification in [`decisions.md`](decisions.md)): they must open before `enrollmentId` — and so the OPFS directory — is known, in V1 where there is no SQLite, and in a tab the single-writer lock refuses.

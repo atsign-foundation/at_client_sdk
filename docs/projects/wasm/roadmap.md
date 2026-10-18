@@ -177,7 +177,7 @@ at_client is not forked, and nothing below its doors names a platform type.
 
 - **`at_client_wasm`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
   behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the V1 default
-  (**D-18**), IndexedDB-backed `WrittenAtKeysIo`, `navigator.onLine` connectivity,
+  (**D-18**), IndexedDB-backed `WrittenAtKeysIo` (custody replica per K-6, independent of the storage bundle), `navigator.onLine` connectivity,
   console logging.
   *(SQLite-wasm storage left this list 2026-09-02 as the **default**: **D-17** ships V1
   remote-only. It is not withdrawn. The **backend** ruling in [`design.md`](design.md) §5 —

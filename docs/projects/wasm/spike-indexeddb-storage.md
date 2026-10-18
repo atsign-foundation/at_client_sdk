@@ -2,6 +2,8 @@
 
 **Status:** spike complete; superseded on W4 and the VFS by [D-25](decisions.md) and [`vfs-lab-results.md`](vfs-lab-results.md) (+386 KB gz accepted, D4 not triggered) · 2026-09-29 · committed 2026-10-08 on `st/wasm/spike-idb-storage` (off `st/wasm/stage6d-x-r2-interop`); the IndexedDB code lives in `packages/at_client_wasm`
 
+**Scope:** this spike concerns the *data* replica. The key-custody replica (K-6) stays in IndexedDB whatever the data-store verdict — see the K-6 clarification in `decisions.md`.
+
 ## 1. Verdict
 
 **A raw-IndexedDB `AtClientStorage` works and costs ~57× less payload than SQLite-wasm: +6.6 KB gzipped vs ≥ +376.9 KB.**
