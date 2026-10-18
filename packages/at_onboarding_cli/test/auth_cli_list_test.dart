@@ -28,7 +28,10 @@ class _CapturedStdout extends Fake implements Stdout {
 /// Catalogue: features/enrollment/approver_sees_expiry.feature and
 /// docs/projects/pq/acceptance.md UC-G3.25.
 void main() {
-  setUpAll(() => registerFallbackValue(_FakeListParams()));
+  setUpAll(() {
+    registerFallbackValue(_FakeListParams());
+    registerFallbackValue(AtKey());
+  });
 
   test(
       'at_activate list shows the expiry each enrollment asked for and when '
@@ -126,5 +129,41 @@ void main() {
     expect(asked, isNot(contains(pendingId)),
         reason: 'a pending enrollment publishes no keys to walk');
     expect(row(pendingId), isNot(matches(RegExp(r' (anchored|unsigned) '))));
+  });
+
+  test(
+      'given no anchoring, at_activate list asks the client whether each '
+      'approved enrollment is anchored', () async {
+    const unsignedId = 'f0f0f0f0-1a2e-43e4-93bd-378f1d366ea7';
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'wavi',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'approved',
+              })
+                ..enrollmentId = unsignedId,
+            ]);
+    when(() => client.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenThrow(AtKeyNotFoundException('no _apsk'));
+    final args =
+        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+
+    expect(
+        out.text.split('\n').singleWhere((l) => l.startsWith(unsignedId)),
+        contains(' unsigned '),
+        reason: 'an enrollment publishing no _apsk reads unsigned through '
+            'client.enrollments.anchoring');
   });
 }
