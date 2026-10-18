@@ -436,7 +436,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('approved-u-1')),
-          matching: find.text('revoked ?'),
+          matching: find.text('revoked'),
         ),
         findsOneWidget,
         reason:

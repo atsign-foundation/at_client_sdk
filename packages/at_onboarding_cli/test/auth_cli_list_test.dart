@@ -165,7 +165,7 @@ void main() {
         stdout: () => out);
 
     expect(out.text.split('\n').singleWhere((l) => l.startsWith(revokedId)),
-        contains(' revoked ? '),
+        allOf(contains(' revoked '), isNot(contains('revoked ?'))),
         reason: 'an enrollment whose _apsk was moved to .r.__e reads revoked '
             'through client.enrollments.anchoring');
   });

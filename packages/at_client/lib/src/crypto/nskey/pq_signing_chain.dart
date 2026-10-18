@@ -81,11 +81,11 @@ class ChainResult {
       {this.kid, this.keysWalked = const []});
 
   /// How an approver's view shows this result: `anchored`, `unsigned`, or
-  /// the verdict followed by the [kid] it is about.
+  /// the verdict, followed by the [kid] it is about when there is one.
   String get summary => switch (verdict) {
         ChainVerdict.anchored => 'anchored',
         ChainVerdict.unsigned => 'unsigned',
-        _ => '${verdict.name} ${kid ?? '?'}',
+        _ => kid == null ? verdict.name : '${verdict.name} $kid',
       };
 
   @override
