@@ -566,8 +566,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
      postures). What chains it to the root are the **links** `alice1` writes for each
      of E2's keys through `enroll:link` straight after approving — root links when it
-     holds the signing root, chain links otherwise — into the record's **metadata**;
-     the value itself is untouched either way.
+     holds the signing root, chain links when one of its own keys walks to it, and
+     none when it has neither — into the record's **metadata**; the value itself is
+     untouched either way.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
