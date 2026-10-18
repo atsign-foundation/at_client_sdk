@@ -209,7 +209,7 @@ class SigningKeyMinting with ApkamSigning {
       // own keys the start's root-linking step then links to the root.
       await PqSigningChain(atClient).linkOwnKeys(
           AtClientSecretSharing.forClient(atClient),
-          isFullyPrivileged: () async => false,
+          isFullyPrivileged: null,
           alsoVouchWith: handingOn);
     } on Exception catch (e) {
       if (e is StoppedException) rethrow;

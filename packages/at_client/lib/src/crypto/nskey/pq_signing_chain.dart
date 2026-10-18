@@ -517,6 +517,7 @@ class PqSigningChain {
   /// What this client vouches with: the signing root when it holds the root's
   /// private key and [isFullyPrivileged] says so, else the strongest of its
   /// own active client data signing keys that walks to the root, else null.
+  /// A null [isFullyPrivileged] asks for a chain voucher alone.
   ///
   /// [signer] is this client's own: its keyfile supplies the keys, and an
   /// authentication key is never one of them. [alsoVouchWith] are keys the
@@ -524,11 +525,12 @@ class PqSigningChain {
   /// retired: a key handing its link on to the key replacing it. The root's
   /// private key is read from [keysIo], else from the client's own.
   Future<LinkVoucher?> voucher(EnvelopeSigning signer,
-      {required Future<bool> Function() isFullyPrivileged,
+      {required Future<bool> Function()? isFullyPrivileged,
       List<ApkamSigningKeys> alsoVouchWith = const [],
       AtKeysIo? keysIo}) async {
-    final root =
-        await PqSigningRoot(_atClient, keysIo: keysIo ?? _atClient.atKeysIo)
+    final root = isFullyPrivileged == null
+        ? null
+        : await PqSigningRoot(_atClient, keysIo: keysIo ?? _atClient.atKeysIo)
             .signingKey(_atSign);
     if (root != null) {
       final kid = root.kid;
@@ -536,7 +538,7 @@ class PqSigningChain {
         _logger.warning('This client holds the signing root private but no '
             'public half beside it, so it cannot name the root key a root link '
             'is signed with, and signs none');
-      } else if (await isFullyPrivileged()) {
+      } else if (await isFullyPrivileged!()) {
         return LinkVoucher.root(private: root.private, kid: kid);
       } else {
         _logger.warning('This enrollment holds the signing root private but is '
@@ -585,7 +587,7 @@ class PqSigningChain {
   /// [signer] is this client's own; [alsoVouchWith] and [keysIo] are as
   /// [voucher] takes them.
   Future<List<String>> linkOwnKeys(EnvelopeSigning signer,
-      {required Future<bool> Function() isFullyPrivileged,
+      {required Future<bool> Function()? isFullyPrivileged,
       List<ApkamSigningKeys> alsoVouchWith = const [],
       AtKeysIo? keysIo}) async {
     final own = await refreshOwnLinks();
@@ -610,9 +612,10 @@ class PqSigningChain {
   /// a key with no link gets one; a root voucher replaces anything but a root
   /// link that passes its check; a chain voucher replaces only a chain link
   /// that does not walk to the root, never a root link, and links no key its
-  /// own key's chain passes through. Each link states the one it found, so a
-  /// refusal means another voucher wrote first: the record is read again and
-  /// the call made once more on what it now holds.
+  /// own key's chain passes through. Only the first entry under a `kid` is
+  /// linked, as the atServer reads the record. Each link states the one it
+  /// found; when the atServer refuses the call, the record is read again and,
+  /// if it has changed, the call made once more on what it now holds.
   Future<List<String>> linkKeysOf(
     ApskRecord target,
     LinkVoucher voucher, {
@@ -623,7 +626,9 @@ class PqSigningChain {
     var record = target;
     for (var attempt = 1; attempt <= 2; attempt++) {
       final writes = <String, LinkWrite>{};
+      final kids = <String>{};
       for (final key in record.keys) {
+        if (!kids.add(key.kid)) continue;
         if (!_takesLink(record, key, authenticationKey, voucher)) continue;
         final found = record.links[key.kid];
         if (found != null &&
@@ -639,11 +644,9 @@ class PqSigningChain {
         return await writeLinks(record.enrollmentId, writes);
       } on Exception catch (e) {
         if (e is StoppedException) rethrow;
-        final reread = await readRecord(record.enrollmentId);
-        final raced = reread != null &&
-            writes.entries.any((w) => !const DeepCollectionEquality()
-                .equals(reread.links[w.key], w.value.expect));
-        if (!raced || attempt == 2) {
+        final reread =
+            attempt == 1 ? await readRecord(record.enrollmentId) : null;
+        if (reread == null || _sameRecord(reread, record)) {
           _logger.warning('enroll:link for enrollment ${record.enrollmentId} '
               'was refused, so keys ${writes.keys.join(', ')} have no new '
               'link: $e');
@@ -705,7 +708,7 @@ class PqSigningChain {
       ApskSigningKey key,
       Map<String, Object?> found,
       EnvelopeSigning verifier) async {
-    final foundIsRoot = found['payload'] is Map;
+    final foundIsRoot = await _isRootLink(found);
     if (voucher.isRoot) {
       if (!foundIsRoot) return true;
       final walk = await walkFrom(verifier, record, key);
@@ -715,6 +718,28 @@ class PqSigningChain {
     final walk = await walkFrom(verifier, record, key);
     return walk.verdict != ChainVerdict.anchored;
   }
+
+  /// Whether [link] is a root link: one whose signer `kid` is a key of the
+  /// signing root, whatever its shape.
+  Future<bool> _isRootLink(Map<String, Object?> link) async {
+    final Iterable<Object?> kids;
+    if (link['payload'] is Map) {
+      kids = [link[rootLinkKidField]];
+    } else {
+      try {
+        kids = SignedEnvelope.fromJson(link).signatures.map((s) => s.kid);
+      } on AtSigningVerificationException {
+        return false;
+      }
+    }
+    final roots = await _rootCandidates();
+    return kids.any((kid) => roots.any((r) => r.kid == kid));
+  }
+
+  /// Whether [a] and [b] hold the same value and the same links.
+  static bool _sameRecord(ApskRecord a, ApskRecord b) =>
+      a.value == b.value &&
+      const DeepCollectionEquality().equals(a.links, b.links);
 
   /// Whether [a] and [b] are one public key: equal bytes when both decode as
   /// base64, in either alphabet, else equal text once trimmed.

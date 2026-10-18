@@ -24,6 +24,7 @@ import 'test_utils/enroll_link_fake.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/link_fixtures.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 import 'test_utils/remote_backed_client.dart';
 import 'test_utils/test_keypairs.dart';
 
@@ -38,8 +39,12 @@ void main() {
   late Map<String, Metadata> remoteMetadata;
   late List<EnrollVerbBuilder> linkCalls;
   late ({String pub, String priv}) rootPair;
+  final logs = RecordedLogs();
 
-  setUpAll(() => registerFallbackValue(AtKey()));
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    logs.installOn();
+  });
   setUp(() {
     remoteData = {};
     remoteMetadata = {};
@@ -88,6 +93,16 @@ void main() {
     final current = await record(c, enrollmentId);
     await PqSigningChain(c).writeLinks(enrollmentId, {
       key.kid: (link: link, expect: current.links[key.kid]),
+    });
+  }
+
+  /// Stores [link] for [kid] on [enrollmentId]'s record directly, as no
+  /// atServer would accept it.
+  void plant(String enrollmentId, String kid, Map<String, Object?> link) {
+    final key = PqSigningChain.apskUri(atSign, enrollmentId);
+    (remoteMetadata[key] ??= Metadata()).appMetadata =
+        AppMetadata(providerId: 'legacy', additional: {
+      PqSigningChain.linksField: {kid: link}
     });
   }
 
@@ -188,6 +203,27 @@ void main() {
 
       expect(result.verdict, ChainVerdict.broken);
       expect(result.reason, contains('names no signer key'));
+    });
+
+    test(
+        'when its payload names the key under another algorithm, then it reads '
+        'broken', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      final k1 = (await record(b, 'b-1')).keys.single;
+      plant(
+          'b-1',
+          k1.kid,
+          await root.sign({
+            ...PqSigningChain.linkPayload('b-1', k1),
+            'alg': SigningAlgoType.mldsa65.name,
+          }));
+
+      final result = await walk(b, 'b-1');
+
+      expect(result.verdict, ChainVerdict.broken);
+      expect(result.reason, contains('does not name that key'));
     });
 
     test('when it was signed without the domain tag, then it reads broken',
@@ -439,19 +475,58 @@ void main() {
     test('when its payload names another enrollment, then it reads broken',
         () async {
       final f = await aVouchingForB();
-      final c = client('c-1');
-      await withSigningKey(c);
-      final cEntry = (await record(c, 'c-1')).keys.single;
-      final bLink = (await record(f.b, 'b-1'))
-          .links[(await record(f.b, 'b-1')).keys.single.kid]!;
-      remoteMetadata[PqSigningChain.apskUri(atSign, 'c-1')]!.appMetadata =
-          AppMetadata(providerId: 'legacy', additional: {
-        PqSigningChain.linksField: {cEntry.kid: bLink}
-      });
+      final bEntry = (await record(f.b, 'b-1')).keys.single;
+      plant(
+          'b-1',
+          bEntry.kid,
+          PqSigningChain.signChainLink({
+            ...PqSigningChain.linkPayload('b-1', bEntry),
+            'enrollmentId': 'c-1'
+          }, key: f.aKey, signerEnrollmentId: 'a-1'));
 
-      expect((await walk(c, 'c-1')).verdict, ChainVerdict.broken,
-          reason: 'a link copied onto another record names the record it was '
-              'written for');
+      final result = await walk(f.b, 'b-1');
+
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'the link names B\'s key, signed by a key that walks to the '
+              'root, and only the enrollment it names is wrong');
+      expect(result.reason, contains('does not name that key'));
+    });
+
+    test(
+        'when the signer lists another key of that algorithm with a link, then '
+        'the walk continues from the key that signed', () async {
+      final root = await newRoot();
+      final a = client('a-1');
+      await withSigningKey(a);
+      final a1 = (await record(a, 'a-1')).keys.single;
+      await store(
+          a, 'a-1', a1, await root.sign(PqSigningChain.linkPayload('a-1', a1)));
+      final second = RsaKeyPair.generate();
+      final a2 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048, pub: second.atPublicKey.publicKey);
+      remoteData[PqSigningChain.apskUri(atSign, 'a-1')] =
+          jsonEncode(apskAdvertisement(keys: [a1, a2]));
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          PqSigningChain.signChainLink(
+              PqSigningChain.linkPayload('b-1', bEntry),
+              key: ApkamSigningKeys(
+                  algorithm: SigningAlgoType.rsa2048,
+                  publicKey: second.atPublicKey.publicKey,
+                  privateKey: second.atPrivateKey.privateKey),
+              signerEnrollmentId: 'a-1'));
+
+      final result = await walk(b, 'b-1');
+
+      expect(result.verdict, ChainVerdict.chained, reason: result.reason);
+      expect(result.keysWalked.last, 'a-1/${a2.kid}',
+          reason: 'the key that signed carries no link, though the other key '
+              'A lists under that algorithm does');
     });
 
     test(
@@ -472,6 +547,47 @@ void main() {
         expect(result.verdict, verdict, reason: result.reason);
       }
     });
+  });
+
+  group('Given a chain of keys within one enrollment', () {
+    test(
+        'when the walk runs from a key sixteen keys from the root, then it '
+        'reads anchored; from one seventeen keys away, broken', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final pairs = [for (var i = 0; i < 17; i++) RsaKeyPair.generate()];
+      final keys = [
+        for (final pair in pairs)
+          ApskSigningKey.forPublicKey(
+              alg: SigningAlgoType.rsa2048, pub: pair.atPublicKey.publicKey)
+      ];
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode(apskAdvertisement(keys: keys));
+      remoteMetadata[apsk] = Metadata();
+      await store(b, 'b-1', keys.first,
+          await root.sign(PqSigningChain.linkPayload('b-1', keys.first)));
+      for (var i = 1; i < keys.length; i++) {
+        await store(
+            b,
+            'b-1',
+            keys[i],
+            PqSigningChain.signChainLink(
+                PqSigningChain.linkPayload('b-1', keys[i]),
+                key: ApkamSigningKeys(
+                    algorithm: SigningAlgoType.rsa2048,
+                    publicKey: pairs[i - 1].atPublicKey.publicKey,
+                    privateKey: pairs[i - 1].atPrivateKey.privateKey),
+                signerEnrollmentId: 'b-1'));
+      }
+
+      final sixteen = await walk(b, 'b-1', keyIndex: 15);
+      final seventeen = await walk(b, 'b-1', keyIndex: 16);
+
+      expect(sixteen.verdict, ChainVerdict.anchored, reason: sixteen.reason);
+      expect(sixteen.keysWalked, hasLength(PqSigningChain.maxDepth));
+      expect(seventeen.verdict, ChainVerdict.broken);
+      expect(seventeen.reason, contains('longer than 16 keys'));
+    }, timeout: const Timeout(Duration(minutes: 3)));
   });
 
   group('Given two keys whose chain links each name the other as signer', () {
@@ -553,6 +669,40 @@ void main() {
   });
 
   group('Given two entries listed under one kid whose keys differ', () {
+    test(
+        'when a root voucher links the record, then it links only the first '
+        'entry under that kid, as the atServer reads it, and the other keys '
+        'all the same', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final k1 = RsaKeyPair.generate().atPublicKey.publicKey;
+      final k1b = RsaKeyPair.generate().atPublicKey.publicKey;
+      final k2 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final kid = publicKeyKidOfBase64(k1);
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey(kid: kid, alg: SigningAlgoType.rsa2048, pub: k1),
+        ApskSigningKey(kid: kid, alg: SigningAlgoType.rsa2048, pub: k1b),
+        k2,
+      ]));
+      remoteMetadata[apsk] = Metadata();
+      final first = (await record(b, 'b-1')).keys.first;
+      await store(b, 'b-1', first,
+          await root.sign(PqSigningChain.linkPayload('b-1', first)));
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [k2.kid]);
+      expect(linkCalls.single.links!.keys, [k2.kid],
+          reason: 'a link for the second entry names a key the atServer does '
+              'not read under that kid, and would spoil the whole call');
+    });
+
     test(
         'when the walk runs from the entry a root link does not name, then '
         'it reads broken; from the entry it names, anchored', () async {
@@ -808,6 +958,199 @@ void main() {
     });
   });
 
+  group('Given a voucher meeting what the target holds', () {
+    /// A, whose only key carries a root link, and its chain voucher.
+    Future<({MockAtClient a, LinkVoucher voucher})> anchoredA(
+        LinkVoucher root) async {
+      final a = client('a-1');
+      await withSigningKey(a);
+      final aEntry = (await record(a, 'a-1')).keys.single;
+      await store(a, 'a-1', aEntry,
+          await root.sign(PqSigningChain.linkPayload('a-1', aEntry)));
+      final voucher = (await PqSigningChain(a)
+          .voucher(signerOf(a), isFullyPrivileged: () async => false))!;
+      expect(voucher.isRoot, isFalse, reason: 'the premise: a chain voucher');
+      return (a: a, voucher: voucher);
+    }
+
+    test(
+        'when the target\'s keys change before the call lands, then it reads '
+        'again and links the keys it now lists', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      final stale = await record(b, 'b-1');
+      final k2 = RsaKeyPair.generate().atPublicKey.publicKey;
+      remoteData[PqSigningChain.apskUri(atSign, 'b-1')] = k2;
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(b).linkKeysOf(stale, root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [publicKeyKidOfBase64(k2)]);
+      expect(linkCalls, hasLength(2),
+          reason: 'the first named a key the record no longer lists');
+    });
+
+    test(
+        'when the target lists a key not spelt in padded standard base64, then '
+        'that key takes no link and the others are linked all the same',
+        () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final k2 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey(
+            kid: 'a1a1a1a1a1a1a1a1',
+            alg: SigningAlgoType.rsa2048,
+            pub: '${RsaKeyPair.generate().atPublicKey.publicKey}\n'),
+        k2,
+      ]));
+      remoteMetadata[apsk] = Metadata();
+
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [k2.kid]);
+      expect(linkCalls.single.links!.keys, [k2.kid]);
+    });
+
+    test(
+        'when the target lists a key whose status no longer vouches, then that '
+        'key takes no link', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final k1 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final withdrawn = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey,
+          status: KeyEntryStatus.of('revoked'));
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode(apskAdvertisement(keys: [k1, withdrawn]));
+      remoteMetadata[apsk] = Metadata();
+
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [k1.kid]);
+    });
+
+    test(
+        'when the key carries a root-shaped link whose kid is no key of the '
+        'root, then a chain voucher replaces it, since its signer makes it a '
+        'chain link', () async {
+      final root = await newRoot();
+      final f = await anchoredA(root);
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      final stray = await LinkVoucher.root(
+              private: Uint8List.fromList(
+                  (await MlDsa65PureDartAlgo().generateKeyPair()).secretKey),
+              kid: 'feedfacefeedface')
+          .sign(PqSigningChain.linkPayload('b-1', bEntry));
+      await store(b, 'b-1', bEntry, stray);
+      expect((await walk(b, 'b-1')).reason, contains('no key of the signing'),
+          reason: 'the premise');
+
+      final linked = await PqSigningChain(f.a).linkKeysOf(
+          await record(f.a, 'b-1'), f.voucher,
+          authenticationKey: null, verifier: signerOf(f.a));
+
+      expect(linked, [bEntry.kid]);
+      expect((await walk(b, 'b-1')).verdict, ChainVerdict.anchored);
+    });
+
+    test(
+        'when the key carries a root link that fails its check, then a chain '
+        'voucher leaves it for a root holder', () async {
+      final root = await newRoot();
+      final f = await anchoredA(root);
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      await store(b, 'b-1', bEntry, await forgedRootLink('b-1', bEntry));
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(f.a).linkKeysOf(
+          await record(f.a, 'b-1'), f.voucher,
+          authenticationKey: null, verifier: signerOf(f.a));
+
+      expect(linked, isEmpty);
+      expect(linkCalls, isEmpty);
+    });
+
+    test(
+        'when the key carries a chain link that walks to the root, then a chain '
+        'voucher keeps it', () async {
+      final root = await newRoot();
+      final f = await anchoredA(root);
+      final c = client('c-1');
+      final cKey = await withSigningKey(c);
+      final cEntry = (await record(c, 'c-1')).keys.single;
+      await store(c, 'c-1', cEntry,
+          await root.sign(PqSigningChain.linkPayload('c-1', cEntry)));
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          PqSigningChain.signChainLink(
+              PqSigningChain.linkPayload('b-1', bEntry),
+              key: cKey,
+              signerEnrollmentId: 'c-1'));
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(f.a).linkKeysOf(
+          await record(f.a, 'b-1'), f.voucher,
+          authenticationKey: null, verifier: signerOf(f.a));
+
+      expect(linked, isEmpty);
+      expect(linkCalls, isEmpty);
+    });
+
+    test(
+        'when a holder of the root links its own keys and its _apsk is its '
+        'authentication key, then it sends nothing', () async {
+      final a = client('a-1');
+      await giveRoot(a, remoteData);
+      await signerOf(a).publishPublicSigningKey();
+      linkCalls.clear();
+
+      final linked = await PqSigningChain(a)
+          .linkOwnKeys(signerOf(a), isFullyPrivileged: () async => true);
+
+      expect(linked, isEmpty);
+      expect(linkCalls, isEmpty);
+    });
+
+    test(
+        'when the caller asks for a chain voucher alone, then a holder of the '
+        'root vouches with its own linked key', () async {
+      final a = client('a-1');
+      final root = await giveRoot(a, remoteData);
+      await withSigningKey(a);
+      final aEntry = (await record(a, 'a-1')).keys.single;
+      await store(a, 'a-1', aEntry,
+          await root.voucher.sign(PqSigningChain.linkPayload('a-1', aEntry)));
+
+      final voucher =
+          await PqSigningChain(a).voucher(signerOf(a), isFullyPrivileged: null);
+
+      expect(voucher, isNotNull);
+      expect(voucher!.isRoot, isFalse);
+    });
+  });
+
   group('Given a bare RSA client data signing key', () {
     test(
         'when a root holder links it and it then vouches for another '
@@ -932,6 +1275,38 @@ void main() {
     });
   });
 
+  group('Given a holder of the root whose key K1 has a link, minting K2', () {
+    test(
+        'when it advertises K2, then it chain-links K2 with K1 and warns of '
+        'nothing', () async {
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final root = await giveRoot(b, remoteData);
+      final k1 = await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      await store(b, 'b-1', k1Entry,
+          await root.voucher.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
+      logs.records.clear();
+
+      await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+          .reconcileSigningKeys();
+
+      final after = await record(b, 'b-1');
+      final k2Entry =
+          after.keys.singleWhere((k) => k.alg == SigningAlgoType.mldsa65);
+      expect(SignedEnvelope.fromJson(after.links[k2Entry.kid]!).signature.kid,
+          publicKeyKidOfBase64(k1.publicKey));
+      expect(logs.at('WARNING'), isEmpty,
+          reason: 'it asked for a chain voucher, which is no claim about its '
+              'privilege');
+    });
+  });
+
   group('Given an enrollment with linked and unlinked keys', () {
     test(
         'when it signs content, then only the keys with a link sign, and '
@@ -980,6 +1355,61 @@ void main() {
       final result = await PqSigningChain(b).verifyChain(signerOf(b), 'b-1');
 
       expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
+    });
+
+    test(
+        'when a retired key\'s link fails, then it still reads anchored, since '
+        'a retired key signs nothing new', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      await withSigningKey(b, alg: SigningAlgoType.mldsa65);
+      final keys = (await record(b, 'b-1')).keys;
+      final k1 = keys.singleWhere((k) => k.alg == SigningAlgoType.rsa2048);
+      final k2 = keys.singleWhere((k) => k.alg == SigningAlgoType.mldsa65);
+      await store(
+          b, 'b-1', k1, await root.sign(PqSigningChain.linkPayload('b-1', k1)));
+      await store(b, 'b-1', k2, await forgedRootLink('b-1', k2));
+      await (b.atKeysIo! as WrittenAtKeysIo).update(atSign.toAtsign(), (keys) {
+        keys.retireSigningKeys('b-1', CryptographicMaterialAlgorithm.mlDsa65);
+        return true;
+      });
+      await signerOf(b).publishPublicSigningKey();
+      expect(
+          (await record(b, 'b-1'))
+              .keys
+              .singleWhere((k) => k.kid == k2.kid)
+              .offeredForNewOperations,
+          isFalse,
+          reason: 'the premise: K2 is retired');
+
+      final result = await PqSigningChain(b).verifyChain(signerOf(b), 'b-1');
+
+      expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
+    });
+
+    test(
+        'when a linked key walks only as far as a key with no link, then it '
+        'reads chained, naming that key', () async {
+      await newRoot();
+      final a = client('a-1');
+      final aKey = await withSigningKey(a);
+      final b = client('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          PqSigningChain.signChainLink(
+              PqSigningChain.linkPayload('b-1', bEntry),
+              key: aKey,
+              signerEnrollmentId: 'a-1'));
+
+      final result = await PqSigningChain(b).verifyChain(signerOf(b), 'b-1');
+
+      expect(result.verdict, ChainVerdict.chained);
+      expect(result.kid, bEntry.kid);
     });
 
     test('when no active key has a link, then it reads unsigned', () async {
