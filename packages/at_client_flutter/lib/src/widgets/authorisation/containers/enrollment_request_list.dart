@@ -44,6 +44,11 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   bool _isLoading = false;
   String? _error;
 
+  /// Why the approved enrollments could not be listed, shown in their own
+  /// section so it is never read as a failure of the pending list or of an
+  /// approval.
+  String? _approvedError;
+
   @override
   void initState() {
     super.initState();
@@ -105,13 +110,26 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   }
 
   /// Lists the approved enrollments, each with whether its keys are anchored,
-  /// or `?` where that could not be read.
+  /// or `?` where that could not be read; a failure to list them is recorded
+  /// in [_approvedError] rather than thrown.
   Future<void> _loadApproved() async {
     // ignore: experimental_member_use
     final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
-    final approved = await _client.enrollments.list(
-      statuses: const [EnrollmentStatus.approved],
-    );
+    final List<Enrollment> approved;
+    try {
+      approved = await _client.enrollments.list(
+        statuses: const [EnrollmentStatus.approved],
+      );
+    } on Exception catch (e) {
+      debugPrint('Could not list the approved enrollments: $e');
+      if (mounted) {
+        setState(() {
+          _approved.clear();
+          _approvedError = 'Could not list the approved enrollments: $e';
+        });
+      }
+      return;
+    }
     final rows = <({Enrollment enrollment, String anchored})>[];
     for (final enrollment in approved) {
       final id = enrollment.enrollmentId;
@@ -127,6 +145,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     }
     if (mounted) {
       setState(() {
+        _approvedError = null;
         _approved
           ..clear()
           ..addAll(rows);
@@ -277,7 +296,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
               onReject: () => _handleDeny(request),
             ),
           ),
-        if (_approved.isNotEmpty) ...[
+        if (_approved.isNotEmpty || _approvedError != null) ...[
           const Padding(
             padding: EdgeInsets.only(top: 16.0),
             child: AuthorisationSectionHeader(
@@ -285,6 +304,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
               icon: Icons.verified_user,
             ),
           ),
+          if (_approvedError != null)
+            Text(_approvedError!, style: const TextStyle(color: Colors.red)),
           for (final row in _approved)
             ListTile(
               key: ValueKey('approved-${row.enrollment.enrollmentId}'),

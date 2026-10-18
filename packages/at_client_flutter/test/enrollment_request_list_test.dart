@@ -80,6 +80,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(FakeEnrollmentRequestDecision());
     registerFallbackValue(FakeListParams());
+    registerFallbackValue(AtKey());
   });
 
   setUp(() {
@@ -319,6 +320,122 @@ void main() {
         find.text('Approve'),
         findsOneWidget,
         reason: 'the pending request is still listed above them',
+      );
+    },
+  );
+
+  testWidgets(
+    'a failure listing the approved enrollments shows in their section, and '
+    'not as a failure of the pending list',
+    (tester) async {
+      when(
+        () => notifications.subscribe(
+          regex: any(named: 'regex'),
+          shouldDecrypt: any(named: 'shouldDecrypt'),
+        ),
+      ).thenAnswer((_) => const Stream<AtNotification>.empty());
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer((inv) async {
+        if (approvedFilter(inv)) {
+          throw AtClientException.message('list refused');
+        }
+        return <Enrollment>[];
+      });
+
+      await pumpList(tester);
+      await tester.pump();
+
+      expect(find.text('No pending enrollment requests'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+      expect(
+        find.textContaining('Could not list the approved enrollments'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'an approval stands when reading the approved enrollments again fails, '
+    'and the section is read again after each approval',
+    (tester) async {
+      var approvedReads = 0;
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer((inv) async {
+        if (approvedFilter(inv)) {
+          approvedReads++;
+          if (approvedReads > 1) {
+            throw AtClientException.message('list refused');
+          }
+          return <Enrollment>[];
+        }
+        return [pendingRecord()];
+      });
+      when(() => service.approve(any())).thenAnswer(
+        (_) async =>
+            AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
+      );
+
+      await pumpList(tester);
+      expect(approvedReads, 1, reason: 'the premise: read once on opening');
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(approvedReads, 2, reason: 'read again after the approval');
+      expect(find.textContaining('Failed to approve'), findsNothing);
+      expect(
+        find.textContaining('Could not list the approved enrollments'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 5));
+    },
+  );
+
+  testWidgets(
+    'given no anchoring, the approved section asks the client whether each '
+    'enrollment is anchored',
+    (tester) async {
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer(
+        (inv) async => approvedFilter(inv)
+            ? [
+                Enrollment()
+                  ..enrollmentId = 'u-1'
+                  ..appName = 'buzz'
+                  ..deviceName = 'tablet'
+                  ..status = 'approved'
+                  ..namespace = <String, String>{},
+              ]
+            : [pendingRecord()],
+      );
+      when(
+        () => atClient.get(
+          any(),
+          getRequestOptions: any(named: 'getRequestOptions'),
+        ),
+      ).thenThrow(AtKeyNotFoundException('no _apsk'));
+
+      await pumpList(tester);
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-u-1')),
+          matching: find.text('unsigned'),
+        ),
+        findsOneWidget,
+        reason:
+            'an enrollment publishing no _apsk reads unsigned through '
+            'client.enrollments.anchoring',
       );
     },
   );
