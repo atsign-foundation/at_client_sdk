@@ -112,7 +112,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [53]  | UC-B4.2, and what asking for no legacy material actually costs                              | 2026-08-08 | LIVE                      |
 | [54]  | S-3: the two things an updatable key store turned out to be                                 | 2026-08-08 | LIVE                      |
 | [55]  | ON-1's consumer half: what "the CLI can do it too" actually cost                            | 2026-08-08 | LIVE                      |
-| [56]  | The "make it right" quality pass, and the design goals it settled                           | 2026-08-09 | AMENDED 2026-08-13        |
+| [56]  | The "make it right" quality pass, and the design goals it settled                           | 2026-08-09 | AMENDED 2026-10-16        |
 | [57]  | The wire vocabulary gets one home per family                                                | 2026-08-09 | LIVE                      |
 | [58]  | The two published-API breaks are repaired in place                                          | 2026-08-09 | LIVE                      |
 | [59]  | Phase-3 at_chops surface rulings                                                            | 2026-08-09 | LIVE                      |

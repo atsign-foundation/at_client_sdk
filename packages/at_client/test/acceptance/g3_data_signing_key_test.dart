@@ -70,8 +70,8 @@ void main() {
         proves: 'the no-op itself, and specifically that NOTHING IS PUBLISHED '
             '— it asserts the update list is empty, not merely that the '
             'minted list is. A reconcile that republished an unchanged value '
-            'would satisfy "mints nothing" and still rewrite the record, '
-            'which is what breaks a conveyed link',
+            'would satisfy "mints nothing" and still rewrite the record at '
+            'every start',
         clauses: ['mints no key, retires none']);
     provenIn('packages/at_client/test/signing_key_mint_test.dart',
         'a set naming two algorithms',

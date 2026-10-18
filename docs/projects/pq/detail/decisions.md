@@ -2048,9 +2048,9 @@ have to wait.
 
 ### 22.2b Publishing a chain signature: the parent signs, the child publishes
 
-> ⛔ **SUPERSEDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** The atServer writes a link for
-> the voucher through `enroll:link`; nothing is conveyed, and the child stamps
-> nothing.
+> ⚠️ **AMENDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** The parent still signs, and the
+> atServer writes the link for it through `enroll:link`; nothing is conveyed,
+> and the child stamps nothing.
 
 A conflict the chain model has to resolve, found by reading the two ends together. In the
 approval-graph chain **E2 signs E3's key** — but `_apsk` writes are restricted to *the owning
@@ -5281,6 +5281,11 @@ has no signed children. The cascade a key rotation would otherwise trigger
 ([section 56.3](#563-three-retrofit-modes-and-the-signing-algorithm-selector)) dissolves into the sweep.
 
 ### 56.2 A root-holder conveys root links, not chain links attributed to itself
+
+> ⚠️ **AMENDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** Nothing conveys a link: a holder
+> of the root writes root links through `enroll:link`. Linking a key it has just
+> minted, it signs a chain link with a key it has already linked, which its next
+> start replaces with a root link.
 
 Today `sweepUnanchoredEnrollments` signs a chain link with the *sweeper's* own
 APKAM key and conveys it. For a client authenticating with the atSign's own root

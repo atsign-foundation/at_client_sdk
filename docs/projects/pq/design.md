@@ -2774,7 +2774,7 @@ whose walk reads anchored; never with an authentication key.
 | Writer | When | What it links |
 | ------ | ---- | ------------- |
 | the approver | straight after `enroll:approve` | every key of the enrollment it approved |
-| an enrollment that mints a key | in the same reconcile, before an outgoing key is retired | the key it minted, signed with one it has linked, which may be the one retiring |
+| an enrollment that mints a key | in the same reconcile, before an outgoing key is retired | the key it minted, by a chain link signed with one it has linked, which may be the one retiring, even when it holds the root |
 | a holder of the root | at every start | its own keys, by root link |
 | a holder of the root's sweep | at every fully privileged start | every key on the atSign's other approved enrollments without a sound root link |
 | a fully privileged enrollment whose atSign publishes no root | at start | mints the root, then links as a holder |
@@ -2784,10 +2784,13 @@ only if that is still what is stored, so two vouchers, or a voucher and a sweep,
 cannot lose each other's writes. The client decides what may replace what: a
 root link replaces a chain link, or a root link that fails its check; a chain
 link replaces only a chain link that does not walk to the root, never a root
-link; and a voucher links no key its own chain passes through. A refused call
-is read again and made once more on what the record now holds. Against an
-atServer without `enroll:link`, nothing is linked and everything else completes
-as before.
+link; and a voucher links no key its own chain passes through. For that rule a
+link's kind follows its signer's `kid`, as it does for the walk. Only the first
+entry under a `kid` is linked, as the atServer reads the record, and a key not
+spelt in padded standard base64 takes no link, so neither can spoil the rest of
+a call. A refused call is read again and, if the record has changed, made once
+more on what it now holds. Against an atServer without `enroll:link`, nothing is
+linked and everything else completes as before.
 
 ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
 approval takes only `__manage`**, so a `__manage`-only approver approves without
