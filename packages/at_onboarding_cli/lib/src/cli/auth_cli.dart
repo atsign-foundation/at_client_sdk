@@ -969,15 +969,8 @@ Future<String> _describeAnchoring(
     return '-';
   }
   try {
-    final result = await anchoring(id);
     // ignore: experimental_member_use
-    return switch (result.verdict) {
-      // ignore: experimental_member_use
-      ChainVerdict.anchored => 'anchored',
-      // ignore: experimental_member_use
-      ChainVerdict.unsigned => 'unsigned',
-      _ => '${result.verdict.name} ${result.kid ?? '?'}',
-    };
+    return (await anchoring(id)).summary;
   } on Exception {
     return '?';
   }

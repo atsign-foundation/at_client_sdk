@@ -57,6 +57,19 @@ void main() {
           'namespace': <String, String>{},
         });
 
+  /// Whether the `enroll:list` [inv] records asks for approved enrollments
+  /// alone, as the approved section does; an approval's own read asks for
+  /// pending and approved together.
+  bool approvedFilter(Invocation inv) {
+    final filter =
+        (inv.namedArguments[#enrollmentListParams]
+                as EnrollmentListRequestParam?)
+            ?.enrollmentListFilter;
+    return filter != null &&
+        filter.length == 1 &&
+        filter.single == EnrollmentStatus.approved;
+  }
+
   Enrollment pendingRecord() => Enrollment()
     ..enrollmentId = enrollmentId
     ..appName = 'buzz'
@@ -89,12 +102,14 @@ void main() {
     ).thenAnswer((_) => Stream.value(announcement()));
     // The roster holds the request, which is what approve() reads the wrapped
     // key off; the initial fetch and the stream both hand it to the widget,
-    // which de-duplicates.
+    // which de-duplicates. A read of the approved enrollments finds none.
     when(
       () => service.fetchEnrollmentRequests(
         enrollmentListParams: any(named: 'enrollmentListParams'),
       ),
-    ).thenAnswer((_) async => [pendingRecord()]);
+    ).thenAnswer(
+      (inv) async => approvedFilter(inv) ? <Enrollment>[] : [pendingRecord()],
+    );
   });
 
   tearDown(() => AtClientManager.getInstance().reset());
@@ -228,4 +243,83 @@ void main() {
     );
     expect(find.text('No pending enrollment requests'), findsOneWidget);
   });
+
+  testWidgets(
+    'the approved enrollments show whether their keys are anchored, naming a '
+    'key that fails',
+    (tester) async {
+      Enrollment approved(String id, String device) => Enrollment()
+        ..enrollmentId = id
+        ..appName = 'buzz'
+        ..deviceName = device
+        ..status = 'approved'
+        ..namespace = <String, String>{};
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer(
+        (inv) async => approvedFilter(inv)
+            ? [
+                approved('a-1', 'laptop'),
+                approved('u-1', 'tablet'),
+                approved('b-1', 'watch'),
+              ]
+            : [pendingRecord()],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async => switch (id) {
+                'a-1' => ChainResult(ChainVerdict.anchored, [id], null),
+                'u-1' => ChainResult(ChainVerdict.unsigned, [id], null),
+                _ => ChainResult(
+                  ChainVerdict.broken,
+                  [id],
+                  'a forged link',
+                  kid: 'deadbeefdeadbeef',
+                ),
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Approved enrollments'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-a-1')),
+          matching: find.text('anchored'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-u-1')),
+          matching: find.text('unsigned'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-b-1')),
+          matching: find.text('broken deadbeefdeadbeef'),
+        ),
+        findsOneWidget,
+        reason:
+            'a failing key is named, so the approver knows which key to '
+            'look at',
+      );
+      expect(
+        find.text('Approve'),
+        findsOneWidget,
+        reason: 'the pending request is still listed above them',
+      );
+    },
+  );
 }

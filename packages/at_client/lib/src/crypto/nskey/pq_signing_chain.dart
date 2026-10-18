@@ -80,6 +80,14 @@ class ChainResult {
   ChainResult(this.verdict, this.path, this.reason,
       {this.kid, this.keysWalked = const []});
 
+  /// How an approver's view shows this result: `anchored`, `unsigned`, or
+  /// the verdict followed by the [kid] it is about.
+  String get summary => switch (verdict) {
+        ChainVerdict.anchored => 'anchored',
+        ChainVerdict.unsigned => 'unsigned',
+        _ => '${verdict.name} ${kid ?? '?'}',
+      };
+
   @override
   String toString() => 'ChainResult(${verdict.name}, path: $path'
       '${kid == null ? '' : ', kid: $kid'}'

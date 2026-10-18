@@ -7,12 +7,15 @@ import 'package:flutter/material.dart';
 /// A "Big Widget" that manages and displays a list of pending enrollment
 /// requests. It listens to real-time updates and provides approval/denial
 /// functionality, through `client.enrollments` on the client it is given.
+/// Below them it lists the approved enrollments, each with whether its keys
+/// are anchored to the atSign's signing root.
 /// {@endtemplate}
 class EnrollmentRequestList extends StatefulWidget {
   const EnrollmentRequestList({
     super.key,
     this.useShrinkWrap = false,
     this.atClient,
+    this.anchoring,
   });
 
   final bool useShrinkWrap;
@@ -22,6 +25,11 @@ class EnrollmentRequestList extends StatefulWidget {
   /// the current-atSign client, as it always has.
   final AtClient? atClient;
 
+  /// Whether an approved enrollment's keys are anchored; with none it asks
+  /// `client.enrollments.anchoring`.
+  // ignore: experimental_member_use
+  final Future<ChainResult> Function(String enrollmentId)? anchoring;
+
   @override
   State<EnrollmentRequestList> createState() => _EnrollmentRequestListState();
 }
@@ -30,6 +38,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   AtClient get _client =>
       widget.atClient ?? AtClientManager.getInstance().atClient;
   final List<Enrollment> _requests = [];
+  final List<({Enrollment enrollment, String anchored})> _approved = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
   bool _isLoading = false;
@@ -84,6 +93,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           _isLoading = false;
         });
       }
+      await _loadApproved();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -91,6 +101,36 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Lists the approved enrollments, each with whether its keys are anchored,
+  /// or `?` where that could not be read.
+  Future<void> _loadApproved() async {
+    // ignore: experimental_member_use
+    final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
+    final approved = await _client.enrollments.list(
+      statuses: const [EnrollmentStatus.approved],
+    );
+    final rows = <({Enrollment enrollment, String anchored})>[];
+    for (final enrollment in approved) {
+      final id = enrollment.enrollmentId;
+      if (id == null) continue;
+      String anchored;
+      try {
+        // ignore: experimental_member_use
+        anchored = (await anchoring(id)).summary;
+      } on Exception {
+        anchored = '?';
+      }
+      rows.add((enrollment: enrollment, anchored: anchored));
+    }
+    if (mounted) {
+      setState(() {
+        _approved
+          ..clear()
+          ..addAll(rows);
+      });
     }
   }
 
@@ -102,6 +142,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
         });
         _showFeedbackOverlay(request, EnrollmentStatus.approved);
+        await _loadApproved();
       }
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException catch (e) {
@@ -114,6 +155,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+        await _loadApproved();
       }
     } catch (e) {
       if (mounted) {
@@ -218,27 +260,43 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       );
     }
 
-    if (_requests.isEmpty) {
-      return const Center(child: Text('No pending enrollment requests'));
-    }
-
-    return ListView.builder(
+    return ListView(
       shrinkWrap: widget.useShrinkWrap,
       physics: widget.useShrinkWrap
           ? const NeverScrollableScrollPhysics()
           : null,
-      itemCount: _requests.length,
-      itemBuilder: (context, index) {
-        final request = _requests[index];
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: EnrollmentRequestCard(
-            request: request,
-            onApprove: () => _handleApprove(request),
-            onReject: () => _handleDeny(request),
+      children: [
+        if (_requests.isEmpty)
+          const Center(child: Text('No pending enrollment requests')),
+        for (final request in _requests)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: EnrollmentRequestCard(
+              request: request,
+              onApprove: () => _handleApprove(request),
+              onReject: () => _handleDeny(request),
+            ),
           ),
-        );
-      },
+        if (_approved.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 16.0),
+            child: AuthorisationSectionHeader(
+              title: 'Approved enrollments',
+              icon: Icons.verified_user,
+            ),
+          ),
+          for (final row in _approved)
+            ListTile(
+              key: ValueKey('approved-${row.enrollment.enrollmentId}'),
+              title: Text(
+                '${row.enrollment.appName ?? ''} · '
+                '${row.enrollment.deviceName ?? ''}',
+              ),
+              subtitle: Text(row.enrollment.enrollmentId!),
+              trailing: Text(row.anchored),
+            ),
+        ],
+      ],
     );
   }
 }
