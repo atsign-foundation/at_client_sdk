@@ -4113,9 +4113,9 @@ Threats, answered for the whole set:
   from which the walk continues (UC-G3.13, UC-G3.19); a link naming another key
   reads broken (UC-G3.30).
 - **Impersonation:** only the target, a caller that could approve it, or a CRAM
-  connection writes a link (UC-G3.14), so the right to write one is the right
-  to approve or revoke the target; an authentication key takes no link and
-  signs none (UC-G3.21).
+  connection writes a link (UC-G3.14), so any writer but the target itself
+  holds the authority to approve or revoke it; an authentication key takes no
+  link and signs none (UC-G3.21).
 
 #### UC-G3.4 — WITHDRAWN: a link was bound to the exact `_apsk` string
   **Withdrawn.** A link now vouches for one key, not the whole value; see

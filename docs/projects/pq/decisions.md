@@ -214,7 +214,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [154] | A shared content key follows the sender's own namespace key too                              | 2026-10-09 | AMENDED 2026-10-13 |
 | [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
 | [156] | The e2e pack's enrollments expire on their own, and nothing tears them down                  | 2026-10-13 | LIVE               |
-| [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | LIVE               |
+| [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | AMENDED 2026-10-18 |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted

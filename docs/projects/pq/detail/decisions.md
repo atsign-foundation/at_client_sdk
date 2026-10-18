@@ -5284,8 +5284,8 @@ has no signed children. The cascade a key rotation would otherwise trigger
 
 > ⚠️ **AMENDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** Nothing conveys a link: a holder
 > of the root writes root links through `enroll:link`. Linking a key it has just
-> minted, it signs a chain link with a key it has already linked, which its next
-> start replaces with a root link.
+> minted, it signs a chain link with a key it has already linked, which the
+> same start's root-linking step then replaces with a root link.
 
 Today `sweepUnanchoredEnrollments` signs a chain link with the *sweeper's* own
 APKAM key and conveys it. For a client authenticating with the atSign's own root
@@ -15446,7 +15446,11 @@ enrollment being mended.
    root link replaces a chain link, or a root link that fails its check; a
    chain link replaces only a chain link that does not walk to the root, never
    a root link; and a voucher links no key its own chain passes through. A
-   refused call is read again and made once more on what the record holds.
+   refused call is read again and, if the record has changed, made once more
+   on what it now holds. *(Amended by gkc on 2026-10-18; it read "made once more
+   on what the record holds". The atServer's checks depend on the record, the
+   request and the caller's grant, so an unchanged record meets the same
+   refusal.)*
 7. **Content is signed with the keys that have a link** while there are any,
    so a key waits for its link before it signs, and otherwise as before.
 8. **The walk follows keys.** It compares each link with the entry it is
