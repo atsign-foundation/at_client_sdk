@@ -2794,10 +2794,10 @@ linked and everything else completes as before.
 
 ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
 approval takes only `__manage`**, so a `__manage`-only approver approves without
-being fully privileged, and links with its own linked key. A client running as
-the atSign's own credential, with no enrollment id or as `primary`, is fully
-privileged by construction, but has no enrollment record for `enroll:link` to
-target, so `_apsk.primary` takes no link.
+being fully privileged, and links with a key of its own that walks to the root.
+A client running as the atSign's own credential, with no enrollment id or as
+`primary`, is fully privileged by construction, but has no enrollment record for
+`enroll:link` to target, so `_apsk.primary` takes no link.
 
 #### 9.8.5 Two coherence rules on the preference
 

@@ -566,9 +566,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
      postures). What chains it to the root are the **links** `alice1` writes for each
      of E2's keys through `enroll:link` straight after approving — root links when it
-     holds the signing root, chain links when one of its own keys walks to it, and
-     none when it has neither — into the record's **metadata**; the value itself is
-     untouched either way.
+     holds the signing root, chain links when one of its own keys walks to the root,
+     and none when it has neither — into the record's **metadata**; the value itself
+     is untouched in every case.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -4130,14 +4130,14 @@ Threats, answered for the whole set:
 
 #### UC-G3.5 — an approver links each key of the enrollment it approves, straight after approving
   *Given* an approver that passes the approve gate for enrollment B and holds
-  the signing root's private key or a linked key of its own, and B's `_apsk`
-  advertising keys K1 and K2 in the list form.
+  the signing root's private key or a key of its own that walks to the root,
+  and B's `_apsk` advertising keys K1 and K2 in the list form.
   *When* it approves B.
   *Then* it calls `enroll:link` once for B, carrying a link for K1 and one for
   K2, each stating that it expects the key to have no link yet.
   *And* the links are root links, signed with the signing root, when the
-  approver holds the root's private key, and chain links, each signed with one
-  of its own linked keys, when it doesn't.
+  approver holds the root's private key, and chain links, each signed with a
+  key of its own that walks to the root, when it doesn't.
   *And* B's record holds one link per `kid`, and the walk from either key
   reads **anchored**.
   *And* an approver with neither sends no `enroll:link`, and the approval
