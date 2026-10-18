@@ -8,6 +8,8 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
+import 'package:at_auth/src/keys/serialization/base64_field.dart';
+import 'package:at_auth/src/keys/serialization/json_text.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -164,7 +166,14 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   Future<Map<String, dynamic>> _readAtRestDocument(File file) async {
-    final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final text = await file.readAsString();
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw FormatException(notValidJson('the atKeys file ${file.path}', e));
+    }
+    final json = decoded as Map<String, dynamic>;
     if (!passphraseCodec.isEnvelope(json)) return json;
     return passphraseCodec.decode(json, passPhrase: passPhrase);
   }
@@ -205,7 +214,7 @@ Future<Map<String, dynamic>> _selfEncryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (algorithm, value) async => base64.encode(await algorithm.encrypt(
+      (algorithm, _, value) async => base64.encode(await algorithm.encrypt(
           Uint8List.fromList(utf8.encode(value)),
           iv: InitialisationVector.legacy())));
 }
@@ -214,8 +223,9 @@ Future<Map<String, dynamic>> _selfDecryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (algorithm, value) async => utf8.decode(await algorithm
-          .decrypt(base64Decode(value), iv: InitialisationVector.legacy())));
+      (algorithm, field, value) async => utf8.decode(await algorithm.decrypt(
+          decodeBase64Field(value, field),
+          iv: InitialisationVector.legacy())));
 }
 
 /// Applies [transform] to whichever of the self-encrypted legacy fields the
@@ -227,7 +237,9 @@ Future<Map<String, dynamic>> _selfDecryptLegacyFields(
 /// bytes against openssl.
 Future<Map<String, dynamic>> _applyToLegacyFields(
   Map<String, dynamic> document,
-  Future<String> Function(AESEncryptionAlgo algorithm, String value) transform,
+  Future<String> Function(
+          AESEncryptionAlgo algorithm, String field, String value)
+      transform,
 ) async {
   final present = _selfEncryptedLegacyFields
       .where((field) => document[field] != null)
@@ -241,10 +253,13 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     throw AtException(
         'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
   }
+  // NOTE: a malformed key fails here, by field name, not inside the cipher.
+  decodeBase64Field(selfEncryptionKey, auth_constants.defaultSelfEncryptionKey);
   final algorithm = AESEncryptionAlgo(AESKey(selfEncryptionKey));
   final result = Map<String, dynamic>.from(document);
   for (final field in present) {
-    result[field] = await transform(algorithm, document[field] as String);
+    result[field] =
+        await transform(algorithm, field, document[field] as String);
   }
   return result;
 }

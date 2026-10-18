@@ -18,7 +18,7 @@ class CramAuthenticator {
       return await atLookUp.cramAuthenticate(cramSecret);
     } on UnAuthenticatedException catch (e) {
       throw UnAuthenticatedException(
-          'cram auth failed for $atSign - ${e.toString()} with cramSecret $cramSecret');
+          'Cram authentication failed for $atSign: ${e.message}');
     }
   }
 }

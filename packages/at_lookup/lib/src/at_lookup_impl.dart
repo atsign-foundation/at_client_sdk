@@ -807,7 +807,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           logger.info('auth success');
           _recordAuthentication();
         } else {
-          throw UnAuthenticatedException('Auth failed');
+          throw UnAuthenticatedException('Auth failed: $cramResponse');
         }
       }
       return _connection!.getMetaData()!.isAuthenticated;
