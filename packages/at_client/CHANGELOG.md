@@ -1,5 +1,15 @@
 ## 3.15.0-rc8
 
+- feat: an approval anchors the enrollment it approves to the atSign's signing
+  root at once, and adding or retiring a key no longer undoes that. It needs an
+  atServer with `enroll:link`; without one nothing is anchored, and everything
+  else works as before.
+- feat: `client.enrollments.anchoring` says whether an enrollment's keys are
+  anchored to the atSign's signing root, and names a key that is not.
+- feat: at a post-quantum posture, a fully privileged client whose atSign
+  publishes no signing root mints one when it starts.
+- experimental: `PqStartupGates.publishChainLink` is removed, and
+  `PqSigningChain`'s methods are replaced.
 - feat: `Enrollment` reports the key expiry a request asked for, as
   `apkamKeysExpiryDuration` (zero or less for none, null when the atServer
   does not say), and when its record expires, as `expiresAt`.

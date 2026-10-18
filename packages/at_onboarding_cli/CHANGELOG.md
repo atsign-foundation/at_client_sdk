@@ -1,5 +1,7 @@
 ## 2.0.0-rc8
 
+- feat: `at_activate list` shows whether each approved enrollment's keys are
+  anchored to the atSign's signing root, naming a key that is not.
 - feat: `at_activate list` shows the key expiry each enrollment asked for and
   when its record expires, and `at_activate fetch` prints both.
 - feat: `at_activate approve` and `auto_approve` print when each enrollment
