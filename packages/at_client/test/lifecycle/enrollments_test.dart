@@ -324,9 +324,7 @@ void main() {
     await withSigningKey(remoteBacked('unlinked-1'));
     final manager = remoteBacked('manager-1');
 
-    // ignore: experimental_member_use
     final anchored = await manager.enrollments.anchoring('linked-1');
-    // ignore: experimental_member_use
     final unsigned = await manager.enrollments.anchoring('unlinked-1');
 
     expect(anchored.verdict, ChainVerdict.anchored, reason: anchored.reason);

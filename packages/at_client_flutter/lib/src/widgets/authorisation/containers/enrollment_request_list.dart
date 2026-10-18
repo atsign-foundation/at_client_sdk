@@ -136,7 +136,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       if (id == null) continue;
       String anchored;
       try {
-        // ignore: experimental_member_use
         anchored = (await anchoring(id)).summary;
       } on Exception {
         anchored = '?';

@@ -969,7 +969,6 @@ Future<String> _describeAnchoring(
     return '-';
   }
   try {
-    // ignore: experimental_member_use
     return (await anchoring(id)).summary;
   } on Exception {
     return '?';
