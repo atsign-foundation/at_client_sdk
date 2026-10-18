@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 enum OperationEnum { update, delete, append, remove }
 
 String getOperationName(OperationEnum? d) => '$d'.split('.').last;
@@ -42,7 +40,6 @@ enum EnrollOperationEnum {
 
   /// Writes links that vouch for an enrollment's signing keys, one per `kid`.
   /// See `EnrollParams.links`.
-  @experimental
   link
 }
 
