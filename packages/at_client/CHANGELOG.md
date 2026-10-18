@@ -14,7 +14,7 @@
 - experimental: `PqStartupGates.publishChainLink` is removed,
   `PqStartupGates.publishRootLink` is renamed `anchorOwnKeys`, and
   `PqSigningChain`'s methods are replaced.
-- build: requires `at_commons` ^5.23.0-rc1, the first to carry `enroll:link`.
+- build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.

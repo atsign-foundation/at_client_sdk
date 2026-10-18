@@ -81,12 +81,9 @@ MockAtClient buildRemoteBackedMockClient({
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
   if (remoteMetadata != null) {
     when(() => remoteSecondary.executeVerb(any(
-        that: isA<EnrollVerbBuilder>().having(
-            // ignore: experimental_member_use
-            (b) => b.operation,
-            'operation',
-            // ignore: experimental_member_use
-            EnrollOperationEnum.link)))).thenAnswer((inv) async {
+            that: isA<EnrollVerbBuilder>().having(
+                (b) => b.operation, 'operation', EnrollOperationEnum.link))))
+        .thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as EnrollVerbBuilder;
       enrollLinkLog?.add(builder);
       return answerEnrollLink(builder,

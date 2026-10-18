@@ -59,11 +59,8 @@ MockRemoteSecondary buildRecordingRemote({
       remoteMeta[key] = builder.atKey.metadata;
       return 'data:1';
     }
-    // ignore: experimental_member_use
     if (builder is EnrollVerbBuilder &&
-        // ignore: experimental_member_use
         builder.operation == EnrollOperationEnum.link) {
-      // ignore: experimental_member_use
       final links = builder.links!.values.map((r) => (r as Map)['link']);
       final tag = links.every((l) => l is Map && l['payload'] is Map)
           ? ':rootlink'

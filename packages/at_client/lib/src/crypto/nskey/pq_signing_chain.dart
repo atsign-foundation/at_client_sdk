@@ -672,10 +672,8 @@ class PqSigningChain {
   Future<List<String>> writeLinks(
       String enrollmentId, Map<String, LinkWrite> links) async {
     final builder = EnrollVerbBuilder()
-      // ignore: experimental_member_use
       ..operation = EnrollOperationEnum.link
       ..enrollmentId = enrollmentId
-      // ignore: experimental_member_use
       ..links = {
         for (final entry in links.entries)
           entry.key: {'link': entry.value.link, 'expect': entry.value.expect}
