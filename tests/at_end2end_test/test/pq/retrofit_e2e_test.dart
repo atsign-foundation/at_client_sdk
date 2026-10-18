@@ -436,9 +436,10 @@ void main() {
             'something unentitled is looking for it');
     final voucher = await PqSigningChain(scoped).voucher(
         AtClientSecretSharing.forClient(scoped),
-        isFullyPrivileged: () async => false);
+        isFullyPrivileged: () async => true);
     expect(voucher?.isRoot ?? false, isFalse,
-        reason: 'it cannot root-link anything: its route to the root is a '
-            'link a holder of the root writes for it');
+        reason: 'even taken as fully privileged it cannot root-link anything, '
+            'since it holds no root private: its route to the root is a link '
+            'a holder of the root writes for it');
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

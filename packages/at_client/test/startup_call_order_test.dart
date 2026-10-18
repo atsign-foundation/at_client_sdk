@@ -128,9 +128,13 @@ void main() {
     return i;
   }
 
-  /// Starts a client of enrollment `e-1`, which the roster lists as fully
-  /// privileged.
-  Future<AtClient> startClient(_RecordingAtKeysIo keysIo) =>
+  /// Starts a client of enrollment `e-1`, which the roster lists with
+  /// [namespaces]: fully privileged unless the caller says otherwise.
+  Future<AtClient> startClient(_RecordingAtKeysIo keysIo,
+          {Map<String, String> namespaces = const {
+            '*': 'rw',
+            '__manage': 'rw'
+          }}) =>
       AtClientImpl.create(
         atSign,
         'buzz',
@@ -149,7 +153,7 @@ void main() {
               'e-1.new.enrollments.__manage$atSign': {
                 'appName': 'buzz',
                 'deviceName': 'pixel',
-                'namespace': {'*': 'rw', '__manage': 'rw'},
+                'namespace': namespaces,
                 'status': 'approved',
               }
             }),
@@ -240,6 +244,25 @@ void main() {
         await PqSigningRoot(MockAtClient(), keysIo: inner).privateHalf(atSign),
         isNotNull,
         reason: 'the private is filed, not only the record published');
+  });
+
+  test(
+      'an enrollment that is not fully privileged, whose atSign publishes no '
+      'root, mints none at start', () async {
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
+    await fileSigningKey(inner);
+
+    final client = await startClient(_RecordingAtKeysIo(inner, events),
+        namespaces: const {'buzz': 'rw'});
+    await (client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    expect(events, isNot(contains('update:public:pq_signing_root$atSign')),
+        reason: 'only a fully privileged enrollment creates the root');
+    expect(
+        await PqSigningRoot(MockAtClient(), keysIo: inner).privateHalf(atSign),
+        isNull);
   });
 
   test(

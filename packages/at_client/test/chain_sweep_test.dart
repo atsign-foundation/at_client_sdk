@@ -174,6 +174,39 @@ void main() {
   });
 
   test(
+      'a fully privileged sweeper whose own key walks to the root, holding no '
+      'root private, links nothing', () async {
+    final enrollee = client(enrolleeId);
+    await withSigningKey(enrollee);
+    final sweeper = client('sweeper-1');
+    await withSigningKey(sweeper);
+    final root = await publishRoot(remoteData, atSign);
+    final own = (await record(sweeper, 'sweeper-1')).keys.single;
+    await PqSigningChain(sweeper).writeLinks('sweeper-1', {
+      own.kid: (
+        link: await root.voucher
+            .sign(PqSigningChain.linkPayload('sweeper-1', own)),
+        expect: null
+      ),
+    });
+    stubApprovedList(sweeper, atSign, {enrolleeId: recordOf(enrolleeId)});
+    expect(
+        (await PqSigningChain(sweeper).voucher(
+                AtClientSecretSharing.forClient(sweeper),
+                isFullyPrivileged: () async => true))
+            ?.isRoot,
+        isFalse,
+        reason: 'the premise: it could chain-link');
+    linkCalls.clear();
+
+    expect(
+        await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+            .sweepUnanchoredEnrollments(),
+        0);
+    expect(linkCalls, isEmpty);
+  });
+
+  test(
       'an enrollment whose _apsk is its authentication key is left alone, '
       'and one with no key package is linked all the same', () async {
     final legacy = client('legacy-1');

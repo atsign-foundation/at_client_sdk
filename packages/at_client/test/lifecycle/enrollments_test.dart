@@ -7,7 +7,9 @@ import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/link_fixtures.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/remote_backed_client.dart';
 
 class _FakeListParams extends Fake implements EnrollmentListRequestParam {}
 
@@ -295,5 +297,39 @@ void main() {
 
     await expectLater(
         () => client.enrollments.pending(), throwsA(isA<StateError>()));
+  });
+
+  test(
+      'anchoring(id) reads anchored for an enrollment whose key carries a root '
+      'link, and unsigned for one whose key carries none', () async {
+    final remoteData = <String, String>{};
+    final remoteMetadata = <String, Metadata>{};
+    AtClient remoteBacked(String enrollmentId) => buildRemoteBackedMockClient(
+        atSign: atSign,
+        enrollmentId: enrollmentId,
+        remoteData: remoteData,
+        remoteMetadata: remoteMetadata);
+    final root = await publishRoot(remoteData, atSign);
+    final linked = remoteBacked('linked-1');
+    await withSigningKey(linked);
+    final key =
+        (await PqSigningChain(linked).readRecord('linked-1'))!.keys.single;
+    await PqSigningChain(linked).writeLinks('linked-1', {
+      key.kid: (
+        link: await root.voucher
+            .sign(PqSigningChain.linkPayload('linked-1', key)),
+        expect: null
+      ),
+    });
+    await withSigningKey(remoteBacked('unlinked-1'));
+    final manager = remoteBacked('manager-1');
+
+    // ignore: experimental_member_use
+    final anchored = await manager.enrollments.anchoring('linked-1');
+    // ignore: experimental_member_use
+    final unsigned = await manager.enrollments.anchoring('unlinked-1');
+
+    expect(anchored.verdict, ChainVerdict.anchored, reason: anchored.reason);
+    expect(unsigned.verdict, ChainVerdict.unsigned);
   });
 }
