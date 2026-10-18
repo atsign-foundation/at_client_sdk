@@ -1,6 +1,3 @@
-// The substrate this exercises is marked @experimental.
-// ignore_for_file: experimental_member_use
-
 import 'package:at_auth/at_auth.dart' show AtEnrollment;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';

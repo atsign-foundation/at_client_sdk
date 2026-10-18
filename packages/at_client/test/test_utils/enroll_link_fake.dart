@@ -1,5 +1,3 @@
-// ignore_for_file: experimental_member_use
-
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show publicKeyKidOfBase64;
