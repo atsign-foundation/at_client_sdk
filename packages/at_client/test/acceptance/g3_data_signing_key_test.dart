@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 
+import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 /// Part G3 — the data signing key an enrollment owns from birth
@@ -132,89 +133,10 @@ void main() {
   });
 
   test(
-      'UC-G3.4 · a link is bound to the exact _apsk string, and a republish '
-      'breaks it', () {
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'a conveyed CHAIN link is refused, naming the mismatch',
-        proves: 'comparison 1 of 5, asserted on the REASON naming the '
-            'mismatch rather than on a bare refusal — a link rejected for '
-            'a bad signature would satisfy a throwsA and prove nothing about '
-            'the binding',
-        clauses: ['whole-string comparisons fails']);
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'a conveyed ROOT link is refused, naming the mismatch',
-        proves: 'comparison 2 of 5. The root path is separate code with its '
-            'own fetch and its own message, so the chain arm above says '
-            'nothing about it');
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'the walk reports a CHAIN link broken, not anchored',
-        proves: 'comparison 3 of 5, and the verdict is the assertion: a walk '
-            'that returned unsigned would also "not be anchored" while '
-            'telling an operator the enrollment was never vouched for');
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'the walk reports a ROOT link broken, not anchored',
-        proves: 'comparison 4 of 5');
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'an enrollment whose own key moved re-anchors itself',
-        proves: 'comparison 5 of 5 — the one that refuses SILENTLY, returning '
-            'a bool to its caller rather than a reason to an operator, and '
-            'therefore the one no message-matching test could have found');
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'clears the chain link, so the chain reads unsigned, not broken',
-        proves: 'a republish under a new key removes the chain link it no '
-            'longer vouches for, against a fixture that merges metadata as '
-            'the atServer does, so the walk reads unsigned; its sibling drops '
-            'a root link the client cannot re-sign',
-        clauses: ['the break is not recoverable by the record alone']);
-    provenIn('packages/at_client/test/chain_sweep_test.dart',
-        'an enrollment whose key changed is re-anchored by the next sweep',
-        proves: 'anchored, then re-keyed: the republish leaves it unsigned, '
-            'the sweep counts it as unanchored and conveys a root link over '
-            'the new key, and once stamped the walk ends anchored. With the '
-            'republish keeping the stale link the walk reads broken and the '
-            'sweep skips it',
-        clauses: ['sweep conveys a root link over the new value']);
-    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
-        'a holder\'s republish under a new key re-anchors in the same write',
-        proves: 'one put to the record carries the new key and a root link '
-            'over it, and the walk ends anchored; the control shows a '
-            'republish anchors nothing that was not anchored',
-        clauses: ['re-anchored over the new value in the same write']);
-  });
-
-  test(
-      'UC-G3.5 · what an approver conveys is decided by possession as well as '
-      'privilege', () {
-    provenIn('packages/at_client/test/approve_link_flavour_test.dart',
-        'a fully privileged approver conveys a root link',
-        proves: 'arm 1 — the posture-invariant anchor',
-        clauses: ['conveys a **root** link, signed with the atSign']);
-    provenIn(
-        'packages/at_client/test/approve_link_flavour_test.dart',
-        'a privileged approver with a data signing key but no root conveys a '
-            'CHAIN link',
-        proves: 'arm 2 — the arm that CHANGED on 2026-08-30. It conveyed '
-            'nothing until then, on the reasoning that the every-start pull '
-            'would heal possession and the sweep would anchor the enrollment '
-            'later; the pull has one production caller and the sweep is a '
-            'later startup step, so nothing re-attempted it',
-        clauses: ['holds a data signing key of its own conveys']);
-    provenIn(
-        'packages/at_client/test/approve_link_flavour_test.dart',
-        'a privileged approver holding NEITHER conveys no link, '
-            'and everything else still flows',
-        proves: 'arm 3, and the "everything else" is the point: the symmetric '
-            'key still arrives. A guard that dropped the whole conveyance '
-            'would cost the enrollee the one envelope it is blocked polling '
-            'for',
-        clauses: ['conveys **no link at all**']);
-    provenIn('packages/at_client/test/approve_link_flavour_test.dart',
-        'a non-privileged approver conveys the provisional chain link',
-        proves: 'arm 4 — and it is the ordinary case rather than the edge, '
-            'since approval takes __manage alone while full privilege takes '
-            'w on both * and __manage',
-        clauses: ['fully privileged conveys a chain link signed with its own']);
-  });
+      'UC-G3.5 · an approver links each key of the enrollment it approves, '
+      'straight after approving', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
 
   test(
       'UC-G3.6 · a legacy enrollment\'s authentication keypair signs data in '
@@ -395,4 +317,109 @@ void main() {
             'rather than a caller having to. The live arm proves the outcome; '
             'this proves which code path produced it');
   });
+
+  test(
+      'UC-G3.12 · a link vouches for one key, so a change to another key '
+      'leaves it standing', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test('UC-G3.13 · the kind of a link follows from its signer', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.14 · enroll:link admits only the target or a caller that '
+      'could approve it', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test('UC-G3.15 · enroll:link checks structure, and writes all or nothing',
+      () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test('UC-G3.16 · a link replaces only the link its writer found', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test('UC-G3.17 · any other write of B\'s _apsk keeps B\'s links', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.18 · an enrollment links a key it adds, using one it has '
+      'already linked, before signing with it', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.19 · a chain link is signed only by a key that has a link, '
+      'and a root link only by the root', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.20 · content is signed with the keys that have links, while '
+      'there are any', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.21 · an enrollment\'s authentication key takes no links, and '
+      'gives none', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.22 · a fully privileged enrollment mints a missing signing '
+      'root when it starts, and anchors the atSign', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.23 · a root holder\'s sweep gives every key without a sound '
+      'root link one', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test('UC-G3.24 · the walk follows keys, and stops at a cycle', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.25 · the approver\'s view shows whether each enrollment is '
+      'anchored', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.26 · links never travel by envelope, and the old link fields '
+      'are gone', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.27 · on an atServer without enroll:link, nothing is linked '
+      'and everything else works', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.28 · a bare RSA client data signing key is linked like a listed '
+      'one', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.29 · an enroll:update cannot make B\'s client data signing key '
+      'its authentication key', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
+
+  test(
+      'UC-G3.30 · a link vouches for the key it names, not for every key '
+      'under its kid', () {
+    fail('not implemented');
+  }, skip: perKeyLinks);
 }

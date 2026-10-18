@@ -121,8 +121,8 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**109 rows** — one scenario per catalogue use case (UC-A5.1 splits and UC-C1.3
-is withdrawn, both below), plus the cross-cutting invariants.
+**127 rows** — one scenario per catalogue use case (UC-A5.1 splits, and
+UC-C1.3 and UC-G3.4 are withdrawn), plus the cross-cutting invariants.
 
 ⚠️ **This said "the catalogue's 53 use cases become 53 scenarios" until
 2026-08-26, when there were 73.** The row total was checked by a rail and the
@@ -174,8 +174,10 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**0 of the 109** rows are skipped. The burn-down went back above zero on
-2026-08-10 rather than drifting there — `enroll:update` was ruled
+**20 of the 127** rows are skipped, all against `perKeyLinks`: the per-key
+links ruling withdrew UC-G3.4, rewrote UC-G3.5 and added UC-G3.12 to UC-G3.30,
+none of which anything implements yet. The burn-down went above zero the same
+way on 2026-08-10, rather than drifting there — `enroll:update` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it, UC-A2.5 and UC-A2.6, so the catalogue grew by two use cases
 that nothing yet implemented. That is the mechanism working: a ruling that adds
