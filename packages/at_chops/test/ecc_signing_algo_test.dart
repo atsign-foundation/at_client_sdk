@@ -36,6 +36,18 @@ void main() {
       expect(publicKey.first, 0x04);
       expect(secretKey, hasLength(32));
     });
+    test('a signature that is neither 64 nor 128 bytes is an ArgumentError',
+        () async {
+      final eccAlgo = EccSigningAlgo();
+      final (:publicKey, secretKey: _) = await eccAlgo.generateKeyPair();
+      for (final length in [0, 63, 65, 127, 129]) {
+        await expectLater(
+            eccAlgo.verifyBytes(Uint8List.fromList('Hello World'.codeUnits),
+                signature: Uint8List(length), publicKey: publicKey),
+            throwsArgumentError,
+            reason: 'length $length');
+      }
+    });
     group('a 128-byte signature that is not hex', () {
       final message = Uint8List.fromList('Hello World'.codeUnits);
       final cases = {
