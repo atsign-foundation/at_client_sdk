@@ -423,6 +423,12 @@ void main() {
           getRequestOptions: any(named: 'getRequestOptions'),
         ),
       ).thenThrow(AtKeyNotFoundException('no _apsk'));
+      when(
+        () => atClient.get(
+          any(that: predicate<AtKey>((k) => '$k'.contains('.r.__e'))),
+          getRequestOptions: any(named: 'getRequestOptions'),
+        ),
+      ).thenAnswer((_) async => AtValue()..value = 'withdrawn');
 
       await pumpList(tester);
       await tester.pump();
@@ -430,13 +436,92 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('approved-u-1')),
-          matching: find.text('unsigned'),
+          matching: find.text('revoked ?'),
         ),
         findsOneWidget,
         reason:
-            'an enrollment publishing no _apsk reads unsigned through '
-            'client.enrollments.anchoring',
+            'an enrollment whose _apsk was moved to .r.__e reads revoked '
+            'through client.enrollments.anchoring',
       );
+    },
+  );
+
+  testWidgets(
+    'a failed listing of the approved enrollments clears the rows it showed, '
+    'and a later listing that succeeds clears the failure',
+    (tester) async {
+      Enrollment approved(String id) => Enrollment()
+        ..enrollmentId = id
+        ..appName = 'buzz'
+        ..deviceName = 'device-$id'
+        ..status = 'approved'
+        ..namespace = <String, String>{};
+      Enrollment pending(String id) => Enrollment()
+        ..enrollmentId = id
+        ..appName = 'buzz'
+        ..deviceName = 'pixel-$id'
+        ..status = 'pending'
+        ..namespace = <String, String>{};
+      var approvedReads = 0;
+      when(
+        () => notifications.subscribe(
+          regex: any(named: 'regex'),
+          shouldDecrypt: any(named: 'shouldDecrypt'),
+        ),
+      ).thenAnswer((_) => const Stream<AtNotification>.empty());
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer((inv) async {
+        if (!approvedFilter(inv)) return [pending('p-1'), pending('p-2')];
+        approvedReads++;
+        if (approvedReads == 2) throw AtClientException.message('refused');
+        return [approved('a-1'), if (approvedReads > 2) approved('b-1')];
+      });
+      when(() => service.approve(any())).thenAnswer(
+        (inv) async => AtEnrollmentResponse(
+          (inv.positionalArguments.single as EnrollmentRequestDecision)
+              .enrollmentId,
+          EnrollmentStatus.approved,
+        ),
+      );
+      Finder row(String id) => find.byKey(ValueKey('approved-$id'));
+      final failure = find.textContaining(
+        'Could not list the approved enrollments',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async =>
+                  ChainResult(ChainVerdict.anchored, [id], null),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(row('a-1'), findsOneWidget, reason: 'the premise');
+
+      await tester.tap(find.text('Approve').first);
+      await tester.pump();
+      await tester.pump();
+      expect(failure, findsOneWidget);
+      expect(
+        row('a-1'),
+        findsNothing,
+        reason: 'rows from before the failure are not known to be current',
+      );
+
+      await tester.tap(find.text('Approve').first);
+      await tester.pump();
+      await tester.pump();
+      expect(failure, findsNothing);
+      expect(row('a-1'), findsOneWidget);
+      expect(row('b-1'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     },
   );
 }

@@ -134,7 +134,7 @@ void main() {
   test(
       'given no anchoring, at_activate list asks the client whether each '
       'approved enrollment is anchored', () async {
-    const unsignedId = 'f0f0f0f0-1a2e-43e4-93bd-378f1d366ea7';
+    const revokedId = 'f0f0f0f0-1a2e-43e4-93bd-378f1d366ea7';
     final client = _MockAtClient();
     final service = _MockEnrollmentService();
     when(() => client.getCurrentAtSign()).thenReturn('@alice');
@@ -148,11 +148,15 @@ void main() {
                 'namespace': {'wavi': 'rw'},
                 'status': 'approved',
               })
-                ..enrollmentId = unsignedId,
+                ..enrollmentId = revokedId,
             ]);
     when(() => client.get(any(),
             getRequestOptions: any(named: 'getRequestOptions')))
         .thenThrow(AtKeyNotFoundException('no _apsk'));
+    when(() => client.get(
+            any(that: predicate<AtKey>((k) => '$k'.contains('.r.__e'))),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((_) async => AtValue()..value = 'withdrawn');
     final args =
         AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
     final out = _CapturedStdout();
@@ -160,10 +164,9 @@ void main() {
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
         stdout: () => out);
 
-    expect(
-        out.text.split('\n').singleWhere((l) => l.startsWith(unsignedId)),
-        contains(' unsigned '),
-        reason: 'an enrollment publishing no _apsk reads unsigned through '
-            'client.enrollments.anchoring');
+    expect(out.text.split('\n').singleWhere((l) => l.startsWith(revokedId)),
+        contains(' revoked ? '),
+        reason: 'an enrollment whose _apsk was moved to .r.__e reads revoked '
+            'through client.enrollments.anchoring');
   });
 }
