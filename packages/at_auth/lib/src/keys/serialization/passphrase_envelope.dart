@@ -219,7 +219,8 @@ class AtKeysPassphraseEnvelopeCodec {
           'a version $currentVersion atKeys envelope must carry a salt');
     }
 
-    final params = ArgonHashParams()..salt = decodeBase64Field(salt, 'salt');
+    final params = ArgonHashParams()
+      ..salt = decodeBase64Field(salt, 'salt', AtDecryptionException.new);
     final kdfParams = json['kdfParams'];
     if (kdfParams is! Map) {
       throw AtDecryptionException(

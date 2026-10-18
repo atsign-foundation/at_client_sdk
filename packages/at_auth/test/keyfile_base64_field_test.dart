@@ -158,12 +158,10 @@ void main() {
           refusedAs: isA<FormatException>(),
         );
       },
-    for (final field in ['iv', 'content'])
+    for (final field in ['iv', 'salt', 'content'])
       'the passphrase envelope\'s $field': () => replacing(field,
           passPhrase: randomBase64(12),
           refusedAs: isA<AtDecryptionException>()),
-    'the passphrase envelope\'s salt': () =>
-        replacing('salt', passPhrase: randomBase64(12)),
   };
 
   Future<Object> errorReading(Corrupted corrupted) async {
