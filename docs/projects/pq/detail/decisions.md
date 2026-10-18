@@ -15448,9 +15448,9 @@ enrollment being mended.
    a root link; and a voucher links no key its own chain passes through. A
    refused call is read again and, if the record has changed, made once more
    on what it now holds. *(Amended by gkc on 2026-10-18; it read "made once more
-   on what the record holds". The atServer's checks depend on the record, the
-   request and the caller's grant, so an unchanged record meets the same
-   refusal.)*
+   on what the record holds". An unchanged record means no other writer raced
+   this one, so the same call would meet the same answer, and the next start
+   or sweep tries again.)*
 7. **Content is signed with the keys that have a link** while there are any,
    so a key waits for its link before it signs, and otherwise as before.
 8. **The walk follows keys.** It compares each link with the entry it is

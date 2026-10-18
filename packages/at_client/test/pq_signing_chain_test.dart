@@ -670,6 +670,39 @@ void main() {
 
   group('Given two entries listed under one kid whose keys differ', () {
     test(
+        'when an entry with no alg comes first under the kid, then the entry '
+        'after it, which the atServer reads, is linked', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final k1b = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final k2 = ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.rsa2048,
+          pub: RsaKeyPair.generate().atPublicKey.publicKey);
+      final listed = apskAdvertisement(keys: [k1b, k2]);
+      final apsk = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteData[apsk] = jsonEncode({
+        ...listed,
+        'keys': [
+          {
+            'kid': k1b.kid,
+            'use': 'sign',
+            'pub': RsaKeyPair.generate().atPublicKey.publicKey
+          },
+          ...listed['keys'] as List,
+        ],
+      });
+      remoteMetadata[apsk] = Metadata();
+
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linked, [k1b.kid, k2.kid]);
+    });
+
+    test(
         'when the first entry under the kid is one whose status no longer '
         'vouches, then the entry after it takes no link either, and the other '
         'keys are linked', () async {

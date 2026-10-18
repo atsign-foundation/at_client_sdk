@@ -11,7 +11,7 @@ import 'package:meta/meta.dart';
 /// nowhere else: a fully privileged client at a post-quantum posture mints the
 /// atSign's signing root there, and a root whose private key is lost can never
 /// be replaced. Keep an application's keys in a durable [WrittenAtKeysIo], such
-/// as [FileAtKeysIo].
+/// as [FileAtKeysIo]. A subclass escapes the analyzer's warning, not this.
 class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// Keys are indexed by normalized [Atsign] (via `toAtsign()`), so the
   /// `String`-typed [read]/[write] and the [Atsign]-typed [flush] all resolve
