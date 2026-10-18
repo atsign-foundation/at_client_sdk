@@ -27,5 +27,9 @@ atSign:
   # this atSign, so like a genuinely new one it has no public:publickey; the
   # demo atSigns pkamLoad provisions all start with one.
   pqNativeOptOutAtSign: '@device2'
+  # Spent by per_key_links_live_test.dart alone: its signing root is minted
+  # by an enrollment that file creates, which then holds the root's private
+  # key, and a root is created once per atSign per virtualenv.
+  perKeyLinksAtSign: '@sameeraja🛠'
 
 
