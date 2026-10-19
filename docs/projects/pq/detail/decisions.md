@@ -14841,8 +14841,8 @@ under three constraints:
   private data, and its public `_apsk` is read from the atServer; moves to
   `.r.__e` on a revoke, and back to `.a.__e`, still commit.
 
-Built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
-3.17.1: the `lookup`, `llookup` and HTTP GET handlers call
+Built in at_server#2858, merged on 2026-10-11, which ships in at_secondary_server
+3.18.0: the `lookup`, `llookup` and HTTP GET handlers call
 `EnrollmentManager.moveExpiredEnrollmentData`, which removes the enrollment when
 its record's expiry has passed, and the removal's pre-remove hook moves the data
 inside the critical section, committing nothing for `.d.__e`. Pinned by the
@@ -14856,8 +14856,8 @@ scenarios in at_server's `features/enrollment/expired_enrollment_data.feature`.
 and widened by him on 2026-10-10. The client half is built:
 `LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
 `__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
-built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
-3.17.1, and pinned by the scenarios in at_server's `features/caching/`.
+built in at_server#2858, merged on 2026-10-11, which ships in at_secondary_server
+3.18.0, and pinned by the scenarios in at_server's `features/caching/`.
 
 **The atServer (at_server).** A reader's atServer keeps no `cached:public:` copy
 of another atSign's public record whose owner gave it no ttr, or a ttr of 0.

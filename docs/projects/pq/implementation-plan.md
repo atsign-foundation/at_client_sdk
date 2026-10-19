@@ -370,7 +370,7 @@ decide the correct behaviour, and implement it. **All eighteen items were ruled 
 `gkc-pq-key-caching` (PR #2294). Items 17 and 18 are at_server work, filed as
 [at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831) and built
 in [at_server#2858](https://github.com/atsign-foundation/at_server/pull/2858), merged
-on 2026-10-11, which opens at_secondary_server 3.17.1.
+on 2026-10-11, which ships in at_secondary_server 3.18.0.
 
 **What the two fields do on an atServer.** `ttl`, in milliseconds, expires a
 record on its owner's atServer, and an `update` that omits `ttl` or `ttr` keeps the
