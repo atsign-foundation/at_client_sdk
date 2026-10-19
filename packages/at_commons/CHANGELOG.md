@@ -1,7 +1,7 @@
-## 5.23.0-rc1
+## 5.23.0
 
-- feat: `enroll:link` (experimental), for writing links that vouch for an
-  enrollment's signing keys: `EnrollOperationEnum.link`, and `links` on
+- feat: `enroll:link`, for writing links that vouch for an enrollment's
+  client data signing keys: `EnrollOperationEnum.link`, and `links` on
   `EnrollParams` and `EnrollVerbBuilder`.
 
 - feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in

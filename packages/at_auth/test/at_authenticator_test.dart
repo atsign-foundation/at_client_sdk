@@ -3,6 +3,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
@@ -12,6 +13,7 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:crypton/crypton.dart' show RSAKeypair;
 import 'package:test/test.dart';
+import 'test_utils/holds_none_of.dart';
 import 'test_utils/pkam_pin.dart';
 
 /// Records what the authenticator sent, and with which budgets, and hands back
@@ -330,6 +332,32 @@ void main() {
 
       await expectLater(() => authenticatorFor(io, atSign)(executor),
           throwsA(isA<UnAuthenticatedException>()));
+    });
+  });
+
+  group('Given an atSign and its CRAM secret', () {
+    test(
+        'when the atServer refuses CRAM authentication, then the exception '
+        'names the atSign and the atServer\'s reason, and its text doesn\'t '
+        'contain the secret', () async {
+      final random = Random.secure();
+      final cramAtSign = '@cram${random.nextInt(1 << 32)}';
+      final secret =
+          List.generate(128, (_) => random.nextInt(16).toRadixString(16))
+              .join();
+      final reason =
+          'error:AT0401-Exception: refused ${random.nextInt(1 << 32)}';
+      final executor = RecordingExecutor(['data:$challenge', reason]);
+
+      final thrown =
+          await authenticatorForCramSecret(cramAtSign, secret)(executor)
+              .then<Object?>((_) => null, onError: (Object e) => e);
+
+      expect('$thrown', holdsNoneOf(secret),
+          reason: 'the exception holds none of the secret');
+      expect(thrown, isA<UnAuthenticatedException>());
+      expect('$thrown', contains(cramAtSign));
+      expect('$thrown', contains(reason));
     });
   });
 
