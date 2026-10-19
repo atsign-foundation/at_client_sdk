@@ -228,9 +228,9 @@ class SigningKeyMinting with ApkamSigning {
       WrittenAtKeysIo io, String atSign, List<ApkamSigningKeys> keys) async {
     if (keys.isEmpty) return;
     logger.info('Retiring ${keys.map((k) => k.algorithm.name).join(', ')} '
-        'signing key(s) for $enrollmentId: the in-use set no longer names '
-        'them. They stay advertised as retired, so what they signed still '
-        'verifies');
+        'client data signing key(s) for $enrollmentId: the in-use set no '
+        'longer names them. They stay advertised as retired, so what they '
+        'signed still verifies');
     for (final key in keys) {
       await _retire(io, atSign, key.algorithm);
     }
