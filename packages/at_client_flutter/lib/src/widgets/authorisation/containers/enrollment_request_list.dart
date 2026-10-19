@@ -49,6 +49,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   /// approval.
   String? _approvedError;
 
+  /// Counts the loads of the approved enrollments, so a load that finishes
+  /// after a later one started leaves the later one's rows standing.
+  int _approvedLoads = 0;
+
   @override
   void initState() {
     super.initState();
@@ -111,8 +115,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   /// Lists the approved enrollments, each with whether its keys are anchored,
   /// or `?` where that could not be read; a failure to list them is recorded
-  /// in [_approvedError] rather than thrown.
+  /// in [_approvedError] rather than thrown. Of two loads, the later started
+  /// is the one shown.
   Future<void> _loadApproved() async {
+    final load = ++_approvedLoads;
     // ignore: experimental_member_use
     final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
     final List<Enrollment> approved;
@@ -120,9 +126,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       approved = await _client.enrollments.list(
         statuses: const [EnrollmentStatus.approved],
       );
-    } on Exception catch (e) {
+    } catch (e) {
       debugPrint('Could not list the approved enrollments: $e');
-      if (mounted) {
+      if (mounted && load == _approvedLoads) {
         setState(() {
           _approved.clear();
           _approvedError = 'Could not list the approved enrollments: $e';
@@ -137,12 +143,12 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       String anchored;
       try {
         anchored = (await anchoring(id)).summary;
-      } on Exception {
+      } catch (e) {
         anchored = '?';
       }
       rows.add((enrollment: enrollment, anchored: anchored));
     }
-    if (mounted) {
+    if (mounted && load == _approvedLoads) {
       setState(() {
         _approvedError = null;
         _approved
@@ -153,19 +159,21 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   }
 
   Future<void> _handleApprove(Enrollment request) async {
+    var approved = false;
     try {
       await _client.enrollments.approve(request.enrollmentId!);
+      approved = true;
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
         });
         _showFeedbackOverlay(request, EnrollmentStatus.approved);
-        await _loadApproved();
       }
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException catch (e) {
       // NOTE: the approval itself succeeded and only conveying the secret
       // failed, so the request leaves the list and the message stands as-is.
+      approved = true;
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
@@ -173,7 +181,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
-        await _loadApproved();
       }
     } catch (e) {
       if (mounted) {
@@ -188,6 +195,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     }
+    if (approved && mounted) await _loadApproved();
   }
 
   Future<void> _handleDeny(Enrollment request) async {

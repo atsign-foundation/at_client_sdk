@@ -9,6 +9,7 @@ library;
 
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
@@ -76,6 +77,34 @@ void main() {
     ..deviceName = 'pixel'
     ..status = 'pending'
     ..namespace = <String, String>{};
+
+  Enrollment approvedRecord(String id, String device) => Enrollment()
+    ..enrollmentId = id
+    ..appName = 'buzz'
+    ..deviceName = device
+    ..status = 'approved'
+    ..namespace = <String, String>{};
+
+  /// Lists the pending request until [approvedYet] says the approval went
+  /// through, and then lists it as approved: among [approvedAfter] for the
+  /// approved section, and alone for an approval's own read.
+  void listAround(
+    bool Function() approvedYet, {
+    List<Enrollment> approvedBefore = const [],
+    required List<Enrollment> approvedAfter,
+  }) {
+    when(
+      () => service.fetchEnrollmentRequests(
+        enrollmentListParams: any(named: 'enrollmentListParams'),
+      ),
+    ).thenAnswer(
+      (inv) async => approvedFilter(inv)
+          ? (approvedYet() ? approvedAfter : approvedBefore)
+          : (approvedYet()
+                ? [approvedRecord(enrollmentId, 'pixel')]
+                : [pendingRecord()]),
+    );
+  }
 
   setUpAll(() {
     registerFallbackValue(FakeEnrollmentRequestDecision());
@@ -522,6 +551,139 @@ void main() {
       expect(row('a-1'), findsOneWidget);
       expect(row('b-1'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
+    },
+  );
+
+  testWidgets('Given an approval that goes through, when reading the approved '
+      'enrollments then throws an error, then it does not say the approval '
+      'failed', (tester) async {
+    var approvedYet = false;
+    when(() => service.approve(any())).thenAnswer((_) async {
+      approvedYet = true;
+      return AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved);
+    });
+    listAround(
+      () => approvedYet,
+      approvedAfter: [approvedRecord(enrollmentId, 'pixel')],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EnrollmentRequestList(
+            atClient: atClient,
+            anchoring: (id) async => throw StateError('unreadable record'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Approve'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Failed to approve'), findsNothing);
+    // Let the feedback overlay's auto-dismiss run down before teardown.
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets(
+    'Given an approval whose conveyance is refused, when reading the approved '
+    'enrollments then throws an error, then the refusal stands and nothing '
+    'escapes',
+    (tester) async {
+      var approvedYet = false;
+      when(() => service.approve(any())).thenAnswer((_) async {
+        approvedYet = true;
+        throw EnrollmentConveyanceException(
+          'Enrollment $enrollmentId is approved, but no secrets were shared '
+          'with it.',
+          response: AtEnrollmentResponse(
+            enrollmentId,
+            EnrollmentStatus.approved,
+          ),
+          keyPackageStatus: KeyPackageStatus.rejected,
+        );
+      });
+      listAround(
+        () => approvedYet,
+        approvedAfter: [approvedRecord(enrollmentId, 'pixel')],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async => throw StateError('unreadable record'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('no secrets were shared'), findsOneWidget);
+      expect(find.textContaining('Failed to approve'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Given a slow first read of the approved enrollments, when an approval '
+    'reloads them first, then the older read does not overwrite the newer '
+    'rows',
+    (tester) async {
+      var approvedYet = false;
+      final slow = Completer<ChainResult>();
+      when(() => service.approve(any())).thenAnswer((_) async {
+        approvedYet = true;
+        return AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved);
+      });
+      listAround(
+        () => approvedYet,
+        approvedBefore: [approvedRecord('a-1', 'laptop')],
+        approvedAfter: [
+          approvedRecord('a-1', 'laptop'),
+          approvedRecord(enrollmentId, 'pixel'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) => approvedYet
+                  ? Future.value(ChainResult(ChainVerdict.anchored, [id], null))
+                  : slow.future,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('approved-$enrollmentId')),
+        findsOneWidget,
+        reason: 'the premise: the reload listed the newly approved enrollment',
+      );
+
+      slow.complete(ChainResult(ChainVerdict.unsigned, ['a-1'], null));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('approved-$enrollmentId')),
+        findsOneWidget,
+        reason: 'the older read must not overwrite the newer rows',
+      );
+      await tester.pump(const Duration(seconds: 4));
     },
   );
 }
