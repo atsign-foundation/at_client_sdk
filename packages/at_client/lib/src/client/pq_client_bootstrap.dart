@@ -471,7 +471,8 @@ class PqClientBootstrap {
   /// holds that the set no longer names.
   ///
   /// Then records which of this enrollment's keys have a link, so content
-  /// signed from here on is signed with those.
+  /// signed from here on is signed with those, whether or not this start
+  /// mints; an inert startup reads nothing.
   ///
   /// Runs before every step that **publishes** — the namespace-key seeding and
   /// the linking of this enrollment's keys — so a key minted on this start is
@@ -482,14 +483,14 @@ class PqClientBootstrap {
   Future<void> _mintInUseSigningKeys() async {
     try {
       await holdBeforeMint?.call();
-      if (!_gates.mintInUseSigningKeys) return;
-      await minting.reconcileSigningKeys();
+      if (_gates.mintInUseSigningKeys) await minting.reconcileSigningKeys();
     } catch (e, st) {
       if (_causedByStop(e)) rethrow;
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
     }
+    if (_gates == const PqStartupGates.inert()) return;
     try {
       await chain.refreshOwnLinks();
     } catch (e, st) {
@@ -603,14 +604,15 @@ class PqClientBootstrap {
   /// Links this enrollment's keys through `enroll:link`.
   ///
   /// A fully privileged enrollment whose atSign publishes no signing root
-  /// mints one first, and root-links its own keys as it does. Otherwise a
-  /// holder of the root's private key root-links any of its keys that lacks a
-  /// sound root link, and any other enrollment links a key it lacks a link
-  /// for with one of its keys that walks to the root.
+  /// mints one first, on a key source that can keep it, and root-links its
+  /// own keys as it does. Otherwise a holder of the root's private key
+  /// root-links any of its keys that lacks a sound root link, and any other
+  /// enrollment links a key it lacks a link for with one of its keys that
+  /// walks to the root.
   Future<void> _anchorOwnKeys() async {
     if (!_gates.anchorOwnKeys) return;
     try {
-      if (_keysIo != null &&
+      if (_keysIo is WrittenAtKeysIo &&
           await _privilege.isFullyPrivileged() &&
           await root.mintIfAbsent(isFullyPrivileged: true) != null) {
         return;

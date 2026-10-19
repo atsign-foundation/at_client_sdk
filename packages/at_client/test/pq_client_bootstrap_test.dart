@@ -5,6 +5,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
+        GeneratedAtKeysIo,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
@@ -45,6 +46,15 @@ class _Signer with ApkamSigning {
   final AtClient atClient;
   @override
   final AtSignLogger logger = AtSignLogger('_Signer');
+}
+
+/// A key source that generates keys rather than persisting them.
+class _GeneratedKeysIo extends GeneratedAtKeysIo {
+  @override
+  AtKeys read(String atsign) => AtKeys();
+
+  @override
+  AtKeys generateKeys(String publicKeyId) => AtKeys();
 }
 
 /// AtKeysIo is sealed; its abstract written flavour is the mockable face.
@@ -134,10 +144,11 @@ void main() {
     EnrollmentPrivilegeResolver? privilege,
     Future<int> Function()? sweep,
     PqStartupGates gates = const PqStartupGates(),
+    AtKeysIo? keysIo,
   }) =>
       PqClientBootstrap(
         client,
-        keysIo: null,
+        keysIo: keysIo,
         privilege: privilege ?? _FakePrivilege(false),
         sweepUnanchoredEnrollments: sweep ?? (() async => 0),
         gates: gates,
@@ -451,6 +462,83 @@ void main() {
           onTimeout: () => fail('a gated-off step must be skipped, not waited '
               'on — nothing settles a step that never runs'));
       await bootstrap.startupComplete.timeout(const Duration(seconds: 5));
+    });
+
+    /// Records the key of every remote read the startup makes.
+    List<String> recordReads() {
+      final read = <String>[];
+      when(() => client.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        read.add('${inv.positionalArguments[0]}');
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}');
+      });
+      return read;
+    }
+
+    test(
+        'Given the mint gate off, when the startup runs, then it still reads '
+        'which of this enrollment\'s keys have a link', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        startEnvelopeListener: false,
+        mintInUseSigningKeys: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        anchorOwnKeys: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+      )).startup();
+
+      expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty);
+    });
+
+    test('Given an inert startup, when it runs, then it reads no _apsk record',
+        () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(gates: const PqStartupGates.inert()).startup();
+
+      expect(read.where((key) => key.contains('_apsk')), isEmpty);
+    });
+
+    test(
+        'Given a fully privileged client on a key source that cannot persist, '
+        'when it links its own keys, then it mints no signing root and goes '
+        'on to link them', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          keysIo: _GeneratedKeysIo(),
+          privilege: _FakePrivilege(true),
+          gates: const PqStartupGates(
+            hydrateHeldSecrets: false,
+            collectConveyedKeys: false,
+            startEnvelopeListener: false,
+            mintInUseSigningKeys: false,
+            reconcileKeyPackage: false,
+            seedNamespaceKeys: false,
+            requestRootPrivate: false,
+            requestMissingPrivates: false,
+            sweepUnanchoredEnrollments: false,
+            reconcileEnrollmentSnapshot: false,
+            askOnReadMiss: false,
+          )).startup();
+
+      expect(read.where((key) => key.contains('pq_signing_root')), isEmpty,
+          reason: 'a mint starts by reading the published root; nothing is '
+              'minted into a store that cannot keep it');
+      expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty,
+          reason: 'it went on to read its own record to link its keys');
     });
 
     test('gates silence the active steps', () async {
