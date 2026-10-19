@@ -250,7 +250,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   ///
   /// Writes **root** links only: a client that does not hold the signing root
   /// links nothing this pass, and the sweep runs again at every privileged
-  /// start.
+  /// start. It stops at the first `enroll:link` an atServer refuses as a
+  /// command it does not know.
   @override
   Future<int> sweepUnanchoredEnrollments() async {
     final chain = PqSigningChain(_atClient);
@@ -273,13 +274,18 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     var linked = 0;
     for (final enrollment in approved) {
       final id = enrollment.enrollmentId;
-      if (id == null || id == ownEnrollmentId) continue;
+      if (isAtSignCredential(id) || id == ownEnrollmentId) continue;
       try {
-        final record = await chain.readRecord(id);
+        final record = await chain.readRecord(id!);
         if (record == null) continue;
         final kids = await chain.linkKeysOf(record, voucher,
             authenticationKey: enrollment.apkamPublicKey, verifier: sharing);
         if (kids.isNotEmpty) linked++;
+        if (chain.lacksEnrollLink) {
+          _logger.info('Stopped the root-link sweep: this atServer does not '
+              'know enroll:link');
+          break;
+        }
       } on Exception catch (e) {
         if (e is StoppedException) rethrow;
         _logger.warning('Could not sweep root links for enrollment $id: $e');

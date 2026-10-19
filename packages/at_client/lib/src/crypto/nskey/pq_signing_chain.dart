@@ -9,6 +9,8 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
+import 'package:at_client/src/enroll/at_sign_credential.dart'
+    show isAtSignCredential;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show rememberOwnLinkedKids;
 import 'package:at_client/src/mixins/envelope_signing.dart'
@@ -126,13 +128,14 @@ class ApskRecord {
   }
 
   static List<ApskSigningKey> _keysOf(String value) {
-    if (!value.trimLeft().startsWith('{')) {
+    final trimmed = value.trim();
+    if (!trimmed.startsWith('{')) {
       try {
         return [
           ApskSigningKey(
-              kid: publicKeyKidOfBase64(value),
+              kid: publicKeyKidOfBase64(trimmed),
               alg: SigningAlgoType.rsa2048,
-              pub: value)
+              pub: trimmed)
         ];
       } on FormatException {
         return const [];
@@ -547,8 +550,8 @@ class PqSigningChain {
     }
 
     final ownId = _atClient.enrollmentId;
-    if (ownId == null) return null;
-    final own = await readRecord(ownId);
+    if (isAtSignCredential(ownId)) return null;
+    final own = await readRecord(ownId!);
     if (own == null) return null;
     final handingOn = {for (final key in alsoVouchWith) key.publicKey};
     for (final held in [...await signer.heldSigningKeys, ...alsoVouchWith]) {
@@ -572,11 +575,12 @@ class PqSigningChain {
 
   /// Reads this enrollment's own `_apsk` and records which of its keys have a
   /// link, for content signing to prefer; returns the record, or null when it
-  /// has none.
+  /// has none. A client running as the atSign's own credential has no
+  /// enrollment record, so it has none.
   Future<ApskRecord?> refreshOwnLinks() async {
     final id = _atClient.enrollmentId;
-    if (id == null) return null;
-    final own = await readRecord(id);
+    if (isAtSignCredential(id)) return null;
+    final own = await readRecord(id!);
     rememberOwnLinkedKids(_atClient, {...?own?.links.keys});
     return own;
   }
@@ -617,14 +621,15 @@ class PqSigningChain {
   /// string `kid`, `alg` and `pub`, whatever its status. Each link states the
   /// one it found; when the atServer refuses the call, the record is read
   /// again and, if it has changed, the call made once more on what it now
-  /// holds.
+  /// holds. An atServer that does not know `enroll:link` is not asked again,
+  /// and [lacksEnrollLink] says so.
   Future<List<String>> linkKeysOf(
     ApskRecord target,
     LinkVoucher voucher, {
     required String? authenticationKey,
     required EnvelopeSigning verifier,
   }) async {
-    final signed = <String, Map<String, Object?>>{};
+    final signed = <(String, SigningAlgoType, String), Map<String, Object?>>{};
     List<ApskSigningKey>? roots;
     Future<List<ApskSigningKey>> rootsOnce() async =>
         roots ??= await _rootCandidates();
@@ -641,7 +646,7 @@ class PqSigningChain {
                 voucher, record, key, found, verifier, await rootsOnce())) {
           continue;
         }
-        final link = signed[key.kid] ??=
+        final link = signed[(key.kid, key.alg, key.pub)] ??=
             await voucher.sign(linkPayload(record.enrollmentId, key));
         writes[key.kid] = (link: link, expect: found);
       }
@@ -650,6 +655,12 @@ class PqSigningChain {
         return await writeLinks(record.enrollmentId, writes);
       } on Exception catch (e) {
         if (e is StoppedException) rethrow;
+        if (lacksEnrollLink) {
+          _logger.warning('This atServer does not know enroll:link, so keys '
+              '${writes.keys.join(', ')} of enrollment ${record.enrollmentId} '
+              'have no new link: $e');
+          return const [];
+        }
         final reread =
             attempt == 1 ? await readRecord(record.enrollmentId) : null;
         if (reread == null || _sameRecord(reread, record)) {
@@ -663,6 +674,12 @@ class PqSigningChain {
     }
     return const [];
   }
+
+  /// Whether an `enroll:link` this instance sent was refused as a command the
+  /// atServer's grammar does not know, or answered without naming what it
+  /// linked: an atServer without `enroll:link`.
+  bool get lacksEnrollLink => _lacksEnrollLink;
+  bool _lacksEnrollLink = false;
 
   /// Sends one `enroll:link` for [enrollmentId] carrying [links], and returns
   /// the `kid`s the atServer reports linked.
@@ -678,7 +695,13 @@ class PqSigningChain {
         for (final entry in links.entries)
           entry.key: {'link': entry.value.link, 'expect': entry.value.expect}
       };
-    final response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
+    final String response;
+    try {
+      response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
+    } on InvalidSyntaxException {
+      _lacksEnrollLink = true;
+      rethrow;
+    }
     if (!response.startsWith('data:')) {
       throw AtEnrollmentException(
           'enroll:link for enrollment $enrollmentId was refused: $response');
@@ -686,6 +709,7 @@ class PqSigningChain {
     final decoded = jsonDecode(response.substring('data:'.length).trim());
     final linked = decoded is Map ? decoded['linked'] : null;
     if (linked is! List) {
+      _lacksEnrollLink = true;
       throw AtEnrollmentException('enroll:link for enrollment $enrollmentId '
           'was answered without saying what it linked: $response');
     }
@@ -715,12 +739,7 @@ class PqSigningChain {
       EnvelopeSigning verifier,
       List<ApskSigningKey> roots) async {
     final foundIsRoot = _isRootLink(found, roots);
-    if (voucher.isRoot) {
-      if (!foundIsRoot) return true;
-      final walk = await walkFrom(verifier, record, key);
-      return walk.verdict != ChainVerdict.anchored;
-    }
-    if (foundIsRoot) return false;
+    if (voucher.isRoot != foundIsRoot) return voucher.isRoot;
     final walk = await walkFrom(verifier, record, key);
     return walk.verdict != ChainVerdict.anchored;
   }

@@ -6,8 +6,10 @@ import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/enroll_link_fake.dart';
 import 'test_utils/link_fixtures.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 import 'test_utils/remote_backed_client.dart';
 import 'test_utils/test_keypairs.dart';
 
@@ -22,19 +24,27 @@ void main() {
   late Map<String, Metadata> remoteMetadata;
   late List<EnrollVerbBuilder> linkCalls;
 
-  setUpAll(() => registerFallbackValue(AtKey()));
+  final logs = RecordedLogs();
+
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    logs.installOn();
+  });
   setUp(() {
     remoteData = {};
     remoteMetadata = {};
     linkCalls = [];
   });
 
-  MockAtClient client(String enrollmentId) => buildRemoteBackedMockClient(
-      atSign: atSign,
-      enrollmentId: enrollmentId,
-      remoteData: remoteData,
-      remoteMetadata: remoteMetadata,
-      enrollLinkLog: linkCalls);
+  MockAtClient client(String enrollmentId,
+          {EnrollLinkSupport enrollLink = EnrollLinkSupport.supported}) =>
+      buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: enrollLink,
+          enrollLinkLog: linkCalls);
 
   Map<String, Object?> recordOf(String enrollmentId) => {
         'appName': 'buzz',
@@ -224,5 +234,54 @@ void main() {
     expect(linkCalls.map((c) => c.enrollmentId), ['nopackage-1'],
         reason: 'a link needs no key package, and an authentication key takes '
             'none, so nothing is sent for the legacy enrollment');
+  });
+
+  group('Given a root holder and an atServer without enroll:link', () {
+    for (final support in [
+      EnrollLinkSupport.unknownToGrammar,
+      EnrollLinkSupport.noHandler,
+    ]) {
+      test(
+          'UC-G3.27 · when the sweep runs over three enrollments and the '
+          'atServer is $support, then it sends one enroll:link and logs the '
+          'refusal once', () async {
+        const ids = ['e-1', 'e-2', 'e-3'];
+        for (final id in ids) {
+          await withSigningKey(client(id));
+        }
+        final sweeper = client('sweeper-1', enrollLink: support);
+        await giveRoot(sweeper, remoteData);
+        stubApprovedList(
+            sweeper, atSign, {for (final id in ids) id: recordOf(id)});
+        logs.records.clear();
+
+        expect(
+            await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+                .sweepUnanchoredEnrollments(),
+            0);
+
+        expect(linkCalls, hasLength(1),
+            reason: 'one refusal of the operation itself ends the sweep');
+        expect(logs.at('WARNING').where((m) => m.contains('enroll:link')),
+            hasLength(1));
+      });
+    }
+  });
+
+  test(
+      'Given a root holder whose approved list names primary, when the sweep '
+      'runs, then it links nothing for primary, which has no enrollment '
+      'record', () async {
+    final primary = client('primary');
+    await withSigningKey(primary);
+    final sweeper = client('sweeper-1');
+    await giveRoot(sweeper, remoteData);
+    stubApprovedList(sweeper, atSign, {'primary': recordOf('primary')});
+
+    expect(
+        await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+            .sweepUnanchoredEnrollments(),
+        0);
+    expect(linkCalls, isEmpty);
   });
 }

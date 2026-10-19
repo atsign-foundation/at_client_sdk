@@ -7,7 +7,12 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, EnvelopeType, SignedEnvelope, signEnvelope;
+    show
+        ApkamSigningKeys,
+        EnvelopeType,
+        SignedEnvelope,
+        parseApskValue,
+        signEnvelope;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
@@ -1573,6 +1578,67 @@ void main() {
         expect((await walk(b, 'b-1')).verdict, ChainVerdict.unsigned);
       });
     }
+  });
+
+  group('Given a client running as the atSign\'s own credential', () {
+    test(
+        'when it links its own keys, then it sends no enroll:link, since '
+        'primary has no enrollment record', () async {
+      final c = client('primary');
+      await giveRoot(c, remoteData);
+      await withSigningKey(c);
+      expect(await PqSigningChain(c).readRecord('primary'), isNotNull,
+          reason: 'the premise: the credential publishes _apsk.primary');
+
+      final linked = await PqSigningChain(c)
+          .linkOwnKeys(signerOf(c), isFullyPrivileged: () async => true);
+
+      expect(linked, isEmpty);
+      expect(linkCalls, isEmpty);
+      expect(await PqSigningChain(c).refreshOwnLinks(), isNull);
+    });
+  });
+
+  test(
+      'Given a bare _apsk value with a trailing newline, when the record is '
+      'read, then it lists the one key the verifier reads in it', () {
+    final pub = RsaKeyPair.generate().atPublicKey.publicKey;
+
+    final keys = ApskRecord.parse('b-1', '$pub\n', null).keys;
+
+    expect(keys.map((k) => k.pub), [pub]);
+    expect(keys.single.kid, parseApskValue('$pub\n').keys.single.kid);
+  });
+
+  group(
+      'Given a refused call whose re-read record lists another key under the '
+      'same kid', () {
+    test(
+        'when the voucher asks once more, then it signs a new link for the '
+        'key the record now lists', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      final p1 = RsaKeyPair.generate().atPublicKey.publicKey;
+      final p2 = RsaKeyPair.generate().atPublicKey.publicKey;
+      final kid = publicKeyKidOfBase64(p1);
+      String listing(String pub) => jsonEncode({
+            'v': 1,
+            'keys': [
+              {'kid': kid, 'use': 'sign', 'alg': 'rsa2048', 'pub': pub}
+            ]
+          });
+      final stale = ApskRecord.parse('b-1', listing(p1), null);
+      remoteData[PqSigningChain.apskUri(atSign, 'b-1')] = listing(p2);
+
+      final linked = await PqSigningChain(b).linkKeysOf(stale, root,
+          authenticationKey: null, verifier: signerOf(b));
+
+      expect(linkCalls, hasLength(2),
+          reason: 'the first named the key the stale record listed, and was '
+              'refused');
+      expect(linked, [kid]);
+      expect(linkCalls.last.links![kid]['link']['payload']['pub'], p2);
+    });
   });
 
   test(
