@@ -23,10 +23,9 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
 
   /// An in-memory store already holding [atKeys] for [atsign].
   ///
-  /// For a caller that has a key set in hand and needs a *source* to
-  /// authenticate from, which is what [AtAuthRequest] takes. at_auth wraps a
-  /// fixed key set exactly this way internally, so this is the same object
-  /// the authentication would have built.
+  /// For a test that has a key set in hand and needs a *source* to
+  /// authenticate from, which is what [AtAuthRequest] takes. Outside a test,
+  /// file the keys into a durable [WrittenAtKeysIo] instead.
   @visibleForTesting
   factory InMemoryAtKeysIo.holding(String atsign, AtKeys atKeys) {
     final io = InMemoryAtKeysIo();

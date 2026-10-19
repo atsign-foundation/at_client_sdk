@@ -1206,9 +1206,10 @@ names them. What the deprecation pass kept is everything that outlived them:
   for the keys, `enrollmentId` for the enrollment — which is what a
   deprecation pass is for, and leaves the fields exercised by nothing but an
   external app;
-- **`InMemoryAtKeysIo.holding(atSign, keys)`**, for a caller that has keys and
-  needs a source. at_auth wraps a fixed key set this way internally, so it is
-  the same object the authentication would have built;
+- **`InMemoryAtKeysIo.holding(atSign, keys)`**, for a test that has keys and
+  needs a source. Outside a test it draws an analyzer warning, since nothing
+  it holds survives the process, and the keys belong in a durable
+  `WrittenAtKeysIo`;
 - **`AuthResponse.enrollmentId` answers from the session as well as the keys**
   — the fix that made a keyfile-sourced authentication report its enrollment
   at all, where it had read the keys alone. The type went internal with the
