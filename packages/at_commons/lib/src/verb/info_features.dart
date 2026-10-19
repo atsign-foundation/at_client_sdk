@@ -17,7 +17,7 @@ class InfoFeature {
   /// `messageType:text` on notify.
   static const String notifyText = 'notify.text';
 
-  /// `otp:list` operation.
+  /// The `otp:delete:<otp>` and `otp:delete:spp` operations.
   static const String otpList = 'otp.list';
 
   /// `otp:delete:<otp>` and `otp:delete:spp` operations.

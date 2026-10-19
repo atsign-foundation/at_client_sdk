@@ -1,8 +1,4 @@
-## 5.23.0
-
-- feat: `enroll:link`, for writing links that vouch for an enrollment's
-  client data signing keys: `EnrollOperationEnum.link`, and `links` on
-  `EnrollParams` and `EnrollVerbBuilder`.
+## 5.24.0-rc1
 
 - feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
   `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
@@ -11,6 +7,12 @@
   `InfoFeature.otpList` (`otp.list`) and `InfoFeature.otpDelete`
   (`otp.delete`) in its `info` features; one that does not refuses them as a
   syntax error.
+
+## 5.23.0
+
+- feat: `enroll:link`, for writing links that vouch for an enrollment's
+  client data signing keys: `EnrollOperationEnum.link`, and `links` on
+  `EnrollParams` and `EnrollVerbBuilder`.
 
 ## 5.22.0
 

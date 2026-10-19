@@ -113,7 +113,8 @@ void main() {
       expect(verbParams['otp'], 'ABC1234');
     });
 
-    test('A test to verify otp:delete:SPP names the SPP, as verbs ignore case',
+    test(
+        'A test to verify otp:delete:SPP names the SPP, as the regex ignore case',
         () {
       Map<dynamic, dynamic> verbParams =
           getVerbParams(VerbSyntax.otp, 'otp:delete:SPP');
