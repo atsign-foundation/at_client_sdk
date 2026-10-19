@@ -1411,6 +1411,9 @@ void main() {
               .offeredForNewOperations,
           isTrue,
           reason: 'K1 is still advertised as in service');
+      expect((await signerOf(b).signingKeys).map((k) => k.publicKey),
+          [k1.publicKey],
+          reason: 'B signs with K1 while K2 has no link');
 
       final restarted = buildRemoteBackedMockClient(
           atSign: atSign,
@@ -1462,6 +1465,140 @@ void main() {
 
       expect(result.minted, [SigningAlgoType.mldsa65]);
       expect(result.retired, [SigningAlgoType.rsa2048]);
+    });
+
+    test(
+        'UC-G3.18 · when the change that adds K2 also retires a K1 whose link '
+        'does not walk to the root, then K1 retires as one without a link '
+        'does', () async {
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      plant('b-1', k1Entry.kid, {'note': 'no signature'});
+
+      final result =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(result.minted, [SigningAlgoType.mldsa65]);
+      expect(result.retired, [SigningAlgoType.rsa2048],
+          reason: 'a key whose link reads broken cannot vouch for K2, so '
+              'keeping it in service only delays its retirement');
+    });
+
+    test(
+        'when the advertisement already lists K1 as retired, then no publish '
+        'lists it in service again, and K2 is linked with it before the '
+        'keyfile retires it', () async {
+      final root = await newRoot();
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: EnrollLinkSupport.unknownToGrammar,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final k1 = await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      plant('b-1', k1Entry.kid,
+          await root.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
+      await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+          .reconcileSigningKeys();
+      final uri = PqSigningChain.apskUri(atSign, 'b-1');
+      final listing = jsonDecode(remoteData[uri]!) as Map<String, dynamic>;
+      for (final entry in listing['keys'] as List) {
+        if (entry['kid'] == k1Entry.kid) entry['status'] = 'retired';
+      }
+      remoteData[uri] = jsonEncode(listing);
+
+      final restarted = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final keyfile = b.atKeysIo;
+      when(() => restarted.atKeysIo).thenReturn(keyfile);
+      final published = _Republishing(remoteData, atSign);
+
+      final later = await SigningKeyMinting(restarted, updater: published)
+          .reconcileSigningKeys();
+
+      for (final value in published.values) {
+        final entries = (jsonDecode(value) as Map)['keys'] as List;
+        expect(
+            entries.where((e) =>
+                e['kid'] == k1Entry.kid &&
+                (e['status'] == null || e['status'] == 'active')),
+            isEmpty,
+            reason: value);
+      }
+      expect(later.retired, [SigningAlgoType.rsa2048]);
+      final after = await record(restarted, 'b-1');
+      final k2Entry =
+          after.keys.singleWhere((k) => k.alg == SigningAlgoType.mldsa65);
+      expect(SignedEnvelope.fromJson(after.links[k2Entry.kid]!).signature.kid,
+          publicKeyKidOfBase64(k1.publicKey));
+    });
+
+    test(
+        'Given the atSign\'s own credential, when the change that adds K2 also '
+        'retires K1, then K1 retires at once', () async {
+      final c = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'primary',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      await withSigningKey(c);
+
+      final result =
+          await SigningKeyMinting(c, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(result.minted, [SigningAlgoType.mldsa65]);
+      expect(result.retired, [SigningAlgoType.rsa2048]);
+      expect(linkCalls, isEmpty);
+    });
+
+    test(
+        'when B cannot read its own record, then K1 stays in service',
+        () async {
+      final root = await newRoot();
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final k1 = await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      plant('b-1', k1Entry.kid,
+          await root.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
+      when(() => b.get(
+              any(
+                  that: isA<AtKey>().having((k) => k.toString(), 'key',
+                      contains('_apsk.b-1'))),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(AtClientException.message('unreadable'));
+
+      final result =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(result.retired, isEmpty);
+      expect((await signerOf(b).heldSigningKeys).map((k) => k.publicKey),
+          contains(k1.publicKey));
     });
   });
 
@@ -1786,12 +1923,16 @@ class _Republishing implements EnrollmentUpdater {
   final Map<String, String> remoteData;
   final String atSign;
 
+  /// Every value published, in order.
+  final List<String> values = [];
+
   @override
   Future<AtEnrollmentResponse> update(
       EnrollmentUpdateRequest request, AtLookUp atLookUp) async {
-    remoteData[PqSigningChain.apskUri(atSign, request.enrollmentId)] =
-        request.apskLegacy ??
-            jsonEncode(apskAdvertisement(keys: request.signingKeys!));
+    final value = request.apskLegacy ??
+        jsonEncode(apskAdvertisement(keys: request.signingKeys!));
+    values.add(value);
+    remoteData[PqSigningChain.apskUri(atSign, request.enrollmentId)] = value;
     return AtEnrollmentResponse(
         request.enrollmentId, EnrollmentStatus.approved);
   }
