@@ -584,7 +584,6 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Failed to approve'), findsNothing);
-    // Let the feedback overlay's auto-dismiss run down before teardown.
     await tester.pump(const Duration(seconds: 4));
   });
 
@@ -684,6 +683,179 @@ void main() {
         reason: 'the older read must not overwrite the newer rows',
       );
       await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets(
+    'Given two approved enrollments, when the list reads whether each is '
+    'anchored, then both reads start before either finishes',
+    (tester) async {
+      listAround(
+        () => false,
+        approvedBefore: [
+          approvedRecord('a-1', 'laptop'),
+          approvedRecord('a-2', 'phone'),
+        ],
+        approvedAfter: const [],
+      );
+      final started = <String>[];
+      final reads = <String, Completer<ChainResult>>{};
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) {
+                started.add(id);
+                return (reads[id] = Completer<ChainResult>()).future;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(started, ['a-1', 'a-2']);
+      for (final entry in reads.entries) {
+        entry.value.complete(
+          ChainResult(ChainVerdict.anchored, [entry.key], null),
+        );
+      }
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'Given listing the approved enrollments throws an error, when the list '
+    'loads, then it shows the failure and nothing escapes',
+    (tester) async {
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer(
+        (inv) async => approvedFilter(inv)
+            ? throw StateError('unreadable roster')
+            : [pendingRecord()],
+      );
+
+      await pumpList(tester);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.textContaining('Could not list the approved enrollments'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'Given a slow first listing that then fails, when an approval reloads the '
+    'list first, then the failure does not replace the newer rows',
+    (tester) async {
+      var approvedYet = false;
+      final slow = Completer<List<Enrollment>>();
+      when(() => service.approve(any())).thenAnswer((_) async {
+        approvedYet = true;
+        return AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved);
+      });
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer((inv) async {
+        if (!approvedFilter(inv)) {
+          return approvedYet
+              ? [approvedRecord(enrollmentId, 'pixel')]
+              : [pendingRecord()];
+        }
+        return approvedYet
+            ? [approvedRecord(enrollmentId, 'pixel')]
+            : slow.future;
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async =>
+                  ChainResult(ChainVerdict.anchored, [id], null),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('approved-$enrollmentId')),
+        findsOneWidget,
+        reason: 'the premise: the reload listed the newly approved enrollment',
+      );
+
+      slow.completeError(AtClientException.message('refused'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('approved-$enrollmentId')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Could not list the approved enrollments'),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets(
+    'Given an approval whose conveyance is refused, when it completes, then '
+    'the approved enrollments are read again',
+    (tester) async {
+      var approvedYet = false;
+      when(() => service.approve(any())).thenAnswer((_) async {
+        approvedYet = true;
+        throw EnrollmentConveyanceException(
+          'Enrollment $enrollmentId is approved, but no secrets were shared '
+          'with it.',
+          response: AtEnrollmentResponse(
+            enrollmentId,
+            EnrollmentStatus.approved,
+          ),
+          keyPackageStatus: KeyPackageStatus.rejected,
+        );
+      });
+      listAround(
+        () => approvedYet,
+        approvedAfter: [approvedRecord(enrollmentId, 'pixel')],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async =>
+                  ChainResult(ChainVerdict.anchored, [id], null),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('approved-$enrollmentId')),
+        findsOneWidget,
+      );
     },
   );
 }

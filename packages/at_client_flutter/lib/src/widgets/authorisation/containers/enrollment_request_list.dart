@@ -53,6 +53,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   /// after a later one started leaves the later one's rows standing.
   int _approvedLoads = 0;
 
+  final AtSignLogger _logger = AtSignLogger('EnrollmentRequestList');
+
   @override
   void initState() {
     super.initState();
@@ -114,39 +116,32 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   }
 
   /// Lists the approved enrollments, each with whether its keys are anchored,
-  /// or `?` where that could not be read; a failure to list them is recorded
-  /// in [_approvedError] rather than thrown. Of two loads, the later started
-  /// is the one shown.
+  /// read for all of them at once, or `?` where that could not be read; a
+  /// failure to list them is recorded in [_approvedError] rather than thrown,
+  /// and an [Error] is logged as well. Of two loads, the later started is the
+  /// one shown.
   Future<void> _loadApproved() async {
     final load = ++_approvedLoads;
-    // ignore: experimental_member_use
-    final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
-    final List<Enrollment> approved;
+    final List<({Enrollment enrollment, String anchored})> rows;
     try {
-      approved = await _client.enrollments.list(
+      // ignore: experimental_member_use
+      final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
+      final approved = await _client.enrollments.list(
         statuses: const [EnrollmentStatus.approved],
       );
-    } catch (e) {
+      rows = await Future.wait([
+        for (final enrollment in approved)
+          if (enrollment.enrollmentId != null)
+            _anchoredRow(enrollment, anchoring),
+      ]);
+    } on Exception catch (e) {
       debugPrint('Could not list the approved enrollments: $e');
-      if (mounted && load == _approvedLoads) {
-        setState(() {
-          _approved.clear();
-          _approvedError = 'Could not list the approved enrollments: $e';
-        });
-      }
+      _showApprovedError(load, e);
       return;
-    }
-    final rows = <({Enrollment enrollment, String anchored})>[];
-    for (final enrollment in approved) {
-      final id = enrollment.enrollmentId;
-      if (id == null) continue;
-      String anchored;
-      try {
-        anchored = (await anchoring(id)).summary;
-      } catch (e) {
-        anchored = '?';
-      }
-      rows.add((enrollment: enrollment, anchored: anchored));
+    } on Error catch (e, st) {
+      _logger.severe('Listing the approved enrollments failed: $e\n$st');
+      _showApprovedError(load, e);
+      return;
     }
     if (mounted && load == _approvedLoads) {
       setState(() {
@@ -154,6 +149,36 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         _approved
           ..clear()
           ..addAll(rows);
+      });
+    }
+  }
+
+  /// [enrollment] with whether its keys are anchored, or `?` when that could
+  /// not be read.
+  Future<({Enrollment enrollment, String anchored})> _anchoredRow(
+    Enrollment enrollment,
+    // ignore: experimental_member_use
+    Future<ChainResult> Function(String enrollmentId) anchoring,
+  ) async {
+    try {
+      final result = await anchoring(enrollment.enrollmentId!);
+      return (enrollment: enrollment, anchored: result.summary);
+    } on Exception {
+      return (enrollment: enrollment, anchored: '?');
+    } on Error catch (e, st) {
+      _logger.severe(
+        'Reading whether enrollment ${enrollment.enrollmentId} is anchored '
+        'failed: $e\n$st',
+      );
+      return (enrollment: enrollment, anchored: '?');
+    }
+  }
+
+  void _showApprovedError(int load, Object error) {
+    if (mounted && load == _approvedLoads) {
+      setState(() {
+        _approved.clear();
+        _approvedError = 'Could not list the approved enrollments: $error';
       });
     }
   }
