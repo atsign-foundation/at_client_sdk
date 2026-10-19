@@ -1376,6 +1376,98 @@ void main() {
       expect(walked.keysWalked, ['b-1/${k2Entry.kid}', 'b-1/${k1Entry.kid}']);
       expect(after.links.keys, containsAll([k1Entry.kid, k2Entry.kid]));
     });
+
+    test(
+        'UC-G3.18 · when the change that adds K2 also retires K1 and K2\'s '
+        'link cannot be written, then B keeps K1 in service, and a later '
+        'start links K2 with K1 and only then retires K1', () async {
+      final root = await newRoot();
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: EnrollLinkSupport.unknownToGrammar,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final k1 = await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      plant('b-1', k1Entry.kid,
+          await root.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
+
+      final first =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(first.minted, [SigningAlgoType.mldsa65]);
+      expect(first.retired, isEmpty,
+          reason: 'K2 has no link, so K1 stays in service');
+      expect((await signerOf(b).heldSigningKeys).map((k) => k.publicKey),
+          contains(k1.publicKey));
+      expect(
+          (await record(b, 'b-1'))
+              .keys
+              .singleWhere((k) => k.kid == k1Entry.kid)
+              .offeredForNewOperations,
+          isTrue,
+          reason: 'K1 is still advertised as in service');
+
+      final remote = b.getRemoteSecondary()!;
+      when(() => remote.executeVerb(any(
+              that: isA<EnrollVerbBuilder>().having(
+                  (v) => v.operation, 'operation', EnrollOperationEnum.link))))
+          .thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0] as EnrollVerbBuilder;
+        linkCalls.add(builder);
+        return answerEnrollLink(builder,
+            atSign: atSign,
+            remoteData: remoteData,
+            remoteMetadata: remoteMetadata,
+            authenticationKeyOf: (id) =>
+                pkamKeyPairFor(atSign, id).atPublicKey.publicKey);
+      });
+      linkCalls.clear();
+
+      final later =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(later.minted, isEmpty);
+      expect(later.retired, [SigningAlgoType.rsa2048]);
+      final after = await record(b, 'b-1');
+      final k2Entry =
+          after.keys.singleWhere((k) => k.alg == SigningAlgoType.mldsa65);
+      expect(SignedEnvelope.fromJson(after.links[k2Entry.kid]!).signature.kid,
+          publicKeyKidOfBase64(k1.publicKey));
+      expect(
+          after.keys
+              .singleWhere((k) => k.kid == k1Entry.kid)
+              .offeredForNewOperations,
+          isFalse);
+      expect((await signerOf(b).heldSigningKeys).map((k) => k.publicKey),
+          isNot(contains(k1.publicKey)));
+    });
+
+    test(
+        'UC-G3.18 · when the change that adds K2 also retires a K1 without a '
+        'link, then K1 retires as before', () async {
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: EnrollLinkSupport.unknownToGrammar,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      await withSigningKey(b);
+
+      final result =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+
+      expect(result.minted, [SigningAlgoType.mldsa65]);
+      expect(result.retired, [SigningAlgoType.rsa2048]);
+    });
   });
 
   group('Given a holder of the root whose key K1 has a link, minting K2', () {

@@ -1,5 +1,9 @@
 import 'package:at_auth/at_auth.dart'
-    show CryptographicMaterialAlgorithm, KeyEntryStatus, WrittenAtKeysIo;
+    show
+        CryptographicMaterialAlgorithm,
+        KeyEntryStatus,
+        WrittenAtKeysIo,
+        publicKeyKidOfBase64;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SigningAlgoType;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
@@ -32,7 +36,8 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// publish lands. A withdrawal from service is filed after the publish, so an
 /// outgoing key is never unadvertised while it is still what signs. A minted
 /// key is linked once it is published, by a key this enrollment already has
-/// linked, before any outgoing key is retired.
+/// linked, before any outgoing key is retired; an outgoing key with a link
+/// stays in service until every key kept has one.
 class SigningKeyMinting with ApkamSigning {
   /// Reconciles [atClient]'s signing keys, publishing through [updater] when
   /// one is supplied and a fresh [EnrollmentUpdater] otherwise.
@@ -102,32 +107,108 @@ class SigningKeyMinting with ApkamSigning {
       logger.info('Minted ${missing.map((a) => a.name).join(', ')} signing '
           'key(s) for $enrollmentId; filing before publishing');
     }
-    if (superseded.isNotEmpty) {
-      logger.info(
-          'Retiring ${superseded.map((k) => k.algorithm.name).join(', ')} '
-          'signing key(s) for $enrollmentId: the in-use set no longer names '
-          'them. They stay advertised as retired, so what they signed still '
-          'verifies');
-    }
 
     // NOTE: file, publish and retire are one critical section, so no other
     // `_apsk` writer in this process composes from the keyfile half way.
+    late final List<ApkamSigningKeys> retired;
     await serialiseApskWrite(atClient, () async {
       for (final key in minted) {
         await _file(io, atSign, key);
       }
-      await _publish(
-          _strongestFirst([...minted, ...keeping], (key) => key.algorithm),
-          retiring: superseded);
-      if (minted.isNotEmpty) await _linkMinted(handingOn: held);
-      for (final key in superseded) {
-        await _retire(io, atSign, key.algorithm);
-      }
+      retired = await _publishLinkAndRetire(io, atSign,
+          minted: minted, keeping: keeping, superseded: superseded, held: held);
     });
     return (
       minted: missing,
-      retired: [for (final key in superseded) key.algorithm]
+      retired: [for (final key in retired) key.algorithm]
     );
+  }
+
+  /// Publishes the keys this reconcile keeps, links those without a link, and
+  /// retires [superseded]; returns the keys it retired.
+  ///
+  /// A superseded key with a link stays advertised and in service while a key
+  /// kept has none, so that it can vouch for that key: it retires on a later
+  /// reconcile, once every key kept has a link. A superseded key without a
+  /// link retires at once.
+  Future<List<ApkamSigningKeys>> _publishLinkAndRetire(
+      WrittenAtKeysIo io, String atSign,
+      {required List<ApkamSigningKeys> minted,
+      required List<ApkamSigningKeys> keeping,
+      required List<ApkamSigningKeys> superseded,
+      required List<ApkamSigningKeys> held}) async {
+    final kept = [...minted, ...keeping];
+    final linked = await _ownLinkedKids();
+    bool hasLink(ApkamSigningKeys key) =>
+        linked == null || linked.contains(_kidOf(key));
+    final vouching = [
+      for (final key in superseded)
+        if (hasLink(key)) key
+    ];
+    final needsLinks = minted.isNotEmpty ||
+        keeping.any((key) => linked == null || !hasLink(key));
+
+    if (vouching.isEmpty || !needsLinks) {
+      await _publish(_strongestFirst(kept, (key) => key.algorithm),
+          retiring: superseded);
+      if (minted.isNotEmpty) await _linkKept(handingOn: held);
+      await _retireAll(io, atSign, superseded);
+      return superseded;
+    }
+
+    final retiringNow = [
+      for (final key in superseded)
+        if (!vouching.contains(key)) key
+    ];
+    await _publish(
+        _strongestFirst([...kept, ...vouching], (key) => key.algorithm),
+        retiring: retiringNow);
+    await _linkKept(handingOn: held);
+    final after = await _ownLinkedKids();
+    if (after != null && kept.every((key) => after.contains(_kidOf(key)))) {
+      await _publish(_strongestFirst(kept, (key) => key.algorithm),
+          retiring: superseded);
+      await _retireAll(io, atSign, superseded);
+      return superseded;
+    }
+    logger.warning('Keeping the '
+        '${vouching.map((k) => k.algorithm.name).join(', ')} signing key(s) of '
+        '$enrollmentId in service, though the in-use set no longer names them: '
+        'a key it keeps has no link yet, and a later start links it with them '
+        'before retiring them');
+    await _retireAll(io, atSign, retiringNow);
+    return retiringNow;
+  }
+
+  /// The `kid`s this enrollment's own `_apsk` record has a link for: none for
+  /// the atSign's own credential, which has no enrollment record, and null
+  /// when the record cannot be read.
+  Future<Set<String>?> _ownLinkedKids() async {
+    if (isAtSignCredential(atClient.enrollmentId)) return const {};
+    try {
+      final own = await PqSigningChain(atClient).readRecord(enrollmentId);
+      return {...?own?.links.keys};
+    } on Exception catch (e) {
+      if (e is StoppedException) rethrow;
+      logger.warning('Could not read which signing keys of $enrollmentId have '
+          'a link, so any it would retire stay in service: $e');
+      return null;
+    }
+  }
+
+  static String _kidOf(ApkamSigningKeys key) =>
+      publicKeyKidOfBase64(key.publicKey);
+
+  Future<void> _retireAll(
+      WrittenAtKeysIo io, String atSign, List<ApkamSigningKeys> keys) async {
+    if (keys.isEmpty) return;
+    logger.info('Retiring ${keys.map((k) => k.algorithm.name).join(', ')} '
+        'signing key(s) for $enrollmentId: the in-use set no longer names '
+        'them. They stay advertised as retired, so what they signed still '
+        'verifies');
+    for (final key in keys) {
+      await _retire(io, atSign, key.algorithm);
+    }
   }
 
   /// [keys] ordered by [SigningAlgoType.strongestFirst], the order an
@@ -197,25 +278,23 @@ class SigningKeyMinting with ApkamSigning {
         atLookUp!);
   }
 
-  /// Links the keys this reconcile just published, signing with one this
-  /// enrollment already has linked; [handingOn] may vouch although the
-  /// advertisement now lists it as retired.
+  /// Links the keys this enrollment advertises that lack a link, signing with
+  /// one it already has linked; [handingOn] may vouch although the
+  /// advertisement lists it as retired.
   ///
-  /// A failure leaves them unlinked: this enrollment signs content with its
-  /// linked keys meanwhile, and the next start links them.
-  Future<void> _linkMinted({required List<ApkamSigningKeys> handingOn}) async {
+  /// A failure leaves them unlinked and is logged; the caller decides what
+  /// stays in service meanwhile.
+  Future<void> _linkKept({required List<ApkamSigningKeys> handingOn}) async {
     try {
-      // NOTE: chain links only, even for a holder of the signing root, whose
-      // own keys the start's root-linking step then links to the root.
+      // NOTE: a chain voucher alone, never the signing root.
       await PqSigningChain(atClient).linkOwnKeys(
           AtClientSecretSharing.forClient(atClient),
           isFullyPrivileged: null,
           alsoVouchWith: handingOn);
     } on Exception catch (e) {
       if (e is StoppedException) rethrow;
-      logger.warning('Could not link the key(s) just minted for '
-          '$enrollmentId; it signs content with its linked keys meanwhile, '
-          'and the next start links them: $e');
+      logger.warning('Could not link the signing key(s) of $enrollmentId that '
+          'have no link; a later start tries again: $e');
     }
   }
 
