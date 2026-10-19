@@ -114,7 +114,7 @@ void main() {
     });
 
     test(
-        'A test to verify otp:delete:SPP names the SPP, as the regex ignore case',
+        'A test to verify otp:delete:SPP names the SPP, as the regex ignores case',
         () {
       Map<dynamic, dynamic> verbParams =
           getVerbParams(VerbSyntax.otp, 'otp:delete:SPP');

@@ -17,10 +17,10 @@ class InfoFeature {
   /// `messageType:text` on notify.
   static const String notifyText = 'notify.text';
 
-  /// The `otp:delete:<otp>` and `otp:delete:spp` operations.
+  ///The `otp:list` operation.
   static const String otpList = 'otp.list';
 
-  /// `otp:delete:<otp>` and `otp:delete:spp` operations.
+  ///The `otp:delete:<otp>` and `otp:delete:spp` operations.
   static const String otpDelete = 'otp.delete';
 }
 
