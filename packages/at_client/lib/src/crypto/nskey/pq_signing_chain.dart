@@ -31,6 +31,9 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:meta/meta.dart' show experimental;
 
+/// The clients whose atServer has shown it does not know `enroll:link`.
+final Expando<bool> _withoutEnrollLink = Expando('withoutEnrollLink');
+
 /// How far up the chain a walk from one key got.
 @experimental
 enum ChainVerdict {
@@ -621,7 +624,8 @@ class PqSigningChain {
   /// string `kid`, `alg` and `pub`, whatever its status. Each link states the
   /// one it found; when the atServer refuses the call, the record is read
   /// again and, if it has changed, the call made once more on what it now
-  /// holds. An atServer that does not know `enroll:link` is not asked again,
+  /// holds. Once the atServer has refused a call as a command it does not
+  /// know, no call any [PqSigningChain] of this client makes sends another,
   /// and [lacksEnrollLink] says so.
   Future<List<String>> linkKeysOf(
     ApskRecord target,
@@ -629,6 +633,7 @@ class PqSigningChain {
     required String? authenticationKey,
     required EnvelopeSigning verifier,
   }) async {
+    if (lacksEnrollLink) return const [];
     final signed = <(String, SigningAlgoType, String), Map<String, Object?>>{};
     List<ApskSigningKey>? roots;
     Future<List<ApskSigningKey>> rootsOnce() async =>
@@ -675,11 +680,11 @@ class PqSigningChain {
     return const [];
   }
 
-  /// Whether an `enroll:link` this instance sent was refused as a command the
-  /// atServer's grammar does not know, or answered without naming what it
-  /// linked: an atServer without `enroll:link`.
-  bool get lacksEnrollLink => _lacksEnrollLink;
-  bool _lacksEnrollLink = false;
+  /// Whether an `enroll:link` this client sent, through any [PqSigningChain],
+  /// was refused as a command the atServer's grammar does not know, or was
+  /// answered without naming what it linked: an atServer without
+  /// `enroll:link`. It holds for the client's lifetime.
+  bool get lacksEnrollLink => _withoutEnrollLink[_atClient] ?? false;
 
   /// Sends one `enroll:link` for [enrollmentId] carrying [links], and returns
   /// the `kid`s the atServer reports linked.
@@ -700,7 +705,7 @@ class PqSigningChain {
       response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
     } on InvalidSyntaxException {
       if (matchesEnrollGrammar(builder.buildCommand())) {
-        _lacksEnrollLink = true;
+        _withoutEnrollLink[_atClient] = true;
       }
       rethrow;
     }
@@ -711,7 +716,7 @@ class PqSigningChain {
     final decoded = jsonDecode(response.substring('data:'.length).trim());
     final linked = decoded is Map ? decoded['linked'] : null;
     if (linked is! List) {
-      _lacksEnrollLink = true;
+      _withoutEnrollLink[_atClient] = true;
       throw AtEnrollmentException('enroll:link for enrollment $enrollmentId '
           'was answered without saying what it linked: $response');
     }

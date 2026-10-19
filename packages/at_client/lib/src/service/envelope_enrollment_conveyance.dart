@@ -250,8 +250,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   ///
   /// Writes **root** links only: a client that does not hold the signing root
   /// links nothing this pass, and the sweep runs again at every privileged
-  /// start. It stops at the first `enroll:link` an atServer refuses as a
-  /// command it does not know.
+  /// start. It stops once this client's atServer has refused `enroll:link` as
+  /// a command it does not know, naming the enrollments it leaves unswept.
   @override
   Future<int> sweepUnanchoredEnrollments() async {
     final chain = PqSigningChain(_atClient);
@@ -271,21 +271,29 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         enrollmentListParams: EnrollmentListRequestParam()
           ..enrollmentListFilter = [EnrollmentStatus.approved]);
 
+    final sweeping = [
+      for (final enrollment in approved)
+        if (!isAtSignCredential(enrollment.enrollmentId) &&
+            enrollment.enrollmentId != ownEnrollmentId)
+          enrollment
+    ];
     var linked = 0;
-    for (final enrollment in approved) {
-      final id = enrollment.enrollmentId;
-      if (isAtSignCredential(id) || id == ownEnrollmentId) continue;
+    for (var i = 0; i < sweeping.length; i++) {
+      if (chain.lacksEnrollLink) {
+        _logger.warning('Stopped the root-link sweep: this atServer links no '
+            'keys, so enrollment(s) '
+            '${sweeping.skip(i).map((e) => e.enrollmentId).join(', ')} were '
+            'not swept; a later start sweeps them again');
+        break;
+      }
+      final enrollment = sweeping[i];
+      final id = enrollment.enrollmentId!;
       try {
-        final record = await chain.readRecord(id!);
+        final record = await chain.readRecord(id);
         if (record == null) continue;
         final kids = await chain.linkKeysOf(record, voucher,
             authenticationKey: enrollment.apkamPublicKey, verifier: sharing);
         if (kids.isNotEmpty) linked++;
-        if (chain.lacksEnrollLink) {
-          _logger.info('Stopped the root-link sweep: this atServer does not '
-              'know enroll:link');
-          break;
-        }
       } on Exception catch (e) {
         if (e is StoppedException) rethrow;
         _logger.warning('Could not sweep root links for enrollment $id: $e');

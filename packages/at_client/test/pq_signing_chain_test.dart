@@ -1412,25 +1412,20 @@ void main() {
           isTrue,
           reason: 'K1 is still advertised as in service');
 
-      final remote = b.getRemoteSecondary()!;
-      when(() => remote.executeVerb(any(
-              that: isA<EnrollVerbBuilder>().having(
-                  (v) => v.operation, 'operation', EnrollOperationEnum.link))))
-          .thenAnswer((inv) async {
-        final builder = inv.positionalArguments[0] as EnrollVerbBuilder;
-        linkCalls.add(builder);
-        return answerEnrollLink(builder,
-            atSign: atSign,
-            remoteData: remoteData,
-            remoteMetadata: remoteMetadata,
-            authenticationKeyOf: (id) =>
-                pkamKeyPairFor(atSign, id).atPublicKey.publicKey);
-      });
+      final restarted = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final keyfile = b.atKeysIo;
+      when(() => restarted.atKeysIo).thenReturn(keyfile);
       linkCalls.clear();
 
-      final later =
-          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
-              .reconcileSigningKeys();
+      final later = await SigningKeyMinting(restarted,
+              updater: _Republishing(remoteData, atSign))
+          .reconcileSigningKeys();
 
       expect(later.minted, isEmpty);
       expect(later.retired, [SigningAlgoType.rsa2048]);

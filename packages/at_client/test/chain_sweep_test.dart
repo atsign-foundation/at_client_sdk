@@ -262,10 +262,86 @@ void main() {
 
         expect(linkCalls, hasLength(1),
             reason: 'one refusal of the operation itself ends the sweep');
-        expect(logs.at('WARNING').where((m) => m.contains('enroll:link')),
+        expect(
+            logs
+                .at('WARNING')
+                .where((m) => m.contains('does not know enroll:link')),
+            hasLength(1));
+        expect(
+            logs.at('WARNING').where((m) =>
+                m.contains('Stopped the root-link sweep') &&
+                m.contains('e-2') &&
+                m.contains('e-3')),
+            hasLength(1),
+            reason: 'the enrollments left unswept are named');
+        expect(logs.at('WARNING').where((m) => m.contains('was refused')),
+            isEmpty,
+            reason: 'a refusal of the operation itself reads the record no '
+                'second time');
+      });
+
+      test(
+          'UC-G3.27 · when a start links its own keys, sweeps, and links a '
+          'key it mints, on an atServer that is $support, then it sends one '
+          'enroll:link and logs the refusal once', () async {
+        const ids = ['e-1', 'e-2', 'e-3'];
+        for (final id in ids) {
+          await withSigningKey(client(id));
+        }
+        final sweeper = client('sweeper-1', enrollLink: support);
+        await giveRoot(sweeper, remoteData);
+        await withSigningKey(sweeper);
+        stubApprovedList(
+            sweeper, atSign, {for (final id in ids) id: recordOf(id)});
+        final signer = AtClientSecretSharing.forClient(sweeper);
+        logs.records.clear();
+
+        await PqSigningChain(sweeper)
+            .linkOwnKeys(signer, isFullyPrivileged: () async => true);
+        await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+            .sweepUnanchoredEnrollments();
+        await PqSigningChain(sweeper)
+            .linkOwnKeys(signer, isFullyPrivileged: null);
+
+        expect(linkCalls, hasLength(1),
+            reason: 'every step of one client shares what the first refusal '
+                'showed');
+        expect(
+            logs
+                .at('WARNING')
+                .where((m) => m.contains('does not know enroll:link')),
             hasLength(1));
       });
     }
+
+    test(
+        'when the atServer refuses one enrollment\'s links as unauthorised, '
+        'then the sweep goes on to the next', () async {
+      const ids = ['e-1', 'e-2', 'e-3'];
+      for (final id in ids) {
+        await withSigningKey(client(id));
+      }
+      final sweeper = client('sweeper-1');
+      await giveRoot(sweeper, remoteData);
+      stubApprovedList(
+          sweeper, atSign, {for (final id in ids) id: recordOf(id)});
+      final remote = sweeper.getRemoteSecondary()!;
+      when(() => remote.executeVerb(any(
+              that: isA<EnrollVerbBuilder>()
+                  .having((b) => b.enrollmentId, 'enrollmentId', 'e-1'))))
+          .thenAnswer((inv) async {
+        linkCalls.add(inv.positionalArguments.single as EnrollVerbBuilder);
+        throw UnAuthorizedException('not authorised to link e-1');
+      });
+
+      expect(
+          await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+              .sweepUnanchoredEnrollments(),
+          2);
+      expect(linkCalls.map((c) => c.enrollmentId), ids);
+      expect(await verdict(sweeper, 'e-2'), ChainVerdict.anchored);
+      expect(await verdict(sweeper, 'e-3'), ChainVerdict.anchored);
+    });
   });
 
   test(
