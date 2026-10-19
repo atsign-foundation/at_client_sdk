@@ -4220,6 +4220,10 @@ Threats, answered for the whole set:
   *And* until K2's link is on the record, B signs content with K1 only.
   *And* when B later retires K1, K1's link stays, so what K1 signed still walks
   to the root.
+  *And* when the change that adds K2 also retires K1, and K1 has a link but
+  K2's link cannot be written, B keeps K1 in service and signs with it, and
+  retires K1 only once a later start has linked K2 with it. A K1 without a
+  link retires as before.
 
 #### UC-G3.19 — a chain link is signed only by a key that has a link, and a root link only by the root
   *Given* an enrollment A that holds neither the signing root's private key
@@ -4315,6 +4319,9 @@ Threats, answered for the whole set:
   *Then* no link is written, and every enrollment reads **unsigned**.
   *And* the approval, the key addition and the start complete as they do
   today, and content is signed as it is today.
+  *And* a root holder's sweep stops at the first such refusal, so a start sends
+  that atServer one `enroll:link` rather than one per approved enrollment, and
+  logs the refusal once.
 
 #### UC-G3.28 — a bare RSA client data signing key is linked like a listed one
   *Given* B on the `pqReady` posture, authenticating with ML-DSA-65, whose
