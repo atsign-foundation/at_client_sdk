@@ -668,6 +668,7 @@ void main() {
         gates.collectConveyedKeys,
         gates.startEnvelopeListener,
         gates.mintInUseSigningKeys,
+        gates.refreshOwnLinks,
         gates.reconcileKeyPackage,
         gates.seedNamespaceKeys,
         gates.requestRootPrivate,
@@ -707,7 +708,7 @@ void main() {
               .toList();
       expect(fields, isNotEmpty,
           reason: 'if this finds nothing the count below proves nothing');
-      expect(fields, hasLength(12),
+      expect(fields, hasLength(13),
           reason: 'PqStartupGates gained or lost a gate. Add it to the inert '
               'arm above and to PqStartupGates.inert(), then move this number '
               '— the gates are: ${fields.join(', ')}');
@@ -728,6 +729,7 @@ void main() {
         gates.collectConveyedKeys,
         gates.startEnvelopeListener,
         gates.mintInUseSigningKeys,
+        gates.refreshOwnLinks,
         gates.reconcileKeyPackage,
         gates.seedNamespaceKeys,
         gates.requestRootPrivate,

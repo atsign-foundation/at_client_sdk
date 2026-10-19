@@ -213,8 +213,10 @@ class PqSigningRoot {
   /// of the pair first.
   ///
   /// Returns the public half, or null when this client did not mint: it is not
-  /// fully privileged, a root is already published, or another of this atSign's
-  /// enrollments holds the mint lock.
+  /// fully privileged, its key source cannot file a private, a root is already
+  /// published, or another of this atSign's enrollments holds the mint lock.
+  /// Without a key source that can file the private, neither is the published
+  /// root read nor the mint lock taken.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {
     final atSign = atClient.getCurrentAtSign()?.toAtsign();
     if (atSign == null) return null;
@@ -223,6 +225,12 @@ class PqSigningRoot {
       _logger.info('Not minting the signing root for $atSign: this enrollment '
           'is not fully privileged, so it receives the root rather than '
           'creating it');
+      return null;
+    }
+    if (keysIo is! WrittenAtKeysIo) {
+      _logger.warning('Not minting the signing root for $atSign: this '
+          'client\'s key source cannot file a private, and a root whose '
+          'private nothing holds cannot be replaced');
       return null;
     }
 

@@ -500,6 +500,31 @@ void main() {
       expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty);
     });
 
+    test(
+        'Given the refresh gate off as well, when the startup runs, then it '
+        'reads no _apsk record of its own', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        startEnvelopeListener: false,
+        mintInUseSigningKeys: false,
+        refreshOwnLinks: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        anchorOwnKeys: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+      )).startup();
+
+      expect(read.where((key) => key.contains('_apsk.b-1')), isEmpty);
+    });
+
     test('Given an inert startup, when it runs, then it reads no _apsk record',
         () async {
       when(() => client.enrollmentId).thenReturn('b-1');
@@ -525,6 +550,7 @@ void main() {
             collectConveyedKeys: false,
             startEnvelopeListener: false,
             mintInUseSigningKeys: false,
+            refreshOwnLinks: false,
             reconcileKeyPackage: false,
             seedNamespaceKeys: false,
             requestRootPrivate: false,
@@ -538,7 +564,8 @@ void main() {
           reason: 'a mint starts by reading the published root; nothing is '
               'minted into a store that cannot keep it');
       expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty,
-          reason: 'it went on to read its own record to link its keys');
+          reason: 'with the refresh gate off, only linking its own keys reads '
+              'its own record');
     });
 
     test('gates silence the active steps', () async {

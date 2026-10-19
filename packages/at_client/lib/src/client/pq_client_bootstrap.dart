@@ -44,6 +44,7 @@ class PqStartupGates {
     this.collectConveyedKeys = true,
     this.startEnvelopeListener = true,
     this.mintInUseSigningKeys = true,
+    this.refreshOwnLinks = true,
     this.reconcileKeyPackage = true,
     this.seedNamespaceKeys = true,
     this.requestRootPrivate = true,
@@ -61,6 +62,7 @@ class PqStartupGates {
         collectConveyedKeys = false,
         startEnvelopeListener = false,
         mintInUseSigningKeys = false,
+        refreshOwnLinks = false,
         reconcileKeyPackage = false,
         seedNamespaceKeys = false,
         requestRootPrivate = false,
@@ -89,6 +91,11 @@ class PqStartupGates {
   /// hold, and retiring every one it holds that the set no longer names.
   /// Inert while that set is empty.
   final bool mintInUseSigningKeys;
+
+  /// Read-precondition: reads which of this enrollment's keys have a link,
+  /// so content is signed with those. Off, it signs with every key it
+  /// holds.
+  final bool refreshOwnLinks;
 
   /// Active: brings this enrollment's advertised key package into line with
   /// `AtClientPreference.keyEstablishmentAlgorithms` — minting, filing and
@@ -158,6 +165,7 @@ class PqStartupGates {
         'collectConveyedKeys': collectConveyedKeys,
         'startEnvelopeListener': startEnvelopeListener,
         'mintInUseSigningKeys': mintInUseSigningKeys,
+        'refreshOwnLinks': refreshOwnLinks,
         'reconcileKeyPackage': reconcileKeyPackage,
         'seedNamespaceKeys': seedNamespaceKeys,
         'requestRootPrivate': requestRootPrivate,
@@ -472,7 +480,7 @@ class PqClientBootstrap {
   ///
   /// Then records which of this enrollment's keys have a link, so content
   /// signed from here on is signed with those, whether or not this start
-  /// mints; an inert startup reads nothing.
+  /// mints, unless [PqStartupGates.refreshOwnLinks] is off.
   ///
   /// Runs before every step that **publishes** — the namespace-key seeding and
   /// the linking of this enrollment's keys — so a key minted on this start is
@@ -490,7 +498,7 @@ class PqClientBootstrap {
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
     }
-    if (_gates == const PqStartupGates.inert()) return;
+    if (!_gates.refreshOwnLinks) return;
     try {
       await chain.refreshOwnLinks();
     } catch (e, st) {
@@ -612,8 +620,7 @@ class PqClientBootstrap {
   Future<void> _anchorOwnKeys() async {
     if (!_gates.anchorOwnKeys) return;
     try {
-      if (_keysIo is WrittenAtKeysIo &&
-          await _privilege.isFullyPrivileged() &&
+      if (await _privilege.isFullyPrivileged() &&
           await root.mintIfAbsent(isFullyPrivileged: true) != null) {
         return;
       }
