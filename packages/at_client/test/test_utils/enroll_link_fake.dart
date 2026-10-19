@@ -23,8 +23,9 @@ enum EnrollLinkSupport {
 /// records in [remoteData] and [remoteMetadata] — the same maps every client
 /// of the test reads.
 ///
-/// A supported atServer refuses the whole call when any link fails: a key the
-/// record does not list, the target's authentication key
+/// A supported atServer answers a command its `enroll` grammar does not match
+/// with a syntax error, and refuses the whole call when any link fails: a key
+/// the record does not list, the target's authentication key
 /// ([authenticationKeyOf]), a key not spelt in padded standard base64, a link
 /// over 16 KiB, a payload naming another enrollment or key, or an `expect`
 /// that is not the link stored. Otherwise it stores every link in one write,
@@ -45,6 +46,12 @@ String answerEnrollLink(
       return 'data:{}';
     case EnrollLinkSupport.supported:
       break;
+  }
+  // NOTE: matched as the atServer matches a command: case-blind, with `.`
+  // matching no line terminator.
+  if (!RegExp(VerbSyntax.enroll, caseSensitive: false)
+      .hasMatch(builder.buildCommand().trim())) {
+    throw InvalidSyntaxException('Syntax Exception');
   }
 
   final id = builder.enrollmentId!;

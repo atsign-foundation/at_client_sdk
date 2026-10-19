@@ -284,4 +284,37 @@ void main() {
         0);
     expect(linkCalls, isEmpty);
   });
+
+  test(
+      'Given a root holder and three enrollments, when a link stored on the '
+      'first holds a line separator, then the sweep still links all three',
+      () async {
+    final separator = String.fromCharCode(0x2028);
+    const ids = ['e-1', 'e-2', 'e-3'];
+    for (final id in ids) {
+      await withSigningKey(client(id));
+    }
+    final sweeper = client('sweeper-1');
+    await giveRoot(sweeper, remoteData);
+    stubApprovedList(sweeper, atSign, {for (final id in ids) id: recordOf(id)});
+    final firstKid = (await record(sweeper, 'e-1')).keys.single.kid;
+    final uri = PqSigningChain.apskUri(atSign, 'e-1');
+    remoteMetadata[uri] = (remoteMetadata[uri] ?? Metadata())
+      ..appMetadata = AppMetadata(providerId: 'legacy', additional: {
+        PqSigningChain.linksField: {
+          firstKid: {'note': 'a${separator}b'}
+        }
+      });
+
+    expect(
+        await EnrollmentServiceImpl(sweeper, AtEnrollment.create())
+            .sweepUnanchoredEnrollments(),
+        3);
+    expect(linkCalls.map((c) => c.enrollmentId), ids,
+        reason: 'the stored link travels back as `expect`, and the command '
+            'carrying it still reads as enroll:link');
+    for (final id in ids) {
+      expect(await verdict(sweeper, id), ChainVerdict.anchored, reason: id);
+    }
+  });
 }

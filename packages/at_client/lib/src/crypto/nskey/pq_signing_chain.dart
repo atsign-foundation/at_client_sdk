@@ -688,7 +688,7 @@ class PqSigningChain {
   /// `linked` list: only a reply naming what it linked counts as success.
   Future<List<String>> writeLinks(
       String enrollmentId, Map<String, LinkWrite> links) async {
-    final builder = EnrollVerbBuilder()
+    final builder = _EnrollLinkBuilder()
       ..operation = EnrollOperationEnum.link
       ..enrollmentId = enrollmentId
       ..links = {
@@ -699,7 +699,9 @@ class PqSigningChain {
     try {
       response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
     } on InvalidSyntaxException {
-      _lacksEnrollLink = true;
+      if (matchesEnrollGrammar(builder.buildCommand())) {
+        _lacksEnrollLink = true;
+      }
       rethrow;
     }
     if (!response.startsWith('data:')) {
@@ -718,6 +720,15 @@ class PqSigningChain {
         if (kid is String) kid
     ];
   }
+
+  /// Whether [command] reads as an `enroll` command under this client's own
+  /// grammar, matched as the atServer matches it: case-blind, with `.`
+  /// matching no line terminator.
+  ///
+  /// An atServer that refuses such a command as a syntax error does not know
+  /// `enroll:link`; one that refuses any other command says nothing about it.
+  static bool matchesEnrollGrammar(String command) =>
+      RegExp(VerbSyntax.enroll, caseSensitive: false).hasMatch(command.trim());
 
   /// Whether [key] on [record] is one [voucher] may link at all.
   bool _takesLink(ApskRecord record, ApskSigningKey key,
@@ -852,5 +863,23 @@ class PqSigningChain {
     } on FormatException {
       return false;
     }
+  }
+}
+
+/// An `enroll:link` whose command carries every line and paragraph separator
+/// in its JSON as an escape, so the command stays one line the atServer's
+/// grammar reads, and each value decodes to exactly what was sent.
+class _EnrollLinkBuilder extends EnrollVerbBuilder {
+  @override
+  String buildCommand() {
+    final units = <int>[];
+    for (final unit in super.buildCommand().codeUnits) {
+      if (unit == 0x2028 || unit == 0x2029) {
+        units.addAll('\\u${unit.toRadixString(16)}'.codeUnits);
+      } else {
+        units.add(unit);
+      }
+    }
+    return String.fromCharCodes(units);
   }
 }
