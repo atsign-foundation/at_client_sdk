@@ -458,7 +458,8 @@ void main() {
                 signingAlgo: SigningAlgoType.rsa2048),
             b.client.getRemoteSecondary()!.atLookUp),
         throwsA(predicate((e) =>
-            '$e'.contains('listed only alone') &&
+            '$e'.contains('AT0022') &&
+            '$e'.contains('authentication key') &&
             '$e'.contains(publicKeyKidOfBase64(signing.publicKey)))),
         reason: 'refused, naming the key');
     final after = await record(b.enrollmentId);
