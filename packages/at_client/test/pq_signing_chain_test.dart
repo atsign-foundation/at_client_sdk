@@ -1928,41 +1928,44 @@ void main() {
         isFalse);
   });
 
-  test(
-      'an enroll:link command reads under the client\'s own enroll grammar '
-      'only while it is one line, and a line separator in a link it carries '
-      'is sent escaped', () async {
-    final separator = String.fromCharCode(0x2028);
-    expect(
-        PqSigningChain.matchesEnrollGrammar('enroll:link:{"enrollmentId":"b"}'),
-        isTrue);
-    expect(
-        PqSigningChain.matchesEnrollGrammar(
-            'enroll:link:{"note":"a${separator}b"}'),
-        isFalse,
-        reason: 'the grammar\'s `.` matches no line terminator');
+  for (final (name, unit) in [('line', 0x2028), ('paragraph', 0x2029)]) {
+    test(
+        'an enroll:link command reads under the client\'s own enroll grammar '
+        'only while it is one line, and a $name separator in a link it '
+        'carries is sent escaped', () async {
+      final separator = String.fromCharCode(unit);
+      expect(
+          PqSigningChain.matchesEnrollGrammar(
+              'enroll:link:{"enrollmentId":"b"}'),
+          isTrue);
+      expect(
+          PqSigningChain.matchesEnrollGrammar(
+              'enroll:link:{"note":"a${separator}b"}'),
+          isFalse,
+          reason: 'the grammar\'s `.` matches no line terminator');
 
-    final root = await newRoot();
-    final b = client('b-1');
-    await withSigningKey(b);
-    final kid = (await record(b, 'b-1')).keys.single.kid;
-    final uri = PqSigningChain.apskUri(atSign, 'b-1');
-    remoteMetadata[uri] = (remoteMetadata[uri] ?? Metadata())
-      ..appMetadata = AppMetadata(providerId: 'legacy', additional: {
-        PqSigningChain.linksField: {
-          kid: {'note': 'a${separator}b'}
-        }
-      });
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      final kid = (await record(b, 'b-1')).keys.single.kid;
+      final uri = PqSigningChain.apskUri(atSign, 'b-1');
+      remoteMetadata[uri] = (remoteMetadata[uri] ?? Metadata())
+        ..appMetadata = AppMetadata(providerId: 'legacy', additional: {
+          PqSigningChain.linksField: {
+            kid: {'note': 'a${separator}b'}
+          }
+        });
 
-    final linked = await PqSigningChain(b).linkKeysOf(
-        await record(b, 'b-1'), root,
-        authenticationKey: null, verifier: signerOf(b));
+      final linked = await PqSigningChain(b).linkKeysOf(
+          await record(b, 'b-1'), root,
+          authenticationKey: null, verifier: signerOf(b));
 
-    expect(linked, [kid]);
-    final command = linkCalls.single.buildCommand();
-    expect(command.contains(separator), isFalse);
-    expect(PqSigningChain.matchesEnrollGrammar(command), isTrue);
-  });
+      expect(linked, [kid]);
+      final command = linkCalls.single.buildCommand();
+      expect(command.contains(separator), isFalse);
+      expect(PqSigningChain.matchesEnrollGrammar(command), isTrue);
+    });
+  }
 }
 
 /// Publishes what an `enroll:update` republishes, as the atServer does: the

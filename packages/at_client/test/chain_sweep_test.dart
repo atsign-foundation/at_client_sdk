@@ -312,6 +312,26 @@ void main() {
                 .where((m) => m.contains('does not know enroll:link')),
             hasLength(1));
       });
+
+      test(
+          'when a later step of the same client would link with the root, on '
+          'an atServer that is $support, then it sends no enroll:link',
+          () async {
+        final sweeper = client('sweeper-1', enrollLink: support);
+        await giveRoot(sweeper, remoteData);
+        await withSigningKey(sweeper);
+        final signer = AtClientSecretSharing.forClient(sweeper);
+        await PqSigningChain(sweeper)
+            .linkOwnKeys(signer, isFullyPrivileged: () async => true);
+        expect(linkCalls, hasLength(1),
+            reason: 'the premise: the first step was refused');
+
+        await PqSigningChain(sweeper)
+            .linkOwnKeys(signer, isFullyPrivileged: () async => true);
+
+        expect(linkCalls, hasLength(1),
+            reason: 'a refusal holds for every PqSigningChain of the client');
+      });
     }
 
     test(

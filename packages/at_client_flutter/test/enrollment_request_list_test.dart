@@ -354,6 +354,60 @@ void main() {
   );
 
   testWidgets(
+    'Given reading whether one approved enrollment is anchored throws an '
+    'error, when the list loads, then that row shows ? and the others their '
+    'verdict',
+    (tester) async {
+      Enrollment approved(String id, String device) => Enrollment()
+        ..enrollmentId = id
+        ..appName = 'buzz'
+        ..deviceName = device
+        ..status = 'approved'
+        ..namespace = <String, String>{};
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer(
+        (inv) async => approvedFilter(inv)
+            ? [approved('a-1', 'laptop'), approved('x-1', 'tablet')]
+            : [pendingRecord()],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async => id == 'x-1'
+                  ? throw StateError('unreadable record')
+                  : ChainResult(ChainVerdict.anchored, [id], null),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-x-1')),
+          matching: find.text('?'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-a-1')),
+          matching: find.text('anchored'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Could not list'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'a failure listing the approved enrollments shows in their section, and '
     'not as a failure of the pending list',
     (tester) async {
