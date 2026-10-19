@@ -32,6 +32,8 @@ dependencies:
   at_utils: ^3.2.0
   at_chops: ^3.7.0
   at_lookup: ^3.7.0-rc3
+  # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
+  # describes, needs 4.0.0-rc8.
   at_auth: ^4.0.0-rc8
   at_persistence_secondary_server: ^5.3.0
   hive: ^2.2.3

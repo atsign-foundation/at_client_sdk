@@ -1,5 +1,6 @@
 ## 4.0.0-rc8
 
+- build: requires `at_utils` ^3.2.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
   on must be durable.
