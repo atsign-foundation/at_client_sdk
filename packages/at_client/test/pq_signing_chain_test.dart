@@ -1570,8 +1570,7 @@ void main() {
       expect(linkCalls, isEmpty);
     });
 
-    test(
-        'when B cannot read its own record, then K1 stays in service',
+    test('when B cannot read its own record, then K1 stays in service',
         () async {
       final root = await newRoot();
       final b = buildRemoteBackedMockClient(
@@ -1587,8 +1586,8 @@ void main() {
           await root.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
       when(() => b.get(
               any(
-                  that: isA<AtKey>().having((k) => k.toString(), 'key',
-                      contains('_apsk.b-1'))),
+                  that: isA<AtKey>().having(
+                      (k) => k.toString(), 'key', contains('_apsk.b-1'))),
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(AtClientException.message('unreadable'));
 
@@ -1836,8 +1835,7 @@ void main() {
           reason: 'the premise');
 
       expect(
-          await PqSigningChain(c)
-              .voucher(signerOf(c), isFullyPrivileged: null),
+          await PqSigningChain(c).voucher(signerOf(c), isFullyPrivileged: null),
           isNull);
     });
   });
@@ -1867,8 +1865,10 @@ void main() {
     plant(
         'b-1',
         entry.kid,
-        await root.sign(
-            {...PqSigningChain.linkPayload('b-1', entry), 'enrollmentId': 'B-1'}));
+        await root.sign({
+          ...PqSigningChain.linkPayload('b-1', entry),
+          'enrollmentId': 'B-1'
+        }));
 
     expect((await walk(b, 'b-1')).verdict, ChainVerdict.anchored);
   });

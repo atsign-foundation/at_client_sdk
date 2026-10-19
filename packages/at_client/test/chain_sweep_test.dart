@@ -274,8 +274,8 @@ void main() {
                 m.contains('e-3')),
             hasLength(1),
             reason: 'the enrollments left unswept are named');
-        expect(logs.at('WARNING').where((m) => m.contains('was refused')),
-            isEmpty,
+        expect(
+            logs.at('WARNING').where((m) => m.contains('was refused')), isEmpty,
             reason: 'a refusal of the operation itself reads the record no '
                 'second time');
       });

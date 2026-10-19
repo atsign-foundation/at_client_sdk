@@ -813,13 +813,15 @@ void main() {
         proves: 'the approval half of the second clause: the conveyance '
             'completes and the symmetric key arrives, for both refusals',
         clauses: ['no link is written, and every enrollment reads']);
-    provenIn('packages/at_client/test/chain_sweep_test.dart',
+    provenIn(
+        'packages/at_client/test/chain_sweep_test.dart',
         'UC-G3.27 · when the sweep runs over three enrollments and the '
             'atServer is ',
         proves: 'for both refusals, one enroll:link, one warning of the '
             'refusal, and a warning naming the enrollments left unswept',
         clauses: ['a root holder\'s sweep stops at the first such refusal']);
-    provenIn('packages/at_client/test/chain_sweep_test.dart',
+    provenIn(
+        'packages/at_client/test/chain_sweep_test.dart',
         'UC-G3.27 · when a start links its own keys, sweeps, and links a key '
             'it mints',
         proves: 'the whole start, through three PqSigningChain instances of '

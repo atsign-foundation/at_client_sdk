@@ -314,8 +314,8 @@ class PqSigningChain {
 
   /// Whether [payload] names [key] as one of [enrollmentId]'s, the id
   /// compared as the atServer folds it.
-  static bool names(Map<String, Object?>? payload, String enrollmentId,
-      ApskSigningKey key) {
+  static bool names(
+      Map<String, Object?>? payload, String enrollmentId, ApskSigningKey key) {
     final named = payload?['enrollmentId'];
     return payload != null &&
         payload['v'] == linkVersion &&
