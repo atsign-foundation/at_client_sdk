@@ -681,9 +681,9 @@ class PqClientBootstrap {
     final keysIo = _keysIo;
     if (keysIo is! WrittenAtKeysIo) return;
 
-    // NOTE: the atSign's own credential has no record to fetch, and
-    // `enroll:fetch` is answered for whatever id it is handed rather than
-    // refused.
+    // NOTE: the atSign's own credential is treated as the atSign itself,
+    // never as an enrollment, and `enroll:fetch` is answered for whatever
+    // id it is handed rather than refused.
     final enrollmentId = _atClient.enrollmentId;
     if (enrollmentId == null || isAtSignCredential(enrollmentId)) return;
 
