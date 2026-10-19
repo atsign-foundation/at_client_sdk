@@ -119,18 +119,19 @@ String answerEnrollLink(
       })}';
 }
 
-/// The keys an `_apsk` value lists, by kid, as the atServer reads them: each
-/// list entry with a string kid, alg and pub, the first of a repeated kid
-/// winning; a bare value is one `rsa2048` key.
+/// The keys an `_apsk` value lists, by kid, as the atServer reads them, from
+/// the value trimmed: each list entry with a string kid, alg and pub, the
+/// first of a repeated kid winning; a bare value is one `rsa2048` key.
 Map<String, ({String alg, String pub})> _advertisedKeys(String value) {
-  if (!value.trimLeft().startsWith('{')) {
+  final trimmed = value.trim();
+  if (!trimmed.startsWith('{')) {
     try {
-      return {publicKeyKidOfBase64(value): (alg: 'rsa2048', pub: value)};
+      return {publicKeyKidOfBase64(trimmed): (alg: 'rsa2048', pub: trimmed)};
     } on FormatException {
       return const {};
     }
   }
-  final decoded = jsonDecode(value);
+  final decoded = jsonDecode(trimmed);
   final entries = decoded is Map ? decoded['keys'] : null;
   if (entries is! List) return const {};
   final keys = <String, ({String alg, String pub})>{};

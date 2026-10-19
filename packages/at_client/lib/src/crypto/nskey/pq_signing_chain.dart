@@ -312,15 +312,24 @@ class PqSigningChain {
     }
   }
 
-  /// Whether [payload] names [key] as one of [enrollmentId]'s.
+  /// Whether [payload] names [key] as one of [enrollmentId]'s, the id
+  /// compared as the atServer folds it.
   static bool names(Map<String, Object?>? payload, String enrollmentId,
-          ApskSigningKey key) =>
-      payload != null &&
-      payload['v'] == linkVersion &&
-      payload['enrollmentId'] == enrollmentId &&
-      payload['kid'] == key.kid &&
-      payload['alg'] == key.alg.name &&
-      payload['pub'] == key.pub;
+      ApskSigningKey key) {
+    final named = payload?['enrollmentId'];
+    return payload != null &&
+        payload['v'] == linkVersion &&
+        named is String &&
+        _foldedId(named) == _foldedId(enrollmentId) &&
+        payload['kid'] == key.kid &&
+        payload['alg'] == key.alg.name &&
+        payload['pub'] == key.pub;
+  }
+
+  /// [id] as the atServer holds an enrollment id: trimmed, lower case, and
+  /// with no spaces.
+  static String _foldedId(String id) =>
+      id.trim().toLowerCase().replaceAll(' ', '');
 
   String get _atSign => _atClient.getCurrentAtSign()!;
 
@@ -578,8 +587,8 @@ class PqSigningChain {
 
   /// Reads this enrollment's own `_apsk` and records which of its keys have a
   /// link, for content signing to prefer; returns the record, or null when it
-  /// has none. A client running as the atSign's own credential has no
-  /// enrollment record, so it has none.
+  /// has none. A client running as the atSign's own credential is treated as
+  /// the atSign itself, never as an enrollment, so it reads none.
   Future<ApskRecord?> refreshOwnLinks() async {
     final id = _atClient.enrollmentId;
     if (isAtSignCredential(id)) return null;
@@ -777,20 +786,22 @@ class PqSigningChain {
     return kids.any((kid) => roots.any((r) => r.kid == kid));
   }
 
-  /// The public key the atServer reads under each `kid` of an `_apsk` [value]:
-  /// for the list form the first entry carrying a string `kid`, `alg` and
-  /// `pub`, whatever its status; for a bare value, that value.
+  /// The public key the atServer reads under each `kid` of an `_apsk` [value],
+  /// read trimmed as the atServer reads it: for the list form the first entry
+  /// carrying a string `kid`, `alg` and `pub`, whatever its status; for a bare
+  /// value, that value.
   static Map<String, String> _readByAtServer(String value) {
-    if (!value.trimLeft().startsWith('{')) {
+    final trimmed = value.trim();
+    if (!trimmed.startsWith('{')) {
       try {
-        return {publicKeyKidOfBase64(value): value};
+        return {publicKeyKidOfBase64(trimmed): trimmed};
       } on FormatException {
         return const {};
       }
     }
     final Object? decoded;
     try {
-      decoded = jsonDecode(value);
+      decoded = jsonDecode(trimmed);
     } on FormatException {
       return const {};
     }

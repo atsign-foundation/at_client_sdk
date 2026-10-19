@@ -1806,8 +1806,9 @@ void main() {
 
   group('Given a client running as the atSign\'s own credential', () {
     test(
-        'when it links its own keys, then it sends no enroll:link, since '
-        'primary has no enrollment record', () async {
+        'when it links its own keys, then it sends no enroll:link, since the '
+        'credential is treated as the atSign itself, never as an enrollment',
+        () async {
       final c = client('primary');
       await giveRoot(c, remoteData);
       await withSigningKey(c);
@@ -1821,6 +1822,55 @@ void main() {
       expect(linkCalls, isEmpty);
       expect(await PqSigningChain(c).refreshOwnLinks(), isNull);
     });
+
+    test(
+        'when a key of its own has a link that walks to the root, then it has '
+        'no chain voucher', () async {
+      final root = await newRoot();
+      final c = client('primary');
+      await withSigningKey(c);
+      final entry = (await record(c, 'primary')).keys.single;
+      plant('primary', entry.kid,
+          await root.sign(PqSigningChain.linkPayload('primary', entry)));
+      expect((await walk(c, 'primary')).verdict, ChainVerdict.anchored,
+          reason: 'the premise');
+
+      expect(
+          await PqSigningChain(c)
+              .voucher(signerOf(c), isFullyPrivileged: null),
+          isNull);
+    });
+  });
+
+  test(
+      'Given a bare _apsk value with a trailing newline, when a voucher links '
+      'it, then the key it lists is linked', () async {
+    final root = await newRoot();
+    final b = client('b-1');
+    final pub = RsaKeyPair.generate().atPublicKey.publicKey;
+    remoteData[PqSigningChain.apskUri(atSign, 'b-1')] = '$pub\n';
+
+    final linked = await PqSigningChain(b).linkKeysOf(
+        await record(b, 'b-1'), root,
+        authenticationKey: null, verifier: signerOf(b));
+
+    expect(linked, [publicKeyKidOfBase64(pub)]);
+  });
+
+  test(
+      'Given a link whose payload spells the enrollment id in upper case, when '
+      'it is walked, then it names that enrollment', () async {
+    final root = await newRoot();
+    final b = client('b-1');
+    await withSigningKey(b);
+    final entry = (await record(b, 'b-1')).keys.single;
+    plant(
+        'b-1',
+        entry.kid,
+        await root.sign(
+            {...PqSigningChain.linkPayload('b-1', entry), 'enrollmentId': 'B-1'}));
+
+    expect((await walk(b, 'b-1')).verdict, ChainVerdict.anchored);
   });
 
   test(

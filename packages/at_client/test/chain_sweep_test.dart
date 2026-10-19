@@ -346,8 +346,9 @@ void main() {
 
   test(
       'Given a root holder whose approved list names primary, when the sweep '
-      'runs, then it links nothing for primary, which has no enrollment '
-      'record', () async {
+      'runs, then it links nothing for primary, the atSign\'s own '
+      'credential, which is treated as the atSign itself, never as an '
+      'enrollment', () async {
     final primary = client('primary');
     await withSigningKey(primary);
     final sweeper = client('sweeper-1');
