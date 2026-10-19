@@ -539,6 +539,21 @@ void main() {
             'its record, signed by its own RSA key, and the walk from it reads '
             'anchored',
         clauses: ['B writes K2\'s link itself']);
+    provenIn(
+        'packages/at_client/test/pq_signing_chain_test.dart',
+        'UC-G3.18 · when the change that adds K2 also retires K1 and K2\'s '
+            'link cannot be written',
+        proves: 'K1 stays advertised and in service, and signs content alone, '
+            'while K2 has no link; a later start links K2 with K1 and only '
+            'then retires K1',
+        clauses: ['when the change that adds K2 also retires K1']);
+    provenIn(
+        'packages/at_client/test/pq_signing_chain_test.dart',
+        'UC-G3.18 · when the change that adds K2 also retires a K1 without a '
+            'link',
+        proves: 'the clause\'s last sentence: a K1 without a link retires in '
+            'the reconcile that mints K2',
+        clauses: ['when the change that adds K2 also retires K1']);
   });
 
   test(
@@ -798,6 +813,18 @@ void main() {
         proves: 'the approval half of the second clause: the conveyance '
             'completes and the symmetric key arrives, for both refusals',
         clauses: ['no link is written, and every enrollment reads']);
+    provenIn('packages/at_client/test/chain_sweep_test.dart',
+        'UC-G3.27 · when the sweep runs over three enrollments and the '
+            'atServer is ',
+        proves: 'for both refusals, one enroll:link, one warning of the '
+            'refusal, and a warning naming the enrollments left unswept',
+        clauses: ['a root holder\'s sweep stops at the first such refusal']);
+    provenIn('packages/at_client/test/chain_sweep_test.dart',
+        'UC-G3.27 · when a start links its own keys, sweeps, and links a key '
+            'it mints',
+        proves: 'the whole start, through three PqSigningChain instances of '
+            'one client, sends one enroll:link and logs the refusal once',
+        clauses: ['a root holder\'s sweep stops at the first such refusal']);
     // NOTE: c2 also names the key addition, the start and content signing,
     // which no test drives against an atServer refusing enroll:link.
   });

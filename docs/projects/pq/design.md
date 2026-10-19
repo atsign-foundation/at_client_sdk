@@ -2774,10 +2774,10 @@ whose walk reads anchored; never with an authentication key.
 | Writer | When | What it links |
 | ------ | ---- | ------------- |
 | the approver | straight after `enroll:approve` | every key of the enrollment it approved |
-| an enrollment that mints a key | in the same reconcile, before an outgoing key is retired | the key it minted, by a chain link signed with one it has linked, which may be the one retiring, even when it holds the root |
+| an enrollment that mints a key | in the same reconcile, before an outgoing key is retired | the key it minted, by a chain link signed with one whose link walks to the root, which may be the one retiring, even when it holds the root; an outgoing key whose link walks to the root stays in service until the keys kept have such links, and any other outgoing key retires at once |
 | a holder of the root | at every start | its own keys, by root link |
 | a holder of the root's sweep | at every fully privileged start | every key on the atSign's other approved enrollments without a sound root link |
-| a fully privileged enrollment whose atSign publishes no root | at start | mints the root, then links as a holder |
+| a fully privileged enrollment whose atSign publishes no root | at start | mints the root, on a key source that can file its private, then links as a holder |
 
 Each call states, per `kid`, the link it found there, and the atServer writes
 only if that is still what is stored, so two vouchers, or a voucher and a sweep,
@@ -2789,15 +2789,23 @@ link's kind follows its signer's `kid`, as it does for the walk. Only the first
 entry under a `kid` is linked, as the atServer reads the record, and a key not
 spelt in padded standard base64 takes no link, so neither can spoil the rest of
 a call. A refused call is read again and, if the record has changed, made once
-more on what it now holds. Against an atServer without `enroll:link`, nothing is
-linked and everything else completes as before.
+more on what it now holds. Every call sends a line or paragraph separator in its
+JSON as an escape, so the command stays one line and a stored link sent back as
+`expect` decodes to exactly what is stored. Against an atServer without
+`enroll:link`, nothing is linked and everything else completes as before: its
+first refusal, an `AT0003` for a command the client's own grammar reads or a
+reply naming nothing linked, holds for the client's lifetime, so no later step
+sends another, and the sweep stops, naming at warning the enrollments it leaves.
 
 ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
 approval takes only `__manage`**, so a `__manage`-only approver approves without
 being fully privileged, and links with a key of its own that walks to the root.
 A client running as the atSign's own credential, with no enrollment id or as
-`primary`, is fully privileged by construction, but has no enrollment record for
-`enroll:link` to target, so `_apsk.primary` takes no link.
+`primary`, is fully privileged by construction, but is treated as the atSign
+itself, never as an enrollment
+([ruling 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)),
+so it sends no `enroll:link`, the sweep passes it by, and `_apsk.primary` takes
+no link.
 
 #### 9.8.5 Two coherence rules on the preference
 
