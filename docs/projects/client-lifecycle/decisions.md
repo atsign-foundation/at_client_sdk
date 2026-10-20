@@ -177,8 +177,9 @@ client config and returning an `AtLookupMuxable`, and `secureSocketLookUps`,
 the default that builds through `withSecureSocket` on the TLS transport. The
 verbs (`open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`),
 `buildAtClient` and `AtServiceFactory.atClient` take `lookUps:`; the client
-holds it, and the client's own connection, sync's, the monitor's, the
-file-stream path and the re-derive after a retrofit all ask it. The Flutter
+holds it, and the client's own connection, sync's, the monitor's and the
+re-derive after a retrofit all ask it (the file-stream path did too, until
+the stream verb was retired). The Flutter
 dialogs and `AtsignFlows`, `CLIBase` and the `at_activate` commands pass it
 through. at_auth keeps taking instances. The existing `atLookUp:` instance
 parameters stay for now. `AtClientPreference.decryptPackets`,

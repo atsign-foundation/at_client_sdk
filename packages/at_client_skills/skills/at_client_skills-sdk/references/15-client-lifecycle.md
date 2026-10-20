@@ -95,9 +95,8 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 
 The third platform-supplied thing, beside the keys store and the storage
 bundle: an `AtLookUpFactory` that builds **every** connection the client
-opens - its own, its sync service's, its monitor's, the file stream's and
-the one a retrofit re-derives on - so an application chooses the transport
-once.
+opens - its own, its sync service's, its monitor's and the one a retrofit
+re-derives on - so an application chooses the transport once.
 
 ```dart
 // TLS on TCP, the default; the config is where TLS settings now live.

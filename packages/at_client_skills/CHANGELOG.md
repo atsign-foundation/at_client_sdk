@@ -32,6 +32,8 @@
   object.
 - Evals: the two auth evals follow the new flows; two new evals cover
   logout / switching and the connection state.
+- The connections an `AtLookUpFactory` builds no longer include a file
+  stream's: atServers no longer support the stream verb (`references/15`).
 
 ## 1.3.0 — 2026-07-31
 
