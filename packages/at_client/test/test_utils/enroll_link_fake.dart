@@ -49,12 +49,17 @@ String answerEnrollLink(
   }
   // NOTE: matched as the atServer matches a command: case-blind, with `.`
   // matching no line terminator.
-  if (!RegExp(VerbSyntax.enroll, caseSensitive: false)
-      .hasMatch(builder.buildCommand().trim())) {
+  final command = builder.buildCommand().trim();
+  if (!RegExp(VerbSyntax.enroll, caseSensitive: false).hasMatch(command)) {
     throw InvalidSyntaxException('Syntax Exception');
   }
+  // NOTE: what is linked is decoded from the command, as the atServer decodes
+  // it, never read off the builder — an escape that changes a value on the
+  // wire must change what this compares and stores.
+  final params = jsonDecode(command.substring(command.indexOf('{'))) as Map;
+  final requested = Map<String, Object?>.from(params['links'] as Map);
 
-  final id = builder.enrollmentId!;
+  final id = params['enrollmentId'] as String;
   final key = PqSigningChain.apskUri(atSign, id);
   final value = remoteData[key];
   if (value == null) {
@@ -65,7 +70,7 @@ String answerEnrollLink(
   final authentication = authenticationKeyOf(id);
 
   final written = <String, Object?>{};
-  for (final request in builder.links!.entries) {
+  for (final request in requested.entries) {
     final kid = request.key;
     final listed = advertised[kid];
     if (listed == null ||

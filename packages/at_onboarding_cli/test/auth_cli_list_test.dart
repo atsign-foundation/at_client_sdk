@@ -132,6 +132,46 @@ void main() {
   });
 
   test(
+      'at_activate list shows `?` for an enrollment whose anchoring cannot be '
+      'read, and goes on to list the rest', () async {
+    const unreadableId = 'a1a1a1a1-1a2e-43e4-93bd-378f1d366ea7';
+    const anchoredId = 'b1b1b1b1-1a2e-43e4-93bd-378f1d366ea7';
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    Enrollment record(String id) => Enrollment.fromJSON({
+          'appName': 'wavi',
+          'deviceName': 'phone',
+          'namespace': {'wavi': 'rw'},
+          'status': 'approved',
+        })
+          ..enrollmentId = id;
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [record(unreadableId), record(anchoredId)]);
+    // ignore: experimental_member_use
+    Future<ChainResult> anchoring(String id) async => id == unreadableId
+        ? throw AtClientException.message('the record cannot be read')
+        // ignore: experimental_member_use
+        : ChainResult(ChainVerdict.anchored, [id], null);
+
+    final args =
+        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(
+        () => auth_cli.list(args, client, anchoring: anchoring),
+        stdout: () => out);
+
+    String row(String id) =>
+        out.text.split('\n').singleWhere((line) => line.startsWith(id));
+    expect(row(unreadableId), contains(' ? '));
+    expect(row(anchoredId), contains(' anchored '),
+        reason: 'one row that cannot be read does not cost the rest theirs');
+  });
+
+  test(
       'given no anchoring, at_activate list asks the client whether each '
       'approved enrollment is anchored', () async {
     const revokedId = 'f0f0f0f0-1a2e-43e4-93bd-378f1d366ea7';

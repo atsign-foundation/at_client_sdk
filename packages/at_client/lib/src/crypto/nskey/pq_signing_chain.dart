@@ -476,6 +476,19 @@ class PqSigningChain {
       }
 
       final signerRecord = await readRecord(signerId);
+      // NOTE: a verifier answering from its key cache never sees the signer's
+      // _apsk withdrawn, so the absent record is what says so here.
+      if (signerRecord == null) {
+        final location =
+            await withdrawnApskLocation(_atClient, _atSign, signerId);
+        if (location != null) {
+          return result(
+              _verdictFor(location),
+              'the link on $where was signed by enrollment $signerId, whose '
+              'keys are no longer published: the atServer moved its _apsk to '
+              '.$location');
+        }
+      }
       final signerKey = signerRecord?.keys
           .where((k) =>
               k.kid == signerKid && signsUnder(k.alg, envelope!.signature.alg))
