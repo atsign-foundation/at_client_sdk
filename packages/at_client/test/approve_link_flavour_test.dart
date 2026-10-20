@@ -147,6 +147,28 @@ void main() {
           .verifyChain(enrollee, enrolleeId);
       expect(verdict.verdict, ChainVerdict.anchored, reason: verdict.reason);
     });
+
+    test(
+        'when it is not fully privileged and approves B, then it signs no root '
+        'link with it', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+
+      final status = await conveyanceFor(approver, privileged: false)
+          .conveySecretsTo(enrollment);
+
+      expect(status, KeyPackageStatus.present);
+      expect(linkCalls, isEmpty,
+          reason: 'only a fully privileged approver vouches with the root, '
+              'and this one has no linked key of its own to vouch with');
+      expect(
+          (await PqSigningChain(enrollee.atClient)
+                  .verifyChain(enrollee, enrolleeId))
+              .verdict,
+          ChainVerdict.unsigned);
+    });
   });
 
   group('Given an approver whose own key walks to the root', () {

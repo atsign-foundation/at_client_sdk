@@ -149,7 +149,12 @@ class SigningKeyMinting with ApkamSigning {
             (walks(key) && !own.listedRetired.contains(_kidOf(key))))
           key
     ];
-    final needsLinks = minted.isNotEmpty || keeping.any((key) => !walks(key));
+    // NOTE: an unreadable record says nothing about which kept key walks, so
+    // it is taken as one that might not — retiring on it would retire a
+    // superseded key that is the only one able to vouch for a kept key.
+    final needsLinks = own == null ||
+        minted.isNotEmpty ||
+        keeping.any((key) => !walks(key));
 
     if (vouching.isEmpty || !needsLinks) {
       await _publish(_strongestFirst(kept, (key) => key.algorithm),

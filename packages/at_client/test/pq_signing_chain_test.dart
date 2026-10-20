@@ -550,6 +550,30 @@ void main() {
         expect(result.verdict, verdict, reason: result.reason);
       }
     });
+
+    test(
+        'when the signer enrollment was revoked after a walk cached its key, '
+        'then it still reads revoked; deleted, then deleted', () async {
+      for (final (location, verdict) in [
+        (EnrollmentConstants.perEnrollmentRevoked, ChainVerdict.revoked),
+        (EnrollmentConstants.perEnrollmentDeleted, ChainVerdict.deleted),
+      ]) {
+        remoteData.clear();
+        remoteMetadata.clear();
+        final f = await aVouchingForB();
+        expect((await walk(f.b, 'b-1')).verdict, isNot(ChainVerdict.broken),
+            reason: 'the first walk verifies A\'s link, caching A\'s key');
+        final from = PqSigningChain.apskUri(atSign, 'a-1');
+        remoteData['public:_apsk.a-1.$location$atSign'] =
+            remoteData.remove(from)!;
+
+        final result = await walk(f.b, 'b-1');
+        expect(result.verdict, verdict,
+            reason: 'a cached key verifies the signature without reading '
+                'A\'s _apsk, so the withdrawal must be read from where the '
+                'record went: ${result.reason}');
+      }
+    });
   });
 
   group('Given a chain of keys within one enrollment', () {
@@ -1599,6 +1623,65 @@ void main() {
       expect((await signerOf(b).heldSigningKeys).map((k) => k.publicKey),
           contains(k1.publicKey));
     });
+
+    test(
+        'when a later start that mints nothing cannot read B\'s own record, '
+        'then K1 stays in service while K2 has no link', () async {
+      final root = await newRoot();
+      final b = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: EnrollLinkSupport.unknownToGrammar,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final k1 = await withSigningKey(b);
+      final k1Entry = (await record(b, 'b-1')).keys.single;
+      plant('b-1', k1Entry.kid,
+          await root.sign(PqSigningChain.linkPayload('b-1', k1Entry)));
+      final first =
+          await SigningKeyMinting(b, updater: _Republishing(remoteData, atSign))
+              .reconcileSigningKeys();
+      expect(first.retired, isEmpty,
+          reason: 'the premise: K2 was minted and has no link');
+
+      final restarted = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'b-1',
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLink: EnrollLinkSupport.unknownToGrammar,
+          enrollLinkLog: linkCalls,
+          posture: PqPosture.pqActive);
+      final keyfile = b.atKeysIo;
+      when(() => restarted.atKeysIo).thenReturn(keyfile);
+      when(() => restarted.get(
+              any(
+                  that: isA<AtKey>().having(
+                      (k) => k.toString(), 'key', contains('_apsk.b-1'))),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(AtClientException.message('unreadable'));
+
+      final later = await SigningKeyMinting(restarted,
+              updater: _Republishing(remoteData, atSign))
+          .reconcileSigningKeys();
+
+      expect(later.minted, isEmpty, reason: 'the premise: K2 is already held');
+      expect(later.retired, isEmpty,
+          reason: 'an unreadable record says nothing about whether K2 has a '
+              'link, and K1 is what would vouch for it');
+      expect(
+          (await signerOf(restarted).heldSigningKeys).map((k) => k.publicKey),
+          contains(k1.publicKey));
+      expect(
+          (await record(b, 'b-1'))
+              .keys
+              .singleWhere((k) => k.kid == k1Entry.kid)
+              .offeredForNewOperations,
+          isTrue,
+          reason: 'K1 is still advertised as in service');
+    });
   });
 
   group('Given a holder of the root whose key K1 has a link, minting K2', () {
@@ -1964,6 +2047,10 @@ void main() {
       final command = linkCalls.single.buildCommand();
       expect(command.contains(separator), isFalse);
       expect(PqSigningChain.matchesEnrollGrammar(command), isTrue);
+      final sent = jsonDecode(command.substring(command.indexOf('{'))) as Map;
+      expect(sent['links'][kid]['expect'], {'note': 'a${separator}b'},
+          reason: 'the escape decodes to exactly the link stored, or the '
+              'atServer refuses the compare-and-set');
     });
   }
 }
