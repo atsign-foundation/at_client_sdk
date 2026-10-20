@@ -132,7 +132,8 @@ class SigningKeyMinting with ApkamSigning {
   /// key: it retires on a later reconcile, once every key kept has one. Any
   /// other superseded key retires at once, and a key the advertisement already
   /// lists as retired is never published in service again. When the record
-  /// cannot be read, every superseded key stays in service.
+  /// cannot be read, every superseded key stays in service, and a reconcile
+  /// that mints nothing publishes, links and retires nothing.
   Future<List<ApkamSigningKeys>> _publishLinkAndRetire(
       WrittenAtKeysIo io, String atSign,
       {required List<ApkamSigningKeys> minted,
@@ -141,6 +142,7 @@ class SigningKeyMinting with ApkamSigning {
       required List<ApkamSigningKeys> held}) async {
     final kept = [...minted, ...keeping];
     final own = await _ownLinkState();
+    if (own == null && minted.isEmpty) return const [];
     bool walks(ApkamSigningKeys key) =>
         own == null || own.anchored.contains(_kidOf(key));
     final vouching = [
@@ -149,12 +151,7 @@ class SigningKeyMinting with ApkamSigning {
             (walks(key) && !own.listedRetired.contains(_kidOf(key))))
           key
     ];
-    // NOTE: an unreadable record says nothing about which kept key walks, so
-    // it is taken as one that might not — retiring on it would retire a
-    // superseded key that is the only one able to vouch for a kept key.
-    final needsLinks = own == null ||
-        minted.isNotEmpty ||
-        keeping.any((key) => !walks(key));
+    final needsLinks = minted.isNotEmpty || keeping.any((key) => !walks(key));
 
     if (vouching.isEmpty || !needsLinks) {
       await _publish(_strongestFirst(kept, (key) => key.algorithm),

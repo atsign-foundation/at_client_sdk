@@ -454,6 +454,50 @@ void main() {
               'answer — so the root the start mints is primed as it is minted');
     });
 
+    test(
+        'Given a rootless atSign and the priming gate off, when a fully '
+        'privileged start mints the root, then it primes nothing', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:1');
+      when(() => client.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = 'wavi');
+
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        gates: const PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          refreshOwnLinks: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestRootPrivate: false,
+          requestMissingPrivates: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      );
+      await bootstrap.startup();
+
+      expect(await bootstrap.root.privateHalf('@bootstrap🛠'), isNotNull,
+          reason: 'the premise: the start minted the root');
+      expect(
+          bootstrap.sharing.secretStore
+              .getSecret('wavi', PqSigningRoot.secretName),
+          isNull);
+    });
+
     test('a secret an envelope delivers is filed into the keyfile', () async {
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write('@bootstrap🛠', AtKeys());

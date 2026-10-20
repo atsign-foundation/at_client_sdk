@@ -618,17 +618,16 @@ class PqClientBootstrap {
   /// enrollment links a key it lacks a link for with one of its keys that
   /// walks to the root.
   ///
-  /// A root minted here is primed into the secret store as it is minted:
-  /// [_hydrateHeldSecrets] ran before there was one, and the listener already
-  /// sweeping would otherwise consume every other enrollment's request for it
-  /// unanswered until this client restarts.
+  /// A root minted here is primed into the secret store for answering other
+  /// enrollments, as [_hydrateHeldSecrets] primes one already held, unless
+  /// [PqStartupGates.hydrateHeldSecrets] is off.
   Future<void> _anchorOwnKeys() async {
     if (!_gates.anchorOwnKeys) return;
     try {
       if (await _privilege.isFullyPrivileged() &&
           await root.mintIfAbsent(isFullyPrivileged: true) != null) {
         final askIn = _atClient.getPreferences()?.namespace;
-        if (askIn != null && askIn.isNotEmpty) {
+        if (_gates.hydrateHeldSecrets && askIn != null && askIn.isNotEmpty) {
           await root.hydrateStore(sharing, askIn);
         }
         return;

@@ -1663,14 +1663,21 @@ void main() {
               getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(AtClientException.message('unreadable'));
 
-      final later = await SigningKeyMinting(restarted,
-              updater: _Republishing(remoteData, atSign))
+      final published = _Republishing(remoteData, atSign);
+      linkCalls.clear();
+
+      final later = await SigningKeyMinting(restarted, updater: published)
           .reconcileSigningKeys();
 
       expect(later.minted, isEmpty, reason: 'the premise: K2 is already held');
       expect(later.retired, isEmpty,
           reason: 'an unreadable record says nothing about whether K2 has a '
               'link, and K1 is what would vouch for it');
+      expect(published.values, isEmpty,
+          reason: 'a start that cannot read its own record publishes nothing, '
+              'so no key the advertisement lists as retired is put back in '
+              'service');
+      expect(linkCalls, isEmpty);
       expect(
           (await signerOf(restarted).heldSigningKeys).map((k) => k.publicKey),
           contains(k1.publicKey));
