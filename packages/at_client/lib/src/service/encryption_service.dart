@@ -5,7 +5,6 @@ import 'package:async/async.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/converters/encryption/aes_converter.dart';
-import 'package:at_client/src/stream/stream_verb_retired.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -22,22 +21,29 @@ class EncryptionService {
     logger = AtSignLogger('EncryptionService ($atSign)');
   }
 
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb.
-  @Deprecated(streamVerbRetiredDeprecation)
+  /// Throws [UnsupportedError]: only the stream transfer used this.
+  @Deprecated('Only the stream transfer used this; it throws UnsupportedError '
+      'and is removed in v4. Encrypt for another atSign with AtClient.put or '
+      'notify')
   Future<List<int>> encryptStream(List<int> value, String sharedWith,
           {String? ivBase64}) async =>
-      throw UnsupportedError(streamVerbRetired);
+      throw UnsupportedError('EncryptionService.encryptStream is retired with '
+          'the stream transfer; encrypt with AtClient.put or notify');
 
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb.
-  @Deprecated(streamVerbRetiredDeprecation)
+  /// Decrypts [encryptedValue] with the AES key [sharedKey].
+  @Deprecated('Use EncryptionUtil.decryptBytes; removed in v4')
   List<int> decryptStream(List<int> encryptedValue, String sharedKey,
           {String? ivBase64}) =>
-      throw UnsupportedError(streamVerbRetired);
+      EncryptionUtil.decryptBytes(encryptedValue, sharedKey,
+          ivBase64: ivBase64);
 
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb.
-  @Deprecated(streamVerbRetiredDeprecation)
+  /// Throws [UnsupportedError]: only the stream transfer used this.
+  @Deprecated('Only the stream transfer used this; it throws UnsupportedError '
+      'and is removed in v4. AtClient.get decrypts what is shared with you')
   Future<String> getSharedKeyForDecryption(String sharedBy) async =>
-      throw UnsupportedError(streamVerbRetired);
+      throw UnsupportedError('EncryptionService.getSharedKeyForDecryption is '
+          'retired with the stream transfer; AtClient.get decrypts what is '
+          'shared with you');
 
   /// Used in atmosphere pro
   String generateFileEncryptionKey() {

@@ -60,19 +60,29 @@ void main() {
   group('Given an EncryptionService', () {
     final service = EncryptionService('@streamer');
 
+    Matcher retiredWithStreamTransfer(String member) =>
+        throwsA(isA<UnsupportedError>().having((e) => e.message, 'message',
+            contains('$member is retired with the stream transfer')));
+
     test('when encryptStream is called, then it throws UnsupportedError',
         () async {
       await expectLater(
           // ignore: deprecated_member_use_from_same_package
           () => service.encryptStream([1, 2, 3], '@bob'),
-          unsupportedStreamVerb());
+          retiredWithStreamTransfer('EncryptionService.encryptStream'));
     });
 
-    test('when decryptStream is called, then it throws UnsupportedError', () {
+    test(
+        'when decryptStream is called, '
+        'then it decrypts with the AES key it is given', () {
+      final key = EncryptionUtil.generateAESKey();
+      final iv = EncryptionUtil.generateIV();
+      final encrypted =
+          EncryptionUtil.encryptBytes([1, 2, 3], key, ivBase64: iv);
       expect(
           // ignore: deprecated_member_use_from_same_package
-          () => service.decryptStream([1, 2, 3], 'key'),
-          unsupportedStreamVerb());
+          service.decryptStream(encrypted, key, ivBase64: iv),
+          [1, 2, 3]);
     });
 
     test(
@@ -81,7 +91,8 @@ void main() {
       await expectLater(
           // ignore: deprecated_member_use_from_same_package
           () => service.getSharedKeyForDecryption('@bob'),
-          unsupportedStreamVerb());
+          retiredWithStreamTransfer(
+              'EncryptionService.getSharedKeyForDecryption'));
     });
   });
 }

@@ -3804,9 +3804,10 @@ its own. None blocks anything.
     (`features/at_client/stream_verb_retired.feature`). The receive half
     (`StreamNotificationHandler`, `AtStreamNotification`), the private
     helpers behind `EncryptionService`'s stream methods and the two stream
-    sample scripts are deleted. `EncryptionService.encryptStream`,
-    `decryptStream` and `getSharedKeyForDecryption` stay deprecated until v4
-    but throw `UnsupportedError`, and `AtClientPreference`'s
+    sample scripts are deleted. `EncryptionService.encryptStream` and
+    `getSharedKeyForDecryption` stay deprecated until v4 but throw
+    `UnsupportedError`; `decryptStream` stays deprecated until v4 and calls
+    `EncryptionUtil.decryptBytes`; and `AtClientPreference`'s
     `outboundConnectionTimeout`, which only the stream path read, is
     deprecated until v4;
     `AtStreamResponse` and `AtStreamStatus` remain only as `stream()`'s return
