@@ -216,7 +216,7 @@ application hands `lookUps:` to at_client's doors and every connection the clien
 comes from it, at_client names the TLS transport in one file, and `at_client_web` can
 implement `AtLookupMuxable` whole behind its factory without waiting for anything below.
 What remains is at_lookup's own major — T3, T4, T5 and T8 — which is what lets a web
-transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw sockets and T7's
+transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw socket and T7's
 web address finder. Two things are additive when wanted and not owed now: an
 address-finder parameter at the doors (`buildAtClient` already takes one), and a
 platform-default registration so the core stops building the Hive and TLS defaults
@@ -253,11 +253,10 @@ break; it stays as ruled.
 - **T5 — `at_lookup_io.dart`.** Native transport wrapping `SecureSocket`; absorb
   `src/util/secure_socket_util.dart` whole (certs, `SecurityContext`, TLS keylog) as
   native-only.
-- **T6 — Follow the raw sockets.** `monitor_client.dart` (exported from at_lookup's
-  barrel, no consumer in this repository) and
-  `at_client/lib/src/stream/stream_notification_handler.dart` both call
-  `SecureSocket.connect` directly, bypassing `SecureSocketUtil`. They must route through
-  the transport or move to `_io`.
+- **T6 — Follow the raw socket.** `monitor_client.dart` (exported from at_lookup's
+  barrel, no consumer in this repository) calls `SecureSocket.connect` directly,
+  bypassing `SecureSocketUtil`. It must route through the transport or move to
+  `_io`.
 - **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
   opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
   not through `AtLookUpFactory`. Ship a web implementation using one of
@@ -1043,8 +1042,8 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   `List<File>` in `uploadFile` / `downloadFile` / `reuploadFiles`, and
   `at_client.dart:4` exports the spec. Resolve OQ-4, then pull
   `at_client_impl.dart:1214,1389-1394,1456-1482`,
-  `encryption_service.dart:310-350`, `file_transfer_service.dart` and
-  `stream_notification_handler.dart` along with it.
+  `encryptFileInChunks` / `decryptFileInChunks` in `encryption_service.dart`, and
+  `file_transfer_service.dart` along with it.
 - **I7 — Inject an `http.Client` into `file_transfer_service.dart`** (`:14,31,40,50`,
   top-level `http.post`/`get` with no seam). Worth doing independently of I6 — it is
   also the only way to test that service.

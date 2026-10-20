@@ -294,7 +294,8 @@ class AtClientPreference {
   /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
   int syncIntervalMins = 10;
 
-  /// Idle time in milliseconds of connection to secondary server. Default to 10 minutes.
+  /// Read by nothing: setting it changes no timeout.
+  @Deprecated('Read by nothing; removed in v4')
   int outboundConnectionTimeout = 600000;
 
   /// The process-wide default network timeout: the maximum wall-clock the SDK
@@ -302,16 +303,17 @@ class AtClientPreference {
   /// response) before giving up. When set on the `AtClientPreference` used to
   /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
   /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies. This supersedes the misleadingly-named
-  /// [outboundConnectionTimeout], which is a socket idle time, not an
-  /// operation/connect timeout, and does not bound onboarding/auth.
+  /// the existing default (30s) applies. This supersedes
+  /// [outboundConnectionTimeout], which nothing reads.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
   /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
 
-  /// Default path to download stream files
+  /// Directory for file transfer: [AtClient.downloadFile] saves files there by
+  /// default, and an upload keeps a copy of each file it sends under its
+  /// `sent-files`.
   String? downloadPath;
 
   /// regex to perform sync

@@ -3796,19 +3796,26 @@ its own. None blocks anything.
     `at_onboarding_preference.dart`'s own dartdoc. Not zero — do not "fix"
     them.
 
-34. **The stream-transfer pair is deprecated for v4, has no in-repo caller,
-    and cannot be used from outside either.** `AtClient.stream()` and
-    `sendStreamAck` are both `@Deprecated("Obsolete, will be removed in v4")`;
-    nothing in this repo calls either, and the receive half
-    (`StreamNotificationHandler`, which drives `stream:receive`/`stream:done`
-    over its own socket) is reachable only from `sendStreamAck`, so it is dead
-    by the same argument. `AtStreamResponse` and `AtStreamStatus` are exported
-    from no barrel, so an external consumer can call `stream()` but cannot
-    write down the type it returns. The deprecation was never announced in the
-    CHANGELOG. It belongs on the v4 removal list rather than being carried as
-    a live API — and until then it stays covered by
-    `AtClientImpl.buildRemoteSecondary`, which is the only reason it now
-    authenticates as the client it belongs to.
+34. **The stream-transfer pair throws until v4 removes it.** atServers
+    refuse the `stream:` command at_client sent from 3.12.0. From at_client
+    3.15.0-rc9, `AtClient.stream()` and
+    `sendStreamAck` stay deprecated until v4 but throw `UnsupportedError`
+    without contacting an atServer
+    (`features/at_client/stream_verb_retired.feature`). The receive half
+    (`StreamNotificationHandler`, `AtStreamNotification`), the private
+    helpers behind `EncryptionService`'s stream methods and the two stream
+    sample scripts are deleted. `EncryptionService.encryptStream` and
+    `getSharedKeyForDecryption` stay deprecated until v4 but throw
+    `UnsupportedError`; `decryptStream` stays deprecated until v4 and calls
+    `EncryptionUtil.decryptBytes`; and `AtClientPreference`'s
+    `outboundConnectionTimeout`, which only the stream path read, is
+    deprecated until v4;
+    `AtStreamResponse` and `AtStreamStatus` remain only as `stream()`'s return
+    type, exported from no barrel. at_lookup's `readResponse`, which only the
+    stream path called, is deprecated until at_lookup 4.0.0 rather than
+    removed, because published at_client 3.15.0-rc1 to rc8 call it, and
+    at_commons deprecates `VerbSyntax.stream` and `Response.isStream` until
+    6.0.0.
 
 35. **Lands in `atGettingStarted`, not here: `at_dart/bin/at_activate.dart`
     imports a file this repo deleted.** Found 2026-08-19 while doing item 33,

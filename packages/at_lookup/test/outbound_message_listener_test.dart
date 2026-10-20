@@ -179,11 +179,16 @@ void main() {
       expect(response, 'error:AT0012: Invalid value found');
     });
 
-    test('A test to validate complete error comes in single packet', () async {
+    /// Catalogue: features/at_client/stream_verb_retired.feature
+    test('at_lookup takes a response starting stream: as unexpected', () async {
       await outboundMessageListener
           .messageHandler('stream:@bob:phone@alice\n@alice@'.codeUnits);
-      var response = await outboundMessageListener.read();
-      expect(response, 'stream:@bob:phone@alice');
+      await expectLater(
+          outboundMessageListener.read(),
+          throwsA(isA<AtLookUpException>()
+              .having((e) => e.errorCode, 'errorCode', 'AT0014')
+              .having((e) => e.errorMessage, 'errorMessage',
+                  'Unexpected response found')));
     });
   });
 
