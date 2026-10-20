@@ -111,6 +111,7 @@ class VerbSyntax {
       r'(:(?<epochMillis>\d+))?'
       r'( (?<regex>.+))?'
       r'$';
+  @Deprecated('atServers no longer support the stream verb; removed in 6.0.0')
   static const stream =
       r'^stream:((?<operation>init|send|receive|done|resume))?((@(?<receiver>[^@:\s]+)))?( ?namespace:(?<namespace>[\w-]+))?( ?startByte:(?<startByte>\d+))?( (?<streamId>[\w-]*))?( (?<fileName>.* ))?((?<length>\d*))?$';
 
