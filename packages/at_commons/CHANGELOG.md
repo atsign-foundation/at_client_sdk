@@ -1,4 +1,4 @@
-## 5.24.0-rc1
+## 5.24.0
 
 - feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
   `VerbSyntax.otp`, so a client can list an atServer's active passcodes and

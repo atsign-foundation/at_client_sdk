@@ -161,9 +161,9 @@ class VerbSyntax {
       // A passcode only after put: or delete: (where spp names the SPP)
       r'(:(?<otp>(?<=put:)\w{6,}|(?<=delete:)(?:spp|\w{6,})))?'
       // delete must have taken a passcode
-      r'(?<=get|put|put:\w{6,}|list|delete:spp|delete:\w{6,})'
+      r'(?<=^otp:(?:get|put|put:\w{6,}|list|delete:spp|delete:\w{6,}))'
       // :ttl: only after get and put
-      r'(:(?:(?<=(?:get|put|put:\w{6,}):)ttl:(?<ttl>\d+)))?$';
+       r'(:(?:(?<=^otp:(?:get|put|put:\w{6,}):)ttl:(?<ttl>\d+)))?$';
   static const keys = r'^keys:((?<operation>put|get|delete):?)'
       r'(?:(?<visibility>public|private|self):?)?'
       r'(?:namespace:(?<namespace>[a-zA-Z0-9_]+):?)?'

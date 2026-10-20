@@ -149,6 +149,9 @@ void main() {
       'otp:get:ABC123',
       'otp:put:spp',
       'otp:get:ttl:abc',
+      'otp:delete:ABCPUT:ttl:5',
+      'otp:delete:XYZGET:ttl:5',
+      'otp:delete:sppget:ttl:5',
     ]) {
       test('A test to verify $command is refused', () {
         expect(
