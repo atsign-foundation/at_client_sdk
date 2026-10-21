@@ -42,6 +42,34 @@ final class _FixedKem implements AtKemAlgorithm {
       _ss;
 }
 
+/// KEM double whose encapsulate and decapsulate throw [_error], so a test can
+/// check which backend failures [pqSeal] and [pqOpen] translate and which they
+/// let through.
+final class _ThrowingKem implements AtKemAlgorithm {
+  final Object _error;
+  _ThrowingKem(this._error);
+  @override
+  String get name => 'throwing-kem-test-double';
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      generateKeyPair() async =>
+          throw UnsupportedError('not used in this test');
+  @override
+  Uint8List newSeed() => throw UnsupportedError('not used in this test');
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+          Uint8List seed) async =>
+      throw UnsupportedError('not used in this test');
+  @override
+  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
+          Uint8List publicKey) async =>
+      throw _error;
+  @override
+  Future<Uint8List> decapsulate(
+          Uint8List secretKey, Uint8List ciphertext) async =>
+      throw _error;
+}
+
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
 Matcher _opensWith(PqOpenFailure reason) =>
@@ -211,6 +239,50 @@ void main() {
           await pqSeal(xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
       expect(() => pqOpen(xwing, Uint8List(7), envelope, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
+    });
+  });
+
+  group('backend failures are not relabelled as bad input', () {
+    // A well-formed envelope, so pqOpen reaches decapsulation.
+    Future<Uint8List> sealedEnvelope() => pqSeal(
+        _FixedKem(Uint8List(32),
+            Uint8List.fromList(List<int>.generate(1120, (i) => i & 0xff))),
+        Uint8List(0),
+        _utf8('payload'),
+        info: _noInfo);
+
+    test('pqOpen: rejected KEM input → malformedEnvelope', () async {
+      final envelope = await sealedEnvelope();
+      expect(
+          () => pqOpen(_ThrowingKem(KemInputRejectedException('low-order')),
+              Uint8List(0), envelope,
+              info: _noInfo),
+          _opensWith(PqOpenFailure.malformedEnvelope));
+    });
+
+    test('pqOpen: a backend StateError propagates unchanged', () async {
+      final envelope = await sealedEnvelope();
+      expect(
+          () => pqOpen(_ThrowingKem(StateError('EVP_PKEY_CTX_new failed')),
+              Uint8List(0), envelope, info: _noInfo),
+          throwsA(isA<StateError>()
+              .having((e) => e.message, 'message', 'EVP_PKEY_CTX_new failed')));
+    });
+
+    test('pqSeal: rejected recipient key → PqSealException', () {
+      expect(
+          () => pqSeal(_ThrowingKem(KemInputRejectedException('low-order')),
+              Uint8List(0), _utf8('payload'),
+              info: _noInfo),
+          throwsA(isA<PqSealException>()));
+    });
+
+    test('pqSeal: a backend StateError propagates unchanged', () {
+      expect(
+          () => pqSeal(_ThrowingKem(StateError('EVP_PKEY_CTX_new failed')),
+              Uint8List(0), _utf8('payload'),
+              info: _noInfo),
+          throwsA(isA<StateError>()));
     });
   });
 

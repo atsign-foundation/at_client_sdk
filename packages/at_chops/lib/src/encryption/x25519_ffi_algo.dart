@@ -202,8 +202,13 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
       if (_deriveInit(ctx) <= 0) {
         throw StateError('EVP_PKEY_derive_init failed');
       }
+      // From here on a failure is caused by the peer's key, not by OpenSSL
+      // itself: it refuses a low-order point, whose shared secret would be
+      // all zeroes. Reported as rejected input so a caller can tell it from a
+      // StateError, which still means the backend failed.
       if (_deriveSetPeer(ctx, peerKey) <= 0) {
-        throw StateError('EVP_PKEY_derive_set_peer failed');
+        throw KemInputRejectedException(
+            'X25519 peer key rejected (EVP_PKEY_derive_set_peer)');
       }
       final Pointer<IntPtr> lenPtr = calloc<IntPtr>();
       try {
@@ -213,7 +218,9 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
         final Pointer<Uint8> ssBuf = calloc<Uint8>(lenPtr.value);
         try {
           if (_derive(ctx, ssBuf, lenPtr) <= 0) {
-            throw StateError('EVP_PKEY_derive failed');
+            throw KemInputRejectedException(
+                'X25519 shared secret rejected (EVP_PKEY_derive), as for a '
+                'low-order point');
           }
           return Uint8List.fromList(ssBuf.asTypedList(lenPtr.value));
         } finally {

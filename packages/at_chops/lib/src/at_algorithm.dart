@@ -104,6 +104,28 @@ abstract class AtHashingAlgorithm<K, V> implements AtAlgorithm {
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }
 
+/// Thrown by an [AtKemAlgorithm] when an input it was given is
+/// cryptographically invalid, not merely the wrong size: for example an X25519
+/// share that is a low-order point, which OpenSSL refuses to derive from.
+///
+/// It is distinct from [StateError], which still signals a fault in the
+/// backend itself (a failed allocation or library call), so a caller can tell
+/// bad input from an operational problem.
+///
+/// ```dart
+/// try {
+///   await kem.decapsulate(secretKey, ciphertext);
+/// } on KemInputRejectedException {
+///   // The ciphertext is invalid: treat it as malformed input.
+/// }
+/// ```
+class KemInputRejectedException implements Exception {
+  final String message;
+  KemInputRejectedException(this.message);
+  @override
+  String toString() => 'KemInputRejectedException: $message';
+}
+
 /// Interface for a Key Encapsulation Mechanism (KEM) such as ML-KEM-768.
 ///
 /// A KEM does not encrypt arbitrary data. It produces a shared secret that
