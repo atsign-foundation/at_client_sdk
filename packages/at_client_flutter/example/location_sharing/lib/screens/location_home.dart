@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/location_share.dart';
 import '../services/location_provider.dart';
 import '../services/location_sharing_service.dart';
+import '../services/serialized_periodic_publisher.dart';
 
 /// Home screen for a logged-in atSign: lets the user start sharing their
 /// (simulated) location with another atSign, and shows every share that's
@@ -25,6 +26,7 @@ class _LocationHomeState extends State<LocationHome> {
   final _locationProvider = SimulatedLocationProvider();
   final _recipientController = TextEditingController();
   Timer? _publishTimer;
+  SerializedPeriodicPublisher<LocationPoint>? _publisher;
 
   @override
   void initState() {
@@ -61,10 +63,14 @@ class _LocationHomeState extends State<LocationHome> {
     await service.startSharingWith(recipient, point: point);
     _recipientController.clear();
 
-    _publishTimer ??= Timer.periodic(const Duration(seconds: 5), (_) async {
-      final next = await _locationProvider();
-      if (next != null) await service.publishCurrentLocation(next);
-    });
+    _publisher ??= SerializedPeriodicPublisher<LocationPoint>(
+      fetch: _locationProvider.call,
+      publish: service.publishCurrentLocation,
+    );
+    _publishTimer ??= Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _publisher!.tick(),
+    );
   }
 
   Future<void> _stopSharing(Atsign atSign) async {

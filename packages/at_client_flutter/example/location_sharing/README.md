@@ -28,7 +28,7 @@ value one atSign pushes to another.
 | A typed `AtCollection<T>` opened once, injected into a service | `LocationSharingService.openCollection` → `LocationSharingService(shares: ...)` |
 | `sharedWith` on `create()` | `startSharingWith()` |
 | `updateSharedWith()` / `delete()` to stop a share | `stopSharingWith()` |
-| `draft()` + `update()` to push a fresh value onto an existing item | `publishCurrentLocation()` |
+| `draft()` + `update()` to push a fresh value onto an existing item, renewing `expiresAt` on each publish | `publishCurrentLocation()` |
 | `Query<T>.wherePath` with a typed `PathField` | `$LocationShare.status`, `_activeSharesQuery()` |
 | `Query<T>.watch()` feeding a `StreamBuilder` for realtime UI updates | `screens/location_home.dart` |
 
@@ -91,3 +91,22 @@ flutter test
   `LocationSharingService` against a mocked `AtClient`, following the
   testing-patterns guide referenced above.
 - [`test/widget_test.dart`](test/widget_test.dart) — login screen smoke test.
+- [`test/serialized_periodic_publisher_test.dart`](test/serialized_periodic_publisher_test.dart) —
+  `SerializedPeriodicPublisher` never runs two publishes concurrently, so a
+  slow tick can't be overtaken by a faster, later one.
+
+## Design notes
+
+- **Expiry is a liveness signal, not a fixed TTL from creation.**
+  `publishCurrentLocation()` renews a share's `expiresAt` to `now +
+  defaultExpiration` on every publish. A share is expected to last as long
+  as its owner keeps publishing, not for one hour from the moment it was
+  created — otherwise a share would quietly disappear for the recipient
+  while the owner's `Timer` kept running.
+- **The publish `Timer` is serialised**, via
+  [`SerializedPeriodicPublisher`](lib/services/serialized_periodic_publisher.dart).
+  `Timer.periodic` fires every 5 seconds regardless of how long the
+  previous publish took; without serialising, a slow publish could be
+  overtaken by a later, faster one and recipients would see an older point
+  arrive after a newer one. A tick that fires while the previous one is
+  still in flight is skipped rather than queued.

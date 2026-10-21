@@ -128,6 +128,66 @@ void main() {
     },
   );
 
+  test('publishCurrentLocation renews expiresAt instead of keeping the '
+      'original one', () async {
+    // Started with a short expiry, far short of defaultExpiration, so a
+    // renewal is unambiguous: if the fix regressed back to reusing
+    // `share.expiresAt`, the written expiresAt would stay close to
+    // `created.expiresAt` instead of landing near `now + 1 hour`.
+    final created = await service.startSharingWith(
+      bob,
+      point: LocationPoint(latitude: 1, longitude: 2),
+      expiresIn: const Duration(seconds: 1),
+    );
+    final selfKey = AtKey.fromString('${created.id}.$namespace$selfAtSignStr');
+
+    when(
+      () => atClient.getAtKeys(regex: any(named: 'regex')),
+    ).thenAnswer((_) async => [selfKey]);
+    when(() => atClient.get(any())).thenAnswer((_) async {
+      final v = AtValue();
+      v.value = jsonEncode({
+        'type': 'LocationShare',
+        'obj': created.obj.toJson(),
+      });
+      v.metadata = Metadata()
+        ..createdAt = created.createdAt
+        ..expiresAt = created.expiresAt;
+      return v;
+    });
+
+    final beforePublish = DateTime.now().toUtc();
+    await service.publishCurrentLocation(
+      LocationPoint(latitude: 9, longitude: 9),
+    );
+
+    final writtenKeys = verify(
+      () => atClient.put(captureAny(), any()),
+    ).captured.cast<AtKey>();
+    // `lastWhere`, not `firstWhere`: `startSharingWith` already wrote the
+    // self key once with the original short expiry, so the first match
+    // would be that write rather than the renewal from
+    // `publishCurrentLocation`.
+    final selfWrite = writtenKeys.lastWhere(
+      (k) => k.toString() == selfKey.toString(),
+    );
+
+    expect(
+      selfWrite.metadata.expiresAt!.isAfter(created.expiresAt),
+      isTrue,
+      reason: 'renewed expiresAt must move past the original short expiry',
+    );
+    expect(
+      selfWrite.metadata.expiresAt!.isAfter(
+        beforePublish.add(const Duration(minutes: 50)),
+      ),
+      isTrue,
+      reason:
+          'renewed expiresAt should land near now + defaultExpiration '
+          '(1 hour), not near the original expiry',
+    );
+  });
+
   test(
     'stopSharingWith deletes a share whose only recipient is removed',
     () async {

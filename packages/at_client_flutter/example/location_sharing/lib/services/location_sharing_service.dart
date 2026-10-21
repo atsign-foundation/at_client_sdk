@@ -93,6 +93,13 @@ class LocationSharingService {
   /// Pushes [point] as the latest position on every active share [self]
   /// owns. A periodic caller (e.g. a `Timer`) drives the "live" feel of the
   /// demo.
+  ///
+  /// Each publish also renews the share's `expiresAt` to `now +
+  /// [defaultExpiration]`. Without this, a share created with the default
+  /// one-hour expiry would vanish for the recipient an hour after
+  /// [startSharingWith] even though the owner's `Timer` keeps publishing
+  /// fresh points — a live share is expected to last as long as the owner
+  /// keeps it alive, not for a fixed window from creation.
   Future<void> publishCurrentLocation(LocationPoint point) async {
     final ownedShares = await shares
         .query()
@@ -111,7 +118,7 @@ class LocationSharingService {
           ),
           id: share.id,
           sharedWith: share.sharedWith,
-          expiresAt: share.expiresAt,
+          expiresAt: now.add(defaultExpiration),
         ),
       );
     }
