@@ -194,9 +194,9 @@ void main() {
     test('encodePrivateKey reproduces the 3.x PKCS#8 bytes', () {
       final der = base64Decode(_rsaPrivateKeyBase64);
       final privateKeyInfo = ASN1Parser(der).nextObject() as ASN1Sequence;
-      final pkcs1 = ASN1Parser((privateKeyInfo.elements![2] as ASN1OctetString)
-              .octets!)
-          .nextObject() as ASN1Sequence;
+      final pkcs1 =
+          ASN1Parser((privateKeyInfo.elements![2] as ASN1OctetString).octets!)
+              .nextObject() as ASN1Sequence;
       BigInt field(int i) => (pkcs1.elements![i] as ASN1Integer).integer!;
 
       final key = RSAPrivateKey(field(1), field(3), field(4), field(5));

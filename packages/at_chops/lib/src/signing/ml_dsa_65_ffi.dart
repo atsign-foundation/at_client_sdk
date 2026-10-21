@@ -55,7 +55,8 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   late final EvpDigestVerifyDart _digestVerify;
 
   MlDsa65FfiAlgo.fromLib(this._lib,
-      {@visibleForTesting bool Function(DynamicLibrary) supportsMlDsa65 =
+      {@visibleForTesting
+      bool Function(DynamicLibrary) supportsMlDsa65 =
           libCryptoSupportsMlDsa65}) {
     if (!supportsMlDsa65(_lib)) {
       throw AtSigningException(

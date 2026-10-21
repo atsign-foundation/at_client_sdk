@@ -21,8 +21,7 @@ import 'dart:typed_data';
 // backends agree, so it needs AesCtrFfiAlgo in scope.
 import 'package:at_chops/at_chops_ffi.dart';
 // HpkeSuite is package-internal; its wire identities stay pinned here.
-import 'package:at_chops/src/encryption/rfc9180_hpke.dart'
-    show HpkeSuite;
+import 'package:at_chops/src/encryption/rfc9180_hpke.dart' show HpkeSuite;
 import 'package:test/test.dart';
 
 void main() {

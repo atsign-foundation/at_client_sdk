@@ -188,8 +188,8 @@ void main() {
           () {
         final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
         final InitialisationVector iv = InitialisationVector.random(16);
-        final Uint8List plaintext = Uint8List.fromList(
-            List<int>.generate(4096, (int i) => i & 0xff));
+        final Uint8List plaintext =
+            Uint8List.fromList(List<int>.generate(4096, (int i) => i & 0xff));
 
         final AesCtrFfiCipher control = makeCipher(key, iv);
         final Uint8List expected;
@@ -211,16 +211,14 @@ void main() {
                   cipher.updateView(Uint8List.sublistView(plaintext, i, end)));
             }
             expect(actual.takeBytes(), expected,
-                reason:
-                    'updateView diverged from update at chunk size $chunk');
+                reason: 'updateView diverged from update at chunk size $chunk');
           } finally {
             cipher.dispose();
           }
         }
       });
 
-      test('grows the buffer correctly for a chunk past the 256 KiB floor',
-          () {
+      test('grows the buffer correctly for a chunk past the 256 KiB floor', () {
         final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
         final InitialisationVector iv = InitialisationVector.random(16);
         final Uint8List plaintext = Uint8List.fromList(
@@ -276,17 +274,21 @@ void main() {
         }
       });
 
-      test('a view is invalidated by the next update call (documented '
+      test(
+          'a view is invalidated by the next update call (documented '
           'contract)', () {
-        final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+        final AesCtrFfiCipher cipher = makeCipher(
+            AesCtrEncryptionAlgo(32).generateKey(),
+            InitialisationVector.random(16));
         try {
-          final Uint8List firstView = cipher.updateView(_hex(_nistPlaintextHex));
+          final Uint8List firstView =
+              cipher.updateView(_hex(_nistPlaintextHex));
           final Uint8List firstSnapshot = Uint8List.fromList(firstView);
 
           // Same-size call reuses the buffer without reallocating, so the
           // outstanding view now aliases the second call's output.
-          final Uint8List secondView = cipher.updateView(_hex(_nistPlaintextHex));
+          final Uint8List secondView =
+              cipher.updateView(_hex(_nistPlaintextHex));
 
           expect(firstView, equals(secondView),
               reason: 'a same-size call must reuse outBuf in place, so an '
@@ -304,22 +306,25 @@ void main() {
 
     group('lifecycle', () {
       test('update after dispose throws', () {
-        final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+        final AesCtrFfiCipher cipher = makeCipher(
+            AesCtrEncryptionAlgo(32).generateKey(),
+            InitialisationVector.random(16));
         cipher.dispose();
         expect(() => cipher.update(Uint8List(4)), throwsA(isA<StateError>()));
       });
 
       test('dispose is idempotent', () {
-        final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+        final AesCtrFfiCipher cipher = makeCipher(
+            AesCtrEncryptionAlgo(32).generateKey(),
+            InitialisationVector.random(16));
         cipher.dispose();
         expect(cipher.dispose, returnsNormally);
       });
 
       test('dispose before any update releases cleanly', () {
-        final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+        final AesCtrFfiCipher cipher = makeCipher(
+            AesCtrEncryptionAlgo(32).generateKey(),
+            InitialisationVector.random(16));
         expect(cipher.dispose, returnsNormally);
       });
     });
@@ -328,8 +333,8 @@ void main() {
       test('an IV that is not 16 bytes throws', () {
         for (final int length in <int>[0, 12, 15, 17, 32]) {
           expect(
-              () => makeCipher(
-                  AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector(Uint8List(length))),
+              () => makeCipher(AesCtrEncryptionAlgo(32).generateKey(),
+                  InitialisationVector(Uint8List(length))),
               throwsA(isA<AtEncryptionException>()),
               reason: '$length-byte IV was accepted');
         }

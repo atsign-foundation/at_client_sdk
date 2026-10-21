@@ -75,16 +75,19 @@ final class AesCtrFfiCipher {
     // any of these ever called back into Dart.
     final ctxNew =
         lib.lookupFunction<EvpCipherCtxNewNative, EvpCipherCtxNewDart>(
-            'EVP_CIPHER_CTX_new', isLeaf: true);
+            'EVP_CIPHER_CTX_new',
+            isLeaf: true);
     final ctxFree =
         lib.lookupFunction<EvpCipherCtxFreeNative, EvpCipherCtxFreeDart>(
-            'EVP_CIPHER_CTX_free', isLeaf: true);
+            'EVP_CIPHER_CTX_free',
+            isLeaf: true);
     final encryptInitEx =
         lib.lookupFunction<EvpEncryptInitExNative, EvpEncryptInitExDart>(
             'EVP_EncryptInit_ex');
     final encryptUpdate =
         lib.lookupFunction<EvpEncryptUpdateNative, EvpEncryptUpdateDart>(
-            'EVP_EncryptUpdate', isLeaf: true);
+            'EVP_EncryptUpdate',
+            isLeaf: true);
 
     final Pointer<EVP_CIPHER_CTX> ctx = ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
