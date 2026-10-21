@@ -146,6 +146,11 @@ directly into your own app.
 
 **Deprecated.** Both packages are being removed. Do not use in new projects.
 
+### `at_location_flutter` ⛔
+
+**Deprecated.** This package has been deleted from the repository. A
+location-sharing example in `at_client_flutter` is planned.
+
 ---
 
 ## Packages — Avoid for New Projects (In Migration)
@@ -160,7 +165,6 @@ Their functionality will eventually move into example application code.
 | `at_contacts_group_flutter` | Migration in progress |
 | `at_events_flutter` | Migration in progress |
 | `at_follows_flutter` | Migration in progress |
-| `at_location_flutter` | Migration in progress |
 | `at_notify_flutter` | Migration in progress |
 | `at_login_flutter` | Minimal / not fully published |
 
