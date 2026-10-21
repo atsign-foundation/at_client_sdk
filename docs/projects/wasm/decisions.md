@@ -868,9 +868,21 @@ The browser lane holds the atSign's @keys as **one encrypted record per passkey*
 
 **K-6 clarification (2026-10-18).** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-25's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-25's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-25-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on.
 
+**Revocation is final (2026-10-21).** Applies to the per-passkey enrollment (browser-onboarding Q-3) under K-6/K-8.
+
+| Point | Ruling |
+| --- | --- |
+| Revoked enrollment | stays revoked; its PKAM stays refused |
+| Re-enroll after revoke | needs explicit approver action |
+| Same-key re-enroll | refused with `AT0032` while the revoked enrollment exists — intended, not a defect |
+| Per-re-enroll seed salt | none |
+| Revoked, passkey only | locked out by design |
+| Record (K-6) | the revoked enrollment cannot PKAM, so it cannot refresh the record's TTL; the record expires after `T`. Revocation does not delete it: the revoker cannot derive its name |
+| Mechanism | **open** — the approver reinstates the existing revoked enrollment (`unrevoke` exists on the wire, no library API: [`enterprise-identity.md`](enterprise-identity.md) E5), or the atServer accepts a duplicate key. Observed today (probe P9d3, at_server trunk `7c7e91b3`): a same-key re-enroll succeeds only after `enroll:delete` of the revoked enrollment |
+
 **Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed.
 
-**Open against K.** At-keys record TTL `T` (proposal 90 days; product); owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite another passkey's record (bead `m0j`, accepted gap); whether hardware-bound APKAM (PR #2295, "gate (c)") replaces or supplements this design. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+**Open against K.** At-keys record TTL `T` (proposal 90 days; product); the re-enroll-after-revoke mechanism (above); owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite another passkey's record (bead `m0j`, accepted gap); whether hardware-bound APKAM (PR #2295, "gate (c)") replaces or supplements this design. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
 
 **Reserved, not filed.** D-26..D-28 are held for PB-0's four unfiled rulings (the portal-requirements routing, R-5).
 
@@ -1241,3 +1253,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
 | 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
 | 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |
+| 2026-10-21 | **Revocation is final.** A revoked enrollment's PKAM stays refused; re-enroll after revoke needs explicit approver action; same-key re-enroll refused with `AT0032` is intended; no per-re-enroll seed salt; revoked with only the passkey is locked out by design. Mechanism (reinstate vs duplicate key) open. K-1..K-9 unchanged. |

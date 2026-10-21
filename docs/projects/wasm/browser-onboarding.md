@@ -117,7 +117,8 @@ sequenceDiagram
 |---|---|
 | Rotation | enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old lookup key → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys |
 | Browser storage eviction | every open rewrites the hint and the local record and requests `storage.persist()`; an evicted replica is rebuilt by the recovery flow (3.3), costing one extra passkey tap |
-| Lost or wiped device | its record stops being refreshed and expires after `T`; revoke its APKAM enrollment if it had its own |
+| Lost or wiped device | revoke its enrollment; its record stops being refreshed and expires after `T` |
+| Revoked enrollment | revocation is final (`decisions.md`, 2026-10-21): PKAM stays refused, so the record is not refreshed and expires after `T`. Same-key re-enroll is refused with `AT0032` (intended); re-enroll needs explicit approver action, mechanism open. Revoked with only the passkey is locked out by design |
 | Portal re-cut | rotates the passphrase envelope; each per-passkey record keeps working until its keys are revoked |
 
 ---

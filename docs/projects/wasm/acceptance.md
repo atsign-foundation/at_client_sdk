@@ -433,7 +433,7 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
 
-**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add four gates.** Under the per-passkey record ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open. Read X-K2 as "the derived kek is imported non-extractable", and X-K3 as "a record present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error". X-K1 and X-K4 stand unchanged. None of the new gates below is built.
+**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add X-K5..X-K9; the 2026-10-21 revocation ruling adds X-K10.** Under the per-passkey record ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open. Read X-K2 as "the derived kek is imported non-extractable", and X-K3 as "a record present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error". X-K1 and X-K4 stand unchanged. None of the new gates below is built.
 
 | # | Gate | Proves |
 | --- | --- | --- |
@@ -442,6 +442,7 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K7 | A valid older record whose public keys no longer match the published ones is refused before PKAM | K-5: rollback |
 | X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
 | X-K9 | After a successful open the credential hint and local record are rewritten, and `navigator.storage.persist()` is requested once; with the replica deleted, the passkey alone restores it | K-6 clarification: eviction is a UX cost, not a loss |
+| X-K10 | A revoked enrollment's PKAM is refused and stays refused; a same-key re-enroll without approver action is refused with `AT0032`; the revoked enrollment's record is not refreshed | revocation is final (2026-10-21). The approver path is not gated until its mechanism is ruled |
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 
