@@ -908,8 +908,8 @@ Future<List<Enrollment>> _list(
   String? arx,
   String? drx,
 }) async {
-  final ar = arx == null ? null : RegExp(arx);
-  final dr = drx == null ? null : RegExp(drx);
+  final ar = arx == null ? null : RegExp(arx, caseSensitive: false);
+  final dr = drx == null ? null : RegExp(drx, caseSensitive: false);
   final all = await atClient.enrollments.list(
       statuses:
           status == null ? null : [EnrollmentStatus.values.byName(status)]);
@@ -1077,10 +1077,10 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
   RegExp? appRegex;
   RegExp? deviceRegex;
   if (arx != null) {
-    appRegex = RegExp(arx);
+    appRegex = RegExp(arx, caseSensitive: false);
   }
   if (drx != null) {
-    deviceRegex = RegExp(drx);
+    deviceRegex = RegExp(drx, caseSensitive: false);
   }
 
   // listen for enrollment requests
