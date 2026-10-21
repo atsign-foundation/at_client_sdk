@@ -71,6 +71,12 @@ at_utils:
       allowed_offenders: []
       max_blocked_packages: 0
       min_files_walked: 90
+    # at_progress.dart still reaches chalkdart through src/logging/progress.dart.
+    # Baselined at 1 so the one-way ceiling can only tighten to 0.
+    - barrel: package:at_utils/at_progress.dart
+      allowed_offenders: []
+      max_blocked_packages: 1
+      min_files_walked: 10
   probe:
     - package:at_utils/at_utils.dart
   controls:
