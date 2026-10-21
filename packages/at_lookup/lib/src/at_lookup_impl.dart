@@ -10,6 +10,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
+import 'package:at_lookup/src/rsa_pkam_signing.dart';
 import 'package:at_lookup/src/util/tls_connect.dart' show Abandonment;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
@@ -705,16 +706,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // is the same base64 PKCS#8 DER this ladder has always taken; decoding
         // it straight into RsaSigningAlgo keeps the signature bytes identical
         // to the pointycastle RSASigner the removed PkamSigningAlgo/crypton
-        // path called.
+        // path called. This caller-supplied key's modulus size is not known
+        // ahead of time, so [signRsaPkam] tries every size the protocol
+        // defines rather than pinning one.
         // TODO(4.0): remove with the privateKey ladder credential this method
-        // exists to serve. If it outlives the ladder instead, RsaSigningAlgo
-        // refuses any modulus that is not 2048 bits, which this path never
-        // checked, so a caller-supplied 3072- or 4096-bit key that
-        // authenticates today would start throwing.
-        final sha256signature =
-            await RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256)
-                .signBytes(Uint8List.fromList(utf8.encode(fromResponse)),
-                    secretKey: base64Decode(privateKey));
+        // exists to serve.
+        final sha256signature = await signRsaPkam(
+            Uint8List.fromList(utf8.encode(fromResponse)),
+            base64Decode(privateKey));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
         await _sendCommand('pkam:$signature\n');

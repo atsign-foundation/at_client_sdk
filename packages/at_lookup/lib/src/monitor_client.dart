@@ -4,9 +4,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/rsa_pkam_signing.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// Utility class to execute monitor verb.
@@ -87,11 +87,12 @@ class MonitorClient {
     // RSA SHA-256 sign via the stateless at_chops 4 algorithm. [_privateKey]
     // is base64 PKCS#8 DER, decoded straight into RsaSigningAlgo, which
     // produces the same signature bytes the removed PkamSigningAlgo/crypton
-    // path did.
-    var sha256signature =
-        await RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256).signBytes(
-            Uint8List.fromList(utf8.encode(fromResponse)),
-            secretKey: base64Decode(_privateKey));
+    // path did. This caller-supplied key's modulus size is not known ahead
+    // of time, so [signRsaPkam] tries every size the protocol defines rather
+    // than pinning one.
+    var sha256signature = await signRsaPkam(
+        Uint8List.fromList(utf8.encode(fromResponse)),
+        base64Decode(_privateKey));
     var signature = base64Encode(sha256signature);
     logger.info('Sending command pkam:$signature');
     await monitorConnection.write('pkam:$signature\n');

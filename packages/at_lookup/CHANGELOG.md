@@ -6,8 +6,9 @@
   `pkamAuthenticate` throws `UnAuthenticatedException` when no authenticator
   is set, rather than falling back to a credential ladder through `AtChops`,
   `AtPkamKeyPair` or `AtSigningInput` — all three types are removed from
-  at_chops 4.0.0. The deprecated `privateKey`/`cramSecret` ladder is
-  unaffected and still works.
+  at_chops 4.0.0. The deprecated `privateKey`/`cramSecret` ladder still
+  works, for a 2048- or 4096-bit `privateKey` — see the PKAM signing entry
+  below.
 - fix: `lookup(verifyData: true)` now rejects a forged or mismatched data
   signature. The at_chops 3.x verification this called computed a result and
   never read it, so a tampered signature was silently treated as valid; the
@@ -17,8 +18,14 @@
 - chore: the PKAM signature `privateKey` ladder (`AtLookupImpl.authenticate`)
   and `MonitorClient`'s PKAM signing move from the removed
   `PkamSigningAlgo`/`AtPkamKeyPair` to the stateless at_chops 4.0.0
-  `RsaSigningAlgo`. The private key is still base64 PKCS#8 DER and produces
-  identical signature bytes to the removed path — no wire format change.
+  `RsaSigningAlgo`. The private key is still base64 PKCS#8 DER and, for a
+  modulus `RsaSigningAlgo` accepts, produces identical signature bytes to
+  the removed path — no wire format change. Unlike the removed path,
+  `RsaSigningAlgo` pins a key size at construction and rejects any other
+  modulus, so both call sites now try every RSA size the Atsign Protocol
+  defines (2048, then 4096 bits) and only fail once neither matches; a
+  `privateKey` of some other size, which the removed path accepted, now
+  throws `AtSigningException`.
 - chore: moves to at_chops ^4.0.0-rc.1.
 
 ## 3.7.0-rc5
