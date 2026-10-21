@@ -23,13 +23,17 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class _MockAtClient extends Mock implements AtClient {
+  _MockAtClient(this._preference);
+  final AtClientPreference _preference;
+
   @override
   String? getCurrentAtSign() => '@alice';
 
   @override
-  AtClientPreference getPreferences() => AtClientPreference();
+  AtClientPreference getPreferences() => _preference;
 }
 
 class _MockNotificationService extends Mock implements NotificationServiceImpl {
@@ -50,7 +54,10 @@ void main() {
   late HiveAtPersistenceFactory factory;
   late SyncServiceImpl service;
 
+  final logs = RecordedLogs();
+
   setUpAll(() {
+    logs.installOn();
     registerFallbackValue(AtKey());
     registerFallbackValue(StatsVerbBuilder());
   });
@@ -61,11 +68,11 @@ void main() {
     final bundle = await factory.initialize(atSignStr,
         HivePersistenceConfig.clientDefaults(storagePath: storageDir));
 
-    atClient = _MockAtClient();
+    atClient =
+        _MockAtClient(AtClientPreference()..hiveStoragePath = storageDir);
     remote = MockRemoteSecondary();
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     when(() => atClient.notificationService)
         .thenReturn(_MockNotificationService());
     final syncService = MockSyncService();
@@ -91,6 +98,7 @@ void main() {
 
   tearDown(() async {
     if (!service.isStopped) await service.stop();
+    await (await local.syncQueueForTest).close();
     await factory.close();
     final dir = Directory(storageDir);
     if (await dir.exists()) dir.deleteSync(recursive: true);
@@ -158,5 +166,57 @@ void main() {
             'a second update here would mean the queue kept the wrong op');
     expect(await local.readSyncQueueEntry(key.toString()), isNull,
         reason: 'the delete\'s own removal succeeds: its version matched');
+  });
+
+  /// Pushes [testKey]'s update in one round whose batch the atServer answers
+  /// with [response], after [duringBatch] runs as though the batch were in
+  /// flight.
+  Future<void> pushOnce(String response,
+      {Future<void> Function()? duringBatch}) async {
+    await local.executeVerb(
+        UpdateVerbBuilder()
+          ..atKey = testKey()
+          ..value = 'v1',
+        sync: true);
+    var batches = 0;
+    when(() =>
+            remote.executeCommand(any(that: startsWith('batch:')), auth: true))
+        .thenAnswer((_) async {
+      batches++;
+      await duringBatch?.call();
+      return response;
+    });
+    logs.records.clear();
+    service.sync();
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 300));
+    expect(batches, 1,
+        reason: 'the premise: the round ran and sent its one batch inside '
+            'the wait, so what follows is about that round');
+  }
+
+  test('a write landing mid-push is not warned about', () async {
+    await pushOnce('data:[{"id":1,"response":{"data":"7"}}]',
+        duringBatch: () async => local.executeVerb(
+            UpdateVerbBuilder()
+              ..atKey = testKey()
+              ..value = 'v2',
+            sync: true));
+
+    expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
+        reason: 'the premise: the newer write is still queued after the '
+            'round, so the round ended with nothing removed');
+    expect(logs.at('WARNING').where((m) => m.contains('in-batch')), isEmpty,
+        reason: 'the atServer took every entry and the newer writes push next '
+            'round, which is not a failure');
+  });
+
+  test('a batch the atServer refuses is still warned about', () async {
+    await pushOnce('data:[{"id":1,"response":'
+        '{"error_code":"AT0003","error_message":"refused"}}]');
+
+    expect(logs.at('WARNING').where((m) => m.contains('in-batch')), isNotEmpty,
+        reason: 'nothing in the batch reached the atServer, and the round '
+            'gives up on it until the next');
   });
 }

@@ -83,6 +83,16 @@ void main() {
     });
   });
 
+  group('the atServer check and the logger are reachable through the barrel',
+      () {
+    test('an app checks an atSign and logs without at_lookup or at_utils', () {
+      expect(checkAtSignServer, isA<Function>());
+      expect(AtSignServerCheck(AtSignServerState.activated).state,
+          AtSignServerState.activated);
+      expect(AtSignLogger('public_api_surface_test'), isA<AtSignLogger>());
+    });
+  });
+
   // The group above catches a surface REMOVAL; this one catches the opposite,
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates
@@ -114,8 +124,31 @@ void main() {
               'If intentional, update _atClientMixinsBarrelExports in the same '
               'commit.');
     });
+
+    test('each storage backend barrel exports exactly its reviewed set', () {
+      for (final MapEntry(key: barrel, value: reviewed)
+          in _storageBarrelExports.entries) {
+        expect(exportsOf(barrel), reviewed,
+            reason: 'The export surface of $barrel changed. If intentional, '
+                'update _storageBarrelExports in the same commit.');
+      }
+    });
   });
 }
+
+/// The exports of each storage backend's barrel, as reviewed.
+const Map<String, Set<String>> _storageBarrelExports = {
+  'hive.dart': {
+    'package:at_client/src/storage/hive/hive_at_client_storage.dart',
+  },
+  'sqlite.dart': {
+    'package:at_client/src/storage/sqlite/sqlite_at_client_storage.dart',
+    'package:at_client/src/storage/sqlite/sqlite_sync_queue_store.dart',
+  },
+  'memory.dart': {
+    'package:at_client/src/storage/memory/in_memory_at_client_storage.dart',
+  },
+};
 
 /// The exports of `lib/at_client.dart`, as reviewed. A refactor that narrows or
 /// widens this surface updates the set here in the same commit.
@@ -133,8 +166,11 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/local_secondary.dart',
   'package:at_client/src/client/remote_secondary.dart',
   'package:at_client/src/client/request_options.dart',
+  // AtClient.tryAcquireServerMutex and its lease.
+  'package:at_client/src/client/server_mutex.dart',
+  // The storage interface only: each backend has its own barrel, so an app
+  // names the one it chooses.
   'package:at_client/src/storage/at_client_storage.dart',
-  'package:at_client/src/storage/hive_at_client_storage.dart',
   'package:at_client/src/crypto/crypto.dart',
   'package:at_client/src/crypto/crypto_runtime.dart',
   'package:at_client/src/key_stream/key_stream.dart',
@@ -159,13 +195,19 @@ const Set<String> _atClientBarrelExports = {
   // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
   // communications leg of the platform bundle, which the verbs take as
   // lookUps:, for the same reason again. From the io-free barrel, so the type
-  // an app implements never reads as io-bound.
+  // an app implements never reads as io-bound. Also checkAtSignServer and
+  // what it answers (AtSignServerCheck, AtSignServerState), which an app asks
+  // before onboarding: is the atSign in the atDirectory, does its atServer
+  // answer, is it activated.
   'package:at_lookup/at_lookup.dart',
   // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
   'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
+  // show-narrowed to AtSignLogger, so an app logs through the SDK's logger
+  // without importing at_utils.
+  'package:at_utils/at_logger.dart',
   'package:at_client/src/response/at_notification.dart',
   'package:at_client/src/response/enrollment.dart',
   // show-narrowed to EnrollmentConveyanceException: approve() throws it after
@@ -177,7 +219,6 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/service/enrollment_service.dart',
   'package:at_client/src/service/notification_service.dart',
   'package:at_client/src/service/sync_service.dart',
-  'package:at_client/src/telemetry/at_client_telemetry.dart',
   'package:at_client/src/util/at_client_util.dart',
   'package:at_client/src/util/encryption_util.dart',
   'package:at_client/src/util/enroll_list_request_param.dart',

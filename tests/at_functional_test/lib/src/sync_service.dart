@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 
 // ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_utils/at_logger.dart';
 
 final _logger = AtSignLogger('FunctionalTestSyncService');
 

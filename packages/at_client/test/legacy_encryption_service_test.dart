@@ -330,6 +330,39 @@ void main() {
       expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
+    test('each encryption with a reused key takes a new IV', () async {
+      sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+            ..sharedWith('@bob'))
+          .build();
+      final preset = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = preset;
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptedSharedKey));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptionPublicKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptionPublicKey));
+
+      final firstValue = await sharedKeyEncryption.encrypt(atKey, 'first');
+      final firstIv = atKey.metadata.ivNonce;
+      final secondValue = await sharedKeyEncryption.encrypt(atKey, 'second');
+      final secondIv = atKey.metadata.ivNonce;
+
+      expect(firstIv, isNot(preset),
+          reason: 'an IV already on the key is replaced, never reused');
+      expect(secondIv, isNot(firstIv),
+          reason: 'this AES is CTR, so two values under one shared key and '
+              'one IV would share a keystream');
+      // ignore: deprecated_member_use_from_same_package
+      final key =
+          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+      expect(EncryptionUtil.decryptValue(firstValue, key, ivBase64: firstIv),
+          'first');
+      expect(EncryptionUtil.decryptValue(secondValue, key, ivBase64: secondIv),
+          'second');
+    });
+
     test('test to verify legacy encryption when a new shared key is generated',
         () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);

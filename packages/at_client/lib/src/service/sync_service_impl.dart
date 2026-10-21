@@ -41,12 +41,6 @@ class SyncServiceImpl implements SyncService {
   final bool _ownsRemoteSecondary;
   StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
-  /// utility method to reduce code verbosity in this file
-  /// Does nothing if a telemetryService has not been injected
-  void _sendTelemetry(String name, dynamic value) {
-    _atClient.telemetry?.controller.sink.add(SyncTelemetryEvent(name, value));
-  }
-
   @visibleForTesting
   SyncUtil syncUtil = SyncUtil();
 
@@ -127,16 +121,29 @@ class SyncServiceImpl implements SyncService {
   /// Returns the currentAtSign associated with the SyncService
   String get currentAtSign => _atClient.getCurrentAtSign()!;
 
-  /// A local AtKey to persist the last received server commitId
-  late final AtKey _lastReceivedServerCommitIdAtKey;
+  /// A local AtKey to persist the last received server commitId, built afresh
+  /// for every read and write: a read copies the stored metadata onto the key
+  /// it is given, and a write must not store it back.
+  AtKey get _lastReceivedServerCommitIdAtKey =>
+      AtKey.local('lastreceivedservercommitid', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
 
-  /// A local AtKey to store skipDeletesUntil value
-  late final AtKey _skipDeletesUntilCommitId;
+  /// A local AtKey to store skipDeletesUntil value, built afresh like
+  /// [_lastReceivedServerCommitIdAtKey].
+  AtKey get _skipDeletesUntilCommitId =>
+      AtKey.local('skipdeletesuntil', currentAtSign,
+              namespace: _watermarkNamespace)
+          .build();
+
+  /// The namespace both keys above are kept under: the preference's when this
+  /// service was built, so a preference replaced later does not move them.
+  final String? _watermarkNamespace;
 
   /// How both sync watermarks above are written.
   ///
-  /// They are `local:` records — never synced, and already encrypted at rest by
-  /// the keystore — so there is nothing for value-level encryption to protect.
+  /// They are `local:` records, never synced and holding nothing sensitive, so
+  /// there is nothing for value-level encryption to protect.
   /// Saying so explicitly keeps them off the shared-data crypto path, where
   /// every post-quantum provider declines a local key and the fallback from
   /// that decline is the legacy provider, which a client that refuses it then
@@ -212,14 +219,11 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary,
       {required bool ownsRemoteSecondary})
-      : _ownsRemoteSecondary = ownsRemoteSecondary {
+      : _ownsRemoteSecondary = ownsRemoteSecondary,
+        _watermarkNamespace = _atClient.getPreferences()?.namespace {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
-    _lastReceivedServerCommitIdAtKey =
-        AtKey.local('lastreceivedservercommitid', currentAtSign).build();
-    _skipDeletesUntilCommitId =
-        AtKey.local('skipdeletesuntil', currentAtSign).build();
   }
 
   @override
@@ -814,6 +818,7 @@ class SyncServiceImpl implements SyncService {
         // the next batch (the queue may still have more).
         continue;
       }
+      var rewrittenMidPush = 0;
       List<dynamic> batchResponse;
       try {
         batchResponse = await sendBatch(batchRequests);
@@ -865,6 +870,7 @@ class SyncServiceImpl implements SyncService {
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
             // the entry unconditionally here would lose it.
+            rewrittenMidPush++;
             _logger.finer('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
@@ -924,9 +930,15 @@ class SyncServiceImpl implements SyncService {
       if (pendingNow > 0 &&
           pendingNow >= queueSizeBefore &&
           allBatchKeysStillPresent) {
-        _logger.warning('sync queue: $pendingNow pending after batch (was '
-            '$queueSizeBefore); none of the in-batch entries were '
-            'removed — bailing out, will retry next round');
+        if (rewrittenMidPush == batchSources.length) {
+          _logger.finer('sync queue: every in-batch entry reached the '
+              'atServer and was rewritten meanwhile; the newer writes push '
+              'next round');
+        } else {
+          _logger.warning('sync queue: $pendingNow pending after batch (was '
+              '$queueSizeBefore); none of the in-batch entries were '
+              'removed — bailing out, will retry next round');
+        }
         break;
       }
     }
@@ -1003,10 +1015,6 @@ class SyncServiceImpl implements SyncService {
 
       while (serverCommitId > lastReceivedServerCommitId) {
         _throwIfStopped();
-        _sendTelemetry('_syncFromServer.whileLoop', {
-          "serverCommitId": serverCommitId,
-          "lastReceivedServerCommitId": lastReceivedServerCommitId
-        });
         List<dynamic> listOfCommitEntriesFromServer =
             await _getEntriesToSyncFromServer(
                 lastReceivedServerCommitId, serverCommitId,
@@ -1084,11 +1092,6 @@ class SyncServiceImpl implements SyncService {
             continue;
           }
 
-          _sendTelemetry('_syncFromServer.forEachEntry.start', {
-            "atKey": serverCommitEntry['atKey'],
-            "operation": serverCommitEntry['operation'],
-            "commitId": serverCommitEntry['commitId'],
-          });
           // Convert the commit-id to "int" if in "String" data type.
           lastReceivedServerCommitId =
               _parseToInteger(serverCommitEntry['commitId']);
@@ -1158,18 +1161,12 @@ class SyncServiceImpl implements SyncService {
           convertCommitOpSymbolToEnum(serverCommitEntry['operation']));
       await _syncLocal(serverCommitEntry);
       keyInfoList.add(keyInfo);
-      _sendTelemetry('_syncFromServer.forEachEntry.end', {
-        'atKey': keyInfo.key,
-        'syncDirection': keyInfo.syncDirection,
-        'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
-      });
     } catch (e) {
       if (e is StoppedException || isStopped) {
         _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
             'the service was stopped ($e)');
         throw const _SyncAbandoned();
       }
-      _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
     }

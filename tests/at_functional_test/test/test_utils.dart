@@ -8,7 +8,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_auth/at_auth.dart'

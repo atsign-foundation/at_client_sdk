@@ -1,10 +1,197 @@
+## 3.15.0-rc9
+
+- chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
+  3.5.0, now throw `UnsupportedError` without contacting an atServer, since
+  atServers refuse the `stream:` command these methods sent from 3.12.0. Both
+  are removed in v4.
+- chore: `EncryptionService.encryptStream` and `getSharedKeyForDecryption`,
+  reached through `AtClient.encryptionService`, now throw `UnsupportedError`,
+  since only the stream transfer used them: encrypt for another atSign with
+  `put` or `notify`. Both are removed in v4.
+- chore: `EncryptionService.decryptStream` is deprecated: use
+  `EncryptionUtil.decryptBytes`. It is removed in v4.
+- chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
+  nothing reads it, and it is removed in v4.
+- `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to
+  `StdErrLoggingHandler` from `at_utils_io.dart` to keep them off stdout.
+
+## 3.15.0-rc8
+
+- feat: `Enrollment` reports the key expiry a request asked for, as
+  `apkamKeysExpiryDuration` (zero or less for none, null when the atServer
+  does not say), and when its record expires, as `expiresAt`.
+- feat: `client.enrollments.approve` returns the approved enrollment as the
+  atServer now holds it, including when it expires.
+
+## 3.15.0-rc7
+
+- feat: `tryAcquireServerMutex` takes a short-lived lock that every client of
+  the atSign shares, held on the atServer for at most 15 minutes; before
+  c3.16.2 and p3.16.5 an expired lock blocks until the atServer's expiry sweep,
+  up to about ten and a half minutes. It needs an atServer from p3.13.0, and
+  from c3.16.3 and p3.16.5 the lock records no commit.
+- fix: `AtRpc`'s request mutex records no commit on an atServer from c3.16.3
+  or p3.16.5, so it no longer leaves an entry behind for every client of the
+  atSign to sync. It now needs an atServer from p3.13.0: on an older one, a
+  responder with `enableRequestMutex` handles no requests.
+- fix: `PublishedNskeyKeyRing` and `PqSigningRoot` refuse a `lockTtl` over 15
+  minutes when built.
+- feat: each storage backend has its own import: `HiveAtClientStorage` comes
+  from `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
+  `package:at_client/memory.dart`, no longer from `at_client.dart` and
+  `sqlite.dart`.
+- fix: a client with `isLocalStoreRequired` false and no storage is refused,
+  as the flag's deprecation says; pass one such as `InMemoryAtClientStorage`.
+  Storage an app passes is now always used.
+- fix: a client built on the deprecated `localSecondaryKeyStore` with no
+  `hiveStoragePath` is refused; set the path, or pass a storage. With the path
+  set it is built whatever `isLocalStoreRequired` says.
+- fix: a client passed neither storage nor `hiveStoragePath` is refused with
+  the same `ArgumentError` as the other cases.
+- fix: `AtClientManager.setCurrentAtSign` refuses a client it could not build
+  for want of storage before it stops the current one, which stays current.
+- fix: a storage, or a sync queue under one `hiveStoragePath`, is held by one
+  client at a time: a second client asking for it meanwhile is refused with a
+  `StateError` instead of sharing it, which could hang an open or close the
+  other client's queue.
+- fix: `Atsign.activate` and `PendingEnrollment.client` refuse a client that
+  would have no local storage before the CRAM secret is spent or the approval
+  is waited for.
+- fix: a stopped client built on the deprecated `localSecondaryKeyStore`
+  closes the sync queue it opened.
+- fix: a Hive store whose sync queue fails to open closes the keystore it had
+  opened, so a retry opens cleanly.
+- deprecated, to be removed in 4.0: `AtClientImpl.create`'s
+  `localSecondaryKeyStore` and `AtClient.persistenceBundle`; pass storage
+  instead.
+- deprecated, to be removed in 4.0: `AtClientPreference.keyStoreSecret`, which
+  nothing reads.
+- fix: local storage the client cannot open, such as a file it may not read,
+  fails with an exception the app can catch, and no longer also ends a
+  command-line program with an unhandled error.
+- fix: a secret shared between an atSign's own clients is filed under the
+  namespace it was sent through, and credited to the client that sent it.
+- fix: each post-quantum value is encrypted under a key of its own, so a
+  content key can encrypt any number of values.
+- fix: a client writes post-quantum data in its own namespace once it holds
+  that namespace's private key; until the key arrives the write throws
+  `NskeyPrivateNotHeldException`.
+- fix: once an atSign's namespace key rotates, including after a revocation,
+  each content key its clients share with other atSigns is replaced by a fresh
+  one sealed to the new key, on the client's first write after it holds that
+  key.
+- fix: revoking an enrollment rotates the namespace key of every namespace its
+  grants cover, including one nested under a granted namespace, such as
+  `chat.app` under `app`.
+- feat: by default a content key is replaced once it is a year old (it was a
+  week), and a namespace key once it was minted a year ago (it was never).
+  `rotateCkAfterOneWeek` and `neverRotateNskey` remain for an app that wants
+  the old behaviour.
+- feat: on macOS and Linux, where OpenSSL 3 is installed, post-quantum
+  encryption uses it, and key exchange (which needs OpenSSL 3.5 or later) gets
+  several times faster. Elsewhere it stays pure Dart.
+- fix: two subscriptions with the same regex but different `shouldDecrypt`
+  each receive notifications as they asked; the second no longer shares the
+  first one's stream and setting.
+- fix: `AtRpc` answers a request whose value it cannot parse with a NACK under
+  the request's id, and keeps serving; an error from a request or response
+  handler is logged and the listener carries on.
+- fix: `get` decrypts data that at_client 3.0.10 to 3.2.1 wrote, which from
+  3.13.0 came back still encrypted.
+- fix: a `get`, `put` or notification whose shared key does not unwrap
+  under this atSign's key throws an `AtException`, as other decryption
+  failures do, not an `ArgumentError`.
+- build: requires `at_chops` ^3.7.0.
+
+## 3.15.0-rc6
+
+- fix: an enrollment sent an ML-KEM-1024 namespace key can read that
+  namespace, including one it received under an earlier 3.15.0 prerelease,
+  and a namespace key that doesn't match what its atSign publishes for that
+  key is refused.
+- fix: a link vouching for an enrollment's signing key is published as soon
+  as it arrives, and one that can't be published yet is tried again at the
+  next start.
+- fix: two operations that need the client's keys at the same moment, such as
+  two notifications to the client's own atSign, no longer fail with "Self
+  encryption key is not set for current atSign".
+
+## 3.15.0-rc5
+
+- feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
+  `AtSignLogger` come through `package:at_client/at_client.dart`, so an app no
+  longer needs at_lookup or at_utils for them.
+
 ## 3.15.0-rc4
 
+- fix: after an upgrade from 3.14.0, sync no longer stops for good, a restart
+  no longer skips the notifications sent while the client was not running, and
+  a `local:` record put back through the `AtKey` that read it can still be
+  read. A device a 3.15.0 prerelease left in that state recovers, except for an
+  app's own `local:` value shaped like ciphertext (base64 of a multiple of 16
+  bytes), which the app has to write again.
+- fix: after an upgrade from 3.14.0, writes not yet synced reach the atServer
+  once the app opens a store in the directory their queue was left in: as it
+  switches back to the other atSign when atSigns have separate directories,
+  or at once when the app had called `Hive.init` itself.
+- fix: after an upgrade from 3.14.0, `Atsign.open` refused by the atServer on
+  a device that has synced returns a client in the refused state rather than
+  throwing.
+- fix: a client built with an `AtChops` and no key source, as
+  at_onboarding_cli 1.x builds one, uses the keys that `AtChops` holds again.
+- fix: an enrolled client starting offline with no grants in its keyfile
+  authorises from the grants at_onboarding_cli 1.x stored, as 3.14.0 did,
+  rather than refusing the write.
+- fix: writing a record again while its previous value is being pushed no
+  longer logs a warning.
+- note: a write that had not synced when an app moves from at_client 3.11 or
+  earlier is not pushed, and has to be written again.
+- fix: `readBy` and `wasMarkedReadByMe` count a read receipt this client sent
+  before a restart, so `markReadByMe` no longer sends it a second time.
 - fix: a content key that has been replaced is kept for 8 days
   (`CryptoConfig.supersededCkGrace`) before it is cleaned up, so a recipient
   can still open a notification sent under it just before the rotation.
-- `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to
-  `StdErrLoggingHandler` from `at_utils_io.dart` to keep them off stdout.
+- feat: a notification can be ephemeral (`NotificationParams.forUpdate(...,
+  ephemeral: true)`, `send(..., ephemeral: true)`): an atServer that supports
+  it delivers it without storing it, for at most 2 minutes. It cannot carry a
+  `ttr` or be cached at the recipient.
+- feat: where the atServer supports it, a notification carries its exact
+  expiry rather than a relative `ttln`, so it no longer drifts at each hop.
+- build: requires `at_commons` ^5.19.0.
+- build: requires `at_auth` ^4.0.0-rc4: `PendingEnrollment.awaitApproval` on
+  an expired or unknown enrollment fails at once, with the atServer's reason.
+- feat: `ensureReachable`'s result says whether this client can open what
+  peers seal to the namespace (`AtReachabilityResult.holdsPrivate`).
+- fix: an approver whose client has only just started still hands a new
+  enrollment every namespace key it may read, under a `*` grant too.
+- fix: a post-quantum enrollment granted only `*` can be approved; it was
+  refused for having no namespace to be sent its keys in.
+- fix: approving no longer throws when the approver may only read a namespace
+  it holds a key for; the new enrollment gets that key from another holder.
+- feat: `atClient.schemeOf(key)` tells how a value another atSign shared was
+  protected: legacy or post-quantum, and under which KEM.
+  `AtNotification.receivedUnder`, passed as the `cryptoProviderId` of
+  `NotificationService.send` or `AtClientBindings.notify` (new there), lets an
+  app answer in the scheme it was asked in. A class that overrides
+  `AtClientBindings.notify` must add the parameter.
+- feat: an `AtRpc` request can name its `cryptoProviderId`, and an `AtRpc`
+  server answers each request in the scheme it arrived in.
+- fix: an `AtRpc` reply to a requester that cannot open a post-quantum answer
+  goes out under the server's default scheme, and a reply that could not be
+  sent is retried rather than dropped.
+- fix: the namespace key a client publishes at start is for the namespace it
+  was built with, not one the app switches it to straight afterwards.
+- fix: concurrent `AtRpc` requests, from one client or several, no longer
+  share a request id, which could drop one or hand a caller another's response.
+- fix: an `AtKey` reused for several puts or notifications carries nothing
+  over from one to the next.
+- fix: a value an app encrypts itself and puts with `shouldEncrypt: false`
+  is stored as given and treated as plain: the put drops `isEncrypted`,
+  `ivNonce` and the other encryption fields an app sets on the key's metadata.
+- fix: a provider id set in a key's `appMetadata` no longer chooses the
+  provider for a notification the SDK encrypts; pass `cryptoProviderId`.
+- fix: a `noCommit` put that falls back to legacy encryption still asks the
+  atServer not to record a commit.
 
 ## 3.15.0-rc3
 

@@ -1,2 +1,15 @@
 test/data/
 
+# NOTE pub reads this file instead of .gitignore in this directory, so every
+# .gitignore rule is repeated here.
+.dart_tool/
+.packages
+build/
+lib/src/config/config_util.dart
+/.vscode/
+/lib/config/
+/lib/src/config_utils/
+**/storage/
+test/*.atKeys
+/*.atKeys
+/*.atKeys.*

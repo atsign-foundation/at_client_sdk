@@ -1,0 +1,24 @@
+name: upgrade_scenario
+publish_to: none
+description: >-
+  What the upgrade check asks a client to write and to report, written once
+  against the API surface every at_client it covers has.
+version: 1.0.0
+
+# Deliberately NOT a workspace member: `packages/at_client` is in the root
+# `workspace:` list, so every member resolves at_client by path — and each
+# released arm has to resolve the version pub.dev ships.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # The floor is the oldest released arm, so this package cannot compile
+  # against anything that version lacks.
+  at_client: ">=3.14.0 <4.0.0"
+  at_commons: ">=5.5.0 <6.0.0"
+  pq_matrix_scenario:
+    path: ../../pq_matrix/scenario
+
+dev_dependencies:
+  lints: ^6.0.0

@@ -47,7 +47,18 @@ class AtReachabilityResult {
   /// What threw, for [AtReachability.failed]; null otherwise.
   final Object? error;
 
-  const AtReachabilityResult(this.outcome, {this.error});
+  /// Whether this client holds the private half of every key the namespace
+  /// offers peers to seal to, and so can open what a peer seals there now.
+  ///
+  /// Checked for both reachable outcomes and false for every other. False on a
+  /// reachable namespace means peers can seal to it and this client cannot
+  /// open what they seal: another enrollment published the key and its
+  /// private has not reached this one. Also false when the check itself could
+  /// not be made, which never changes [outcome].
+  final bool holdsPrivate;
+
+  const AtReachabilityResult(this.outcome,
+      {this.error, this.holdsPrivate = false});
 
   /// Whether a peer can seal to this namespace now.
   ///
@@ -58,6 +69,7 @@ class AtReachabilityResult {
       outcome == AtReachability.published;
 
   @override
-  String toString() =>
-      'AtReachabilityResult(${outcome.name}${error == null ? '' : ', $error'})';
+  String toString() => 'AtReachabilityResult(${outcome.name}'
+      '${isReachable ? ', holdsPrivate: $holdsPrivate' : ''}'
+      '${error == null ? '' : ', $error'})';
 }

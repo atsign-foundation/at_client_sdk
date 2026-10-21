@@ -109,8 +109,8 @@ MockLocalSecondary stubApproverKeys(AtClient atClient,
 
 /// Stubs [localSecondary] to answer [atSign]'s encryption keypair.
 ///
-/// This is how a client resolves that keypair: `LocalSecondary` consults an
-/// injected `AtChops`, then the client's key source, then the keystore, and a
+/// This is how a client resolves that keypair: `LocalSecondary` consults the
+/// client's key source, then the keystore, then an injected `AtChops`, and a
 /// mock standing in for it answers directly. Stubbing an `AtChops` on the
 /// client instead reaches the same material through the deprecated door, and
 /// leaves the paths that read it through the local secondary unexercised.

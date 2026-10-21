@@ -8,7 +8,6 @@ import 'package:at_onboarding_cli/src/util/api_call_status.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_onboarding_cli/src/util/register_api_result.dart';
 import 'package:at_onboarding_cli/src/util/register_api_task.dart';
-import 'package:at_utils/at_logger.dart';
 
 import '../util/onboarding_util.dart';
 import '../util/registrar_api_constants.dart';

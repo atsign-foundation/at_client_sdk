@@ -332,6 +332,20 @@ void main() {
     test('an unimplemented algorithm states no key length either', () {
       expect(SecretSharingAlgos.publicKeyLengthFor('kyber-1024-v9'), isNull);
     });
+
+    test('every algorithm with a KEM has a seed length no other one shares',
+        () {
+      final byLength = <int, String>{};
+      for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+        final length = SecretSharingAlgos.kemFor(keyAlgo)!.newSeed().length;
+        expect(byLength[length], isNull,
+            reason: '$keyAlgo and ${byLength[length]} both take $length-byte '
+                'seeds, so a seed filed with nothing published to name its '
+                'KEM would be labelled by guesswork');
+        byLength[length] = keyAlgo;
+        expect(SecretSharingAlgos.keyAlgoForSeedLength(length), keyAlgo);
+      }
+    });
   });
 
   group('the crypto config registers a conveyance provider per KEM', () {
@@ -407,6 +421,13 @@ class _FixedRing implements NskeyKeyRing {
       nskeyKid == _advertised.nskeyKid
           ? NskeyDecapsulationKey(_secretKey)
           : null;
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      nskeyKid == _advertised.nskeyKid
+          ? _advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
+          : null;
 }
 
 /// A ring serving one advertisement carrying MORE THAN ONE key, plus the
@@ -428,4 +449,11 @@ class _WidenedRing implements NskeyKeyRing {
     final secret = _privates[nskeyKid];
     return secret == null ? null : NskeyDecapsulationKey(secret);
   }
+
+  @override
+  Future<PackageKey?> heldPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      _privates.containsKey(nskeyKid)
+          ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
+          : null;
 }

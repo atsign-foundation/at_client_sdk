@@ -45,13 +45,22 @@ class PutRequestTransformer
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys.
     // NOTE: a `local:` key is excluded — it never leaves the device, so there
-    // is nothing for a peer to decrypt, and the keystore encrypts it at rest.
+    // is nothing for a peer to decrypt. It is stored as given, protected at
+    // rest only as far as the storage backend protects it.
     if (!_isPublicKey(metadata) && !atKey.isLocal && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
           AppMetadata(providerId: _cryptoProviderIdFor(options, atKey));
       await _encryptData(updateVerbBuilder);
     } else {
+      // NOTE: the value is stored as given, encoded below only if it has a
+      // newline. A key read back from a stored record carries that record's
+      // `isEncrypted` and `encoding`; only a caller declaring
+      // [PutRequestOptions.alreadyEncrypted] sealed the value itself.
+      if (!options.alreadyEncrypted) {
+        metadata.isEncrypted = false;
+        metadata.encoding = null;
+      }
       // Sign the data for public keys
       if (_isPublicKey(metadata)) {
         _signPublicData(updateVerbBuilder, encryptionPrivateKey);

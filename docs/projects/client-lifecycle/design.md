@@ -32,11 +32,13 @@ an enrolled client of one atSign in one process. `Atsign.authenticatesAs` is
 the client-less check ruling 2 allowed for, added because six pack tests
 assert exactly that. `AtClientManager.setCurrentAtSign` and `fromAuthSession`
 are deprecated, removed in 4.0, now that the live packs' fixtures are on
-`open`. The `npt_flutter` port is built on sshnoports branch
-`gkc-client-lifecycle-port` (not pushed): acceptance item 1 measures no
+`open`. The `npt_flutter` port was built on sshnoports branch
+`gkc-client-lifecycle-port`, where acceptance item 1 measured no
 `package:at_auth` import under its `lib/` and no `at_auth` dependency in its
-pubspec, its analyzer reports no error and only warnings trunk already
-carried, and its 359 tests pass. The port found that the keychain store
+pubspec, its analyzer reported no error and only warnings trunk already
+carried, and its 359 tests passed. It merged to NoPorts trunk on 2026-10-03
+(noports#2952), and on 2026-10-09 NoPorts trunk still met item 1: at_auth only
+as a transitive dependency, and no analyzer error. The port found that the keychain store
 reported an atSign it did not hold as unreadable rather than absent, which
 refused every first enrollment on a fresh keychain; fixed in
 at_client_flutter. Acceptance item 2 was measured on 2026-09-13: against this
@@ -63,11 +65,11 @@ communications leg of the platform bundle
 day: the verbs take `lookUps:`, every connection a client opens comes from
 it, and the four live packs were re-run green at that tip (functional 200,
 e2e 52 and 21, onboarding-CLI 21, proxy 4), the proxy pack being the live
-proof of `proxyLookUps()`. The work is a
+proof of `proxyLookUps()`. The work was a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
-gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
-NoPorts `npt_flutter` port. It is built on `gkc-client-lifecycle`, cut from
+gated at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
+NoPorts `npt_flutter` port; the row left the table once the work was done. It is built on `gkc-client-lifecycle`, cut from
 `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12 (ruling 7,
 amended); that branch merged to trunk the same day as PR #2229, and the
 lifecycle branch was rebased onto trunk. It supersedes families B, C and D
@@ -234,7 +236,8 @@ and the manager's adopt; `authenticate()` returns true only for the online
 outcome. The other ten members and the live-object getters go. Seven
 repositories migrate by dependency bump; `CLIBase` moves onto `open` directly.
 
-**Ruling 7, where it lands.** This directory, a P0 row in the PQ table, and
+**Ruling 7, where it lands.** This directory, a P0 row in the PQ table until
+the work was done, and
 the branch `gkc-client-lifecycle`: cut from `gkc-test-pack-speedup` on gkc's
 instruction and rebased onto trunk once that branch merged (the ledger has
 the amendment). Acceptance is in [section 6](#6-acceptance).
@@ -472,11 +475,14 @@ answers it differently: the types those families annotate are removed with
 it, so there is nothing to hold and no caller to migrate one field at a
 time. The plan's rows for B, C and D point here. Its own work closed on
 2026-09-13: every consumer moved, `LocalSecondary` reads its keys from the
-key source and the keystore, and family F's seven fields stay deprecated
+key source and the keystore, then an injected `AtChops` as the last tier
+(restored 2026-10-06 for at_onboarding_cli 1.x, which builds a client from one
+and files its keys only afterwards), and family F's seven fields stay deprecated
 with a legacy writer and two readers as their replacement. What the plan
 still lists is the majors' removals, a P1 row blocked on them.
 
-The PQ table carries this as a P0 row because it is on D1's critical path.
+The PQ table carried this as a P0 row, because it was on D1's critical path,
+until the work was done.
 The motivation is PQ conveyance: an approval issued through at_auth alone
 conveys the legacy keys and nothing else, which is what NoPorts does today.
 
@@ -579,7 +585,7 @@ which requires the connection):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`), the file-stream path and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
+| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
 | at_client `notification_service_impl.dart`             | the monitor's connection                                                             | authenticator from `AtChops`, the preference's TLS fields                   |
 | at_client `atsign_lifecycle.dart` (`enroll`)           | the unauthenticated submission                                                       | none: `authenticator: null`                                                 |
 | at_client `authenticated_lookup.dart`                  | `open`'s probe and `authenticatesAs`                                                 | authenticator from the keys                                                 |
@@ -606,8 +612,7 @@ given, with a client built without one as the control.
 
 Not built through `withSecureSocket`, and not this leg: at_lookup's
 `CacheableSecondaryAddressFinder` (a raw TLS socket to the atDirectory, the
-`SecondaryAddressFinder` interface being the injection point), at_client's
-`StreamNotificationHandler` (the legacy file stream, a raw socket), and
+`SecondaryAddressFinder` interface being the injection point), and
 at_lookup's `MonitorClient` (exported, no caller in this repository). The WASM
 design's transport section owns those.
 
@@ -654,8 +659,8 @@ final client = await Atsign('@alice').open(
     lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = certs));
 ```
 
-and the client holds it: `buildRemoteSecondary`, sync's `remoteSecondaryFor`,
-the file-stream path and the re-derive after a retrofit all call
+and the client holds it: `buildRemoteSecondary`, sync's `remoteSecondaryFor`
+and the re-derive after a retrofit all call
 `client.lookUps(...)` instead of `AtLookUp.withSecureSocket(...)`, and the
 monitor's connection comes through `NotificationServiceImpl.create(lookUps:)`,
 the way that service takes `connection`: it holds the client as its

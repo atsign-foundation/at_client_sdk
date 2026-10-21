@@ -22,10 +22,21 @@ void main(List<String> args) async {
       namespace: 'wavi',
       storage: AtSignPreference.getAliceStorage(atSign, enrollmentId));
 
-  await for (final request in client.enrollments.requests) {
+  await for (final announced in client.enrollments.requests) {
+    final request = await client.enrollments.fetch(announced.enrollmentId!);
+    if (request == null) {
+      print('enrollment ${announced.enrollmentId} not found');
+      continue;
+    }
+    final Duration? expiry = request.apkamKeysExpiryDuration;
+    final String asked = expiry == null
+        ? 'an expiry the atServer did not report'
+        : expiry <= Duration.zero
+            ? 'no expiry'
+            : 'keys that expire after $expiry';
     print('Approve enrollment ${request.enrollmentId} from '
         '${request.appName} on ${request.deviceName} for '
-        '${request.namespace}? (yes/no)');
+        '${request.namespace}, asking for $asked? (yes/no)');
     if (stdin.readLineSync() == 'yes') {
       await client.enrollments.approve(request.enrollmentId!);
       print('approved ${request.enrollmentId}');

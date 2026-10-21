@@ -14,6 +14,8 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
+  /// - Calls with the same [regex] and [shouldDecrypt] share one subscription;
+  /// a call with the same [regex] and the other [shouldDecrypt] gets its own.
   /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
@@ -89,6 +91,10 @@ abstract class NotificationService {
   ///
   /// Exactly one of [idAndNamespace] and the deprecated [namespace] must be
   /// given; supplying both, or neither, throws [ArgumentError].
+  ///
+  /// An [ephemeral] notification is persisted by no atServer that supports it,
+  /// and lives at most two minutes whatever [expiration] says; it cannot be
+  /// combined with [cacheAtRecipient], which persists a copy at the recipient.
   Future<String> send({
     required Atsign to,
     String? idAndNamespace,
@@ -104,6 +110,7 @@ abstract class NotificationService {
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     DateTime? recipientCacheExpiration,
+    bool ephemeral = false,
   });
 
   /// calls [subscribe] with regex constructed from the [namespace]
@@ -193,14 +200,6 @@ abstract class NotificationService {
   ///   var notificationService = AtClientManager.getInstance().notificationService;
   ///   await notificationService.notify(NotificationParams.forDelete(key));
   ///```
-  ///4. To notify a text message to @bob
-  ///   forText notifications are case sensitive
-  ///   `await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));`
-  ///
-  ///```dart
-  ///   var notificationService = AtClientManager.getInstance().notificationService;
-  ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
-  ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
@@ -267,6 +266,7 @@ class NotificationParams {
   String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
   String? _cryptoProviderId;
+  bool _ephemeral = false;
 
   String get id => _id;
 
@@ -291,6 +291,9 @@ class NotificationParams {
 
   String? get cryptoProviderId => _cryptoProviderId;
 
+  /// Whether no atServer that supports it persists the notification.
+  bool get ephemeral => _ephemeral;
+
   /// Returns [NotificationParams] to send an update notification.
   ///
   /// Optionally accepts the following
@@ -305,6 +308,10 @@ class NotificationParams {
   ///
   /// * notificationExpiry: Refers to the amount of time the notification is
   /// available in the KeyStore. Beyond which the notification is removed from the KeyStore.
+  ///
+  /// * ephemeral: no atServer that supports it persists the notification, and
+  /// it lives at most two minutes whatever [notificationExpiry] says. It cannot
+  /// be combined with a ttr or ccd on [atKey].
   static NotificationParams forUpdate(AtKey atKey,
       {String? value,
       PriorityEnum priority = PriorityEnum.low,
@@ -312,12 +319,14 @@ class NotificationParams {
       int latestN = 1,
       String notifier = AtConstants.system,
       Duration? notificationExpiry,
-      String? cryptoProviderId}) {
+      String? cryptoProviderId,
+      bool ephemeral = false}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
+      .._ephemeral = ephemeral
       .._messageType = MessageTypeEnum.key
       .._priority = priority
       .._strategy = strategy
@@ -337,10 +346,9 @@ class NotificationParams {
       .._cryptoProviderId = cryptoProviderId;
   }
 
-  /// Returns [NotificationParams] to send a text message to another atSign.
-  /// forText notifications are case-sensitive
-  /// platform level lower case enforcement will not apply to forText notifications
-  @Deprecated('No longer supported')
+  /// Returns [NotificationParams] to send a text message to another atSign,
+  /// which atServers refuse with AT0003; send a key notification instead.
+  @Deprecated('atServers refuse text notifications; use forUpdate')
   static NotificationParams forText(String text, String whomToNotify,
       {bool shouldEncrypt = false, String? cryptoProviderId}) {
     var atKey = AtKey()

@@ -133,6 +133,49 @@ void main() {
     expect(received.metadata?.appMetadata?.additional?['ckKid'], ckKid);
   });
 
+  test('bob tells how alice shared each value with him, down to the KEM',
+      () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+
+    AtKey sharedWithBob(String name) => AtKey()
+      ..key = name
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    final sealedPq = uniqueKey('schemepq');
+    final sealedLegacy = uniqueKey('schemelegacy');
+    expect(await aliceSide.client.put(sharedWithBob(sealedPq), 'post-quantum'),
+        true);
+    expect(
+        await aliceSide.client.put(sharedWithBob(sealedLegacy), 'legacy',
+            putRequestOptions: PutRequestOptions()
+              ..cryptoProviderId = legacyCryptoProviderId),
+        true);
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+    await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
+
+    // NOTE: the keys as getAtKeys hands them over, so the scheme is read from
+    // the records themselves rather than from what this test wrote.
+    final listed = await bobSide.client.getAtKeys(sharedBy: alice);
+    AtKey listedAs(String name) =>
+        listed.singleWhere((k) => k.toString().contains(name));
+
+    final pq = await bobSide.client.schemeOf(listedAs(sealedPq));
+    expect(pq.providerId, symmetricAesGcmCryptoProviderId);
+    expect(pq.isPostQuantum, isTrue);
+    final advertised = await bobSide.ring.currentPublic(bob, namespace);
+    expect(advertised!.keys.map((k) => k.alg), contains(pq.keyAlgorithm),
+        reason: 'the KEM is read off the conveyance alice sealed to bob, so '
+            'it is one bob advertises; null here means it was never read');
+    expect(pq.suite, SecretSharingAlgos.suiteForKeyAlgo(pq.keyAlgorithm!));
+
+    final legacy = await bobSide.client.schemeOf(listedAs(sealedLegacy));
+    expect(legacy, const ReceivedScheme(providerId: legacyCryptoProviderId),
+        reason: 'the control: the same two atSigns and namespace, with the '
+            'sender choosing legacy, read back as legacy');
+  });
+
   test(
       'a restarted sender resumes the key it shares, and reads what it '
       'shared, from the sibling copy', () async {

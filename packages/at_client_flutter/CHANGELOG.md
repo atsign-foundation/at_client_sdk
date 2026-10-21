@@ -1,8 +1,42 @@
 # CHANGELOG
 
-## 2.0.0-rc3
+## 2.0.0-rc7
 
 - chore(deps): at_utils ^4.0.0-rc1
+
+## 2.0.0-rc6
+
+- feat: a dialog given no storage opens Hive in the app's support directory,
+  or under `preference.hiveStoragePath` while that is set. An app that kept its
+  store anywhere else should pass it as `storage:` before at_client 4.0.
+- fix: an app whose preference sets `isLocalStoreRequired` false must pass
+  `storage:`, as at_client now refuses a client with no local storage;
+  `ApkamActivationDialog` refuses such an app when it opens, before any
+  enrollment request goes out.
+- build: requires `at_client` ^3.15.0-rc7.
+
+## 2.0.0-rc5
+
+- fix: keychain writes made at the same moment no longer lose another
+  atSign's keys, and `update` no longer fails or brings back an atSign
+  removed meanwhile.
+
+## 2.0.0-rc4
+
+- fix: an atSign that an app built on at_client_mobile saved to the keychain
+  signs in again, instead of failing with "PKAM mode requires
+  defaultEncryptionPrivateKey".
+
+## 2.0.0-rc3
+
+- build: requires `at_client` ^3.15.0-rc5 and `at_auth` ^4.0.0-rc4, for their
+  fixes to upgrading from at_client 3.14.0.
+- feat: `AtSignServerCheck`, `AtSignServerState`, `checkAtSignServer` and
+  `AtSignLogger` come through this package, so an app no longer needs at_lookup
+  or at_utils for them.
+- fix: `ApkamActivationDialog` fails at once for an expired or unknown
+  enrollment, rather than after its whole retry budget.
+- fix: the package no longer includes Xcode logs from the invitations example.
 
 ## 2.0.0-rc2
 

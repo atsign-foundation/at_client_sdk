@@ -49,7 +49,10 @@ Future<String> decryptStringFromBase64(
     plainBytes = algorithm is SymmetricEncryptionAlgorithm<Uint8List, Uint8List>
         ? await algorithm.decrypt(cipherBytes, iv: iv!)
         : await algorithm.decrypt(cipherBytes);
-  } on Exception catch (e) {
+  } catch (e) {
+    // NOTE: the cipher reports input it cannot use, such as a block sealed to
+    // another RSA key, as an ArgumentError.
+    if (e is! Exception && e is! ArgumentError) rethrow;
     throw AtDecryptionException(e.toString())
       ..stack(AtChainedException(Intent.decryptData,
           ExceptionScenario.decryptionFailed, 'Failed to decrypt $e'));
@@ -60,8 +63,8 @@ Future<String> decryptStringFromBase64(
 /// Unwraps with the atSign's own RSA private key, which is the only half RSA
 /// decryption reads.
 ///
-/// `LocalSecondary` resolves that key across every tier the client has — an
-/// injected `AtChops`, then its key source, then the keystore — so this works
+/// `LocalSecondary` resolves that key across every tier the client has — its
+/// key source, then the keystore, then an injected `AtChops` — so this works
 /// for a client built either way. The public half is deliberately not
 /// fetched: asking for material the operation does not use would refuse a
 /// client that holds a private key and no public one, which is a shape the

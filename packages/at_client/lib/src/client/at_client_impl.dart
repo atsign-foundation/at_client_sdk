@@ -23,6 +23,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -36,7 +37,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -45,7 +45,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/hive_at_client_storage.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -54,10 +54,9 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
-import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/stream/stream_notification_handler.dart';
+import 'package:at_client/src/stream/stream_verb_retired.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
@@ -69,7 +68,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
-import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
 /// A defect met while stopping a client, paired with the stack of where it was
@@ -117,20 +115,6 @@ class AtClientImpl implements AtClient {
   AtKeysIo? _atKeysIo;
 
   EncryptionService? _encryptionService;
-
-  @experimental
-  AtTelemetryService? _telemetry;
-
-  @override
-  @experimental
-  set telemetry(AtTelemetryService? telemetryService) {
-    _telemetry = telemetryService;
-    _cascadeSetTelemetryService();
-  }
-
-  @override
-  @experimental
-  AtTelemetryService? get telemetry => _telemetry;
 
   @override
   @Deprecated(
@@ -214,9 +198,12 @@ class AtClientImpl implements AtClient {
       // enrollment published a moment ago is absent locally until sync catches
       // up, and reading that absence as a cold start publishes a second key
       // over the first.
-      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
-          null) {
-        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      final published =
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      if (published != null) {
+        return AtReachabilityResult(AtReachability.alreadyReachable,
+            holdsPrivate:
+                await _holdsPrivates(bootstrap, atSign, namespace, published));
       }
 
       if (_preference?.seedNamespaceKeys != true) {
@@ -232,7 +219,10 @@ class AtClientImpl implements AtClient {
       // both see their own id, and both mint.
       await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
-      return const AtReachabilityResult(AtReachability.published);
+      // NOTE: checked rather than assumed — the mint adopts, rather than
+      // replaces, a key a sibling enrollment published after the read above.
+      return AtReachabilityResult(AtReachability.published,
+          holdsPrivate: await _holdsPrivates(bootstrap, atSign, namespace));
     } catch (e) {
       if (e is StoppedException) {
         _logger.warning('Stopped making $atSign reachable for $namespace: the '
@@ -241,6 +231,27 @@ class AtClientImpl implements AtClient {
         _logger.warning('Could not make $atSign reachable for $namespace: $e');
       }
       return AtReachabilityResult(AtReachability.failed, error: e);
+    }
+  }
+
+  /// Whether this client holds the privates [published] offers, re-reading the
+  /// advertisement when none is given.
+  ///
+  /// Answers false rather than throwing: the namespace is already reachable by
+  /// now, and a failure to tell must not report it as failed.
+  Future<bool> _holdsPrivates(
+      PqClientBootstrap bootstrap, String atSign, String namespace,
+      [NskeyAdvertisement? published]) async {
+    try {
+      final advertisement = published ??
+          await bootstrap.ring.publishedAdvertisement(atSign, namespace);
+      return advertisement != null &&
+          await bootstrap.seeding
+              .holdsPrivatesFor(atSign, namespace, advertisement);
+    } catch (e) {
+      _logger.warning('Could not tell whether this client holds the private '
+          'for $atSign:$namespace, so it reports that it does not: $e');
+      return false;
     }
   }
 
@@ -513,6 +524,16 @@ class AtClientImpl implements AtClient {
   static String instanceKey(String atSign, String? enrollmentId) =>
       enrollmentId == null ? atSign : '$atSign|$enrollmentId';
 
+  /// Whether a client of [atSign] other than [except] is filed here, under
+  /// its own credential or an enrollment, so that [create] may hand one back
+  /// rather than build one.
+  static bool holdsClientFor(String atSign, {AtClient? except}) {
+    final fixed = AtUtils.fixAtSign(atSign);
+    return atClientInstanceMap.entries.any((entry) =>
+        !identical(entry.value, except) &&
+        (entry.key == fixed || '${entry.key}'.startsWith('$fixed|')));
+  }
+
   /// The key [create] should look under, given what the caller named.
   ///
   /// A caller that names no enrollment usually means *this atSign's client*
@@ -704,7 +725,8 @@ class AtClientImpl implements AtClient {
   ///
   /// Two mismatches are **refused** rather than ignored: a [storage] the cached
   /// client does not hold, and a preference naming different rollout axes —
-  /// see [refuseChangedRolloutAxes]. A test or an app
+  /// see [refuseChangedRolloutAxes]. A client it would build with no local
+  /// storage is refused as [refuseWithoutStorage] says. A test or an app
   /// that needs a genuinely different client must not rely on passing
   /// different arguments here.
   ///
@@ -724,6 +746,8 @@ class AtClientImpl implements AtClient {
     AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
+    @Deprecated('Pass storage instead, such as InMemoryAtClientStorage from '
+        'package:at_client/memory.dart; removed in 4.0')
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     @Deprecated('replaced by atKeysIo, will be removed in the next release')
     AtChops? atChops,
@@ -827,7 +851,7 @@ class AtClientImpl implements AtClient {
         atClientImpl._isStopped = true;
         await atClientImpl._stopBackgroundProcesses();
         await atClientImpl._releaseStorage();
-        atClientImpl.localSecondary?.release();
+        await atClientImpl.localSecondary?.release();
         rethrow;
       }
     }
@@ -839,6 +863,43 @@ class AtClientImpl implements AtClient {
     final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
     atClientInstanceMap[filedKey] = atClientImpl;
     return atClientInstanceMap[filedKey];
+  }
+
+  /// Throws the [ArgumentError] a client built from these arguments throws,
+  /// so a caller can refuse before an irreversible step, such as a CRAM
+  /// activation or an enrollment request, rather than after it. Every client
+  /// keeps local storage: a [storage], a [localSecondaryKeyStore] whose queue
+  /// lives under `preference.hiveStoragePath`, or the default store under
+  /// that path.
+  static void refuseWithoutStorage(
+    String atSign,
+    AtClientPreference preference, {
+    AtClientStorage? storage,
+    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+  }) {
+    if (storage != null) return;
+    if (localSecondaryKeyStore != null) {
+      if (preference.hiveStoragePath != null) return;
+      throw ArgumentError(
+          'a client built on a bare keystore holds its sync queue under '
+              'preference.hiveStoragePath, and $atSign names none. Set it, '
+              'or pass a storage instead of the keystore',
+          'preference.hiveStoragePath');
+    }
+    if (!preference.isLocalStoreRequired) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage: InMemoryAtClientStorage, from '
+              'package:at_client/memory.dart, keeps nothing on disk',
+          'preference.isLocalStoreRequired');
+    }
+    if (preference.hiveStoragePath == null) {
+      throw ArgumentError(
+          'every client keeps local storage, and none was passed for '
+              '$atSign. Pass a storage, or set preference.hiveStoragePath '
+              'for the default Hive store',
+          'preference.hiveStoragePath');
+    }
   }
 
   AtClientImpl._(
@@ -856,6 +917,8 @@ class AtClientImpl implements AtClient {
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
+    refuseWithoutStorage(theAtSign, preference,
+        storage: storage, localSecondaryKeyStore: localSecondaryKeyStore);
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -871,12 +934,6 @@ class AtClientImpl implements AtClient {
           AtNetworkTimeouts.cap(preference.networkTimeout!);
     }
     _localSecondaryKeyStore = localSecondaryKeyStore;
-
-    if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
-      throw IllegalArgumentException(
-        'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false',
-      );
-    }
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
@@ -929,7 +986,7 @@ class AtClientImpl implements AtClient {
   /// atServer with: the process-wide finder when one is registered, else one
   /// of this client's own, either way remembering the answer in this
   /// client's storage so a start with the atDirectory unreachable still
-  /// finds the atServer. A client with no local storage remembers nothing.
+  /// finds the atServer.
   SecondaryAddressFinder get secondaryAddressFinder =>
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
           inner: () =>
@@ -952,6 +1009,10 @@ class AtClientImpl implements AtClient {
           });
 
   /// Whether this client's principal has ever been online over this storage.
+  ///
+  /// A store with no marker at all but a sync cursor was online under a
+  /// release that wrote no marker; it counts, and is marked as this
+  /// principal's.
   Future<bool> hasBeenOnline() async {
     final store = localSecondary?.keyStore;
     if (store == null) return false;
@@ -962,7 +1023,12 @@ class AtClientImpl implements AtClient {
           recorded['enrollmentId'] ==
               (enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
     } on KeyNotFoundException {
-      return false;
+      final cursors = await store.getKeys(
+          regex: '^local:lastreceivedservercommitid(\\..+)?'
+              '${RegExp.escape(_atSign)}\$');
+      if (await cursors.isEmpty) return false;
+      await _recordOnline();
+      return true;
     }
   }
 
@@ -983,63 +1049,56 @@ class AtClientImpl implements AtClient {
     // client whose AtChops was injected never builds one, and it must not
     // sign the preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
-    if (_preference!.isLocalStoreRequired) {
-      AtSyncQueue? syncQueue;
-      if (_localSecondaryKeyStore == null) {
-        final injected = _injectedStorage;
-        final AtClientStorage storage;
-        if (injected != null) {
-          storage = injected;
-        } else {
-          final storagePath = preference!.hiveStoragePath;
-          if (storagePath == null) {
-            throw Exception('Please set local storage path');
-          }
-          storage = HiveAtClientStorage(
-              atSign: _atSign, storagePath: storagePath, closedByClient: true);
-        }
-        await storage.attach(this);
-        _storage = storage;
-        syncQueue = storage.syncQueue;
+    AtSyncQueue? syncQueue;
+    if (_localSecondaryKeyStore == null) {
+      final injected = _injectedStorage;
+      final AtClientStorage storage;
+      if (injected != null) {
+        storage = injected;
+      } else {
+        storage = defaultStorageFor(_atSign, preference!.hiveStoragePath!);
       }
-
-      localSecondary = LocalSecondary(
-        this,
-        keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
-        syncQueue: syncQueue,
-        onEvent: emitDataEvent,
-      );
-      _atChops ??= await _createAtChops(_atSign);
-      _validateDefaultCryptoProvider();
-
-      // Wire the event-driven expiry timer to the data-events stream.
-      // Re-arms on every keystore mutation; first arm uses the current
-      // cache state (no-op when nothing has TTL).
-      _expirySub = dataEvents.listen((_) {
-        if (_expirySweepInFlight) return;
-        unawaited(_armExpiryTimer());
-      });
-      await _armExpiryTimer();
-
-      // Symmetric wire-up for the availability timer. SEED the
-      // already-fired set BEFORE arming the timer: every cached
-      // record whose `availableAt` is in the past at startup gets
-      // marked as already-emitted so the first sweep doesn't replay
-      // it. Without this, restarting the AtClient against an
-      // existing storage-dir would re-emit `DataUpdated` for every
-      // such record, which AtCollection forwards as
-      // CSubItemUpdated / CItemUpdated — making listeners see a
-      // fresh stream of "arrivals" when nothing has actually
-      // arrived. The semantic of `_onAvailableFire` is "fire when
-      // availableAt JUST CROSSED" — past crossings observed by an
-      // earlier process run shouldn't replay on a later one.
-      await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
-      _availableSub = dataEvents.listen((_) {
-        if (_availableSweepInFlight) return;
-        unawaited(_armAvailableTimer());
-      });
-      await _armAvailableTimer();
+      await storage.attach(this);
+      _storage = storage;
+      syncQueue = storage.syncQueue;
     }
+
+    localSecondary = LocalSecondary(
+      this,
+      keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
+      syncQueue: syncQueue,
+      onEvent: emitDataEvent,
+    );
+    _atChops ??= await _createAtChops(_atSign);
+    _validateDefaultCryptoProvider();
+
+    // Wire the event-driven expiry timer to the data-events stream.
+    // Re-arms on every keystore mutation; first arm uses the current
+    // cache state (no-op when nothing has TTL).
+    _expirySub = dataEvents.listen((_) {
+      if (_expirySweepInFlight) return;
+      unawaited(_armExpiryTimer());
+    });
+    await _armExpiryTimer();
+
+    // Symmetric wire-up for the availability timer. SEED the
+    // already-fired set BEFORE arming the timer: every cached
+    // record whose `availableAt` is in the past at startup gets
+    // marked as already-emitted so the first sweep doesn't replay
+    // it. Without this, restarting the AtClient against an
+    // existing storage-dir would re-emit `DataUpdated` for every
+    // such record, which AtCollection forwards as
+    // CSubItemUpdated / CItemUpdated — making listeners see a
+    // fresh stream of "arrivals" when nothing has actually
+    // arrived. The semantic of `_onAvailableFire` is "fire when
+    // availableAt JUST CROSSED" — past crossings observed by an
+    // earlier process run shouldn't replay on a later one.
+    await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
+    _availableSub = dataEvents.listen((_) {
+      if (_availableSweepInFlight) return;
+      unawaited(_armAvailableTimer());
+    });
+    await _armAvailableTimer();
 
     // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
@@ -1053,8 +1112,6 @@ class AtClientImpl implements AtClient {
     _encryptionService!.localSecondary = localSecondary;
 
     putRequestTransformer.atClient = this;
-
-    _cascadeSetTelemetryService();
 
     // NOTE: built before the crypto config adopts its era default — the
     // config's nskey providers read through the bootstrap's key ring, the same
@@ -1378,7 +1435,7 @@ class AtClientImpl implements AtClient {
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
-    localSecondary?.release();
+    await localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
@@ -1522,24 +1579,15 @@ class AtClientImpl implements AtClient {
     // No-op: the commit-log-free client has no commit log compaction job.
   }
 
-  void _cascadeSetTelemetryService() {
-    // if (telemetry != null) {
-    //   _encryptionService?.telemetry = telemetry;
-    //   _localSecondary?.telemetry = telemetry;
-    //   _remoteSecondary?.telemetry = telemetry;
-    // }
-  }
-
   @override
   LocalSecondary? getLocalSecondary() {
     return localSecondary;
   }
 
   @override
-  AtPersistenceBundle? get persistenceBundle {
-    final storage = _storage;
-    return storage is HiveAtClientStorage ? storage.bundle : null;
-  }
+  @Deprecated('Read the keystore from the AtClientStorage the client was '
+      'given; removed in 4.0')
+  AtPersistenceBundle? get persistenceBundle => defaultStorageBundle(_storage);
 
   @override
   RemoteSecondary? getRemoteSecondary() {
@@ -1631,23 +1679,7 @@ class AtClientImpl implements AtClient {
     bool isDedicated = false,
     DeleteRequestOptions? deleteRequestOptions,
   }) {
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
-    );
-    // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult = _delete(
-      atKey,
-      deleteRequestOptions: deleteRequestOptions,
-    );
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.delete complete', {
-        "key": atKey,
-        "_deleteResult": _deleteResult,
-      }),
-    );
-    return _deleteResult;
+    return _delete(atKey, deleteRequestOptions: deleteRequestOptions);
   }
 
   Future<bool> _delete(
@@ -1869,10 +1901,6 @@ class AtClientImpl implements AtClient {
     bool isDedicated = false,
     PutRequestOptions? putRequestOptions,
   }) async {
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.put called', {"key": atKey}),
-    );
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -1894,10 +1922,6 @@ class AtClientImpl implements AtClient {
         putRequestOptions: putRequestOptions,
       );
     }
-    _telemetry?.controller.sink.add(
-      // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}),
-    );
     return atResponse.response.isNotEmpty;
   }
 
@@ -1956,9 +1980,6 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    // NOTE: refused before any work — on a client with no local store, doing
-    // the encryption first never reaches this answer, dying on the missing
-    // secondary instead.
     _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
         _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
     // Performs the put request validations.
@@ -1971,7 +1992,6 @@ class AtClientImpl implements AtClient {
       atKey.namespace ??= preference?.namespace;
     }
 
-    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey
@@ -2002,10 +2022,10 @@ class AtClientImpl implements AtClient {
     // starts — minting a content key means writing a conveyance record, and
     // that cannot happen once the transformer is mid-way through building a
     // verb builder. A `local:` record is excluded: it is never synced to the
-    // atServer, the keystore already encrypts it at rest, and every
-    // post-quantum provider declines a local key.
+    // atServer, and every post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
@@ -2024,8 +2044,12 @@ class AtClientImpl implements AtClient {
         if (!mayFallBackToLegacy(_preference)) rethrow;
         _logger.warning(
             'falling back to legacy encryption for ${atKey.key}: ${e.message}');
-        options = _copyOptionsForLegacyFallback(options);
+        options = copyOptionsForLegacyFallback(options);
       }
+    } else if (!atKey.metadata.isPublic &&
+        !options.shouldEncrypt &&
+        !options.alreadyEncrypted) {
+      atKey.metadata = metadataForEncryptedSend(atKey.metadata);
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -2446,11 +2470,18 @@ class AtClientImpl implements AtClient {
   /// [options] with the crypto provider pinned to legacy, leaving the caller's
   /// object untouched — it may be a shared instance, and one write's fallback
   /// must not become every later write's default.
-  static PutRequestOptions _copyOptionsForLegacyFallback(
+  ///
+  /// Every other field is carried: one left out is reset to its default on
+  /// exactly the writes that fell back. `legacy_fallback_options_test.dart`
+  /// fails until a field added to [PutRequestOptions] is placed.
+  @visibleForTesting
+  static PutRequestOptions copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
+        ..alreadyEncrypted = options.alreadyEncrypted
+        ..noCommit = options.noCommit
         ..cryptoProviderId = legacyCryptoProviderId;
 
   /// Fails fast at construction if the configured default provider id can't be
@@ -2470,59 +2501,16 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Obsolete, will be removed in v4")
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<AtStreamResponse> stream(
     String sharedWith,
     String filePath, {
     String? namespace,
-  }) async {
-    var streamResponse = AtStreamResponse();
-    var streamId = Uuid().v4();
-    var file = File(filePath);
-    var data = file.readAsBytesSync();
-    var fileName = basename(filePath);
-    fileName = base64.encode(utf8.encode(fileName));
-    var encryptedData = await _encryptionService!.encryptStream(
-      data,
-      sharedWith,
-    );
-    var command =
-        'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
-    _logger.finer('sending stream init:$command');
-    // NOTE: its own connection, because it hands the socket raw bytes and then
-    // closes it; built the same way as the client's, so it authenticates as
-    // the same enrollment with the same routine.
-    var remoteSecondary = buildRemoteSecondary();
-    var result = await remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer('ack message:$result');
-    if (result != null && result.startsWith('stream:ack')) {
-      result = result.replaceAll('stream:ack ', '');
-      result = result.trim();
-      _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      // `readResponse` rather than reaching through to the listener: this
-      // path has already written the bytes to the socket itself, so it needs
-      // the read half alone. The listener is not in at_lookup's barrel.
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
-          .readResponse(
-              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult.startsWith('stream:done')) {
-        await remoteSecondary.atLookUp.connection!.close();
-        streamResponse.status = AtStreamStatus.complete;
-      }
-    } else if (result != null && result.startsWith('error:')) {
-      result = result.replaceFirst(RegExp('^error:'), '');
-      streamResponse.errorCode = result.split('-')[0];
-      streamResponse.errorMessage = result.split('-')[1];
-      streamResponse.status = AtStreamStatus.error;
-    } else {
-      streamResponse.status = AtStreamStatus.noAck;
-    }
-    return streamResponse;
-  }
+  }) async =>
+      throw UnsupportedError(streamVerbRetired);
 
   @override
-  @Deprecated("Obsolete, will be removed in v4")
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<void> sendStreamAck(
     String streamId,
     String fileName,
@@ -2530,24 +2518,8 @@ class AtClientImpl implements AtClient {
     String senderAtSign,
     Function streamCompletionCallBack,
     Function streamReceiveCallBack,
-  ) async {
-    var handler = StreamNotificationHandler();
-    handler.remoteSecondary = getRemoteSecondary();
-    handler.localSecondary = getLocalSecondary();
-    handler.preference = _preference;
-    handler.encryptionService = _encryptionService;
-    var notification = AtStreamNotification()
-      ..streamId = streamId
-      ..fileName = fileName
-      ..currentAtSign = _atSign
-      ..senderAtSign = senderAtSign
-      ..fileLength = fileLength;
-    await handler.streamAck(
-      notification,
-      streamCompletionCallBack,
-      streamReceiveCallBack,
-    );
-  }
+  ) async =>
+      throw UnsupportedError(streamVerbRetired);
 
   @override
   Future<Map<String, FileTransferObject>> uploadFile(

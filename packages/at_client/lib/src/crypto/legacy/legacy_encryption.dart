@@ -340,7 +340,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
     }
 
     // The local secondary resolves this across every tier the client has:
-    // an injected AtChops, then its key source, then the keystore.
+    // its key source, then the keystore, then an injected AtChops.
     selfEncryptionKey =
         await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     if (selfEncryptionKey.isNullOrEmpty) {
@@ -352,12 +352,10 @@ class SelfKeyEncryption implements AtKeyEncryption {
 
     String encryptedValue;
     try {
-      InitialisationVector iV;
-      if (atKey.metadata.ivNonce != null) {
-        iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
-      } else {
-        iV = InitialisationVector.legacy();
-      }
+      // NOTE: AES here is CTR, so a (key, IV) pair must never encrypt twice;
+      // the IV is new for every value, whatever the key already carries.
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
+      final iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(selfEncryptionKey!));
       encryptedValue =
           await encryptStringToBase64(value, encryptionAlgo, iv: iV);
@@ -398,9 +396,10 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
     await super.encrypt(atKey, value);
     String encryptedValue;
     try {
-      InitialisationVector iV;
-      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
+      // NOTE: AES here is CTR, so a (key, IV) pair must never encrypt twice;
+      // the IV is new for every value, whatever the key already carries.
+      atKey.metadata.ivNonce = EncryptionUtil.generateIV();
+      final iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
       encryptedValue =
           await encryptStringToBase64(value, encryptionAlgo, iv: iV);

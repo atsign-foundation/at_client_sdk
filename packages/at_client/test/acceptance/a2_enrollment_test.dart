@@ -93,6 +93,26 @@ void main() {
           'authenticates PQ and decrypts',
         ],
       );
+      provenIn(
+        'packages/at_client/test/enrollment_conveyance_guard_test.dart',
+        'an enrollment granted only * is conveyed in the approver\'s namespace',
+        proves: 'where the envelopes go, through the real conveyance: every '
+            'envelope for an enrollment granted only * lands in the approver\'s '
+            'preference namespace. Its siblings show a namespace the grant '
+            'names comes first, an approver that may not write its own '
+            'namespace falls back to one it was granted, and a grant sharing '
+            'no namespace with the approver is refused before the approval',
+        clauses: ['An E2 granted only `*` is approved too'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approval conveys every key its approver holds that the new '
+            'enrollment may read, all of them under *',
+        proves: 'that such an approval completes against an atServer: an '
+            'enrollment granted only * is approved, opens its client, and is '
+            'conveyed the keys its approver holds',
+        clauses: ['An E2 granted only `*` is approved too'],
+      );
     });
 
     test('UC-A2.2 · second host using the same (copied) keyfile', () {

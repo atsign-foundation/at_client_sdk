@@ -5,6 +5,8 @@
 library;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
@@ -52,6 +54,9 @@ void main() {
             'the distinction: this call did the work, and a caller that wants '
             'to log or meter its first run can tell');
     expect(rescued.isReachable, isTrue);
+    expect(rescued.holdsPrivate, isTrue,
+        reason: 'checked against the advertisement the atServer now serves, '
+            'not assumed from having minted it');
     expect(
         await PublishedNskeyKeyRing(atClient).currentPublic(atSign, namespace),
         isNotNull,
@@ -64,5 +69,48 @@ void main() {
             'call this on every start without rotating its own namespace key '
             'each time');
     expect(again.isReachable, isTrue);
+    expect(again.holdsPrivate, isTrue,
+        reason: 'the client that minted the key holds its private, so it can '
+            'open what peers seal here');
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'a client of the same atSign that was never conveyed the private does '
+      'not hold it', () async {
+    // NOTE: one live client per principal; the one above has done its work.
+    await AtClientManager.getInstance().atClient.stop();
+    final loader = AtEncryptionKeysLoader.getInstance();
+    final other = '${namespace}other';
+    // NOTE: the demo keys hold this atSign's credential and none of the nskey
+    // privates the first client filed, which is what makes this the false arm.
+    final second = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.pqActive)
+          ..namespace = other,
+        namespace: other,
+        storage: TestUtils.storageForPrincipal(atSign, 'unheld'));
+    addTearDown(second.stop);
+    await loader.setEncryptionKeys(second, atSign);
+    await (second as AtClientImpl).pqBootstrap!.startupComplete;
+
+    final result = await second.ensureReachable(namespace);
+
+    expect(result.outcome, AtReachability.alreadyReachable,
+        reason: 'the first client published the key for this namespace');
+    expect(result.isReachable, isTrue);
+    expect(result.holdsPrivate, isFalse,
+        reason: 'the private was filed by the client that minted it and '
+            'conveyed to nobody, so peers can seal here and this client '
+            'cannot open what they seal: the arm the two assertions above '
+            'cannot show, and the one a constant true would hide');
+    final ring = PublishedNskeyKeyRing(second);
+    final offered = (await ring.publishedAdvertisement(atSign, namespace))!;
+    for (final entry in offered.keys) {
+      expect(await ring.heldPrivateHalf(atSign, namespace, entry.kid), isNull,
+          reason: 'the control: the advertisement reads and the private is '
+              'absent, so the false above is "not held" and not a check that '
+              'could not tell');
+    }
   }, timeout: Timeout(Duration(minutes: 3)));
 }

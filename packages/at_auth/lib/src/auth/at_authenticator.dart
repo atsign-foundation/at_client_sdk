@@ -9,6 +9,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:crypton/crypton.dart' show RSAPrivateKey;
 
 final _logger = AtSignLogger('AtAuthenticator');
 
@@ -185,9 +186,7 @@ AtAuthenticator authenticatorForPrivateKey(
       fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
       fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-      final signature = base64Encode(RsaSignatureAlgo.rsa2048().signBytesSync(
-          Uint8List.fromList(utf8.encode(fromResponse)),
-          secretKey: base64Decode(privateKey)));
+      final signature = _signRsaPkamChallenge(fromResponse, privateKey);
 
       final pkamResponse = await executor.sendSync((PkamVerbBuilder()
             ..signingAlgo = SigningAlgoType.rsa2048.name
@@ -282,7 +281,9 @@ Future<bool> _pkam(
           ..signingMode = AtSigningMode.pkam)
         .result;
   } else if (keyPair != null) {
-    signature = signPkamChallenge(keyPair, fromResponse);
+    signature = keyPair.algorithm == SigningAlgoType.rsa2048
+        ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
+        : signPkamChallenge(keyPair, fromResponse);
   } else {
     throw AtKeyNotFoundException(
         'AtKeys holds no authentication keypair for '
@@ -303,15 +304,12 @@ Future<bool> _pkam(
   throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
 }
 
-/// Ported from at_lookup's own `cramAuthenticate`, verbatim - including that it
-/// does NOT pass the challenge through [validatedFromChallenge], where PKAM
-/// does.
+/// Authenticates [atSign] by answering the atServer's `from:` challenge with
+/// the SHA-512 digest of [cramSecret] and the challenge.
 ///
-/// That asymmetry is preserved deliberately rather than resolved here: a port
-/// that quietly adds a check is a behaviour change hiding inside a refactor,
-/// and it would land in a commit nobody would think to review for it. Whether
-/// CRAM should validate the challenge too is a real question and a separate
-/// one; it wants its own change, with its own test.
+/// The challenge is digested as it arrives: unlike PKAM's, it does not pass
+/// through [validatedFromChallenge]. A refusal throws an
+/// [UnAuthenticatedException] naming [atSign] and the atServer's response.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,
@@ -339,14 +337,16 @@ Future<bool> _cram(
     _logger.info('cram auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException('Auth failed');
+  throw UnAuthenticatedException(
+      'Cram authentication failed for $atSign: $cramResponse');
 }
 
 /// Signs [challenge] as a PKAM proof with [keyPair], returning the base64 the
 /// `pkam:` verb carries.
 ///
 /// The algorithm comes from the key material rather than from a caller, so a
-/// key cannot be put through the wrong routine.
+/// key cannot be put through the wrong routine. An rsa2048 key must be 2048
+/// bits here; the authenticators also sign a `pkam:` with a 1024-bit one.
 String signPkamChallenge(
   ({SigningAlgoType algorithm, String publicKey, String privateKey}) keyPair,
   String challenge,
@@ -363,6 +363,31 @@ String signPkamChallenge(
       throw AtSigningException(
           'a PKAM challenge cannot be signed with ${keyPair.algorithm.name}: '
           'this build signs one with rsa2048 or mldsa65');
+  }
+}
+
+/// Base64 of [challenge] signed by [privateKey], a base64 PKCS#8 RSA private
+/// key, for a `pkam:` naming rsa2048.
+///
+/// Signs with a 1024-bit key as well as a 2048-bit one; [RsaSignatureAlgo]
+/// refuses every other size.
+String _signRsaPkamChallenge(String challenge, String privateKey) {
+  final data = Uint8List.fromList(utf8.encode(challenge));
+  final key = _rsaPrivateKeyOrNull(privateKey);
+  if (key != null && key.asPointyCastle.n?.bitLength == 1024) {
+    return base64Encode(key.createSHA256Signature(data));
+  }
+  return base64Encode(RsaSignatureAlgo.rsa2048()
+      .signBytesSync(data, secretKey: base64Decode(privateKey)));
+}
+
+/// Null when [base64Key] is not a readable RSA private key, which
+/// [RsaSignatureAlgo] then reports.
+RSAPrivateKey? _rsaPrivateKeyOrNull(String base64Key) {
+  try {
+    return RSAPrivateKey.fromString(base64Key);
+  } catch (_) {
+    return null;
   }
 }
 

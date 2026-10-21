@@ -1,49 +1,24 @@
 import 'dart:async' show Completer, unawaited;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_commons/at_commons.dart'
-    show AtKey, EnrollmentConstants, StoppedException;
-import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
+import 'package:at_client/src/client/server_mutex.dart';
+import 'package:at_commons/at_commons.dart' show AtKey, StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
 
-/// The window in which the winner of an election may still act.
-///
-/// The winner carries this into its critical section and refuses to publish
-/// once it is spent. The election bounds when enrollments attempt, not how long
-/// the winner takes, so a holder that overran the ttl would publish on top of
-/// the enrollment that legitimately won the next one.
-class MintLease {
-  /// When this lease stops being valid.
-  ///
-  /// Stamped from before the take was issued, never after: the atServer starts
-  /// the ttl when it stores the record, so a deadline taken from the send gives
-  /// up slightly early, while one taken from the reply would outlive the lock.
-  ///
-  /// Not a clock comparison between two machines — the client stamps and reads
-  /// this against its own clock throughout, and the atServer's ttl is the
-  /// separate, authoritative bound.
-  final DateTime expiresAt;
-
-  const MintLease(this.expiresAt);
-
-  /// Whether the lease has run out, so nothing further may be published under
-  /// it.
-  bool get isSpent => !DateTime.now().isBefore(expiresAt);
-}
-
 /// Serialises minting a key record between an atSign's own enrollments.
 ///
 /// The records this guards are mutable, so the interlock cannot be their own
-/// immutability: it is a separate short-ttl immutable self key whose creation
-/// the atServer refuses to repeat. Each record composes its own lock key and
-/// hands it here, ttl and all.
+/// immutability: it is a server mutex, a separate short-ttl immutable self key
+/// whose creation the atServer refuses to repeat. Each record composes its own
+/// lock key and hands it here, ttl and all.
 ///
-/// The atomicity is the atServer's alone, which is why [_take] writes
-/// remote-first: a local-first put would succeed on both enrollments, each
-/// believing it had won, and collide only at sync.
+/// The winner carries its [ServerMutexLease] into its critical section and
+/// refuses to publish once it is spent. The election bounds when enrollments
+/// attempt, not how long the winner takes, so a holder that overran the ttl
+/// would publish on top of the enrollment that legitimately won the next one.
 ///
 /// A lock is a protocol, not a guarantee — it narrows a window to the ttl, so
 /// every caller still reconciles what it holds against what is published rather
@@ -66,7 +41,7 @@ class MintLock {
 
   /// Runs [mint] holding [lockKey], and returns its result.
   ///
-  /// Returns null when the lock is already held, without waiting — so a caller
+  /// Returns null when the lock cannot be taken, without waiting — so a caller
   /// whose [mint] can itself return null should return something non-null from
   /// it, or the two answers become one.
   ///
@@ -84,7 +59,7 @@ class MintLock {
   /// idempotent, and rate-limiting it is what holding the lock for the full ttl
   /// is for; a caller that opts in must read what is published before writing.
   Future<T?> withLock<T>(
-      AtKey lockKey, Future<T> Function(MintLease lease) mint,
+      AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
       {bool ownLockIsNotContention = false}) async {
     // NOTE: declining rather than returning the winner's result keeps one
     // meaning for a null — "you did not mint".
@@ -108,17 +83,16 @@ class MintLock {
     final done = Completer<void>();
     _inFlight[inFlightKey] = done.future;
     try {
-      // NOTE: stamped before the request goes out — see [MintLease.expiresAt].
-      final leaseFrom = DateTime.now();
-      if (!await _take(lockKey,
-          ownLockIsNotContention: ownLockIsNotContention)) {
-        _logger.info('$lockKey is already held; re-reading rather than '
-            'waiting for it. Whether the holder is another enrollment or '
-            'this one from an earlier run was not established');
+      final ttl = Duration(milliseconds: ttlMillis);
+      final (lease, refused) = await _take(lockKey, ttl);
+      final held = lease ??
+          (ownLockIsNotContention ? await _ownLease(lockKey, ttl) : null);
+      if (held == null) {
+        _logger.info('Could not take $lockKey, so nothing is minted under it '
+            'this time: $refused');
         return null;
       }
-      return await mint(
-          MintLease(leaseFrom.add(Duration(milliseconds: ttlMillis))));
+      return await mint(held);
     } finally {
       // NOTE: released only once the mint has published, so a waiter that wakes
       // here re-reads an advertisement that is already on the atServer.
@@ -127,59 +101,47 @@ class MintLock {
     }
   }
 
-  /// This client's identity in a lock record.
-  ///
-  /// The enrollment is the grain the lock is about, so an enrollment meeting
-  /// its own token is not contention. A client with no enrollment id
-  /// authenticates as the owner, of which there is only ever one, so the
-  /// sentinel is equally distinct from any enrollment's id.
-  String get _holder =>
-      atClient.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId;
-
-  Future<bool> _take(AtKey lockKey,
-      {required bool ownLockIsNotContention}) async {
+  /// Takes [lockKey] for [ttl], and returns the lease, or else why it could
+  /// not be taken.
+  Future<(ServerMutexLease?, Object?)> _take(
+      AtKey lockKey, Duration ttl) async {
     try {
-      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
-        ..atKey = lockKey
-        ..value = _holder
-        // NOTE: a commit entry would sync the lock to every device for no gain;
-        // the interlock is the atServer refusing a second write to an immutable
-        // record, which not committing leaves untouched.
-        ..noCommit = true);
-      return true;
+      final lease = await atClient.tryAcquireServerMutex(lockKey, ttl: ttl);
+      return (lease, lease == null ? 'its record already exists' : null);
     } catch (e) {
-      if (e is StoppedException) rethrow;
-      // NOTE: the refusal of a second write is the contention signal, and any
-      // other failure to take the lock is equally a reason not to mint.
-      _logger.finer('Could not take $lockKey: $e');
-      if (!ownLockIsNotContention) return false;
-      return _isOwnLock(lockKey);
+      // NOTE: an Error is a mistake in the call, such as a ttl over the cap,
+      // not a reason the lock was unavailable.
+      if (e is StoppedException || e is Error) rethrow;
+      // NOTE: any failure to take the lock is as much a reason not to mint as
+      // the lock being held.
+      return (null, e);
     }
   }
 
-  /// Whether the lock that refused us is one this enrollment already holds.
+  /// A lease on the lock that refused us when this enrollment already holds
+  /// it, ending at the lock's expiry as this client's clock reads it or [ttl]
+  /// after the read, whichever is sooner; otherwise null. A client clock
+  /// behind the atServer's lets that lease outlast the lock by the difference.
   ///
   /// The winner never releases — the ttl does — so a client that mints and then
   /// re-enters within the cooldown loses the election to itself; the cooldown
   /// covers an ordinary restart. Proceeding is safe only because every caller
   /// reads what is published before minting, and a read that cannot say whose
-  /// lock it is answers false.
-  Future<bool> _isOwnLock(AtKey lockKey) async {
+  /// lock it is answers null.
+  Future<ServerMutexLease?> _ownLease(AtKey lockKey, Duration ttl) async {
+    final ServerMutexLease? lease;
     try {
-      final held = await atClient
-          .getRemoteSecondary()!
-          .executeCommand('llookup:${lockKey.toString()}\n', auth: true);
-      if (held == null || !held.startsWith('data:')) return false;
-      final value = held.replaceFirst('data:', '').trim();
-      if (value != _holder) return false;
-      _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
-          'its cooldown — proceeding rather than treating ourselves as a '
-          'loser');
-      return true;
+      lease = await atClient.ownServerMutexLease(lockKey, ttl: ttl);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      if (e is StoppedException || e is Error) rethrow;
       _logger.finer('Could not read $lockKey to check ownership: $e');
-      return false;
+      return null;
     }
+    if (lease != null) {
+      _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
+          'its cooldown — proceeding until it expires rather than treating '
+          'ourselves as a loser');
+    }
+    return lease;
   }
 }

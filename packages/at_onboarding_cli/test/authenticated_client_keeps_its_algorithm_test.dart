@@ -5,7 +5,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 
 import 'lifecycle_rig.dart';

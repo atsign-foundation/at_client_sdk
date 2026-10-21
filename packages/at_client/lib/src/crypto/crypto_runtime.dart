@@ -86,9 +86,16 @@ class CryptoRuntime {
   /// Throws if the answer cannot be established (an unreachable atServer is not
   /// the same as an unready recipient), and — like every other read of a peer's
   /// advertised key — if what came back cannot be verified as theirs.
-  Future<bool> isReadyFor(String atSign, String namespace) async {
-    final config = CryptoConfig.forClient(_atClient);
-    final provider = config.lookup(config.defaultProviderId);
+  Future<bool> isReadyFor(String atSign, String namespace) => isReadyUnder(
+      CryptoConfig.forClient(_atClient).defaultProviderId, atSign, namespace);
+
+  /// Whether a write to [atSign] in [namespace] can go out under [providerId],
+  /// asked as [isReadyFor] asks it of the default scheme. True for a scheme
+  /// with no precondition, and for a provider this client has not configured,
+  /// which the write itself reports.
+  Future<bool> isReadyUnder(
+      String providerId, String atSign, String namespace) async {
+    final provider = CryptoConfig.forClient(_atClient).lookup(providerId);
     if (provider is! ReportsReadiness) return true;
     return await (provider as ReportsReadiness)
         .isReadyFor(_context(), atSign, namespace);

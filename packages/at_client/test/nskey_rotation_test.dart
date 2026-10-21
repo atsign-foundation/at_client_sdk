@@ -16,7 +16,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
@@ -115,14 +114,26 @@ void main() {
         if (key == '_nskeylock') {
           if (lockHeld) {
             // What the atServer says to the loser of the race.
-            throw AtLookUpException(
-                'AT0023', 'Immutable records may not be updated');
+            throw IllegalStateException('Immutable records may not be updated');
           }
         } else if (key.startsWith('__nskey')) {
           trace.add('publish:${builder.atKey.namespace}');
           published.add(builder.value as String);
           advertised[builder.atKey.namespace!] = builder.value as String;
         }
+      }
+      if (builder is LLookupVerbBuilder && builder.operation == 'all') {
+        // A lock another enrollment holds, as llookup:all serves it.
+        return 'data:${jsonEncode({
+              'key': '${builder.atKey}',
+              'data': 'another-enrollment',
+              'metaData': {
+                'expiresAt': DateTime.now()
+                    .toUtc()
+                    .add(const Duration(minutes: 2))
+                    .toIso8601String()
+              }
+            })}';
       }
       return 'data:1';
     });
@@ -184,6 +195,39 @@ void main() {
         .wrapAndSignAndJsonEncode(advertisement.toPayload(),
             type: EnvelopeType.nskeyRing);
     return advertisement;
+  }
+
+  /// An enrollment service holding the caller's own record and `enroll-b`,
+  /// recording each revoke into the returned trace.
+  ({MockEnrollmentService service, List<String> order}) enrollmentService(
+      MockAtClient atClient,
+      {Map<String, dynamic>? grants,
+      List<String>? order,
+      Map<String, dynamic> callerGrants = const {
+        '*': 'rw',
+        '__manage': 'rw'
+      }}) {
+    final service = MockEnrollmentService();
+    final trace = order ?? <String>[];
+    when(() => atClient.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              // The caller's own record: the atServer always returns it, and
+              // it says whether this client may revoke at all.
+              Enrollment()
+                ..enrollmentId = 'enroll-a'
+                ..namespace = callerGrants,
+              Enrollment()
+                ..enrollmentId = 'enroll-b'
+                ..namespace = grants ?? {namespace: 'rw'}
+            ]);
+    when(() => service.revoke(any())).thenAnswer((inv) async {
+      trace.add(
+          'revoke:${(inv.positionalArguments[0] as EnrollmentRequestDecision).enrollmentId}');
+      return AtEnrollmentResponse('enroll-b', EnrollmentStatus.revoked);
+    });
+    return (service: service, order: trace);
   }
 
   group('the rotation lever', () {
@@ -849,39 +893,6 @@ void main() {
   });
 
   group('the revocation composition', () {
-    /// An enrollment service holding the caller's own record and `enroll-b`,
-    /// recording each revoke into the returned trace.
-    ({MockEnrollmentService service, List<String> order}) enrollmentService(
-        MockAtClient atClient,
-        {Map<String, dynamic>? grants,
-        List<String>? order,
-        Map<String, dynamic> callerGrants = const {
-          '*': 'rw',
-          '__manage': 'rw'
-        }}) {
-      final service = MockEnrollmentService();
-      final trace = order ?? <String>[];
-      when(() => atClient.enrollmentService).thenReturn(service);
-      when(() => service.fetchEnrollmentRequests(
-              enrollmentListParams: any(named: 'enrollmentListParams')))
-          .thenAnswer((_) async => [
-                // The caller's own record: the atServer always returns it, and
-                // it says whether this client may revoke at all.
-                Enrollment()
-                  ..enrollmentId = 'enroll-a'
-                  ..namespace = callerGrants,
-                Enrollment()
-                  ..enrollmentId = 'enroll-b'
-                  ..namespace = grants ?? {namespace: 'rw'}
-              ]);
-      when(() => service.revoke(any())).thenAnswer((inv) async {
-        trace.add(
-            'revoke:${(inv.positionalArguments[0] as EnrollmentRequestDecision).enrollmentId}');
-        return AtEnrollmentResponse('enroll-b', EnrollmentStatus.revoked);
-      });
-      return (service: service, order: trace);
-    }
-
     test('revokes before it rotates', () async {
       final c = client();
       final filer = await filing();
@@ -1015,6 +1026,54 @@ void main() {
               'client\'s OWN enrollment record, so the failure would surface '
               'as "no enrollment <id> to revoke" and send the caller looking '
               'for a wrong id');
+    });
+  });
+
+  group(
+      'Given enrollment E2 granted `app`, and @alice holding namespace keys '
+      'for `app` and `chat.app`', () {
+    const e2 = 'enroll-b';
+
+    test(
+        'when E1 revokes E2 without naming namespaces, then both keys rotate, '
+        'and E2 is excluded from each', () async {
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final app = await ring.mintAndPublish('app');
+      final chat = await ring.mintAndPublish('chat.app');
+      await ring.mintAndPublish('chatapp');
+      final s = sharing();
+      enrollmentService(c.client, grants: {'app': 'rw'});
+
+      final outcomes = await NskeyRotation(
+              atClient: c.client,
+              ring: ring,
+              privateFiling: filer,
+              sharing: s.sharing)
+          .revokeEnrollmentAndRotate(e2);
+
+      expect(outcomes.map((o) => o.namespace).toSet(), {'app', 'chat.app'},
+          reason: 'a grant on `app` covers `chat.app`, so E2 could hold the '
+              'key E1 holds there as well as the one named in its grant');
+      expect({
+        for (final o in outcomes) o.namespace: o.supersededKid
+      }, {
+        'app': app.nskeyKid,
+        'chat.app': chat.nskeyKid
+      }, reason: 'each rotation supersedes the generation E2 could hold');
+      for (final outcome in outcomes) {
+        expect(outcome.excluded, {e2},
+            reason: '${outcome.namespace} is rotated with E2 excluded, as the '
+                'namespace its grant names is');
+      }
+      expect(s.pushes.map((p) => p.$1.namespace).toSet(), {'app', 'chat.app'});
+      expect(s.pushes.map((p) => p.$2), everyElement({e2}),
+          reason: 'and the exclusion reaches the push of each successor');
+      expect(outcomes.map((o) => o.namespace), isNot(contains('chatapp')),
+          reason: 'the control: `chatapp` ends in `app` without the dot, so '
+              'the grant does not cover the key held there and it is not '
+              'rotated');
     });
   });
 }

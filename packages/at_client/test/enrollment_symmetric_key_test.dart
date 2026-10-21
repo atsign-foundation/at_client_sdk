@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show ApkamSigningKeys, EnvelopeType, signEnvelope;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// Collecting the `apkamSymmetricKey` an approver sealed to a new enrollment.
 ///
@@ -127,7 +132,12 @@ void main() {
     return lookUp;
   }
 
-  setUpAll(() => registerFallbackValue(''));
+  final logs = RecordedLogs();
+
+  setUpAll(() {
+    logs.installOn();
+    registerFallbackValue('');
+  });
 
   test('an envelope whose signer has no _apsk is skipped, not fatal', () async {
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
@@ -175,6 +185,131 @@ void main() {
             .toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('No conveyed apkamSymmetricKey arrived'))));
+  });
+
+  const approver = 'approver-enrollment';
+  const conveyed = 'the-apkam-symmetric-key';
+
+  /// [withKeyPackage]'s envelope sealed to the key package's real public half
+  /// for `myapp` under a body naming [approver] as its sender, and signed by
+  /// [signer].
+  Future<String> approverEnvelope({String signer = approver}) async {
+    final kem = XWingPureDartAlgo.instance;
+    final recipient = await kem
+        .keyPairFromSeed(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+    final info = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: approver,
+        fromKpid: 'kpid-approver',
+        toKpid: kpid,
+        appNamespace: 'myapp');
+    final sealed = await pqSeal(
+        kem,
+        recipient.publicKey,
+        Uint8List.fromList(utf8.encode(jsonEncode({
+          'kind': PairwiseSecretSharing.secretPayloadKind,
+          'name': enrollmentApkamSymmetricKeySecretName,
+          'value': conveyed,
+        }))),
+        info: info);
+    final pkam = pkamKeyPairFor(atSign, signer);
+    return jsonEncode(signEnvelope(
+      SecretEnvelope(
+        fromKpid: 'kpid-approver',
+        fromEnrollmentId: approver,
+        toKpid: kpid,
+        appNamespace: 'myapp',
+        suite: SecretSharingAlgos.xWingRfc9180,
+        kid: kpid,
+        sealed: base64Encode(sealed),
+      ).toJson(),
+      keys: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: pkam.atPublicKey.publicKey,
+            privateKey: pkam.atPrivateKey.privateKey)
+      ],
+      type: EnvelopeType.secretEnvelope,
+      enrollmentId: signer,
+    ).toJson());
+  }
+
+  /// A lookup whose scan finds [value] at [key] and whose `_apsk` lookup
+  /// answers with [signer]'s real public key.
+  MockAtLookUp serving(String key, String value, {String signer = approver}) {
+    final lookUp = MockAtLookUp();
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((inv) async {
+      final command = inv.positionalArguments[0] as String;
+      if (command.startsWith('scan')) return 'data:${jsonEncode([key])}';
+      if (command.contains('_apsk.$signer')) {
+        return 'data:${pkamKeyPairFor(atSign, signer).atPublicKey.publicKey}';
+      }
+      if (command.contains(key)) return 'data:$value';
+      return null;
+    });
+    return lookUp;
+  }
+
+  group('a genuinely sealed and signed envelope', () {
+    test('is collected where its approver addressed it', () async {
+      // NOTE: the positive control for every skip in this file, none of which
+      // otherwise shows that anything is ever collected.
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(seconds: 5),
+          pollInterval: const Duration(milliseconds: 50));
+      expect(
+          await resolve(
+                  withKeyPackage(),
+                  serving('msg.0.$kpid.__ssenv.myapp@alice',
+                      await approverEnvelope()))
+              .first,
+          conveyed);
+    });
+
+    test('is skipped when it sits under a namespace its approver did not sign',
+        () async {
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      await expectLater(
+          resolve(
+                  withKeyPackage(),
+                  serving('msg.0.$kpid.__ssenv.otherapp@alice',
+                      await approverEnvelope()))
+              .toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))));
+    });
+  });
+
+  group("Given an envelope C seals and signs whose body names A's enrollment",
+      () {
+    test('when B sweeps, then it is refused, by name', () async {
+      const signerC = 'other-enrollment';
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      logs.records.clear();
+
+      await expectLater(
+          resolve(
+                  withKeyPackage(),
+                  serving(key, await approverEnvelope(signer: signerC),
+                      signer: signerC))
+              .toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))),
+          reason: 'C signed it, and its body names $approver as the sender');
+      expect(
+          logs.at('WARNING').where((m) => m.contains(key)),
+          allOf(
+              isNotEmpty,
+              everyElement(contains('signer enrollment $signerC does not '
+                  'match claimed sender enrollment $approver'))),
+          reason: 'C sealed the body under the binding that names $approver, '
+              'so only the check of signer against sender refuses it');
+    });
   });
 
   test('AtKeys with no key package cannot be resolved at all', () async {

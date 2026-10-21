@@ -18,7 +18,8 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
-import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_client/src/secret_sharing/secret_store.dart'
+    show Secret, SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -49,19 +50,25 @@ class NskeySeeding {
   /// atSign's namespace key should be replaced.
   final NskeyRotationPolicy rotationPolicy;
 
+  // NOTE: read once, here. The startup that seeds runs unawaited, so a
+  // namespace an application sets on the client after building it would
+  // otherwise redirect the seed to wherever the app's own records go.
+  final String? _ownNamespace;
+
   NskeySeeding({
     required this.atClient,
     required this.ring,
     this.sharing,
     this.privateFiling,
-    this.rotationPolicy = neverRotateNskey,
-  });
+    this.rotationPolicy = rotateNskeyAfterOneYear,
+  }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
   /// The namespaces this client should hold a key for; see
   /// [authorisedNamespacesOf]. Empty when the enrollment record cannot be read.
   Future<Set<String>> authorisedNamespaces() async {
     try {
-      return await authorisedNamespacesOf(atClient);
+      return await authorisedNamespacesOf(atClient,
+          ownNamespace: _ownNamespace);
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.info('Could not read this enrollment to find its namespaces, so '
@@ -77,12 +84,34 @@ class NskeySeeding {
   /// Mints and publishes for every authorised namespace that has no key yet,
   /// then conveys each new private. Returns the namespaces this start published
   /// fresh material for — a cold-start mint, or a rotation a revocation owed.
+  ///
+  /// A namespace this enrollment may only read is skipped, since every step
+  /// here writes to it. One its grants let it write without naming it, such as
+  /// `chat.app` under a grant on `app`, is rotated where this client holds its
+  /// key and a revocation is owed there, and is otherwise left alone.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
 
+    final Map<String, dynamic>? grants;
+    try {
+      grants = await ownGrantsOf(atClient);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.info('Could not read this enrollment to find its namespaces, so '
+          'nothing is seeded this start: $e');
+      return const {};
+    }
+    final namespaces =
+        authorisedNamespacesIn(grants, ownNamespace: _ownNamespace);
+
     final minted = <String>{};
-    for (final namespace in await authorisedNamespaces()) {
+    final readOnly = <String>{};
+    for (final namespace in namespaces) {
+      if (!mayWriteIn(grants, namespace)) {
+        readOnly.add(namespace);
+        continue;
+      }
       try {
         // NOTE: before the seed, not after — a rotation mints every algorithm
         // this client is configured for, so seeding behind one would find
@@ -97,7 +126,44 @@ class NskeySeeding {
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
+    for (final namespace in await _writableHeld(grants, named: namespaces)) {
+      try {
+        if (await rotateIfRevoked(owner, namespace)) minted.add(namespace);
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        _logger.warning('Could not check $owner:$namespace for a revocation '
+            'it is owed this start: $e');
+      }
+    }
+    if (readOnly.isNotEmpty) {
+      _logger.info('Not minting or rotating the nskey for $owner in '
+          '${readOnly.join(', ')}: this enrollment may only read there, so '
+          'that is left to an enrollment that may write there');
+    }
     return minted;
+  }
+
+  /// The namespaces this client holds a key for and [grants] let it write,
+  /// other than those in [named]: `chat.app` under a grant on `app`.
+  ///
+  /// Empty for the atSign's own credential, whose start asks about no
+  /// revocation, and, logged, when the keyfile cannot be read.
+  Future<Set<String>> _writableHeld(Map<String, dynamic>? grants,
+      {required Set<String> named}) async {
+    final filing = privateFiling;
+    if (grants == null || filing == null) return const {};
+    try {
+      return (await filing.readAllWhere((namespace) =>
+              !named.contains(namespace) && mayWriteIn(grants, namespace)))
+          .keys
+          .toSet();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read which namespace keys this client holds, '
+          'so no namespace its grants reach without naming it is checked for '
+          'a revocation this start: $e');
+      return const {};
+    }
   }
 
   /// Mints, publishes and conveys the key for **one** namespace unless one is
@@ -424,7 +490,7 @@ class NskeySeeding {
               return;
             }
             _logger.info('No holder answered for $name in $owner:$namespace '
-                'within the wait; a later answer is filed at the next start '
+                'within the wait; a later answer is filed as it arrives '
                 '($e)');
           }));
         }
@@ -437,31 +503,83 @@ class NskeySeeding {
     return asked;
   }
 
-  /// Sends every nskey private this client holds for [approvedNamespaces] to
-  /// one newly approved enrollment.
+  /// Whether this client holds the private half of every key [advertisement]
+  /// offers peers to seal to in [owner]'s [namespace].
   ///
-  /// Read from `AtKeys` rather than the secret store, which is in-memory by
-  /// design and holds nothing after a restart — an approver relying on it would
-  /// convey a new enrollment **nothing**.
+  /// Asks no other enrollment for a private it lacks. False for an
+  /// advertisement offering no key at all.
+  Future<bool> holdsPrivatesFor(
+      String owner, String namespace, NskeyAdvertisement advertisement) async {
+    var offered = 0;
+    for (final entry in advertisement.keys) {
+      // NOTE: every offered entry, not only the one this build would pick: a
+      // peer seals under its own algorithm list, so any of them can be chosen.
+      if (entry.use != SecretSharingAlgos.useEnc ||
+          !entry.offeredForNewOperations) {
+        continue;
+      }
+      offered++;
+      if (await ring.heldPrivateHalf(owner, namespace, entry.kid) == null) {
+        return false;
+      }
+    }
+    return offered > 0;
+  }
+
+  /// Sends every nskey private this client holds, in every namespace [grants]
+  /// covers, to one newly approved enrollment.
+  ///
+  /// [grants] is the enrollment's namespace-to-access map, and covers a
+  /// namespace as [SecretStore.namespaceAuthorizes] says: `*`, the namespace
+  /// itself, or any namespace it is a dot-suffix of. Read from `AtKeys` rather
+  /// than the secret store, which is in-memory by design and holds nothing
+  /// after a restart — an approver relying on it would convey a new enrollment
+  /// **nothing**.
+  ///
+  /// An approver holds privates for namespaces it may only read, and cannot
+  /// write an envelope into one. [ownGrants] is the approver's own grants, and
+  /// a namespace it may not write is skipped up front, with a warning naming
+  /// it; null means no recorded limit. Where the atServer still refuses a
+  /// write, that private is logged and skipped rather than ending the loop.
+  /// Returns how many were sent.
   Future<int> conveyHeldPrivatesTo(
-      KeyPackage keyPackage, Iterable<String> approvedNamespaces) async {
+      KeyPackage keyPackage, Map<String, dynamic> grants,
+      {required Map<String, dynamic>? ownGrants}) async {
     final sharing = this.sharing;
     final filing = privateFiling;
     if (sharing == null || filing == null) return 0;
 
+    final unwritable = <String>{};
+    final held = await filing.readAllWhere((namespace) {
+      if (!SecretStore.namespaceAuthorizes(grants, namespace)) return false;
+      if (mayWriteIn(ownGrants, namespace)) return true;
+      unwritable.add(namespace);
+      return false;
+    });
+    if (unwritable.isNotEmpty) {
+      _logger.warning('Not conveying the nskey privates held for '
+          '${unwritable.join(', ')} to enrollment ${keyPackage.enrollmentId}: '
+          'this approver may not write there, so that enrollment is left to '
+          'pull them from another holder');
+    }
     int sent = 0;
-    for (final namespace in approvedNamespaces.where(isSeedable)) {
-      final held = await filing.readAllFor(namespace);
-      for (final entry in held.entries) {
-        await sharing.shareSecretWith(
-            keyPackage,
-            Secret(
-              namespace: namespace,
-              name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
-              value: base64Encode(entry.value.bytes),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-        sent++;
+    for (final MapEntry(key: namespace, value: privates) in held.entries) {
+      for (final MapEntry(key: kid, value: seed) in privates.entries) {
+        try {
+          await sharing.shareSecretWith(
+              keyPackage,
+              Secret(
+                namespace: namespace,
+                name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+                value: base64Encode(seed.bytes),
+              ),
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          sent++;
+        } on Exception catch (e) {
+          if (e is StoppedException) rethrow;
+          _logger.warning('Could not convey the nskey private $namespace:$kid '
+              'to the new enrollment, going on with the rest: $e');
+        }
       }
     }
     return sent;

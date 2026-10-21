@@ -11,8 +11,8 @@ import 'package:at_utils/src/logging/handlers.dart';
 ///
 /// ## Usage
 /// ```dart
-/// var logger = AtSignLogger('MyApp');
-/// logger.loggingHandler = FileLoggingHandler('app.log');
+/// var logger =
+///     AtSignLogger('MyApp', loggingHandler: FileLoggingHandler('app.log'));
 /// ```
 class FileLoggingHandler implements LoggingHandler {
   late File _file;

@@ -9,6 +9,8 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/client/server_mutex.dart'
+    show ServerMutexLease, checkedServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -224,17 +226,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
     MintLock? mintLock,
-    this.lockTtl = mintLockTtl,
+    Duration lockTtl = mintLockTtl,
     NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
     Stream<DataEvent> Function()? ownChanges,
-  })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
+  })  : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
-        privateFiling = privateFiling ?? _filingFor(_atClient),
         _requestConveyance = requestConveyance,
         _ownChanges = ownChanges,
-        _signer = AtClientEnvelopeSigner(_atClient);
+        _signer = AtClientEnvelopeSigner(_atClient) {
+    _privateFiling = privateFiling ?? _filingFor(_atClient, this);
+  }
 
   final Stream<DataEvent> Function()? _ownChanges;
 
@@ -244,12 +248,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Two filings over one keyfile are safe, but they carry separate
   /// `privatesFiled` streams, so a caller that needs a filing's events must
   /// pass the instance it is listening to.
-  static NskeyPrivateFiling? _filingFor(AtClient atClient) {
+  static NskeyPrivateFiling? _filingFor(
+      AtClient atClient, PublishedNskeyKeyRing ring) {
     final keysIo = atClient.atKeysIo;
     if (keysIo == null) return null;
     final atSign = atClient.getCurrentAtSign();
     if (atSign == null) return null;
-    return NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+    return NskeyPrivateFiling.checkedAgainst(() => ring,
+        keysIo: keysIo, atSign: atSign);
   }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
@@ -294,7 +300,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// says so at `severe` and mints anyway: a published key whose private did
   /// not survive the process leaves every sender sealing to something nobody
   /// can open.
-  final NskeyPrivateFiling? privateFiling;
+  NskeyPrivateFiling? get privateFiling => _privateFiling;
+  late final NskeyPrivateFiling? _privateFiling;
 
   @override
   Stream<FiledNskeyPrivate> get privatesFiled =>
@@ -327,6 +334,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _remote.remove(_scope(owner, namespace));
 
   final Map<String, NskeyDecapsulationKey> _ownPrivates = {};
+
+  /// The public half of each generation this ring minted, beside its private
+  /// in [_ownPrivates].
+  final Map<String, PackageKey> _mintedPublics = {};
 
   /// Advertisements this ring has read or published, with when and, where
   /// known, the verified bytes they came from.
@@ -432,7 +443,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// look for. Adopting is right only for the cold-start mint; [rotate] runs
   /// [_mint] directly.
   Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
-      String namespace, MintLease lease, _PreparedMint prepared) async {
+      String namespace, ServerMutexLease lease, _PreparedMint prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
     if (published == null) {
       final filed = await _filedUnpublished(owner, namespace);
@@ -693,7 +704,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
-    MintLease lease,
+    ServerMutexLease lease,
     _PreparedMint prepared, {
     DateTime? assertUpdatedAt,
   }) async {
@@ -764,8 +775,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       payload: payload,
     );
     for (final key in prepared.minted) {
-      _ownPrivates[_generation(owner, namespace, nskeyKidOf(key.publicKey))] =
-          NskeyDecapsulationKey(key.secretKey);
+      final generation =
+          _generation(owner, namespace, nskeyKidOf(key.publicKey));
+      _ownPrivates[generation] = NskeyDecapsulationKey(key.secretKey);
+      _mintedPublics[generation] = PackageKey.fromBytes(
+          use: SecretSharingAlgos.useEnc, alg: key.keyAlgo, pub: key.publicKey);
     }
     return advertisement;
   }
@@ -982,6 +996,42 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid) async {
+    final held = await heldPrivateHalf(owner, namespace, nskeyKid);
+    if (held != null || owner != _atClient.getCurrentAtSign()) return held;
+
+    // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
+    // owns waiting for the answer and filing it; nothing else does, so an ask
+    // wired without that repairs the client only at its next start.
+    _askForMissingPrivate(namespace, nskeyKid);
+    return null;
+  }
+
+  @override
+  Future<PackageKey?> heldPublic(
+      String owner, String namespace, String nskeyKid) async {
+    if (owner != _atClient.getCurrentAtSign()) return null;
+    final minted = _mintedPublics[_generation(owner, namespace, nskeyKid)];
+    if (minted != null) return minted;
+    final filed = (await privateFiling?.filedFor(namespace))
+        ?.where((f) => f.nskeyKid == nskeyKid)
+        .firstOrNull;
+    if (filed == null) return null;
+    final kem = SecretSharingAlgos.kemFor(filed.keyAlgo);
+    if (kem == null) return null;
+    final pair = await kem.keyPairFromSeed(filed.seed.bytes);
+    final derived = PackageKey.fromBytes(
+        use: SecretSharingAlgos.useEnc,
+        alg: filed.keyAlgo,
+        pub: pair.publicKey);
+    // NOTE: a seed that re-derives some other kid is not this generation, and
+    // sealing to it would leave a copy nobody opens under the kid it names.
+    return derived.kid == nskeyKid ? derived : null;
+  }
+
+  /// What [privateHalf] answers, without asking the atSign's other enrollments
+  /// for a private this client does not hold.
+  Future<NskeyDecapsulationKey?> heldPrivateHalf(
+      String owner, String namespace, String nskeyKid) async {
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
     if (held != null) return held;
 
@@ -989,14 +1039,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
       _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
-      return filed;
     }
-
-    // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
-    // owns waiting for the answer and filing it; nothing else does, so an ask
-    // wired without that repairs the client only at its next start.
-    _askForMissingPrivate(namespace, nskeyKid);
-    return null;
+    return filed;
   }
 
   /// How this ring asks, supplied or derived.
@@ -1039,14 +1083,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _logger.info('Asked the other enrollments for the nskey private '
           '$namespace:$nskeyKid; the answer is filed when a holder replies');
     }).catchError((Object e) {
-      // NOTE: clear the stamp, so the next miss re-asks rather than waiting out
-      // a cooldown earned by a request that never went out.
-      _askedConveyance.remove(generation);
+      // NOTE: the stamp stays, so an ask that keeps failing goes out at most
+      // once per [askCooldown].
       logSwallowed(
           _logger,
           e,
           'Could not request the missing nskey private for '
-          '$namespace:$nskeyKid, and the next read miss will ask again: $e',
+          '$namespace:$nskeyKid, and a read miss once the ask cooldown has '
+          'passed asks again: $e',
           routine: true);
     }));
   }

@@ -151,6 +151,21 @@ void main() {
             'exists and resolves on a `plookup`',
           ]);
       provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'a key minted in a namespace reaches every enrollment with access to '
+            'it, a * enrollment included',
+        proves: 'against the atServer that decides the roster: an enrollment '
+            'granted only `*`, and one granted read on the namespace above, '
+            'are listed as members and are each conveyed the key minted at '
+            'the namespace and the one minted below it, while an enrollment '
+            'granted only another namespace is neither listed nor conveyed '
+            'either. A client pushes to whatever `enroll:listns` answers, so '
+            'only a live atServer can say who that is',
+        clauses: [
+          'a `*` enrollment and one granted a namespace above it included',
+        ],
+      );
+      provenIn(
         'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',
         'a public:__ key syncs, is served by plookup, and is not enumerable',
         proves: 'what makes eager publication safe, against the atServer that '

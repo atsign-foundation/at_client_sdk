@@ -1,3 +1,33 @@
+## 4.0.0-rc7
+
+- fix: a refused CRAM authentication reports "Cram authentication failed for
+  <atSign>: <reason>", with the reason the atServer gave.
+- fix: a keyfile field that does not hold valid base64 is reported by its name
+  and the offset of the first bad character.
+- fix: a keyfile, or a passphrase-protected keyfile's decrypted content, that
+  is not valid JSON is reported with the parser's reason and the character
+  where it stopped.
+- fix: a passphrase-protected keyfile whose envelope `salt` is not valid
+  base64 is refused with `AtDecryptionException`, as its `iv` and `content`
+  are.
+- build: requires `at_lookup` ^3.7.0-rc4.
+
+## 4.0.0-rc6
+
+- fix: an atSign whose RSA PKAM key is 1024 bits authenticates again, rather
+  than failing with "Cannot sign with a 1024-bit key". RSA PKAM keys of other
+  sizes than 1024 or 2048 bits are still refused.
+- build: requires `at_chops` ^3.7.0.
+
+## 4.0.0-rc5
+
+- feat: `RegistrarService.registerAtSign` (v4 `/register-atsign/`).
+- feat: `RegistrarAdminService` for the v4 `/manage-atsigns/` delete flow
+  (Super API key).
+- refactor: `registrarApiRequest`'s `data` is now `Map<String, dynamic>`.
+- BREAKING: removed `getFreeAtSign`, `getFreeAtSignByCategory`,
+  `registerPerson` and `validatePerson`; use `registerAtSign`.
+
 ## 4.0.0-rc4
 
 - fix: waiting for an enrollment's approval ends at once, with the atServer's

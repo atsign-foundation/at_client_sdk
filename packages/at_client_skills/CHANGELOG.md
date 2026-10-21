@@ -2,6 +2,13 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Multiple instances of one agent take their lock with
+  `tryAcquireServerMutex`.
+- Storage: each backend comes from its own import, `HiveAtClientStorage` from
+  `package:at_client/hive.dart` and `InMemoryAtClientStorage` from
+  `package:at_client/memory.dart`, and a Flutter app passing no storage gets
+  at_client_flutter's default, Hive in the app's support directory
+  (`SKILL.md`; `references/01`, `05`, `14`, `15`).
 - Stopping a client: `stop()` ends the client's timers and waits and closes
   every connection, work it cuts short fails with `StoppedException`, and a
   push the atServer accepted just before the stop is pushed again by the next
@@ -25,6 +32,8 @@
   object.
 - Evals: the two auth evals follow the new flows; two new evals cover
   logout / switching and the connection state.
+- The connections an `AtLookUpFactory` builds no longer include a file
+  stream's: atServers no longer support the stream verb (`references/15`).
 
 ## 1.3.0 — 2026-07-31
 

@@ -140,8 +140,9 @@ collection operations follow whatever the *client* is configured to do:
 
 What you cannot do is flip a *single* collection call to remote. For the few
 keys that genuinely need per-operation control — cross-process coordination
-keys, mutex/lock keys, read-your-write probes — drop below `AtCollection` to
-raw `put`/`get` with request options. These are *infrastructure*, not app
+keys, read-your-write probes — drop below `AtCollection` to raw `put`/`get`
+with request options, and take a lock with `tryAcquireServerMutex`, which goes
+straight to the atServer by itself. These are *infrastructure*, not app
 data — give them a distinct key-name prefix within your app's namespace (e.g.
 `lock.` or `session_mutexes.`, as `AtRpc` does within its `__rpcs` namespace)
 so they never collide with collection keys, and keep everything else in

@@ -122,7 +122,7 @@ CI emits the stream from five jobs across two workflows
 (`grep -n 'file-reporter json' .github/workflows/*.yaml`): `unit_at_client`,
 `functional_tests`, `pqe2e_tests` and `legacy_server_tests` in `at_client_sdk.yaml`
 and the `build_and_test` matrix in `at_libraries.yaml`. The CLI pack's job
-(`functional_tests_at_onboarding_cli`, `at_libraries.yaml:303`) runs with no
+(`functional_tests_at_onboarding_cli` in `at_libraries.yaml`) runs with no
 reporter and no upload, although it is a declared live pack with 3 citations, so a
 CI-rendered ledger can never show those rows exercised. Rendering is a local step
 (`tools/acceptance_ledger.sh`), by decision.
@@ -172,7 +172,7 @@ deliberately*. The current design provides:
 8. Unnumbered cross-cutting invariants that count as rows, cite tests, and cannot
    pin clauses.
 9. One catalogue row split into two scenarios by an `(a)`/`(b)` suffix the id
-   grammar ignores (98 use cases, 108 scenarios).
+   grammar ignores, so the use-case and scenario counts differ.
 10. A document that is design prose as well as acceptance rows, where only the Then
     structure is parsed.
 11. A status table and a headline sentence generated from the tree and guarded

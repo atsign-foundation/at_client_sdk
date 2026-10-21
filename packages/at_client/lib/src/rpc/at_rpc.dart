@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/client/server_mutex.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show CryptoConfig, legacyCryptoProviderId;
+import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -16,6 +19,10 @@ abstract class AtRpcCallbacks {
   Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign);
 
   /// Called when a 'response' is received
+  ///
+  /// The same response can arrive more than once: a responder sends a reply
+  /// again when it cannot confirm the atServer accepted it. Ignore a repeat
+  /// for a request already answered, as [AtRpcClient] does.
   Future<void> handleResponse(AtRpcResp response);
 }
 
@@ -64,11 +71,14 @@ class AtRpcClient implements AtRpcCallbacks {
     }));
   }
 
-  /// Sends [payload] to the server atSign and completes with its response.
+  /// Sends [payload] to the server atSign and completes with its response,
+  /// sealing the request under [cryptoProviderId], or this client's default
+  /// when it is null.
   ///
   /// Throws [StoppedException] when the client is stopped, or stops before the
   /// response arrives.
-  Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> call(Map<String, dynamic> payload,
+      {String? cryptoProviderId}) async {
     if (rpc.atClient.isStopped) {
       throw StoppedException('the client for '
           '${rpc.atClient.getCurrentAtSign()} has stopped');
@@ -79,7 +89,10 @@ class AtRpcClient implements AtRpcCallbacks {
     completer.future.ignore();
     logger.info('Sending request to $serverAtsign : $request');
     try {
-      await rpc.sendRequest(toAtSign: serverAtsign, request: request);
+      await rpc.sendRequest(
+          toAtSign: serverAtsign,
+          request: request,
+          cryptoProviderId: cryptoProviderId);
     } catch (_) {
       completerMap.remove(request.reqId);
       rethrow;
@@ -211,7 +224,12 @@ class AtRpc {
   /// handling across all services that use [AtRpc].
   ///
   /// When enabled, it prevents multiple [AtRpc] responses from being sent for
-  /// the same request.
+  /// the same request: each request's id is held as a server mutex
+  /// (`tryAcquireServerMutex`) for 30 seconds by the one responder that takes
+  /// it. It needs an atServer from p3.13.0; an older one refuses every lock,
+  /// so a responder with this on handles no requests. If taking it fails after
+  /// the atServer stored it, such as on a timeout, no responder handles that
+  /// request and none sends a nack; the requester's own timeout ends it.
   final bool enableRequestMutex;
 
   factory AtRpc.server({
@@ -274,7 +292,7 @@ class AtRpc {
       _requestStream = atClient.notificationService
           .subscribe(regex: requestsRegex, shouldDecrypt: true);
 
-      _requestStream!.listen(handleRequestNotification,
+      _requestStream!.listen((n) => _handle(n, handleRequestNotification),
           onError: _onNotificationError,
           onDone: () => logger.info('RPC request listener stopped'));
     }
@@ -288,11 +306,25 @@ class AtRpc {
       _responseStream = atClient.notificationService
           .subscribe(regex: responsesRegex, shouldDecrypt: true);
 
-      _responseStream!.listen(handleResponseNotification,
+      _responseStream!.listen((n) => _handle(n, handleResponseNotification),
           onError: _onNotificationError, onDone: () {
         logger.info('RPC response listener stopped');
         if (!_responsesEnded.isCompleted) _responsesEnded.complete();
       });
+    }
+  }
+
+  /// Runs [handler] on [notification] and logs whatever it throws, so an
+  /// error handling one notification neither reaches the zone nor stops the
+  /// listener.
+  Future<void> _handle(AtNotification notification,
+      Future<void> Function(AtNotification) handler) async {
+    try {
+      await handler(notification);
+    } catch (e, st) {
+      logger.severe('Exception $e handling notification ${notification.key} '
+          'from ${notification.from}');
+      logger.severe(st);
     }
   }
 
@@ -349,9 +381,13 @@ class AtRpc {
   /// to [toAtSign]
   ///
   /// Waits for [ready] first when [isClient], so the response cannot arrive
-  /// before there is anything subscribed to receive it.
+  /// before there is anything subscribed to receive it. The request is sealed
+  /// under [cryptoProviderId], or this client's default when it is null; the
+  /// server answers in the same scheme.
   Future<void> sendRequest(
-      {required String toAtSign, required AtRpcReq request}) async {
+      {required String toAtSign,
+      required AtRpcReq request,
+      String? cryptoProviderId}) async {
     if (isClient) {
       await ready();
     }
@@ -363,7 +399,7 @@ class AtRpc {
       ..sharedBy = atClient.getCurrentAtSign()
       ..sharedWith = AtUtils.fixAtSign(toAtSign)
       ..namespace = baseNameSpace
-      ..metadata = _defaultMetaData;
+      ..metadata = _newMetaData();
 
     // Need to be able to receive responses from the atSigns we're sending requests to
     allowList.add(toAtSign);
@@ -380,7 +416,8 @@ class AtRpc {
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(requestRecordID,
                 value: requestJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
         sent = true;
@@ -411,7 +448,7 @@ class AtRpc {
   // *** Everything below this point is not part of the public AtRpc API ***
   // ***********************************************************************
 
-  final Metadata _defaultMetaData = Metadata()
+  Metadata _newMetaData() => Metadata()
     ..isPublic = false
     ..isEncrypted = true
     // namespaceAware IS SET TO FALSE FOR A REASON:
@@ -420,13 +457,15 @@ class AtRpc {
 
   /// Not part of API, but visibleForTesting.
   /// Receives 'request' notifications, and
-  /// - parses and validates
-  /// - sends an [AtRpcRespType.nack] response if deserialization or validation fails
-  /// - sends an [AtRpcRespType.nack] response otherwise
-  /// - Acquires session mutex if [enableRequestMutex] is true
-  /// - sends an [AtRpcRespType.nack] response if mutex cannot be acquired
-  /// - calls [AtRpcCallbacks.handleRequest]
-  /// - calls [sendResponse] with the response from [AtRpcCallbacks.handleRequest]
+  /// - ignores a request from a sender not on [allowList], unless [allowAll]
+  /// - ignores one whose key carries no request id
+  /// - sends an [AtRpcRespType.nack] response when the payload cannot be
+  ///   parsed, or names a different request id
+  /// - with [enableRequestMutex], takes the request's mutex, and leaves the
+  ///   request alone when it cannot, since the responder that took it answers
+  /// - sends an [AtRpcRespType.ack], calls [AtRpcCallbacks.handleRequest], and
+  ///   sends its response with [sendResponse], or an [AtRpcRespType.nack] if
+  ///   it throws
   @visibleForTesting
   Future<void> handleRequestNotification(AtNotification notification) async {
     if (!allowList.contains(notification.from)) {
@@ -463,18 +502,21 @@ class AtRpc {
     }
 
     // print('Received request with id ${notification.key} and value ${chalk.brightGreen.bold(notification.value)}');
-    late AtRpcReq request;
+    final AtRpcReq request;
 
     try {
       request = AtRpcReq.fromJson(jsonDecode(notification.value!));
     } catch (e, st) {
-      var message =
-          'Failed to deserialize AtRpcReq from ${notification.value}: $e';
-      logger.warning(message);
+      logger.warning(
+          'Failed to deserialize AtRpcReq from ${notification.value}: $e');
       logger.warning(st);
-      // send NACK
-      await sendResponse(notification, request,
-          AtRpcResp.nack(request: request, message: message));
+      final unparsed = AtRpcReq(reqId: requestId, payload: {});
+      await sendResponse(
+          notification,
+          unparsed,
+          AtRpcResp.nack(
+              request: unparsed,
+              message: 'The request could not be parsed as an AtRpcReq'));
       return;
     }
 
@@ -516,19 +558,22 @@ class AtRpc {
     }
   }
 
+  /// How long a request mutex is held, which is also how long its request id
+  /// stays claimed.
+  static const Duration _requestMutexTtl = Duration(seconds: 30);
+
   Future<bool> _tryAcquireSessionMutex(int requestId, String atsign) async {
     var mutexKey = AtKey.fromString('$requestId.session_mutexes.'
-        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign')
-      ..metadata = (Metadata()
-        ..immutable = true // only one RPC client will succeed in doing this
-        ..ttl =
-            30000); // keeps the datastore clean + auto releases mutex after 30s
-    PutRequestOptions pro = PutRequestOptions()
-      ..shouldEncrypt = true
-      ..useRemoteAtServer = true;
+        '$domainNameSpace.$rpcsNameSpace.$baseNameSpace$atsign');
 
     try {
-      await atClient.put(mutexKey, 'lock', putRequestOptions: pro);
+      final lease =
+          await atClient.tryAcquireServerMutex(mutexKey, ttl: _requestMutexTtl);
+      if (lease == null) {
+        logger.shout('Will not handle request from $atsign'
+            '; could not acquire mutex $mutexKey');
+        return false;
+      }
       logger.shout(
           '😎 Will handle request from $atsign; acquired mutex $mutexKey');
       return true;
@@ -537,13 +582,8 @@ class AtRpc {
         logger.warning('Not handling request from $atsign: the client stopped');
         return false;
       }
-      if (err.toString().toLowerCase().contains('immutable')) {
-        logger.shout('Will not handle request from $atsign'
-            '; could not acquire mutex $mutexKey');
-      } else {
-        logger.shout(
-            '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
-      }
+      logger.shout(
+          '🤷‍♂️ Will not handle; could not acquire mutex $mutexKey : $err');
       return false;
     }
   }
@@ -626,15 +666,30 @@ class AtRpc {
   /// Sends a response. Note that this is marked as `@visibleForTesting` as it
   /// is only called by [handleRequestNotification] and is not intended to be
   /// used directly by [AtRpc] users.
+  ///
+  /// The response goes out in the scheme [notification] arrived in, when this
+  /// client can seal it to the requester with it, and under this client's
+  /// default otherwise. A response the notification service could not seal
+  /// counts as an attempt that failed, and is retried like one the atServer
+  /// refused; where the failure was in sealing it and the client's preference
+  /// allows a legacy fallback, the retry goes out under the default. That
+  /// flag is the one place a client says reaching a peer outranks keeping the
+  /// scheme, so it gates this downgrade as it gates every other write's.
   @visibleForTesting
   Future<void> sendResponse(
       AtNotification notification, AtRpcReq request, AtRpcResp response) async {
+    String? cryptoProviderId;
+    var schemeChosen = false;
     bool sent = false;
     int delayMillis = 200;
     for (int attemptNumber = 1;
         attemptNumber <= maxSendAttempts && !sent;
         attemptNumber++) {
       try {
+        if (!schemeChosen) {
+          cryptoProviderId = await _answerUnder(notification);
+          schemeChosen = true;
+        }
         String responseAtID =
             '${response.respType.name}.${request.reqId}.$domainNameSpace.$rpcsNameSpace';
         var responseAtKey = AtKey()
@@ -642,18 +697,35 @@ class AtRpc {
           ..sharedBy = atClient.getCurrentAtSign()
           ..sharedWith = notification.from
           ..namespace = baseNameSpace
-          ..metadata = _defaultMetaData;
+          ..metadata = _newMetaData();
 
         var responseJson = jsonEncode(response.toJson());
 
         logger.info(
             "Sending notification $responseAtKey with payload $responseJson");
-        await atClient.notificationService.notify(
+        final result = await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
                 value: responseJson,
-                notificationExpiry: defaultNotificationExpiry),
+                notificationExpiry: defaultNotificationExpiry,
+                cryptoProviderId: cryptoProviderId),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);
+        // NOTE: notify() reports a failure to seal or send in its result, not
+        // by throwing.
+        final failure = result.atClientException;
+        if (failure != null) {
+          // NOTE: only a failure to seal says the scheme is the problem; a
+          // timeout or a refusal from the atServer is retried as it is.
+          if (cryptoProviderId != null &&
+              failure is AtEncryptionException &&
+              CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
+            logger.warning('Could not seal response $response under '
+                '$cryptoProviderId, the scheme its request arrived in; the '
+                'next attempt answers under this client\'s default');
+            cryptoProviderId = null;
+          }
+          throw failure;
+        }
         sent = true;
       } catch (e) {
         if (atClient.isStopped) {
@@ -673,6 +745,32 @@ class AtRpc {
         }
       }
     }
+  }
+
+  /// The provider [request] arrived under, or null when this client cannot
+  /// answer with it: legacy under a posture that refuses legacy, a provider
+  /// this client has not configured, or one that cannot seal to the requester
+  /// in [baseNameSpace], as a post-quantum provider cannot when the requester
+  /// has published no key there.
+  ///
+  /// Throws when the requester's readiness cannot be established, as the
+  /// provider does; the caller's retry covers that.
+  Future<String?> _answerUnder(AtNotification request) async {
+    final scheme = request.receivedUnder;
+    if (scheme == legacyCryptoProviderId) {
+      return atClient.getPreferences()?.disallowLegacyEncryption == true
+          ? null
+          : scheme;
+    }
+    if (CryptoConfig.forClient(atClient).lookup(scheme) == null) return null;
+    if (!await CryptoRuntime(atClient)
+        .isReadyUnder(scheme, request.from, baseNameSpace)) {
+      logger.warning('Answering ${request.from} under this client\'s default '
+          'rather than $scheme, the scheme its request arrived in: it has '
+          'published no key for $baseNameSpace to seal the response to');
+      return null;
+    }
+    return scheme;
   }
 }
 

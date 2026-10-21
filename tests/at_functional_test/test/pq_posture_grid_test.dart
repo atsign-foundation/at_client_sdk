@@ -22,7 +22,6 @@ import 'package:at_client/src/service/notification_service_impl.dart'
 // ignore: implementation_imports
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
-import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;

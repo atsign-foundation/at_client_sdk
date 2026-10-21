@@ -9,7 +9,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_server_features.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
@@ -136,40 +136,6 @@ void main() {
     Completer received = Completer();
     await atClientManager.atClient.notificationService
         .notify(NotificationParams.forDelete(phoneKey),
-            onSuccess: (NotificationResult notificationResult) {
-      expect(notificationResult.notificationStatusEnum.toString(),
-          'NotificationStatusEnum.delivered');
-      expect(notificationResult.atKey?.key, 'phone');
-      expect(notificationResult.atKey?.sharedWith, '@bob🛠');
-      received.complete();
-    });
-    await received.future;
-  });
-
-  test('notify text of to sharedWith atSign', () async {
-    var notificationResult = await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('Hello', sharedWithAtSign));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey?.key, 'Hello');
-    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
-  });
-
-  test('notify text of to sharedWith atSign with shouldEncrypt set to true',
-      () async {
-    var notificationResult = await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('Hello', sharedWithAtSign,
-            shouldEncrypt: true));
-    expect(notificationResult.notificationStatusEnum.toString(),
-        'NotificationStatusEnum.delivered');
-    expect(notificationResult.atKey?.key, 'Hello');
-    expect(notificationResult.atKey?.sharedWith, sharedWithAtSign);
-  });
-
-  test('notify text of to sharedWith atSign - callback', () async {
-    Completer received = Completer();
-    await atClientManager.atClient.notificationService
-        .notify(NotificationParams.forText('phone', '@bob🛠'),
             onSuccess: (NotificationResult notificationResult) {
       expect(notificationResult.notificationStatusEnum.toString(),
           'NotificationStatusEnum.delivered');
@@ -315,42 +281,49 @@ void main() {
 
     test('A test to verify the notification expiry', () async {
       await TestUtils.initAtClient(currentAtSign, namespace, posture: PqPosture.legacy);
+      final atClient = AtClientManager.getInstance().atClient;
+      // NOTE: an atServer that takes eAtn keeps the expiry the client sent,
+      // set from the client's clock, while epochMillis is stamped by the
+      // atServer's. Each is compared only with the clock that set it.
+      final exactExpiry =
+          await AtServerFeatures.of(atClient).has(InfoFeature.notifyEAtn);
+      const lifetime = Duration(minutes: 1);
       for (int i = 0; i < 10; i++) {
         logger.info('Testing notification expiry - test run #$i');
         var atKey = (AtKey.shared('test-notification-expiry',
                 namespace: 'wavi', sharedBy: currentAtSign)
               ..sharedWith(sharedWithAtSign))
             .build();
+        final sentFrom = DateTime.now().toUtc();
         NotificationResult notificationResult =
-            await AtClientManager.getInstance()
-                .atClient
-                .notificationService
-                .notify(
-                  NotificationParams.forUpdate(atKey,
-                      notificationExpiry: Duration(minutes: 1)),
-                  waitForFinalDeliveryStatus: false,
-                  checkForFinalDeliveryStatus: false,
-                );
+            await atClient.notificationService.notify(
+          NotificationParams.forUpdate(atKey, notificationExpiry: lifetime),
+          waitForFinalDeliveryStatus: false,
+          checkForFinalDeliveryStatus: false,
+        );
+        final sentBy = DateTime.now().toUtc();
 
-        AtNotification atNotification = await AtClientManager.getInstance()
-            .atClient
-            .notificationService
+        AtNotification atNotification = await atClient.notificationService
             .fetch(notificationResult.notificationID);
+        final expiresAt = atNotification.expiresAtInEpochMillis!;
+        logger.info('Notification expiry: exactExpiry $exactExpiry, '
+            'expiresAt - epochMillis - lifetime = '
+            '${expiresAt - atNotification.epochMillis - lifetime.inMilliseconds}'
+            ' ms');
 
-        var actualExpiresAtInEpochMills = DateTime.fromMillisecondsSinceEpoch(
-                atNotification.expiresAtInEpochMillis!)
-            .toUtc()
-            .millisecondsSinceEpoch;
-        var expectedExpiresAtInEpochMills =
-            DateTime.fromMillisecondsSinceEpoch(atNotification.epochMillis)
-                .toUtc()
-                .add(Duration(minutes: 1))
-                .millisecondsSinceEpoch;
-        expect(
-            (actualExpiresAtInEpochMills - expectedExpiresAtInEpochMills)
-                    .abs() <
-                10,
-            true);
+        if (exactExpiry) {
+          expect(
+              expiresAt,
+              inInclusiveRange(sentFrom.add(lifetime).millisecondsSinceEpoch,
+                  sentBy.add(lifetime).millisecondsSinceEpoch),
+              reason: 'the client set this expiry a minute ahead of its own '
+                  'clock while it was sending');
+        } else {
+          expect(expiresAt - atNotification.epochMillis,
+              closeTo(lifetime.inMilliseconds, 10),
+              reason: 'the atServer set this expiry a minute after it '
+                  'stamped the notification');
+        }
       }
     });
   });

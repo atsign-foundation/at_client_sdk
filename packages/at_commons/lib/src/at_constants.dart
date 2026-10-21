@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 class AtConstants {
   static const String atSign = 'atSign';
   static const String forAtSign = 'forAtSign';
@@ -22,6 +24,12 @@ class AtConstants {
       'private:blocklist'; // contains @atsign postfix
   static const String atSigningKeypairGenerated =
       'privatekey:signing_keypair_generated';
+  @experimental
+  static const String atTelemetrySigningPrivateKey =
+      'privatekey:at_telemetry_signing_privatekey';
+  @experimental
+  static const String atTelemetrySigningPublicKey =
+      'public:_at_telemetry_signing_publickey.__atserver'; // contains @atsign postfix
   static const String statId = 'statId';
   static const String ttl = 'ttl';
   static const String ttb = 'ttb';

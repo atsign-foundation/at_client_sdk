@@ -3,7 +3,6 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 
 /// A dialog that opens a client on keys the app already holds and hands it
@@ -18,7 +17,8 @@ import 'package:flutter/material.dart';
 ///   when given.
 ///
 /// Optional Parameters:
-/// - [storage]: the client's local storage.
+/// - [storage]: the client's local storage; with none, a Hive store under the
+///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [backupKeys]: stores the keys are copied into once the client is open,
 ///   each skipped when it already holds an entry for the atSign.
 /// - [title]: A title string for the dialog (default: "Authenticating via pkam").

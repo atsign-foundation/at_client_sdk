@@ -24,14 +24,17 @@ import 'package:flutter/services.dart';
 ///   platform keychain by default. It is also the resume record: a request
 ///   submitted earlier for the same app and device is waited on again rather
 ///   than repeated, so the passcode is only asked for when nothing is pending.
-/// - [storage]: the client's local storage.
+/// - [storage]: the client's local storage; with none, a Hive store under the
+///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
 ///   its symmetric key travels; with neither, the preference's posture
 ///   decides.
 ///
 /// Returns:
 /// - The `AtClient` opened on the approved keys, or null if the process fails
-///   or is cancelled.
+///   or is cancelled. A preference with `isLocalStoreRequired` false and no
+///   [storage] is a programming error: the dialog throws an [ArgumentError] as
+///   it opens, before any request goes out.
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
@@ -120,6 +123,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.storage == null && !widget.preference.isLocalStoreRequired) {
+      // NOTE: before any request goes out; an approval earned for a client
+      // that cannot open is wasted.
+      AtClientImpl.refuseWithoutStorage(widget.atSign, widget.preference);
+    }
     _keys = widget.keys ?? KeychainAtKeysIo();
     _resumeIfPending();
   }
@@ -167,9 +175,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       if (mounted) setState(() => _status = event.msg);
     });
     try {
+      final preference = under(widget.preference, widget.rootDomain);
       final client = await pending.client(
-        under(widget.preference, widget.rootDomain),
-        storage: widget.storage,
+        preference,
+        storage: await storageOrDefault(
+          widget.atSign,
+          preference,
+          widget.storage,
+        ),
       );
       if (!mounted) return;
       Navigator.of(context).pop(client);

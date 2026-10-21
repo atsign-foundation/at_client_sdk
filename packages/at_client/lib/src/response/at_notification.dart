@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_client/src/crypto/crypto.dart' show legacyCryptoProviderId;
 import 'package:at_commons/at_commons.dart';
 
 class AtNotification {
@@ -15,6 +16,22 @@ class AtNotification {
   bool? isEncrypted;
   int? expiresAtInEpochMillis;
   Metadata? metadata;
+
+  /// The provider this notification's value was read under, which is the one
+  /// to answer it in: [legacyCryptoProviderId] when the sender stamped none.
+  ///
+  /// ```dart
+  /// await atClient.notificationService.send(
+  ///     to: request.from.toAtsign(),
+  ///     idAndNamespace: 'reply.orders.my_app',
+  ///     body: answer,
+  ///     cryptoProviderId: request.receivedUnder);
+  /// ```
+  ///
+  /// `NotificationParams.forUpdate` and `AtClientBindings.notify` take it as
+  /// their `cryptoProviderId` the same way.
+  String get receivedUnder =>
+      metadata?.appMetadata?.providerId ?? legacyCryptoProviderId;
 
   /// AtNotification instance is created without initializing the fields
   AtNotification.empty();

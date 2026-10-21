@@ -1,6 +1,39 @@
-## 2.0.0-rc4
+## 2.0.0-rc9
 
 - chore(deps): at_utils ^4.0.0-rc1
+
+## 2.0.0-rc8
+
+- feat: `at_activate list` shows the key expiry each enrollment asked for and
+  when its record expires, and `at_activate fetch` prints both.
+- feat: `at_activate approve` and `auto_approve` print when each enrollment
+  they approve expires, or that it has since been revoked.
+- build: requires `at_client` ^3.15.0-rc8, whose `Enrollment` reports the
+  expiry a request asks for.
+
+## 2.0.0-rc7
+
+- build: requires `at_client` ^3.15.0-rc7, which serves
+  `HiveAtClientStorage` from `package:at_client/hive.dart`.
+
+## 2.0.0-rc6
+
+- fix: the package no longer includes keyfiles that local test runs leave in
+  the package directory.
+
+## 2.0.0-rc5
+
+- build: requires `at_client` ^3.15.0-rc5.
+
+## 2.0.0-rc4
+
+- fix: a storage path set on the preference after `AtOnboardingServiceImpl`
+  is built is used again, as in 1.x, rather than an empty store opening in
+  the default directory. Building the service no longer fills in the
+  preference's `storagePath`.
+- build: requires `at_client` ^3.15.0-rc4 and `at_auth` ^4.0.0-rc4: waiting
+  for approval of an expired or unknown enrollment fails at once, with the
+  atServer's reason.
 
 ## 2.0.0-rc3
 

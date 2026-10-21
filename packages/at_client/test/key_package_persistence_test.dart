@@ -6,7 +6,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -122,7 +121,8 @@ void main() {
     await NskeyPrivateFiling(keysIo: io, atSign: atSign).file(Secret(
       namespace: 'app_1.my_apps',
       name: '${NskeyPrivateFiling.secretNamePrefix}kid-one',
-      value: base64Encode(Uint8List.fromList(List<int>.generate(64, (i) => i))),
+      // NOTE: an X-Wing seed's length, the KEM a key package also uses.
+      value: base64Encode(Uint8List.fromList(List<int>.generate(32, (i) => i))),
     ));
 
     final registrant = await boundRegistrant(io);
@@ -139,7 +139,8 @@ void main() {
     await NskeyPrivateFiling(keysIo: io, atSign: atSign).file(Secret(
       namespace: 'app_1.my_apps',
       name: '${NskeyPrivateFiling.secretNamePrefix}kid-one',
-      value: base64Encode(Uint8List.fromList(List<int>.generate(64, (i) => i))),
+      // NOTE: an X-Wing seed's length, the KEM a key package also uses.
+      value: base64Encode(Uint8List.fromList(List<int>.generate(32, (i) => i))),
     ));
 
     expect(keyPackageMaterial(await io.read(atSign)), isNull,

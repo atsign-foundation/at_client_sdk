@@ -6,45 +6,67 @@ import 'package:test/test.dart';
 
 var _queue = Queue();
 
+/// The demo atSigns the suite logs in as with a PKAM key pkamLoad installs,
+/// with their secondary ports in the virtualenv image.
+///
+/// Every one is probed: pkamLoad installs them all at once, so one atSign
+/// being ready says nothing about another, and a test logging in as one still
+/// being installed fails its authentication.
+const Map<String, int> atSigns = {
+  '@alice🛠': 25000,
+  '@bob🛠': 25003,
+  '@eve🛠': 25010,
+  '@kevin🛠': 25012,
+  '@sitaram🛠': 25017,
+  '@denise': 25035,
+};
+
 void main() {
-  var atsign = '@sitaram🛠';
   var rootServer = 'vip.ve.atsign.zone';
-  // @sitaram🛠's secondary is 25017 by default; a base-port virtualenv shifts
-  // every secondary by (VIRTUALENV_BASE_PORT + 1) - 25000.
+  // A base-port virtualenv shifts every secondary by
+  // (VIRTUALENV_BASE_PORT + 1) - 25000.
   final basePort =
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
-  var atsignPort = basePort == 64 ? 25017 : 25017 + (basePort + 1 - 25000);
 
-  SecureSocket secureSocket;
+  for (final MapEntry(key: atsign, value: port) in atSigns.entries) {
+    final atsignPort = basePort == 64 ? port : port + (basePort + 1 - 25000);
 
-  test('checking for test environment readiness', () async {
-    secureSocket = await secureSocketConnection(
-      rootServer,
-      atsignPort,
-      maxTries: 20,
-      retryIntervalSecs: 3,
-    );
+    test('checking for test environment readiness ($atsign)', () async {
+      // NOTE: one queue serves every probe, so drain what the previous one
+      // left behind rather than reading it as this atSign's answer.
+      _queue.clear();
+      final secureSocket = await secureSocketConnection(
+        rootServer,
+        atsignPort,
+        maxTries: 20,
+        retryIntervalSecs: 3,
+      );
 
-    startSocketListener(secureSocket);
+      startSocketListener(secureSocket);
 
-    String response = '';
-    print('waiting for up to 2 minutes for public:publickey$atsign');
+      // NOTE: pkamLoad writes pkaminstalled last, after the PKAM key and the
+      // encryption public key, so it alone says the install finished.
+      String response = '';
+      print('waiting for up to 2 minutes for pkaminstalled$atsign');
 
-    int attempt = 0;
-    int maxAttempts = 40;
-    int retryIntervalSecs = 3;
-    while (response.isEmpty && attempt < maxAttempts) {
-      if (attempt > 0) {
-        await Future.delayed(Duration(seconds: retryIntervalSecs));
+      int attempt = 0;
+      int maxAttempts = 40;
+      int retryIntervalSecs = 3;
+      while (response.isEmpty && attempt < maxAttempts) {
+        if (attempt > 0) {
+          await Future.delayed(Duration(seconds: retryIntervalSecs));
+        }
+        attempt++;
+        secureSocket.write('lookup:pkaminstalled$atsign\n');
+        response = await read();
       }
-      attempt++;
-      secureSocket.write('lookup:publickey$atsign\n');
-      response = await read();
-    }
-    await secureSocket.close();
+      await secureSocket.close();
 
-    expect(response, isNotEmpty);
-  }, timeout: Timeout(Duration(minutes: 5)));
+      expect(response, isNotEmpty,
+          reason: 'pkaminstalled$atsign not present — pkamLoad did not '
+              'finish installing $atsign');
+    }, timeout: Timeout(Duration(minutes: 5)));
+  }
 }
 
 Future<SecureSocket> secureSocketConnection(

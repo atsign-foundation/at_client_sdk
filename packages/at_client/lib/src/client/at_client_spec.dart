@@ -19,27 +19,25 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
+import 'package:at_client/src/stream/stream_verb_retired.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  @experimental
-  set telemetry(AtTelemetryService? telemetryService);
-
-  @experimental
-  AtTelemetryService? get telemetry;
-
   /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
 
-  /// The local persistence bundle backing this client, or `null`
-  /// when local storage is not required or has not yet been
-  /// initialised. Commit-log-free: `persistenceBundle.keyValueStore.commitLog`
-  /// is always `null` on the client. Owned and torn down by the
-  /// client; callers must not close it.
+  /// The persistence bundle backing this client when it runs on a Hive
+  /// storage, the default or one the app passed; `null` on any other storage
+  /// or before it has opened.
+  /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
+  /// `null` on the client. Callers must not close it: the storage that holds
+  /// it closes it, when the client stops for a storage built with
+  /// `closedByClient: true`, else when its owner closes the storage.
+  @Deprecated('Read the keystore from the AtClientStorage the client was '
+      'given; removed in 4.0')
   AtPersistenceBundle? get persistenceBundle;
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
@@ -88,13 +86,15 @@ abstract class AtClient {
   /// not failure — a posture that does not seed, a namespace this enrollment
   /// cannot hold a key for, and a client with no key source to file a private
   /// half in. Read [AtReachabilityResult.isReachable] rather than comparing the
-  /// outcome.
+  /// outcome, and [AtReachabilityResult.holdsPrivate] for whether this client
+  /// can also open what peers seal there.
   ///
   /// Nothing is left in flight when this returns [AtReachability.published]:
   /// the advertisement is an awaited remote write rather than a local-first
   /// put, so a peer's `plookup` finds it on return. Conveying the private half
   /// to this atSign's other enrollments is awaited too, and a failure there is
-  /// logged rather than fatal — those enrollments pull at their next start.
+  /// logged rather than fatal — an enrollment that seeds the namespace asks for
+  /// it at its next start, and any other at the first read that misses it.
   ///
   /// [timeout] bounds the whole operation, which may take several round
   /// trips. On [AtReachability.timedOut] nothing is known about whether the
@@ -569,16 +569,7 @@ abstract class AtClient {
   ///                                                .._messageType = MessageTypeEnum.key;
   ///   notifyChange(notificationParams);
   ///```
-  ///3. To notify a text message
-  ///```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._messageType = MessageTypeEnum.text;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///4. To notify a deletion of a key to @bob.
+  ///3. To notify a deletion of a key to @bob.
   ///```dart
   ///   var key = AtKey()..key='phone'
   ///                    ..sharedWith='@bob'
@@ -658,13 +649,15 @@ abstract class AtClient {
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
-  /// Streams the file in [filePath] to [sharedWith] atSign.
-  @Deprecated("Obsolete, will be removed in v4")
+  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
+  /// so nothing is sent.
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
-  /// Sends stream acknowledgement
-  @Deprecated("Obsolete, will be removed in v4")
+  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
+  /// so no connection is opened.
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<void> sendStreamAck(
       String streamId,
       String fileName,

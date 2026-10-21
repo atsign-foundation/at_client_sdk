@@ -6,12 +6,12 @@
 library;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -72,13 +72,11 @@ void main() {
         return 'data:-1';
       });
       final atClient = await AtClientImpl.create(
-          atSign,
-          'testing',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive/no_commit'
-            ..commitLogPath = 'test/hive/no_commit/commit'
-            ..isLocalStoreRequired = false,
-          remoteSecondary: remote);
+          atSign, 'testing', AtClientPreference(),
+          remoteSecondary: remote,
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
+      addTearDown(atClient.stop);
       await atClient.delete(
           AtKey()
             ..key = 'ordinary'
@@ -108,14 +106,13 @@ void main() {
       final remote = MockRemoteSecondary();
       when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
           .thenAnswer((_) async => 'data:-1');
-      return AtClientImpl.create(
-          atSign,
-          'testing',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive/no_commit'
-            ..commitLogPath = 'test/hive/no_commit/commit'
-            ..isLocalStoreRequired = false,
-          remoteSecondary: remote);
+      final atClient = await AtClientImpl.create(
+          atSign, 'testing', AtClientPreference(),
+          remoteSecondary: remote,
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
+      addTearDown(atClient.stop);
+      return atClient;
     }
 
     AtKey keyFor(String atSign) => AtKey()
@@ -163,6 +160,7 @@ void main() {
       final atClient = MockAtClient();
       final remote = MockRemoteSecondary();
       when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => atClient.enrollmentId).thenReturn('e-1');
       when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
           .thenAnswer((inv) async {

@@ -21,19 +21,25 @@ final String dummyAtKeysData = jsonEncode(
   AtKeysData(keys: [dummyAtKeys], defaultAtsign: '@alice'),
 );
 
+/// at_client_mobile's keychain document (`AtClientData` holding `AtsignKey`s)
+/// exactly as it writes it to `@atsigns:<package>` (checked against 3.2.0
+/// through 3.3.1).
+///
+/// Frozen: devices onboarded by an app built on at_client_mobile hold this
+/// shape, so its field names must not be edited to match the reader.
 const legacyAtClientData = '''
     {
       "config": {
         "schemaVersion": 1,
-        "useSharedAtSign": false
+        "useSharedAtsign": false
       },
       "keys": [
         {
           "name": "@alice",
-          "aesPkamPrivateKey": "privateKey12",
-          "aesPkamPublicKey": "publicKey123",
-          "aesEncryptPublicKey": "encPublicKey",
-          "aesEncryptPrivateKey": "encPrivateKey123",
+          "pkamPrivateKey": "privateKey12",
+          "pkamPublicKey": "publicKey123",
+          "encryptionPublicKey": "encPublicKey",
+          "encryptionPrivateKey": "encPrivateKey123",
           "selfEncryptionKey": "selfEncKey12",
           "apkamSymmetricKey": "apkamSymKey1",
           "enrollmentId": "enrollId1",
@@ -42,10 +48,10 @@ const legacyAtClientData = '''
         },
         {
           "name": "@bob",
-          "aesPkamPrivateKey": "privateKey12",
-          "aesPkamPublicKey": "publicKey123",
-          "aesEncryptPublicKey": "encPublicKey",
-          "aesEncryptPrivateKey": "encPrivateKey123",
+          "pkamPrivateKey": "privateKey12",
+          "pkamPublicKey": "publicKey123",
+          "encryptionPublicKey": "encPublicKey",
+          "encryptionPrivateKey": "encPrivateKey123",
           "selfEncryptionKey": "selfEncKey12",
           "apkamSymmetricKey": "apkamSymKey1",
           "enrollmentId": "enrollId2",

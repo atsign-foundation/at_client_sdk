@@ -922,6 +922,8 @@ Future<List<Enrollment>> _list(
   return filtered;
 }
 
+/// `at_activate list`: one row per enrollment, with the key expiry it asked
+/// for and when its record expires.
 Future<void> list(ArgResults ar, AtClient atClient) async {
   String? statusFilter = ar[AuthCliArgs.argNameEnrollmentStatus];
   String? arx = ar[AuthCliArgs.argNameAppNameRegex];
@@ -932,14 +934,41 @@ Future<void> list(ArgResults ar, AtClient atClient) async {
   stdout.write('Status'.padRight(10));
   stdout.write('AppName'.padRight(20));
   stdout.write('DeviceName'.padRight(38));
+  stdout.write('KeysExpiry'.padRight(14));
+  stdout.write('ExpiresAt'.padRight(26));
   stdout.writeln('Namespaces');
   for (final e in records) {
     stdout.writeln('${(e.enrollmentId ?? '').padRight(38)}'
         '${(e.status ?? '').padRight(10)}'
         '${(e.appName ?? '').padRight(20)}'
         '${(e.deviceName ?? '').padRight(38)}'
+        '${_describeKeysExpiry(e.apkamKeysExpiryDuration).padRight(14)}'
+        '${(e.expiresAt?.toIso8601String() ?? '-').padRight(26)}'
         '${e.namespace}');
   }
+}
+
+/// [expiry] in the form `--expiry` takes, such as `1d,2h`; `none` when no
+/// expiry was asked for, and `?` when the atServer did not say.
+String _describeKeysExpiry(Duration? expiry) {
+  if (expiry == null) return '?';
+  if (expiry <= Duration.zero) return 'none';
+  final parts = <String>[];
+  var rest = expiry;
+  for (final (String unit, Duration size) in [
+    ('d', Duration(days: 1)),
+    ('h', Duration(hours: 1)),
+    ('m', Duration(minutes: 1)),
+    ('s', Duration(seconds: 1)),
+    ('ms', Duration(milliseconds: 1)),
+  ]) {
+    final int count = rest.inMicroseconds ~/ size.inMicroseconds;
+    if (count > 0) {
+      parts.add('$count$unit');
+      rest -= size * count;
+    }
+  }
+  return parts.join(',');
 }
 
 Future<void> fetch(ArgResults argResults, AtClient atClient) async {
@@ -1002,8 +1031,13 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
         ' and deviceName "${er.deviceName}"');
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.
-    await atClient.enrollments.approve(eId);
-    stdout.writeln('Approved $eId');
+    final record = await atClient.enrollments.approve(eId);
+    final expiresAt = record.expiresAt;
+    stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
+        ? 'Approved $eId, but it has since been revoked'
+        : expiresAt == null
+            ? 'Approved $eId'
+            : 'Approved $eId, which expires at ${expiresAt.toIso8601String()}');
 
     approved++;
 
@@ -1080,8 +1114,14 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
       // NOTE: approving is also when this atSign's secrets are sealed to the
       // new device's key package, which is why it goes through the client.
-      await atClient.enrollments.approve(eId);
-      stdout.writeln('Approval successful.');
+      final record = await atClient.enrollments.approve(eId);
+      final expiresAt = record.expiresAt;
+      stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
+          ? 'Approval successful, but $eId has since been revoked'
+          : expiresAt == null
+              ? 'Approval successful.'
+              : 'Approval successful; $eId expires at '
+                  '${expiresAt.toIso8601String()}');
 
       // increment approved count
       approved++;

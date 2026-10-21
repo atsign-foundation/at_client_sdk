@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 /// Simple data structure whose JSON is transmitted as the payload of the
 /// notification which is sent from the requester to the responder
@@ -11,11 +12,22 @@ class AtRpcReq {
 
   AtRpcReq({required this.reqId, required this.payload});
 
-  /// factory which generates a request ID
+  /// A request carrying [payload] under a random id.
+  ///
+  /// The id is 53 bits from a secure source, so concurrent requests from this
+  /// client or any other do not share one, and it is never negative and never
+  /// above 2^53, so it matches the request key's `\d+` and survives JSON in any
+  /// language.
   static AtRpcReq create(Map<String, dynamic> payload) {
-    return AtRpcReq(
-        reqId: DateTime.now().microsecondsSinceEpoch, payload: payload);
+    return AtRpcReq(reqId: _randomId(), payload: payload);
   }
+
+  static final Random _ids = Random.secure();
+
+  // NOTE: multiplied rather than shifted, because a shift past 32 bits is not
+  // exact on every platform Dart compiles to.
+  static int _randomId() =>
+      _ids.nextInt(0x200000) * 0x100000000 + _ids.nextInt(0x100000000);
 
   Map<String, dynamic> toJson() => {'reqId': reqId, 'payload': payload};
 

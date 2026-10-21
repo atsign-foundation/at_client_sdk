@@ -12,7 +12,7 @@ dependencies:
   at_demo_data: ^1.2.0
   crypto: ^3.0.5
   crypton: ^2.2.1
-  at_client: ^3.15.0-rc2
+  at_client: ^3.15.0-rc7
   at_auth: ^4.0.0-rc3
   at_lookup: ^3.4.2
   at_utils: ^4.0.0-rc1
@@ -25,3 +25,11 @@ dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0
   coverage: ^1.5.0
+  # The upgrade check's seed and snapshot, compiled here against this tree and
+  # by each released arm under tests/upgrade/released against its own.
+  upgrade_scenario:
+    path: ../upgrade/scenario
+  # The released arm's reader, compiled here so it cannot stop compiling
+  # against this tree unnoticed.
+  pq_matrix_scenario:
+    path: ../pq_matrix/scenario

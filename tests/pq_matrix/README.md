@@ -35,9 +35,13 @@ set is not a control: a changed result could be a finding or a different
 at_commons, with no way to tell which.
 
 The reader lives in `scenario/` rather than in `published/` so that it compiles
-against **both** at_clients. Its mixin members are declared identically in
-3.14.0 and in this tree, which is what makes a divergence attributable to
-at_client rather than to two hand-written programs.
+against **both** at_clients, which is what makes a divergence attributable to
+at_client rather than to two hand-written programs. The members it overrides
+exist in both; `publicKeyCacheSettings` is declared with a different type in
+each, so the reader overrides it as `Null`, which fits both.
+`published/` compiles it against 3.14.0, and
+`tests/at_functional_test/test/pq_matrix_reader_compiles_test.dart` compiles it
+against this tree.
 
 ## Running it by hand
 

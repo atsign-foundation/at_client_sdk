@@ -1,4 +1,5 @@
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+// ignore: deprecated_member_use
+import 'package:at_chops/at_chops.dart' show AtChopsKeys, SigningAlgoType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -7,11 +8,11 @@ import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -21,7 +22,6 @@ import 'package:meta/meta.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
-/// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
 /// Delete and Update commands will be synced to the server
 class LocalSecondary implements Secondary {
   final AtClient _atClient;
@@ -73,6 +73,10 @@ class LocalSecondary implements Secondary {
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
+  /// Whether the queue is this secondary's to close: opened lazily here
+  /// rather than handed in by a storage, which closes its own.
+  final bool _ownsSyncQueue;
+
   /// Tracks atKeys with a currently-executing [_update] / [_delete] —
   /// i.e. a write that has entered the keystore mutation phase but
   /// hasn't yet enqueued for sync. The sync service's pull-side
@@ -111,21 +115,17 @@ class LocalSecondary implements Secondary {
     AtSyncQueue? syncQueue,
     void Function(DataEvent)? onEvent,
   })  : _syncQueue = syncQueue,
+        _ownsSyncQueue = syncQueue == null,
         _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
-    keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
 
-  /// Idempotent lazy-open of the sync queue. The first caller wins
-  /// the open; concurrent callers await the same in-flight future so
-  /// we never call `Hive.openBox` twice for the same atSign.
+  /// Opens the sync queue on first use, for a client built around a bare
+  /// keystore, which brings no queue of its own. Concurrent callers share one
+  /// open, so the queue is never opened twice for one atSign.
   ///
-  /// The queue opens on the instance owning the client's
-  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
-  /// halves cannot land in different places. A client configuring no path
-  /// falls back to the package-global instance, which is why this must still
-  /// run after the keystore's initialisation has called `Hive.init(...)`; we
-  /// never call it here ourselves.
+  /// The queue opens through the default storage under the client's
+  /// `hiveStoragePath`, whatever backend the keystore uses.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     if (_released) return Future.error(_stopped());
     final existing = _syncQueue;
@@ -138,13 +138,12 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      // NOTE: a null storagePath is legal — a LocalSecondary built around an
-      // injected keystore has no hiveStoragePath, and AtSyncQueue then uses
-      // the global Hive instance.
-      final q = AtSyncQueue(
-          atSign: atSign,
-          storagePath: _atClient.getPreferences()?.hiveStoragePath);
-      await q.open();
+      final storagePath = _atClient.getPreferences()?.hiveStoragePath;
+      if (storagePath == null) {
+        throw StateError('the client for $atSign was built on a bare keystore '
+            'with no hiveStoragePath, so its sync queue has nowhere to live');
+      }
+      final q = await openDefaultSyncQueue(atSign, storagePath: storagePath);
       _syncQueue = q;
       return q;
     }();
@@ -157,14 +156,32 @@ class LocalSecondary implements Secondary {
 
   /// Ends this local secondary's use of its storage, when its client stops:
   /// from here every keystore and sync-queue operation throws
-  /// [StoppedException].
-  void release() {
+  /// [StoppedException], and a sync queue opened here rather than handed in
+  /// by a storage is closed.
+  Future<void> release() async {
     _released = true;
     keyStore = _ReleasedKeyStore(_stopped);
+    if (!_ownsSyncQueue) return;
+    AtSyncQueue? q = _syncQueue;
+    final inflight = _syncQueueOpenInflight;
+    if (q == null && inflight != null) {
+      try {
+        q = await inflight;
+      } on Object {
+        return;
+      }
+    }
+    _syncQueue = null;
+    _syncQueueOpenInflight = null;
+    try {
+      await q?.close();
+    } on Exception catch (e) {
+      _logger.warning('could not close the sync queue: $e');
+    }
   }
 
   /// Number of atKeys with pending client→server writes. Reads the
-  /// in-memory queue length (no Hive I/O). Triggers a one-time
+  /// in-memory queue length, without touching the store. Triggers a one-time
   /// open of the queue on first call.
   Future<int> get syncQueueSize async {
     final q = await _ensureSyncQueueOpen();
@@ -903,31 +920,31 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPrivateKey")
   Future<String?> getPrivateKey() => getPkamPrivateKey();
 
-  bool _keySourceRead = false;
-  AtKeys? _keySourceKeys;
+  Future<AtKeys?>? _keySourceRead;
 
   /// The keys this client's [AtClient.atKeysIo] holds, or null when it has no
   /// key source or the source holds nothing readable for this atSign.
   ///
   /// Read once and kept: a file-backed source decrypts on every read and each
   /// key getter below consults it, while the source a client was built with
-  /// does not change over that client's life.
+  /// does not change over that client's life. Callers that ask while the
+  /// read is in flight wait for it.
   ///
   /// A source that throws is not an error here. The getters have a keystore
   /// behind them, and a client can legitimately be built before its keyfile
   /// exists.
-  Future<AtKeys?> _keysFromSource() async {
-    if (_keySourceRead) return _keySourceKeys;
-    _keySourceRead = true;
+  Future<AtKeys?> _keysFromSource() => _keySourceRead ??= _readKeySource();
+
+  Future<AtKeys?> _readKeySource() async {
     final io = _atClient.atKeysIo;
     final atSign = _atClient.getCurrentAtSign();
     if (io == null || atSign == null) return null;
     try {
-      _keySourceKeys = await io.read(atSign);
+      return await io.read(atSign);
     } on Exception catch (e) {
       _logger.finer('the key source holds nothing readable for $atSign: $e');
+      return null;
     }
-    return _keySourceKeys;
   }
 
   /// The APKAM keypair the key source holds for this client's enrollment,
@@ -942,49 +959,75 @@ class LocalSecondary implements Secondary {
       _keySourceApkam() async => (await _keysFromSource())
           ?.authenticationKeyPairFor(_atClient.enrollmentId);
 
+  /// [key]'s value in the keystore, else what [fromAtChops] finds in the
+  /// client's AtChops.
+  ///
+  /// NOTE: the AtChops is the last tier because a client handed one at build
+  /// may hold its keys nowhere else until its caller writes them to the
+  /// keystore. An empty value there is a placeholder for a keypair the
+  /// AtChops was built without, so it counts as absent. A miss in every tier
+  /// is still the keystore's own exception.
+  Future<String?> _fromKeystoreElseAtChops(
+      String key,
+      // ignore: deprecated_member_use
+      String? Function(AtChopsKeys keys) fromAtChops) async {
+    // ignore: deprecated_member_use
+    final AtChopsKeys? held = _atClient.atChops?.atChopsKeys;
+    final fromChops = held == null ? null : fromAtChops(held);
+    final fallback = fromChops == null || fromChops.isEmpty ? null : fromChops;
+    AtData? stored;
+    try {
+      stored = await keyStore!.get(key);
+    } on KeyNotFoundException {
+      if (fallback != null) return fallback;
+      rethrow;
+    }
+    return stored?.data ?? fallback;
+  }
+
   /// The PKAM private key: the key source's for this enrollment, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getPkamPrivateKey() async =>
       (await _keySourceApkam())?.privateKey ??
-      (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+      await _fromKeystoreElseAtChops(AtConstants.atPkamPrivateKey,
+          (keys) => keys.atPkamKeyPair?.atPrivateKey.privateKey);
 
   /// The atSign's encryption private key: the key source's, else the
-  /// keystore's.
-  Future<String?> getEncryptionPrivateKey() async {
-    String? v =
-        (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
-    return v;
-  }
+  /// keystore's, else the client's AtChops's.
+  Future<String?> getEncryptionPrivateKey() async =>
+      (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey ??
+      await _fromKeystoreElseAtChops(AtConstants.atEncryptionPrivateKey,
+          (keys) => keys.atEncryptionKeyPair?.atPrivateKey.privateKey);
 
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
   /// The PKAM public key: the key source's for this enrollment, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getPkamPublicKey() async =>
       (await _keySourceApkam())?.publicKey ??
-      (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+      await _fromKeystoreElseAtChops(AtConstants.atPkamPublicKey,
+          (keys) => keys.atPkamKeyPair?.atPublicKey.publicKey);
 
   /// [atSign]'s encryption public key: the key source's, else the
-  /// keystore's.
+  /// keystore's, else the client's AtChops's.
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
-    String? v =
-        (await _keysFromSource())?.encryptionKeyPair?.atPublicKey.publicKey;
-    v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
-        ?.data;
-
-    return v;
+    return (await _keysFromSource())
+            ?.encryptionKeyPair
+            ?.atPublicKey
+            .publicKey ??
+        await _fromKeystoreElseAtChops(
+            '${AtConstants.atEncryptionPublicKey}$atSign',
+            (keys) => keys.atEncryptionKeyPair?.atPublicKey.publicKey);
   }
 
   /// The atSign's self-encryption key: the key source's, else the
-  /// keystore's.
-  Future<String?> getEncryptionSelfKey() async {
-    String? v = (await _keysFromSource())?.selfEncryptionKey?.key;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
-    return v;
-  }
+  /// keystore's, else the client's AtChops's.
+  Future<String?> getEncryptionSelfKey() async =>
+      (await _keysFromSource())?.selfEncryptionKey?.key ??
+      await _fromKeystoreElseAtChops(AtConstants.atEncryptionSelfKey,
+          (keys) => keys.selfEncryptionKey?.key);
 
   /// Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
@@ -1087,17 +1130,19 @@ class LocalSecondary implements Secondary {
     }
 
     if (enrollmentInfoFromServer == null) {
-      final fromKeyfile = fetchFailure == null ||
-              classifyConnectionFailure(fetchFailure)?.isOffline != true
-          ? null
-          : await _enrollmentFromKeyfile();
-      if (fromKeyfile != null) {
+      final offline = fetchFailure != null &&
+          classifyConnectionFailure(fetchFailure)?.isOffline == true;
+      final fromKeyfile = offline ? await _enrollmentFromKeyfile() : null;
+      final recorded = fromKeyfile ??
+          (offline ? await _enrollmentFromOnboardingRecord() : null);
+      if (recorded != null) {
         _logger.warning('Could not fetch the enrollment record for '
             '${_atClient.enrollmentId} ($fetchFailure); authorising from the '
-            'grants the keyfile last recorded, ${fromKeyfile.namespace}, until '
-            'the atServer can be reached');
+            'grants ${fromKeyfile != null ? 'the keyfile' : 'local storage'} '
+            'last recorded, ${recorded.namespace}, until the atServer can be '
+            'reached');
         _enrollmentIsFromKeyfile = true;
-        return fromKeyfile;
+        return recorded;
       }
       throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
           '${_atClient.enrollmentId} from the atServer'
@@ -1148,6 +1193,35 @@ class LocalSecondary implements Secondary {
       ..appName = snapshot!.appName
       ..deviceName = snapshot.deviceName
       ..namespace = Map<String, dynamic>.from(grants);
+  }
+
+  /// The grants at_onboarding_cli 1.x recorded in local storage once the
+  /// enrollment it requested was approved, as an [Enrollment], or null when
+  /// there is no such record. A keyfile from that era holds no snapshot until
+  /// an authenticated start records one.
+  Future<Enrollment?> _enrollmentFromOnboardingRecord() async {
+    final enrollmentId = _atClient.enrollmentId;
+    if (enrollmentId == null) return null;
+    final String? value;
+    try {
+      value = (await keyStore
+              ?.get('local:$enrollmentId${_atClient.getCurrentAtSign()}'))
+          ?.data;
+    } on KeyNotFoundException {
+      return null;
+    }
+    if (value == null) return null;
+    try {
+      final record = jsonDecode(value);
+      if (record is! Map<String, dynamic> || record['namespace'] is! Map) {
+        return null;
+      }
+      return Enrollment.fromJSON(record)..enrollmentId = enrollmentId;
+    } on FormatException catch (e) {
+      _logger.warning('The enrollment record in local storage for '
+          '$enrollmentId does not parse, so it cannot authorise: $e');
+      return null;
+    }
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {

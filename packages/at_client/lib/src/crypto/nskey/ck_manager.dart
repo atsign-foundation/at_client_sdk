@@ -16,6 +16,7 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
         currentCkPointerRecordName,
         parseCkConveyanceKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -49,7 +50,7 @@ Future<void> collectUnusedOnceCaughtUp(SyncService sync,
 Future<bool> _ranOrGaveUp(CkManager? manager, CryptoContext context) async {
   if (manager == null) return true;
   try {
-    return await manager._tryCollect(context) != null;
+    return await manager.tryCollect(context) != null;
   } on StoppedException {
     return true;
   } catch (e) {
@@ -105,7 +106,7 @@ class CkManager {
       required this.keyRing,
       NskeyResolver? resolver,
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-      this.ckRotationPolicy = rotateCkAfterOneWeek,
+      this.ckRotationPolicy = rotateCkAfterOneYear,
       this.supersededCkGrace = defaultSupersededCkGrace,
       this.pointer = const CurrentCkPointer()})
       : resolver = resolver ??
@@ -118,7 +119,15 @@ class CkManager {
   /// the key ring's cache while that is fresh — and compared with the one the
   /// current CK was conveyed to: a sender never sees a recipient's
   /// decapsulation fail, so that comparison is the only way it learns of a
-  /// rotation.
+  /// rotation. A shared CK is also compared with the sender's own generation,
+  /// since its sibling copy is sealed there: a revocation on either atSign
+  /// rotates the namespace keys of that atSign the revoked enrollment held,
+  /// and either generation moving cuts a fresh CK, whatever
+  /// [ckRotationPolicy] would say.
+  ///
+  /// Cuts are serialised within this manager only: two processes of one
+  /// enrollment writing at once can each cut a key, and the pointer keeps
+  /// whichever was recorded last.
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
@@ -133,28 +142,37 @@ class CkManager {
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
+    final ownGeneration = await _ownGenerationHeld(context, owner, ckNs);
     final current = cache.current(owner, ckNs);
     if (current != null &&
         cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {
-      // NOTE: with no recorded cut time the policy is not asked at all, rather
-      // than told the key is fresh.
-      final cutAt = cache.currentCutAt(owner, ckNs);
-      if (cutAt == null) return;
-      final replace = await ckRotationPolicy(CkRotationContext(
-        destination: owner,
-        namespace: ckNs,
-        ckKid: current.ckKid,
-        cutAt: cutAt,
-        now: DateTime.now().toUtc(),
-      ));
-      if (!replace) return;
-      _logger.info('The rotation policy asked for a fresh content key for '
-          '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
+      if (ownGeneration != null &&
+          ownGeneration != cache.currentOwnNskeyKid(owner, ckNs)) {
+        _logger.info('This enrollment now holds its own namespace key '
+            '$ownGeneration covering $ckNs, which the content key '
+            '${current.ckKid} shared with $owner is not sealed to, so a fresh '
+            'one is cut');
+      } else {
+        // NOTE: with no recorded cut time the policy is not asked at all,
+        // rather than told the key is fresh.
+        final cutAt = cache.currentCutAt(owner, ckNs);
+        if (cutAt == null) return;
+        final replace = await ckRotationPolicy(CkRotationContext(
+          destination: owner,
+          namespace: ckNs,
+          ckKid: current.ckKid,
+          cutAt: cutAt,
+          now: DateTime.now().toUtc(),
+        ));
+        if (!replace) return;
+        _logger.info('The rotation policy asked for a fresh content key for '
+            '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
+      }
     }
 
     if (current == null) {
       final resumed = await _resumeCurrent(
-          context, valueKey, owner, ckNs, advertised.nskeyKid);
+          context, valueKey, owner, ckNs, advertised.nskeyKid, ownGeneration);
       if (resumed) return;
     }
 
@@ -170,7 +188,10 @@ class CkManager {
     }
 
     await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
-        keyAlgo: target.alg, useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: target.alg,
+        useRemoteAtServer: useRemoteAtServer,
+        replacing: current?.ckKid,
+        ownGeneration: ownGeneration);
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
@@ -219,11 +240,19 @@ class CkManager {
     }
 
     return _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
-        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: advertised.alg,
+        useRemoteAtServer: useRemoteAtServer,
+        force: true);
   }
 
   /// Cuts a fresh CK for `(owner, ckNs)`, conveys it sealed to [nskeyKid], and
   /// promotes it to current.
+  ///
+  /// [replacing] is the CK the caller found current, or null when it found
+  /// none. A cut queued behind another that already replaced it, with a key
+  /// sealed to [nskeyKid] whose sibling copy rests on [ownGeneration] where
+  /// the caller holds one, returns that key instead of cutting a second one,
+  /// unless [force] asks for a fresh one regardless.
   Future<ContentKey> _cutAndConvey(
     CryptoContext context,
     AtKey valueKey,
@@ -232,10 +261,23 @@ class CkManager {
     String nskeyKid, {
     required String keyAlgo,
     bool? useRemoteAtServer,
+    String? replacing,
+    String? ownGeneration,
+    bool force = false,
   }) =>
-      _inTurn(() => _cutAndConveyInTurn(
-          context, valueKey, owner, ckNs, nskeyKid,
-          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer));
+      _inTurn(() async {
+        final current = cache.current(owner, ckNs);
+        if (!force &&
+            current != null &&
+            current.ckKid != replacing &&
+            cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
+            (ownGeneration == null ||
+                cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
+          return current;
+        }
+        return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
+            keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
+      });
 
   Future<ContentKey> _cutAndConveyInTurn(
     CryptoContext context,
@@ -260,14 +302,15 @@ class CkManager {
         // the recipient before its key does.
         ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
-    await _conveySiblingCopy(context, owner, ckNs, ck,
+    final ownNskeyKid = await _conveySiblingCopy(context, owner, ckNs, ck,
         useRemoteAtServer: useRemoteAtServer ?? false);
 
     // NOTE: promoted only once the record is durable — a failed conveyance left
     // as the current key would make every later value cite a CK never sent.
     final replaced = cache.current(owner, ckNs) != null;
-    cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
-    await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
+    cache.putAsCurrent(owner, ckNs, ck, nskeyKid, ownNskeyKid: ownNskeyKid);
+    await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid,
+        ownNskeyKid: ownNskeyKid);
     // NOTE: queued behind this cut and not awaited, so the write it serves is
     // not held up by a pass over local storage.
     if (replaced) unawaited(_collectAfterReplacing(context));
@@ -304,11 +347,15 @@ class CkManager {
   /// replacement, try again at the next sync that catches up. A client with no
   /// enrollment id names no cutter on what it conveys, so it deletes nothing.
   Future<int> collectUnused(CryptoContext context) async =>
-      await _tryCollect(context) ?? 0;
+      await tryCollect(context) ?? 0;
 
   /// [collectUnused], answering null when it was refused because sync had not
-  /// caught up, the one refusal a later pass can overcome.
-  Future<int?> _tryCollect(CryptoContext context) =>
+  /// caught up, the one refusal a later pass can overcome; a pass that does not
+  /// look for another reason answers 0, as [collectUnused] does.
+  ///
+  /// Visible so a test can tell a pass sync refused from one that answered.
+  @visibleForTesting
+  Future<int?> tryCollect(CryptoContext context) =>
       _inTurn(() => _collectUnused(context));
 
   Future<int?> _collectUnused(CryptoContext context) async {
@@ -378,11 +425,7 @@ class CkManager {
   /// completely, and whether a later pass might, or null when it can.
   static Future<({String why, bool transient})?> _whyLocalStorageIsPartial(
       AtClient atClient) async {
-    final preference = atClient.getPreferences();
-    if (preference == null || !preference.isLocalStoreRequired) {
-      return (why: 'this client keeps no local store', transient: false);
-    }
-    final syncRegex = preference.syncRegex;
+    final syncRegex = atClient.getPreferences()?.syncRegex;
     if (syncRegex != null && syncRegex.isNotEmpty) {
       return (
         why: 'syncRegex "$syncRegex" narrows what local storage holds',
@@ -470,19 +513,66 @@ class CkManager {
     return result;
   }
 
+  /// `sender|ckNs` → when the sender was found to hold no key covering ckNs.
+  final Map<String, DateTime> _noOwnKeyAt = {};
+
+  /// The sender's own nskey generation covering [ckNs] that a CK shared with
+  /// [destination] should now rest on: the advertised one, once this
+  /// enrollment holds its private.
+  ///
+  /// Null for a CK that is not shared, when the sender has no key covering
+  /// [ckNs], and while the advertised generation's private has not reached this
+  /// enrollment; a null never replaces a CK. Asking for the private is what
+  /// pulls a generation this enrollment missed from its sibling enrollments.
+  /// Finding no key covering [ckNs] is remembered for the resolver's
+  /// `missMemory`, while the current CK toward [destination] rests on no own
+  /// generation.
+  Future<String?> _ownGenerationHeld(
+      CryptoContext context, String destination, String ckNs) async {
+    final sender = context.atClient.getCurrentAtSign();
+    if (sender == null || destination == sender) return null;
+    final scope = '$sender|$ckNs';
+    final missed = _noOwnKeyAt[scope];
+    if (missed != null &&
+        DateTime.now().difference(missed) < resolver.missMemory &&
+        cache.currentOwnNskeyKid(destination, ckNs) == null) {
+      return null;
+    }
+    try {
+      final own = await resolver.resolve(sender, ckNs);
+      if (own == null) {
+        _noOwnKeyAt[scope] = DateTime.now();
+        return null;
+      }
+      final held =
+          await keyRing.privateHalf(sender, own.namespace, own.nskeyKid);
+      return held == null ? null : own.nskeyKid;
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      _logger.info('Could not tell which of its own namespace keys covering '
+          '$ckNs $sender holds, so the content key it shares with '
+          '$destination there is kept: $e');
+      return null;
+    }
+  }
+
   /// Conveys [ck], shared with [destination], a second time — to this atSign's
   /// own key covering [ckNs] — so its other enrollments, and this one after a
-  /// restart, can open it.
+  /// restart, can open it, and returns the own generation it was sealed to.
   ///
   /// Sealed here and written as it is, because the put pipeline replaces the
   /// `appMetadata` that names the recipient. An atSign holding no key covering
   /// [ckNs] mints one there first, at the recipient's level rather than the
-  /// value's own; where it makes none, the share goes without a copy.
-  Future<void> _conveySiblingCopy(
+  /// value's own; where it makes none, the share goes without a copy and this
+  /// returns null. While the advertised generation's private has not reached
+  /// this enrollment, the copy is sealed to the generation its keys in [ckNs]
+  /// already rest on, or goes without one when none is recorded.
+  Future<String?> _conveySiblingCopy(
       CryptoContext context, String destination, String ckNs, ContentKey ck,
       {required bool useRemoteAtServer}) async {
     final sender = context.atClient.getCurrentAtSign();
-    if (sender == null || destination == sender) return;
+    if (sender == null || destination == sender) return null;
     var own = await resolver.resolve(sender, ckNs);
     if (own == null) {
       final reached = await context.atClient.ensureReachable(ckNs);
@@ -493,19 +583,66 @@ class CkManager {
             'key ${ck.ckKid} shared with $destination has no sibling copy: '
             'no other enrollment of $sender can open what it shares, and this '
             'one cuts a fresh key after a restart');
-        return;
+        return null;
       }
+    }
+    var alg = own.alg;
+    String? sealTo;
+    if (await keyRing.privateHalf(sender, own.namespace, own.nskeyKid) ==
+        null) {
+      final held = await _recordedOwnGeneration(
+          context, sender, destination, ckNs, own.namespace);
+      if (held == null) {
+        _logger.warning('$sender holds no private for its namespace key '
+            '${own.nskeyKid} covering $ckNs yet, and none of its content keys '
+            'there rests on another, so the content key ${ck.ckKid} shared '
+            'with $destination has no sibling copy until a fresh one is cut '
+            'once that private arrives');
+        return null;
+      }
+      _logger.info('$sender holds no private for its advertised namespace '
+          'key ${own.nskeyKid} covering $ckNs yet, so the sibling copy of the '
+          'content key ${ck.ckKid} shared with $destination is sealed to its '
+          'generation ${held.kid}');
+      alg = held.alg;
+      sealTo = held.kid;
     }
     final key = ckSiblingCopyKey(sender: sender, ckKid: ck.ckKid, ckNs: ckNs)
       ..metadata.appMetadata = AppMetadata(
-          providerId: nskeyProviderIdFor(own.alg) ?? nskeyCryptoProviderId,
-          additional: {'destination': destination, 'ns': own.namespace});
+          providerId: nskeyProviderIdFor(alg) ?? nskeyCryptoProviderId,
+          additional: {
+            'destination': destination,
+            'ns': own.namespace,
+            if (sealTo != null) 'sealTo': sealTo,
+          });
     final sealed =
         await CryptoRuntime(context.atClient).encryptForPut(key, ck.toBase64());
     await context.atClient.put(key, sealed,
         putRequestOptions: PutRequestOptions()
           ..shouldEncrypt = false
+          ..alreadyEncrypted = true
           ..useRemoteAtServer = useRemoteAtServer);
+    return key.metadata.appMetadata?.additional?['nskeyKid'] as String?;
+  }
+
+  /// The public half of the own generation this enrollment's content keys in
+  /// [ckNs] already rest on and whose private it holds: the one toward
+  /// [destination] first, from the cache or the pointer, then any other.
+  Future<PackageKey?> _recordedOwnGeneration(CryptoContext context,
+      String sender, String destination, String ckNs, String ownNs) async {
+    final candidates = <String>{
+      if (cache.currentOwnNskeyKid(destination, ckNs) case final kid?) kid,
+      ...cache.currentOwnNskeyKidsIn(ckNs),
+      if ((await pointer?.read(context.atClient, destination, ckNs))
+              ?.ownNskeyKid
+          case final kid?)
+        kid,
+    };
+    for (final kid in candidates) {
+      final held = await keyRing.heldPublic(sender, ownNs, kid);
+      if (held != null) return held;
+    }
+    return null;
   }
 
   static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>
@@ -542,14 +679,21 @@ class CkManager {
   }
 
   /// Re-adopts the CK this sender was last writing under for `(owner, ckNs)`,
-  /// if the pointer names one and it is still sealed to [nskeyKid].
+  /// if the pointer names one, it is still sealed to [nskeyKid], and its
+  /// sibling copy rests on [ownGeneration] whenever that is known.
   ///
   /// Returns whether the cache now holds a current CK. A pointer to a stale
-  /// generation is ignored rather than repaired, so a fresh CK gets cut.
+  /// generation is ignored rather than repaired, so a fresh CK gets cut, and
+  /// so is a pointer with no `ownNskeyKid` field.
   Future<bool> _resumeCurrent(CryptoContext context, AtKey valueKey,
-      String owner, String ckNs, String nskeyKid) async {
+      String owner, String ckNs, String nskeyKid, String? ownGeneration) async {
     final remembered = await pointer?.read(context.atClient, owner, ckNs);
-    if (remembered == null || remembered.nskeyKid != nskeyKid) return false;
+    if (remembered == null ||
+        remembered.nskeyKid != nskeyKid ||
+        !remembered.ownRecorded ||
+        (ownGeneration != null && remembered.ownNskeyKid != ownGeneration)) {
+      return false;
+    }
 
     // NOTE: reading the conveyance record routes back through the at/nskey
     // provider, which decapsulates and caches the CK as a side effect. The
@@ -577,7 +721,8 @@ class CkManager {
 
     final resumed = cache.get(owner, ckNs, remembered.ckKid);
     if (resumed == null) return false;
-    cache.putAsCurrent(owner, ckNs, resumed, nskeyKid, cutAt: conveyedAt);
+    cache.putAsCurrent(owner, ckNs, resumed, nskeyKid,
+        ownNskeyKid: remembered.ownNskeyKid, cutAt: conveyedAt);
     return true;
   }
 
