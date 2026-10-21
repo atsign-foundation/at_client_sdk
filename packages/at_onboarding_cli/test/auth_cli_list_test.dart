@@ -132,4 +132,44 @@ void main() {
         reason: 'a digits-only appName must not match \\D+, case-insensitivity '
             'must not touch the regex escape');
   });
+
+  test('a malformed --arx still fails as before, not a silent match', () async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => []);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-A', '[abc']);
+
+    await expectLater(
+        IOOverrides.runZoned(() => auth_cli.list(args, client),
+            stdout: () => _CapturedStdout()),
+        throwsFormatException,
+        reason: 'caseSensitive: false must not swallow the unterminated '
+            'character class in --arx');
+  });
+
+  test('a malformed --drx still fails as before, not a silent match', () async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => []);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-D', '[abc']);
+
+    await expectLater(
+        IOOverrides.runZoned(() => auth_cli.list(args, client),
+            stdout: () => _CapturedStdout()),
+        throwsFormatException,
+        reason: 'caseSensitive: false must not swallow the unterminated '
+            'character class in --drx');
+  });
 }
