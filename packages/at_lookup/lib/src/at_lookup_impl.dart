@@ -607,6 +607,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final Mutex _pkamAuthenticationMutex = Mutex();
 
   @override
+  @Deprecated('atServers no longer support the stream verb, its only use; '
+      'removed in 4.0.0')
   Future<String> readResponse(
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
       _whileOpen(() => messageListener.read(
@@ -807,7 +809,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           logger.info('auth success');
           _recordAuthentication();
         } else {
-          throw UnAuthenticatedException('Auth failed');
+          throw UnAuthenticatedException('Auth failed: $cramResponse');
         }
       }
       return _connection!.getMetaData()!.isAuthenticated;

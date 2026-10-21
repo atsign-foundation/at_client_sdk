@@ -156,7 +156,6 @@ default.
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |
 | `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
-| `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
 | `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
 
 **The ABI leak** is the interface, not the implementation:
@@ -462,9 +461,8 @@ reachable signature, no amount of internal work makes the client neutral.
 
 The implementation trail behind it: `at_client_impl.dart:1214,1389-1394,1456-1482`
 (`File`, `Directory().create()`, `.copy()`, `.listSync`, `deleteSync(recursive:)`);
-`encryption_service.dart:310,313,323,342,350` (`encryptFileInChunks` /
-`decryptFileInChunks`); `file_transfer_service.dart:58,62`;
-`stream_notification_handler.dart:29,51,57`.
+`encryption_service.dart`'s `encryptFileInChunks` and `decryptFileInChunks`;
+`file_transfer_service.dart:58,62`.
 
 **Design — two options, decide at execution.** Either change the API to take
 `(bytes, name)` or a stream abstraction, or move file transfer into a separate optional
@@ -475,7 +473,7 @@ choice is recorded as an open question in [`decisions.md`](decisions.md).
 ### 2.9 Process and environment
 
 `Platform.pathSeparator` at `at_client_impl.dart:1363,1390,1394,1469-1476`,
-`encryption_service.dart:310,314,343`, `stream_notification_handler.dart:30,58`,
+`encryption_service.dart` (`encryptFileInChunks`, `decryptFileInChunks`),
 `file_transfer_service.dart:62`; `Platform.operatingSystem` and
 `Platform.environment['HOME'/'USERPROFILE']` at `at_auth/lib/src/keys/io/file_io.dart:162-174`.
 

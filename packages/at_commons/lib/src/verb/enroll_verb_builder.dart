@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:at_commons/src/enroll/enrollment.dart';
 import 'package:at_commons/src/verb/abstract_verb_builder.dart';
 import 'package:at_commons/src/verb/enroll_params.dart';
-import 'package:meta/meta.dart';
 
 import 'operation_enum.dart';
 
@@ -89,7 +88,6 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   /// The links an [EnrollOperationEnum.link] writes. See [EnrollParams.links]
   /// for the shape; no other operation sends them.
-  @experimental
   Map<String, dynamic>? links;
 
   @override

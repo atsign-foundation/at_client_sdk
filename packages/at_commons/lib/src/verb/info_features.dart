@@ -16,6 +16,12 @@ class InfoFeature {
 
   /// `messageType:text` on notify.
   static const String notifyText = 'notify.text';
+
+  ///The `otp:list` operation.
+  static const String otpList = 'otp.list';
+
+  ///The `otp:delete:<otp>` and `otp:delete:spp` operations.
+  static const String otpDelete = 'otp.delete';
 }
 
 /// The statuses an atServer gives a feature in its `info` `features`, spelt
