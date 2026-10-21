@@ -84,11 +84,14 @@ class MonitorClient {
     logger.info('from result:$fromResponse');
     fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
     logger.info('fromResponse $fromResponse');
-    // RSA SHA-256 sign via at_chops (wraps the same crypton
-    // RSAPrivateKey.createSHA256Signature; only the private key is used).
-    var sha256signature = PkamSigningAlgo(
-            AtPkamKeyPair.create('', _privateKey), HashingAlgoType.sha256)
-        .sign(Uint8List.fromList(utf8.encode(fromResponse)));
+    // RSA SHA-256 sign via the stateless at_chops 4 algorithm. [_privateKey]
+    // is base64 PKCS#8 DER, decoded straight into RsaSigningAlgo, which
+    // produces the same signature bytes the removed PkamSigningAlgo/crypton
+    // path did.
+    var sha256signature =
+        await RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256).signBytes(
+            Uint8List.fromList(utf8.encode(fromResponse)),
+            secretKey: base64Decode(_privateKey));
     var signature = base64Encode(sha256signature);
     logger.info('Sending command pkam:$signature');
     await monitorConnection.write('pkam:$signature\n');

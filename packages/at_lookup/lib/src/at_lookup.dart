@@ -1,6 +1,6 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// Performs one authentication on a connection that is already open, using
@@ -151,11 +151,11 @@ abstract interface class AtLookUp {
 
   Future<String?> executeCommand(String command, {bool auth = false});
 
-  /// Performs a PKAM authentication using private key on the client side and public key on secondary server
+  /// Performs a PKAM authentication through the injected [AtAuthenticator].
   ///
-  /// Pkam private key should be set in  [atChops.atChopsKeys]
-  ///
-  /// Default signing algorithm for pkam signature is [SigningAlgoType.rsa2048] and default hashing algorithm is [HashingAlgoType.sha256]
+  /// Throws [UnAuthenticatedException] if no authenticator is set: the
+  /// credential ladder this method once fell back to is gone, so there is no
+  /// other way for this call to find a credential.
   ///
   /// Optionally pass enrollmentId if the client is enrolled using APKAM
   Future<bool> pkamAuthenticate({String? enrollmentId});
@@ -171,24 +171,7 @@ abstract interface class AtLookUp {
   /// again. Calling this again waits for the first close.
   Future<void> close();
 
-  /// set an instance of  [AtChops] for signing and verification operations.
-  ///
-  /// Deprecated as a *credential*. Authentication runs through an injected
-  /// [AtAuthenticator] instead, so at_lookup no longer needs to hold key
-  /// material to authenticate. Callers that read this for crypto which is not
-  /// authentication should be handed their own key material - that is what
-  /// at_auth EnrollmentApprover.approve takes its approverKeys for.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  set atChops(AtChops? atChops);
-
   OutboundConnection? get connection;
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  AtChops? get atChops;
 
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 

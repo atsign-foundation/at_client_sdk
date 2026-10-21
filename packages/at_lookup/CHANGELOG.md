@@ -1,3 +1,26 @@
+## 4.0.0-rc.1
+
+- breaking: remove the deprecated `atChops` getter/setter from `AtLookUp` and
+  `AtLookupImpl` — the injected `AtAuthenticator` (see
+  `AtLookUp.withSecureSocket`) is now the only PKAM credential path.
+  `pkamAuthenticate` throws `UnAuthenticatedException` when no authenticator
+  is set, rather than falling back to a credential ladder through `AtChops`,
+  `AtPkamKeyPair` or `AtSigningInput` — all three types are removed from
+  at_chops 4.0.0. The deprecated `privateKey`/`cramSecret` ladder is
+  unaffected and still works.
+- fix: `lookup(verifyData: true)` now rejects a forged or mismatched data
+  signature. The at_chops 3.x verification this called computed a result and
+  never read it, so a tampered signature was silently treated as valid; the
+  at_chops 4.0.0 `RsaSigningAlgo.verifyBytes` this now calls throws
+  `AtSigningVerificationException` on a failed verification, and that
+  exception now propagates to the existing catch that reports no data.
+- chore: the PKAM signature `privateKey` ladder (`AtLookupImpl.authenticate`)
+  and `MonitorClient`'s PKAM signing move from the removed
+  `PkamSigningAlgo`/`AtPkamKeyPair` to the stateless at_chops 4.0.0
+  `RsaSigningAlgo`. The private key is still base64 PKCS#8 DER and produces
+  identical signature bytes to the removed path — no wire format change.
+- chore: moves to at_chops ^4.0.0-rc.1.
+
 ## 3.7.0-rc5
 
 - chore: `AtLookupMuxable.readResponse` is deprecated: it was added for the

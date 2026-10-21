@@ -1,13 +1,5 @@
-// The injected authenticator is the replacement for the atChops credential
-// ladder, so these tests hold both sides and use the vocabulary at_chops has
-// deprecated (AtChops, AtSigningInput, AtSigningResult) to stand in for the
-// old one.
-// TODO(4.0): remove the ladder side with the credential ladder.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
@@ -16,10 +8,9 @@ import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
 
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
-
-/// The injected authenticator, which takes over from the
-/// atChops/privateKey/cramSecret ladder.
+/// The injected authenticator, which is the only PKAM credential path left:
+/// the atChops/privateKey/cramSecret ladder it replaced is gone with
+/// at_chops 4.0.0.
 void main() {
   late OutboundConnection mockOutBoundConnection;
   late SecondaryAddressFinder mockSecondaryAddressFinder;
@@ -27,7 +18,6 @@ void main() {
   late AtLookupSecureSocketFactory mockSocketFactory;
   late AtLookupSecureSocketListenerFactory mockSecureSocketListenerFactory;
   late AtLookupOutboundConnectionFactory mockOutboundConnectionFactory;
-  late AtChops mockAtChops;
   late SecureSocket mockSecureSocket;
 
   const host = '127.0.0.1';
@@ -45,9 +35,7 @@ void main() {
     mockSocketFactory = MockSecureSocketFactory();
     mockSecureSocketListenerFactory = MockSecureSocketListenerFactory();
     mockOutboundConnectionFactory = MockOutboundConnectionFactory();
-    mockAtChops = MockAtChops();
     registerFallbackValue(SecureSocketConfig());
-    registerFallbackValue(FakeAtSigningInput());
     mockSecureSocket = createMockAtServerSocket(host, port);
 
     when(() => mockSecondaryAddressFinder.findSecondary('@alice'))
@@ -75,19 +63,10 @@ void main() {
       socketListenerFactory: mockSecureSocketListenerFactory,
       outboundConnectionFactory: mockOutboundConnectionFactory);
 
-  test('an injected authenticator runs, and the ladder does not', () async {
+  test('an injected authenticator runs and is recorded on the connection',
+      () async {
     replies = [fromChallenge, 'data:success', 'data:[]'];
     final atLookup = build();
-    // atChops is set too, so the ladder COULD run. This is the whole claim:
-    // the injected authenticator is preferred over it, not merely available
-    // when it is absent.
-    atLookup.atChops = mockAtChops;
-    // Stubbed so that if the ladder DID run it would succeed rather than
-    // crash on an unstubbed mock. Otherwise removing the preference fails
-    // this test with a type error instead of with the assertion below, and
-    // a type error proves nothing about which route was taken.
-    when(() => mockAtChops.sign(any()))
-        .thenReturn(AtSigningResult()..result = 'ladder-signature');
 
     var authenticatorCalls = 0;
     atLookup.authenticator = (executor) async {
@@ -102,11 +81,10 @@ void main() {
     final result = await atLookup.executeCommand('scan\n', auth: true);
 
     expect(authenticatorCalls, 1, reason: 'the authenticator must have run');
-    verifyNever(() => mockAtChops.sign(any()));
     expect(result, 'data:[]');
     expect(mockOutBoundConnection.getMetaData()!.isAuthenticated, isTrue,
         reason: 'a successful authenticator must be recorded on the '
-            'connection, exactly as the ladder records it');
+            'connection');
   });
 
   test('an authenticator reporting failure raises UnAuthenticatedException',
@@ -127,18 +105,17 @@ void main() {
         reason: 'a failed authentication must not be recorded');
   });
 
-  test('with no authenticator the atChops ladder still runs', () async {
-    // The "alongside" half of the seam: nothing about the existing route
-    // changes while an authenticator is absent.
-    replies = [fromChallenge, 'data:success', 'data:[]'];
+  test('with no authenticator, no privateKey and no cramSecret, auth throws',
+      () async {
+    // The credential ladder this once fell back to (atChops, then
+    // privateKey, then cramSecret) is gone for atChops: with none of the
+    // three credentials set, there is nothing left to authenticate with.
     final atLookup = build();
-    atLookup.atChops = mockAtChops;
-    when(() => mockAtChops.sign(any()))
-        .thenReturn(AtSigningResult()..result = 'sig');
 
-    final result = await atLookup.executeCommand('scan\n', auth: true);
-
-    verify(() => mockAtChops.sign(any())).called(1);
-    expect(result, 'data:[]');
+    await expectLater(
+        () => atLookup.executeCommand('scan\n', auth: true),
+        throwsA(predicate((dynamic e) =>
+            e is UnAuthenticatedException &&
+            e.message.contains('No AtAuthenticator'))));
   });
 }

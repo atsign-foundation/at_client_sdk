@@ -1,13 +1,6 @@
-// These tests exercise the atChops credential ladder itself, so they are
-// written in the vocabulary at_chops has deprecated (AtChops, AtSigningInput,
-// AtSigningResult). They go when the ladder does.
-// TODO(4.0): remove with the credential ladder.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -19,8 +12,6 @@ import 'package:at_utils/at_logger.dart';
 
 import 'at_lookup_test_utils.dart';
 
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
-
 void main() {
   AtSignLogger.root_level = 'finest';
   late OutboundConnection mockOutBoundConnection;
@@ -30,7 +21,6 @@ void main() {
   late AtLookupSecureSocketListenerFactory mockSecureSocketListenerFactory;
   late AtLookupOutboundConnectionFactory mockOutboundConnectionFactory;
 
-  late AtChops mockAtChops;
   late SecureSocket mockSecureSocket;
 
   String atServerHost = '127.0.0.1';
@@ -43,7 +33,6 @@ void main() {
     mockSocketFactory = MockSecureSocketFactory();
     mockSecureSocketListenerFactory = MockSecureSocketListenerFactory();
     mockOutboundConnectionFactory = MockOutboundConnectionFactory();
-    mockAtChops = MockAtChops();
     registerFallbackValue(SecureSocketConfig());
     mockSecureSocket = createMockAtServerSocket(atServerHost, atServerPort);
 
@@ -72,217 +61,125 @@ void main() {
     });
   });
 
-  /// The challenge shape an atServer should emit for a client:
-  /// `data:_<uuid><atSign>:<uuid>`.
-  const fromChallenge = 'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@alice'
-      ':c3d345fc-5691-4f90-bc34-17cba31f060f';
-
   group('A group of tests to verify atlookup pkam authentication', () {
+    test('pkamAuthenticate with no authenticator set throws', () async {
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          secureSocketFactory: mockSocketFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+
+      await expectLater(
+          atLookup.pkamAuthenticate(),
+          throwsA(predicate((e) =>
+              e is UnAuthenticatedException &&
+              e.message.contains('no AtAuthenticator is set'))));
+    });
+
     test('pkam auth without enrollmentId - auth success', () async {
-      final pkamSignature =
-          'MbNbIwCSxsHxm4CHyakSE2yLqjjtnmzpSLPcGG7h+4M/GQAiJkklQfd/x9z58CSJfuSW8baIms26SrnmuYePZURfp5oCqtwRpvt+l07Gnz8aYpXH0k5qBkSR34SBk4nb+hdAjsXXgfWWC56gROPMwpOEbuDS6esU7oku+a7Rdr10xrFlk1Tf2eRwPOMWyuKwOvLwSgyq/INAFRYav5RmLFiecQhPME6ssc1jW92wztylKBtuZT4rk8787b6Z9StxT4dPZzWjfV1+oYDLaqu2PcQS2ZthH+Wj8NgoogDxSP+R7BE1FOVJKnavpuQWeOqNWeUbKkSVP0B0DN6WopAdsg==';
-
-      AtSigningResult mockSigningResult = AtSigningResult()
-        ..result = 'mock_signing_result';
-      registerFallbackValue(FakeAtSigningInput());
-      when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
-
-      when(() => mockAtChops.sign(any()))
-          .thenReturn(AtSigningResult()..result = pkamSignature);
-      // The from: response first, then the pkam result.
-      var readCount = 0;
-      when(() => mockOutboundListener.read()).thenAnswer((_) =>
-          Future.value(readCount++ == 0 ? fromChallenge : 'data:success'));
-
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-
-      when(() => mockOutBoundConnection.write(
-              'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n'))
-          .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n');
-        return Future.value();
-      });
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => true;
       var result = await atLookup.pkamAuthenticate();
       expect(result, true);
     });
 
     test('pkam auth without enrollmentId - auth failed', () async {
-      final pkamSignature =
-          'MbNbIwCSxsHxm4CHyakSE2yLqjjtnmzpSLPcGG7h+4M/GQAiJkklQfd/x9z58CSJfuSW8baIms26SrnmuYePZURfp5oCqtwRpvt+l07Gnz8aYpXH0k5qBkSR34SBk4nb+hdAjsXXgfWWC56gROPMwpOEbuDS6esU7oku+a7Rdr10xrFlk1Tf2eRwPOMWyuKwOvLwSgyq/INAFRYav5RmLFiecQhPME6ssc1jW92wztylKBtuZT4rk8787b6Z9StxT4dPZzWjfV1+oYDLaqu2PcQS2ZthH+Wj8NgoogDxSP+R7BE1FOVJKnavpuQWeOqNWeUbKkSVP0B0DN6WopAdsg==';
-
-      AtSigningResult mockSigningResult = AtSigningResult()
-        ..result = 'mock_signing_result';
-      registerFallbackValue(FakeAtSigningInput());
-      when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
-
-      when(() => mockAtChops.sign(any()))
-          .thenReturn(AtSigningResult()..result = pkamSignature);
-      when(() => mockOutboundListener.read()).thenAnswer((_) =>
-          Future.value('error:AT0401-Exception: pkam authentication failed'));
-
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-
-      when(() => mockOutBoundConnection.write(
-              'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n'))
-          .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n');
-        return Future.value();
-      });
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => false;
       expect(() async => await atLookup.pkamAuthenticate(),
           throwsA(predicate((e) => e is UnAuthenticatedException)));
     });
 
     test('pkam auth with enrollmentId - auth success', () async {
-      final pkamSignature =
-          'MbNbIwCSxsHxm4CHyakSE2yLqjjtnmzpSLPcGG7h+4M/GQAiJkklQfd/x9z58CSJfuSW8baIms26SrnmuYePZURfp5oCqtwRpvt+l07Gnz8aYpXH0k5qBkSR34SBk4nb+hdAjsXXgfWWC56gROPMwpOEbuDS6esU7oku+a7Rdr10xrFlk1Tf2eRwPOMWyuKwOvLwSgyq/INAFRYav5RmLFiecQhPME6ssc1jW92wztylKBtuZT4rk8787b6Z9StxT4dPZzWjfV1+oYDLaqu2PcQS2ZthH+Wj8NgoogDxSP+R7BE1FOVJKnavpuQWeOqNWeUbKkSVP0B0DN6WopAdsg==';
       final enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      AtSigningResult mockSigningResult = AtSigningResult()
-        ..result = 'mock_signing_result';
-      registerFallbackValue(FakeAtSigningInput());
-      when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
-
-      when(() => mockAtChops.sign(any()))
-          .thenReturn(AtSigningResult()..result = pkamSignature);
-      // The from: response first, then the pkam result.
-      var readCount = 0;
-      when(() => mockOutboundListener.read()).thenAnswer((_) =>
-          Future.value(readCount++ == 0 ? fromChallenge : 'data:success'));
-
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-
-      when(() => mockOutBoundConnection.write(
-              'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n'))
-          .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n');
-        return Future.value();
-      });
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => true;
       var result =
           await atLookup.pkamAuthenticate(enrollmentId: enrollmentIdFromServer);
       expect(result, true);
     });
 
     test('pkam auth with enrollmentId - auth failed', () async {
-      final pkamSignature =
-          'MbNbIwCSxsHxm4CHyakSE2yLqjjtnmzpSLPcGG7h+4M/GQAiJkklQfd/x9z58CSJfuSW8baIms26SrnmuYePZURfp5oCqtwRpvt+l07Gnz8aYpXH0k5qBkSR34SBk4nb+hdAjsXXgfWWC56gROPMwpOEbuDS6esU7oku+a7Rdr10xrFlk1Tf2eRwPOMWyuKwOvLwSgyq/INAFRYav5RmLFiecQhPME6ssc1jW92wztylKBtuZT4rk8787b6Z9StxT4dPZzWjfV1+oYDLaqu2PcQS2ZthH+Wj8NgoogDxSP+R7BE1FOVJKnavpuQWeOqNWeUbKkSVP0B0DN6WopAdsg==';
       final enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      AtSigningResult mockSigningResult = AtSigningResult()
-        ..result = 'mock_signing_result';
-      registerFallbackValue(FakeAtSigningInput());
-      when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
-
-      when(() => mockAtChops.sign(any()))
-          .thenReturn(AtSigningResult()..result = pkamSignature);
-      when(() => mockOutboundListener.read()).thenAnswer((_) =>
-          Future.value('error:AT0401-Exception: pkam authentication failed'));
-
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-
-      when(() => mockOutBoundConnection.write(
-              'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n'))
-          .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n');
-        return Future.value();
-      });
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => false;
       expect(
           () async => await atLookup.pkamAuthenticate(
               enrollmentId: enrollmentIdFromServer),
-          throwsA(predicate((e) =>
-              e is UnAuthenticatedException && e.message.contains('AT0401'))));
+          throwsA(predicate((e) => e is UnAuthenticatedException)));
     });
   });
 
   group('A connection records the identity it authenticated as', () {
-    const pkamSignature = 'a-signature';
-
-    /// Wires the mocks for one PKAM exchange and hands back the metadata
+    /// Wires the mocks for one authentication and hands back the metadata
     /// object the connection will carry, so a test can read what the
     /// authentication wrote onto it.
-    OutboundConnectionMetadata primePkam(
-        {String? enrollmentId, bool succeeds = true}) {
-      registerFallbackValue(FakeAtSigningInput());
-      when(() => mockAtChops.sign(any()))
-          .thenReturn(AtSigningResult()..result = pkamSignature);
-      var readCount = 0;
-      when(() => mockOutboundListener.read()).thenAnswer((_) => Future.value(
-          readCount++ == 0
-              ? fromChallenge
-              : (succeeds
-                  ? 'data:success'
-                  : 'error:AT0401-Exception: pkam authentication failed')));
-
+    OutboundConnectionMetadata primeAuth() {
       final metaData = OutboundConnectionMetadata()..isAuthenticated = false;
       when(() => mockOutBoundConnection.getMetaData()).thenReturn(metaData);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-
-      final enrollmentClause =
-          enrollmentId == null ? '' : 'enrollmentId:$enrollmentId:';
-      final command = 'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:'
-          '$enrollmentClause$pkamSignature\n';
-      when(() => mockOutBoundConnection.write(command))
-          .thenAnswer((invocation) {
-        mockSecureSocket.write(command);
-        return Future.value();
-      });
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
       return metaData;
     }
 
-    AtLookupImpl newAtLookup() {
+    AtLookupImpl newAtLookup(AtAuthenticator authenticator) {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = authenticator;
       return atLookup;
     }
 
     test('pkam auth records the enrollment id it authenticated with', () async {
       const enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      final metaData = primePkam(enrollmentId: enrollmentIdFromServer);
+      final metaData = primeAuth();
       final before = DateTime.now().toUtc();
 
       expect(
-          await newAtLookup()
+          await newAtLookup((executor) async => true)
               .pkamAuthenticate(enrollmentId: enrollmentIdFromServer),
           true);
 
@@ -295,26 +192,27 @@ void main() {
       expect(metaData.authenticatedAt!.isUtc, true);
     });
 
-    test('pkam auth with no enrollment id records none, not the field',
-        () async {
-      final metaData = primePkam();
-      final atLookup = newAtLookup()
-        // What the NEXT authentication would use. This one is being handed
-        // nothing, and sends nothing, so it must record nothing.
-        ..enrollmentId = 'f0c5e2b0-0000-4000-8000-000000000001';
+    test(
+        'pkam auth with no call-site enrollment id falls back to the '
+        'enrollmentId field', () async {
+      final metaData = primeAuth();
+      const fieldEnrollmentId = 'f0c5e2b0-0000-4000-8000-000000000001';
+      final atLookup = newAtLookup((executor) async => true)
+        ..enrollmentId = fieldEnrollmentId;
 
       expect(await atLookup.pkamAuthenticate(), true);
 
-      expect(metaData.authenticatedAsEnrollmentId, isNull,
-          reason: 'the recorded identity is what went on the wire, '
-              'not what AtLookUp.enrollmentId holds');
+      expect(metaData.authenticatedAsEnrollmentId, fieldEnrollmentId,
+          reason: 'with no enrollment id named on the call, the field is '
+              'the only other place the authenticator is told to look');
       expect(metaData.authenticatedAt, isNotNull);
     });
 
     test('a refused pkam auth records nothing', () async {
-      final metaData = primePkam(succeeds: false);
+      final metaData = primeAuth();
 
-      await expectLater(newAtLookup().pkamAuthenticate(),
+      await expectLater(
+          newAtLookup((executor) async => false).pkamAuthenticate(),
           throwsA(isA<UnAuthenticatedException>()));
 
       expect(metaData.isAuthenticated, false,
@@ -356,13 +254,12 @@ void main() {
           throwsA(predicate((e) => e is UnAuthenticatedException)));
     });
 
-    test('executeCommand -llookup verb - auth true - at_chops set', () async {
+    test('executeCommand - llookup verb', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse = 'data:1234';
       when(() => mockOutBoundConnection.write(llookupCommand))
@@ -382,7 +279,6 @@ void main() {
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse = 'error:AT0015-Exception: fubar';
       when(() => mockOutBoundConnection.write(llookupCommand))
@@ -404,7 +300,6 @@ void main() {
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse =
           'error:{"errorCode":"AT0015","errorDescription":"Exception: fubar"}';
@@ -467,7 +362,7 @@ void main() {
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => true;
 
       String appName = 'unit_test_2';
       String deviceName = 'test_device';
@@ -505,7 +400,7 @@ void main() {
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => true;
       String enrollmentId = '89213647826348';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
@@ -537,7 +432,7 @@ void main() {
           secureSocketFactory: mockSocketFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.atChops = mockAtChops;
+      atLookup.authenticator = (executor) async => true;
       String enrollmentId = '5754765754';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()

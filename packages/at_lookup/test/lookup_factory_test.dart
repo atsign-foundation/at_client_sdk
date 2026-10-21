@@ -31,7 +31,8 @@ void main() {
     });
   });
 
-  test('the default factory builds through withSecureSocket, carrying the '
+  test(
+      'the default factory builds through withSecureSocket, carrying the '
       'authenticator and the preamble', () {
     Future<bool> authenticator(AtCommandExecutor _) async => true;
     Future<void> preamble(AtCommandExecutor _) async {}
@@ -47,7 +48,8 @@ void main() {
     expect(lookUp.onConnect, same(preamble));
   });
 
-  test('onConnect runs once per connection, before the first command, and '
+  test(
+      'onConnect runs once per connection, before the first command, and '
       'again on a reconnect', () async {
     final preambleAnswers = <String>[];
     final lookUp = AtLookUp.withSecureSocket(

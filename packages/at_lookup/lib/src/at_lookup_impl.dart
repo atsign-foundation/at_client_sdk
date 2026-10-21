@@ -140,13 +140,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
-  // Holds what the deprecated `atChops` accessors set. The type cannot leave
-  // while those accessors are part of this class's API, so it goes when the
-  // credential ladder does.
-  // TODO(4.0): remove with the credential ladder.
-  // ignore: deprecated_member_use
-  AtChops? _atChops;
-
   /// Prefer [AtLookUp.withSecureSocket].
   ///
   /// This takes a `String, int` root pair where [AtRootDomain] validates the
@@ -282,19 +275,19 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       var value = resultJson['data'];
       value = VerbUtil.getFormattedValue(value);
       logger.finer('value: $value dataSignature:$dataSignature');
-      // RSA SHA-256 verify via at_chops (wraps the same crypton
-      // RSAPublicKey.verifySHA256Signature).
-      // TODO(4.0): not part of the credential ladder, so this one outlives
-      // it. at_chops directs it to RsaSignatureAlgo — but that class pins a
-      // modulus size per instance, and this verifies a PEER's key, whose
-      // size we do not control: rsa2048() returns false for a 4096-bit key
-      // that verifies here today. Choose the instance by the key, or keep a
-      // size-agnostic verify.
-      // ignore: deprecated_member_use
-      var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
-          Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
-          publicKey: publicKeyResult);
-      logger.finer('data verify result: $isDataValid');
+      // RSA SHA-256 verify via the stateless at_chops 4 algorithm. This
+      // verifies a PEER's key, whose size we do not control, so
+      // [_verifyRsaSignature] tries both sizes [SigningAlgoType] allows
+      // rather than pinning one the way a single RsaSigningAlgo instance
+      // would. verifyBytes throws on a failed verification, so unlike the
+      // removed PkamSigningAlgo.verify this cannot return false and have the
+      // result read, then ignored: a forged or mismatched signature throws
+      // straight into the catch below and the lookup reports no data.
+      await _verifyRsaSignature(
+          Uint8List.fromList(utf8.encode(value)),
+          base64Decode(dataSignature),
+          base64Decode(publicKeyResult),
+          HashingAlgoType.sha256);
       return 'data:$value';
     } on StoppedException {
       rethrow;
@@ -303,6 +296,34 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           'Error while verify public data for key: $key sharedBy: $sharedBy exception:${e.toString()}');
       return 'data:null';
     }
+  }
+
+  /// Verifies an RSA PKAM-style signature against a peer's public key whose
+  /// modulus size this class does not control.
+  ///
+  /// [RsaSigningAlgo] pins its key size at construction and
+  /// [RsaSigningAlgo.verifyBytes] throws [AtSigningVerificationException] for
+  /// a key of the wrong size, so this tries every size the Atsign Protocol's
+  /// [SigningAlgoType] defines for RSA and only fails once none of them
+  /// verify. A thrown exception always means "not verified" — there is no
+  /// path here that can turn a failed verification into a return value a
+  /// caller might treat as success.
+  static Future<void> _verifyRsaSignature(
+      Uint8List message,
+      Uint8List signature,
+      Uint8List publicKey,
+      HashingAlgoType hashingAlgoType) async {
+    AtSigningVerificationException? lastFailure;
+    for (final keySize in [2048, 4096]) {
+      try {
+        await RsaSigningAlgo(hashingAlgoType: hashingAlgoType, keySize: keySize)
+            .verifyBytes(message, signature: signature, publicKey: publicKey);
+        return;
+      } on AtSigningVerificationException catch (e) {
+        lastFailure = e;
+      }
+    }
+    throw lastFailure!;
   }
 
   @override
@@ -680,20 +701,20 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
         logger.finer('fromResponse $fromResponse');
-        // RSA SHA-256 sign via at_chops (wraps the same crypton
-        // RSAPrivateKey.createSHA256Signature; only the private key is used).
+        // RSA SHA-256 sign via the stateless at_chops 4 algorithm. [privateKey]
+        // is the same base64 PKCS#8 DER this ladder has always taken; decoding
+        // it straight into RsaSigningAlgo keeps the signature bytes identical
+        // to the pointycastle RSASigner the removed PkamSigningAlgo/crypton
+        // path called.
         // TODO(4.0): remove with the privateKey ladder credential this method
-        // exists to serve. If it outlives the ladder instead, RsaSignatureAlgo
-        // produces identical signature bytes for a 2048-bit key — but refuses
-        // any other modulus size, which this path never checked, so a
-        // caller-supplied 3072- or 4096-bit key that authenticates today
-        // would start throwing.
-        // ignore: deprecated_member_use
-        var sha256signature = PkamSigningAlgo(
-                // ignore: deprecated_member_use
-                AtPkamKeyPair.create('', privateKey),
-                HashingAlgoType.sha256)
-            .sign(Uint8List.fromList(utf8.encode(fromResponse)));
+        // exists to serve. If it outlives the ladder instead, RsaSigningAlgo
+        // refuses any modulus that is not 2048 bits, which this path never
+        // checked, so a caller-supplied 3072- or 4096-bit key that
+        // authenticates today would start throwing.
+        final sha256signature =
+            await RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256)
+                .signBytes(Uint8List.fromList(utf8.encode(fromResponse)),
+                    secretKey: base64Decode(privateKey));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
         await _sendCommand('pkam:$signature\n');
@@ -717,63 +738,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       _whileOpen(() => _pkamAuthenticate(enrollmentId: enrollmentId));
 
   Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
-    // Prefer an injected authenticator here too, not only in [_process].
-    // at_auth reaches this method directly rather than through a verb, so a
-    // seam wired only into [_process] would leave the authenticate() path
-    // still running the ladder - the seam would look connected and do nothing
-    // on the one call that matters most.
-    if (authenticator != null) {
-      await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
-      return _connection!.getMetaData()!.isAuthenticated;
+    // The injected authenticator is the only PKAM credential path left: the
+    // atChops ladder this method used to fall back to depended on AtChops and
+    // AtSigningInput, both removed from at_chops 4.0.0.
+    if (authenticator == null) {
+      throw UnAuthenticatedException(
+          'Unable to perform PKAM authentication for $_currentAtSign: no '
+          'AtAuthenticator is set. Pass one to AtLookUp.withSecureSocket.');
     }
-    await createConnection();
-    try {
-      await _pkamAuthenticationMutex.acquire();
-      if (!_connection!.getMetaData()!.isAuthenticated) {
-        await _sendCommand((FromVerbBuilder()
-              ..atSign = _currentAtSign
-              ..clientConfig = _clientConfig)
-            .buildCommand());
-        var fromResponse = await (messageListener.read());
-        logger.finer('from result:$fromResponse');
-        if (fromResponse.isEmpty) {
-          return false;
-        }
-        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-        fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
-        logger.finer('fromResponse $fromResponse');
-        logger.finer(
-            'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
-        // TODO(4.0): remove with the credential ladder; at_chops directs this
-        // to calling an AtSigningAlgorithm implementation directly.
-        // ignore: deprecated_member_use
-        final atSigningInput = AtSigningInput(fromResponse)
-          ..signingAlgoType = signingAlgoType
-          ..hashingAlgoType = hashingAlgoType
-          // ignore: deprecated_member_use
-          ..signingMode = AtSigningMode.pkam;
-        var signingResult = _atChops!.sign(atSigningInput);
-        var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = signingAlgoType.name
-          ..hashingAlgo = hashingAlgoType.name
-          ..enrollmentlId = enrollmentId
-          ..signature = signingResult.result;
-        logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
-        await _sendCommand(pkamBuilder.buildCommand());
-
-        var pkamResponse = await messageListener.read();
-        if (pkamResponse == 'data:success') {
-          logger.info('auth success');
-          _recordAuthentication(enrollmentId: enrollmentId);
-        } else {
-          throw UnAuthenticatedException(
-              'Failed connecting to $_currentAtSign. $pkamResponse');
-        }
-      }
-      return _connection!.getMetaData()!.isAuthenticated;
-    } finally {
-      _pkamAuthenticationMutex.release();
-    }
+    await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+    return _connection!.getMetaData()!.isAuthenticated;
   }
 
   final Mutex _cramAuthenticationMutex = Mutex();
@@ -865,17 +839,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (auth && _isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!);
-        } else if (_atChops != null) {
-          logger.finer('calling pkam using atchops');
-          await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
-          logger.finer('calling pkam without atchops');
+          logger.finer('calling pkam with the privateKey credential');
           await authenticate(privateKey);
         } else if (cramSecret != null) {
           await cramAuthenticate(cramSecret!);
         } else {
           throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. atChops object is not set');
+              'Unable to perform atLookup auth. No AtAuthenticator, '
+              'privateKey or cramSecret is set.');
         }
       }
       try {
@@ -1414,20 +1386,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     logger.finer('SENDING: $command');
     await _connection!.write(command);
   }
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  set atChops(AtChops? atChops) {
-    _atChops = atChops;
-  }
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  AtChops? get atChops => _atChops;
 
   /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
   @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
