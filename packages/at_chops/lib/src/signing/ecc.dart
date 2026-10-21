@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
+import 'package:at_chops/src/hex.dart';
 import 'package:at_chops/src/secure_random.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:pointycastle/api.dart'
@@ -78,7 +79,7 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
     final compact = Uint8List(_scalarLength * 2)
       ..setRange(0, _scalarLength, _encodeScalar(signature.r))
       ..setRange(_scalarLength, _scalarLength * 2, _encodeScalar(signature.s));
-    return Uint8List.fromList(_bytesToHex(compact).codeUnits);
+    return Uint8List.fromList(hexEncode(compact).codeUnits);
   }
 
   /// Verify [signature] over [message] against the uncompressed [publicKey].
@@ -87,8 +88,9 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
   /// at_chops 3.x wire format) and the raw 64-byte compact `R ‖ S` form, so
   /// data signed under either encoding still verifies.
   ///
-  /// Throws [AtSigningVerificationException] if the signature does not
-  /// verify, or [ArgumentError] if [signature] is neither 64 nor 128 bytes.
+  /// Throws [AtSigningVerificationException] if the signature is not valid hex
+  /// or does not verify, or [ArgumentError] if [signature] is neither 64 nor
+  /// 128 bytes.
   @override
   Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
@@ -96,7 +98,12 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
     if (signature.length == _scalarLength * 2) {
       compact = signature;
     } else if (signature.length == _scalarLength * 4) {
-      compact = _hexToBytes(String.fromCharCodes(signature));
+      try {
+        compact = hexDecode(String.fromCharCodes(signature));
+      } on FormatException {
+        throw AtSigningVerificationException(
+            '$name signature is not valid hex');
+      }
     } else {
       throw ArgumentError.value(signature.length, 'signature.length',
           'must be ${_scalarLength * 2} (compact) or ${_scalarLength * 4} (hex)');
@@ -135,18 +142,5 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
       value = (value << 8) | BigInt.from(byte);
     }
     return value;
-  }
-
-  // Not dart:core's StringBuffer: `at_commons.dart` exports its own class of
-  // that name (an AtBuffer<String>, `append`-based) which shadows it here.
-  static String _bytesToHex(Uint8List bytes) =>
-      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
-
-  static Uint8List _hexToBytes(String hex) {
-    final result = Uint8List(hex.length ~/ 2);
-    for (var i = 0; i < result.length; i++) {
-      result[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return result;
   }
 }

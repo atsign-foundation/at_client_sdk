@@ -177,6 +177,8 @@ Future<Uint8List> pqSeal(
     enc = await kem.encapsulate(recipientPublicKey);
   } on ArgumentError catch (e) {
     throw PqSealException('encapsulation rejected the recipient key: $e');
+  } on KemInputRejectedException catch (e) {
+    throw PqSealException('encapsulation rejected the recipient key: $e');
   }
 
   // The version names the whole suite, so the KEM has to be the suite's KEM.
@@ -217,7 +219,10 @@ Future<Uint8List> pqSeal(
 /// [pqSeal], and passing the wrong one is indistinguishable from a tampered
 /// envelope.
 ///
-/// Throws [PqOpenException] on any failure (see [PqOpenFailure]).
+/// Throws [PqOpenException] on any failure of the envelope or its keys (see
+/// [PqOpenFailure]). A fault in the KEM backend itself, such as a failed
+/// native allocation, surfaces as [StateError] instead, so it is never
+/// mistaken for malformed input.
 Future<Uint8List> pqOpen(
   AtKemAlgorithm kem,
   Uint8List recipientSecretKey,
@@ -245,16 +250,20 @@ Future<Uint8List> pqOpen(
   final Uint8List aeadBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
   // Decapsulation rejects a wrong-length secret key or KEM ciphertext with an
-  // ArgumentError. That is still a malformed envelope from the caller's side,
-  // and letting it escape would break the documented contract that every
-  // failure arrives as a PqOpenException — leaving a caller who catches the
-  // documented type with an uncaught error on a bad input.
+  // ArgumentError, and an FFI backend reports a ciphertext OpenSSL refuses
+  // (a low-order X25519 point) as a KemInputRejectedException. Both are a
+  // malformed envelope from the caller's side, and letting either escape would
+  // break the documented contract that every input failure arrives as a
+  // PqOpenException. A StateError is not caught: it means the backend itself
+  // failed (an allocation or library error), and relabelling it as peer data
+  // would hide an operational fault.
   final Uint8List ss;
   try {
     ss = await kem.decapsulate(recipientSecretKey, kemCt);
   } on ArgumentError catch (e) {
-    throw PqOpenException(PqOpenFailure.malformedEnvelope,
-        'decapsulation rejected the input: $e');
+    throw _decapsulationRejected(e);
+  } on KemInputRejectedException catch (e) {
+    throw _decapsulationRejected(e);
   }
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
@@ -266,6 +275,10 @@ Future<Uint8List> pqOpen(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
   }
 }
+
+PqOpenException _decapsulationRejected(Object cause) => PqOpenException(
+    PqOpenFailure.malformedEnvelope,
+    'decapsulation rejected the input: $cause');
 
 /// The AEAD key and nonce [pqSeal] derives from a KEM shared secret, exposed so
 /// a conformance suite can check the schedule directly.

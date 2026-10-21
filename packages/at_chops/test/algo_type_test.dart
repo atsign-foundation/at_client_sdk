@@ -85,7 +85,7 @@ void main() {
   });
 
   group('algorithm implementations report their enum name', () {
-    test('both AES-256-GCM backends share one identifier', () {
+    test('AES-256-GCM (pure Dart)', () {
       expect(AesGcm256EncryptionAlgo().name, equals('aesgcm256'));
     });
 

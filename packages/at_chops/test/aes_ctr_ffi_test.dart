@@ -9,6 +9,8 @@ import 'package:at_chops/at_chops_ffi.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:test/test.dart';
 
+import 'exception_matchers.dart';
+
 String hexOf(Uint8List bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
@@ -186,10 +188,28 @@ void main() {
       final Uint8List plain = Uint8List.fromList([1, 2, 3]);
       await expectLater(
           algo.encrypt(plain, key, iv: InitialisationVector.random(12)),
-          throwsA(isA<AtEncryptionException>()));
+          throwsEncryption('explicit 16-byte nonce'));
       await expectLater(
           algo.decrypt(plain, key, iv: InitialisationVector.random(12)),
-          throwsA(isA<AtDecryptionException>()));
+          throwsDecryption('explicit 16-byte nonce'));
+    });
+
+    group('a key that is not the configured length', () {
+      for (final int len in <int>[16, 24, 31, 33]) {
+        test('$len bytes against a 32-byte algo is rejected in both directions',
+            () async {
+          final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+          final AesCtrFfiAlgo algo = makeAlgo(key);
+          final Uint8List otherKey = Uint8List(len);
+          final InitialisationVector iv = InitialisationVector.random(16);
+          final Uint8List plain = Uint8List.fromList([1, 2, 3]);
+
+          await expectLater(algo.encrypt(plain, otherKey, iv: iv),
+              throwsEncryption('configured for a 32-byte key'));
+          await expectLater(algo.decrypt(plain, otherKey, iv: iv),
+              throwsDecryption('configured for a 32-byte key'));
+        });
+      }
     });
 
     /// 3.x is where the backends parted company on IV length: the pure-Dart
@@ -210,9 +230,9 @@ void main() {
               throwsA(isA<AtEncryptionException>()),
               reason: 'the pure-Dart path no longer right-pads a short IV');
           await expectLater(makeAlgo(key).encrypt(plain, key, iv: iv),
-              throwsA(isA<AtEncryptionException>()));
+              throwsEncryption('explicit 16-byte nonce'));
           await expectLater(makeAlgo(key).decrypt(plain, key, iv: iv),
-              throwsA(isA<AtDecryptionException>()),
+              throwsDecryption('explicit 16-byte nonce'),
               reason: 'the decrypt direction rejects with its own sibling '
                   'exception, not AtEncryptionException');
         });

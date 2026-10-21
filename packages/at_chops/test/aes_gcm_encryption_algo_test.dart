@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
+import 'exception_matchers.dart';
 
 Uint8List _hex(String s) {
   final out = Uint8List(s.length ~/ 2);
@@ -69,7 +70,7 @@ void main() {
       expect(
           () => algo.decrypt(Uint8List(tagLength + 1), key128,
               iv: InitialisationVector.random(12)),
-          throwsA(isA<AtDecryptionException>()));
+          throwsDecryption('256-bit key'));
     });
   });
 

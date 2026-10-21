@@ -100,7 +100,9 @@ void main() {
     // One 4096-bit generation for the whole group: pure-Dart RSA-4096 key
     // generation is seconds, and every test here needs the same pair.
     late final ({Uint8List publicKey, Uint8List secretKey}) rsa4096;
+    late final ({Uint8List publicKey, Uint8List secretKey}) rsa2048;
     setUpAll(() async {
+      rsa2048 = await RsaSigningAlgo().generateKeyPair();
       rsa4096 = await RsaSigningAlgo(keySize: 4096).generateKeyPair();
     });
 
@@ -126,6 +128,27 @@ void main() {
           throwsA(predicate((e) =>
               e is AtSigningException &&
               e.toString().contains('Cannot sign with a 4096-bit key'))));
+    });
+
+    test('signing with a smaller key than the instance size throws', () async {
+      await expectLater(
+          RsaSigningAlgo(keySize: 4096)
+              .signBytes(message, secretKey: rsa2048.secretKey),
+          throwsA(predicate((e) =>
+              e is AtSigningException &&
+              e.toString().contains('Cannot sign with a 2048-bit key'))));
+    });
+
+    test('verifying against a smaller key than the instance size throws',
+        () async {
+      final signature = await RsaSigningAlgo()
+          .signBytes(message, secretKey: rsa2048.secretKey);
+      await expectLater(
+          RsaSigningAlgo(keySize: 4096).verifyBytes(message,
+              signature: signature, publicKey: rsa2048.publicKey),
+          throwsA(predicate((e) =>
+              e is AtSigningVerificationException &&
+              e.toString().contains('Cannot verify a 2048-bit key'))));
     });
 
     test('verifying against a key of another size throws', () async {

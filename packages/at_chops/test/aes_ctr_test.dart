@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
+import 'exception_matchers.dart';
 
 void main() {
   group(
@@ -29,7 +30,7 @@ void main() {
       expect(() => aesCtr.encrypt(utf8.encode('Hello World'), key, iv: shortIv),
           throwsA(isA<AtEncryptionException>()));
       expect(() => aesCtr.decrypt(utf8.encode('Hello World'), key, iv: shortIv),
-          throwsA(isA<AtDecryptionException>()));
+          throwsDecryption('requires an 16-byte IV'));
     });
 
     test('Test the legacy all-zeroes IV round-trips', () async {
@@ -55,7 +56,7 @@ void main() {
       expect(() => aesCtr.encrypt(utf8.encode('Hello World'), key, iv: iv),
           throwsA(isA<AtEncryptionException>()));
       expect(() => aesCtr.decrypt(utf8.encode('Hello World'), key, iv: iv),
-          throwsA(isA<AtDecryptionException>()));
+          throwsDecryption('Expected a 32-byte AES key'));
     });
   });
 }

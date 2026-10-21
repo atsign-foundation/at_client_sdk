@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:test/test.dart';
@@ -23,5 +24,16 @@ void main() {
         expect(utf8.decode(decryptedData), dataToEncrypt);
       });
     }
+
+    test('an empty plaintext encrypts to one modulus-wide block', () async {
+      final algo = RsaEncryptionAlgo();
+      final (:publicKey, :secretKey) =
+          await RsaSigningAlgo(keySize: 2048).generateKeyPair();
+
+      final encrypted = algo.encrypt(Uint8List(0), publicKey);
+
+      expect(encrypted, hasLength(256));
+      expect(algo.decrypt(encrypted, secretKey), isEmpty);
+    });
   });
 }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/ffi/secret_buffer.dart';
 import 'package:ffi/ffi.dart';
 
 /// X25519 Diffie–Hellman key agreement backed by OpenSSL 3 via Dart FFI.
@@ -107,7 +108,7 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
     privBuf.asTypedList(privateKey.length).setAll(0, privateKey);
     final Pointer<EVP_PKEY> myKey =
         _newRawPrivateKey(nidX25519, nullptr, privBuf, privateKey.length);
-    calloc.free(privBuf);
+    freeSecret(privBuf, privateKey.length);
     if (myKey == nullptr) {
       throw StateError('EVP_PKEY_new_raw_private_key failed');
     }
@@ -141,7 +142,7 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
     privBuf.asTypedList(privateKey.length).setAll(0, privateKey);
     final Pointer<EVP_PKEY> key =
         _newRawPrivateKey(nidX25519, nullptr, privBuf, privateKey.length);
-    calloc.free(privBuf);
+    freeSecret(privBuf, privateKey.length);
     if (key == nullptr) {
       throw StateError('EVP_PKEY_new_raw_private_key failed');
     }
@@ -187,7 +188,7 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
         }
         return Uint8List.fromList(buf.asTypedList(lenPtr.value));
       } finally {
-        calloc.free(buf);
+        freeSecret(buf, lenPtr.value);
       }
     } finally {
       calloc.free(lenPtr);
@@ -201,8 +202,13 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
       if (_deriveInit(ctx) <= 0) {
         throw StateError('EVP_PKEY_derive_init failed');
       }
+      // From here on a failure is caused by the peer's key, not by OpenSSL
+      // itself: it refuses a low-order point, whose shared secret would be
+      // all zeroes. Reported as rejected input so a caller can tell it from a
+      // StateError, which still means the backend failed.
       if (_deriveSetPeer(ctx, peerKey) <= 0) {
-        throw StateError('EVP_PKEY_derive_set_peer failed');
+        throw KemInputRejectedException(
+            'X25519 peer key rejected (EVP_PKEY_derive_set_peer)');
       }
       final Pointer<IntPtr> lenPtr = calloc<IntPtr>();
       try {
@@ -212,11 +218,13 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
         final Pointer<Uint8> ssBuf = calloc<Uint8>(lenPtr.value);
         try {
           if (_derive(ctx, ssBuf, lenPtr) <= 0) {
-            throw StateError('EVP_PKEY_derive failed');
+            throw KemInputRejectedException(
+                'X25519 shared secret rejected (EVP_PKEY_derive), as for a '
+                'low-order point');
           }
           return Uint8List.fromList(ssBuf.asTypedList(lenPtr.value));
         } finally {
-          calloc.free(ssBuf);
+          freeSecret(ssBuf, lenPtr.value);
         }
       } finally {
         calloc.free(lenPtr);
