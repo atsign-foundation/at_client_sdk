@@ -1,3 +1,18 @@
+## 3.15.0-rc9
+
+- chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
+  3.5.0, now throw `UnsupportedError` without contacting an atServer, since
+  atServers refuse the `stream:` command these methods sent from 3.12.0. Both
+  are removed in v4.
+- chore: `EncryptionService.encryptStream` and `getSharedKeyForDecryption`,
+  reached through `AtClient.encryptionService`, now throw `UnsupportedError`,
+  since only the stream transfer used them: encrypt for another atSign with
+  `put` or `notify`. Both are removed in v4.
+- chore: `EncryptionService.decryptStream` is deprecated: use
+  `EncryptionUtil.decryptBytes`. It is removed in v4.
+- chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
+  nothing reads it, and it is removed in v4.
+
 ## 3.15.0-rc8
 
 - feat: `Enrollment` reports the key expiry a request asked for, as

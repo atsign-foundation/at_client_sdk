@@ -30,8 +30,8 @@ dependencies:
   # 3.15.0-rc5 re-exports the atServer check and AtSignLogger that apps reach
   # through this package, and 3.15.0-rc7 serves the Hive store this package
   # opens by default from package:at_client/hive.dart. It has to be written
-  # as a prerelease: a caret on a stable lower bound never accepts one, so
-  # ^3.14.1 would not resolve 3.15.0-rc7 however it is published.
+  # as a prerelease: pub prefers a stable release that meets the floor, and
+  # ^3.15.0 admits no 3.15.0 candidate.
   at_client: ^3.15.0-rc7
   encrypt: ^5.0.3
   intl: ^0.20.2

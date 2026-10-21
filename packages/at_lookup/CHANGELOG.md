@@ -1,3 +1,14 @@
+## 3.7.0-rc5
+
+- chore: `AtLookupMuxable.readResponse` is deprecated: it was added for the
+  stream verb, which atServers no longer support, and is removed in 4.0.0. A
+  response line starting `stream:` is refused as unexpected (AT0014).
+
+## 3.7.0-rc4
+
+- fix: a refused CRAM authentication's exception carries the atServer's
+  response.
+
 ## 3.7.0-rc3
 
 - feat: while notifications are on, each heartbeat the atServer answers logs

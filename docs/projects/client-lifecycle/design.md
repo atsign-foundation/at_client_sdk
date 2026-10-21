@@ -585,7 +585,7 @@ which requires the connection):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`), the file-stream path and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
+| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
 | at_client `notification_service_impl.dart`             | the monitor's connection                                                             | authenticator from `AtChops`, the preference's TLS fields                   |
 | at_client `atsign_lifecycle.dart` (`enroll`)           | the unauthenticated submission                                                       | none: `authenticator: null`                                                 |
 | at_client `authenticated_lookup.dart`                  | `open`'s probe and `authenticatesAs`                                                 | authenticator from the keys                                                 |
@@ -612,8 +612,7 @@ given, with a client built without one as the control.
 
 Not built through `withSecureSocket`, and not this leg: at_lookup's
 `CacheableSecondaryAddressFinder` (a raw TLS socket to the atDirectory, the
-`SecondaryAddressFinder` interface being the injection point), at_client's
-`StreamNotificationHandler` (the legacy file stream, a raw socket), and
+`SecondaryAddressFinder` interface being the injection point), and
 at_lookup's `MonitorClient` (exported, no caller in this repository). The WASM
 design's transport section owns those.
 
@@ -660,8 +659,8 @@ final client = await Atsign('@alice').open(
     lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = certs));
 ```
 
-and the client holds it: `buildRemoteSecondary`, sync's `remoteSecondaryFor`,
-the file-stream path and the re-derive after a retrofit all call
+and the client holds it: `buildRemoteSecondary`, sync's `remoteSecondaryFor`
+and the re-derive after a retrofit all call
 `client.lookUps(...)` instead of `AtLookUp.withSecureSocket(...)`, and the
 monitor's connection comes through `NotificationServiceImpl.create(lookUps:)`,
 the way that service takes `connection`: it holds the client as its

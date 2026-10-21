@@ -290,8 +290,10 @@ declares itself the single place for this and its dartdoc covers "waiting for a
 response". Its `defaultTimeout` is **30 s** — the exact value the timeouts branch
 independently picked. It already distinguishes the kinds: `maxAllowed` (60 s)
 caps operations, `defaultOnboardingTimeout` is exempt because it bounds a loop.
-The total must follow the second, since at_client passes
-`outboundConnectionTimeout` — **600 000 ms** — for stream reads.
+The total must follow the second, since its own 90 s default already exceeds
+the cap. (When this was decided, at_client also passed
+`outboundConnectionTimeout`, **600 000 ms**, for stream reads; the stream verb
+has since been retired.)
 
 **8 — A fake socket over a real `StreamController`, plus mechanism counters.**
 The waiting path itself **is** covered, contrary to what this decision first

@@ -304,15 +304,12 @@ Future<bool> _pkam(
   throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
 }
 
-/// Ported from at_lookup's own `cramAuthenticate`, verbatim - including that it
-/// does NOT pass the challenge through [validatedFromChallenge], where PKAM
-/// does.
+/// Authenticates [atSign] by answering the atServer's `from:` challenge with
+/// the SHA-512 digest of [cramSecret] and the challenge.
 ///
-/// That asymmetry is preserved deliberately rather than resolved here: a port
-/// that quietly adds a check is a behaviour change hiding inside a refactor,
-/// and it would land in a commit nobody would think to review for it. Whether
-/// CRAM should validate the challenge too is a real question and a separate
-/// one; it wants its own change, with its own test.
+/// The challenge is digested as it arrives: unlike PKAM's, it does not pass
+/// through [validatedFromChallenge]. A refusal throws an
+/// [UnAuthenticatedException] naming [atSign] and the atServer's response.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,
@@ -340,7 +337,8 @@ Future<bool> _cram(
     _logger.info('cram auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException('Auth failed');
+  throw UnAuthenticatedException(
+      'Cram authentication failed for $atSign: $cramResponse');
 }
 
 /// Signs [challenge] as a PKAM proof with [keyPair], returning the base64 the

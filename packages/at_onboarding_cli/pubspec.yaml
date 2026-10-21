@@ -23,8 +23,8 @@ dependencies:
   at_auth: ^4.0.0-rc4
   at_chops: ^3.0.0
   # The prerelease lower bound is deliberate: this package uses PqPosture,
-  # which no stable at_client carries, and a caret on a stable version does not
-  # accept a prerelease. 3.15.0-rc5 is the first to re-export AtSignLogger,
+  # which no stable at_client carries, and pub prefers a stable release that
+  # meets the floor. 3.15.0-rc5 is the first to re-export AtSignLogger,
   # which this package takes from at_client, 3.15.0-rc7 the first to serve
   # HiveAtClientStorage from package:at_client/hive.dart, and 3.15.0-rc8 the
   # first whose Enrollment reports apkamKeysExpiryDuration and expiresAt.
