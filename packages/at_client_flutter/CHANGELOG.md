@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.0-rc7
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 2.0.0-rc6
 
 - feat: a dialog given no storage opens Hive in the app's support directory,

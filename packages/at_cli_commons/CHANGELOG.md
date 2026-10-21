@@ -1,3 +1,7 @@
+## 3.1.2-rc4
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 3.1.2-rc3
 
 - build: requires `at_onboarding_cli` ^2.0.0-rc4, `at_client` ^3.15.0-rc4 and

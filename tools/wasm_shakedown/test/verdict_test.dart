@@ -7,7 +7,7 @@ import 'package:wasm_shakedown/verdict.dart';
 import 'package:wasm_shakedown/wasm_shakedown.dart';
 
 /// A walk, written down rather than taken — which is what makes the baseline
-/// logic testable. Both gated packages baseline an empty allow list over a
+/// logic testable. Every gated package baselines an empty allow list over a
 /// package owning no offender, so both directions of the subtraction are empty
 /// against the live tree.
 Shakedown _walk({

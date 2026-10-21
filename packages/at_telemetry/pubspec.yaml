@@ -1,7 +1,7 @@
 name: at_telemetry
 description: telemetry package that defines models, behaviors
               and contracts for applications and atServers
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/atsign-foundation/at_client_sdk
 
 environment:
@@ -9,7 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_utils: ^3.0.19
+  at_utils: ">=3.0.19 <5.0.0"
   crypto: ^3.0.5
   cryptography: ^2.7.0
 

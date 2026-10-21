@@ -1,3 +1,7 @@
+## 4.0.0-rc1
+- BREAKING: `at_utils.dart` no longer exports `PseudoServerSocket`, `ApplicationConfiguration`, `FileLoggingHandler`, `StdErrLoggingHandler`, `CLILoggingHandler`, or `AtSignLogger.stdErrLoggingHandler` — import `at_utils_io.dart` for these. The default barrel is now dart:io-free.
+- BREAKING: removed `AtUtils.formatAtSign` (deprecated since 3.x)
+
 ## 3.5.0
 - feat: AtSignLogger hands its LoggingHandler each record's message and logger
   name with control characters, bidirectional formatting characters and line

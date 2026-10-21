@@ -12,7 +12,7 @@ dependencies:
   at_client: ^3.15.0-rc7
   at_client_flutter:
     path: ../../
-  at_utils: ^3.4.0
+  at_utils: ^4.0.0-rc1
   app_links: ^6.4.0
   http: ^1.2.0
   path_provider: ^2.1.5
@@ -29,6 +29,8 @@ dependency_overrides:
     path: ../../../at_commons/
   at_chops:
     path: ../../../at_chops/
+  at_utils:
+    path: ../../../at_utils/
 
 dev_dependencies:
   flutter_test:

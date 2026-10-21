@@ -12,6 +12,8 @@
   `EncryptionUtil.decryptBytes`. It is removed in v4.
 - chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
   nothing reads it, and it is removed in v4.
+- `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to
+  `StdErrLoggingHandler` from `at_utils_io.dart` to keep them off stdout.
 
 ## 3.15.0-rc8
 

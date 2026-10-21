@@ -1,3 +1,7 @@
+## 2.0.0-rc9
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 2.0.0-rc8
 
 - feat: `at_activate list` shows the key expiry each enrollment asked for and

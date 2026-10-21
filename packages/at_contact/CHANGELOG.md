@@ -1,3 +1,7 @@
+## 3.1.1-rc1
+
+- chore(deps): at_utils ^4.0.0-rc1
+
 ## 3.1.0
 
 - chore: cleanup lint warnings

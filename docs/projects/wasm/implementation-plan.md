@@ -169,7 +169,7 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 > at_auth's `max_blocked_packages` from 4 to 3 in the same PR — which is exactly the "T0
 > shrinks" the phase promises, and the first evidence that the one-way baseline is
 > tightened when convenient rather than ignored. Putting the import back fails the at_auth
-> ratchet at 4 blocked packages over the 3 it is baselined at.
+> ratchet by one blocked package over its ceiling.
 
 - **S1 — Plumb the at_lookup socket factories.** ⛔ **Superseded by
   [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)**;
