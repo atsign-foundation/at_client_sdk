@@ -2,7 +2,7 @@
 
 **Status:** decision record (binding).
 **Scope:** the rulings D-1..D-25 that govern the implementation-neutral `AtClient`
-work, the measurements that drove them, the superseded positions from the predecessor
+work, the K-1..K-9 rulings on browser at-keys custody, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
 [`design.md`](design.md); sequencing in [`implementation-plan.md`](implementation-plan.md);
@@ -11,7 +11,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings)
+- [1. The rulings](#1-the-rulings) — D-1..D-25, then [K-1..K-9 browser at-keys custody](#browser-at-keys-custody--k-1k-9)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -74,21 +74,6 @@ implementations, a documented reason why one cannot serve both platforms, an inj
 escape hatch, and a control. Anything short of that is the stub case, and D-1 still
 refuses it.
 
-**Amended 2026-10-13 — at_client's crypto backends, the one exception in a package `lib/`.**
-gkc chose a conditional export on 2026-10-09 for at_client's post-quantum backends:
-`lib/src/crypto/backends/crypto_backends.dart` exports `crypto_backends_dart.dart`, or
-`crypto_backends_native.dart` under `dart.library.ffi`, which takes X-Wing and value
-AES-256-GCM from at_chops's OpenSSL backends where the loaded libcrypto supports them.
-Of the burden above it meets two parts. Both branches are real implementations, the
-pure-Dart one complete, and the two are byte-compatible. The reason is recorded: the
-OpenSSL code needs `dart:ffi`, which a wasm build does not have, and at_client may not
-import `at_chops_ffi.dart` from anywhere a web build reaches
-([PQ design](../pq/design.md#openssl-backends-behind-a-conditional-export-at_client)).
-It has no injection escape hatch: `AT_CHOPS_LIBCRYPTO_PATH` chooses which libcrypto
-loads, not which implementation runs. And it has no control: at_client is not in the
-wasm gate, so neither branch is walked there; a local `dart compile wasm` of a program
-importing `package:at_client/at_client.dart` takes the pure-Dart branch.
-
 ### D-2 — No throwing stubs (2026-08-13)
 
 **A capability a platform lacks must be unreachable there, not reachable-and-explosive.**
@@ -125,6 +110,8 @@ not an API-compatibility commitment.
 
 ### D-4 — `at_client_web` is the only new package for now (2026-08-13)
 
+**Amended 2026-10-18 — the package is `at_client_wasm`.** The Dart package is named `at_client_wasm`; every `at_client_web` in D-4, D-8 and D-11 and in the log below means it. The npm facade stays `@atsign/at-client-web`.
+
 Flutter and CLI platform-implementer packages are named as the eventual shape and
 deferred. `at_client_flutter` is in scope as a breaking-change **consumer**;
 `at_onboarding_cli` and `at_cli_commons` likewise.
@@ -145,12 +132,6 @@ neutral barrel's import graph clean. Consumers add one import line.
 
 **Precedent:** `at_auth_io.dart` under the PQ program's S-5, and the existing
 `at_chops.dart` / `at_chops_ffi.dart` pair, which has held its separation successfully.
-
-**Amended 2026-10-07 — storage backends get a barrel each.** at_client's storage backends
-are not native code for `at_client_io.dart` to collect. Each has its own barrel
-(`package:at_client/hive.dart`, `sqlite.dart` and `memory.dart`), so an app picks a backend
-by its import (D-25). `at_client_io.dart` isn't built yet; when it comes with the WASM work,
-it re-exports the backend barrels along with the native implementations above.
 
 ### D-6 — The structural gate is primary; the compiler is not a gate (2026-08-13)
 
@@ -360,8 +341,7 @@ supplied"*, which is the property the browser lane needs.
    when a keystore is injected while `preference.isLocalStoreRequired` is false. Under a
    bundle that question stops being meaningful: the bundle *is* the store, and whether it
    happens to be durable is its own business. **X4 must not carry this guard onto the
-   factory it introduces.** *(Built 2026-10-08, D-25: storage passed is used whatever the
-   flag says, at every entry point, and the guard on an injected keystore is gone.)*
+   factory it introduces.**
 4. **`clear()` and the principal guard must survive a store with no durable half.** Both
    stay meaningful — an in-memory cache is still principal-specific, and `AT0009` is still
    the failure being designed out — but neither may assume there are records on disk to
@@ -681,8 +661,7 @@ reached"* to *"is supplied"*, which is strictly better for this design.
    `at_client_impl.dart:824` currently throws when a keystore is injected while
    `preference.isLocalStoreRequired` is false — exactly backwards for this design. Under a
    bundle the flag stops being the right question, so X4's factory must not inherit the
-   guard. This is D-12's amendment item 3, stated from this side. *(Built 2026-10-08,
-   D-25.)*
+   guard. This is D-12's amendment item 3, stated from this side.
 3. **`AtChops` must not be rebuilt from a store that never held the keys.** X4's
    measurement found 14 e2e tests dying with *"PKAM Keypair required for signing"* when a
    client was rebuilt on a reopened keystore. A remote-only bundle has no durable keystore
@@ -742,6 +721,8 @@ Choosing it on latency would mean **a storage benchmark silently deciding the en
 identity integration** ([D-16](#d-16--the-browser-lane-keeps-enterprise-identity-possible-2026-09-13), E3) — the same failure shape OQ-5 was written to prevent, in a new form.
 
 Escalate the remaining trade as a **product** decision before V2 needs it.
+
+> **Amended 2026-10-13 by [D-25](#d-25--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13).** The table above is partly wrong: SimpleOPFS *is* multi-atSign (one instance per directory), and IndexedDB's gap is un-flushed durability, not torn transactions. The pick-two framing no longer holds; the `WasmVfs` rejection does.
 
 ---
 
@@ -837,38 +818,61 @@ into **resume**.
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
 
-### D-25 — Client storage is the app's choice; at_client keeps a Hive default until 4.0 (2026-10-07)
+---
 
-An app chooses its local storage, and a platform package chooses a default for the apps
-that don't. at_client offers each backend from its own barrel (`package:at_client/hive.dart`,
-`sqlite.dart` and `memory.dart`, D-5 as amended), and its core holds none of them: outside
-the backend directories only `lib/src/storage/default_storage.dart` names Hive, which it
-opens for a client given no storage until 4.0. `test/storage/import_boundary_test.dart`
-holds that line for Hive and for SQLite. at_client_flutter's default is Hive under the
-app's support directory, where at_client_mobile's examples put `hiveStoragePath`, and
-at_onboarding_cli already chooses its own.
+### D-25 — Browser SQLite storage is **SimpleOPFS, one directory per (atSign, enrollmentId)**; W4 resolved (2026-10-13)
 
-Everything at_client creates lives on that storage. `AtSyncQueue` takes a `SyncQueueStore`
-from the backend and opens nothing itself, and the Hive queue box moves into the Hive
-backend with the 3.14 stray-queue recovery. The types a backend is written against stay
-internal, so an app wanting a backend of its own raises a feature request.
+Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) from a live lab, not a benchmark ([`vfs-lab-results.md`](vfs-lab-results.md)). It honours D-21's bound: nothing here is chosen on latency.
 
-Every client keeps local storage, even if only in memory. Storage passed is used whatever
-`isLocalStoreRequired` says, which completes D-12's amendment item 3, and a client with the
-flag false and no storage is refused. at_cli 3.1.1 builds exactly that client, but its
-constraints (Dart below 3.0, at_commons 3.x) never resolve at_client 3.15.0, and at_tools has
-since removed at_cli, which at_repl replaces (gkc, 2026-10-15).
-`AtClientImpl.create(localSecondaryKeyStore:)` and `AtClient.persistenceBundle` are
-deprecated; 4.0 removes them along with the default seam, `hiveStoragePath` and
-`isLocalStoreRequired`, after which storage is required at every door.
+**Ruled**
 
-The storage docs say one thing about what is on disk: end-to-end-encrypted values are
-stored in local storage as ciphertext, never in the clear. What each backend does at rest
-beyond that is left out of them, as it confused readers (gkc, 2026-10-09).
+- **W4.** `sqlite3.wasm` costs **+386 KB gz** (+363 KB br) over `remote_only` — a fixed per-app first-load cost. Accepted. D4 (raw IndexedDB) is not triggered; `design.md` §5's SQLite-wasm ruling stands.
+- **P1.** The browser SQLite bundle uses `SimpleOpfsFileSystem`, one instance per (atSign, enrollmentId) via `loadFromStorage(<dir>, vfsName: <unique>)`, hosted in a dedicated worker.
+- **Fallback.** `IndexedDbFileSystem` is acceptable only as an opt-in bundle where OPFS is unavailable, and **only with** (a) `await flush()` before acknowledging a write and (b) a Web Locks single-tab guard.
 
-**Why.** Which store suits an app is a platform question (a Flutter app, a command-line
-tool and a browser each want a different one), and a core that names one backend chooses
-for all of them. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327).
+**Why — evidence, Chromium unless noted**
+
+| Axis | `IndexedDbFileSystem` | `SimpleOpfsFileSystem` |
+| --- | --- | --- |
+| Renderer crash, 200 runs | atomic, but **200/200 lost acknowledged writes** (median 42 tx); 0 lost once flush is awaited | 200/200 clean |
+| Two tabs, one database | **database unusable** | second tab refused, data intact |
+| Multi-atSign | ✅ | ✅ (D-21 said ❌ — per-instance, not per-origin) |
+| Two tabs, Firefox | `integrity_check` fails | second tab refused, data intact |
+| Open at 100k rows | 178 ms (WebKit 349, Firefox 176), grows with size | 13 ms (WebKit 18, Firefox 23), flat |
+
+**Corrects D-21's table.** (1) `SimpleOpfsFileSystem` *does* support multi-atSign: "exactly two files" is per instance. (2) `IndexedDbFileSystem`'s weakness is un-flushed durability and multi-tab corruption, not torn transactions. D-21's `WasmVfs` rejection is unchanged.
+
+**Consequences**
+
+- SQLite runs in a **dedicated worker**; Dart stays on the main thread per D-19 and talks to it across the `AtKeyStore` boundary. A worker hop measured 0.02–0.06 ms.
+- The second tab must handle the open failure (UX: "already open in another tab"); that refusal is the single-writer lock.
+
+**Scope limits (do not lean on this ruling beyond them).** Durability is characterised for renderer death only, not power loss or browser-process kill. Browser coverage is desktop Chromium, Firefox 157, WebKit and Safari 27.0.1; E2 is Chromium-only; mobile is out of scope. A bfcache-parked tab can keep the lock (seen on Firefox), so the app must release on `pagehide` and reacquire on `pageshow` (unbuilt). `sqlite3.wasm` compile time and memory are excluded.
+
+
+### Browser at-keys custody — K-1..K-9
+
+The browser lane holds the atSign's @keys as **one encrypted record per passkey**, derived from a single WebAuthn PRF call. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently.
+
+| ID | Ruling | Decided |
+| --- | --- | --- |
+| K-1 | **Constant PRF salt** `SHA-256("atsign:keys:lookup:v1")`; recovery is typing-free. Departs from the architect's model (salt derived from the atSign) | 2026-10-15 |
+| K-2 | **One PRF call, then HKDF; no stored salt.** A server-controlled salt as PRF input lets the server force the blob key to equal the lookup key it already knows | 2026-10-15 |
+| K-3 | **atSign in both HKDF labels** (`atkeys-record-id\|<atSign>`, `atkeys-kek\|<atSign>`), canonical per at_commons `toAtsign()` | 2026-10-15 |
+| K-4 | **AES-256-GCM, AAD = the record's clear header** (`v`, `alg`, `kdf`, `iv`) | 2026-10-15 |
+| K-5 | **Restored public keys must match the published ones before PKAM** (rollback defence) | 2026-10-15 |
+| K-6 | **One record per passkey** at `public:_<lookupHex>.atkeysv@<atSign>` on existing verbs, no server change (probed P1–P7); TTL refreshed on open. Resolves OQ-19 and browser-onboarding Q-2 | 2026-10-15 |
+| K-7 | **`prf` is the passkey unlock kind; no `largeBlob`.** 4 of 4 tested rows return PRF; iOS Safari, Firefox, Windows Hello untested. The generated passphrase stays the recovery unlock | 2026-09-25 |
+| K-8 | **PCAM private key lives inside the blob;** signing algorithm = first of `SigningAlgoType.strongestFirst` the browser can sign and the atServer verifies | 2026-10-13 |
+| K-9 | **A per-write data key is rejected** — its only job is sharing one key across passkeys, the `unlocks[]` pattern K-6 removes | 2026-10-15 |
+
+**K-6 clarification (2026-10-18).** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-25's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-25's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-25-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on.
+
+**Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed.
+
+**Open against K.** At-keys record TTL `T` (proposal 90 days; product); owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite another passkey's record (bead `m0j`, accepted gap); whether hardware-bound APKAM (PR #2295, "gate (c)") replaces or supplements this design. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+
+**Reserved, not filed.** D-26..D-28 are held for PB-0's four unfiled rulings (the portal-requirements routing, R-5).
 
 ---
 
@@ -1031,6 +1035,8 @@ trunk commit the plan was *written against* — it never held the file.
 | T0.3's ban on `if (dart.library.` in a neutral `lib/`                                          | Withdrawn — D-1's amendment above: both branches of a conditional must be walked. Its cause is gone; not re-ruled.             |
 | R5 — add the `dart test -p node -c dart2wasm` matrix dimension, allowed-to-fail                | Withdrawn. The hosted runner cannot load a suite at all; waits on a pinned Dart/Node pair. §2.7.                               |
 | R1's plan to lift `packages/at_auth/test/wasm/dep_tree_test.dart` into a shared *test* utility | Shipped as a standalone CLI, `tools/wasm_shakedown`, run as its own CI job rather than as a per-package test.                  |
+| The `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array and a merge-on-heal (PB-5 H/J, live-tested in L step 0a) | Superseded 2026-10-13/15 by K-6: one record per passkey, nothing shared, nothing merged. The code is not yet reworked (see K build state). |
+| PRF input derived from the atSign (`prfEvalInput(atSign)`) | Superseded by K-1: the salt is constant. |
 
 **Resolved.** A prior merge-time follow-up here tracked four references to
 `docs/projects/wasm/plan.md` on the `at_client_sdk-atauth-wasm` branch. None reached trunk:
@@ -1106,14 +1112,13 @@ field). Open for the remaining capabilities.
 abstraction, or file transfer becomes a separate optional native-only `AtFileTransfer`.
 The second is smaller; the first is the better API. See [`design.md`](design.md) §2.8.
 
-**OQ-5 — Which VFS?** `IndexedDbFileSystem` (main thread, async flush) or OPFS (true
-sync, needs a dedicated web worker). Sets `at_client_web`'s execution model. **Not a
-measurement:** deferred by D-17 and constrained by D-21, which make it a product pick-two —
-see the status table below.
+**OQ-5 — Which VFS?** **Resolved by D-25:** `SimpleOpfsFileSystem` in a dedicated web
+worker, one directory per (atSign, enrollmentId). `IndexedDbFileSystem` is an opt-in fallback
+only with flush-before-ack and a single-tab guard.
 
 **OQ-6 — What is the acceptable WASM payload budget?** Compiled `.wasm` +
-JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). Informs whether the IndexedDB fallback is ever needed —
-[`design.md`](design.md) §5, gate X2. Record the number before deciding.
+JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). **Resolved by D-25 (W4):** +386 KB gz, fixed per app, accepted; D4 (raw IndexedDB) is not triggered —
+[`design.md`](design.md) §5, gate X2.
 
 **OQ-7 — Directory lookup from a browser.** `root.atsign.org:64` is a raw TLS socket.
 The `proxy:` convention and the injectable `SecondaryAddressFinder` unblock
@@ -1154,7 +1159,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 
 | Question | Now |
 | --- | --- |
-| **OQ-5** — which VFS | **Deferred by D-17** (the default V1 bundle needs no VFS; a consumer injecting a SQLite bundle does, which is why this is deferred rather than closed) and **constrained by D-21** (`WasmVfs` rejected; the remaining trade is a product decision, not a benchmark) |
+| **OQ-5** — which VFS | **Resolved by D-25** (2026-10-13): `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), dedicated worker. `WasmVfs` stays rejected (D-21). The V1 default bundle still needs no VFS (D-17); this applies to a consumer injecting a SQLite bundle |
 | **OQ-11** — instance-based `AtClientManager` | **Resolved by D-22** in the instance-based direction. The browser lane constructs its own manager; `getInstance()` is demoted over a major rather than deleted |
 | **OQ-12** — process-global factory registry | **Resolved by D-22** — instance-per-client |
 | **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |
@@ -1187,6 +1192,14 @@ Open in every lineage; owner assigned in none. D-17 keeps `sqlite3.wasm` (~1 MB+
 the **default** V1 payload, which relieves the pressure but does not answer the question —
 and a consumer who injects a SQLite bundle pays it back in full. Escalate rather than
 invent a number.
+
+### OQ-16 — Is dart2js or dart2wasm the primary JS/TS target?
+
+D-7 rules dart2js the target for the JS/TS artifact and D-23 puts one TypeScript facade over it; dart2wasm is built and gated in CI (PB-3 stage6, PB-5 J) but advisory. The open part is product sign-off on that call, as against a Flutter Web `--wasm` build. Proposed in the PB-6 plan: dart2js primary, dart2wasm advisory. Not blocking V1 compile gates, which run both.
+
+### OQ-19 — Do prf unlocks accumulate on the server copy? **RESOLVED 2026-10-15 by K-6**
+
+Live test L step 0a found every new passkey appended an unlock to one shared public record, that nothing pruned dead ones, and that a stale device merged them back. Replaced by one PRF-keyed record per passkey with a refreshed TTL ([`browser-onboarding.md`](browser-onboarding.md)). The implementation is still to do (K build state).
 
 ---
 
@@ -1222,5 +1235,9 @@ invent a number.
 | 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
-| 2026-10-07 | **D-25 ruled; D-5 amended.** Client storage is the app's choice, each backend from its own barrel, with a Hive default in one core file until 4.0; every client keeps local storage, and one with `isLocalStoreRequired` false and no storage is refused; the bare-keystore route and `persistenceBundle` are deprecated; each backend says what it protects at rest. D-12's amendment item 3 and D-18's consequence 2 built. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327). |
-| 2026-10-09 | **D-25 amended.** The storage docs no longer say what each backend protects at rest, which confused readers; they say only that end-to-end-encrypted values are stored in local storage as ciphertext, never in the clear (gkc). |
+| 2026-09-25 | **K-7 ruled.** OQ-P1 spike (#2269): PRF returns 32 bytes on 4 of 4 rows; `prf` is the unlock kind, `largeBlob` dropped. |
+| 2026-10-13 | **D-25 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Chromium, Firefox 157, WebKit and Safari 27.0.1 agree on E3/E4; Chromium, Firefox and Safari agree on E7. Scope limits in D-25. |
+| 2026-10-13 | **K-8 ruled; OQ-19 raised.** Live test L step 0a showed the shared `unlocks[]` copy leaks device count and accumulates dead entries; [`browser-onboarding.md`](browser-onboarding.md) proposes one record per passkey. PCAM private key moves inside the blob. |
+| 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
+| 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
+| 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |

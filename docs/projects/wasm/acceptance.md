@@ -5,7 +5,8 @@
 `AtClient` work, the measured evidence behind each tier, and — for every tier — an
 explicit statement of what it does *not* establish.
 **Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`; T9 (the app-supplied
-transport) landed on `gkc-client-lifecycle` on 2026-09-13. The measured
+transport) landed on `gkc-client-lifecycle` on 2026-09-13. §9a.1 amended 2026-10-18 for
+the per-passkey record design (K-1..K-9); no other gate was re-measured on that pass. The measured
 baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see
@@ -342,8 +343,8 @@ For everything T2 cannot reach: IndexedDB, the SQLite-wasm VFS, `WebSocket`,
 
 | ID   | Gate                                                                                                                                             | Done when       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the IndexedDB VFS. **V2** — the V1 default bundle has no storage backend (D-17), and which VFS is D-21's product call, not this gate's. | All tests pass. |
-| T3.2 | Same for the `at_client_web` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
+| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_wasm` storage backend, including a write/reload/read cycle against the SimpleOPFS VFS (D-25). **V2** — the V1 default bundle has no storage backend (D-17). | All tests pass. |
+| T3.2 | Same for the `at_client_wasm` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
 | T3.3 | The whole T2 set re-run under Chrome, confirming no dart2js-vs-Chrome-WasmGC divergence.                                                         | All tests pass. |
 
 **Prerequisite:** the first CI run must confirm the platform executes at all — it was
@@ -431,6 +432,16 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K2 | `exportKey` on the wrapping key **throws** | the key is genuinely non-extractable |
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
+
+**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add four gates.** Under the per-passkey record ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open. Read X-K2 as "the derived kek is imported non-extractable", and X-K3 as "a record present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error". X-K1 and X-K4 stand unchanged. None of the new gates below is built.
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-K5 | HKDF with `P` = bytes `00..1f` and atSign `@alice` yields the lookup key and kek in [`atkeys-derivation.md`](atkeys-derivation.md), and `@Alice`, `alice`, `@ali.ce` yield the same | K-1, K-3: the derivation and atSign canonicalisation are stable across implementations |
+| X-K6 | A record whose `v`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
+| X-K7 | A valid older record whose public keys no longer match the published ones is refused before PKAM | K-5: rollback |
+| X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
+| X-K9 | After a successful open the credential hint and local record are rewritten, and `navigator.storage.persist()` is requested once; with the replica deleted, the passkey alone restores it | K-6 clarification: eviction is a UX cost, not a loss |
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 

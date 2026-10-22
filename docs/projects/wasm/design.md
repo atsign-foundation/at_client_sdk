@@ -124,7 +124,7 @@ export 'src/io/secure_socket_transport.dart';  // the only file naming dart:io
 **In the platform package**, the web implementation:
 
 ```dart
-// package:at_client_web/at_client_web.dart
+// package:at_client_wasm/at_client_wasm.dart
 class WebSocketTransport implements AtTransport {
   // ...
 }
@@ -134,7 +134,7 @@ Three rules make this work, and they are rulings rather than style —
 [`decisions.md`](decisions.md) D-1, D-2, D-5:
 
 1. **No `if (dart.library.*)` in a neutral package.** The core must not know platforms
-   differ. at_client's crypto backends are the one recorded exception (D-1).
+   differ.
 2. **No default that names an implementation.** `x ??= NativeThing()` re-imports the
    native graph regardless of what the caller injects, and is the single most common
    way a barrel split silently fails. Require injection instead.
@@ -179,7 +179,7 @@ implementation can be handed in entire; retyping the three is what makes
 
 **Implementers.** `at_lookup_io.dart` wraps `SecureSocket` and absorbs
 `secure_socket_util.dart` whole (certs and TLS keylog are native-only concerns).
-`at_client_web` wraps `WebSocket` from `package:web`, targeting
+`at_client_wasm` wraps `WebSocket` from `package:web`, targeting
 `wss://<host>:<port>/ws`. Framing is unchanged, so the response parser is reused as-is.
 
 **Breaking-change blast radius.** `Socket getSocket()` is on a public interface;
@@ -204,17 +204,27 @@ or HTTPS-reachable directory endpoint, which is an open question in
 
 ### 2.2 Storage bootstrap
 
-The keystore and its bootstrap are both injectable. A client takes a constructed
-`AtClientStorage` as `storage:`, and builds one itself only when given none, through
-`lib/src/storage/default_storage.dart`, the one core file that names Hive until 4.0
-([D-25](decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)).
-That default still requires `hiveStoragePath`, and a client given no storage and no path
-is refused with an `ArgumentError` at construction. The Hive bootstrap lives in
-`HiveAtClientStorage`, which builds its keystore through `HiveAtPersistenceFactory`, and
-`keyStoreSecret`, which nothing reads, is deprecated.
+The keystore *is* injectable. Its bootstrap is not.
 
-`AtClientImpl.create(..., localSecondaryKeyStore:)`, the bare-keystore route that skipped
-the bootstrap, is deprecated and goes in 4.0; a caller passes storage instead.
+```dart
+// at_client/lib/src/manager/storage_manager.dart:16
+final HiveAtPersistenceFactory _factory = HiveAtPersistenceFactory();
+```
+
+`final`, no constructor parameter, `package:at_persistence_secondary_server/hive.dart`
+imported directly. `_initStorage` then requires `preferences!.hiveStoragePath` and
+throws `'Please set local storage path'` when it is null. The chain runs
+`AtClientImpl._init()` (`at_client_impl.dart:392-399`) → `StorageManager.init(...)` →
+`HiveAtPersistenceFactory().initialize(...)` → `Hive.init(storagePath)` +
+`Directory(storagePath)` inside `at_persistence_secondary_server`.
+
+`StorageManager.init(String currentAtSign, List<int>? keyStoreSecret)` accepts
+`keyStoreSecret` and never uses it — worth removing while in the area.
+
+**The existing escape hatch:** `AtClientImpl.create(..., localSecondaryKeyStore:)`.
+When non-null, `StorageManager` is skipped entirely and `LocalSecondary` takes the
+injected store. Good, but it means a web caller must construct the whole store itself
+rather than choosing a backend.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 `at_client` owns a storage abstraction covering the keystore **and** the sync queue
@@ -319,10 +329,10 @@ abstract class AtClientStorage {
 
 ### 2.3 The sync queue
 
-**Defused by D-25.** `AtSyncQueue.open` takes a `SyncQueueStore` and opens nothing
-itself: each backend opens its queue on its own storage and hands it over, and the Hive
-box store lives in `lib/src/storage/hive/`. Until then this was the canonical runtime
-landmine, as `AtSyncQueue.open()` read after X3:
+**The canonical runtime landmine, and the one to lead with when explaining this
+project.**
+
+On trunk (after X3, `at_sync_queue.dart` — `AtSyncQueue.open()`):
 
 ```dart
 if (store != null) {
@@ -342,15 +352,15 @@ is what lets a storage bundle hand the queue its own store instead. (`gkc-pq-d1-
 carries a variant that opens on `HiveInstances.forPath(path)` when the preference names a
 path, falling back to the global instance; the X3 merge-back has to keep both.)
 
-A queue is still opened lazily from `LocalSecondary._ensureSyncQueueOpen()`, but only on
-the deprecated bare-keystore route, through the default seam's `openDefaultSyncQueue`, and
-only under the preference's `hiveStoragePath`: a bare keystore with no path is refused at
-construction, so nothing in at_client opens a box on Hive's global instance. The route goes
-in 4.0.
+Opened lazily from `LocalSecondary._ensureSyncQueueOpen()` when no storage bundle
+supplied a queue, assuming someone already called `Hive.init`. `local_secondary.dart:118-121` documents that
+ordering dependency in a comment — it is an implicit global contract, not an enforced
+one.
 
-Consequences, before D-25: it fired on the first `put` or `syncQueueSize`, not at
-construction; it compiled everywhere; and injecting a keystore in place of the Hive
-bootstrap made it throw rather than fixing it.
+Consequences: it fires on the first `put` or `syncQueueSize`, not at construction; it
+compiles everywhere; and injecting a keystore to bypass `StorageManager` makes it throw
+rather than fixing it. `at_client`'s pubspec carries a direct `hive: ^2.2.3` dependency
+solely for this file.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 The queue does **not** get a spec interface of its own. It belongs to the storage bundle
@@ -359,8 +369,8 @@ separately from the store whose writes it tracks. This supersedes the earlier de
 — a small parallel interface matching how the keystore is factored — and S3 with it, which
 plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as a test
 seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
-tests; it stops being the route to backend selection. (D-25 removed that seam, and keeps
-the direct `hive` dependency while `hive.dart` lives in at_client.)
+tests; it stops being the route to backend selection. Drop the direct `hive` dependency
+once this and §2.2 land.
 
 
 ### 2.4 Key material — the exemplar
@@ -386,7 +396,7 @@ Its one flaw is the shape rule 2 warns about: `at_auth_impl.dart:227` still does
 `atOnboardingRequest.atKeysIo ??= FileAtKeysIo()`, which pulls `dart:io` into the graph
 no matter what the caller injects. **The PQ program's S-5 removes it.**
 
-`at_client_web` adds a web `WrittenAtKeysIo` subtype. Because `InMemoryAtKeysIo`
+`at_client_wasm` adds a web `WrittenAtKeysIo` subtype. Because `InMemoryAtKeysIo`
 already handles the decode path, this should reduce to a thin persistence wrapper over
 IndexedDB or WebCrypto-wrapped storage — a new subtype, not a new abstraction.
 
@@ -422,11 +432,11 @@ first.
 
 The interface is right; its packaging is not.
 
-- `at_utils/lib/src/logging/handlers.dart` `LoggingHandler` — `LoggingHandler { void call(LogRecord) }`,
+- `at_utils/lib/src/logging/handlers.dart:9-12` — `LoggingHandler { void call(LogRecord) }`,
   with four implementations.
 - `at_utils/lib/src/logging/handlers.dart:1` — `import 'dart:io';` **in the same file**,
-  so importing the logger at all drags `dart:io` in. `FileLoggingHandler`,
-  `StdErrLoggingHandler` and `CLILoggingHandler` are the users.
+  so importing the logger at all drags `dart:io` in. `FileLoggingHandler` (`:34-48`),
+  `StdErrLoggingHandler` (`:53-59`) and `CLILoggingHandler` (`:71-97`) are the users.
 - `at_utils/lib/src/logging/atsignlogger.dart:14-22` — a mutable process-global static
   `defaultLoggingHandler`, defaulting to `ConsoleLoggingHandler` → `print`.
 
@@ -578,7 +588,7 @@ an oversight.
 **Status: mostly history.** The first row is superseded by the `AtLookUpFactory`
 every at_client connection is built from, the third was plumbed, and
 `AtSyncQueue.open({injectedBox})` was overtaken by the storage bundle (D-12, the X
-series) and removed (D-25). The table stays as the record of what the seams were.
+series). The table stays as the record of what the seams were.
 
 Four injection points already existed and were simply never passed through. Plumbing
 them changes no interface, breaks nothing, and shrinks every later diff.
@@ -614,7 +624,7 @@ It carries platform-specific configuration as `String?`:
 | `tlsKeysSavePath` | —    | **@Deprecated.** Copied onto `SecureSocketConfig` by `defaultLookUps` (`at_client/lib/src/lifecycle/lookups.dart`), then `File(...).writeAsStringSync` in `SecureSocketUtil`; goes in 4.0 |
 | `pathToCerts`     | —    | **@Deprecated.** The same route, then `SecurityContext.setTrustedCertificates`; goes in 4.0 |
 | `decryptPackets`  | —    | **@Deprecated.** The same route, where it gates the TLS keylog write; goes in 4.0. The replacement for all three is `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:` |
-| `keyStoreSecret`  | 37   | deprecated; read by nothing                         |
+| `keyStoreSecret`  | 37   | passed to `StorageManager.init` and ignored         |
 
 **This is the mechanism by which native-only configuration compiles on web and fails at
 runtime.** A path is a string everywhere; it only stops meaning anything when something
@@ -638,7 +648,7 @@ platform type: a service takes the legs through its constructor, the way
 handed instances. Each leg has exactly one default seam in the core, named in the
 table, which is what a platform package replaces and what the `_io` split of at_client
 will move out. And a platform implementer is three objects handed to the doors, no
-fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
+fork of at_client: `at_client_wasm` is a WebSocket `AtLookupMuxable` behind a factory, a
 SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
 this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
 as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
@@ -648,8 +658,8 @@ D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when
 its leg landed and gone in 4.0. `downloadPath` (file transfer,
-[§2.8](#28-filesystem-and-file-transfer)) is the one not yet claimed by a leg;
-`keyStoreSecret`, which nothing reads, is deprecated without one.
+[§2.8](#28-filesystem-and-file-transfer)) and `keyStoreSecret` (ignored) are the two not
+yet claimed by a leg.
 
 ---
 
@@ -685,7 +695,9 @@ spec surface makes it a straightforward backend implementation rather than a mig
 that decision can be revisited late, on the measured number from
 [`acceptance.md`](acceptance.md) X2, rather than committed to up front.
 
-**VFS choice** — `IndexedDbFileSystem` (main thread, loads on open, flushes
-asynchronously; no worker) vs **OPFS** (true synchronous access, requires a dedicated
-web worker). This sets `at_client_web`'s execution model and is deferred to a
-measurement; open question in [`decisions.md`](decisions.md).
+**VFS choice** — `SimpleOpfsFileSystem` in a dedicated web worker, one directory per
+(atSign, enrollmentId) ([D-25](decisions.md)). SQLite runs in the worker; Dart stays on the
+main thread (D-19) and reaches it across the async `AtKeyStore` boundary.
+`IndexedDbFileSystem` is an opt-in fallback only with flush-before-ack and a single-tab guard.
+
+**Key custody is not in this store.** The credential hint and the per-passkey record replica stay in plain IndexedDB, outside the storage bundle (K-6 clarification in [`decisions.md`](decisions.md)): they must open before `enrollmentId` — and so the OPFS directory — is known, in V1 where there is no SQLite, and in a tab the single-writer lock refuses.
