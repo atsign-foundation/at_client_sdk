@@ -106,8 +106,15 @@ void main() {
       final calls = <String, Future<Object?> Function()>{
         'executeCommand': () => atLookup.executeCommand('noop:0\n'),
         'executeVerb': () => atLookup.executeVerb(StatsVerbBuilder()),
-        'llookup': () => atLookup.llookup('phone'),
-        'lookup': () => atLookup.lookup('phone', '@bob'),
+        'llookup': () => atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        'lookup': () => atLookup.executeVerb(LookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@bob')
+          ..auth = true),
         'pkamAuthenticate': () => atLookup.pkamAuthenticate(),
         'cramAuthenticate': () => atLookup.cramAuthenticate('secret'),
         'sendSync': () => (atLookup as AtCommandExecutor).sendSync('noop:0\n'),

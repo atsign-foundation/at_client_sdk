@@ -46,6 +46,24 @@
   `isInValid`, `messageListener` and `requestResponseMutex` are now private.
   Nothing outside this package called them.
 - chore: moves to at_chops ^4.0.0-rc.1.
+- breaking: `AtLookupImpl` is no longer exported from
+  `package:at_lookup/at_lookup.dart`. Construct a lookup through
+  `AtLookUp.withSecureSocket` or `secureSocketLookUps`
+  (`package:at_lookup/at_lookup_io.dart`) — those are now the only ways to
+  get one. The deprecation on its constructor is removed along with the
+  export, since there is no longer a public, deprecated path to compare it
+  against.
+- breaking: Removed the CRUD helpers `update`, `delete`, `scan`, `lookup`,
+  `llookup` and `plookup` from `AtLookUp` and `AtLookupImpl`. Call
+  `executeVerb` with the matching `VerbBuilder` instead:
+  - `update`: `lookUp.executeVerb(UpdateVerbBuilder()..atKey = ...
+    ..value = ...)`
+  - `delete`: `lookUp.executeVerb(DeleteVerbBuilder()..atKey = ...)`
+  - `scan`: `lookUp.executeVerb(ScanVerbBuilder()..auth = false)`
+  - `lookup`: `lookUp.executeVerb(LookupVerbBuilder()..atKey = ...
+    ..auth = true)`
+  - `llookup`: `lookUp.executeVerb(LLookupVerbBuilder()..atKey = ...)`
+  - `plookup`: `lookUp.executeVerb(PLookupVerbBuilder()..atKey = ...)`
 
 ## 3.7.0-rc5
 

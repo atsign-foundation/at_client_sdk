@@ -1,5 +1,6 @@
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/src/at_lookup_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

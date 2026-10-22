@@ -1,6 +1,7 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/at_lookup_impl.dart' show AtLookupImpl;
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -63,10 +64,8 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
 abstract interface class AtLookUp {
   /// Build a lookup that talks to an atServer over TLS.
   ///
-  /// This is the entry point. Constructing `AtLookupImpl` directly still
-  /// works and is deprecated: it takes a `String, int` root pair rather than
-  /// an [AtRootDomain], and it hands back a concrete type where callers only
-  /// need an interface.
+  /// This is the entry point: `AtLookupImpl`, the concrete type behind it, is
+  /// internal and not exported.
   ///
   /// Static, and that is deliberate — statics are not part of the `implements`
   /// contract, so adding this breaks none of the classes that mock
@@ -121,25 +120,6 @@ abstract interface class AtLookUp {
       onConnect: onConnect,
     )..authenticator = authenticator;
   }
-
-  /// update
-  Future<bool> update(String key, String value,
-      {String? sharedWith, Metadata? metadata});
-
-  /// lookup
-  Future<String> lookup(String key, String sharedBy, {bool auth = true});
-
-  /// plookup
-  Future<String> plookup(String key, String sharedBy);
-
-  Future<String> llookup(String key,
-      {String? sharedBy, String? sharedWith, bool isPublic = false});
-
-  /// delete
-  Future<bool> delete(String key, {String? sharedWith, bool isPublic = false});
-
-  /// scan
-  Future<List<String>> scan({String? regex, String? sharedBy});
 
   Future<String?> executeVerb(VerbBuilder builder);
 
@@ -270,44 +250,6 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// While notifying, this is a lost connection like any other and is
   /// reconnected. [close] is what ends the lookup.
   Future<void> dropConnection();
-
-  // Where `AtLookupImpl` accepts more than `AtLookUp` does, restated here so
-  // a caller can hold this interface without losing anything: two methods,
-  // three parameters - `scan(auth:)`, `scan(showHiddenKeys:)` and
-  // `lookup(metadata:)`.
-  //
-  // ⚠️ Dart lets an implementer ADD optional named parameters, so a gap here
-  // is invisible: the analyzer stays clean and the only symptom is a caller
-  // holding the interface unable to pass something the class accepts.
-  // `showHiddenKeys` was missed for exactly that reason, and this comment
-  // claimed the restatement was complete while it was not.
-  //
-  // Found with the analyzer, not by reading: a hand-written comparison of the
-  // two signature lists missed `scan` entirely, because nested generics in
-  // `Future<List<String>>` broke its return-type pattern. A probe that calls
-  // each method through the interface reports exactly what is missing, and
-  // carries `scan(auth:)` as a control that must be reported.
-  //
-  // They go HERE rather than on `AtLookUp` because that interface is frozen:
-  // adding a parameter to one of its methods forces every `implements
-  // AtLookUp` to redeclare it, which breaks the six mocks and any external
-  // implementer at compile time. This interface is new, and `AtLookupImpl` is
-  // its only implementer.
-
-  /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
-  /// authenticated atSign (`at_server_status` scans unauthenticated) - and
-  /// [showHiddenKeys], which asks the atServer to include `public:__` keys.
-  @override
-  Future<List<String>> scan(
-      {String? regex,
-      String? sharedBy,
-      bool auth = true,
-      bool showHiddenKeys = false});
-
-  /// As [AtLookUp.lookup], and additionally [metadata].
-  @override
-  Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool metadata = false});
 
   /// Takes over authentication entirely when set.
   ///

@@ -114,18 +114,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
-  /// Prefer [AtLookUp.withSecureSocket].
-  ///
-  /// This takes a `String, int` root pair where [AtRootDomain] validates the
-  /// port and knows about proxy addresses, and it hands back a concrete type
-  /// where a caller only ever needs an interface.
-  ///
-  /// The warnings this raises at every construction site ARE the deliverable:
-  /// they are the mechanical list of what still has to move. `dart analyze`
-  /// reports them as `info`, so nothing breaks while the list is worked
-  /// through.
-  @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
-      'AtLookupMuxable. Removed in the next major release.')
+  /// Internal; construct an [AtLookUp] through [AtLookUp.withSecureSocket]
+  /// instead. This takes a `String, int` root pair where [AtRootDomain]
+  /// validates the port and knows about proxy addresses, and it hands back a
+  /// concrete type where a caller only ever needs an interface.
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {SecondaryAddressFinder? secondaryAddressFinder,
       SecureSocketConfig? secureSocketConfig,
@@ -146,108 +138,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         socketListenerFactory ?? AtLookupSecureSocketListenerFactory();
     this.outboundConnectionFactory =
         outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
-  }
-
-  @override
-  Future<bool> delete(String key,
-      {String? sharedWith, bool isPublic = false}) async {
-    var builder = DeleteVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = key
-        ..sharedWith = sharedWith
-        ..sharedBy = _currentAtSign
-        ..metadata = (Metadata()..isPublic = isPublic));
-    var deleteResult = await executeVerb(builder);
-    return deleteResult.isNotEmpty; //replace with call back
-  }
-
-  @override
-  Future<String> llookup(String key,
-      {String? sharedBy, String? sharedWith, bool isPublic = false}) async {
-    LLookupVerbBuilder builder;
-    if (sharedWith != null) {
-      builder = LLookupVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = key
-          ..sharedBy = _currentAtSign
-          ..sharedWith = sharedWith
-          ..metadata = (Metadata()..isPublic = isPublic));
-    } else if (isPublic && sharedBy == null && sharedWith == null) {
-      builder = LLookupVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = 'public:$key'
-          ..sharedBy = _currentAtSign);
-    } else {
-      builder = LLookupVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = key
-          ..sharedBy = _currentAtSign);
-    }
-    var llookupResult = await executeVerb(builder);
-    llookupResult = VerbUtil.getFormattedValue(llookupResult);
-    return llookupResult;
-  }
-
-  @override
-  Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool metadata = false}) async {
-    var builder = LookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = key
-        ..sharedBy = sharedBy)
-      ..auth = auth
-      ..operation = metadata == true ? 'all' : null;
-    var lookupResult = await executeVerb(builder);
-    lookupResult = VerbUtil.getFormattedValue(lookupResult);
-    return lookupResult;
-  }
-
-  @override
-  Future<String> plookup(String key, String sharedBy) async {
-    var builder = PLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = key
-        ..sharedBy = sharedBy);
-    var plookupResult = await executeVerb(builder);
-    plookupResult = VerbUtil.getFormattedValue(plookupResult);
-    return plookupResult;
-  }
-
-  @override
-  Future<List<String>> scan(
-      {String? regex,
-      String? sharedBy,
-      bool auth = true,
-      bool showHiddenKeys = false}) async {
-    var builder = ScanVerbBuilder()
-      ..sharedBy = sharedBy
-      ..regex = regex
-      ..auth = auth
-      ..showHiddenKeys = showHiddenKeys;
-    var scanResult = await executeVerb(builder);
-    if (scanResult.isNotEmpty) {
-      scanResult = scanResult.replaceFirst(RegExp(r'^data:'), '');
-    }
-    return (scanResult.isNotEmpty) ? List.from(jsonDecode(scanResult)) : [];
-  }
-
-  @override
-  Future<bool> update(String key, String value,
-      {String? sharedWith, Metadata? metadata}) async {
-    var builder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = key
-        ..sharedBy = _currentAtSign
-        ..sharedWith = sharedWith)
-      ..value = value;
-    if (metadata != null) {
-      builder.atKey.metadata = metadata;
-      if (metadata.isHidden) {
-        builder.atKey.key = '_$key';
-      }
-    }
-    var putResult = await executeVerb(builder);
-    return putResult.isNotEmpty;
   }
 
   /// Serialises [_createConnection]: two callers racing through it would

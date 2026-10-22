@@ -46,3 +46,27 @@ Why: a pub workspace resolves one version of `at_chops` for every member, so
 trunk cannot hold a workspace with some members migrated to 4.0.0-rc.1 and
 others still on 3.x. Landing each slice on an integration branch keeps the
 half-migrated state off trunk until every slice is in.
+
+## D4. at_lookup 4.0 public surface (2026-10-22)
+
+`LIVE`. As part of the at_lookup 4.0 clean break:
+
+- `AtLookupImpl` is no longer exported from `package:at_lookup/at_lookup.dart`.
+  `AtLookUp.withSecureSocket` and `secureSocketLookUps` are the only ways to
+  get a lookup; at_lookup's own tests and other `src/` code import the
+  concrete type directly from `package:at_lookup/src/at_lookup_impl.dart`.
+- The CRUD helpers `update`, `delete`, `scan`, `lookup`, `llookup` and
+  `plookup` are removed from `AtLookUp` and `AtLookupImpl`. Callers use
+  `executeVerb` with the matching `VerbBuilder`
+  (`UpdateVerbBuilder`, `DeleteVerbBuilder`, `ScanVerbBuilder`,
+  `LookupVerbBuilder`, `LLookupVerbBuilder`, `PLookupVerbBuilder`).
+- `pkamAuthenticate` and `cramAuthenticate` stay, unchanged.
+- `isConnectionAvailable`, `secondaryAddressFinder`,
+  `isReconnectingNotifications`, `notificationReconnectDelays` and
+  `AtConnection.getSocket` stay for now.
+- `enrollmentId` handling and the `AtLookupMuxable` shape are still open —
+  a later ruling redesigns them.
+
+Why: the maintainer asked for at_lookup 4.0 to narrow its public surface to
+what a caller actually needs, rather than carry a parallel CRUD API next to
+`executeVerb`, which can express every verb `at_commons` defines.
