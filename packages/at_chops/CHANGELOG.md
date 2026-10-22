@@ -1,4 +1,4 @@
-## 4.0.0
+## 4.0.0-rc.1
 - breaking: remove the deprecated `AtChops`/`AtChopsImpl` facade, `AtChopsKeys`, `AtChopsUtil`, `AtEncrypted`, and `AtHashingAlgorithmFactory` — construct and call the algorithm classes directly (e.g. `RsaSigningAlgo`, `AesGcm256EncryptionAlgo`, `Sha256HashingAlgo`), and generate IVs with `InitialisationVector.random(length)`
 - breaking: remove the deprecated result/input/metadata types `AtSigningInput`, `AtSigningVerificationInput`, `AtSigningMode`, `AtSigningResult`, `AtSigningResultType`, `AtSigningMetaData`, `AtEncryptionResult`, `AtEncryptionResultType`, and `AtEncryptionMetaData` — use the algorithm result bytes directly with your own metadata
 - breaking: remove all key-pair wrapper classes (`RsaKeyPair`, `X25519KeyPair`, `MlDsa65KeyPair`, `MlKem768KeyPair`, `XWingKeyPair`) and the deprecated `At*KeyPair` classes, along with the `AbstractKeyPair`/`AsymmetricKeyPair` hierarchy and the `RawKeyPairBytes` mixin — generate key material directly from each algorithm's `generateKeyPair()`, which returns raw `Uint8List` public/secret keys; base64-encode them yourself where a string form is needed
