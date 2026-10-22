@@ -77,7 +77,7 @@ void main() {
               e.message.contains('no AtAuthenticator is set'))));
     });
 
-    test('pkam auth without enrollmentId - auth success', () async {
+    test('pkam auth - auth success', () async {
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
@@ -94,7 +94,7 @@ void main() {
       expect(result, true);
     });
 
-    test('pkam auth without enrollmentId - auth failed', () async {
+    test('pkam auth - auth failed', () async {
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
@@ -108,45 +108,6 @@ void main() {
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.authenticator = (executor) async => false;
       expect(() async => await atLookup.pkamAuthenticate(),
-          throwsA(predicate((e) => e is UnAuthenticatedException)));
-    });
-
-    test('pkam auth with enrollmentId - auth success', () async {
-      final enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      when(() => mockOutBoundConnection.getMetaData())
-          .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
-      when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-      when(() => mockOutBoundConnection.write(any()))
-          .thenAnswer((_) => Future.value());
-
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.authenticator = (executor) async => true;
-      var result =
-          await atLookup.pkamAuthenticate(enrollmentId: enrollmentIdFromServer);
-      expect(result, true);
-    });
-
-    test('pkam auth with enrollmentId - auth failed', () async {
-      final enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      when(() => mockOutBoundConnection.getMetaData())
-          .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
-      when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
-      when(() => mockOutBoundConnection.write(any()))
-          .thenAnswer((_) => Future.value());
-
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
-      atLookup.authenticator = (executor) async => false;
-      expect(
-          () async => await atLookup.pkamAuthenticate(
-              enrollmentId: enrollmentIdFromServer),
           throwsA(predicate((e) => e is UnAuthenticatedException)));
     });
   });
@@ -174,39 +135,18 @@ void main() {
       return atLookup;
     }
 
-    test('pkam auth records the enrollment id it authenticated with', () async {
-      const enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
+    test('pkam auth records when it authenticated', () async {
       final metaData = primeAuth();
       final before = DateTime.now().toUtc();
 
       expect(
-          await newAtLookup((executor) async => true)
-              .pkamAuthenticate(enrollmentId: enrollmentIdFromServer),
-          true);
+          await newAtLookup((executor) async => true).pkamAuthenticate(), true);
 
-      expect(metaData.authenticatedAsEnrollmentId, enrollmentIdFromServer,
-          reason: 'the connection must carry the enrollment id it sent');
       expect(metaData.authenticatedAt, isNotNull,
           reason: 'an authenticated connection must be stamped with when');
       expect(metaData.authenticatedAt!.isBefore(before), false,
           reason: 'the stamp is this authentication, not an earlier one');
       expect(metaData.authenticatedAt!.isUtc, true);
-    });
-
-    test(
-        'pkam auth with no call-site enrollment id falls back to the '
-        'enrollmentId field', () async {
-      final metaData = primeAuth();
-      const fieldEnrollmentId = 'f0c5e2b0-0000-4000-8000-000000000001';
-      final atLookup = newAtLookup((executor) async => true)
-        ..enrollmentId = fieldEnrollmentId;
-
-      expect(await atLookup.pkamAuthenticate(), true);
-
-      expect(metaData.authenticatedAsEnrollmentId, fieldEnrollmentId,
-          reason: 'with no enrollment id named on the call, the field is '
-              'the only other place the authenticator is told to look');
-      expect(metaData.authenticatedAt, isNotNull);
     });
 
     test('a refused pkam auth records nothing', () async {
@@ -218,8 +158,6 @@ void main() {
 
       expect(metaData.isAuthenticated, false,
           reason: 'nothing may be recorded until the atServer accepts');
-      expect(metaData.authenticatedAsEnrollmentId, isNull,
-          reason: 'a refusal must leave the connection unidentified');
       expect(metaData.authenticatedAt, isNull);
     });
   });

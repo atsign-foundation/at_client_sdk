@@ -64,6 +64,13 @@
     ..auth = true)`
   - `llookup`: `lookUp.executeVerb(LLookupVerbBuilder()..atKey = ...)`
   - `plookup`: `lookUp.executeVerb(PLookupVerbBuilder()..atKey = ...)`
+- breaking: `AtLookUp`/`AtLookupImpl` no longer track an enrollment id.
+  Removed the `enrollmentId` getter/setter, `pkamAuthenticate`'s
+  `enrollmentId` parameter, and
+  `AtConnectionMetaData.authenticatedAsEnrollmentId`. The atServer learns the
+  enrollment from the `pkam:` command, which at_auth's `AtAuthenticator`
+  builds from its own `enrollmentId`; read "which enrollment am I" from your
+  own client state rather than from this package.
 
 ## 3.7.0-rc5
 

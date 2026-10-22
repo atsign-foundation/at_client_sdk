@@ -70,3 +70,19 @@ half-migrated state off trunk until every slice is in.
 Why: the maintainer asked for at_lookup 4.0 to narrow its public surface to
 what a caller actually needs, rather than carry a parallel CRUD API next to
 `executeVerb`, which can express every verb `at_commons` defines.
+
+## D5. at_lookup stops tracking an enrollment id (2026-10-22)
+
+`LIVE`. `AtLookUp`/`AtLookupImpl` no longer track an enrollment id: the
+`enrollmentId` getter and setter, `pkamAuthenticate`'s `enrollmentId`
+parameter, and `AtConnectionMetaData.authenticatedAsEnrollmentId` are all
+removed.
+
+Why: the atServer learns the enrollment from the `pkam:` command, which
+at_auth's `AtAuthenticator` builds from its own `enrollmentId` parameter
+(`at_auth/lib/src/auth/at_authenticator.dart`). Inside at_lookup, the
+`enrollmentId` field and `pkamAuthenticate(enrollmentId:)` only fed
+`_recordAuthentication`, which wrote
+`AtConnectionMetaData.authenticatedAsEnrollmentId` — a value nothing outside
+at_lookup's own tests read, now that the public connection getter that once
+reached it is gone.

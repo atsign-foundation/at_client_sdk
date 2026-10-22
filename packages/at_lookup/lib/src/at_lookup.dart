@@ -130,9 +130,7 @@ abstract interface class AtLookUp {
   /// Throws [UnAuthenticatedException] if no authenticator is set: the
   /// credential ladder this method once fell back to is gone, so there is no
   /// other way for this call to find a credential.
-  ///
-  /// Optionally pass enrollmentId if the client is enrolled using APKAM
-  Future<bool> pkamAuthenticate({String? enrollmentId});
+  Future<bool> pkamAuthenticate();
 
   /// Generates digest using from verb response and [secret] and performs a
   /// CRAM authentication to secondary server
@@ -148,30 +146,6 @@ abstract interface class AtLookUp {
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
-
-  /// EnrollmentId has to be set for clients that are enrolled through APKAM.
-  ///
-  /// This is the enrollment the *next* authentication will use, which is
-  /// deliberately not [AtConnectionMetaData.authenticatedAsEnrollmentId] -
-  /// what a live socket actually authenticated as. That distinction survives
-  /// the deprecation; the two are not interchangeable.
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  set enrollmentId(String? enrollmentId);
-
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  String? get enrollmentId;
 }
 
 /// An [AtLookUp] that also carries the atServer's asynchronous notification

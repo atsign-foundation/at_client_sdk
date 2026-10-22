@@ -377,13 +377,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return _verbResponseHandler(verbResponse);
   }
 
-  /// Records on the connection the identity it has just authenticated as, so
-  /// a later caller can tell which enrollment a live socket holds rather than
-  /// which one the next authentication would use.
-  void _recordAuthentication({String? enrollmentId}) {
+  /// Records on the connection that it has just authenticated.
+  void _recordAuthentication() {
     final metaData = _connection!.getMetaData()!;
     metaData.isAuthenticated = true;
-    metaData.authenticatedAsEnrollmentId = enrollmentId;
     metaData.authenticatedAt = DateTime.now().toUtc();
   }
 
@@ -401,13 +398,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Runs [authenticate] against this connection, under the same mutex
   /// [pkamAuthenticate] takes.
-  ///
-  /// [enrollmentId] is what gets recorded on the connection. It is a parameter
-  /// rather than always this object's field because the two can differ: a
-  /// caller reaching [pkamAuthenticate] names the enrollment in that call,
-  /// while a verb going through [_process] has only the field to go on.
-  Future<void> _authenticateWith(AtAuthenticator authenticate,
-      {String? enrollmentId}) async {
+  Future<void> _authenticateWith(AtAuthenticator authenticate) async {
     await _createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -418,17 +409,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
-      _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
+      _recordAuthentication();
     } finally {
       _pkamAuthenticationMutex.release();
     }
   }
 
   @override
-  Future<bool> pkamAuthenticate({String? enrollmentId}) =>
-      _whileOpen(() => _pkamAuthenticate(enrollmentId: enrollmentId));
+  Future<bool> pkamAuthenticate() => _whileOpen(() => _pkamAuthenticate());
 
-  Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
+  Future<bool> _pkamAuthenticate() async {
     // The injected authenticator is the only PKAM credential path left: the
     // atChops ladder this method used to fall back to depended on AtChops and
     // AtSigningInput, both removed from at_chops 4.0.0.
@@ -437,7 +427,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           'Unable to perform PKAM authentication for $_currentAtSign: no '
           'AtAuthenticator is set. Pass one to AtLookUp.withSecureSocket.');
     }
-    await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+    await _authenticateWith(authenticator!);
     return _connection!.getMetaData()!.isAuthenticated;
   }
 
@@ -972,7 +962,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       await _createConnection();
       if (_isAuthRequired()) {
         if (authenticator != null) {
-          await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+          await _authenticateWith(authenticator!);
         } else {
           throw UnAuthenticatedException(
               'monitor requires authentication and no authenticator is set');
@@ -1055,16 +1045,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     logger.finer('SENDING: $command');
     await _connection!.write(command);
   }
-
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  String? enrollmentId;
 }
 
 class AtLookupSecureSocketFactory {
