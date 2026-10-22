@@ -43,12 +43,16 @@ void main() {
 
       expect(atLookup.socketFactory.runtimeType.toString(),
           "AtLookupSecureSocketFactory");
-      expect(() async => await atLookup.createConnection(),
+      expect(() async => await atLookup.executeCommand('scan\n'),
           throwsA(predicate((dynamic e) => e is SecondaryConnectException)));
     });
 
-    test('two callers racing through createConnection share one socket',
+    test('two callers racing through pkamAuthenticate share one connection',
         () async {
+      // `createConnection` is private now, so the race is driven through
+      // `pkamAuthenticate`, which calls it before taking the mutex that
+      // would otherwise serialise the two callers.
+      //
       // The atDirectory answers slowly enough that both callers have found
       // no connection before either has opened one.
       when(() => finder.findSecondary(any())).thenAnswer((_) async {
@@ -58,10 +62,11 @@ void main() {
       AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
           secondaryAddressFinder: finder,
           secureSocketFactory: mockSocketFactory);
+      atLookup.authenticator = (executor) async => true;
 
       await Future.wait([
-        atLookup.createConnection(),
-        atLookup.createConnection(),
+        atLookup.pkamAuthenticate(),
+        atLookup.pkamAuthenticate(),
       ]);
 
       verify(() =>
@@ -82,8 +87,9 @@ void main() {
           secureSocketFactory: mockSocketFactory);
       expect(atLookup.socketFactory.runtimeType.toString(),
           "MockSecureSocketFactory");
+      atLookup.authenticator = (executor) async => true;
 
-      await atLookup.createConnection();
+      await atLookup.pkamAuthenticate();
 
       // let's get a handle to the first socket & connection
       OutboundConnection firstConnection = atLookup.connection!;
@@ -100,10 +106,10 @@ void main() {
       await Future.delayed(Duration(milliseconds: 2));
       expect(firstConnection.isInValid(), true);
 
-      // When we now call AtLookupImpl's createConnection again, it should:
+      // When we now authenticate again, AtLookupImpl should:
       // - notice that its current connection is 'idle', and close it
       // - create a new connection
-      await atLookup.createConnection();
+      await atLookup.pkamAuthenticate();
 
       // has the first connection been closed, and its socket destroyed?
       expect(firstSocket.destroyed, true);

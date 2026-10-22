@@ -1,21 +1,23 @@
-// ignore_for_file: unused_field, deprecated_member_use_from_same_package
+// ignore_for_file: deprecated_member_use_from_same_package
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
-import 'package:at_lookup/src/rsa_pkam_signing.dart';
+import 'package:at_lookup/src/exception/at_lookup_exception.dart'
+    show AtLookUpExceptionUtil;
+import 'package:at_lookup/src/util/secure_socket_util.dart';
 import 'package:at_lookup/src/util/tls_connect.dart' show Abandonment;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
+import 'package:meta/meta.dart' show visibleForTesting;
 import 'package:mutex/mutex.dart';
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops.dart' show SHA512HashingAlgo;
 
 /// The `from:` challenge an atServer issues a client, once the `data:` prefix
 /// is stripped: `_<uuid><atSign>:<uuid>`.
@@ -73,11 +75,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final logger = AtSignLogger('AtLookup');
 
   /// Listener for reading verb responses from the remote server
-  late OutboundMessageListener messageListener;
+  late OutboundMessageListener _messageListener;
 
   OutboundConnection? _connection;
 
-  @override
+  /// The connection this lookup currently holds, if any.
+  ///
+  /// Not on [AtLookUp]/[AtLookupMuxable]: its only external consumer was
+  /// at_client's `RemoteSecondary.addStreamData`, which has no callers.
+  /// Reachable here, rather than fully private, only because at_lookup's own
+  /// tests assert on it directly.
+  @visibleForTesting
   OutboundConnection? get connection => _connection;
 
   @override
@@ -85,50 +93,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late String _currentAtSign;
 
-  late String _rootDomain;
-
-  late int _rootPort;
-
-  /// The legacy PKAM credential: a private key and nothing else.
-  ///
-  /// The message this annotation used to carry - "privateKey reference is no
-  /// longer used" - was false. The ladder in [_process] reads this field and
-  /// calls authenticate() with it, and before the authenticator seam landed
-  /// that was the leg most ladder traffic took.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one from a bare private key with '
-      'authenticatorForPrivateKey(). '
-      'Removed with the credential ladder in the next major release.')
-  String? privateKey;
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one that falls back to CRAM with '
-      'authenticatorFor(). '
-      'Removed with the credential ladder in the next major release.')
-  String? cramSecret;
-
-  /// Takes over authentication entirely when set, in place of the
-  /// atChops/privateKey/cramSecret ladder below.
-  ///
-  /// The ladder asks "which credential do I hold?" in at_lookup, which is the
-  /// wrong place to ask: at_lookup cannot see an enrollment, a keystore or a
-  /// signing algorithm, so every credential it might use has to be handed to
-  /// it and stored here first. A caller that sets this hands over one closure
-  /// instead, and keeps all of that on its own side. See [AtAuthenticator].
-  ///
-  /// Both routes work while this exists. The ladder and the fields feeding it
-  /// go once every caller supplies an authenticator.
+  /// The only PKAM credential path: at_lookup cannot see an enrollment, a
+  /// keystore or a signing algorithm, so a caller that needs one builds it
+  /// with at_auth and hands over the closure here. See [AtAuthenticator].
   @override
   AtAuthenticator? authenticator;
 
   /// Runs on each connection once it is up and before anything else is sent
   /// on it. See `AtLookUp.withSecureSocket`.
   final Future<void> Function(AtCommandExecutor connection)? onConnect;
-
-  /// Permitted number of milliseconds before connection to atServer
-  /// is deemed 'idle' and will be closed. The default is usually set to
-  /// 10 minutes i.e. 600,000 milliseconds
-  int? outboundConnectionTimeout;
 
   late SecureSocketConfig _secureSocketConfig;
 
@@ -144,9 +117,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Prefer [AtLookUp.withSecureSocket].
   ///
   /// This takes a `String, int` root pair where [AtRootDomain] validates the
-  /// port and knows about proxy addresses, it accepts key material at_lookup
-  /// no longer needs, and it hands back a concrete type where a caller only
-  /// ever needs an interface.
+  /// port and knows about proxy addresses, and it hands back a concrete type
+  /// where a caller only ever needs an interface.
   ///
   /// The warnings this raises at every construction site ARE the deliverable:
   /// they are the mechanical list of what still has to move. `dart analyze`
@@ -155,9 +127,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
       'AtLookupMuxable. Removed in the next major release.')
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
-      {this.privateKey,
-      this.cramSecret,
-      SecondaryAddressFinder? secondaryAddressFinder,
+      {SecondaryAddressFinder? secondaryAddressFinder,
       SecureSocketConfig? secureSocketConfig,
       Map<String, dynamic>? clientConfig,
       AtLookupSecureSocketFactory? secureSocketFactory,
@@ -165,8 +135,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       AtLookupOutboundConnectionFactory? outboundConnectionFactory,
       this.onConnect}) {
     _currentAtSign = atSign;
-    _rootDomain = rootDomain;
-    _rootPort = rootPort;
     this.secondaryAddressFinder = secondaryAddressFinder ??
         CacheableSecondaryAddressFinder(rootDomain, rootPort);
     _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
@@ -178,16 +146,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         socketListenerFactory ?? AtLookupSecureSocketListenerFactory();
     this.outboundConnectionFactory =
         outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
-  }
-
-  @Deprecated('use CacheableSecondaryAddressFinder')
-  static Future<String?> findSecondary(
-      String atsign, String? rootDomain, int rootPort) async {
-    // temporary change to preserve backward compatibility and change the callers later on to use
-    // SecondaryAddressFinder.findSecondary
-    return (await CacheableSecondaryAddressFinder(rootDomain!, rootPort)
-            .findSecondary(atsign))
-        .toString();
   }
 
   @override
@@ -232,99 +190,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<String> lookup(String key, String sharedBy,
-      {bool auth = true,
-      bool verifyData = false,
-      bool metadata = false}) async {
+      {bool auth = true, bool metadata = false}) async {
     var builder = LookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = key
         ..sharedBy = sharedBy)
       ..auth = auth
       ..operation = metadata == true ? 'all' : null;
-    if (verifyData == false) {
-      var lookupResult = await executeVerb(builder);
-      lookupResult = VerbUtil.getFormattedValue(lookupResult);
-      return lookupResult;
-    }
-    //verify data signature if verifyData is set to true
-    try {
-      builder = LookupVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = key
-          ..sharedBy = sharedBy)
-        ..auth = false
-        ..operation = 'all';
-      String? lookupResult = await executeVerb(builder);
-      lookupResult = lookupResult.replaceFirst(RegExp(r'^data:'), '');
-      var resultJson = json.decode(lookupResult);
-      logger.finer(resultJson);
-
-      String? publicKeyResult = '';
-      if (auth) {
-        publicKeyResult = await plookup('publickey', sharedBy);
-      } else {
-        var publicKeyLookUpBuilder = LookupVerbBuilder()
-          ..atKey = (AtKey()
-            ..key = 'publickey'
-            ..sharedBy = sharedBy);
-        publicKeyResult = await executeVerb(publicKeyLookUpBuilder);
-      }
-      publicKeyResult = publicKeyResult.replaceFirst(RegExp(r'^data:'), '');
-      logger.finer('public key of $sharedBy :$publicKeyResult');
-
-      var dataSignature = resultJson['metaData']['dataSignature'];
-      var value = resultJson['data'];
-      value = VerbUtil.getFormattedValue(value);
-      logger.finer('value: $value dataSignature:$dataSignature');
-      // RSA SHA-256 verify via the stateless at_chops 4 algorithm. This
-      // verifies a PEER's key, whose size we do not control, so
-      // [_verifyRsaSignature] tries both sizes [SigningAlgoType] allows
-      // rather than pinning one the way a single RsaSigningAlgo instance
-      // would. verifyBytes throws on a failed verification, so unlike the
-      // removed PkamSigningAlgo.verify this cannot return false and have the
-      // result read, then ignored: a forged or mismatched signature throws
-      // straight into the catch below and the lookup reports no data.
-      await _verifyRsaSignature(
-          Uint8List.fromList(utf8.encode(value)),
-          base64Decode(dataSignature),
-          base64Decode(publicKeyResult),
-          HashingAlgoType.sha256);
-      return 'data:$value';
-    } on StoppedException {
-      rethrow;
-    } on Exception catch (e) {
-      logger.severe(
-          'Error while verify public data for key: $key sharedBy: $sharedBy exception:${e.toString()}');
-      return 'data:null';
-    }
-  }
-
-  /// Verifies an RSA PKAM-style signature against a peer's public key whose
-  /// modulus size this class does not control.
-  ///
-  /// [RsaSigningAlgo] pins its key size at construction and
-  /// [RsaSigningAlgo.verifyBytes] throws [AtSigningVerificationException] for
-  /// a key of the wrong size, so this tries every size the Atsign Protocol's
-  /// [SigningAlgoType] defines for RSA and only fails once none of them
-  /// verify. A thrown exception always means "not verified" — there is no
-  /// path here that can turn a failed verification into a return value a
-  /// caller might treat as success.
-  static Future<void> _verifyRsaSignature(
-      Uint8List message,
-      Uint8List signature,
-      Uint8List publicKey,
-      HashingAlgoType hashingAlgoType) async {
-    AtSigningVerificationException? lastFailure;
-    for (final keySize in [2048, 4096]) {
-      try {
-        await RsaSigningAlgo(hashingAlgoType: hashingAlgoType, keySize: keySize)
-            .verifyBytes(message, signature: signature, publicKey: publicKey);
-        return;
-      } on AtSigningVerificationException catch (e) {
-        lastFailure = e;
-      }
-    }
-    throw lastFailure!;
+    var lookupResult = await executeVerb(builder);
+    lookupResult = VerbUtil.getFormattedValue(lookupResult);
+    return lookupResult;
   }
 
   @override
@@ -375,7 +250,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return putResult.isNotEmpty;
   }
 
-  /// Serialises [createConnection]: two callers racing through it would
+  /// Serialises [_createConnection]: two callers racing through it would
   /// each open a socket, the second replacing the first as `_connection`
   /// while the first is still the one being authenticated, so the
   /// authenticated flag lands on a socket the atServer never saw a PKAM on.
@@ -385,9 +260,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   ///
   /// Throws [StoppedException] once [close] has been called, including when
   /// the close lands while the connection is being opened.
-  Future<void> createConnection() => _whileOpen(_createConnection);
+  Future<void> _createConnection() => _whileOpen(_createConnectionImpl);
 
-  Future<void> _createConnection() async {
+  Future<void> _createConnectionImpl() async {
     var created = false;
     await _createConnectionMutex.acquire();
     try {
@@ -406,7 +281,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         var host = secondaryAddress.host;
         var port = secondaryAddress.port;
         //2. create a connection to secondary server
-        await createOutBoundConnection(
+        await _createOutBoundConnection(
             host, port.toString(), _currentAtSign, _secureSocketConfig);
         if (_closed) {
           // NOTE: close() has already run and cannot see this socket, so it
@@ -418,16 +293,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           throw _stopped();
         }
         //3. listen to server response
-        messageListener = socketListenerFactory.createListener(_connection!);
-        // Re-established on every connection, because createConnection builds
+        _messageListener = socketListenerFactory.createListener(_connection!);
+        // Re-established on every connection, because _createConnection builds
         // a fresh listener each time. Installed only when somebody has asked
         // for the stream: with no controller there is nowhere to put a
         // notification, and routing one into a void drops it silently.
         if (_notificationController != null) {
-          messageListener.onNotification = _routeNotification;
-          messageListener.onDisconnect = _onNotificationConnectionLost;
+          _messageListener.onNotification = _routeNotification;
+          _messageListener.onDisconnect = _onNotificationConnectionLost;
         }
-        messageListener.listen();
+        _messageListener.listen();
         created = true;
         logger.finer('New connection created OK');
       }
@@ -444,11 +319,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Catches any exception and throws [AtLookUpException]
   @override
-  Future<String> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it. The verb always executes '
-          'on the remote atServer; there is no sync behaviour here '
-          'to control. Removed in 4.0.')
-      sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder) async {
     _throwIfClosed();
     String verbResult = '';
     try {
@@ -629,26 +500,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final Mutex _pkamAuthenticationMutex = Mutex();
 
   @override
-  @Deprecated('atServers no longer support the stream verb, its only use; '
-      'removed in 4.0.0')
-  Future<String> readResponse(
-          {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
-      _whileOpen(() => messageListener.read(
-          maxWaitMilliSeconds: maxWaitMilliSeconds,
-          transientWaitTimeMillis: transientWaitTimeMillis));
-
-  @override
   Future<String> sendSync(String command,
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
       _whileOpen(() async {
         await _sendCommand(command);
-        return messageListener.read(
+        return _messageListener.read(
             maxWaitMilliSeconds: maxWaitMilliSeconds,
             transientWaitTimeMillis: transientWaitTimeMillis);
       });
 
-  /// Runs [authenticate] against this connection, under the same mutex the
-  /// ladder's own methods take.
+  /// Runs [authenticate] against this connection, under the same mutex
+  /// [pkamAuthenticate] takes.
   ///
   /// [enrollmentId] is what gets recorded on the connection. It is a parameter
   /// rather than always this object's field because the two can differ: a
@@ -656,7 +518,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// while a verb going through [_process] has only the field to go on.
   Future<void> _authenticateWith(AtAuthenticator authenticate,
       {String? enrollmentId}) async {
-    await createConnection();
+    await _createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
       if (_connection!.getMetaData()!.isAuthenticated) {
@@ -666,67 +528,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
-      // The enrollment id still comes from the caller or this object, because
-      // the ladder still needs the field. When the ladder goes, so does the
-      // field, and the authenticator - which is the side that knows the
-      // enrollment - becomes the only thing that can supply it.
       _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
-    } finally {
-      _pkamAuthenticationMutex.release();
-    }
-  }
-
-  /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
-  /// secondary server. This method is executed for all verbs that requires authentication.
-  /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
-  Future<bool> authenticate(String? privateKey) =>
-      _whileOpen(() => _authenticateWithPrivateKey(privateKey));
-
-  Future<bool> _authenticateWithPrivateKey(String? privateKey) async {
-    if (privateKey == null) {
-      throw UnAuthenticatedException('Private key not passed');
-    }
-    await createConnection();
-    try {
-      await _pkamAuthenticationMutex.acquire();
-      if (!_connection!.getMetaData()!.isAuthenticated) {
-        await _sendCommand((FromVerbBuilder()
-              ..atSign = _currentAtSign
-              ..clientConfig = _clientConfig)
-            .buildCommand());
-        var fromResponse = await (messageListener.read());
-        logger.finer('from result:$fromResponse');
-        if (fromResponse.isEmpty) {
-          return false;
-        }
-        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-        fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
-        logger.finer('fromResponse $fromResponse');
-        // RSA SHA-256 sign via the stateless at_chops 4 algorithm. [privateKey]
-        // is the same base64 PKCS#8 DER this ladder has always taken; decoding
-        // it straight into RsaSigningAlgo keeps the signature bytes identical
-        // to the pointycastle RSASigner the removed PkamSigningAlgo/crypton
-        // path called. This caller-supplied key's modulus size is not known
-        // ahead of time, so [signRsaPkam] tries every size the protocol
-        // defines rather than pinning one.
-        // TODO(4.0): remove with the privateKey ladder credential this method
-        // exists to serve.
-        final sha256signature = await signRsaPkam(
-            Uint8List.fromList(utf8.encode(fromResponse)),
-            base64Decode(privateKey));
-        var signature = base64Encode(sha256signature);
-        logger.finer('Sending command pkam:$signature');
-        await _sendCommand('pkam:$signature\n');
-        var pkamResponse = await messageListener.read();
-        if (pkamResponse == 'data:success') {
-          logger.info('auth success');
-          _recordAuthentication();
-        } else {
-          throw UnAuthenticatedException(
-              'Failed connecting to $_currentAtSign. $pkamResponse');
-        }
-      }
-      return _connection!.getMetaData()!.isAuthenticated;
     } finally {
       _pkamAuthenticationMutex.release();
     }
@@ -756,7 +558,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       _whileOpen(() => _cramAuthenticate(secret));
 
   Future<bool> _cramAuthenticate(String secret) async {
-    await createConnection();
+    await _createConnection();
     try {
       await _cramAuthenticationMutex.acquire();
       if (!_connection!.getMetaData()!.isAuthenticated) {
@@ -764,7 +566,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
               ..atSign = _currentAtSign
               ..clientConfig = _clientConfig)
             .buildCommand());
-        var fromResponse = await messageListener.read(
+        var fromResponse = await _messageListener.read(
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
         logger.info('from result:$fromResponse');
         if (fromResponse.isEmpty) {
@@ -776,7 +578,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // SHA-512 hex digest via at_chops (= sha512.convert(bytes).toString()).
         var digest = SHA512HashingAlgo().hash(bytes);
         await _sendCommand('cram:$digest\n');
-        var cramResponse = await messageListener.read(
+        var cramResponse = await _messageListener.read(
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
         if (cramResponse == 'data:success') {
           logger.info('auth success');
@@ -789,16 +591,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     } finally {
       _cramAuthenticationMutex.release();
     }
-  }
-
-  @Deprecated('use AtLookup().cramAuthenticate()')
-  // ignore: non_constant_identifier_names
-  Future<bool> authenticate_cram(String? secret) async {
-    secret ??= cramSecret;
-    if (secret == null) {
-      throw UnAuthenticatedException('Cram secret not passed');
-    }
-    return await cramAuthenticate(secret);
   }
 
   Future<String> _plookup(PLookupVerbBuilder builder) async {
@@ -826,32 +618,27 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Ensures that a new request isn't sent until either response has been received from previous
   /// request, or response wasn't received due to timeout or other exception
-  Mutex requestResponseMutex = Mutex();
+  final Mutex _requestResponseMutex = Mutex();
 
   Future<String> _process(String command, {bool auth = false}) =>
       _whileOpen(() => _processCommand(command, auth: auth));
 
   Future<String> _processCommand(String command, {bool auth = false}) async {
     try {
-      await requestResponseMutex.acquire();
+      await _requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (authenticator != null) {
-          await _authenticateWith(authenticator!);
-        } else if (privateKey != null) {
-          logger.finer('calling pkam with the privateKey credential');
-          await authenticate(privateKey);
-        } else if (cramSecret != null) {
-          await cramAuthenticate(cramSecret!);
-        } else {
+        if (authenticator == null) {
           throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. No AtAuthenticator, '
-              'privateKey or cramSecret is set.');
+              'Unable to perform atLookup auth for $_currentAtSign. '
+              'No AtAuthenticator is set. Pass one to '
+              'AtLookUp.withSecureSocket.');
         }
+        await _authenticateWith(authenticator!);
       }
       try {
         await _sendCommand(command);
-        var result = await messageListener.read();
+        var result = await _messageListener.read();
         return result;
       } on ConnectionInvalidException {
         // Already logged by the listener that failed the read.
@@ -863,7 +650,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         rethrow;
       }
     } finally {
-      requestResponseMutex.release();
+      _requestResponseMutex.release();
     }
   }
 
@@ -872,16 +659,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         !(_connection!.getMetaData()!.isAuthenticated);
   }
 
-  Future<bool> createOutBoundConnection(String host, String port,
+  Future<bool> _createOutBoundConnection(String host, String port,
       String toAtSign, SecureSocketConfig secureSocketConfig) async {
     try {
       SecureSocket secureSocket =
           await socketFactory.createSocket(host, port, secureSocketConfig);
       _connection =
           outboundConnectionFactory.createOutboundConnection(secureSocket);
-      if (outboundConnectionTimeout != null) {
-        _connection!.setIdleTime(outboundConnectionTimeout);
-      }
     } on SocketException {
       throw SecondaryConnectException(
           'unable to connect to atServer for $toAtSign on $host:$port');
@@ -892,10 +676,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   bool isConnectionAvailable() {
     return _connection != null && !_connection!.isInValid();
-  }
-
-  bool isInValid() {
-    return _connection!.isInValid();
   }
 
   bool _closed = false;
@@ -952,7 +732,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// directly, because a close leaves a request in flight with nowhere for its
   /// response to arrive from. [OutboundMessageListener.read] cannot see that on
   /// its own, so it waits out its transient budget - and it is holding
-  /// [requestResponseMutex] while it does, which stalls the NEXT request on
+  /// [_requestResponseMutex] while it does, which stalls the NEXT request on
   /// this instance for the same 30 seconds.
   ///
   /// The listener aborts on `onDone` as well, and in Dart a local
@@ -967,10 +747,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     if (connection == null) {
       return;
     }
-    // `messageListener` is `late` and assigned in [createConnection] - which is
+    // `_messageListener` is `late` and assigned in [_createConnection] - which is
     // also where `_connection` is assigned, so a non-null connection means
     // there is a listener to tell.
-    messageListener.abortPendingRequests(closedLocally: true);
+    _messageListener.abortPendingRequests(closedLocally: true);
     await connection.close();
   }
 
@@ -983,7 +763,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Created on first read of [notifications], not in the constructor.
   ///
-  /// Its existence is what tells [createConnection] to install the framing
+  /// Its existence is what tells [_createConnection] to install the framing
   /// seam, so a lookup nobody asked notifications of behaves exactly as it
   /// always did - including leaving a stray notification in the buffer, which
   /// is pinned by test as the behaviour the seam exists to fix.
@@ -1145,19 +925,19 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // next interval. A connection that really has gone is still detected: the
     // done event is buffered by the paused subscription and delivered when
     // delivery resumes.
-    if (messageListener.isDeliveryPaused) {
+    if (_messageListener.isDeliveryPaused) {
       _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
       return;
     }
     try {
-      await requestResponseMutex.acquire();
+      await _requestResponseMutex.acquire();
       try {
         await _sendCommand('noop:0\n');
-        await messageListener.read(
+        await _messageListener.read(
             maxWaitMilliSeconds: heartbeatResponseTimeout.inMilliseconds,
             transientWaitTimeMillis: heartbeatResponseTimeout.inMilliseconds);
       } finally {
-        requestResponseMutex.release();
+        _requestResponseMutex.release();
       }
       // NOTE: a stop or a reconnect while the probe was out owns the
       // heartbeat now; re-arming here would leave a timer nothing cancels.
@@ -1172,7 +952,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // it: the failure is our own reader being starved, not the connection.
       // Tearing down here would destroy a healthy socket for doing exactly
       // what the back-pressure contract invites.
-      if (messageListener.isDeliveryPaused) {
+      if (_messageListener.isDeliveryPaused) {
         logger.info('Notification heartbeat could not complete while delivery '
             'is paused - leaving the connection alone and retrying');
         _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
@@ -1208,23 +988,23 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // and starts a reconnect. Installing the disconnect seam before anything
     // is notifying is harmless - it returns immediately unless `_isNotifying`.
     if (_connection != null) {
-      messageListener.onNotification = _routeNotification;
-      messageListener.onDisconnect = _onNotificationConnectionLost;
+      _messageListener.onNotification = _routeNotification;
+      _messageListener.onDisconnect = _onNotificationConnectionLost;
     }
     return _notificationController!.stream;
   }
 
-  /// [messageListener] is `late` and is assigned only inside
-  /// [createConnection], immediately after `_connection`. So a null
+  /// [_messageListener] is `late` and is assigned only inside
+  /// [_createConnection], immediately after `_connection`. So a null
   /// `_connection` is exactly the case where touching it throws a
   /// `LateInitializationError` - and the controller can be paused before
   /// anything has connected.
   void _setNotificationDelivery({required bool paused}) {
     if (_connection == null) return;
     if (paused) {
-      messageListener.pauseDelivery();
+      _messageListener.pauseDelivery();
     } else {
-      messageListener.resumeDelivery();
+      _messageListener.resumeDelivery();
     }
   }
 
@@ -1297,9 +1077,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// retired [generation] meanwhile; throws [StoppedException] when that stop
   /// was [close].
   Future<bool> _openNotificationStream(int generation) async {
-    await requestResponseMutex.acquire();
+    await _requestResponseMutex.acquire();
     try {
-      await createConnection();
+      await _createConnection();
       if (_isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
@@ -1346,7 +1126,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       await _connection!.write(command);
       return true;
     } finally {
-      requestResponseMutex.release();
+      _requestResponseMutex.release();
     }
   }
 
@@ -1381,23 +1161,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   Future<void> _sendCommand(String command) async {
-    await createConnection();
+    await _createConnection();
     logger.finer('SENDING: $command');
     await _connection!.write(command);
   }
-
-  /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
   @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
       'builds. To ask "which enrollment am I", read your own client state - '
@@ -1450,7 +1217,7 @@ class _ConnectionPreamble implements AtCommandExecutor {
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
     _lookUp.logger.finer('SENDING (on connect): $command');
     await _lookUp._connection!.write(command);
-    return _lookUp.messageListener.read(
+    return _lookUp._messageListener.read(
         maxWaitMilliSeconds: maxWaitMilliSeconds,
         transientWaitTimeMillis: transientWaitTimeMillis);
   }

@@ -5,6 +5,8 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/cache/cacheable_secondary_address_finder.dart'
+    show SecondaryUrlFinder;
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
 import 'package:mocktail/mocktail.dart';

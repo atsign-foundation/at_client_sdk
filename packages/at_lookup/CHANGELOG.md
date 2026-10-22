@@ -6,26 +6,45 @@
   `pkamAuthenticate` throws `UnAuthenticatedException` when no authenticator
   is set, rather than falling back to a credential ladder through `AtChops`,
   `AtPkamKeyPair` or `AtSigningInput` — all three types are removed from
-  at_chops 4.0.0. The deprecated `privateKey`/`cramSecret` ladder still
-  works, for a 2048- or 4096-bit `privateKey` — see the PKAM signing entry
-  below.
-- fix: `lookup(verifyData: true)` now rejects a forged or mismatched data
-  signature. The at_chops 3.x verification this called computed a result and
-  never read it, so a tampered signature was silently treated as valid; the
-  at_chops 4.0.0 `RsaSigningAlgo.verifyBytes` this now calls throws
-  `AtSigningVerificationException` on a failed verification, and that
-  exception now propagates to the existing catch that reports no data.
-- chore: the PKAM signature `privateKey` ladder (`AtLookupImpl.authenticate`)
-  and `MonitorClient`'s PKAM signing move from the removed
-  `PkamSigningAlgo`/`AtPkamKeyPair` to the stateless at_chops 4.0.0
-  `RsaSigningAlgo`. The private key is still base64 PKCS#8 DER and, for a
-  modulus `RsaSigningAlgo` accepts, produces identical signature bytes to
-  the removed path — no wire format change. Unlike the removed path,
-  `RsaSigningAlgo` pins a key size at construction and rejects any other
-  modulus, so both call sites now try every RSA size the Atsign Protocol
-  defines (2048, then 4096 bits) and only fail once neither matches; a
-  `privateKey` of some other size, which the removed path accepted, now
-  throws `AtSigningException`.
+  at_chops 4.0.0.
+- breaking: Removed, as the maintainer-requested clean break for 4.0 — each
+  had zero production callers outside this package:
+  - `MonitorClient`: use `AtLookUp.withSecureSocket` and
+    `AtLookupMuxable.notifications`.
+  - `AtLookupImpl.findSecondary` (deprecated static): use
+    `CacheableSecondaryAddressFinder.findSecondary`.
+  - `AtLookUp.lookup`'s `verifyData` parameter, and the peer-signature
+    verification it drove: no replacement. A caller that still needs it
+    verifies the `dataSignature` metadata itself.
+  - `AtLookupMuxable.readResponse`: atServers no longer support the stream
+    verb this served; deprecated in 3.7.0-rc5, removed here.
+  - The `privateKey`/`cramSecret` credential ladder — the fields, the
+    deprecated `authenticate(String? privateKey)` and `authenticate_cram`
+    methods, and the fallback branch in verb authentication: pass an
+    `AtAuthenticator` to `AtLookUp.withSecureSocket` instead, built by
+    at_auth's `authenticatorForPrivateKey()` or `authenticatorFor()`. An
+    authenticated command with no authenticator set now throws
+    `UnAuthenticatedException` rather than falling back to a credential
+    ladder.
+  - `AtLookUp`/`AtLookupImpl`'s `signingAlgoType`/`hashingAlgoType` getters
+    and setters: pass the signing and hashing algorithm to the
+    `AtAuthenticator` at_auth builds — `authenticatorForChops()` takes
+    `signingAlgo` and `hashingAlgo`.
+  - `executeVerb`'s `sync` parameter: it was already inert.
+  - `AtLookupImpl.outboundConnectionTimeout`: nothing assigned it.
+  - The `connection` getter on `AtLookUp`/`AtLookupMuxable`: its only
+    consumer was at_client's `RemoteSecondary.addStreamData`, which has no
+    callers. `AtLookupImpl.connection` still exists, `@visibleForTesting`,
+    for this package's own tests.
+- breaking: `SecureSocketUtil`, `SecondaryUrlFinder`,
+  `SecondaryAddressCacheEntry` and `AtLookUpExceptionUtil` are no longer
+  exported from `package:at_lookup/at_lookup.dart` — each is internal
+  plumbing with no callers outside this package. `AtLookUpException`,
+  `CacheableSecondaryAddressFinder`, `SecondaryAddressFinder` and
+  `SecondaryAddress` keep exporting.
+- chore: `AtLookupImpl.createConnection`, `createOutBoundConnection`,
+  `isInValid`, `messageListener` and `requestResponseMutex` are now private.
+  Nothing outside this package called them.
 - chore: moves to at_chops ^4.0.0-rc.1.
 
 ## 3.7.0-rc5

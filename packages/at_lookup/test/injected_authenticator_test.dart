@@ -8,9 +8,9 @@ import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
 
-/// The injected authenticator, which is the only PKAM credential path left:
-/// the atChops/privateKey/cramSecret ladder it replaced is gone with
-/// at_chops 4.0.0.
+/// The injected authenticator, which is the only PKAM credential path: the
+/// atChops/privateKey/cramSecret ladder it replaced is gone with at_chops
+/// 4.0.0 and the 4.0 clean break.
 void main() {
   late OutboundConnection mockOutBoundConnection;
   late SecondaryAddressFinder mockSecondaryAddressFinder;
@@ -105,11 +105,10 @@ void main() {
         reason: 'a failed authentication must not be recorded');
   });
 
-  test('with no authenticator, no privateKey and no cramSecret, auth throws',
-      () async {
+  test('with no authenticator set, an auth: true command throws', () async {
     // The credential ladder this once fell back to (atChops, then
-    // privateKey, then cramSecret) is gone for atChops: with none of the
-    // three credentials set, there is nothing left to authenticate with.
+    // privateKey, then cramSecret) is gone: with no authenticator set, there
+    // is nothing left to authenticate with.
     final atLookup = build();
 
     await expectLater(

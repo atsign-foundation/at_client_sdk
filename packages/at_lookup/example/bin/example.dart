@@ -1,24 +1,20 @@
-// Names AtLookupImpl directly, which is deprecated in favour of
-// AtLookUp.withSecureSocket but cannot leave the barrel before the next
-// major release.
-// TODO(4.0): rewrite against AtLookUp.withSecureSocket.
-// ignore_for_file: deprecated_member_use
-
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 /// The example below demonstrate on how to use at_lookup package to interact with secondary server
 /// to execute the verbs.
 /// NOTE: Running this example would result in an exception. The At_lookup package would require
 /// a secondary running.
 void main() async {
-  var atLookupImpl = AtLookupImpl(
-    '@alice',
-    'root.atsign.com',
-    64,
-    privateKey: 'privateKey',
-    cramSecret: 'cramSecret',
+  var atLookupImpl = AtLookUp.withSecureSocket(
+    atSign: '@alice',
+    rootDomain: const AtRootDomain('root.atsign.com', 64),
+    // A real caller builds this from its credential with at_auth, for example
+    // authenticatorForPrivateKey() or authenticatorForChops().
+    authenticator: (executor) async =>
+        throw UnimplementedError('build an AtAuthenticator with at_auth'),
+    transport: secureSocketTransport(SecureSocketConfig()),
   );
 
   /// To update a key into secondary server

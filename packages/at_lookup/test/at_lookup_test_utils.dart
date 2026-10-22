@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/cache/cacheable_secondary_address_finder.dart'
+    show SecondaryUrlFinder;
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
 

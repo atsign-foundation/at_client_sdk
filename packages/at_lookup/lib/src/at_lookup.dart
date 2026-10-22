@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -66,8 +65,8 @@ abstract interface class AtLookUp {
   ///
   /// This is the entry point. Constructing `AtLookupImpl` directly still
   /// works and is deprecated: it takes a `String, int` root pair rather than
-  /// an [AtRootDomain], it accepts key material this class no longer needs,
-  /// and it hands back a concrete type where callers only need an interface.
+  /// an [AtRootDomain], and it hands back a concrete type where callers only
+  /// need an interface.
   ///
   /// Static, and that is deliberate — statics are not part of the `implements`
   /// contract, so adding this breaks none of the classes that mock
@@ -128,8 +127,7 @@ abstract interface class AtLookUp {
       {String? sharedWith, Metadata? metadata});
 
   /// lookup
-  Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool verifyData = false});
+  Future<String> lookup(String key, String sharedBy, {bool auth = true});
 
   /// plookup
   Future<String> plookup(String key, String sharedBy);
@@ -143,11 +141,7 @@ abstract interface class AtLookUp {
   /// scan
   Future<List<String>> scan({String? regex, String? sharedBy});
 
-  Future<String?> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it. The verb always executes '
-          'on the remote atServer; there is no sync behaviour here '
-          'to control. Removed in 4.0.')
-      bool sync = false});
+  Future<String?> executeVerb(VerbBuilder builder);
 
   Future<String?> executeCommand(String command, {bool auth = false});
 
@@ -171,39 +165,9 @@ abstract interface class AtLookUp {
   /// again. Calling this again waits for the first close.
   Future<void> close();
 
-  OutboundConnection? get connection;
-
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
-
-  /// Signing algorithm for pkam signature
-  ///
-  /// Deprecated together with [hashingAlgoType]: the two are read on the same
-  /// lines when the PKAM signature is built, so they are one setting and they
-  /// move together.
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set signingAlgoType(SigningAlgoType signingAlgoType);
-
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  SigningAlgoType get signingAlgoType;
-
-  /// Hashing algorithm for pkam signature
-  ///
-  /// Deprecated together with [signingAlgoType]; see the note there.
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set hashingAlgoType(HashingAlgoType hashingAlgoType);
-
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  HashingAlgoType get hashingAlgoType;
 
   /// EnrollmentId has to be set for clients that are enrolled through APKAM.
   ///
@@ -343,7 +307,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// As [AtLookUp.lookup], and additionally [metadata].
   @override
   Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool verifyData = false, bool metadata = false});
+      {bool auth = true, bool metadata = false});
 
   /// Takes over authentication entirely when set.
   ///
@@ -360,12 +324,6 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// A caller closing down needs this to avoid closing what was never opened,
   /// and it too was reached only by casting.
   bool isConnectionAvailable();
-
-  /// Read one response from the connection, without sending anything first.
-  @Deprecated('atServers no longer support the stream verb, its only use; '
-      'removed in 4.0.0')
-  Future<String> readResponse(
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
 
   /// Whether the connection dropped and a reconnect is in flight.
   ///

@@ -317,8 +317,9 @@ void main() {
   group('a request in flight when the connection goes away', () {
     /// A response can only arrive on the socket the listener is reading, so a
     /// connection that is gone can never produce one. Until `read` gives up it
-    /// holds `AtLookupImpl.requestResponseMutex`, so every later request on the
-    /// same instance queues behind a dead one for the whole transient budget.
+    /// holds `AtLookupImpl`'s request/response mutex, so every later request
+    /// on the same instance queues behind a dead one for the whole transient
+    /// budget.
     ///
     /// Each arm measures the WAIT, not the throw: the throw happens either way,
     /// and only its timing distinguishes "noticed the connection died" from
