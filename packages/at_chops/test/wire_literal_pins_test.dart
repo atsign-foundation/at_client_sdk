@@ -21,7 +21,7 @@ import 'dart:typed_data';
 // backends agree, so it needs AesCtrFfiAlgo in scope.
 import 'package:at_chops/at_chops_ffi.dart';
 // HpkeSuite is package-internal; its wire identities stay pinned here.
-import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart'
+import 'package:at_chops/src/encryption/rfc9180_hpke.dart'
     show HpkeSuite;
 import 'package:test/test.dart';
 
@@ -112,35 +112,15 @@ void main() {
     });
   });
 
-  group('the passphrase-envelope JSON keys (at rest)', () {
-    test('AtEncrypted emits content, iv, hashingAlgoType — and no v, no salt',
-        () {
-      // Deprecated but still writing files (the CLI's passphrase-protected
-      // keyfile wraps in exactly this legacy unsalted form). A renamed JSON
-      // key orphans every existing encrypted keyfile; the absence of
-      // 'v'/'salt' is what tells this generation from at_auth's v1 salted
-      // envelope, whose reader dispatches on their presence.
-      // ignore: deprecated_member_use_from_same_package
-      final json = (AtEncrypted()
-            ..content = 'Y3Q='
-            ..iv = 'aXY='
-            ..hashingAlgoType = HashingAlgoType.argon2id)
-          .toJson();
-      expect(jsonEncode(json),
-          '{"content":"Y3Q=","iv":"aXY=","hashingAlgoType":"argon2id"}');
-    });
-  });
-
   group('AES-CTR wire format pin', () {
     test('AES-CTR wire format with FFI and pure-Dart', () async {
-      final key =
-          AESKey(base64Encode(Uint8List.fromList(List.generate(32, (i) => i))));
+      final key = Uint8List.fromList(List.generate(32, (i) => i));
       final iv = InitialisationVector(
           Uint8List.fromList(List.generate(16, (i) => 15 - i)));
       final plain = Uint8List.fromList(utf8.encode('wire pin'));
 
-      final pureAlgo = AESEncryptionAlgo(key);
-      final pureEncrypted = await pureAlgo.encrypt(plain, iv: iv);
+      final pureAlgo = AesCtrEncryptionAlgo(32);
+      final pureEncrypted = await pureAlgo.encrypt(plain, key, iv: iv);
       final pureHex =
           pureEncrypted.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
 
@@ -149,8 +129,8 @@ void main() {
       // Also test FFI implementation to ensure it exactly matches pure-Dart
       final ffiLib = tryLoadLibCrypto();
       if (ffiLib != null) {
-        final ffiAlgo = AesCtrFfiAlgo.fromLib(ffiLib, key);
-        final ffiEncrypted = await ffiAlgo.encrypt(plain, iv: iv);
+        final ffiAlgo = AesCtrFfiAlgo.fromLib(ffiLib, 32);
+        final ffiEncrypted = await ffiAlgo.encrypt(plain, key, iv: iv);
         final ffiHex =
             ffiEncrypted.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
         expect(ffiHex, '05d8915d6c0326457ba2ccc2824a8da9');

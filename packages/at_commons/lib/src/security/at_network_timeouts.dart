@@ -46,10 +46,8 @@ class AtNetworkTimeouts {
   /// nothing else.
   ///
   /// NOT capped by [maxAllowed], by design and necessarily: it bounds an
-  /// aggregate rather than one operation, its own default already exceeds the
-  /// 60s ceiling, and `at_client` passes `AtClientPreference`'s
-  /// `outboundConnectionTimeout` — 600000 ms — as the budget for a stream read.
-  /// Capping it would truncate both.
+  /// aggregate rather than one operation, and its own default already exceeds
+  /// the 60s ceiling, which capping it would truncate.
   ///
   /// 90 seconds preserves the long-standing default of
   /// `OutboundMessageListener.read`'s `maxWaitMilliSeconds`, so adopting this

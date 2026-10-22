@@ -1,3 +1,16 @@
+## 5.24.0
+
+- feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
+  `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
+  withdraw one. `otp:delete` must name what it deletes, and `:ttl:` follows
+  only `get` and `put`. An atServer that accepts them lists
+  `InfoFeature.otpList` (`otp.list`) and `InfoFeature.otpDelete`
+  (`otp.delete`) in its `info` features; one that does not refuses them as a
+  syntax error.
+- chore: `VerbSyntax.stream` and `Response.isStream` are deprecated:
+  atServers no longer support the stream verb, and both are removed in
+  6.0.0.
+
 ## 5.23.0
 
 - feat: `enroll:link`, for writing links that vouch for an enrollment's

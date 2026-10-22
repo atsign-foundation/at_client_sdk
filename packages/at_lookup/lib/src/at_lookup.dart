@@ -379,15 +379,8 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   bool isConnectionAvailable();
 
   /// Read one response from the connection, without sending anything first.
-  ///
-  /// For a caller that has already put bytes on the wire itself — at_client's
-  /// file-stream path writes to the socket directly and then waits for
-  /// `stream:done`. It previously reached `messageListener.read(...)` through
-  /// a cast to the concrete class.
-  ///
-  /// This is deliberately narrower than exposing the listener: that type is
-  /// not in at_lookup's barrel, and putting it on a public interface would
-  /// publish it by the back door.
+  @Deprecated('atServers no longer support the stream verb, its only use; '
+      'removed in 4.0.0')
   Future<String> readResponse(
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
 

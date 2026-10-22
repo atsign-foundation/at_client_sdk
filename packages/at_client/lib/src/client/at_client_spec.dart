@@ -19,6 +19,7 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
+import 'package:at_client/src/stream/stream_verb_retired.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -648,13 +649,15 @@ abstract class AtClient {
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
 
-  /// Streams the file in [filePath] to [sharedWith] atSign.
-  @Deprecated("Obsolete, will be removed in v4")
+  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
+  /// so nothing is sent.
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
-  /// Sends stream acknowledgement
-  @Deprecated("Obsolete, will be removed in v4")
+  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
+  /// so no connection is opened.
+  @Deprecated(streamVerbRetiredDeprecation)
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
