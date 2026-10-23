@@ -79,7 +79,7 @@ void main() {
     // nothing listens on, so the open comes back offline without a network.
     final own = AtLookupImpl(
         atSign, InternetAddress.loopbackIPv4.address, preference.rootPort,
-        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        secondaryAddressFinder: ProxySecondaryAddressFinder(
             InternetAddress.loopbackIPv4.address, preference.rootPort),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: SecureSocketConfig()));

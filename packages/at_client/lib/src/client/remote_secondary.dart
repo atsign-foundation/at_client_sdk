@@ -37,10 +37,13 @@ class RemoteSecondary implements Secondary {
   /// null to read the process-wide one per lookup.
   SecondaryAddressFinder? _secondaryAddressFinder;
 
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
+  // ignore: deprecated_member_use
   AtChops? get atChops => _atChops;
 
+  // ignore: deprecated_member_use
   set atChops(AtChops? value) {
     _atChops = value;
     _installAuthenticator();
@@ -164,6 +167,7 @@ class RemoteSecondary implements Secondary {
   /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
+      // ignore: deprecated_member_use
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,

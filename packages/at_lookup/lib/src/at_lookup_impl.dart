@@ -1316,7 +1316,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     logger.finer('SENDING: $command');
     await _connection!.write(command);
   }
-
 }
 
 /// Builds the listener that reads an open connection.

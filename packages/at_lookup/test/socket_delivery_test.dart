@@ -369,7 +369,8 @@ void main() {
     test('a far end that hangs up fails the pending read at once', () async {
       final rig = FakeAtServerRig();
 
-      final result = await millisUntilReadFails(rig, rig.transport.serverCloses);
+      final result =
+          await millisUntilReadFails(rig, rig.transport.serverCloses);
       final waited = result.millis;
 
       expect(

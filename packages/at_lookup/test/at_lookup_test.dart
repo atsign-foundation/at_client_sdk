@@ -108,8 +108,7 @@ void main() {
       final before = DateTime.now().toUtc();
 
       expect(
-          await atLookup.pkamAuthenticate(
-              enrollmentId: enrollmentIdFromServer),
+          await atLookup.pkamAuthenticate(enrollmentId: enrollmentIdFromServer),
           true);
 
       expect(metaData.authenticatedAsEnrollmentId, enrollmentIdFromServer,
@@ -128,8 +127,8 @@ void main() {
       when(() => mockOutBoundConnection.write(any()))
           .thenAnswer((_) => Future.value());
       var readCount = 0;
-      when(() => mockOutboundListener.read()).thenAnswer((_) => Future.value(
-          readCount++ == 0 ? fromChallenge : 'data:1234'));
+      when(() => mockOutboundListener.read()).thenAnswer(
+          (_) => Future.value(readCount++ == 0 ? fromChallenge : 'data:1234'));
       final atLookup = newAtLookup()
         ..authenticator = authenticatorAnswering(true);
 
