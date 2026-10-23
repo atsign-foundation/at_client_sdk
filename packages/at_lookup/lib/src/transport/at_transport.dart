@@ -19,6 +19,11 @@ abstract interface class AtTransport {
   /// `Socket implements Stream<Uint8List>`, so the socket transport returns
   /// the socket itself and pause and resume survive by construction.
   ///
+  /// The one exception is a source that cannot be paused, such as a browser
+  /// `WebSocket`. Its implementation MAY use a `StreamController`, but MUST
+  /// bound what it holds while paused, and past that bound MUST close the
+  /// connection and end this stream with an error.
+  ///
   /// `List<int>` rather than `Uint8List` because that is what
   /// `OutboundMessageListener` consumes, and it is what lets a `WebSocket`
   /// implement this.

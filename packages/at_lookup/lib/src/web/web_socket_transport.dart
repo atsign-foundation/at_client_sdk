@@ -1,114 +1,159 @@
 import 'dart:async';
-import 'dart:js_interop';
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:web/web.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 import '../transport/at_transport.dart';
 import 'ws_frame.dart';
 
-/// A browser [WebSocket] as an [AtTransport].
+/// The parts of a WebSocket that [WebSocketTransport] drives.
+@internal
+abstract interface class WebSocketPort {
+  /// Whether the socket's `readyState` is `OPEN`.
+  bool get isOpen;
+
+  /// Bytes passed to [send] that have not yet left the process.
+  int get bufferedAmount;
+
+  void send(Uint8List bytes);
+
+  /// Each received frame's payload: a `String` or a `ByteBuffer`.
+  Stream<Object?> get onMessage;
+
+  /// Fires once, when the socket closes.
+  Stream<void> get onClose;
+
+  void close();
+}
+
+/// A WebSocket as an [AtTransport].
 ///
 /// Frames go out binary. Frames come in as text or binary, and both reach
 /// [inbound] as bytes.
 class WebSocketTransport implements AtTransport {
-  final WebSocket _socket;
-  final StreamController<List<int>> _inbound = StreamController<List<int>>();
-  bool _destroyed = false;
+  final WebSocketPort _port;
+  final int _maxInboundBytes;
+  final Duration _flushTimeout;
+  final Duration _flushPollInterval;
+  final AtSignLogger _logger;
+
+  late final StreamController<List<int>> _inbound = StreamController<List<int>>(
+      sync: true, onListen: _scheduleDrain, onResume: _scheduleDrain);
+  final Queue<List<int>> _held = Queue<List<int>>();
+  int _heldBytes = 0;
+  bool _closed = false;
 
   @override
   final String description;
 
-  WebSocketTransport._(this._socket, this.description) {
-    _socket.onMessage.listen((event) {
-      if (_destroyed) return;
-      try {
-        _inbound.add(frameBytes(_dartData(event.data)));
-      } catch (e, st) {
-        _inbound.addError(e, st);
-      }
-    });
-    _socket.onClose.listen((_) => _closeInbound());
+  @internal
+  WebSocketTransport(
+    this._port,
+    this.description, {
+    int maxInboundBytes = 10240000,
+    Duration flushTimeout = const Duration(seconds: 30),
+    Duration flushPollInterval = const Duration(milliseconds: 10),
+    AtSignLogger? logger,
+  })  : _maxInboundBytes = maxInboundBytes,
+        _flushTimeout = flushTimeout,
+        _flushPollInterval = flushPollInterval,
+        _logger = logger ?? AtSignLogger('WebSocketTransport') {
+    _port.onMessage.listen(_receive);
+    _port.onClose.listen((_) => _peerClosed());
   }
 
-  /// A single-subscription controller fed by the socket's `message` events,
-  /// closed on its `close` event.
-  ///
-  /// A browser WebSocket has no pause or back-pressure, so this controller
-  /// buffers nothing that could be pushed back.
+  /// Single-subscription. A WebSocket cannot be paused, so while this
+  /// subscription is paused or not yet listened to, frames are held here, up
+  /// to `maxInboundBytes`. Past that the socket is closed and this stream
+  /// ends with an [AtIOException].
   @override
   Stream<List<int>> get inbound => _inbound.stream;
 
+  /// Throws [AtIOException], sending nothing, once the socket is not `OPEN`.
   @override
-  void add(List<int> bytes) => _socket
-      .send((bytes is Uint8List ? bytes : Uint8List.fromList(bytes)).toJS);
+  void add(List<int> bytes) {
+    if (_closed || !_port.isOpen) {
+      throw AtIOException('WebSocket to $description is closed');
+    }
+    _port.send(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+  }
 
-  /// Completes at once: `send` hands each frame to the browser whole.
+  /// Completes once the socket's `bufferedAmount` is zero, polling for it.
+  ///
+  /// Throws [AtTimeoutException] if it is not zero within `flushTimeout`, and
+  /// [AtIOException] if the socket closes first.
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    final elapsed = Stopwatch()..start();
+    while (_port.bufferedAmount > 0) {
+      if (_closed || !_port.isOpen) {
+        throw AtIOException(
+            'WebSocket to $description closed with ${_port.bufferedAmount} '
+            'bytes unsent');
+      }
+      if (elapsed.elapsed > _flushTimeout) {
+        throw AtTimeoutException(
+            'WebSocket to $description still had ${_port.bufferedAmount} '
+            'bytes unsent after $_flushTimeout');
+      }
+      await Future<void>.delayed(_flushPollInterval);
+    }
+  }
 
   /// Closes the socket and [inbound]. Calling it again does nothing.
   @override
   void destroy() {
-    if (_destroyed) return;
-    _socket.close();
-    _closeInbound();
+    if (_closed) return;
+    _closed = true;
+    _port.close();
+    _held.clear();
+    _inbound.close();
   }
 
-  void _closeInbound() {
-    _destroyed = true;
-    if (!_inbound.isClosed) _inbound.close();
+  void _receive(Object? data) {
+    if (_closed) return;
+    final bytes = frameBytes(data);
+    if (_held.isEmpty && _canDeliver) {
+      _inbound.add(bytes);
+      return;
+    }
+    _held.add(bytes);
+    _heldBytes += bytes.length;
+    if (_heldBytes > _maxInboundBytes) _overflow();
   }
 
-  static Object? _dartData(JSAny? data) {
-    if (data == null) return null;
-    if (data.typeofEquals('string')) return (data as JSString).toDart;
-    if (data.instanceOfString('ArrayBuffer')) {
-      return (data as JSArrayBuffer).toDart;
+  bool get _canDeliver => _inbound.hasListener && !_inbound.isPaused;
+
+  void _scheduleDrain() => scheduleMicrotask(_drain);
+
+  void _drain() {
+    while (_held.isNotEmpty && _canDeliver) {
+      final bytes = _held.removeFirst();
+      _heldBytes -= bytes.length;
+      _inbound.add(bytes);
     }
-    return data;
   }
-}
 
-/// Opens [WebSocketTransport]s to `scheme://host:port` + [path].
-///
-/// The atServer upgrades [path] on its TLS port, so [scheme] is `wss` outside
-/// tests.
-class WebSocketTransportFactory implements AtTransportFactory {
-  final String path;
-  final String scheme;
+  void _overflow() {
+    _logger.warning('$description: closing, $_heldBytes inbound bytes held '
+        'unread, over the $_maxInboundBytes-byte bound');
+    _closed = true;
+    _port.close();
+    _held.clear();
+    _inbound
+      ..addError(AtIOException('WebSocket to $description closed: over '
+          '$_maxInboundBytes inbound bytes held unread'))
+      ..close();
+  }
 
-  const WebSocketTransportFactory({this.path = '/ws', this.scheme = 'wss'});
-
-  /// An `error` or `close` before `open`, and a [timeout] elapsing, surface
-  /// as [SecondaryConnectException]; the cause is kept in the message.
-  @override
-  Future<AtTransport> connect(String host, String port,
-      {Duration? timeout}) async {
-    final url = '$scheme://$host:$port$path';
-    final socket = WebSocket(url)..binaryType = 'arraybuffer';
-    final opened = Completer<void>();
-    void fail(String reason) {
-      if (!opened.isCompleted) opened.completeError(reason);
-    }
-
-    final subscriptions = [
-      socket.onOpen.listen((_) => opened.complete()),
-      socket.onError.listen((_) => fail('WebSocket error')),
-      socket.onClose.listen((_) => fail('WebSocket closed before open')),
-    ];
-    try {
-      await (timeout == null ? opened.future : opened.future.timeout(timeout));
-      return WebSocketTransport._(socket, url);
-    } catch (e) {
-      socket.close();
-      throw SecondaryConnectException(
-          'unable to connect to atServer on $host:$port - $e');
-    } finally {
-      for (final subscription in subscriptions) {
-        await subscription.cancel();
-      }
-    }
+  void _peerClosed() {
+    if (_closed) return;
+    _closed = true;
+    _held.forEach(_inbound.add);
+    _held.clear();
+    _inbound.close();
   }
 }

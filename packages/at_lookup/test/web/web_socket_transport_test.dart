@@ -3,7 +3,7 @@ library;
 
 import 'dart:convert';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/src/web/web_socket_transport.dart';
+import 'package:at_lookup/src/web/web_socket_transport_factory.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 

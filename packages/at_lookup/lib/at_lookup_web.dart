@@ -15,10 +15,13 @@ import 'package:at_commons/at_commons.dart' show AtRootDomain;
 
 import 'at_lookup.dart';
 
-import 'src/web/web_socket_transport.dart' show WebSocketTransportFactory;
+import 'src/web/web_socket_transport_factory.dart'
+    show WebSocketTransportFactory;
 
 export 'at_lookup.dart';
-export 'src/web/web_socket_transport.dart';
+export 'src/web/web_socket_transport.dart' show WebSocketTransport;
+export 'src/web/web_socket_transport_factory.dart'
+    show WebSocketTransportFactory;
 
 /// A browser WebSocket — the transport to pass to `AtLookUp.withTransport`
 /// unless you are supplying your own. [scheme] is `ws` only for tests.
