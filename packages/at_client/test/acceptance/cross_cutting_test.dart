@@ -344,7 +344,7 @@ void main() {
             'successor arrives over the ordinary filing path and lands in its '
             'own slot beside the retired predecessor, signing selects the '
             'active root and stamps its kid, and the link signed earlier '
-            'under the retired one still verifies through both verifiers. '
+            'under the retired one still walks to the root. '
             'Isolated by mutation — filing the successor over its '
             "predecessor's slot reddens this row and nothing else",
       );

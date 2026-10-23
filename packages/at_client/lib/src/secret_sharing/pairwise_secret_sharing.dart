@@ -1202,7 +1202,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// Distinct from the general `__` reserved space, which
   /// [SecretStore.putIfNewer] accepts precisely so that system secrets flow
   /// between a client's enrollments. Material addressed to a single enrollment
-  /// — its own `apkamSymmetricKey`, its own approval-chain link — must not.
+  /// — its own `apkamSymmetricKey`, the signing root's private key — must not.
   static const String perEnrollmentSecretPrefix = '__en.';
 
   /// Whether [name] is addressed to one enrollment, and so must never be

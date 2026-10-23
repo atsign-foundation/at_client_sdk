@@ -27,12 +27,14 @@ dependencies:
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_base2e15: ^1.0.0
-  # Metadata.copy(), which notify_request_transformer.dart calls, needs 5.16.0.
-  at_commons: ^5.19.0
+  # enroll:link, which pq_signing_chain.dart sends, needs 5.23.0.
+  at_commons: ^5.23.0
   at_utils: ^3.2.0
   at_chops: ^3.7.0
   at_lookup: ^3.7.0-rc3
-  at_auth: ^4.0.0-rc4
+  # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
+  # describes, needs 4.0.0-rc8.
+  at_auth: ^4.0.0-rc8
   at_persistence_secondary_server: ^5.3.0
   hive: ^2.2.3
   meta: ^1.16.0

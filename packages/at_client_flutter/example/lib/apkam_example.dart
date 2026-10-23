@@ -139,6 +139,8 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
         app: appName,
         device: deviceName,
         namespaces: {'public': 'rw'},
+        // NOTE: a demo device's keys, which no client is opened on.
+        // ignore: invalid_use_of_visible_for_testing_member
         keys: InMemoryAtKeysIo(),
         preference: AtClientPreference()
           ..rootDomain = preferences.rootDomain

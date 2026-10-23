@@ -57,8 +57,8 @@ enum EnvelopeType {
   /// handed looks like.
   app('at-app+jws'),
 
-  /// A parent enrollment vouching for a child's APKAM key —
-  /// `PqSigningChain.signLinkFor`.
+  /// One enrollment's key vouching for a key another enrollment, or the same
+  /// one, lists: `PqSigningChain.signChainLink`.
   chainLink('at-chain-link+jws'),
 
   /// An enrollment's public encapsulation key package, signed either at
@@ -337,6 +337,11 @@ class ApkamSigningKeys {
 /// A keyfile can hold a signing key for an algorithm this build has no
 /// envelope support for; a signer skips it rather than throwing.
 bool canSignEnvelopeWith(SigningAlgoType algo) => _joseAlgFor(algo) != null;
+
+/// Whether a key under [algo] is one an envelope signature naming the JOSE
+/// algorithm [joseAlg] was made with.
+bool signsUnder(SigningAlgoType algo, String? joseAlg) =>
+    joseAlg != null && _joseAlgFor(algo) == joseAlg;
 
 /// The exact text that is signed and verified: a String payload as-is,
 /// anything else as its JSON encoding.

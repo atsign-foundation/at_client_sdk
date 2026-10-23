@@ -97,6 +97,8 @@ class PendingEnrollment {
       session: AtAuthSession(
           atSign: atSign,
           rootDomain: rootDomain,
+          // NOTE: a key source for the handshake alone, never a keyfile.
+          // ignore: invalid_use_of_visible_for_testing_member
           atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
           enrollmentId: enrollmentId),
       apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq

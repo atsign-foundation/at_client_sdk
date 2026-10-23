@@ -1,20 +1,14 @@
 import 'dart:async' show Completer;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, KeyEntryStatus;
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, KeyEntryStatus, publicKeyKidOfBase64;
 // ignore: deprecated_member_use
 import 'package:at_chops/at_chops.dart' show AtPkamKeyPair, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
-import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
-    show PqSigningChain;
 import 'package:at_commons/at_commons.dart'
-    show
-        AppMetadata,
-        AtClientException,
-        AtKey,
-        AtKeyNotFoundException,
-        EnrollmentConstants;
+    show AtClientException, AtKey, AtKeyNotFoundException, EnrollmentConstants;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -30,12 +24,21 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger;
 /// are two enrollments writing two different records.
 final Expando<Future<void>> _apskWriteChain = Expando('apskWriteChain');
 
+/// The `kid`s of the keys each client's own enrollment has a link for, as last
+/// read from its `_apsk`; absent until something has read them.
+final Expando<Set<String>> _ownLinkedKids = Expando('ownLinkedKids');
+
+/// Records [kids] as the keys [client]'s own enrollment has a link for, which
+/// [ApkamSigning.signingKeys] then prefers.
+void rememberOwnLinkedKids(AtClient client, Set<String> kids) =>
+    _ownLinkedKids[client] = Set.unmodifiable(kids);
+
 /// Runs [action] with no other `_apsk` write for [client] interleaved.
 ///
-/// Every `_apsk` write re-sends a whole record composed from something read
-/// first: the keyfile for a publish of the signing keys, the record itself for
-/// a link. A write landing between another's read and its put is therefore
-/// lost, so a caller holds this from that read through its put.
+/// Every publish of the client data signing keys re-sends a whole record
+/// composed from the keyfile, read first. A write landing between another's
+/// read and its put is therefore lost, so a caller holds this from that read
+/// through its put.
 ///
 /// ⚠️ This is in-process only and claims nothing more: a concurrent second
 /// client of the same atSign in another process can still interleave, which is
@@ -107,7 +110,6 @@ mixin ApkamSigning {
     value ??= await publicSigningKeyValue;
 
     String? published;
-    AppMetadata? stored;
     try {
       logger.finer('publishPublicSigningKey: checking $publicSigningKeyUri');
       final current = await atClient.get(
@@ -115,7 +117,6 @@ mixin ApkamSigning {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
       published = current.value is String ? current.value as String : null;
-      stored = current.metadata?.appMetadata;
     } on AtKeyNotFoundException catch (err) {
       logger.info('${err.message} - publishing now');
     }
@@ -128,11 +129,8 @@ mixin ApkamSigning {
       logger.info('publishPublicSigningKey: what is published is not what this '
           'client holds - republishing');
     }
-    final atKey = AtKey.fromString(publicSigningKeyUri);
-    atKey.metadata.appMetadata = await PqSigningChain.republishedAppMetadata(
-        atClient, enrollmentId, stored, value);
     await atClient.put(
-      atKey,
+      AtKey.fromString(publicSigningKeyUri),
       value,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );
@@ -150,8 +148,12 @@ mixin ApkamSigning {
         authentication: await authenticationSigningKey,
       ));
 
-  /// This client's signing keys, strongest algorithm first — one entry per
-  /// algorithm this enrollment holds a key for. Never empty.
+  /// The keys this client signs content with, strongest algorithm first:
+  /// those of its client data signing keys that have a link, while any do, and
+  /// otherwise every one it holds. Never empty.
+  ///
+  /// Which keys have a link is what [rememberOwnLinkedKids] last recorded;
+  /// until something has, every held key signs.
   ///
   /// Sourced from the keyfile through [AtClient.atKeysIo] and read on every
   /// call: a cached copy goes stale the moment an `enroll:update` rotates the
@@ -170,9 +172,15 @@ mixin ApkamSigning {
   /// lands first, once the next start's republish does.
   Future<List<ApkamSigningKeys>> get signingKeys async {
     final held = await heldSigningKeys;
-    if (held.isNotEmpty) return held;
+    if (held.isEmpty) return [(await authenticationSigningKey)!];
 
-    return [(await authenticationSigningKey)!];
+    final linkedKids = _ownLinkedKids[atClient];
+    if (linkedKids == null) return held;
+    final linked = [
+      for (final key in held)
+        if (linkedKids.contains(publicKeyKidOfBase64(key.publicKey))) key
+    ];
+    return linked.isEmpty ? held : linked;
   }
 
   /// The APKAM **authentication** keypair as a signing key: the keyfile's for
