@@ -3,6 +3,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver;
 import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
+import 'package:at_client/src/signing/envelope_signature.dart' show apskUri;
 import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -318,5 +319,48 @@ void main() {
             contains(enrollmentApkamSymmetricKeySecretName));
       });
     }
+  });
+
+  /// The link step's own guard, not `linkKeysOf`'s: a read of B's `_apsk`
+  /// that fails before any write is attempted.
+  group('Given a read of B\'s _apsk that fails once', () {
+    setUp(() => EnvelopeEnrollmentConveyance.verifyRetryPause = Duration.zero);
+    tearDown(() => EnvelopeEnrollmentConveyance.verifyRetryPause =
+        const Duration(seconds: 1));
+
+    test(
+        'when an approver holding the root approves B, then nothing is '
+        'linked and B\'s secrets are still conveyed', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+      final apsk = apskUri(atSign, enrolleeId);
+      var fetches = 0;
+      when(() => approver.get(
+          any(that: predicate<AtKey>((k) => k.toString() == apsk)),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        if (++fetches == 1) {
+          throw AtConnectException('The connection was closed by this '
+              'client before a response arrived');
+        }
+        return Future.value(AtValue()..value = remoteData[apsk]);
+      });
+
+      final conveyance = conveyanceFor(approver, privileged: true);
+      await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+      final status = await conveyance.conveySecretsTo(enrollment);
+
+      expect(status, KeyPackageStatus.present,
+          reason: 'the approval has landed, so a failed link step must not '
+              'fail what follows it');
+      expect(fetches, greaterThan(1),
+          reason: 'the premise: the link step\'s read failed and the key '
+              'package check read again');
+      expect(linkCalls, isEmpty, reason: 'nothing was read, so nothing linked');
+      expect(await enrollee.sweepOnce(), greaterThan(0));
+      expect(enrollee.secretStore.listSecrets().map((s) => s.name),
+          contains(enrollmentApkamSymmetricKeySecretName));
+    });
   });
 }
