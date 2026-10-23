@@ -300,19 +300,24 @@ void main() {
         });
     final pair = await record(two.enrollmentId);
     expect(pair.keys, hasLength(2), reason: 'the premise: two keys listed');
+    final sent = {
+      for (final k in pair.keys) k.kid: await rootLinkFor(two.enrollmentId, k),
+    };
+    for (final k in pair.keys) {
+      expect(sent[k.kid], isNot(pair.links[k.kid]),
+          reason: 'the premise: each key\'s new link differs from the one '
+              'its approval left, so reading it back proves the write');
+    }
     expect(
         await chain.writeLinks(two.enrollmentId, {
           for (final k in pair.keys)
-            k.kid: (
-              link: await rootLinkFor(two.enrollmentId, k),
-              expect: pair.links[k.kid]
-            ),
+            k.kid: (link: sent[k.kid]!, expect: pair.links[k.kid]),
         }),
         unorderedEquals(pair.keys.map((k) => k.kid)));
     final written = await record(two.enrollmentId);
     for (final k in pair.keys) {
-      expect(written.links[k.kid]?['payload'], isA<Map>(),
-          reason: 'one call wrote a root link on each key');
+      expect(written.links[k.kid], sent[k.kid],
+          reason: 'one call wrote the link it carried on each key');
     }
   });
 
@@ -480,8 +485,8 @@ void main() {
             apskLegacy: fresh.atPublicKey.publicKey),
         alone.client.getRemoteSecondary()!.atLookUp);
     expect(response.enrollmentId, alone.enrollmentId);
-    expect((await record(alone.enrollmentId)).value,
-        fresh.atPublicKey.publicKey,
+    expect(
+        (await record(alone.enrollmentId)).value, fresh.atPublicKey.publicKey,
         reason: 'a key listed alone with no link may be the authentication '
             'key, as for an enrollment holding no client data signing key');
   });
