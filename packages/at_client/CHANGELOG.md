@@ -1,5 +1,7 @@
 ## 3.15.0-rc9
 
+- breaking: `AtClientUtil.findSecondary` is removed. Use
+  `RemoteSecondary.findSecondaryUrl`.
 - chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
   3.5.0, now throw `UnsupportedError` without contacting an atServer, since
   atServers refuse the `stream:` command these methods sent from 3.12.0. Both

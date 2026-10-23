@@ -1,6 +1,8 @@
 ## 4.0.0-rc1
-- feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer over a
-  browser WebSocket: `webSocketLookUps(host:, port:)`, `webSocketTransport()`.
+- feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer from a
+  browser: `webSocketLookUps()` finds it through the atDirectory over HTTPS
+  and connects over `wss://`; `proxyWebSocketLookUps(host:, port:)` goes
+  through a proxy instead.
 - feat: `AtLookUp.withTransport` builds a lookup over any transport.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder` and `SecureSocketUtil` now come
@@ -27,6 +29,10 @@
   now `AtLookupMessageListenerFactory`. Anything constructing an
   `OutboundConnectionImpl` itself changes with it, including code reaching
   `src/connection/` through `implementation_imports`.
+- breaking: `AtLookUp`'s credential-ladder members (`atChops`, `enrollmentId`,
+  `signingAlgoType`, `hashingAlgoType`, `authenticate_cram`, and
+  `executeVerb`'s `sync` param) are removed. A connection's authenticated
+  enrollment is `AtConnectionMetaData.authenticatedAsEnrollmentId`.
 
 ## 3.7.0-rc5
 
