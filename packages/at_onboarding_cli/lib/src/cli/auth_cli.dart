@@ -1074,14 +1074,8 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
   Completer completer = Completer();
 
-  RegExp? appRegex;
-  RegExp? deviceRegex;
-  if (arx != null) {
-    appRegex = RegExp(arx, caseSensitive: false);
-  }
-  if (drx != null) {
-    deviceRegex = RegExp(drx, caseSensitive: false);
-  }
+  final appRegex = arx == null ? null : RegExp(arx, caseSensitive: false);
+  final deviceRegex = drx == null ? null : RegExp(drx, caseSensitive: false);
 
   // listen for enrollment requests
   stdout.writeln('Listening for new enrollment requests');
