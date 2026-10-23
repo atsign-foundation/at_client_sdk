@@ -38,6 +38,21 @@ void main() {
     expect(lookUp.onConnect, same(preamble));
   });
 
+  test('secureSocketTransport and secureSocketLookUps carry their config into '
+      'the TLS transport factory', () {
+    final config = SecureSocketConfig();
+    final carriesConfig = isA<SecureSocketTransportFactory>()
+        .having((f) => f.secureSocketConfig, 'secureSocketConfig', same(config));
+
+    expect(secureSocketTransport(config).transportFactory, carriesConfig);
+
+    final lookUp = secureSocketLookUps(config: config)(
+        atSign: '@alice',
+        rootDomain: const AtRootDomain(host, 64),
+        authenticator: null) as AtLookupImpl;
+    expect(lookUp.transportFactory, carriesConfig);
+  });
+
   test('onConnect runs once per connection, before the first command, and '
       'again on a reconnect', () async {
     final preambleAnswers = <String>[];
