@@ -64,4 +64,112 @@ void main() {
     expect(row, contains('2026-10-14T09:00:00.000Z'),
         reason: 'when B\'s record expires');
   });
+
+  test(
+      '--arx and --drx match regardless of the case the user and the '
+      'enrollment disagree on', () async {
+    const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'Wavi',
+                'deviceName': 'Phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'pending',
+                'apkamKeysExpiryInMillis': 3600000,
+                'expiresAt': '2026-10-14T09:00:00.000Z',
+              })
+                ..enrollmentId = b
+            ]);
+    // Lower-case --arx against an upper-case appName, upper-case --drx
+    // against a lower-case-initial deviceName.
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-A', 'wavi', '-D', 'PHONE']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+
+    expect(out.text.split('\n').any((line) => line.startsWith(b)), isTrue,
+        reason: 'arx/drx must match case-insensitively');
+  });
+
+  test('--arx keeps \\D meaning non-digit rather than folding it with case',
+      () async {
+    const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': '12345',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'pending',
+                'apkamKeysExpiryInMillis': 3600000,
+                'expiresAt': '2026-10-14T09:00:00.000Z',
+              })
+                ..enrollmentId = b
+            ]);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-A', r'^\D+$']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+
+    expect(out.text.split('\n').any((line) => line.startsWith(b)), isFalse,
+        reason: 'a digits-only appName must not match \\D+, case-insensitivity '
+            'must not touch the regex escape');
+  });
+
+  test('a malformed --arx still fails as before, not a silent match', () async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => []);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-A', '[abc']);
+
+    await expectLater(
+        IOOverrides.runZoned(() => auth_cli.list(args, client),
+            stdout: () => _CapturedStdout()),
+        throwsFormatException,
+        reason: 'caseSensitive: false must not swallow the unterminated '
+            'character class in --arx');
+  });
+
+  test('a malformed --drx still fails as before, not a silent match', () async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => []);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-D', '[abc']);
+
+    await expectLater(
+        IOOverrides.runZoned(() => auth_cli.list(args, client),
+            stdout: () => _CapturedStdout()),
+        throwsFormatException,
+        reason: 'caseSensitive: false must not swallow the unterminated '
+            'character class in --drx');
+  });
 }
