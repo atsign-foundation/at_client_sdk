@@ -1,79 +1,71 @@
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/signing/ecc.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:elliptic/elliptic.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('A group of tests for ecc signing and verification', () {
-    test(
-        'Test ecc signing and verification using generated private key from ecc',
-        () {
+    test('Test ecc signing and verification using generated key pair',
+        () async {
       final eccAlgo = EccSigningAlgo();
-      var ec = getSecp256r1();
-      final eccPrivateKey = ec.generatePrivateKey();
-      eccAlgo.privateKey = eccPrivateKey;
-      final dataToSign = 'Hello World';
-      final dataInBytes = Uint8List.fromList(dataToSign.codeUnits);
-      final signature = eccAlgo.sign(dataInBytes);
-      var verifyResult = eccAlgo.verify(dataInBytes, signature);
-      expect(verifyResult, true);
+      final (:publicKey, :secretKey) = await eccAlgo.generateKeyPair();
+      final message = Uint8List.fromList('Hello World'.codeUnits);
+      final signature = await eccAlgo.signBytes(message, secretKey: secretKey);
+      await expectLater(
+          eccAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
-    test('Test ecc verification - passing public key', () {
+    test('Test invalid ecc verification - verify with a different public key',
+        () async {
       final eccAlgo = EccSigningAlgo();
-      var ec = getSecp256r1();
-      final eccPrivateKey = ec.generatePrivateKey();
-      eccAlgo.privateKey = eccPrivateKey;
-      final publicKey = eccPrivateKey.publicKey;
-      final dataToSign = 'Hello World';
-      final dataInBytes = Uint8List.fromList(dataToSign.codeUnits);
-      final signature = eccAlgo.sign(dataInBytes);
-      var verifyResult = eccAlgo.verify(dataInBytes, signature,
-          publicKey: publicKey.toString());
-      expect(verifyResult, true);
+      final (publicKey: _, :secretKey) = await eccAlgo.generateKeyPair();
+      final other = await eccAlgo.generateKeyPair();
+      final message = Uint8List.fromList('Hello World'.codeUnits);
+      final signature = await eccAlgo.signBytes(message, secretKey: secretKey);
+      await expectLater(
+          eccAlgo.verifyBytes(message,
+              signature: signature, publicKey: other.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
-    test('Test invalid ecc verification - passing different public key', () {
-      final eccAlgo = EccSigningAlgo();
-      var ec = getSecp256r1();
-      var ec2 = getSecp256r1();
-      final eccPrivateKey = ec.generatePrivateKey();
-      eccAlgo.privateKey = eccPrivateKey;
-      final publicKey = ec2.generatePrivateKey().publicKey;
-      final dataToSign = 'Hello World';
-      final dataInBytes = Uint8List.fromList(dataToSign.codeUnits);
-      final signature = eccAlgo.sign(dataInBytes);
-      var verifyResult = eccAlgo.verify(dataInBytes, signature,
-          publicKey: publicKey.toString());
-      expect(verifyResult, false);
+    test('generateKeyPair writes an uncompressed SEC1 point and a 32-byte scalar',
+        () async {
+      final (:publicKey, :secretKey) = await EccSigningAlgo().generateKeyPair();
+      expect(publicKey, hasLength(65));
+      expect(publicKey.first, 0x04);
+      expect(secretKey, hasLength(32));
     });
-    test('Test ecc signing - private key not set', () {
+    test('a signature that is neither 64 nor 128 bytes is an ArgumentError',
+        () async {
       final eccAlgo = EccSigningAlgo();
-      final dataToSign = 'Hello World';
-      final dataInBytes = Uint8List.fromList(dataToSign.codeUnits);
-      expect(
-          () => eccAlgo.sign(dataInBytes),
-          throwsA(predicate((e) =>
-              e is AtException &&
-              e.toString().contains(
-                  'elliptic private key has to be set for signing operation'))));
+      final (:publicKey, secretKey: _) = await eccAlgo.generateKeyPair();
+      for (final length in [0, 63, 65, 127, 129]) {
+        await expectLater(
+            eccAlgo.verifyBytes(Uint8List.fromList('Hello World'.codeUnits),
+                signature: Uint8List(length), publicKey: publicKey),
+            throwsArgumentError,
+            reason: 'length $length');
+      }
     });
-    test('Test ecc verification - private key and public key not available',
-        () {
-      final eccAlgo = EccSigningAlgo();
-      var ec = getSecp256r1();
-      final eccPrivateKey = ec.generatePrivateKey();
-      eccAlgo.privateKey = eccPrivateKey;
-      final dataToSign = 'Hello World';
-      final dataInBytes = Uint8List.fromList(dataToSign.codeUnits);
-      final signature = eccAlgo.sign(dataInBytes);
-      eccAlgo.privateKey = null;
-      expect(
-          () => eccAlgo.verify(dataInBytes, signature),
-          throwsA(predicate((e) =>
-              e is AtException &&
-              e.toString().contains(
-                  'Cannot verify signature - publicKey not provided or privateKey not available'))));
+    group('a 128-byte signature that is not hex', () {
+      final message = Uint8List.fromList('Hello World'.codeUnits);
+      final cases = {
+        'non-hex characters': 'z' * 128,
+        'a sign prefix on a byte pair': '-1${'00' * 63}',
+        'multi-byte characters': '\u00e9' * 128,
+      };
+      for (final entry in cases.entries) {
+        test('is rejected as a verification failure: ${entry.key}', () async {
+          final eccAlgo = EccSigningAlgo();
+          final (:publicKey, secretKey: _) = await eccAlgo.generateKeyPair();
+          await expectLater(
+              eccAlgo.verifyBytes(message,
+                  signature: Uint8List.fromList(entry.value.codeUnits),
+                  publicKey: publicKey),
+              throwsA(isA<AtSigningVerificationException>()));
+        });
+      }
     });
   });
 }
