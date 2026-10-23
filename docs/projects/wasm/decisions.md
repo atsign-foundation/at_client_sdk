@@ -583,8 +583,10 @@ and `pathToCerts`, read by the default factory until they go in 4.0; the replace
 **Amended 2026-10-23 — at_lookup's major.** T3–T7 are done in at_lookup 4.0.0-rc1, and
 only T8 (publish) remains. `AtLookupTransport` keeps its name and takes
 `transportFactory:` in place of the socket factories; `secureSocketTransport(...)` and
-`secureSocketLookUps(...)` keep their signatures, so the doors above are unchanged. The
-web factory no longer implements `AtLookupMuxable` itself: `webSocketLookUps()` in
+`secureSocketLookUps(...)` keep their signatures, so the doors above are unchanged. T5
+moved `secure_socket_util.dart` behind `at_lookup_io.dart`, so the factory type no longer
+reaches `dart:io` through the main barrel; `wasm_shakedown` gates it. The web factory
+no longer implements `AtLookupMuxable` itself: `webSocketLookUps()` in
 `at_lookup_web.dart` builds an `AtLookupImpl` over a `WebSocketTransport`, and resolves
 the atServer through the atDirectory's HTTPS face (OQ-7).
 

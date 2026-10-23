@@ -45,7 +45,8 @@ non-optional.
 
 ## Dependency floors
 
-`at_utils: ^4.0.0-rc1`. Every workspace consumer is floored at `at_lookup: ^4.0.0-rc1`.
+`at_utils: ^4.0.0-rc1`, `at_commons: ^5.18.0`, `at_chops: ^3.6.0`. Every workspace
+consumer is floored at `at_lookup: ^4.0.0-rc1`.
 
 ## Open items
 
