@@ -142,6 +142,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     // self-heal can consume an envelope and file it where the test is not
     // looking, so the test reads a null meaning "somebody got there first"
     // rather than "it never arrived".
+    // ignore: invalid_use_of_visible_for_testing_member
     atKeysIo: atKeysIo ?? InMemoryAtKeysIo(),
   );
 

@@ -388,8 +388,10 @@ wrong from the next publish onward.
 
 **The design goals the cutover rests on** are ruled in
 [`decisions.md` 56](detail/decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
-the signing chain is **root-anchored** (chain links provisional, the sweep
-upgrades them; a root-holder conveys root links, not chain links); retrofit has
+the signing chain is **root-anchored** (chain links provisional, a holder of
+the root replaces them with root links, all written through `enroll:link`, as
+[ruling 157](detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16)
+has it); retrofit has
 **three modes** with a per-retrofit signing-algorithm selector; and — the frame
 for the whole cutover — **from the PQ project's view, the majors after 3.x are
 final-3.x code with only flag *defaults* changed.** Every rollout stage (the

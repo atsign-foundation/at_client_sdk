@@ -93,6 +93,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     rootDomain: AtRootDomain(rootDomain, rootPort),
     // In memory: these keys exist for the length of one test, and writing them
     // to disk would leave a file the next run's onboarding refuses to overwrite.
+    // ignore: invalid_use_of_visible_for_testing_member
     atKeysIo: InMemoryAtKeysIo(),
   );
 

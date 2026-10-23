@@ -76,6 +76,8 @@ class AtAuthImpl implements AtAuth {
     if (reReadable != null) {
       return reReadable;
     }
+    // NOTE: a key source for this authentication alone, never a keyfile.
+    // ignore: invalid_use_of_visible_for_testing_member
     final memory = InMemoryAtKeysIo();
     await memory.write(atSign, resolved);
     return memory;
