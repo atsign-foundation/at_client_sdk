@@ -29,7 +29,8 @@ void main() {
               signature: signature, publicKey: other.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
     });
-    test('generateKeyPair writes an uncompressed SEC1 point and a 32-byte scalar',
+    test(
+        'generateKeyPair writes an uncompressed SEC1 point and a 32-byte scalar',
         () async {
       final (:publicKey, :secretKey) = await EccSigningAlgo().generateKeyPair();
       expect(publicKey, hasLength(65));

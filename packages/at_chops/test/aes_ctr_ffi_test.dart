@@ -41,7 +41,8 @@ void main() {
               Uint8List.fromList(utf8.encode('hello, alice'));
 
           final Uint8List encrypted = await algo.encrypt(plain, key, iv: iv);
-          final Uint8List decrypted = await algo.decrypt(encrypted, key, iv: iv);
+          final Uint8List decrypted =
+              await algo.decrypt(encrypted, key, iv: iv);
           expect(utf8.decode(decrypted), 'hello, alice');
         });
       }
@@ -55,24 +56,29 @@ void main() {
         test('${len * 8}-bit: FFI encrypts, pure-Dart decrypts', () async {
           final Uint8List key = AesCtrEncryptionAlgo(len).generateKey();
           final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
-          final AesCtrEncryptionAlgo pureAlgo = AesCtrEncryptionAlgo(key.length);
+          final AesCtrEncryptionAlgo pureAlgo =
+              AesCtrEncryptionAlgo(key.length);
           final InitialisationVector iv = InitialisationVector.random(16);
           final Uint8List plain = Uint8List.fromList(utf8.encode('ffi→pure'));
 
           final Uint8List encrypted = await ffiAlgo.encrypt(plain, key, iv: iv);
-          final Uint8List decrypted = await pureAlgo.decrypt(encrypted, key, iv: iv);
+          final Uint8List decrypted =
+              await pureAlgo.decrypt(encrypted, key, iv: iv);
           expect(utf8.decode(decrypted), 'ffi→pure');
         });
 
         test('${len * 8}-bit: pure-Dart encrypts, FFI decrypts', () async {
           final Uint8List key = AesCtrEncryptionAlgo(len).generateKey();
           final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
-          final AesCtrEncryptionAlgo pureAlgo = AesCtrEncryptionAlgo(key.length);
+          final AesCtrEncryptionAlgo pureAlgo =
+              AesCtrEncryptionAlgo(key.length);
           final InitialisationVector iv = InitialisationVector.random(16);
           final Uint8List plain = Uint8List.fromList(utf8.encode('pure→ffi'));
 
-          final Uint8List encrypted = await pureAlgo.encrypt(plain, key, iv: iv);
-          final Uint8List decrypted = await ffiAlgo.decrypt(encrypted, key, iv: iv);
+          final Uint8List encrypted =
+              await pureAlgo.encrypt(plain, key, iv: iv);
+          final Uint8List decrypted =
+              await ffiAlgo.decrypt(encrypted, key, iv: iv);
           expect(utf8.decode(decrypted), 'pure→ffi');
         });
 
@@ -83,8 +89,10 @@ void main() {
           final Uint8List plain =
               Uint8List.fromList(utf8.encode('byte-for-byte'));
 
-          expect(await makeAlgo(key).encrypt(plain, key, iv: iv),
-              await AesCtrEncryptionAlgo(key.length).encrypt(plain, key, iv: iv),
+          expect(
+              await makeAlgo(key).encrypt(plain, key, iv: iv),
+              await AesCtrEncryptionAlgo(key.length)
+                  .encrypt(plain, key, iv: iv),
               reason: 'a cross-decrypt still passes if both backends are '
                   'wrong in the same way; this does not');
         });
@@ -96,12 +104,25 @@ void main() {
       // encrypts block 2 differently, and the equality and hex pins below
       // catch that on either side.
       test('multi-block parity across the low64(IV) carry boundary', () async {
-        final Uint8List key =
-            Uint8List.fromList(List.generate(32, (i) => i));
-        final InitialisationVector iv = InitialisationVector(
-            Uint8List.fromList([
-          0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        final Uint8List key = Uint8List.fromList(List.generate(32, (i) => i));
+        final InitialisationVector iv =
+            InitialisationVector(Uint8List.fromList([
+          0x11,
+          0x22,
+          0x33,
+          0x44,
+          0x55,
+          0x66,
+          0x77,
+          0x88,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
         ]));
         final Uint8List plain =
             Uint8List.fromList(utf8.encode('low64 carry boundary'));
@@ -109,8 +130,10 @@ void main() {
         final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
         final AesCtrEncryptionAlgo pureAlgo = AesCtrEncryptionAlgo(key.length);
 
-        final Uint8List ffiEncrypted = await ffiAlgo.encrypt(plain, key, iv: iv);
-        final Uint8List pureEncrypted = await pureAlgo.encrypt(plain, key, iv: iv);
+        final Uint8List ffiEncrypted =
+            await ffiAlgo.encrypt(plain, key, iv: iv);
+        final Uint8List pureEncrypted =
+            await pureAlgo.encrypt(plain, key, iv: iv);
 
         expect(ffiEncrypted.length, 32);
         expect(hexOf(ffiEncrypted),
@@ -136,7 +159,8 @@ void main() {
           final Uint8List encrypted = await algo.encrypt(plain, key, iv: iv);
           expect(encrypted.length, expectedLen);
 
-          final Uint8List decrypted = await algo.decrypt(encrypted, key, iv: iv);
+          final Uint8List decrypted =
+              await algo.decrypt(encrypted, key, iv: iv);
           expect(decrypted, plain);
         });
       }
@@ -253,8 +277,8 @@ void main() {
     test('a key length that is not 16/24/32 throws AtEncryptionException', () {
       // The length is a constructor argument now, so this fails before any
       // key or plaintext is in hand rather than at the first encrypt.
-      expect(() => makeAlgo(Uint8List(15)),
-          throwsA(isA<AtEncryptionException>()));
+      expect(
+          () => makeAlgo(Uint8List(15)), throwsA(isA<AtEncryptionException>()));
     });
   });
 }
