@@ -158,6 +158,12 @@ take a dependency on `at_invitation_flutter`.
 
 Both packages are being deprecated and removed. Do not use them in new projects.
 
+### at_location_flutter
+
+This package has been deleted from the repository. A location-sharing example
+in `at_client_flutter` is planned; until it lands, implement location sharing
+directly on `at_client`. Do not take a dependency on `at_location_flutter`.
+
 ---
 
 ## Packages In Migration (avoid for new projects)
@@ -173,7 +179,6 @@ pattern, don't depend on the package).
 | `at_contacts_group_flutter` | In migration |
 | `at_events_flutter`         | In migration |
 | `at_follows_flutter`        | In migration |
-| `at_location_flutter`       | In migration |
 | `at_notify_flutter`         | In migration |
 
 For new projects: look at the source of these packages for inspiration, then

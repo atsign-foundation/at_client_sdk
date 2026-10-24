@@ -105,9 +105,9 @@ published on
   deprecated; invitations are now `AtClientInvitations` in `at_client`,
   shown in the
   [`at_client_flutter` invitations example](./packages/at_client_flutter/example/invitations).
-- [at_location_flutter](./packages/at_location_flutter): share
-  location between two atSigns and view on
-  [OpenStreetMap](https://www.openstreetmap.org/).
+- [at_location_flutter](./deprecated/flutter/at_location_flutter):
+  deprecated; a location-sharing example in `at_client_flutter` is
+  planned.
 - [at_login_flutter](./packages/at_login_flutter): zero-trust
   logins using the Atsign Protocol.
 - [at_notify_flutter](./packages/at_notify_flutter): notification
