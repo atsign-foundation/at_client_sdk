@@ -78,6 +78,8 @@ class EnrollmentHandshake {
     final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
     final String handshakeEnrollmentId = enrollmentResponse.enrollmentId;
 
+    // NOTE: a key source for the handshake alone, never a keyfile.
+    // ignore: invalid_use_of_visible_for_testing_member
     final memory = InMemoryAtKeysIo();
     await memory.write(enrollmentResponse.atSign!, handshakeKeys);
     atLookup.authenticator = authenticatorFor(

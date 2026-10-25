@@ -1,6 +1,6 @@
 name: at_onboarding_cli
 description: Dart tools for initial client onboarding, subsequent client enrollment, and enrollment management.
-version: 2.0.0-rc8
+version: 2.0.0-rc9
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_onboarding_cli
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -26,9 +26,11 @@ dependencies:
   # which no stable at_client carries, and pub prefers a stable release that
   # meets the floor. 3.15.0-rc5 is the first to re-export AtSignLogger,
   # which this package takes from at_client, 3.15.0-rc7 the first to serve
-  # HiveAtClientStorage from package:at_client/hive.dart, and 3.15.0-rc8 the
-  # first whose Enrollment reports apkamKeysExpiryDuration and expiresAt.
-  at_client: ^3.15.0-rc8
+  # HiveAtClientStorage from package:at_client/hive.dart, 3.15.0-rc8 the
+  # first whose Enrollment reports apkamKeysExpiryDuration and expiresAt, and
+  # 3.15.0-rc9 the first whose client.enrollments says whether an enrollment
+  # is anchored.
+  at_client: ^3.15.0-rc9
   at_commons: ^5.6.0
   at_lookup: ^3.7.0-rc2
   at_utils: ^3.2.0

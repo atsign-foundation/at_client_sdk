@@ -1,5 +1,3 @@
-// ignore_for_file: experimental_member_use
-
 /// Records the ORDER of `_fileConveyedKeysAndAnchor`'s startup steps.
 ///
 /// The ordering is a safety property with no string equivalent:
@@ -9,8 +7,9 @@
 ///   from an in-memory store a restart empties. Hydrated afterwards, that
 ///   sweep destroys every request waiting for this holder while holding
 ///   nothing to answer them with.
-/// - **root filed before anchor** — anchoring signs with the root private, so
-///   collection must have run first or the same start cannot anchor.
+/// - **root filed before anchor** — root-linking this enrollment's keys signs
+///   with the root private, so collection must have run first or the same
+///   start cannot anchor.
 /// - **reconcile before offer** — a held private that corresponds to nothing
 ///   published must be retired, not offered: offering it spends other
 ///   enrollments' broadcasts on bytes their own check rejects, and holding it
@@ -20,13 +19,6 @@
 /// observable effects — keyfile reads and writes, and wire operations on a
 /// mocked RemoteSecondary. The filer is fire-and-forget with no completion
 /// handle, so the test waits for the last step's wire marker.
-///
-/// One ordering is NOT recorded here: anchor-before-pending-link. The
-/// pending-link step emits nothing unless a conveyed chain link is already in
-/// the secret store, which takes a genuinely sealed envelope from a peer
-/// fixture, and hand-building the sealed form would re-describe the wire
-/// construction this suite exists to protect. The anchor-before-sweep
-/// assertion bounds the anchor's position from the other side.
 library;
 
 // A client built from an AtChops beside a key source holding no credential is
@@ -134,7 +126,13 @@ void main() {
     return i;
   }
 
-  Future<AtClient> startClient(_RecordingAtKeysIo keysIo) =>
+  /// Starts a client of enrollment `e-1`, which the roster lists with
+  /// [namespaces]: fully privileged unless the caller says otherwise.
+  Future<AtClient> startClient(_RecordingAtKeysIo keysIo,
+          {Map<String, String> namespaces = const {
+            '*': 'rw',
+            '__manage': 'rw'
+          }}) =>
       AtClientImpl.create(
         atSign,
         'buzz',
@@ -143,22 +141,49 @@ void main() {
         AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = storageDir
           ..commitLogPath = '$storageDir/commit',
+        enrollmentId: 'e-1',
         remoteSecondary: buildRecordingRemote(
-            events: events, remoteData: remoteData, remoteMeta: remoteMeta),
+            events: events,
+            remoteData: remoteData,
+            remoteMeta: remoteMeta,
+            atSign: atSign,
+            enrollments: {
+              'e-1.new.enrollments.__manage$atSign': {
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': namespaces,
+                'status': 'approved',
+              }
+            }),
         atChops: AtChopsImpl(AtChopsKeys.create(
             AtChopsUtil.generateAtEncryptionKeyPair(),
             AtChopsUtil.generateAtPkamKeyPair())),
         atKeysIo: keysIo,
       );
 
+  /// Files a client data signing key for `e-1` in [io], so its `_apsk` lists
+  /// a key that can take a link.
+  Future<void> fileSigningKey(WrittenAtKeysIo io) async {
+    final pair = RsaKeyPair.generate();
+    await io.update(atSign.toAtsign(), (keys) {
+      keys.fileSigningMaterial(
+          enrollmentId: 'e-1',
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
+          publicKey: pair.atPublicKey.publicKey,
+          privateKey: pair.atPrivateKey.privateKey);
+      return true;
+    });
+  }
+
   test(
-      'the start hydrates before it sweeps, files before it anchors, and '
-      'anchors before the privileged sweep', () async {
+      'the start hydrates before it sweeps, and files the root before it '
+      'links its own keys to it', () async {
     // NOTE: the held root private's public half IS the published root, which
     // is what gives every step work.
     final inner = await keyfileHolding(atSign,
         encryptionKeyPair: RsaKeyPair.generate(),
         selfEncryptionKey: AESKey.generate(32).key);
+    await fileSigningKey(inner);
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     await PqSigningRoot(MockAtClient(), keysIo: inner)
         .store(atSign, pair.secretKey);
@@ -170,7 +195,7 @@ void main() {
 
     final keysIo = _RecordingAtKeysIo(inner, events);
     await startClient(keysIo);
-    await untilEvent('cmd:enroll:list');
+    await untilEvent('enroll:link:e-1');
 
     // NOTE: the marker must be hydrate-SPECIFIC — collection also reads the
     // keyfile, so a bare keys-read-before-scan assertion stays green with the
@@ -188,25 +213,54 @@ void main() {
             'them from a store hydrate primes — swept-then-hydrated destroys '
             'every waiting request while holding nothing to answer with');
 
-    // NOTE: register() also rewrites the _apsk inside collection, so the anchor
-    // is matched by the apskRootLink tag rather than by the key — matching the
-    // key finds that earlier bare publish instead.
-    final anchorPublish = events.indexWhere((e) => e.endsWith(':rootlink'));
-    expect(anchorPublish, isNot(-1),
-        reason: 'no _apsk rewrite carried apskRootLink — the start never '
-            'anchored. Events:\n${events.join('\n')}');
-    expect(sweepScan, lessThan(anchorPublish),
-        reason: 'anchoring signs with the root private that collection files '
-            '— anchored-then-filed needs a second start to anchor at all');
+    final anchor = events.indexOf('enroll:link:e-1:rootlink');
+    expect(anchor, isNot(-1),
+        reason: 'the start never root-linked its own key. '
+            'Events:\n${events.join('\n')}');
+    expect(sweepScan, lessThan(anchor),
+        reason: 'root-linking signs with the root private that collection '
+            'files — linked-then-filed needs a second start to anchor at all');
+  });
 
-    // NOTE: the trailing colon is what makes this the SWEEP. `firstIndex`
-    // matches a prefix, and the roster read `enroll:listns:<ns>` starts with
-    // `cmd:enroll:list` too, so a looser prefix matches that instead and reads
-    // a correct startup as an inverted one.
-    final sweepCommand = firstIndex('cmd:enroll:list:');
-    expect(anchorPublish, lessThan(sweepCommand),
-        reason: 'the sweep signs links for OTHER enrollments; a sweeper that '
-            'has not anchored itself adds a hop without reaching the root');
+  test(
+      'a fully privileged enrollment whose atSign publishes no root mints one '
+      'at start, then root-links its own key', () async {
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
+    await fileSigningKey(inner);
+
+    await startClient(_RecordingAtKeysIo(inner, events));
+    await untilEvent('enroll:link:e-1');
+
+    final mint = events.indexOf('update:public:pq_signing_root$atSign');
+    expect(mint, isNot(-1),
+        reason: 'no root was published. Events:\n${events.join('\n')}');
+    expect(mint, lessThan(events.indexOf('enroll:link:e-1:rootlink')),
+        reason: 'the root this start minted is what signs its own root link');
+    expect(
+        await PqSigningRoot(MockAtClient(), keysIo: inner).privateHalf(atSign),
+        isNotNull,
+        reason: 'the private is filed, not only the record published');
+  });
+
+  test(
+      'an enrollment that is not fully privileged, whose atSign publishes no '
+      'root, mints none at start', () async {
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
+    await fileSigningKey(inner);
+
+    final client = await startClient(_RecordingAtKeysIo(inner, events),
+        namespaces: const {'buzz': 'rw'});
+    await (client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    expect(events, isNot(contains('update:public:pq_signing_root$atSign')),
+        reason: 'only a fully privileged enrollment creates the root');
+    expect(
+        await PqSigningRoot(MockAtClient(), keysIo: inner).privateHalf(atSign),
+        isNull);
   });
 
   test(
@@ -215,6 +269,7 @@ void main() {
     final inner = await keyfileHolding(atSign,
         encryptionKeyPair: RsaKeyPair.generate(),
         selfEncryptionKey: AESKey.generate(32).key);
+    await fileSigningKey(inner);
     final held = await MlDsa65PureDartAlgo().generateKeyPair();
     final published = await MlDsa65PureDartAlgo().generateKeyPair();
     await PqSigningRoot(MockAtClient(), keysIo: inner)

@@ -1,6 +1,4 @@
-// The PQ enrolment surface is @experimental while it matures; this test drives
-// it deliberately.
-// ignore_for_file: experimental_member_use, deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
 import 'dart:io';
 

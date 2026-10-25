@@ -1,5 +1,12 @@
+// PqStartupGates is @experimental; this pack's post-quantum files drive that
+// substrate deliberately.
+// ignore_for_file: experimental_member_use
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/hive.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 
@@ -33,6 +40,18 @@ final legacyPlusPqProviders = PqPosture(
 
 class TestPreferences {
   final atClientPreferencesMap = <String, AtClientPreference>{};
+
+  /// The startup steps a post-quantum client in this pack runs: every step
+  /// except the start-time root step.
+  ///
+  /// ⚠️ That step mints a root on an atSign that has none, into the keyfile
+  /// the client opened on. Files here open shared atSigns on keyfiles that die
+  /// with the file, which would leave every later file a root whose private
+  /// nobody holds.
+  static const packStartupGates = PqStartupGates(anchorOwnKeys: false);
+
+  static PqStartupGates? _gatesFor(PqPosture posture) =>
+      posture.configuresPqProviders ? packStartupGates : null;
 
   /// The atSigns this pack shares with CI, and which are **never recycled**.
   ///
@@ -142,7 +161,8 @@ class TestPreferences {
     }
     // `posture` is final on AtClientPreference, so it is a constructor
     // argument rather than one of the assignments below.
-    var atClientPreference = AtClientPreference(posture: posture);
+    var atClientPreference = AtClientPreference(
+        posture: posture, pqStartupGates: _gatesFor(posture));
     atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
     // Optional `root_server.port` (e.g. a base-port virtualenv run); defaults
     // to the standard root port 64 when absent.
@@ -165,9 +185,14 @@ class TestPreferences {
   /// store is separate too. Separate stores are what a deployment has anyway:
   /// two enrollments normally run as two processes.
   AtClientPreference forCoLocatedClient(String atSign,
-      {required PqPosture posture, required String device}) {
+      {required PqPosture posture,
+      required String device,
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms}) {
     final shared = getPreference(atSign, posture: posture);
-    final preference = AtClientPreference(posture: posture)
+    final preference = AtClientPreference(
+        posture: posture,
+        pqStartupGates: _gatesFor(posture),
+        dataSigningKeyAlgorithms: dataSigningKeyAlgorithms)
       ..rootDomain = shared.rootDomain
       ..rootPort = shared.rootPort
       ..syncRegex = shared.syncRegex;

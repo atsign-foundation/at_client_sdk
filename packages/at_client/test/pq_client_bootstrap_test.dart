@@ -5,6 +5,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
+        GeneratedAtKeysIo,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
@@ -45,6 +46,15 @@ class _Signer with ApkamSigning {
   final AtClient atClient;
   @override
   final AtSignLogger logger = AtSignLogger('_Signer');
+}
+
+/// A key source that generates keys rather than persisting them.
+class _GeneratedKeysIo extends GeneratedAtKeysIo {
+  @override
+  AtKeys read(String atsign) => AtKeys();
+
+  @override
+  AtKeys generateKeys(String publicKeyId) => AtKeys();
 }
 
 /// AtKeysIo is sealed; its abstract written flavour is the mockable face.
@@ -134,10 +144,11 @@ void main() {
     EnrollmentPrivilegeResolver? privilege,
     Future<int> Function()? sweep,
     PqStartupGates gates = const PqStartupGates(),
+    AtKeysIo? keysIo,
   }) =>
       PqClientBootstrap(
         client,
-        keysIo: null,
+        keysIo: keysIo,
         privilege: privilege ?? _FakePrivilege(false),
         sweepUnanchoredEnrollments: sweep ?? (() async => 0),
         gates: gates,
@@ -333,8 +344,7 @@ void main() {
         seedNamespaceKeys: false,
         requestRootPrivate: false,
         requestMissingPrivates: false,
-        publishRootLink: false,
-        publishChainLink: false,
+        anchorOwnKeys: false,
         sweepUnanchoredEnrollments: false,
         reconcileEnrollmentSnapshot: false,
         askOnReadMiss: false,
@@ -386,8 +396,7 @@ void main() {
           reconcileKeyPackage: false,
           seedNamespaceKeys: false,
           requestMissingPrivates: false,
-          publishRootLink: false,
-          publishChainLink: false,
+          anchorOwnKeys: false,
           sweepUnanchoredEnrollments: false,
           reconcileEnrollmentSnapshot: false,
           askOnReadMiss: false,
@@ -397,6 +406,96 @@ void main() {
       expect(written, contains(PqSigningRoot.recordName),
           reason: 'the pair this enrollment filed is the root, and nothing '
               'else on a start would ever publish it');
+    });
+
+    test(
+        'Given a rootless atSign, when a fully privileged start mints the '
+        'root, then it can answer other enrollments\' pulls for it', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:1');
+      when(() => client.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = 'wavi');
+
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        gates: const PqStartupGates(
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          refreshOwnLinks: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestRootPrivate: false,
+          requestMissingPrivates: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      );
+      await bootstrap.startup();
+
+      expect(await bootstrap.root.privateHalf('@bootstrap🛠'), isNotNull,
+          reason: 'the start minted the root');
+      expect(
+          bootstrap.sharing.secretStore
+              .getSecret('wavi', PqSigningRoot.secretName),
+          isNotNull,
+          reason: 'the hydrate step ran before there was a root to prime, and '
+              'the listener sweeping since consumes every request it cannot '
+              'answer — so the root the start mints is primed as it is minted');
+    });
+
+    test(
+        'Given a rootless atSign and the priming gate off, when a fully '
+        'privileged start mints the root, then it primes nothing', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:1');
+      when(() => client.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = 'wavi');
+
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        gates: const PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          refreshOwnLinks: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestRootPrivate: false,
+          requestMissingPrivates: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      );
+      await bootstrap.startup();
+
+      expect(await bootstrap.root.privateHalf('@bootstrap🛠'), isNotNull,
+          reason: 'the premise: the start minted the root');
+      expect(
+          bootstrap.sharing.secretStore
+              .getSecret('wavi', PqSigningRoot.secretName),
+          isNull);
     });
 
     test('a secret an envelope delivers is filed into the keyfile', () async {
@@ -455,6 +554,110 @@ void main() {
       await bootstrap.startupComplete.timeout(const Duration(seconds: 5));
     });
 
+    /// Records the key of every remote read the startup makes.
+    List<String> recordReads() {
+      final read = <String>[];
+      when(() => client.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        read.add('${inv.positionalArguments[0]}');
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}');
+      });
+      return read;
+    }
+
+    test(
+        'Given the mint gate off, when the startup runs, then it still reads '
+        'which of this enrollment\'s keys have a link', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        startEnvelopeListener: false,
+        mintInUseSigningKeys: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        anchorOwnKeys: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+      )).startup();
+
+      expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty);
+    });
+
+    test(
+        'Given the refresh gate off as well, when the startup runs, then it '
+        'reads no _apsk record of its own', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        startEnvelopeListener: false,
+        mintInUseSigningKeys: false,
+        refreshOwnLinks: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        anchorOwnKeys: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+      )).startup();
+
+      expect(read.where((key) => key.contains('_apsk.b-1')), isEmpty);
+    });
+
+    test('Given an inert startup, when it runs, then it reads no _apsk record',
+        () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(gates: const PqStartupGates.inert()).startup();
+
+      expect(read.where((key) => key.contains('_apsk')), isEmpty);
+    });
+
+    test(
+        'Given a fully privileged client on a key source that cannot persist, '
+        'when it links its own keys, then it mints no signing root and goes '
+        'on to link them', () async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final read = recordReads();
+
+      await build(
+          keysIo: _GeneratedKeysIo(),
+          privilege: _FakePrivilege(true),
+          gates: const PqStartupGates(
+            hydrateHeldSecrets: false,
+            collectConveyedKeys: false,
+            startEnvelopeListener: false,
+            mintInUseSigningKeys: false,
+            refreshOwnLinks: false,
+            reconcileKeyPackage: false,
+            seedNamespaceKeys: false,
+            requestRootPrivate: false,
+            requestMissingPrivates: false,
+            sweepUnanchoredEnrollments: false,
+            reconcileEnrollmentSnapshot: false,
+            askOnReadMiss: false,
+          )).startup();
+
+      expect(read.where((key) => key.contains('pq_signing_root')), isEmpty,
+          reason: 'a mint starts by reading the published root; nothing is '
+              'minted into a store that cannot keep it');
+      expect(read.where((key) => key.contains('_apsk.b-1')), isNotEmpty,
+          reason: 'with the refresh gate off, only linking its own keys reads '
+              'its own record');
+    });
+
     test('gates silence the active steps', () async {
       var swept = 0;
       final privilege = _FakePrivilege(true);
@@ -464,8 +667,7 @@ void main() {
         gates: const PqStartupGates(
           requestRootPrivate: false,
           requestMissingPrivates: false,
-          publishRootLink: false,
-          publishChainLink: false,
+          anchorOwnKeys: false,
           sweepUnanchoredEnrollments: false,
           askOnReadMiss: false,
         ),
@@ -639,8 +841,7 @@ void main() {
       'seedNamespaceKeys',
       'requestRootPrivate',
       'requestMissingPrivates',
-      'publishRootLink',
-      'publishChainLink',
+      'anchorOwnKeys',
       'sweepUnanchoredEnrollments',
       // Last: nothing reads the enrollment snapshot, so this step can only
       // delay a step that heals key material, never enable one.

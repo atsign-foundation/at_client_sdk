@@ -72,19 +72,19 @@ class EnrollmentServiceImpl implements EnrollmentService {
   bool get _configuresPqProviders =>
       _atClient.getPreferences()?.posture.configuresPqProviders ?? true;
 
-  /// Signs and conveys approval-chain links for approved enrollments that
-  /// lack one — see [EnrollmentConveyance.sweepUnanchoredEnrollments].
+  /// Root-links the keys on approved enrollments that lack a sound root
+  /// link: see [EnrollmentConveyance.sweepUnanchoredEnrollments].
   ///
   /// Rejects its future when this client's posture configures no post-quantum
-  /// providers: the sweep signs links and seals secrets, which such a client
-  /// cannot do.
+  /// providers: a root link is an ML-DSA-65 signature, which such a client
+  /// does not make.
   Future<int> sweepUnanchoredEnrollments() async {
     if (!_configuresPqProviders) {
       throw AtClientException.message(
           'this client\'s posture configures no post-quantum providers, so it '
-          'cannot sign or convey approval-chain links. Run the sweep from a '
-          'client whose posture does — the enrollments it would have anchored '
-          'stay unanchored and a later sweep still finds them');
+          'signs no root links. Run the sweep from a client whose posture '
+          'does — the enrollments it would have anchored stay unanchored and '
+          'a later sweep still finds them');
     }
     return _conveyance.sweepUnanchoredEnrollments();
   }

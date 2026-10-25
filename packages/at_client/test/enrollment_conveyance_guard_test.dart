@@ -1,7 +1,3 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
-// ignore_for_file: experimental_member_use
-
 import 'dart:convert';
 import 'dart:typed_data';
 

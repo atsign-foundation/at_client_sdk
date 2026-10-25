@@ -88,6 +88,12 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
     when(() => atClient.enrollmentId).thenReturn(enrollmentId);
+    // NOTE: a mint links what it minted, which reads this enrollment's own
+    // _apsk; with no atServer behind this client, that record is absent.
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async =>
+            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
 
     enrollment = MockEnrollmentUpdater();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
