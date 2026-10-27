@@ -130,3 +130,8 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo, running as root, updates the keyfile
     Then the .bak is a file with the keyfile's owner and group
     And the second account's file is unchanged
+
+  Scenario: A keyfile the writer cannot open is still there to root
+    Given @alice🛠's keyfile has mode 0000, so the writer cannot open it
+    When FileAtKeysIo asks the keys directory, opened as root opens it, whether the keyfile is there
+    Then it is there, so a write is refused and a flush validates it before replacing it

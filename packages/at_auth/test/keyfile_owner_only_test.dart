@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -370,6 +371,18 @@ void main() {
       expect(await _ownerOf(theirs), '5678:5678',
           reason: "the second account's file keeps its owner");
     }, skip: _rootOnly);
+
+    test('A keyfile the writer cannot open is still there to root', () async {
+      await writeKeyfile(mode: '000');
+      final keys = KeyfileDirectory.open('${dir.path}/keys');
+      addTearDown(keys.close);
+
+      expect(keys.exists('${atsign}_key.atKeys'), isTrue,
+          reason: 'a keyfile that cannot be opened is still there, so root '
+              'neither replaces it on write nor flushes onto it unchecked');
+      expect(keys.exists('${atsign}_key.atKeys.bak'), isFalse,
+          reason: 'nothing is at a name with no file');
+    });
 
     test('Narrowing a keyfile to owner-only is logged', () async {
       await writeKeyfile(mode: '644');

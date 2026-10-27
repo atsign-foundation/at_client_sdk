@@ -52,8 +52,18 @@ final class KeyfileDirectory {
     return KeyfileDirectory._(libc, fd, path);
   }
 
-  /// Whether anything is at [name] here, a symbolic link included.
+  /// Whether anything is at [name] here, a symbolic link included, whether
+  /// or not this process may open it.
   bool exists(String name) {
+    // NOTE: F_OK needs search permission on the directory alone, as stat
+    // does, so a keyfile root cannot open still counts as there.
+    if (_withNative(
+            name,
+            (native) =>
+                _libc.faccessat(_fd, native, 0, _libc.symlinkNoFollow)) ==
+        0) {
+      return true;
+    }
     final fd = _openAt(name, _libc.openForReadingNoFollow!, 0);
     if (fd >= 0) {
       _libc.close(fd);
@@ -214,6 +224,7 @@ typedef _RenameAtFunction = int Function(
 typedef _UnlinkAtFunction = int Function(int, Pointer<Utf8>, int);
 typedef _ReadLinkAtFunction = int Function(
     int, Pointer<Utf8>, Pointer<Uint8>, int);
+typedef _AccessAtFunction = int Function(int, Pointer<Utf8>, int, int);
 typedef _FdModeFunction = int Function(int, int);
 typedef _FdOwnerFunction = int Function(int, int, int);
 typedef _ReadWriteFunction = int Function(int, Pointer<Uint8>, int);
@@ -230,6 +241,8 @@ final class _Libc {
       required this.renameat,
       required this.unlinkat,
       required this.readlinkat,
+      required this.faccessat,
+      required this.symlinkNoFollow,
       required this.fchmod,
       required this.fchown,
       required this.read,
@@ -252,6 +265,10 @@ final class _Libc {
   final _RenameAtFunction renameat;
   final _UnlinkAtFunction unlinkat;
   final _ReadLinkAtFunction readlinkat;
+  final _AccessAtFunction faccessat;
+
+  /// `AT_SYMLINK_NOFOLLOW`.
+  final int symlinkNoFollow;
   final _FdModeFunction fchmod;
   final _FdOwnerFunction fchown;
   final _ReadWriteFunction read;
@@ -294,6 +311,9 @@ final class _Libc {
       final readlinkat = libc.lookupFunction<
           IntPtr Function(Int32, Pointer<Utf8>, Pointer<Uint8>, Size),
           _ReadLinkAtFunction>('readlinkat');
+      final faccessat = libc.lookupFunction<
+          Int32 Function(Int32, Pointer<Utf8>, Int32, Int32),
+          _AccessAtFunction>('faccessat');
       if (Platform.isMacOS) {
         return _Libc._(
             createNewForWriting: 0x1000a01,
@@ -304,6 +324,8 @@ final class _Libc {
             renameat: renameat,
             unlinkat: unlinkat,
             readlinkat: readlinkat,
+            faccessat: faccessat,
+            symlinkNoFollow: 0x20,
             fchmod: libc.lookupFunction<Int32 Function(Int32, Uint16),
                 _FdModeFunction>('fchmod'),
             fchown: fchown,
@@ -322,6 +344,8 @@ final class _Libc {
           renameat: renameat,
           unlinkat: unlinkat,
           readlinkat: readlinkat,
+          faccessat: faccessat,
+          symlinkNoFollow: 0x100,
           fchmod: libc.lookupFunction<Int32 Function(Int32, Uint32),
               _FdModeFunction>('fchmod'),
           fchown: fchown,
