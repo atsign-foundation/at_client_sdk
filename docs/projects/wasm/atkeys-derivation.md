@@ -32,7 +32,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
                                                                the APKAM private key
 ```
 
-- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's PCAM private key in the record is gone: the document holds no APKAM private key. Where the PKAM key comes from (a passkey-derived ML-DSA-65 key) is part of gate (c), proposed, not ruled.
+- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. Where the PKAM key comes from (a passkey-derived ML-DSA-65 key) is part of gate (c), proposed, not ruled.
 - `typ` in the AAD stops a pointer being opened as a document, or the reverse. Whether `v` changes with `typ` is open.
 
 - `<atSign>` comes from `userHandle`, so it is known before any derivation.

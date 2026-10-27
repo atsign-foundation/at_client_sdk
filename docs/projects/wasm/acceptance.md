@@ -438,7 +438,7 @@ wall-clock. Nothing tests the property the concern is named for.
 | # | Gate | Proves |
 | --- | --- | --- |
 | X-K5 | HKDF with `P` = bytes `00..1f` and atSign `@alice` yields the lookup key and kek in [`atkeys-derivation.md`](atkeys-derivation.md), and `@Alice`, `alice`, `@ali.ce` yield the same | K-1, K-3: the derivation and atSign canonicalisation are stable across implementations |
-| X-K6 | A record whose `v`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
+| X-K6 | A record whose `v`, `typ`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
 | X-K7 | A valid older document whose public keys no longer match the published ones is refused before the keys are used ("before PKAM" pending K-5′) | K-5: rollback |
 | X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
 | X-K9 | After a successful open the credential hint is rewritten and `navigator.storage.persist()` is requested once; with IndexedDB cleared, the passkey alone restores the session (pointer → PKAM → document) | K-6 clarification, retained under K-10/K-11: eviction is a UX cost, not a loss |
