@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · gate (c) and K-5′ proposed
+**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled 2026-10-27 · gate (c) proposed
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
 
@@ -12,7 +12,7 @@
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
-| C4 | **Restored public keys must match the published ones before PKAM**. Under K-11 the document arrives after PKAM; the rewording K-5′ ("before the keys are used") is proposed | — |
+| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
 ## Derivation and record
@@ -64,7 +64,7 @@ Freshness per write comes from the random IV.
 |---|---|
 | C1 atSign in labels | Linking or splicing records if a passkey is ever paired with two atSigns |
 | C2 AAD = clear header | Downgrade attacks via edits to `v`, `alg` or `kdf` |
-| C4 public-key check | **Rollback**: the server replays an older valid document whose keys have since been rotated |
+| C4 public-key check | **Partial rollback**: the server replays an older valid document whose keys have since been rotated, without rolling back the published keys too. Runs after PKAM and after the document is opened, before the restored keys are used. Does not stop a compromised atServer that rolls back the document and the published keys together, nor a stale-but-valid document whose public keys are unchanged |
 | C3 per-write data key (rejected) | Nothing here. Its job is letting several passkeys unlock one shared key, the `unlocks[]` pattern this design removes. |
 
 ## Cost of changing later

@@ -1,6 +1,6 @@
 # Browser onboarding — problem definition and solution flow
 
-**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; gate (c) and K-5′ proposed · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); open: Q-3 (portal envelope), Q-4, Q-5
+**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled 2026-10-27; gate (c) proposed · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); open: Q-3 (portal envelope), Q-4, Q-5
 **Supersedes:** the shared `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array (PB-5 H/J, live-tested in L step 0a)
 **Resolves:** OQ-19 (prf unlocks accumulate on the server copy)
 
@@ -97,7 +97,9 @@ sequenceDiagram
     B->>S: lookup pointer (unauthenticated) → unseal enrollmentId
     B->>S: PKAM auth as enrollmentId
     B->>S: llookup atkeys.eid.a.__e → open with kek
-    B->>B: rewrite hint; storage.persist() once
+    B->>S: lookup public:publickey@atSign
+    B->>B: restored public keys must match the published ones, else hard fail (BO-9, K-5)
+    B->>B: only then use the @keys; rewrite hint; storage.persist() once
 ```
 
 ### 3.3 Recovery — browser storage cleared, passkey kept
@@ -113,8 +115,9 @@ sequenceDiagram
     S-->>B: pointer → unseal enrollmentId with kek
     B->>S: PKAM auth as enrollmentId
     B->>S: llookup atkeys.eid.a.__e → open with kek
-    B->>B: restored public keys must match the published ones (BO-9)
-    B->>B: store hint in IndexedDB
+    B->>S: lookup public:publickey@atSign
+    B->>B: restored public keys must match the published ones, else hard fail (BO-9, K-5)
+    B->>B: only then use the @keys; store hint in IndexedDB
 ```
 
 Return and recovery differ only in the credential hint: the server holds everything else, so a cleared browser loses nothing.
@@ -145,7 +148,7 @@ Return and recovery differ only in the credential hint: the server holds everyth
 | BO-6 | ~~`ttl` refreshed on open prunes dead passkeys~~ **superseded 2026-10-27 by K-10**: the pointer has no TTL | — |
 | BO-7 | **Pointer read by exact lookup key, unauthenticated; document read over PKAM; all writes PKAM-authenticated**; the pointer never appears in `scan` | recovery must find the `enrollmentId` before auth; writes need an owner; enumeration would break R5. The document is listed to its own enrollment and to CRAM only, by an `enrollmentId` they already know |
 | BO-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
-| BO-9 | **Restored public keys must match the published ones before PKAM**; AAD = the record's clear header. Under K-11 the check can only run after PKAM; the rewording K-5′ is proposed | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade) |
+| BO-9 | **Restored public keys must match the published ones before the restored keys are used** — after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27); AAD = the record's clear header | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade). The match catches only a partial rollback: the published keys come from the same atServer (§5) |
 
 ---
 
@@ -159,13 +162,16 @@ Return and recovery differ only in the credential hint: the server holds everyth
 | The passkey private key never leaves the authenticator | WebAuthn |
 | Dead passkeys accumulate at most one orphan pointer each | the pointer has no TTL and revocation cannot remove it (K-10); it holds only a sealed `enrollmentId` |
 | A stale device cannot resurrect removed records | no shared record, nothing merged |
-| A replayed older record is refused | BO-9 public-key check |
+| A replayed older document is refused when the published keys were not rolled back with it (partial rollback) | BO-9 / K-5 public-key check, after PKAM and before the restored keys are used |
 
 **Does not hold:**
 
 - An atServer can still see that *some* record was read on the atSign's own server — the lookup arrives over a connection to that atSign.
 - Any enrollment holding `atkeysv:rw` can overwrite or delete another passkey's pointer **if it knows that pointer's lookup key** (probe P4). The key is PRF-derived and never listed, so this is bounded to a party that already saw it; the effect is denial of recovery, not disclosure. Owner-binding guard deferred (`at_client_sdk-m0j`).
 - CRAM can read every enrollment's document; it is still sealed under the kek.
+- A compromised atServer that rolls back the document **and** `public:publickey@<atSign>` together passes the K-5 check: the published keys come from the same server. K-5 defends partial rollback only.
+- A stale-but-valid document whose public keys are unchanged (other @keys state older) passes the K-5 check — acknowledged limit.
+- A server can move a valid document ciphertext to another enrollment's document name under the same kek; binding the `enrollmentId` and record name into the AAD is a proposed follow-up ([`decisions.md`](decisions.md)), not ruled.
 
 ---
 
