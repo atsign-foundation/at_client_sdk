@@ -1,5 +1,7 @@
 ## 3.15.0-rc9
 
+- breaking: `AtClientUtil.findSecondary` is removed. Use
+  `RemoteSecondary.findSecondaryUrl`.
 - feat: an approval by an enrollment that holds the atSign's signing root, or
   a key anchored to it, anchors the enrollment it approves at once, and adding
   or retiring a key no longer undoes that. It needs an atServer with

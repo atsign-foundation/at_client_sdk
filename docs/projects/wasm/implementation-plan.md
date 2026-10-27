@@ -256,12 +256,14 @@ break; it stays as ruled.
 - **T6 — Follow the raw socket.** `monitor_client.dart` (exported from at_lookup's
   barrel, no consumer in this repository) calls `SecureSocket.connect` directly,
   bypassing `SecureSocketUtil`. It must route through the transport or move to
-  `_io`.
+  `_io`. **Done 2026-10-23:** `MonitorClient` is removed in at_lookup 4.0.0.
 - **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
   opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
   not through `AtLookUpFactory`. Ship a web implementation using one of
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
-  convention. The production answer is OQ-7.
+  convention. The production answer is OQ-7. **Done 2026-10-23:**
+  `HttpsSecondaryAddressFinder` in `at_lookup_web.dart`, behind `webSocketLookUps()`;
+  OQ-7 resolved, pending atDirectory CORS.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
 - **T9 — Let the APP inject the transport, and thread it to every construction site**
   (gkc, 2026-09-06). ✅ **DONE 2026-09-13**, on the client-lifecycle branch, as the

@@ -1,5 +1,4 @@
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 import 'package:at_lookup/at_lookup_io.dart';
 
 /// The connections a client opens when its application supplied no

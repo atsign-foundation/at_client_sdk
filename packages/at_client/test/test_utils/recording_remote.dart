@@ -17,8 +17,8 @@ import 'mocks.dart';
 /// treated as an authentication key. `enroll:list` answers [enrollments],
 /// keyed as the atServer keys its records.
 ///
-/// The atLookUp carries no enrollment id, so a client built on this with none
-/// of its own is fully privileged by construction.
+/// The mock lookup carries no enrollment restriction, so a client built on
+/// this is fully privileged by construction.
 ///
 /// Callers must `registerFallbackValue` a [VerbBuilder] fake in `setUpAll`.
 MockRemoteSecondary buildRecordingRemote({
@@ -31,9 +31,6 @@ MockRemoteSecondary buildRecordingRemote({
   final remote = MockRemoteSecondary();
   final lookUp = MockAtLookupImpl();
   when(() => remote.atLookUp).thenReturn(lookUp);
-  // the bridge reads the enrollment id off the lookup until the ladder goes
-  // ignore: deprecated_member_use
-  when(() => lookUp.enrollmentId).thenReturn(null);
   when(() => remote.sync(any(), regex: any(named: 'regex')))
       .thenAnswer((_) async => null);
 
