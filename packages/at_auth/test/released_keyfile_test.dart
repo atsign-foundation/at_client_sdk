@@ -196,11 +196,14 @@ void main() {
           .writeAsStringSync(jsonEncode({...document, 'atsign': '@bob🛠'}));
 
       await expectLater(
-          FileAtKeysIo(filePath: (_) => path)
-              .update(atsign.toAtsign(), (keys) => true),
-          throwsA(isA<AtKeysValidationException>()),
-          reason: 'a keyfile naming another atSign is not rewritten for '
-              '$atsign');
+          FileAtKeysIo(filePath: (_) => path).update(atsign.toAtsign(), (keys) {
+            keys.atsign = atsign.toAtsign();
+            return true;
+          }),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'a keyfile whose atsign field names another atSign is not '
+              'rewritten for $atsign, even with keys that name $atsign');
     });
 
     test(
