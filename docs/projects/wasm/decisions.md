@@ -582,6 +582,26 @@ util) and T8 (publish 4.0.0) — which is also why the factory type still reache
 and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
 
+**Amended 2026-10-23 — at_lookup's major.** T3–T7 are done in at_lookup 4.0.0-rc1, and
+only T8 (publish) remains, still blocked. `AtLookupTransport` keeps its name and takes
+`transportFactory:` in place of the socket factories; `secureSocketTransport(...)` and
+`secureSocketLookUps(...)` keep their signatures, so the doors above are unchanged. T5
+moved `secure_socket_util.dart` behind `at_lookup_io.dart`, so the factory type no longer
+reaches `dart:io` through the main barrel; `wasm_shakedown` gates it. The web factory
+no longer implements `AtLookupMuxable` itself: `webSocketLookUps()` in
+`at_lookup_web.dart` builds an `AtLookupImpl` over a `WebSocketTransport`, and resolves
+the atServer through the atDirectory's HTTPS face (OQ-7). The web default is that
+**direct** path; the fixed-host `proxyWebSocketLookUps` is dev-only, because a proxy ends
+TLS and sees the authenticated session.
+
+**Web back-pressure: bounded, then closed.** A browser WebSocket cannot pause, so the
+TCP back-pressure the native transport relies on does not exist there.
+`WebSocketTransport.inbound` is bounded in bytes (default: the listener's
+`bufferCapacity`); on overflow the transport closes the connection with a warning log,
+and recovery is reconnect + sync. The `AtTransport` contract and
+`AtLookupMuxable.notifications` state the split: native, TCP back-pressure; web, bounded,
+then closed. `flush()` waits for `bufferedAmount == 0`, bounded by `flushTimeout`.
+
 ---
 
 ### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
@@ -1208,6 +1228,19 @@ JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). 
 The `proxy:` convention and the injectable `SecondaryAddressFinder` unblock
 development, but a production browser client needs a WebSocket- or HTTPS-reachable
 directory endpoint. Whose work is that, and does it belong in this project?
+**Resolved 2026-10-23 by at_lookup 4.0.0.** The atDirectory already has an HTTPS face
+(`GET /@alice` → `host:port`, `404` for an unknown atSign), and an atServer upgrades
+`/ws` on its own TLS port. `webSocketLookUps()` uses both: `HttpsSecondaryAddressFinder`
+(`package:web` `fetch`) for the lookup, `wss://` straight to the atServer for the
+session. This is also the answer to the browser replacement for `root.atsign.org:64`
+(R9 in the probe list).
+
+**Open dependencies — the direct path is not usable in production until both land:**
+
+| Dependency | State |
+| --- | --- |
+| CORS on the atDirectory's HTTPS face | The server code sends `Access-Control-Allow-Origin: *` on every HTTP answer since at_root_server 2.3.0 ([at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894), merged 2026-10-23). Open: 2.3.0 deployed to `root.atsign.org`, which the repos cannot show. Only the finder's `fetch` needs it; WebSocket opens are not subject to CORS |
+| Prod HTTPS lookup | The prod atDirectory's `:443` listener is not live; `:64` answers only in the raw protocol |
 
 **OQ-8 — How far does the `AtConnection` break reach outside this repo?** In-repo
 callers are enumerated in [`design.md`](design.md) §2.1. External `implements
@@ -1331,4 +1364,5 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-27 | **K-10, K-11 ruled; K-6, K-8 superseded; R-a closed; R-b dissolved.** K-10: TTL-less public pointer `public:_<lookupHex>.atkeysv@<atSign>` sealing the `enrollmentId` (`typ:"eid"`), written once at enroll, hidden from every scan, read unauthenticated. K-11: private document `atkeys.<eid>.a.__e@<atSign>`, read over PKAM by that enrollment only, no private key needed to open; CRAM reads but cannot write it; revoke, delete and unrevoke move it. K-6 survives as K-10's name and read grammar; K-8's signing-algorithm choice survives. Re-enroll after revoke = approver `enroll:unrevoke` (same `enrollmentId`, same public key, original expiry; no server change). "Revocation is final" restated as approver policy. Evidence: at_server trunk `acd5a4ba`. K-5′ and the rest of gate (c) stay proposed. |
 | 2026-10-27 | **K-5 re-ruled.** The public-key match runs after PKAM and before the restored @keys are used for any encrypt or decrypt; mismatch is a hard fail. Replaces "before PKAM", which K-11 made unmeetable; K-5′ is retired into K-5. Limit stated in the ruling: a compromised atServer can roll back the document and the published keys together, so K-5 defends partial rollback only; a stale-but-valid document with unchanged public keys also passes. Binding `enrollmentId` and record name into the AAD stays a proposed follow-up. |
 | 2026-10-27 | **K-12 ruled (gate (c)).** The PKAM key is derived from the passkey and is the primary path: `HKDF(P, "at_auth/custody/auth-seed/v1\|<atSign>")` seeds ML-DSA-65, never stored. With it the passkey alone restores the session (R3), and the K-11 ledger has a ruled PKAM key. Fallbacks (no-PRF authenticator, lost or wiped passkey, IndexedDB-held key, second passkey) and rotation stay open, not ruled. |
+| 2026-10-23 | **D-15 amended; OQ-7 resolved.** at_lookup 4.0.0-rc1 closes T3–T7 (T8, publish, still blocked): `webSocketLookUps()` is an `AtLookupImpl` over a `WebSocketTransport`, resolving through the atDirectory's HTTPS face and connecting `wss://` to the atServer directly; the proxy factory is dev-only. Web back-pressure is bounded, then closed. Open dependencies: at_root_server 2.3.0 (CORS) deployed to `root.atsign.org`, and the prod `:443` listener. Recorded here 2026-10-28. |
 | 2026-10-28 | **PB-0 reservation dropped.** No D-numbers are held for PB-0's unfiled rulings (the portal-requirements routing, R-5); they take the next free numbers when filed. The old reservation of D-26..D-28 also collided with D-26 (SimpleOPFS). |

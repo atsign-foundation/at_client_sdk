@@ -155,8 +155,8 @@ default.
 | Site                                                                        | What it does                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |
-| `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
-| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
+| `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`. Removed in at_lookup 4.0.0.                                                                                                 |
+| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup. Native only from at_lookup 4.0.0 (`at_lookup_io.dart`).                                                                                               |
 
 **The ABI leak** is the interface, not the implementation:
 
@@ -199,8 +199,10 @@ much of it at_client owns. Re-derive it before scoping the transport work.
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
 interface, and the `rootDomain: 'proxy:<host>'` convention bypasses root lookup
 entirely. Either unblocks development; a production browser client needs a WebSocket-
-or HTTPS-reachable directory endpoint, which is an open question in
-[`decisions.md`](decisions.md).
+or HTTPS-reachable directory endpoint. at_lookup 4.0.0 resolves this (OQ-7 in
+[`decisions.md`](decisions.md)): `HttpsSecondaryAddressFinder` asks the atDirectory's
+HTTPS face, pending at_root_server 2.3.0 (CORS) deployed to `root.atsign.org` and the
+prod `:443` listener.
 
 ### 2.2 Storage bootstrap
 
