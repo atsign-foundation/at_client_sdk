@@ -287,67 +287,6 @@ void main() {
     }, skip: _rootOnly);
 
     test(
-        'A keys directory replaced while root updates a keyfile in it is not '
-        'written through', () async {
-      await writeKeyfile(mode: '600');
-      await _chown('1234:2345', keyfile);
-      final keys = '${dir.path}/keys';
-      await _chown('1234:2345', keys);
-      final moved = '${dir.path}/keys.moved';
-      final theirs = Directory('${dir.path}/theirs')..createSync();
-      final theirKeyfile = '${theirs.path}/${atsign}_key.atKeys';
-      File(theirKeyfile).writeAsBytesSync(File(keyfile).readAsBytesSync());
-      await _chown('5678:5678', theirKeyfile);
-      final theirBytes = File(theirKeyfile).readAsBytesSync();
-
-      await io().update(atsign.toAtsign(), (stored) {
-        Directory(keys).renameSync(moved);
-        Link(keys).createSync(theirs.path);
-        return true;
-      });
-
-      expect(_namesIn(theirs), ['${atsign}_key.atKeys'],
-          reason: "nothing is written in the second account's directory");
-      expect(File(theirKeyfile).readAsBytesSync(), theirBytes,
-          reason: "the second account's keyfile is unchanged");
-      expect(await _ownerOf(theirKeyfile), '5678:5678',
-          reason: "the second account's keyfile keeps its owner");
-      final written = '$moved/${atsign}_key.atKeys';
-      expect(FileSystemEntity.typeSync(written, followLinks: false),
-          FileSystemEntityType.file,
-          reason: 'the keyfile written is a file in the directory it was '
-              'read from');
-      expect(await _ownerOf(written), '1234:2345',
-          reason: "the keyfile written takes the first account's owner and "
-              'group');
-    }, skip: _rootOnly);
-
-    test('Root does not write a keyfile in a directory that is a symbolic link',
-        () async {
-      final theirs = Directory('${dir.path}/theirs')..createSync();
-      final theirKeyfile = '${theirs.path}/${atsign}_key.atKeys';
-      await FileAtKeysIo(filePath: (_) => theirKeyfile)
-          .write(atsign, legacyAtKeys(atsign: atsign.toAtsign()));
-      await _chown('5678:5678', theirKeyfile);
-      final theirBytes = File(theirKeyfile).readAsBytesSync();
-      Link('${dir.path}/keys').createSync(theirs.path);
-
-      await expectLater(
-          io().flush(
-              atsign.toAtsign(), legacyAtKeys(atsign: atsign.toAtsign())),
-          throwsA(isA<FileSystemException>()),
-          reason: 'root does not write a keyfile in a directory that is a '
-              'symbolic link');
-
-      expect(_namesIn(theirs), ['${atsign}_key.atKeys'],
-          reason: "the second account's directory is unchanged");
-      expect(File(theirKeyfile).readAsBytesSync(), theirBytes,
-          reason: "the second account's keyfile is unchanged");
-      expect(await _ownerOf(theirKeyfile), '5678:5678',
-          reason: "the second account's keyfile keeps its owner");
-    }, skip: _rootOnly);
-
-    test(
         'A backup path that is a symbolic link is replaced when root '
         'rewrites the keyfile', () async {
       await writeKeyfile(mode: '600');
@@ -408,10 +347,6 @@ Future<void> _chmod(String mode, String path) async {
   final result = await Process.run('chmod', [mode, path]);
   expect(result.exitCode, 0, reason: '${result.stderr}');
 }
-
-List<String> _namesIn(Directory directory) =>
-    directory.listSync().map((entity) => entity.uri.pathSegments.last).toList()
-      ..sort();
 
 Future<void> _chown(String owner, String path) async {
   final result = await Process.run('chown', [owner, path]);

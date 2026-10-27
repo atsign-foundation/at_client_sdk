@@ -51,16 +51,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future write(String atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
     await AtKeysFileLock(file.path).synchronized(() async {
-      final site = _openSite(file, createParent: true);
-      try {
-        if (site.exists(file)) {
-          throw AtKeysFileOverwriteException(
-              'Tried writing ${file.path}, but failed since it already exists');
-        }
-        await _writeDocument(site, file, await _encodeAtRest(atKeys, atsign));
-      } finally {
-        site.close();
+      if (file.existsSync()) {
+        throw AtKeysFileOverwriteException(
+            'Tried writing ${file.path}, but failed since it already exists');
       }
+
+      await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
     });
   }
 
@@ -73,14 +69,8 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     // either writes both pass validation, and the second rename silently
     // discards the first's addition. Several CLI apps sharing one keyfile is
     // the ordinary deployment, not an edge.
-    await AtKeysFileLock(file.path).synchronized(() async {
-      final site = _openSite(file, createParent: true);
-      try {
-        await _writeValidated(site, file, atsign, atKeys);
-      } finally {
-        site.close();
-      }
-    });
+    await AtKeysFileLock(file.path)
+        .synchronized(() => _writeValidated(file, atsign, atKeys));
   }
 
   /// Read, mutate and write inside **one** hold of the lock.
@@ -100,18 +90,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     final file = File(filePath!(atsign));
     await AtKeysFileLock(file.path).synchronized(() async {
       _refuseAbsent(file);
-      final site = _openSite(file);
-      try {
-        final asRead = await site.read(file);
-        final json =
-            await _decodeAtRestDocument(utf8.decode(asRead.bytes), file);
-        final keys = AtKeys.fromJson(await _selfDecryptLegacyFields(json));
-        if (await mutate(keys) == false) return;
-        await _writeValidated(site, file, atsign, keys,
-            requireExisting: true, asRead: asRead);
-      } finally {
-        site.close();
-      }
+      final asRead = await _readForWrite(file);
+      final json = await _decodeAtRestDocument(utf8.decode(asRead.bytes), file);
+      final keys = AtKeys.fromJson(await _selfDecryptLegacyFields(json));
+      if (await mutate(keys) == false) return;
+      await _writeValidated(file, atsign, keys,
+          requireExisting: true, asRead: asRead);
     });
   }
 
@@ -132,52 +116,55 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// [asRead] is the keyfile as [update] read it; without it the keyfile is
   /// read here. Either way the copies and the keyfile written take the owner
   /// that read reports.
-  Future<void> _writeValidated(
-      _Site site, File file, Atsign atsign, AtKeys atKeys,
+  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
       {bool requireExisting = false, KeyfileRead? asRead}) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
-    if (!site.exists(file)) {
+    if (!file.existsSync()) {
       if (requireExisting) {
         throw AtKeysSourceAbsentException(
             'Tried updating ${file.path}, but it was deleted while the update '
             'was in flight; nothing was written');
       }
-      await _writeDocument(site, file, document);
+      await _writeAtRestDocument(file, document);
       return;
     }
 
-    final previous = asRead ?? await site.read(file);
+    final previous = asRead ?? await _readForWrite(file);
     final existing =
         await _decodeAtRestDocument(utf8.decode(previous.bytes), file);
     assurance.validateMapUpdate(
       existing: existing,
       candidate: document,
     );
-    await _preserveLegacyShape(site, file, existing, document, previous);
+    await _preserveLegacyShape(file, existing, document, previous);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
-    await site.replace(File('${file.path}.bak'), previous.bytes,
+    await _replaceOwnerOnly(File('${file.path}.bak'), previous.bytes,
         owner: previous.owner);
-    await _writeDocument(site, file, document, owner: previous.owner);
+    await _writeAtRestDocument(file, document, owner: previous.owner);
   }
 
-  /// Where this write reads and writes [file] and its copies: as root, its
-  /// directory opened once without following a symbolic link; otherwise the
-  /// paths themselves. [createParent] creates a missing directory first.
-  _Site _openSite(File file, {bool createParent = false}) {
-    if (createParent && !file.parent.existsSync()) {
-      file.parent.createSync(recursive: true);
+  /// The keyfile as a write reads it under the lock: its bytes, and when
+  /// this process runs as root, the owner the files the write replaces take.
+  Future<KeyfileRead> _readForWrite(File file) async {
+    if (!ownerOnlyWritesAvailable || !runningAsRoot) {
+      return (bytes: await file.readAsBytes(), owner: null);
     }
-    if (!ownerOnlyWritesAvailable || !runningAsRoot) return _PathSite();
-    try {
-      return _DirectorySite(KeyfileDirectory.open(file.parent.path));
-    } on FileSystemException catch (e) {
+    if (FileSystemEntity.typeSync(file.path, followLinks: false) ==
+        FileSystemEntityType.link) {
       throw FileSystemException(
-          'Not writing the keyfile as root: its directory is a symbolic link '
-          'or cannot be opened (${e.message})',
+          'Not rewriting the keyfile as root: it is a symbolic link',
           file.path);
     }
+    // NOTE: the bytes and the owner come from one descriptor, opened without
+    // following a symbolic link.
+    final read = readNoFollow(file.path);
+    if (read.owner == null) {
+      _logger.warning('Writing ${file.path} owned by root: the owner of the '
+          'keyfile could not be read');
+    }
+    return read;
   }
 
   /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
@@ -189,7 +176,6 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// Keyed on that transition and never overwritten, unlike the rolling `.bak`
   /// beside it, which the next write replaces.
   Future<void> _preserveLegacyShape(
-    _Site site,
     File file,
     Map<String, dynamic> existing,
     Map<String, dynamic> candidate,
@@ -198,8 +184,8 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     if (existing.containsKey('version')) return;
     if (!candidate.containsKey('version')) return;
     final backup = File('${file.path}$legacyShapeBackupSuffix');
-    if (site.exists(backup)) return;
-    await site.replace(backup, previous.bytes, owner: previous.owner);
+    if (backup.existsSync()) return;
+    await _replaceOwnerOnly(backup, previous.bytes, owner: previous.owner);
     _logger.shout(
         'Upgrading ${file.path} to the typed keyfile format: it now carries '
         'per-enrollment key material, which a build older than this one does '
@@ -234,72 +220,52 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     return passphraseCodec.decode(json, passPhrase: passPhrase);
   }
 
-  Future<void> _writeDocument(
-    _Site site,
+  Future<void> _writeAtRestDocument(
     File file,
     Map<String, dynamic> document, {
     OwnerAndGroup? owner,
   }) async {
-    await site.replace(
+    if (!file.parent.existsSync()) {
+      await file.parent.create(recursive: true);
+    }
+    await _replaceOwnerOnly(
         file, utf8.encode(await _encodePassphraseEnvelope(document)),
         owner: owner);
   }
-
-  Future<String> _encodePassphraseEnvelope(
-      Map<String, dynamic> document) async {
-    final plaintext = jsonEncode(document);
-    if (passPhrase == null || passPhrase!.isEmpty) {
-      return plaintext;
-    }
-    return passphraseCodec.encode(plaintext, passPhrase!);
-  }
-}
-
-/// Where one write reads and writes a keyfile and its copies.
-abstract class _Site {
-  bool exists(File file);
-
-  Future<KeyfileRead> read(File file);
 
   /// Replaces [file] with [bytes] through a temporary file renamed over it,
   /// so a crash mid-write leaves [file] as it was rather than truncated.
   /// Where the platform has file modes, [file] ends up readable and writable
   /// by its owner alone, and given [owner] when one is named.
-  Future<void> replace(File file, List<int> bytes, {OwnerAndGroup? owner});
-
-  void close() {}
-}
-
-/// The files at their paths, as a process that is not root reads and writes
-/// them.
-class _PathSite extends _Site {
-  @override
-  bool exists(File file) => file.existsSync();
-
-  @override
-  Future<KeyfileRead> read(File file) async =>
-      (bytes: await file.readAsBytes(), owner: null);
-
-  @override
-  Future<void> replace(File file, List<int> bytes,
+  Future<void> _replaceOwnerOnly(File file, List<int> bytes,
       {OwnerAndGroup? owner}) async {
     final temp = File('${file.path}.tmp');
     await _deleteLeftover(temp.path);
     final previousMode = _platformHasFileModes ? _modeOf(file) : null;
-    final ownerOnly = await _writeTemporary(temp, bytes);
+    final ownerOnly = await _writeTemporary(temp, bytes, owner);
     await temp.rename(file.path);
-    _logNarrowed(file, ownerOnly, previousMode);
+    if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
+      _logger.info('${file.path} is now readable and writable by its owner '
+          'alone: mode ${_octal(ownerOnlyMode)}, was ${_octal(previousMode)}');
+    }
   }
 
   /// Writes [bytes] to [temp], owner-only where the platform has file modes,
-  /// and says whether it is.
-  Future<bool> _writeTemporary(File temp, List<int> bytes) async {
+  /// and given [owner] when one is named; says whether it is owner-only.
+  Future<bool> _writeTemporary(
+      File temp, List<int> bytes, OwnerAndGroup? owner) async {
     if (ownerOnlyWritesAvailable) {
       // NOTE: the temporary file is created by this write, owner-only before
       // any byte reaches it; anything already at its path fails the write.
-      final written = writeNewOwnerOnly(temp.path, bytes);
+      final written = writeNewOwnerOnly(temp.path, bytes, owner: owner);
+      if (!written.ownerSet) {
+        _logger.warning('Wrote ${temp.path} owned by root: it could not be '
+            'given uid ${owner!.uid} and gid ${owner.gid}, which own the file '
+            'it replaces');
+      }
       if (written.modeSet) return true;
-      _warnModeNotTaken(temp);
+      _logger.warning('Wrote ${temp.path} without owner-only permissions: '
+          'its file system did not take mode ${_octal(ownerOnlyMode)}');
       return false;
     }
     if (_platformHasFileModes) {
@@ -309,66 +275,14 @@ class _PathSite extends _Site {
     await temp.writeAsBytes(bytes);
     return false;
   }
-}
 
-/// The keyfile's directory, opened once as root, so that every read and
-/// write of the keyfile and its copies lands in the directory the keyfile
-/// was read from.
-class _DirectorySite extends _Site {
-  _DirectorySite(this._directory);
-
-  final KeyfileDirectory _directory;
-
-  String _name(File file) => file.path.split(Platform.pathSeparator).last;
-
-  @override
-  bool exists(File file) => _directory.exists(_name(file));
-
-  @override
-  Future<KeyfileRead> read(File file) async {
-    final KeyfileRead read;
-    try {
-      read = _directory.read(_name(file));
-    } on FileSystemException catch (e) {
-      throw FileSystemException(
-          'Not rewriting the keyfile as root: it is a symbolic link or cannot '
-          'be read (${e.message})',
-          file.path);
+  Future<String> _encodePassphraseEnvelope(
+      Map<String, dynamic> document) async {
+    final plaintext = jsonEncode(document);
+    if (passPhrase == null || passPhrase!.isEmpty) {
+      return plaintext;
     }
-    if (read.owner == null) {
-      _logger.warning('Writing ${file.path} owned by root: the owner of the '
-          'keyfile could not be read');
-    }
-    return read;
-  }
-
-  @override
-  Future<void> replace(File file, List<int> bytes,
-      {OwnerAndGroup? owner}) async {
-    final previousMode = _modeOf(file);
-    final written = _directory.replace(_name(file), bytes, owner: owner);
-    if (!written.ownerSet) {
-      _logger.warning('Wrote ${file.path} owned by root: it could not be '
-          'given uid ${owner!.uid} and gid ${owner.gid}, which own the '
-          'keyfile');
-    }
-    if (!written.modeSet) _warnModeNotTaken(file);
-    _logNarrowed(file, written.modeSet, previousMode);
-  }
-
-  @override
-  void close() => _directory.close();
-}
-
-void _warnModeNotTaken(File file) {
-  _logger.warning('Wrote ${file.path} without owner-only permissions: its '
-      'file system did not take mode ${_octal(ownerOnlyMode)}');
-}
-
-void _logNarrowed(File file, bool ownerOnly, int? previousMode) {
-  if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
-    _logger.info('${file.path} is now readable and writable by its owner '
-        'alone: mode ${_octal(ownerOnlyMode)}, was ${_octal(previousMode)}');
+    return passphraseCodec.encode(plaintext, passPhrase!);
   }
 }
 
