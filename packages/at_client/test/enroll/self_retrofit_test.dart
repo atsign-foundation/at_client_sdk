@@ -38,6 +38,10 @@ void main() {
       await client.stop();
     }
     AtClientImpl.atClientInstanceMap.clear();
+    // NOTE: a client that retrofits as it opens links its legacy key to its
+    // new one here, and a link left behind makes a later test's legacy key
+    // resolve to that test's client.
+    AtClientImpl.supersededInstanceKeys.clear();
     dir.deleteSync(recursive: true);
   });
 
@@ -61,7 +65,8 @@ void main() {
 
   /// An atServer that auto-approves the self-enrollment as [newId], shows an
   /// empty roster, answers `enroll:fetch` with [record] when given one, and
-  /// records every command it was sent, and each `close()`.
+  /// records every command it was sent, each completed PKAM as
+  /// `pkam:<enrollmentId>`, and each `close()`.
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
       {Map<String, dynamic>? record}) {
     final lookUp = MockAtLookupImpl();
@@ -93,7 +98,14 @@ void main() {
     });
     when(() =>
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+        .thenAnswer((invocation) async {
+      // NOTE: a round trip, as an atServer's challenge is, recorded once it
+      // completes, so an attempt that gives up before then is seen not to
+      // have authenticated.
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      sent.add('pkam:${invocation.namedArguments[#enrollmentId]}');
+      return true;
+    });
     when(() => lookUp.close()).thenAnswer((_) async => sent.add('close()'));
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
@@ -161,13 +173,20 @@ void main() {
         (c) => c.startsWith('enroll:') && !c.startsWith('enroll:list'));
     expect(submitted, isNonNegative,
         reason: 'the premise: the retrofit was submitted on the given lookup');
-    expect(server.sent.skip(submitted + 1).where((c) => c != 'close()'),
+    expect(
+        server.sent
+            .skip(submitted + 1)
+            .where((c) => c != 'close()' && !c.startsWith('pkam:')),
         isNotEmpty,
         reason: 'the premise: the client ran a command on the lookup it took '
             'over');
     expect(server.sent.indexOf('close()'), submitted + 1,
         reason: 'the connection the submission logged in on closes before the '
             'client runs anything on it');
+    expect(server.sent.skip(submitted + 1).where((c) => c != 'close()').first,
+        'pkam:$newId',
+        reason: 'the client has authenticated as the new enrollment before it '
+            'runs anything on the lookup it took over');
     // ignore: deprecated_member_use
     verify(() => server.lookUp.enrollmentId = newId).called(1);
 
