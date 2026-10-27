@@ -60,7 +60,7 @@ void main() {
     ..enrollmentId = legacyId;
 
   /// An atServer that auto-approves the self-enrollment as [newId], shows an
-  /// empty roster, and records every command it was sent.
+  /// empty roster, and records every command it was sent, and each `close()`.
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
@@ -89,7 +89,7 @@ void main() {
     when(() =>
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) async => true);
-    when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.close()).thenAnswer((_) async => sent.add('close()'));
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
   }
@@ -129,6 +129,42 @@ void main() {
             contains('"appName":"wavi"'), contains('"signingAlgo":"mldsa65"')));
     expect(AtClientImpl.holdsLiveClientAs(atSign, legacyId), isFalse,
         reason: 'no legacy client was live, and none is built for it');
+
+    await client.stop();
+  });
+
+  test("A client retrofitted on a caller's lookup logs in again", () async {
+    final server = atServer();
+
+    final client = await selfRetrofit(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, legacyKeys()),
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65,
+        atLookUp: server.lookUp);
+
+    final submitted = server.sent.indexWhere(
+        (c) => c.startsWith('enroll:') && !c.startsWith('enroll:list'));
+    expect(submitted, isNonNegative,
+        reason: 'the premise: the retrofit was submitted on the given lookup');
+    expect(server.sent.skip(submitted + 1).where((c) => c != 'close()'),
+        isNotEmpty,
+        reason: 'the premise: the client ran a command on the lookup it took '
+            'over');
+    expect(server.sent.indexOf('close()'), submitted + 1,
+        reason: 'the connection the submission logged in on closes before the '
+            'client runs anything on it');
+    // ignore: deprecated_member_use
+    verify(() => server.lookUp.enrollmentId = newId).called(1);
 
     await client.stop();
   });
