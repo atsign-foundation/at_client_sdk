@@ -165,7 +165,8 @@ abstract interface class AtLookUp {
   Future<bool> cramAuthenticate(String secret);
 
   /// Closes this lookup's connection: the next call opens a new one and
-  /// authenticates again, as the same atSign with the same credentials.
+  /// authenticates again as the same atSign, with the credentials the lookup
+  /// holds at that moment.
   ///
   /// A request waiting on the connection fails at once. An [AtLookupMuxable]
   /// also stops its notifications, so nothing reconnects until a caller sends
