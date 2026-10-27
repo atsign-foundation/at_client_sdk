@@ -2,11 +2,16 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show ChainResult, ChainVerdict, PqSigningChain;
+import 'package:at_client/src/mixins/at_client_envelope_signer.dart'
+    show AtClientEnvelopeSigner;
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart' show experimental;
 
 /// A passcode the atServer issued or accepted, and when it stops working;
 /// [expiry] is null when the atServer's own default decides that.
@@ -124,6 +129,15 @@ class Enrollments {
   /// revoked enrollment may be deleted; the atServer refuses the rest.
   Future<void> delete(String enrollmentId) =>
       _decide(EnrollOperationEnum.delete, enrollmentId);
+
+  /// Whether [enrollmentId]'s keys are anchored to this atSign's signing
+  /// root: [ChainVerdict.anchored] when every key it signs with walks to the
+  /// root, [ChainVerdict.unsigned] when none of its active keys has a link,
+  /// and otherwise the verdict for a key that fails, which
+  /// [ChainResult.kid] names.
+  @experimental
+  Future<ChainResult> anchoring(String enrollmentId) => PqSigningChain(_client)
+      .verifyChain(AtClientEnvelopeSigner(_client), enrollmentId);
 
   /// The atServer's record of [enrollmentId], or null when it holds none.
   Future<Enrollment?> fetch(String enrollmentId) async {

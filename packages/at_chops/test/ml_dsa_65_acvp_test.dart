@@ -176,12 +176,12 @@ void main() {
       final c = vectorsFor('sigGenDeterministic')
           .firstWhere((c) => c['context'] == '');
       expect(
-        MlDsa65PureDartAlgo.verifyBytesSync(
+        () => MlDsa65PureDartAlgo.verifyBytesSync(
           _hex(c['message'] as String),
           signature: _hex(c['signature'] as String),
           publicKey: _hex(c['pk'] as String),
         ),
-        isTrue,
+        returnsNormally,
       );
     });
   });

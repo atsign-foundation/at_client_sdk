@@ -1,6 +1,3 @@
-// The substrate this exercises is marked @experimental.
-// ignore_for_file: experimental_member_use
-
 /// A namespace key minted by startup seeding must be DURABLY filed before its
 /// advertisement is published.
 ///

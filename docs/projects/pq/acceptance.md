@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**98 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 99 use cases and 109 scenarios —
+**116 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 118 use cases and 127 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -163,14 +163,33 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G3.1  | Every creation door files the private half, not just the public one                | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.2  | The algorithm minted is the one kept, so the first start rewrites nothing          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.3  | The `_apsk` form follows the algorithm, and nothing else decides it                | PROVEN    | `g3_data_signing_key_test.dart` |
-| UC-G3.4  | A link is bound to the exact `_apsk` string, and a republish breaks it             | PROVEN    | `g3_data_signing_key_test.dart` |
-| UC-G3.5  | What an approver conveys is decided by possession as well as privilege             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.4  | WITHDRAWN — a link was bound to the exact `_apsk` string                           | WITHDRAWN | — |
+| UC-G3.5  | An approver links each key of the enrollment it approves, straight after           | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.6  | A legacy enrollment's authentication keypair signs data in memory only             | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.7  | The reconcile treats rsa2048 as already held, and only rsa2048                     | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.8  | No signer waits on a mint                                                          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.9  | Two coherence rules, refused at construction before any I/O                        | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.10 | A no-PQ-provider client refuses the work and leaves the enrolment repairable       | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.11 | A pre-enrollment atSign gives itself a first enrollment                            | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.12 | A link vouches for one key, so a change to another key leaves it standing          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.13 | The kind of a link follows from its signer                                         | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.14 | `enroll:link` admits only the target or a caller that could approve it             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.15 | `enroll:link` checks structure, and writes all or nothing                          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.16 | A link replaces only the link its writer found                                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.17 | Any other write of an `_apsk` keeps its links                                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.18 | An enrollment links a key it adds, with one already linked, first                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.19 | A chain link is signed only by a linked key, a root link only by the root          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.20 | Content is signed with the keys that have links, while there are any               | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.21 | An enrollment's authentication key takes no links, and gives none                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.22 | A fully privileged enrollment mints a missing root at start, and anchors           | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.23 | A root holder's sweep gives every key without a sound root link one                | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.24 | The walk follows keys, and stops at a cycle                                        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.25 | The approver's view shows whether each enrollment is anchored                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.26 | Links never travel by envelope, and the old link fields are gone                   | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.27 | Without `enroll:link` on the atServer, nothing is linked and all else works        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.28 | A bare RSA client data signing key is linked like a listed one                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.29 | An `enroll:update` cannot make B's client data signing key its authentication key  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.30 | A link vouches for the key it names, not for every key under its `kid`             | PROVEN    | `g3_data_signing_key_test.dart` |
 
 ---
 
@@ -545,9 +564,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      single active `rsa2048` entry, and the `{v, keys:[…]}` **array** otherwise — which
      a pq-native E2 is, since it advertises `mldsa65`
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
-     postures). What chains it to the root is the **approval-chain link** `alice1` signs
-     and conveys, which E2 stamps onto its own `_apsk` **metadata** as it arrives — the
-     value itself is untouched either way.
+     postures). What chains it to the root are the **links** `alice1` writes for each
+     of E2's keys through `enroll:link` straight after approving — root links when it
+     holds the signing root, chain links when one of its own keys walks to the root,
+     and none when it has neither — into the record's **metadata**; the value itself
+     is untouched in every case.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -568,10 +589,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
     `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
     namespace-scoped E2 — the root is held only by fully privileged enrollments.
-  - E2's `_apsk` carries a chain link that `verifyChain` walks to the signing
-    root, so a reader can chain an advertised key back to the atSign's own
-    anchor rather than to whatever the atServer served — the link rides the record's
-    **metadata**, leaving the `_apsk` **value** exactly what apps already parse.
+  - E2's `_apsk` carries a link for each key E2 signs with, which `verifyChain`
+    walks to the signing root, so a reader can chain an advertised key back to the
+    atSign's own anchor rather than to whatever the atServer served — the links ride
+    the record's **metadata**, leaving the `_apsk` **value** exactly what apps
+    already parse.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -1819,8 +1841,9 @@ map and be refused rather than obeyed.
   legacy-interop **opt-out** refuses it — deliberately, and loudly.
 - **Impl/verify:**
   `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
-  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
-  signing root — asserted against the PQ-native one as a control), a PQ-native
+  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, and
+  the pack's clients skip the start-time root step, so no signing root —
+  asserted against the PQ-native one as a control), a PQ-native
   one, and a PQ-native one activated with `mintLegacyMaterial: false`. Inbound,
   outbound (refused by name, then opted-in and stamped legacy, then read by the
   peer) and the opt-out all covered. It is in the **functional** pack, not
@@ -3984,9 +4007,8 @@ is where its missing lever lives.
 Design in [`design.md` 9.8](design.md#98-the-data-signing-key-an-enrollment-owns-from-birth).
 
 Section 16 covers what an `_apsk` record *means* to a reader. This cluster
-covers the key it names: where it comes from, what has to agree about its
-spelling, and what breaks when the record changes under a signature that
-vouched for it.
+covers the keys it names: where they come from, what has to agree about their
+spelling, and the links that vouch for each of them.
 
 Every row below is written against the production path rather than the design,
 because a clause can be **false** rather than untested and both read the same
@@ -4001,10 +4023,7 @@ working, pinned capability that the guard would have deleted.
 [UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it)
 comes from
 [`design.md` 9.8.2](design.md#982-the-form-_apsk-takes-follows-the-algorithm-and-nothing-else),
-and is the rule the two composers were breaking. The `_apsk`-mismatch refusals
-are not a row of their own — they are the five comparisons inside
-[UC-G3.4](#uc-g34--a-link-is-bound-to-the-exact-_apsk-string-and-a-republish-breaks-it),
-which is the same mechanism stated once.
+and is the rule the two composers were breaking.
 
 ### 18.1 Creation
 
@@ -4057,7 +4076,7 @@ which is the same mechanism stated once.
   consumer base64-decodes — and both spell anything else as the **array**.
   *And* a second condition on either side is a defect, not a refinement: the
   client republishes on any difference, so a disagreement rewrites the record
-  and discards whatever was bound to its old value.
+  at the client's first start.
 
   ⚠️ **A second condition fires only on the case it is wrong about.** Forcing
   the array whenever a key package is present, on the grounds that a bare value
@@ -4066,56 +4085,275 @@ which is the same mechanism stated once.
   is not, the algorithm having already chosen the array. What is left is an
   rsa2048-advertising enrollment in pq key-exchange mode, which
   `--posture legacy --key-exchange pq` reaches: the client rewrites `_apsk` at
-  its first start and discards the chain link the approver just conveyed.
+  its first start.
 
-### 18.2 The chain over the record
+### 18.2 Links, one per key
 
-#### UC-G3.4 — a link is bound to the exact `_apsk` string, and a republish breaks it
-  *Given* an approver that has conveyed a signing link for an enrollment, the
-  link signing `{v, childEnrollmentId, apkamPublicKey}` where `apkamPublicKey`
-  is the enrollee's entire published `_apsk` value.
-  *When* that value changes — a mint republishing, or any other writer
-  composing a different spelling.
-  *Then* every one of `PqSigningChain`'s **five** whole-string comparisons
-  fails: a conveyed **chain** link is refused naming the mismatch, a conveyed
-  **root** link is refused naming the mismatch, the walk reports a chain link
-  **broken** rather than anchored, the walk reports a root link **broken**
-  rather than anchored, and an enrollment whose own key moved **re-anchors
-  itself** rather than publishing a link that vouches for a value it no longer
-  holds.
-  *And* the break is not recoverable by the record alone, and a republish does
-  not leave it standing: `publishPublicSigningKey` sends the record's
-  `appMetadata` without a link over the old value, which the atServer would
-  otherwise keep, so the enrollment reads `unsigned` rather than `broken` until
-  the next fully privileged start's sweep conveys a root link over the new
-  value. An enrollment whose client holds the signing root is instead
-  re-anchored over the new value in the same write.
+A link vouches for one key an enrollment's `_apsk` lists. It names that key,
+`{v: 2, enrollmentId, kid, alg, pub}`, and the `kid` of the key that signed
+it, and it lives in the record's `appMetadata` under `apskLinks`, keyed by the
+`kid` it vouches for. `enroll:link` is the only operation that writes one.
 
-  ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
-  `_apsk` held the APKAM public key alone. It is a member of the signed preimage,
-  so renaming it changes what verifies. Four of the five comparisons refuse with
-  a message; the fifth refuses silently.
+Threats, answered for the whole set:
 
-#### UC-G3.5 — what an approver conveys is decided by possession as well as privilege
-  *Given* an approver servicing an enrolment whose key package verifies.
-  *Then* a fully privileged approver **holding the signing-root private**
-  conveys a **root** link, signed with the atSign's ML-DSA-65 root key and so
-  posture-invariant.
-  *And* a fully privileged approver with **no** root private that holds a data
-  signing key of its own conveys a **chain** link signed with that key — which
-  is not "root link or nothing" for that arm, because nothing re-attempts a link
-  for an enrolment approved while its approver was unpossessed.
-  *And* a fully privileged approver holding **neither** conveys **no link at
-  all**, and everything else still flows — signing with the APKAM
-  authentication key would produce a link that is *dropped* rather than
-  retired, and so silently unverifiable for ever.
-  *And* an approver that is **not** fully privileged conveys a chain link
-  signed with its own signing keys.
+- **@race:** two vouchers, or a voucher and a sweep, writing one key's link
+  (compare-and-set on `expect`, UC-G3.16); `enroll:link` against a republish of
+  the same `_apsk` (serialised, UC-G3.17); two fully privileged enrollments
+  minting a root (the existing `_rootlock`, UC-G3.22).
+- **@replay:** a link names its target enrollment, `kid`, `alg` and public key,
+  so it can only be written onto that key (UC-G3.15) and vouches for no other
+  (UC-G3.30), and a link copied to another atSign is checked against that
+  atSign's own records. Re-sending a link already stored changes nothing.
+- **@dos:** only the target or a caller passing the approve gate can write
+  (UC-G3.14); one link per advertised `kid`, each at most 16 KiB, and both the
+  call and the `_apsk` record with all its links within the 500 KiB
+  enrollment-record limit (UC-G3.15).
+- **Forgery:** the atServer stores a link without checking its signature, so a
+  stored link is a claim the walk checks: a root link against the atSign's own
+  published root keys, a chain link against the signer's entry for its `kid`,
+  from which the walk continues (UC-G3.13, UC-G3.19); a link naming another key
+  reads broken (UC-G3.30).
+- **Impersonation:** only the target, a caller that could approve it, or a CRAM
+  connection writes a link (UC-G3.14), so any writer but the target itself
+  holds the authority to approve or revoke it; an authentication key takes no
+  link and signs none (UC-G3.21).
 
-  ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage` while
-  approval takes only `__manage`**, so the second arm is an ordinary case rather
-  than an edge: a `__manage`-only approver approves without being fully
-  privileged.
+#### UC-G3.4 — WITHDRAWN: a link was bound to the exact `_apsk` string
+  **Withdrawn.** A link now vouches for one key, not the whole value; see
+  [UC-G3.12](#uc-g312--a-link-vouches-for-one-key-so-a-change-to-another-key-leaves-it-standing).
+
+  It read: *given an approver that has conveyed a signing link for an
+  enrollment, the link signing `{v, childEnrollmentId, apkamPublicKey}` where
+  `apkamPublicKey` is the enrollee's entire published `_apsk` value, when that
+  value changes, then every whole-string comparison fails, and the break is
+  not recoverable by the record alone.*
+
+#### UC-G3.5 — an approver links each key of the enrollment it approves, straight after approving
+  *Given* an approver that passes the approve gate for enrollment B and holds
+  the signing root's private key or a key of its own that walks to the root,
+  and B's `_apsk` advertising keys K1 and K2 in the list form.
+  *When* it approves B.
+  *Then* it calls `enroll:link` once for B, carrying a link for K1 and one for
+  K2, each stating that it expects the key to have no link yet.
+  *And* the links are root links, signed with the signing root, when the
+  approver holds the root's private key, and chain links, each signed with a
+  key of its own that walks to the root, when it doesn't.
+  *And* B's record holds one link per `kid`, and the walk from either key
+  reads **anchored**.
+  *And* an approver with neither sends no `enroll:link`, and the approval
+  completes as before.
+
+#### UC-G3.12 — a link vouches for one key, so a change to another key leaves it standing
+  *Given* B anchored, with links for K1 and K2.
+  *When* B advertises a new key K3, or retires K2, through `enroll:update`.
+  *Then* K1's link is still on the record and the walk from K1 still reads
+  **anchored**.
+  *And* a retired K2, still advertised, keeps its link, so what it signed
+  still walks to the root.
+
+#### UC-G3.13 — the kind of a link follows from its signer
+  *Given* on B's record, a link signed by a key whose `kid` is an active or
+  retired key of `public:pq_signing_root@<atSign>`, and a link signed by a key
+  of enrollment A's `_apsk`.
+  *When* the walk checks them.
+  *Then* the first is checked against that root key only, under the
+  `at-root-link:` prefix, and reads **anchored**; the second is checked against
+  that `kid` in A's `_apsk` and the walk continues from it.
+  *And* a link naming a root `kid` that fails its check reads **broken** and is
+  never tried as a chain link, and a link naming no signer `kid` reads
+  **broken**.
+
+#### UC-G3.14 — `enroll:link` admits only the target or a caller that could approve it
+  *Given* enrollment C without `__manage`, and enrollment D holding `__manage`
+  but not every namespace B holds at B's access.
+  *When* C or D calls `enroll:link` for B.
+  *Then* the atServer refuses it, and nothing is written.
+  *And* B calling `enroll:link` on its own keys is admitted without `__manage`;
+  a caller passing the approve gate is admitted; and so is a CRAM connection,
+  as for `enroll:approve`.
+
+#### UC-G3.15 — `enroll:link` checks structure, and writes all or nothing
+  *Given* B approved, its `_apsk` advertising K1 and K2.
+  *When* one call carries a well-formed link for K1 and any of: a link for an
+  unadvertised K9, or for a key not spelt in padded standard base64; a link
+  whose payload names another enrollment, or another `kid`, `alg` or public
+  key; a link over 16 KiB; or the call, or B's `_apsk` record with every link
+  it would then hold, is over the 500 KiB limit.
+  *Then* the whole call is refused, naming what failed, and K1's link is not
+  written either.
+  *And* a call for an enrollment that isn't approved is refused.
+  *And* a call carrying well-formed links for K1 and K2 writes both.
+
+#### UC-G3.16 — a link replaces only the link its writer found
+  *Given* key K1 on B carries a link L1.
+  *When* a voucher sends a new link for K1 with a copy of the link it found on
+  K1, and that copy is "none" or a link other than L1.
+  *Then* the atServer refuses the call, and L1 stays on K1.
+  *And* when the copy it sends is L1, its new link replaces L1.
+  *And* when two vouchers each find no link on K1 and each send a new link
+  with the copy "none", the first to arrive is written and the second is
+  refused; the second reads B's `_apsk` again and keeps the link it now finds,
+  unless that link is a chain link and its own is a root link, when it sends
+  its root link again, with a copy of that chain link.
+
+  The copy is `enroll:link`'s `expect`: the exact link JSON the voucher read,
+  or null, compared as JSON by the atServer.
+
+#### UC-G3.17 — any other write of B's `_apsk` keeps B's links
+  *Given* B's `_apsk` record carries links for K1 and K2.
+  *When* B's `_apsk` is written any way other than `enroll:link`: an
+  `enroll:update` republish that adds K3, or a put of the record, including
+  one from an older client that still sends the old version 1 link fields.
+  *Then* the links for K1 and K2 are still on the record afterwards,
+  unchanged, whatever that write sent.
+  *And* when the new value no longer lists K2 at all, K2's link is removed in
+  the same write.
+  *And* when an `enroll:link` for K1 and a republish that removes K1 arrive
+  together, the atServer handles one and then the other, so afterwards K1 has
+  no link and no other link has been lost.
+
+#### UC-G3.18 — an enrollment links a key it adds, using one it has already linked, before signing with it
+  *Given* B, whose key K1 has a link, minting a new key K2.
+  *When* B advertises K2 in its `_apsk`.
+  *Then* B writes K2's link itself, with `enroll:link` on its own record, the
+  link signed with K1; and the walk from K2 reads **anchored**, through K1.
+  *And* until K2's link is on the record, B signs content with K1 only.
+  *And* when B later retires K1, K1's link stays, so what K1 signed still walks
+  to the root.
+  *And* when the change that adds K2 also retires K1, and K1 has a link but
+  K2's link cannot be written, B keeps K1 in service and signs with it, and
+  retires K1 only once a later start has linked K2 with it. A K1 without a
+  link retires as before.
+
+#### UC-G3.19 — a chain link is signed only by a key that has a link, and a root link only by the root
+  *Given* an enrollment A that holds neither the signing root's private key
+  nor any key with a link.
+  *When* A would vouch for B, at approval or later.
+  *Then* A writes no link for B.
+  *And* every chain link on any record was signed by a key that had a link of
+  its own when it signed, so the walk from any linked key reaches a root link,
+  unless a key on the way has since been revoked or has expired.
+
+#### UC-G3.20 — content is signed with the keys that have links, while there are any
+  *Given* B holding K1, which has a link, and K2, which has none yet.
+  *When* B signs content: a secret envelope, a key package after approval, or a
+  namespace-key advertisement.
+  *Then* the content carries one signature, made with K1; once K2 has a link,
+  it carries two, one made with each key.
+  *And* an enrollment with no key that has a link signs with every key it
+  holds, as it does today.
+  *And* the key package signed at `enroll:request` is signed as today, since no
+  link can exist before approval.
+
+  Whether content should carry several signatures at all is a separate
+  decision.
+
+#### UC-G3.21 — an enrollment's authentication key takes no links, and gives none
+  *Given* B holding no client data signing key of its own, so its `_apsk` is
+  its APKAM authentication key, published bare or listed alone in the list form.
+  *When* an approver or a root holder's sweep would link B, or B would vouch
+  for another enrollment.
+  *Then* no link is written for that key, and the atServer refuses one if
+  asked, since the key is the one the enrollment record holds as its
+  `apkamPublicKey`; B signs no link with it; and the walk from B reads
+  **unsigned**.
+  *And* once B mints a client data signing key and publishes it, that key is
+  linked like any other.
+
+#### UC-G3.22 — a fully privileged enrollment mints a missing signing root when it starts, and anchors the atSign
+  *Given* an atSign that publishes no signing root, with a fully privileged
+  enrollment F and other approved enrollments.
+  *When* F starts.
+  *Then* F mints the signing root, root-links its own keys, and then
+  root-links every key on the atSign's other enrollments that has no root
+  link, all through `enroll:link`.
+  *And* when two fully privileged enrollments start together, only one root is
+  published.
+  *And* an enrollment that isn't fully privileged mints nothing.
+
+  "Every key" leaves out an authentication key, which takes no link
+  (UC-G3.21); a bare RSA client data signing key is one
+  ([UC-G3.28](#uc-g328--a-bare-rsa-client-data-signing-key-is-linked-like-a-listed-one)).
+
+#### UC-G3.23 — a root holder's sweep gives every key without a sound root link one
+  *Given* an atSign with a signing root; a fully privileged enrollment F
+  holding the root's private key; and keys on other enrollments that have a
+  chain link, no link at all, or a root link that fails its check.
+  *When* F starts.
+  *Then* each of those keys gets a root link from F through `enroll:link`, each
+  call carrying a copy of the link F found on the key, or "none".
+  *And* a key whose root link passes its check is left as it is.
+
+#### UC-G3.24 — the walk follows keys, and stops at a cycle
+  *Given* two keys, on two enrollments, whose chain links each name the other
+  as signer.
+  *When* the walk runs from either key.
+  *Then* it reads **broken**, and stops.
+  *And* a voucher never links a key that its own key's chain already passes
+  through.
+
+#### UC-G3.25 — the approver's view shows whether each enrollment is anchored
+  *Given* enrollments whose keys read **anchored**, **unsigned** and
+  **broken**, including one with an anchored key and a new key not yet linked.
+  *When* `at_activate list` runs, and when `EnrollmentRequestList` lists them
+  below its pending requests.
+  *Then* a row shows **anchored** when every key the enrollment signs with
+  walks to the root, **unsigned** when it has no linked key, and otherwise the
+  walk's verdict for a key that fails, naming that key.
+  *And* the enrollment whose new key isn't linked yet shows **anchored**, since
+  it doesn't sign with that key yet.
+
+#### UC-G3.26 — links never travel by envelope, and the old link fields are gone
+  *Given* an approval, a key an enrollment adds, and a root holder's sweep.
+  *When* each of them links keys.
+  *Then* every link is written through `enroll:link`; no link is sent in an
+  envelope, and no client stamps one.
+  *And* no client writes or reads the old version 1 link fields,
+  `apskChainLink` and `apskRootLink`.
+
+#### UC-G3.27 — on an atServer without `enroll:link`, nothing is linked and everything else works
+  *Given* an atServer that refuses `enroll:link` as an operation it doesn't
+  know.
+  *When* an approval, a key an enrollment adds, or a root holder's sweep would
+  write links.
+  *Then* no link is written, and every enrollment reads **unsigned**.
+  *And* the approval, the key addition and the start complete as they do
+  today, and content is signed as it is today.
+  *And* a root holder's sweep stops at the first such refusal, so a start sends
+  that atServer one `enroll:link` rather than one per approved enrollment, and
+  logs the refusal once.
+
+#### UC-G3.28 — a bare RSA client data signing key is linked like a listed one
+  *Given* B on the `pqReady` posture, authenticating with ML-DSA-65, whose
+  `_apsk` is the RSA-2048 client data signing key it minted, published bare.
+  *When* an approver links B, and later B, with that key linked, vouches for
+  another enrollment.
+  *Then* the atServer and the walk both treat the bare value as one `rsa2048`
+  entry, whose `kid` they derive from the key the way every other `kid` is
+  derived; the link is written, the walk from B reads **anchored**, and B's
+  own link signed with that key is accepted.
+  *And* when B moves to `pqActive`, mints an ML-DSA-65 client data signing key and
+  lists both, retiring the RSA one, the RSA key keeps the same `kid` and keeps its
+  link.
+
+#### UC-G3.29 — an `enroll:update` cannot make B's client data signing key its authentication key
+  *Given* B's enrollment and its `_apsk`.
+  *When* an `enroll:update` by B would leave K1 both as B's `apkamPublicKey`
+  and listed in B's `_apsk` beside another key, or carrying a link, whether
+  it installs K1, republishes the `_apsk`, or both.
+  *Then* the atServer refuses the update, naming K1, and nothing is written.
+  *And* an update that leaves K1 as the only key B's `_apsk` lists, with no
+  link, is accepted, as for an enrollment holding no client data signing key
+  of its own.
+
+#### UC-G3.30 — a link vouches for the key it names, not for every key under its `kid`
+  *Given* B's `_apsk` listing two entries under one `kid`, K1 and K1′, whose
+  keys differ, and on that `kid` a link whose payload names K1's `alg` and
+  `pub`.
+  *When* the walk runs from K1′.
+  *Then* it reads **broken**, since the link names another key.
+  *And* the walk from K1, through the same link, reads **anchored** when that
+  link is a root link that passes its check.
 
 ### 18.3 The one keypair a legacy enrollment has
 

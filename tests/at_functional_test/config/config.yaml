@@ -16,8 +16,9 @@ atSign:
   # The three below are spent by pq_legacy_interop_live_test.dart alone, and
   # are named for the role each is onboarded AS rather than by position.
   #
-  # Pre-PQ: the default RSA signing algorithm, so no signing root, no key
-  # package and no namespace key — the legacy peer of UC-B4.2.
+  # Pre-PQ: the default RSA signing algorithm, and like every client here it
+  # skips the start-time root step (TestUtils.packStartupGates), so no signing
+  # root, no key package and no namespace key — the legacy peer of UC-B4.2.
   legacyPeerAtSign: '@chris'
   # PQ-native, keeping legacy material by default.
   pqNativeAtSign: '@xavier'
@@ -26,5 +27,9 @@ atSign:
   # this atSign, so like a genuinely new one it has no public:publickey; the
   # demo atSigns pkamLoad provisions all start with one.
   pqNativeOptOutAtSign: '@device2'
+  # Spent by per_key_links_live_test.dart alone: its signing root is minted
+  # by an enrollment that file creates, which then holds the root's private
+  # key, and a root is created once per atSign per virtualenv.
+  perKeyLinksAtSign: '@sameeraja🛠'
 
 

@@ -477,6 +477,25 @@ void main() {
             'private is durable is not a retryable mistake');
   });
 
+  for (final (name, keysIo) in [
+    ('a key source that generates keys', _GeneratedKeysIo()),
+    ('no key source', null),
+  ]) {
+    test(
+        'Given $name, when a fully privileged client would mint the root, '
+        'then it mints nothing and takes no lock', () async {
+      final c = client();
+
+      expect(
+          await PqSigningRoot(c.client, keysIo: keysIo)
+              .mintIfAbsent(isFullyPrivileged: true),
+          isNull);
+      expect(c.verbs, isEmpty,
+          reason: 'neither the published root is read nor the mint lock taken');
+      expect(c.published, isEmpty);
+    });
+  }
+
   test('losing the mint lock generates nothing and files nothing', () async {
     final c = client(lockHeldElsewhere: true);
     final io = await keysIo();
@@ -1559,4 +1578,13 @@ class _RecordingSharing extends Fake implements PairwiseSecretSharing {
     requests.add((namespace: namespace, names: names));
     return 2;
   }
+}
+
+/// A key source that generates keys rather than persisting them.
+class _GeneratedKeysIo extends GeneratedAtKeysIo {
+  @override
+  AtKeys read(String atsign) => AtKeys();
+
+  @override
+  AtKeys generateKeys(String publicKeyId) => AtKeys();
 }

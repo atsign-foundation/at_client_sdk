@@ -1,3 +1,9 @@
+## 2.0.0-rc9
+
+- feat: `at_activate list` shows whether each approved enrollment's keys are
+  anchored to the atSign's signing root, naming a key that is not.
+- build: requires `at_client` ^3.15.0-rc9.
+
 ## 2.0.0-rc8
 
 - feat: `at_activate list` shows the key expiry each enrollment asked for and
