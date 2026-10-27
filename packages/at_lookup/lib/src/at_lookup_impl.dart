@@ -361,15 +361,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Opens a connection if there is no usable one.
   ///
-  /// Throws [StoppedException] once [close] has been called, including when
-  /// the close lands while the connection is being opened.
-  Future<void> createConnection() => _whileOpen(_createConnection);
+  /// Throws [StoppedException] once [stop] has been called, including when
+  /// the stop lands while the connection is being opened.
+  Future<void> createConnection() => _unlessStopped(_createConnection);
 
   Future<void> _createConnection() async {
     var created = false;
     await _createConnectionMutex.acquire();
     try {
-      _throwIfClosed();
+      _throwIfStopped();
       if (!isConnectionAvailable()) {
         if (_connection != null) {
           // Clean up the connection before creating a new one
@@ -380,20 +380,20 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         //1. find secondary url for atsign from lookup library
         SecondaryAddress secondaryAddress =
             await secondaryAddressFinder.findSecondary(_currentAtSign);
-        _throwIfClosed();
+        _throwIfStopped();
         var host = secondaryAddress.host;
         var port = secondaryAddress.port;
         //2. create a connection to secondary server
         await createOutBoundConnection(
             host, port.toString(), _currentAtSign, _secureSocketConfig);
-        if (_closed) {
-          // NOTE: close() has already run and cannot see this socket, so it
+        if (_stopped) {
+          // NOTE: stop() has already run and cannot see this socket, so it
           // is destroyed here or not at all. Unset first: it has no listener,
           // and a close arriving meanwhile would reach for one.
           final orphan = _connection!;
           _connection = null;
           await orphan.close();
-          throw _stopped();
+          throw _stoppedException();
         }
         //3. listen to server response
         messageListener = socketListenerFactory.createListener(_connection!);
@@ -427,7 +427,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           'on the remote atServer; there is no sync behaviour here '
           'to control. Removed in 4.0.')
       sync = false}) async {
-    _throwIfClosed();
+    _throwIfStopped();
     String verbResult = '';
     try {
       if (builder is UpdateVerbBuilder) {
@@ -611,14 +611,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       'removed in 4.0.0')
   Future<String> readResponse(
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
-      _whileOpen(() => messageListener.read(
+      _unlessStopped(() => messageListener.read(
           maxWaitMilliSeconds: maxWaitMilliSeconds,
           transientWaitTimeMillis: transientWaitTimeMillis));
 
   @override
   Future<String> sendSync(String command,
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
-      _whileOpen(() async {
+      _unlessStopped(() async {
         await _sendCommand(command);
         return messageListener.read(
             maxWaitMilliSeconds: maxWaitMilliSeconds,
@@ -658,7 +658,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// secondary server. This method is executed for all verbs that requires authentication.
   /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
   Future<bool> authenticate(String? privateKey) =>
-      _whileOpen(() => _authenticateWithPrivateKey(privateKey));
+      _unlessStopped(() => _authenticateWithPrivateKey(privateKey));
 
   Future<bool> _authenticateWithPrivateKey(String? privateKey) async {
     if (privateKey == null) {
@@ -714,7 +714,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) =>
-      _whileOpen(() => _pkamAuthenticate(enrollmentId: enrollmentId));
+      _unlessStopped(() => _pkamAuthenticate(enrollmentId: enrollmentId));
 
   Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
     // Prefer an injected authenticator here too, not only in [_process].
@@ -780,7 +780,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<bool> cramAuthenticate(String secret) =>
-      _whileOpen(() => _cramAuthenticate(secret));
+      _unlessStopped(() => _cramAuthenticate(secret));
 
   Future<bool> _cramAuthenticate(String secret) async {
     await createConnection();
@@ -856,7 +856,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Mutex requestResponseMutex = Mutex();
 
   Future<String> _process(String command, {bool auth = false}) =>
-      _whileOpen(() => _processCommand(command, auth: auth));
+      _unlessStopped(() => _processCommand(command, auth: auth));
 
   Future<String> _processCommand(String command, {bool auth = false}) async {
     try {
@@ -886,7 +886,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // Already logged by the listener that failed the read.
         rethrow;
       } on Exception catch (e) {
-        if (!_closed) {
+        if (!_stopped) {
           logger.severe('Exception in sending to server, ${e.toString()}');
         }
         rethrow;
@@ -927,18 +927,21 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return _connection!.isInValid();
   }
 
-  bool _closed = false;
-  Future<void>? _closing;
+  bool _stopped = false;
+  Future<void>? _stopping;
 
-  /// Abandoned by [close], ending the work in flight and every socket still
+  /// Abandoned by [stop], ending the work in flight and every socket still
   /// being opened for this lookup, the atDirectory's included.
   final Abandonment _abandonment = Abandonment();
 
   @override
-  Future<void> close() => _closing ??= _close();
+  Future<void> close() => stopNotifications();
 
-  Future<void> _close() async {
-    _closed = true;
+  @override
+  Future<void> stop() => _stopping ??= _stop();
+
+  Future<void> _stop() async {
+    _stopped = true;
     _abandonment.abandon();
     await stopNotifications();
   }
@@ -946,28 +949,28 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   Future<void> dropConnection() => _closeConnection();
 
-  StoppedException _stopped() =>
-      StoppedException('the lookup for $_currentAtSign has been closed');
+  StoppedException _stoppedException() =>
+      StoppedException('the lookup for $_currentAtSign has been stopped');
 
-  void _throwIfClosed() {
-    if (_closed) throw _stopped();
+  void _throwIfStopped() {
+    if (_stopped) throw _stoppedException();
   }
 
-  /// Runs [work] unless [close] has been called, and fails it with a
-  /// [StoppedException] as soon as [close] is called, without waiting for it.
+  /// Runs [work] unless [stop] has been called, and fails it with a
+  /// [StoppedException] as soon as [stop] is called, without waiting for it.
   ///
-  /// A failure that arrives after the close - a read it aborted, a write to
+  /// A failure that arrives after the stop - a read it aborted, a write to
   /// the socket it destroyed - is reported as the [StoppedException] it is.
-  Future<T> _whileOpen<T>(Future<T> Function() work) async {
-    _throwIfClosed();
+  Future<T> _unlessStopped<T>(Future<T> Function() work) async {
+    _throwIfStopped();
     final closed = Completer<T>();
     final unregister =
-        _abandonment.onAbandon(() => closed.completeError(_stopped()));
+        _abandonment.onAbandon(() => closed.completeError(_stoppedException()));
     final running = _abandonment.run(work);
     try {
       return await Future.any([running, closed.future]);
     } on Exception catch (e) {
-      if (_closed && e is! StoppedException) throw _stopped();
+      if (_stopped && e is! StoppedException) throw _stoppedException();
       rethrow;
     } finally {
       unregister();
@@ -1085,7 +1088,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Stream<bool> get notificationConnectionUp {
-    if (_closed) return const Stream.empty();
+    if (_stopped) return const Stream.empty();
     _connectionUpController ??= StreamController<bool>.broadcast();
     return _connectionUpController!.stream;
   }
@@ -1220,7 +1223,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Stream<String> get notifications {
-    if (_closed) return const Stream.empty();
+    if (_stopped) return const Stream.empty();
     _notificationController ??= StreamController<String>(
       // Back-pressure that reaches the far end. A listener that stops reading
       // stops the socket, so bytes pile up in the kernel buffer and TCP closes
@@ -1277,7 +1280,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
   }) =>
-      _whileOpen(() => _startNotifications(
+      _unlessStopped(() => _startNotifications(
           regex: regex,
           getLastNotificationTime: getLastNotificationTime,
           selfNotificationsEnabled: selfNotificationsEnabled));
@@ -1324,7 +1327,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   ///
   /// Returns false, having closed the connection it opened, when a stop has
   /// retired [generation] meanwhile; throws [StoppedException] when that stop
-  /// was [close].
+  /// was [stop].
   Future<bool> _openNotificationStream(int generation) async {
     await requestResponseMutex.acquire();
     try {
@@ -1368,7 +1371,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // this closes.
       if (generation != _notifyGeneration) {
         await _closeConnection();
-        _throwIfClosed();
+        _throwIfStopped();
         return false;
       }
       logger.finer('SENDING: ${command.trim()}');

@@ -21,7 +21,7 @@ class _RecordedLogs implements LoggingHandler {
       records.where((r) => r.level == level).map((r) => r.message);
 }
 
-/// `close()` ends a lookup and `dropConnection()` does not, over a real
+/// `stop()` ends a lookup and `dropConnection()` does not, over a real
 /// connection and listener on a [FakeAtServerSocket].
 void main() {
   const host = '127.0.0.1';
@@ -76,7 +76,7 @@ void main() {
     return response;
   }
 
-  group('close()', () {
+  group('stop()', () {
     test('fails a request in flight as stopped, and logs nothing at severe',
         () async {
       final atLookup = build();
@@ -86,22 +86,22 @@ void main() {
           .then<void>((_) {}, onError: (Object e) => thrown = e);
       await Future.delayed(const Duration(milliseconds: 50));
 
-      await atLookup.close();
+      await atLookup.stop();
       await pending.timeout(const Duration(seconds: 5),
           onTimeout: () => fail('the request in flight was never failed'));
 
       expect(thrown, isA<StoppedException>(),
-          reason: 'the request failed because its owner closed the lookup, '
+          reason: 'the request failed because its owner stopped the lookup, '
               'and a caller has to be able to tell that from a network fault');
       expect(recorded.at('SEVERE'), isEmpty,
-          reason: 'a close the owner asked for is not an error');
+          reason: 'a stop the owner asked for is not an error');
     });
 
     test('refuses every later call, and opens no connection', () async {
       final atLookup = build();
       await answered(atLookup, 'noop:0\n');
       expect(sockets, hasLength(1));
-      await atLookup.close();
+      await atLookup.stop();
 
       final calls = <String, Future<Object?> Function()>{
         'executeCommand': () => atLookup.executeCommand('noop:0\n'),
@@ -117,10 +117,10 @@ void main() {
       };
       for (final call in calls.entries) {
         await expectLater(call.value(), throwsA(isA<StoppedException>()),
-            reason: '${call.key} after close()');
+            reason: '${call.key} after stop()');
       }
       expect(sockets, hasLength(1),
-          reason: 'a closed lookup must not reconnect to report its refusal');
+          reason: 'a stopped lookup must not reconnect to report its refusal');
     });
 
     test('destroys a socket that arrives after it', () async {
@@ -133,7 +133,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 50));
       expect(sockets, hasLength(1), reason: 'the connect must be in flight');
 
-      await atLookup.close();
+      await atLookup.stop();
       connectGate!.complete();
       await pending.timeout(const Duration(seconds: 5),
           onTimeout: () => fail('the request on the late socket was never '
@@ -153,14 +153,14 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 50));
       expect(sockets, hasLength(1), reason: 'the connect must be in flight');
 
-      final closing = atLookup.close();
+      final stopping = atLookup.stop();
 
       await expectLater(
           pending.timeout(const Duration(seconds: 2),
               onTimeout: () => fail('the request waited for its connect, '
                   'which a silent peer never completes')),
           throwsA(isA<StoppedException>()));
-      await closing;
+      await stopping;
       connectGate!.complete();
     });
 
@@ -171,11 +171,11 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 50));
       expect(atLookup.isReconnectingNotifications, isTrue);
 
-      await atLookup.close();
+      await atLookup.stop();
       await Future.delayed(const Duration(milliseconds: 1400));
 
       expect(sockets, hasLength(1),
-          reason: 'a reconnect after close() reopens what its owner closed');
+          reason: 'a reconnect after stop() reopens what its owner stopped');
       expect(atLookup.isNotifying, isFalse);
     });
 
@@ -186,15 +186,15 @@ void main() {
       final notificationsDone = Completer<void>();
       atLookup.notifications.listen(null, onDone: notificationsDone.complete);
 
-      await atLookup.close();
+      await atLookup.stop();
       await Future.delayed(const Duration(milliseconds: 150));
 
       expect(atLookup.isNotifying, isFalse);
       expect(notificationsDone.isCompleted, isTrue);
       expect(sockets.single.written, isNot(contains('noop:0\n')),
-          reason: 'the heartbeat must not outlive the close');
+          reason: 'the heartbeat must not outlive the stop');
       await expectLater(atLookup.notifications, emitsDone,
-          reason: 'a stream read after close() can never produce anything');
+          reason: 'a stream read after stop() can never produce anything');
       await expectLater(atLookup.notificationConnectionUp, emitsDone);
     });
   });
@@ -218,7 +218,7 @@ void main() {
           reason: 'no monitor: on a connection nobody is listening to');
       expect(sockets.single.destroyed, isTrue,
           reason: 'the connection the start opened is closed, not left open');
-      await atLookup.close();
+      await atLookup.stop();
     });
 
     test('with a heartbeat in flight, the heartbeat ends quietly', () async {
@@ -241,7 +241,7 @@ void main() {
           isNot(contains(contains('heartbeat failed'))),
           reason: 'a probe the stop cut short is not a failed connection');
       expect(sockets, hasLength(1));
-      await atLookup.close();
+      await atLookup.stop();
     });
   });
 
@@ -256,7 +256,7 @@ void main() {
       expect(await answered(atLookup, 'noop:0\n'), 'data:ok',
           reason: 'the next call opens a new connection');
       expect(sockets, hasLength(2));
-      await atLookup.close();
+      await atLookup.stop();
     });
 
     test('while notifying, reconnects', () async {
@@ -269,7 +269,7 @@ void main() {
       expect(sockets, hasLength(2));
       expect(sockets.last.written.single, startsWith('monitor:'));
       expect(atLookup.isNotifying, isTrue);
-      await atLookup.close();
+      await atLookup.stop();
     });
   });
 }
