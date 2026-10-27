@@ -8,7 +8,8 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
-import 'package:at_auth/src/keys/io/owner_only_file.dart';
+import 'package:at_auth/src/keys/io/owner_only_mode_stub.dart'
+    if (dart.library.ffi) 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_auth/src/keys/serialization/json_text.dart';
 import 'package:at_chops/at_chops.dart';
@@ -199,7 +200,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future<void> _replaceOwnerOnly(File file, List<int> bytes) async {
     final temp = File('${file.path}.tmp');
     await _deleteLeftover(temp.path);
-    final previousMode = ownerOnlyModeSupported ? _modeOf(file) : null;
+    final previousMode = _platformHasFileModes ? _modeOf(file) : null;
     final ownerOnly = await _writeTemporary(temp, bytes);
     await temp.rename(file.path);
     if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
@@ -219,9 +220,9 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'its file system did not take mode ${_octal(ownerOnlyMode)}');
       return false;
     }
-    if (ownerOnlyModeSupported) {
+    if (_platformHasFileModes) {
       _logger.warning('Writing ${temp.path} without owner-only permissions: '
-          'the libc calls that set the mode were not found');
+          'the libc calls that set the mode are not available');
     }
     await temp.writeAsBytes(bytes);
     return false;
@@ -308,6 +309,8 @@ Future<void> _deleteLeftover(String path) async {
     await File(path).delete();
   }
 }
+
+bool get _platformHasFileModes => Platform.isLinux || Platform.isMacOS;
 
 /// The permission bits of [file], or null when it does not exist.
 int? _modeOf(File file) {

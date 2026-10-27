@@ -6,11 +6,8 @@ import 'package:ffi/ffi.dart';
 /// Mode 0600: read and write for the owner, nothing for anyone else.
 const ownerOnlyMode = 0x180;
 
-/// Whether this platform has the file modes [writeNewOwnerOnly] sets.
-bool get ownerOnlyModeSupported => Platform.isLinux || Platform.isMacOS;
-
-/// Whether [writeNewOwnerOnly] can run here: a platform with file modes, and
-/// the libc calls it makes found.
+/// Whether [writeNewOwnerOnly] can run here: Linux or macOS, with the libc
+/// calls it makes found.
 bool get ownerOnlyWritesAvailable => _Libc.instance != null;
 
 /// Writes [bytes] to a file this call creates at [path], readable and
@@ -77,7 +74,7 @@ final class _Libc {
   static final _Libc? instance = _lookUp();
 
   static _Libc? _lookUp() {
-    if (!ownerOnlyModeSupported) return null;
+    if (!Platform.isLinux && !Platform.isMacOS) return null;
     final libc = DynamicLibrary.process();
     try {
       final write = libc.lookupFunction<
