@@ -68,6 +68,7 @@ canonical home rather than duplicating it.
 | [`atkeys-derivation.md`](atkeys-derivation.md)     | The derivation behind K-1..K-5 and the K-10/K-11 layout: constant PRF salt, one PRF call then HKDF, pointer and document format and AAD, test vector, cost of changing each choice later. |
 | [`pb3-storage-bundle.md`](pb3-storage-bundle.md)   | What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
 | [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](spike-indexeddb-storage.md) | The measurements behind D-26 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
+| [`at-talk-demo.md`](at-talk-demo.md)               | The first real browser↔atServer session: a Chrome tab (dart2js and dart2wasm) chatting end-to-end encrypted with the C `at_talk` CLI, 2026-10-27 — local virtualenv, dev keys, via `at_secondary_proxy`, not yet the direct path. |
 
 ---
 
