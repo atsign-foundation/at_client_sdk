@@ -1,3 +1,7 @@
+## 3.7.1-rc1
+
+- chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
+
 ## 3.7.0
 
 - feat: the barrel exports `MlDsa65Sizes`. A caller signing a PKAM challenge
