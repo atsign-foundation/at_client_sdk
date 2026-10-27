@@ -56,5 +56,5 @@ flowchart LR
 
 ## Not done
 
-- A proxy-free client: atDirectory HTTP lookup via at_server#2894 plus the atServer's `wss://…/ws` (`at_client_sdk-0b4`, waiting on deployment).
+- A proxy-free client: atDirectory HTTP lookup via at_server#2894 plus the atServer's `wss://…/ws` (`at_client_sdk-0b4`, waiting on deployment). The demo ran through the dev proxy path (`at_secondary_proxy`); the direct path has never run live.
 - A manual click-through of the dart2wasm build and a same-tab reopen in a real Chrome window. Both paths are covered headlessly and in unit tests.

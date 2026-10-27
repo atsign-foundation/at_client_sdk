@@ -197,8 +197,8 @@ much of it at_client owns. Re-derive it before scoping the transport work.
 
 **Directory lookup.** `root.atsign.org:64` is a raw TLS socket with no browser
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
-interface, and the `rootDomain: 'proxy:<host>'` convention bypasses root lookup
-entirely. Either unblocks development; a production browser client needs a WebSocket-
+interface, and a `proxy:<host>` root-domain prefix (dev-only; see `AtRootDomain.isProxyAddress`
+in at_commons) bypasses root lookup. A production browser client needs a WebSocket-
 or HTTPS-reachable directory endpoint. at_lookup 4.0.0 resolves this (OQ-7 in
 [`decisions.md`](decisions.md)): `HttpsSecondaryAddressFinder` asks the atDirectory's
 HTTPS face, pending at_root_server 2.3.0 (CORS) deployed to `root.atsign.org` and the

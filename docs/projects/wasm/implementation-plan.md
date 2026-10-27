@@ -45,7 +45,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 >
 > | Group | Status |
 > | --- | --- |
-> | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
+> | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already upgrades `/ws` on its own TLS port and the browser reaches it directly (D-15; the fixed-host WSS proxy is dev-only), so there is **no server-side transport work** |
 > | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. the VFS is settled by `decisions.md` D-26 (SimpleOPFS, one directory per atSign and enrollment) for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
 > | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
 > | Key-storage tasks | **unchanged, and now the whole storage story** |
@@ -263,8 +263,8 @@ break; it stays as ruled.
 - **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
   opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
   not through `AtLookUpFactory`. Ship a web implementation using one of
-  the two existing escape hatches — the abstract interface, or the `proxy:<host>`
-  convention. The production answer is OQ-7. **Done 2026-10-23:**
+  the abstract interface (the `proxy:<host>` root-domain prefix is a dev-only
+  escape hatch, not a web path). The production answer is OQ-7. **Done 2026-10-23:**
   `HttpsSecondaryAddressFinder` in `at_lookup_web.dart`, behind `webSocketLookUps()`;
   OQ-7 resolved, pending at_root_server 2.3.0 (CORS) deployed to `root.atsign.org` and
   the prod `:443` listener.
@@ -283,8 +283,8 @@ break; it stays as ruled.
   [`storage:`](#5a-client-storage-bundle-x); `AtClientImpl.lookUps` holds it, and
   `buildRemoteSecondary`, `SyncServiceImpl.remoteSecondaryFor` and the monitor (through
   `NotificationServiceImpl.create(lookUps:)`) all build through it, so every connection
-  a client opens travels the way the app chose. `at_client_wasm` hands in a factory
-  returning a WebSocket-backed `AtLookupMuxable` once T4 gives it one to construct.
+  a client opens travels the way the app chose. `at_client_wasm` hands in
+  `webSocketLookUps()` from `at_lookup_web.dart` (the direct path, D-15).
   **What is still hardcoded, re-measured 2026-09-13: three sites, all in at_auth** —
   `at_auth_impl.dart`'s activation lookup, `enroll/enrollment_handshake.dart`'s
   `waitForApproval` default, and a dartdoc example in `enroll/at_enrollment.dart` — each
@@ -311,8 +311,10 @@ break; it stays as ruled.
   (`decryptPackets`, `tlsKeysSavePath`, `pathToCerts`) the default factory,
   `defaultLookUps(preference)` in at_client's `lifecycle/lookups.dart`, reads until 4.0.
   The proxy convention at_onboarding_cli carried as a string prefix is the first
-  non-default factory, `proxyLookUps()`, which sends `from:<atSign>` first on every
-  connection through `withSecureSocket`'s `onConnect` hook.
+  non-default factory, now `proxyWebSocketLookUps(host:, port:)` in `at_lookup_web.dart`:
+  **dev-only**, it sends `proxyPreamble(atSign)` (`from:<atSign>`) first on every
+  connection. The default web path is `webSocketLookUps()` (D-15): HTTPS directory
+  lookup, then `wss://` straight to the atServer.
 
 ---
 
@@ -1194,6 +1196,10 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J5 — Entry point.** `packages/at_client_wasm/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
+  **Planned (not done):** the entry's session factory defaults to `webSocketLookUps()`
+  (direct, D-15), with the proxy as an explicit dev option. `at_client_wasm` must not
+  define its own `proxyWebSocketLookUps` / `proxyPreamble`; they come from
+  `at_lookup_web.dart`.
 - **J6 — npm package.** `packages/at_client_wasm/npm/` — `package.json` **generated**, not
   hand-committed (verified dart-sass practice, `js-api.md` §8); `index.js` sets
   `globalThis.self` before load (or every Promise hangs on Node) **and wraps the raw
