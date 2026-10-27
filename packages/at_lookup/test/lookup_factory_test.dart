@@ -22,7 +22,8 @@ void main() {
         .thenAnswer((_) async => SecondaryAddress(host, port));
   });
 
-  test('the default factory builds through withSecureSocket, carrying the '
+  test(
+      'the default factory builds through withSecureSocket, carrying the '
       'authenticator and the preamble', () {
     Future<bool> authenticator(AtCommandExecutor _) async => true;
     Future<void> preamble(AtCommandExecutor _) async {}
@@ -38,11 +39,12 @@ void main() {
     expect(lookUp.onConnect, same(preamble));
   });
 
-  test('secureSocketTransport and secureSocketLookUps carry their config into '
+  test(
+      'secureSocketTransport and secureSocketLookUps carry their config into '
       'the TLS transport factory', () {
     final config = SecureSocketConfig();
-    final carriesConfig = isA<SecureSocketTransportFactory>()
-        .having((f) => f.secureSocketConfig, 'secureSocketConfig', same(config));
+    final carriesConfig = isA<SecureSocketTransportFactory>().having(
+        (f) => f.secureSocketConfig, 'secureSocketConfig', same(config));
 
     expect(secureSocketTransport(config).transportFactory, carriesConfig);
 
@@ -53,7 +55,8 @@ void main() {
     expect(lookUp.transportFactory, carriesConfig);
   });
 
-  test('onConnect runs once per connection, before the first command, and '
+  test(
+      'onConnect runs once per connection, before the first command, and '
       'again on a reconnect', () async {
     final preambleAnswers = <String>[];
     final lookUp = AtLookUp.withSecureSocket(
@@ -74,10 +77,11 @@ void main() {
         reason: 'the preamble is the first thing on the wire; the command '
             'waits behind it');
 
-    await transportFactory.created.single.serverSends('data:challenge\n@alice@');
+    await transportFactory.created.single
+        .serverSends('data:challenge\n@alice@');
     await transportFactory.created.single.settle();
-    expect(transportFactory.created.single.written,
-        ['from:@alice\n', 'noop:0\n']);
+    expect(
+        transportFactory.created.single.written, ['from:@alice\n', 'noop:0\n']);
     await transportFactory.created.single.serverSends('data:ok\n@alice@');
     expect(await first, 'data:ok');
     expect(preambleAnswers, ['data:challenge'],
