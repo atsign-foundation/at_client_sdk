@@ -946,7 +946,7 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 | Same-key new request | refused with `AT0032` while the revoked enrollment exists in any state (EVH:1721-1737, EM:765-781) — intended, not a defect. Approver `enroll:delete` then approval of a new request also works (fresh `enrollmentId`, fresh expiry) but is not the ruled path. A duplicate key is never accepted |
 | Per-re-enroll seed salt | none |
 | Revoked, passkey only | locked out by design |
-| Pointer (K-10) | revoke leaves it in place (the revoker cannot derive its name); after unrevoke it resolves again |
+| Pointer (K-10) | revoke leaves it in place (the revoker cannot derive its name); it keeps resolving, but PKAM as its `enrollmentId` fails until unrevoke |
 | Document (K-11) | revoke makes it unreadable (`.r.__e`), unrevoke restores it, delete removes it (`.d.__e`) |
 
 **R-a closed (2026-10-27):** unrevoke, as above. **R-b dissolved:** it asked whether a re-enrolling browser reuses the record's stored APKAM key or mints a fresh one; unrevoke reinstates the existing enrollment and its stored public key, and K-11 stores no private key.

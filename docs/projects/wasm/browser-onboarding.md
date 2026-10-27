@@ -78,8 +78,8 @@ sequenceDiagram
     B->>B: lookup = HKDF(P,"atkeys-record-id|atSign"); kek = HKDF(P,"atkeys-kek|atSign")
     B->>S: enroll:request (namespaces + atkeysv:rw) → pending until approved
     B->>S: PKAM auth as the approved enrollment; keys:get
-    B->>S: update atkeys.<eid>.a.__e (typ "atkeys": @keys without APKAM private key)
-    B->>S: update public:_<lookup>.atkeysv (typ "eid": enrollmentId), no TTL, once
+    B->>S: update atkeys.eid.a.__e (typ "atkeys": @keys without APKAM private key)
+    B->>S: update public:_lookupHex.atkeysv (typ "eid": enrollmentId), no TTL, once
     B->>B: IndexedDB: credential-ID hint
 ```
 
@@ -96,7 +96,7 @@ sequenceDiagram
     A-->>B: P, userHandle = atSign
     B->>S: lookup pointer (unauthenticated) → unseal enrollmentId
     B->>S: PKAM auth as enrollmentId
-    B->>S: llookup atkeys.<eid>.a.__e → open with kek
+    B->>S: llookup atkeys.eid.a.__e → open with kek
     B->>B: rewrite hint; storage.persist() once
 ```
 
@@ -112,7 +112,7 @@ sequenceDiagram
     B->>S: lookup(HKDF(P,"atkeys-record-id|atSign")) on atSign's atServer — unauthenticated, no from:
     S-->>B: pointer → unseal enrollmentId with kek
     B->>S: PKAM auth as enrollmentId
-    B->>S: llookup atkeys.<eid>.a.__e → open with kek
+    B->>S: llookup atkeys.eid.a.__e → open with kek
     B->>B: restored public keys must match the published ones (BO-9)
     B->>B: store hint in IndexedDB
 ```
@@ -126,7 +126,7 @@ Return and recovery differ only in the credential hint: the server holds everyth
 | Rotation | enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old pointer → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys. The rotation flow under gate (c) is proposed |
 | Browser storage eviction | loses only the credential hint; the recovery flow (3.3) needs none, costing one extra passkey tap |
 | Lost or wiped device | revoke its enrollment: its PKAM is refused (`AT0027`) and its document becomes unreadable (`.r.__e`). The pointer stays (the revoker cannot derive its name) — at most one orphan per passkey |
-| Revoked enrollment | revocation is final as approver policy ([`decisions.md`](decisions.md), 2026-10-21/27). To re-enroll, the approver **reinstates** it with `enroll:unrevoke`: same `enrollmentId`, same public key, original expiry (expired → `AT0028`); the pointer resolves and the document returns. Revoke also revokes every enrollment the revoked one approved; unrevoke does not reinstate those. A new request with the same key is refused with `AT0032` (intended). Revoked with only the passkey is locked out by design |
+| Revoked enrollment | revocation is final as approver policy ([`decisions.md`](decisions.md), 2026-10-21/27). To re-enroll, the approver **reinstates** it with `enroll:unrevoke`: same `enrollmentId`, same public key, original expiry (expired → `AT0028`); PKAM succeeds again and the document returns. Revoke also revokes every enrollment the revoked one approved; unrevoke does not reinstate those. A new request with the same key is refused with `AT0032` (intended). Revoked with only the passkey is locked out by design |
 | Portal re-cut | rotates the passphrase envelope; each enrollment's document keeps working until that enrollment is revoked |
 
 ---
@@ -141,7 +141,7 @@ Return and recovery differ only in the credential hint: the server holds everyth
 | BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign it returns in `userHandle` then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
 | BO-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
 | BO-4 | ~~PCAM private key inside the blob~~ **superseded 2026-10-27 by K-11** (the document holds no APKAM private key). Was: for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
-| BO-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. The PCAM key is a software key (BO-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
+| BO-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded with the enrollment (`signingAlgo`) | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. The PCAM key is a software key (BO-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
 | BO-6 | ~~`ttl` refreshed on open prunes dead passkeys~~ **superseded 2026-10-27 by K-10**: the pointer has no TTL | — |
 | BO-7 | **Pointer read by exact lookup key, unauthenticated; document read over PKAM; all writes PKAM-authenticated**; the pointer never appears in `scan` | recovery must find the `enrollmentId` before auth; writes need an owner; enumeration would break R5. The document is listed to its own enrollment and to CRAM only, by an `enrollmentId` they already know |
 | BO-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
