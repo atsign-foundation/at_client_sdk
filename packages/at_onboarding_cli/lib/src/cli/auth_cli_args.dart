@@ -578,7 +578,8 @@ class AuthCliArgs {
     p.addOption(
       argNameAppNameRegex,
       abbr: argAbbrAppNameRegex,
-      help: 'Filter requests via regular expression on app name',
+      help: 'Filter requests via regular expression on app name'
+          ' (case-insensitive)',
       mandatory: mandatory,
     );
   }
@@ -587,7 +588,8 @@ class AuthCliArgs {
     p.addOption(
       argNameDeviceNameRegex,
       abbr: argAbbrDeviceNameRegex,
-      help: 'Filter requests via regular expression on device name',
+      help: 'Filter requests via regular expression on device name'
+          ' (case-insensitive)',
       mandatory: mandatory,
     );
   }
