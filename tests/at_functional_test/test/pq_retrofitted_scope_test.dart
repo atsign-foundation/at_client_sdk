@@ -10,7 +10,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupMuxable;
 import 'package:at_functional_test/src/enrolled_client.dart'
     show EnrolledClient, enrolAndAuthenticate;
 import 'package:test/test.dart';
@@ -61,7 +61,8 @@ void main() {
   ///
   /// No `*` and no `__manage`: a fully privileged retrofit also mints the
   /// signing root, which belongs to UC-B1.1 rather than here.
-  Future<EnrolledClient> retrofittedScopedClient(String label) async {
+  Future<EnrolledClient> retrofittedScopedClient(String label,
+      {AtLookUp? atLookUp}) async {
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
@@ -79,6 +80,7 @@ void main() {
       deviceName: 'rs-$label-${uuid.v4().hashCode}',
       namespaces: {namespace: 'rw'},
       storage: TestUtils.storage,
+      atLookUp: atLookUp,
     );
 
     expect(enrolled.client.enrollmentId, isNot(enrolled.enrollmentId),
@@ -92,6 +94,31 @@ void main() {
             'enrollment it was enrolled as under a different id');
     return enrolled;
   }
+
+  /// Catalogue: features/at_lookup/close_and_stop.feature
+  test("A superseded enrollment's lookup cannot reconnect after a retrofit",
+      () async {
+    // The client authenticates on this as the enrollment it was submitted
+    // as, retrofits, and rederives onto a connection of its own.
+    final superseded = secureSocketLookUps()(
+      atSign: atSign,
+      rootDomain: AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+      authenticator: null,
+    );
+    final enrolled =
+        await retrofittedScopedClient('superseded', atLookUp: superseded);
+    expect(
+        identical(enrolled.client.getRemoteSecondary()!.atLookUp, superseded),
+        isFalse,
+        reason: 'the premise: the client moved off the connection it was '
+            'opened on');
+
+    await expectLater(superseded.executeCommand('scan\n', auth: true),
+        throwsA(isA<StoppedException>()),
+        reason: 'a connection left able to reconnect would authenticate as '
+            'the superseded enrollment, which the atServer still honours for '
+            'its grace period');
+  }, timeout: Timeout(Duration(minutes: 3)));
 
   test('UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
       () async {
