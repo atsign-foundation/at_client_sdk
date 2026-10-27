@@ -326,7 +326,7 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
 > **V2, tracked as [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754).** V1 ships remote-only
 > ([`decisions.md`](decisions.md) D-17), so no task here is on V1's path; a SQLite bundle in
 > a browser waits on all of them. Re-verified 2026-09-14 on at_server trunk `1c51474d`:
-> P1 and P5 done; P2–P4 not started.
+> P5 done; P2–P4 not started. P1 closed later, on 2026-10-13 (D-26).
 
 - **P1 — VFS: done (D-26).** `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId),
   in a dedicated worker; this sets `at_client_wasm`'s execution model. OQ-5.

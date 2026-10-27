@@ -188,7 +188,7 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 |---|---|
 | A compromised atServer cannot decrypt @keys | the kek needs `P`, which needs the passkey plus platform authentication |
 | An outside reader cannot read the @keys | the document is private and read only after PKAM (K-11); unauthenticated readers see at most a pointer's ciphertext, by its exact 256-bit name |
-| An outside reader cannot count devices or link a pointer to an atSign's passkeys | lookup keys are PRF-derived and pointers are hidden from every scan (BO-7); pointers carry no atSign or credential ID |
+| An outside reader cannot count devices or link a pointer to an atSign's passkeys | lookup keys are PRF-derived and pointers are hidden from every scan (BO-7); pointer ciphertexts carry no atSign or credential ID (the key name embeds `@<atSign>` but cannot be scanned without P) |
 | The passkey private key never leaves the authenticator | WebAuthn |
 | Dead passkeys accumulate at most one orphan pointer each | the pointer has no TTL and revocation cannot remove it (K-10); it holds only a sealed `enrollmentId` |
 | A stale device cannot resurrect removed records | no shared record, nothing merged |
