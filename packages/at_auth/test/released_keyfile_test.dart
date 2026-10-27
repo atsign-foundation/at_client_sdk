@@ -194,13 +194,52 @@ void main() {
           jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
       File(path)
           .writeAsStringSync(jsonEncode({...document, 'atsign': '@bob🛠'}));
+      final original = File(path).readAsBytesSync();
 
+      // NOTE: the keys are claimed for $atsign, so the write gets past the
+      // guard on the keys' own atSign and it is the keyfile at rest, naming
+      // another atSign, that refuses the flat rewrite.
       await expectLater(
-          FileAtKeysIo(filePath: (_) => path)
-              .update(atsign.toAtsign(), (keys) => true),
-          throwsA(isA<AtKeysValidationException>()),
+          FileAtKeysIo(filePath: (_) => path).update(atsign.toAtsign(),
+              (keys) {
+            keys.atsign = atsign.toAtsign();
+            return true;
+          }),
+          throwsA(isA<AtKeysAssuranceException>()),
           reason: 'a keyfile naming another atSign is not rewritten for '
               '$atsign');
+      expect(File(path).readAsBytesSync(), original,
+          reason: 'the keyfile is left as it was');
+    });
+
+    test(
+        'A keyfile naming another atSign and holding no credential is still '
+        'refused', () async {
+      final path = copyOf('3.3.0', 'alice_key');
+      final document =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      // A pending request's keyfile: none of the flat secrets, so it is the
+      // atSign the caller writes for, and nothing the keyfile holds, that
+      // the one at rest is checked against.
+      File(path).writeAsStringSync(jsonEncode({
+        for (final field in ['version', 'keys', 'enrollmentId'])
+          field: document[field],
+        'apkamSymmetricKey': document['apkamSymmetricKey'],
+        'atsign': '@bob🛠',
+      }));
+      final original = File(path).readAsBytesSync();
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path).update(atsign.toAtsign(),
+              (keys) {
+            keys.atsign = atsign.toAtsign();
+            return true;
+          }),
+          throwsA(isA<AtKeysAssuranceException>()),
+          reason: 'a keyfile naming another atSign is not rewritten for '
+              '$atsign');
+      expect(File(path).readAsBytesSync(), original,
+          reason: 'the keyfile is left as it was');
     });
 
     test(
