@@ -31,6 +31,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<AtKeys> read(String atsign) async {
     final file = File(filePath!(atsign));
+    _refuseAbsent(file);
+    final json = await _readAtRestDocument(file);
+    final plaintextJson = await _selfDecryptLegacyFields(json);
+    return AtKeys.fromJson(plaintextJson);
+  }
+
+  void _refuseAbsent(File file) {
     if (!file.existsSync()) {
       // Typed, so a caller can tell "no keyfile yet" from "a keyfile this
       // process cannot read". Both used to arrive as a bare AtException and
@@ -38,10 +45,6 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       throw AtKeysSourceAbsentException(
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
-
-    final json = await _readAtRestDocument(file);
-    final plaintextJson = await _selfDecryptLegacyFields(json);
-    return AtKeys.fromJson(plaintextJson);
   }
 
   @override
@@ -86,9 +89,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
     final file = File(filePath!(atsign));
     await AtKeysFileLock(file.path).synchronized(() async {
-      final keys = await read(atsign.toString());
+      _refuseAbsent(file);
+      final asRead = await _readForWrite(file);
+      final json = await _decodeAtRestDocument(utf8.decode(asRead.bytes), file);
+      final keys = AtKeys.fromJson(await _selfDecryptLegacyFields(json));
       if (await mutate(keys) == false) return;
-      await _writeValidated(file, atsign, keys, requireExisting: true);
+      await _writeValidated(file, atsign, keys,
+          requireExisting: true, asRead: asRead);
     });
   }
 
@@ -105,8 +112,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// What that silently undid: the keyfile is the credential, and deleting it
   /// is how a device is decommissioned. An update in flight when the owner
   /// deletes it would put it back, and nothing said so.
+  ///
+  /// [asRead] is the keyfile as [update] read it; without it the keyfile is
+  /// read here. Either way the copies and the keyfile written take the owner
+  /// that read reports.
   Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
-      {bool requireExisting = false}) async {
+      {bool requireExisting = false, KeyfileRead? asRead}) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
     if (!file.existsSync()) {
@@ -119,17 +130,41 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       return;
     }
 
-    final existing = await _readAtRestDocument(file);
+    final previous = asRead ?? await _readForWrite(file);
+    final existing =
+        await _decodeAtRestDocument(utf8.decode(previous.bytes), file);
     assurance.validateMapUpdate(
       existing: existing,
       candidate: document,
     );
-    final previous = await file.readAsBytes();
     await _preserveLegacyShape(file, existing, document, previous);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
-    await _replaceOwnerOnly(File('${file.path}.bak'), previous, keyfile: file);
-    await _writeAtRestDocument(file, document);
+    await _replaceOwnerOnly(File('${file.path}.bak'), previous.bytes,
+        owner: previous.owner);
+    await _writeAtRestDocument(file, document, owner: previous.owner);
+  }
+
+  /// The keyfile as a write reads it under the lock: its bytes, and when
+  /// this process runs as root, the owner the files the write replaces take.
+  Future<KeyfileRead> _readForWrite(File file) async {
+    if (!ownerOnlyWritesAvailable || !runningAsRoot) {
+      return (bytes: await file.readAsBytes(), owner: null);
+    }
+    if (FileSystemEntity.typeSync(file.path, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw FileSystemException(
+          'Not rewriting the keyfile as root: it is a symbolic link',
+          file.path);
+    }
+    // NOTE: the bytes and the owner come from one descriptor, opened without
+    // following a symbolic link.
+    final read = readNoFollow(file.path);
+    if (read.owner == null) {
+      _logger.warning('Writing ${file.path} owned by root: the owner of the '
+          'keyfile could not be read');
+    }
+    return read;
   }
 
   /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
@@ -144,13 +179,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     File file,
     Map<String, dynamic> existing,
     Map<String, dynamic> candidate,
-    List<int> previous,
+    KeyfileRead previous,
   ) async {
     if (existing.containsKey('version')) return;
     if (!candidate.containsKey('version')) return;
     final backup = File('${file.path}$legacyShapeBackupSuffix');
     if (backup.existsSync()) return;
-    await _replaceOwnerOnly(backup, previous, keyfile: file);
+    await _replaceOwnerOnly(backup, previous.bytes, owner: previous.owner);
     _logger.shout(
         'Upgrading ${file.path} to the typed keyfile format: it now carries '
         'per-enrollment key material, which a build older than this one does '
@@ -169,8 +204,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     return _selfEncryptLegacyFields(atKeys.toJson());
   }
 
-  Future<Map<String, dynamic>> _readAtRestDocument(File file) async {
-    final text = await file.readAsString();
+  Future<Map<String, dynamic>> _readAtRestDocument(File file) async =>
+      _decodeAtRestDocument(await file.readAsString(), file);
+
+  Future<Map<String, dynamic>> _decodeAtRestDocument(
+      String text, File file) async {
     final Object? decoded;
     try {
       decoded = jsonDecode(text);
@@ -184,46 +222,31 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
   Future<void> _writeAtRestDocument(
     File file,
-    Map<String, dynamic> document,
-  ) async {
+    Map<String, dynamic> document, {
+    OwnerAndGroup? owner,
+  }) async {
     if (!file.parent.existsSync()) {
       await file.parent.create(recursive: true);
     }
     await _replaceOwnerOnly(
-        file, utf8.encode(await _encodePassphraseEnvelope(document)));
+        file, utf8.encode(await _encodePassphraseEnvelope(document)),
+        owner: owner);
   }
 
   /// Replaces [file] with [bytes] through a temporary file renamed over it,
   /// so a crash mid-write leaves [file] as it was rather than truncated.
   /// Where the platform has file modes, [file] ends up readable and writable
-  /// by its owner alone. [keyfile] names the keyfile when [file] is a copy
-  /// of it.
+  /// by its owner alone, and given [owner] when one is named.
   Future<void> _replaceOwnerOnly(File file, List<int> bytes,
-      {File? keyfile}) async {
+      {OwnerAndGroup? owner}) async {
     final temp = File('${file.path}.tmp');
     await _deleteLeftover(temp.path);
     final previousMode = _platformHasFileModes ? _modeOf(file) : null;
-    final ownerOnly =
-        await _writeTemporary(temp, bytes, _ownerToKeep(file, keyfile));
+    final ownerOnly = await _writeTemporary(temp, bytes, owner);
     await temp.rename(file.path);
     if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
       _logger.info('${file.path} is now readable and writable by its owner '
           'alone: mode ${_octal(ownerOnlyMode)}, was ${_octal(previousMode)}');
-    }
-  }
-
-  /// When this process runs as root, the owner and group the file written at
-  /// [file] takes: those of [file] if it exists, or else those of [keyfile],
-  /// the keyfile [file] is a copy of.
-  OwnerAndGroup? _ownerToKeep(File file, File? keyfile) {
-    if (!ownerOnlyWritesAvailable || !runningAsRoot) return null;
-    try {
-      return ownerAndGroupOf(file.path) ??
-          (keyfile == null ? null : ownerAndGroupOf(keyfile.path));
-    } on FileSystemException catch (e) {
-      _logger.warning('Writing ${file.path} owned by root: the owner to '
-          'give it could not be read: $e');
-      return null;
     }
   }
 

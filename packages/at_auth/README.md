@@ -267,9 +267,10 @@ mid-write can never truncate the keyfile, and a rewrite over an existing
 file first preserves the previous state as `<file>.bak` alongside it. On
 Linux and macOS the keyfile, its `.bak` and its `.pre-v1` copy are written
 readable and writable by their owner alone (mode 0600), whatever mode the
-keyfile had before. Written as root, a file that already exists keeps its
-owner and group, and a .bak or .pre-v1 copy written for the first time takes
-the keyfile's.
+keyfile had before. Written as root, the keyfile and its `.bak` and `.pre-v1`
+copies take the owner and group of the keyfile as it was read; a keyfile that
+did not exist stays owned by root, and root does not rewrite a keyfile that is
+a symbolic link.
 
 ## Migrating from 3.x
 

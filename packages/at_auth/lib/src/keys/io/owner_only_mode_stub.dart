@@ -4,6 +4,10 @@ const ownerOnlyMode = 0x180;
 /// A file's owner and group, as numeric ids.
 typedef OwnerAndGroup = ({int uid, int gid});
 
+/// What [readNoFollow] read: the file's bytes, and its owner and group, or
+/// null when they cannot be reported.
+typedef KeyfileRead = ({List<int> bytes, OwnerAndGroup? owner});
+
 /// Whether [writeNewOwnerOnly] can run here: never, on a platform without
 /// `dart:ffi`.
 bool get ownerOnlyWritesAvailable => false;
@@ -14,8 +18,9 @@ bool get runningAsRoot => false;
 
 /// Not available on a platform without `dart:ffi`; callers check
 /// [ownerOnlyWritesAvailable] first.
-OwnerAndGroup? ownerAndGroupOf(String path) =>
-    throw UnsupportedError('Reading a file\'s owner needs dart:ffi');
+KeyfileRead readNoFollow(String path) =>
+    throw UnsupportedError('Reading a file without following a link needs '
+        'dart:ffi');
 
 /// Not available on a platform without `dart:ffi`; callers check
 /// [ownerOnlyWritesAvailable] first.

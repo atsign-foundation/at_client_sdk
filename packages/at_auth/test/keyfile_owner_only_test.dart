@@ -222,6 +222,94 @@ void main() {
             : 'runs only as root, the one account that can give a file to '
                 'another owner');
 
+    test(
+        "A backup owned by another account takes the keyfile's owner and "
+        'group when root rewrites it', () async {
+      await writeKeyfile(mode: '600');
+      await _chown('1234:2345', keyfile);
+      final backup = '$keyfile.bak';
+      File(backup).writeAsStringSync('older');
+      await _chown('5678:5678', backup);
+
+      await io().update(atsign.toAtsign(), (keys) => true);
+
+      expect(await _ownerOf(backup), '1234:2345',
+          reason: "the .bak takes the keyfile's owner and group, not those of "
+              'the file it replaces');
+      expect(_modeOf(backup), '0600',
+          reason: 'the .bak is readable and writable by its owner alone');
+    }, skip: _rootOnly);
+
+    test('Root does not rewrite a keyfile that is a symbolic link', () async {
+      final target = '${dir.path}/elsewhere.atKeys';
+      await FileAtKeysIo(filePath: (_) => target)
+          .write(atsign, legacyAtKeys(atsign: atsign.toAtsign()));
+      await _chown('5678:5678', target);
+      final before = File(target).readAsBytesSync();
+      Directory('${dir.path}/keys').createSync();
+      Link(keyfile).createSync(target);
+
+      await expectLater(io().update(atsign.toAtsign(), (keys) => true),
+          throwsA(isA<FileSystemException>()),
+          reason: 'root does not rewrite a keyfile that is a symbolic link');
+
+      expect(File(target).readAsBytesSync(), before,
+          reason: 'the file the link points to is unchanged');
+      expect(await _ownerOf(target), '5678:5678',
+          reason: 'the file the link points to keeps its owner');
+    }, skip: _rootOnly);
+
+    test(
+        'A keyfile replaced while root updates it is written with the owner '
+        'it was read with', () async {
+      await writeKeyfile(mode: '600');
+      await _chown('1234:2345', keyfile);
+      final theirs = '${dir.path}/theirs.atKeys';
+      File(theirs).writeAsStringSync('{}');
+      await _chown('5678:5678', theirs);
+
+      await io().update(atsign.toAtsign(), (keys) {
+        File(keyfile).renameSync('${dir.path}/moved.atKeys');
+        Link(keyfile).createSync(theirs);
+        return true;
+      });
+
+      expect(FileSystemEntity.typeSync(keyfile, followLinks: false),
+          FileSystemEntityType.file,
+          reason: 'the keyfile written is a file');
+      expect(await _ownerOf(keyfile), '1234:2345',
+          reason: 'the keyfile written takes the owner and group it was read '
+              'with');
+      expect(File(theirs).readAsStringSync(), '{}',
+          reason: "the second account's file is unchanged");
+      expect(await _ownerOf(theirs), '5678:5678',
+          reason: "the second account's file keeps its owner");
+    }, skip: _rootOnly);
+
+    test(
+        'A backup path that is a symbolic link is replaced when root '
+        'rewrites the keyfile', () async {
+      await writeKeyfile(mode: '600');
+      await _chown('1234:2345', keyfile);
+      final theirs = '${dir.path}/theirs';
+      File(theirs).writeAsStringSync('theirs');
+      await _chown('5678:5678', theirs);
+      final backup = '$keyfile.bak';
+      Link(backup).createSync(theirs);
+
+      await io().update(atsign.toAtsign(), (keys) => true);
+
+      expect(FileSystemEntity.typeSync(backup, followLinks: false),
+          FileSystemEntityType.file,
+          reason: 'the .bak is a file');
+      expect(await _ownerOf(backup), '1234:2345',
+          reason: "the .bak takes the keyfile's owner and group");
+      expect(File(theirs).readAsStringSync(), 'theirs',
+          reason: "the second account's file is unchanged");
+      expect(await _ownerOf(theirs), '5678:5678',
+          reason: "the second account's file keeps its owner");
+    }, skip: _rootOnly);
+
     test('Narrowing a keyfile to owner-only is logged', () async {
       await writeKeyfile(mode: '644');
 
@@ -274,6 +362,11 @@ Future<String> _ownerOf(String path) async {
 
 final _runningAsRoot =
     (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
+
+final Object _rootOnly = _runningAsRoot
+    ? false
+    : 'runs only as root, the one account that can give a file to another '
+        'owner';
 
 class _RecordedLogs implements LoggingHandler {
   final List<String> messages = [];

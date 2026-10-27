@@ -10,6 +10,10 @@ const ownerOnlyMode = 0x180;
 /// A file's owner and group, as numeric ids.
 typedef OwnerAndGroup = ({int uid, int gid});
 
+/// What [readNoFollow] read: the file's bytes, and its owner and group, or
+/// null when this libc cannot report them.
+typedef KeyfileRead = ({List<int> bytes, OwnerAndGroup? owner});
+
 /// Whether [writeNewOwnerOnly] can run here: Linux or macOS, with the libc
 /// calls it makes found.
 bool get ownerOnlyWritesAvailable => _Libc.instance != null;
@@ -17,19 +21,35 @@ bool get ownerOnlyWritesAvailable => _Libc.instance != null;
 /// Whether this process runs with an effective user id of 0.
 bool get runningAsRoot => _Libc.instance?.geteuid() == 0;
 
-/// The owner and group of the file at [path], following a symbolic link, or
-/// null when nothing is there.
+/// Reads the file at [path] through one descriptor opened without following
+/// a symbolic link, taking its owner and group from that descriptor.
 ///
-/// Throws [FileSystemException] when they cannot be read.
-OwnerAndGroup? ownerAndGroupOf(String path) {
-  final stat = FileStat.statSync(path);
-  if (stat.type == FileSystemEntityType.notFound) return null;
-  final read = _ownerReader;
-  if (read == null) {
+/// Throws [FileSystemException] when [path] is a symbolic link or anything
+/// other than a regular file, or cannot be read.
+KeyfileRead readNoFollow(String path) {
+  final libc = _Libc.instance!;
+  final flags = libc.openForReadingNoFollow;
+  if (flags == null) {
     throw FileSystemException(
-        'Cannot look up the libc call that reads an owner', path);
+        'Cannot open a file without following a link on this platform', path);
   }
-  return read(path, stat.mode);
+  final nativePath = path.toNativeUtf8();
+  final int fd;
+  try {
+    fd = libc.open(nativePath, flags, 0);
+  } finally {
+    malloc.free(nativePath);
+  }
+  if (fd < 0) {
+    throw FileSystemException(
+        'Cannot open the file without following a link', path);
+  }
+  try {
+    final owner = _fdOwnerReader?.call(fd, path);
+    return (bytes: _readAll(libc, fd, path), owner: owner);
+  } finally {
+    libc.close(fd);
+  }
 }
 
 /// Writes [bytes] to a file this call creates at [path], readable and
@@ -81,23 +101,54 @@ void _writeAll(_Libc libc, int fd, List<int> bytes, String path) {
   }
 }
 
+List<int> _readAll(_Libc libc, int fd, String path) {
+  const chunk = 65536;
+  final buffer = malloc<Uint8>(chunk);
+  final bytes = BytesBuilder(copy: true);
+  try {
+    while (true) {
+      final count = libc.read(fd, buffer, chunk);
+      if (count < 0) {
+        throw FileSystemException('Cannot read the file', path);
+      }
+      if (count == 0) return bytes.takeBytes();
+      bytes.add(buffer.asTypedList(count));
+    }
+  } finally {
+    malloc.free(buffer);
+  }
+}
+
 typedef _OpenFunction = int Function(Pointer<Utf8>, int, int);
 typedef _FdModeFunction = int Function(int, int);
 typedef _FdOwnerFunction = int Function(int, int, int);
-typedef _WriteFunction = int Function(int, Pointer<Uint8>, int);
+typedef _ReadWriteFunction = int Function(int, Pointer<Uint8>, int);
 typedef _CloseFunction = int Function(int);
 typedef _UidFunction = int Function();
 
 final class _Libc {
-  _Libc._(this.createNewForWriting, this.open, this.fchmod, this.fchown,
-      this.write, this.close, this.geteuid);
+  _Libc._(
+      {required this.createNewForWriting,
+      required this.openForReadingNoFollow,
+      required this.open,
+      required this.fchmod,
+      required this.fchown,
+      required this.read,
+      required this.write,
+      required this.close,
+      required this.geteuid});
 
   /// `O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC`.
   final int createNewForWriting;
+
+  /// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC`, or null on an architecture whose
+  /// `O_NOFOLLOW` this does not know.
+  final int? openForReadingNoFollow;
   final _OpenFunction open;
   final _FdModeFunction fchmod;
   final _FdOwnerFunction fchown;
-  final _WriteFunction write;
+  final _ReadWriteFunction read;
+  final _ReadWriteFunction write;
   final _CloseFunction close;
   final _UidFunction geteuid;
 
@@ -107,9 +158,12 @@ final class _Libc {
     if (!Platform.isLinux && !Platform.isMacOS) return null;
     final libc = DynamicLibrary.process();
     try {
+      final read = libc.lookupFunction<
+          IntPtr Function(Int32, Pointer<Uint8>, Size),
+          _ReadWriteFunction>('read');
       final write = libc.lookupFunction<
           IntPtr Function(Int32, Pointer<Uint8>, Size),
-          _WriteFunction>('write');
+          _ReadWriteFunction>('write');
       final close =
           libc.lookupFunction<Int32 Function(Int32), _CloseFunction>('close');
       final fchown = libc.lookupFunction<Int32 Function(Int32, Uint32, Uint32),
@@ -121,68 +175,87 @@ final class _Libc {
       final open = libc.lookupFunction<
           Int32 Function(Pointer<Utf8>, Int32, VarArgs<(Uint32,)>),
           _OpenFunction>('open');
-      return Platform.isMacOS
-          ? _Libc._(
-              0x1000a01,
-              open,
-              libc.lookupFunction<Int32 Function(Int32, Uint16),
-                  _FdModeFunction>('fchmod'),
-              fchown,
-              write,
-              close,
-              geteuid)
-          : _Libc._(
-              0x800c1,
-              open,
-              libc.lookupFunction<Int32 Function(Int32, Uint32),
-                  _FdModeFunction>('fchmod'),
-              fchown,
-              write,
-              close,
-              geteuid);
+      if (Platform.isMacOS) {
+        return _Libc._(
+            createNewForWriting: 0x1000a01,
+            openForReadingNoFollow: 0x1000100,
+            open: open,
+            fchmod: libc.lookupFunction<Int32 Function(Int32, Uint16),
+                _FdModeFunction>('fchmod'),
+            fchown: fchown,
+            read: read,
+            write: write,
+            close: close,
+            geteuid: geteuid);
+      }
+      return _Libc._(
+          createNewForWriting: 0x800c1,
+          openForReadingNoFollow: _linuxOpenForReadingNoFollow(Abi.current()),
+          open: open,
+          fchmod: libc.lookupFunction<Int32 Function(Int32, Uint32),
+              _FdModeFunction>('fchmod'),
+          fchown: fchown,
+          read: read,
+          write: write,
+          close: close,
+          geteuid: geteuid);
     } on ArgumentError {
       return null;
     }
   }
 }
 
-typedef _OwnerReader = OwnerAndGroup Function(String path, int mode);
-typedef _StatFunction = int Function(Pointer<Utf8>, Pointer<Uint8>);
+/// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC` on Linux, where `O_NOFOLLOW` is
+/// 0100000 on Arm and 0400000 on the generic layout x86 and RISC-V use.
+int? _linuxOpenForReadingNoFollow(Abi abi) {
+  const cloexec = 0x80000;
+  if (abi == Abi.linuxArm || abi == Abi.linuxArm64) return cloexec | 0x8000;
+  if (abi == Abi.linuxX64 ||
+      abi == Abi.linuxIA32 ||
+      abi == Abi.linuxRiscv32 ||
+      abi == Abi.linuxRiscv64) {
+    return cloexec | 0x20000;
+  }
+  return null;
+}
+
+typedef _FdOwnerReader = OwnerAndGroup? Function(int fd, String path);
+typedef _FdStatFunction = int Function(int, Pointer<Uint8>);
 typedef _StatxFunction = int Function(
     int, Pointer<Utf8>, int, int, Pointer<Uint8>);
 
-final _OwnerReader? _ownerReader = _lookUpOwnerReader();
+final _FdOwnerReader? _fdOwnerReader = _lookUpFdOwnerReader();
 
-_OwnerReader? _lookUpOwnerReader() {
+_FdOwnerReader? _lookUpFdOwnerReader() {
   final libc = DynamicLibrary.process();
   try {
     if (Platform.isMacOS) {
       // NOTE: the offsets below are the 64-bit inode struct stat, which
-      // x86_64 exports as stat$INODE64.
-      final stat = libc.lookupFunction<
-              Int32 Function(Pointer<Utf8>, Pointer<Uint8>), _StatFunction>(
-          Abi.current() == Abi.macosX64 ? 'stat\$INODE64' : 'stat');
-      return (path, mode) => _readOwner(path, mode, stat,
+      // x86_64 exports as fstat$INODE64.
+      final fstat = libc.lookupFunction<Int32 Function(Int32, Pointer<Uint8>),
+              _FdStatFunction>(
+          Abi.current() == Abi.macosX64 ? 'fstat\$INODE64' : 'fstat');
+      return (fd, path) => _readOwner(path, (buffer) => fstat(fd, buffer),
           size: 144, modeAt: 4, uidAt: 16, gidAt: 20);
     }
     if (Platform.isLinux) {
       final statx = libc.lookupFunction<
           Int32 Function(Int32, Pointer<Utf8>, Int32, Uint32, Pointer<Uint8>),
           _StatxFunction>('statx');
-      // AT_FDCWD, and STATX_TYPE | STATX_MODE | STATX_UID | STATX_GID.
-      const atFdCwd = -100, wanted = 0x1b;
-      return (path, mode) => _readOwner(
-          path,
-          mode,
-          (nativePath, buffer) =>
-              statx(atFdCwd, nativePath, 0, wanted, buffer) == 0 &&
+      // NOTE: AT_EMPTY_PATH, and STATX_TYPE | STATX_MODE | STATX_UID |
+      // STATX_GID.
+      const emptyPath = 0x1000, wanted = 0x1b;
+      return (fd, path) => _readOwner(path, (buffer) {
+            final empty = ''.toNativeUtf8();
+            try {
+              return statx(fd, empty, emptyPath, wanted, buffer) == 0 &&
                       buffer.cast<Uint32>().value & wanted == wanted
                   ? 0
-                  : -1,
-          size: 256,
-          modeAt: 28,
-          uidAt: 20,
-          gidAt: 24);
+                  : -1;
+            } finally {
+              malloc.free(empty);
+            }
+          }, size: 256, modeAt: 28, uidAt: 20, gidAt: 24);
     }
   } on ArgumentError {
     return null;
@@ -190,23 +263,20 @@ _OwnerReader? _lookUpOwnerReader() {
   return null;
 }
 
-/// Reads the owner and group [fill] writes into a stat buffer, refusing them
-/// when the mode beside them is not [mode], the one dart:io read.
-OwnerAndGroup _readOwner(String path, int mode, _StatFunction fill,
+/// Reads the owner and group [fill] writes into a stat buffer, or null when
+/// [fill] fails. Throws [FileSystemException] unless the mode beside them is
+/// a regular file's.
+OwnerAndGroup? _readOwner(String path, int Function(Pointer<Uint8>) fill,
     {required int size,
     required int modeAt,
     required int uidAt,
     required int gidAt}) {
-  final nativePath = path.toNativeUtf8();
   final buffer = calloc<Uint8>(size);
   try {
-    if (fill(nativePath, buffer) != 0) {
-      throw FileSystemException('Cannot read the owner', path);
-    }
+    if (fill(buffer) != 0) return null;
     final fields = ByteData.sublistView(buffer.asTypedList(size));
-    if (fields.getUint16(modeAt, Endian.host) & 0xfff != mode & 0xfff) {
-      throw FileSystemException(
-          'The owner read does not belong to the file', path);
+    if (fields.getUint16(modeAt, Endian.host) & 0xf000 != 0x8000) {
+      throw FileSystemException('Not a regular file', path);
     }
     return (
       uid: fields.getUint32(uidAt, Endian.host),
@@ -214,6 +284,5 @@ OwnerAndGroup _readOwner(String path, int mode, _StatFunction fill,
     );
   } finally {
     calloc.free(buffer);
-    malloc.free(nativePath);
   }
 }
