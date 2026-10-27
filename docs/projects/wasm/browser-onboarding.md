@@ -54,7 +54,7 @@ An app client running in a browser must:
 | APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeysv:rw`. An OTP admits the request, and it must be minted covering the app namespaces + `atkeysv:rw`: a narrower OTP is spent and the request refused (`UnAuthorizedException`, EVH:341-349); it stays **pending** until an approver acts from an existing device (an OTP never approves). The APKAM key is derived from the passkey (K-12) | **primary** |
 | Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | secondary, for a user with no device to approve from (open) |
 
-Both converge on the same pointer + document pair.
+Both converge on the same pointer + document pair — unproven for the portal source under K-11, which has no enrollment to own a document (open, [`decisions.md`](decisions.md) "Open against K").
 
 ---
 

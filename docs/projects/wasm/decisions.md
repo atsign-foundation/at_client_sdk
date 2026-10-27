@@ -975,7 +975,23 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 
 **Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed; `5vf.4`/`5vf.5` are re-scoped to the K-10 pointer and K-11 document.
 
-**Open against K.** Owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite or delete another passkey's pointer (bead `m0j`, accepted gap); K-12's fallbacks (a)–(d) and rotation, with the signing algorithm on any fallback (K-8's kept clause); the K-5 follow-up (AAD binding); whether IndexedDB keeps a document replica; whether header `v` changes with `typ`. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+**Open against K — not ruled.** #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+
+| Item | State |
+| --- | --- |
+| Owner-binding guard: one `atkeysv:rw` enrollment can overwrite or delete another passkey's pointer | Accepted gap, bead `m0j` |
+| K-12 fallbacks (a)–(d) | Open (proposed table above) |
+| Signing algorithm on a fallback | K-8's kept clause (first of `strongestFirst`) stands; not fixed to `mldsa65` |
+| K-5 follow-up: bind `enrollmentId` and record name into the AAD | Proposed |
+| Whether IndexedDB keeps a document replica beside the credential hint | Open; the flows store the hint only |
+| Whether header `v` changes with `typ` (stays 2?) | Open |
+| Rotation: a new passkey, so a new derived key, so a new enrollment + approval; the old pointer is deleted | Proposed. `enroll:update` can rekey an approved enrollment in place with proof of possession (EVH:948-1010), so new-enrollment rotation is a policy choice, not a server constraint |
+| Gate IDs: X-K11..X-K14 here collide with the gate-(c) docs branch's X-K10..X-K22 | That branch renumbers when it rebases onto this one |
+| Portal bootstrap under K-11: a portal cut has no enrollment to own a K-11 document, so "both bootstrap sources converge on the same pointer + document pair" ([`browser-onboarding.md`](browser-onboarding.md) §2) is unproven | Open |
+| Pointer written "once at enroll": the write needs PKAM, so the enroll flow writes it after approval | Applied; to confirm |
+| Applied because K-11 is ruled: revoke cascade not undone by unrevoke; CRAM reads but cannot write the document; scans hide the pointer and list the document | Applied; to confirm |
+| at_client `Enrollments.unrevoke` cited by name ([`enterprise-identity.md`](enterprise-identity.md)) | Applied; to confirm |
+| Reinterpretations: BO-5 "recorded in the blob" → "recorded with the enrollment (`signingAlgo`)"; X-K1, X-K3, X-K4 re-read for a hint-only IndexedDB | Applied; to confirm |
 
 ---
 
