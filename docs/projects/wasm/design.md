@@ -680,10 +680,9 @@ honours the full spec; every fix benefits native and server too; and one schema 
 browser database is byte-comparable with a desktop one.
 
 The case for IndexedDB is **payload size only** — `sqlite3.wasm` is a ~1 MB+ blob on
-top of the compiled Dart. Hold it in reserve as a payload mitigation. Because the async
-spec surface makes it a straightforward backend implementation rather than a migration,
-that decision can be revisited late, on the measured number from
-[`acceptance.md`](acceptance.md) X2, rather than committed to up front.
+top of the compiled Dart. Hold it in reserve as a payload mitigation. The payload was
+measured and accepted under [D-26](decisions.md) (W4: `sqlite3.wasm` costs +386 KB gz over
+`remote_only`, fixed per app); D4 (raw IndexedDB) is not triggered.
 
 **VFS choice** — `SimpleOpfsFileSystem` in a dedicated web worker, one directory per
 (atSign, enrollmentId) ([D-26](decisions.md)). SQLite runs in the worker; Dart stays on the

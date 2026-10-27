@@ -6,7 +6,7 @@
 explicit statement of what it does *not* establish.
 **Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`; T9 (the app-supplied
 transport) landed on `gkc-client-lifecycle` on 2026-09-13. §9a.1 amended 2026-10-18 for
-the per-passkey record design (K-1..K-9) and 2026-10-27 for K-10/K-11 and unrevoke; no other gate was re-measured on that pass. The measured
+the per-passkey record design (K-1..K-9) and 2026-10-27 for K-10/K-11 and unrevoke; T3.1 re-pointed to the SimpleOPFS VFS (D-26) 2026-10-18; no gate was re-measured on those passes. The measured
 baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see

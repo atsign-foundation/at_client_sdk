@@ -209,7 +209,7 @@ product; the compiler is a packaging decision.*
 ## 4. Where the facade lives
 
 **Inside `at_client_wasm`.** No new Dart package;
-[`decisions.md`](decisions.md) D-4 stands unamended.
+[`decisions.md`](decisions.md) D-4 stands (amended 2026-10-18 for the package name only).
 
 1. **The npm package is not a Dart package.** It is a build artifact — the compiled Dart
    `.js` engine plus a wrapper **authored once in TypeScript**, from which both the

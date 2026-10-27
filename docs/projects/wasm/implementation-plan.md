@@ -1024,7 +1024,7 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
 
-The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. Every PR below is **open and unmerged**; PR state was read with `gh` on 2026-10-18. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. Every PR below is **open and unmerged**; PR state was read with `gh` on 2026-10-18; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
 
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |

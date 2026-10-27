@@ -7,7 +7,7 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 `at_client_wasm` platform package is the first consumer of the result.
 **Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
 `9d9e5f7d7`, 2026-08-27, and against `gkc-client-lifecycle` on 2026-09-13 for the
-transport leg; phase table and document map refreshed 2026-10-18. Supersedes the single-file `plan.md` (deleted; recoverable at
+transport leg; phase table and document map refreshed 2026-10-18, browser at-keys custody 2026-10-27. Supersedes the single-file `plan.md` (deleted; recoverable at
 `d3e7dcdd5`, the commit that added it).
 
 > This doc is the **high-level WHY + WHAT** only: the neutrality thesis, the tier
@@ -26,6 +26,7 @@ transport leg; phase table and document map refreshed 2026-10-18. Supersedes the
 - [4. Goals and non-goals](#4-goals-and-non-goals)
 - [5. Ownership boundary against the PQ program](#5-ownership-boundary-against-the-pq-program)
 - [6. The phase trajectory at a glance](#6-the-phase-trajectory-at-a-glance)
+- [Beyond the neutral client](#beyond-the-neutral-client)
 
 ## Scope note: V1 is remote-only
 
@@ -63,7 +64,7 @@ canonical home rather than duplicating it.
 | [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-26, plus K-1..K-11 for browser at-keys custody), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
 | [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
-| [`browser-onboarding.md`](browser-onboarding.md)   | How the browser holds the atSign's @keys: requirements R1–R7, the one-record-per-passkey model, enroll / return / recover flows, lifecycle, security properties and what does not hold. |
+| [`browser-onboarding.md`](browser-onboarding.md)   | How the browser holds the atSign's @keys: requirements R1–R7, one public pointer per passkey (K-10) + one private document per enrollment (K-11), enroll / return / recover flows, lifecycle, security properties and what does not hold. |
 | [`atkeys-derivation.md`](atkeys-derivation.md)     | The derivation behind K-1..K-5 and the K-10/K-11 layout: constant PRF salt, one PRF call then HKDF, pointer and document format and AAD, test vector, cost of changing each choice later. |
 | [`pb3-storage-bundle.md`](pb3-storage-bundle.md)   | What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
 | [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](spike-indexeddb-storage.md) | The measurements behind D-26 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
@@ -218,7 +219,7 @@ at_client_wasm      *_io barrels      at_client_flutter
 Two things about this tier are worth stating at roadmap level:
 
 - **It adds no Dart package.** The facade is an entry point inside `at_client_wasm`, and
-  the npm artifact is a build output, not a pub package — so D-4 stands unamended.
+  the npm artifact is a build output, not a pub package — so D-4 stands (amended 2026-10-18 for the package name only).
 - **Node is a target, not just the browser.** Node supplies `WebSocket`,
   `crypto.subtle`, `fetch` and `navigator`, but **no `indexedDB` and no `localStorage`**,
   so a Node consumer supplies storage from TypeScript. This works because a JS object can
@@ -290,14 +291,14 @@ ruling that a removed default is preferable to a conditional default.
 
 ## 6. The phase trajectory at a glance
 
-| Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-10-18                                                                  |
+| Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-10-18 (phase 5 keys line 2026-10-27)                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** ([#2149], [#2183]); `at_client` joins with PB-3 stage 5 (open, [#2263])        |
 | **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **Landed** — S4–S6 ([#2162]); S1–S3 superseded by the transport work ([#2163], [#2164])  |
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Built, in review** — [#2223] (draft), with the web transport                           |
 | **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 built, in review** — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **In review** — `at_client` side is PB-3 stages 4–5 (breaking, draft); `at_utils` not started |
-| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-9; first live session partial — see [`implementation-plan.md`](implementation-plan.md) §5b |
+| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-11 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live session partial — see [`implementation-plan.md`](implementation-plan.md) §5b |
 | **6 — JS/TS facade**    | The `@JSExport` facade and its TypeScript entry point; the npm package. See [`js-api.md`](js-api.md).                              | T6               | Dev harness only; the `@atsign/at-client-web` facade is a draft plan, gated on OQ-16      |
 | **7 — Deferred**        | File transfer on web, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. Browser onboarding is **no longer deferred** (K-1..K-11). | —                | —                                                                                        |
 
@@ -324,7 +325,7 @@ at all — see [`acceptance.md`](acceptance.md) §4.
 
 ## Beyond the neutral client
 
-Three adjacent systems depend on this work but are **not** part of this doc set's rulings. Their state, as of 2026-10-18:
+Three adjacent systems depend on this work. Browser at-keys custody is ruled in this doc set (K-1..K-11 in [`decisions.md`](decisions.md)); the other two are **not** part of its rulings. Their state, as of 2026-10-27:
 
 | System | What | State | Where |
 | --- | --- | --- | --- |
