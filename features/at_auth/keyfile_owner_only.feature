@@ -5,7 +5,7 @@ Feature: Keyfiles are written owner-only
   had before. Written as root, the keyfile and its .bak and .pre-v1 copies
   take the owner and group of the keyfile as it was read; a keyfile that did
   not exist stays owned by root, and root does not rewrite a keyfile that is
-  a symbolic link. Each write goes to a temporary file that is created with
+  a symbolic link or whose directory is one. Each write goes to a temporary file that is created with
   mode 0600 before any key material is written to it, and is then renamed
   into place. On Windows the file takes its directory's permissions, as before.
 
@@ -110,6 +110,19 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo, running as root, updates it, and the keyfile is replaced by a link to a second account's file before the update writes
     Then the keyfile written is a file with the first account's owner and group
     And the second account's file is unchanged
+
+  @race
+  Scenario: A keys directory replaced while root updates a keyfile in it is not written through
+    Given @alice🛠's keyfile is owned by one account, in a directory that account controls
+    When FileAtKeysIo, running as root, updates it, and the directory is replaced by a link to a second account's directory before the update writes
+    Then the second account's directory is unchanged
+    And the keyfile written is a file with the first account's owner and group, in the directory the keyfile was read from
+
+  Scenario: Root does not write a keyfile in a directory that is a symbolic link
+    Given @alice🛠's keys directory is a symbolic link to a second account's directory
+    When FileAtKeysIo, running as root, flushes keys onto the keyfile there
+    Then the flush fails
+    And the second account's directory is unchanged
 
   Scenario: A backup path that is a symbolic link is replaced when root rewrites the keyfile
     Given @alice🛠's keyfile is owned by one account
