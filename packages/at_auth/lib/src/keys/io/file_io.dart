@@ -128,7 +128,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     await _preserveLegacyShape(file, existing, document, previous);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
-    await _replaceOwnerOnly(File('${file.path}.bak'), previous);
+    await _replaceOwnerOnly(File('${file.path}.bak'), previous, keyfile: file);
     await _writeAtRestDocument(file, document);
   }
 
@@ -150,7 +150,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     if (!candidate.containsKey('version')) return;
     final backup = File('${file.path}$legacyShapeBackupSuffix');
     if (backup.existsSync()) return;
-    await _replaceOwnerOnly(backup, previous);
+    await _replaceOwnerOnly(backup, previous, keyfile: file);
     _logger.shout(
         'Upgrading ${file.path} to the typed keyfile format: it now carries '
         'per-enrollment key material, which a build older than this one does '
@@ -196,12 +196,15 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// Replaces [file] with [bytes] through a temporary file renamed over it,
   /// so a crash mid-write leaves [file] as it was rather than truncated.
   /// Where the platform has file modes, [file] ends up readable and writable
-  /// by its owner alone.
-  Future<void> _replaceOwnerOnly(File file, List<int> bytes) async {
+  /// by its owner alone. [keyfile] names the keyfile when [file] is a copy
+  /// of it.
+  Future<void> _replaceOwnerOnly(File file, List<int> bytes,
+      {File? keyfile}) async {
     final temp = File('${file.path}.tmp');
     await _deleteLeftover(temp.path);
     final previousMode = _platformHasFileModes ? _modeOf(file) : null;
-    final ownerOnly = await _writeTemporary(temp, bytes, _ownerToKeep(file));
+    final ownerOnly =
+        await _writeTemporary(temp, bytes, _ownerToKeep(file, keyfile));
     await temp.rename(file.path);
     if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
       _logger.info('${file.path} is now readable and writable by its owner '
@@ -209,15 +212,17 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
   }
 
-  /// When this process runs as root, the owner and group of [file] if it
-  /// exists, which the file replacing it keeps.
-  OwnerAndGroup? _ownerToKeep(File file) {
+  /// When this process runs as root, the owner and group the file written at
+  /// [file] takes: those of [file] if it exists, or else those of [keyfile],
+  /// the keyfile [file] is a copy of.
+  OwnerAndGroup? _ownerToKeep(File file, File? keyfile) {
     if (!ownerOnlyWritesAvailable || !runningAsRoot) return null;
     try {
-      return ownerAndGroupOf(file.path);
+      return ownerAndGroupOf(file.path) ??
+          (keyfile == null ? null : ownerAndGroupOf(keyfile.path));
     } on FileSystemException catch (e) {
-      _logger.warning('Writing ${file.path} owned by root: the owner of the '
-          'file it replaces could not be read: $e');
+      _logger.warning('Writing ${file.path} owned by root: the owner to '
+          'give it could not be read: $e');
       return null;
     }
   }

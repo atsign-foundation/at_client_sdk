@@ -191,6 +191,37 @@ void main() {
             : 'runs only as root, the one account that can give a file to '
                 'another owner');
 
+    test(
+        "Copies root writes for the first time take the keyfile's owner and "
+        'group', () async {
+      await writeKeyfile(mode: '600');
+      await _chown('1234:2345', keyfile);
+      final copies = [
+        '$keyfile.bak',
+        '$keyfile${FileAtKeysIo.legacyShapeBackupSuffix}'
+      ];
+      expect(copies.where((copy) => File(copy).existsSync()), isEmpty,
+          reason: 'the Given is a flat keyfile with no copies beside it');
+
+      await io().update(atsign.toAtsign(), (keys) {
+        keys.addKey(symmetricKey('typed'));
+        return true;
+      });
+
+      for (final copy in copies) {
+        expect(await _ownerOf(copy), '1234:2345',
+            reason: 'a copy root writes for the first time takes the '
+                'keyfile\'s owner and group: $copy');
+        expect(_modeOf(copy), '0600',
+            reason: 'the copy is readable and writable by its owner alone: '
+                '$copy');
+      }
+    },
+        skip: _runningAsRoot
+            ? false
+            : 'runs only as root, the one account that can give a file to '
+                'another owner');
+
     test('Narrowing a keyfile to owner-only is logged', () async {
       await writeKeyfile(mode: '644');
 
