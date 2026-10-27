@@ -3,6 +3,8 @@
 - fix: on Linux and macOS, a keyfile, and the `.bak` and `.pre-v1` copies
   written beside it, are readable and writable by their owner alone (mode
   0600), whatever mode the keyfile had before.
+- fix: on Linux and macOS, a keyfile, `.bak` or `.pre-v1` copy that root
+  rewrites keeps the owner and group it had.
 - build: requires `at_utils` ^3.2.0.
 - build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer

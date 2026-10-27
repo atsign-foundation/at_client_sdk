@@ -175,6 +175,22 @@ void main() {
           reason: 'the keyfile is readable and writable by its owner alone');
     });
 
+    test('A keyfile rewritten by root keeps its owner and group', () async {
+      await writeKeyfile(mode: '600');
+      await _chown('1234:2345', keyfile);
+
+      await io().update(atsign.toAtsign(), (keys) => true);
+
+      expect(await _ownerOf(keyfile), '1234:2345',
+          reason: 'a keyfile root rewrites keeps the owner and group it had');
+      expect(_modeOf(keyfile), '0600',
+          reason: 'the keyfile is readable and writable by its owner alone');
+    },
+        skip: _runningAsRoot
+            ? false
+            : 'runs only as root, the one account that can give a file to '
+                'another owner');
+
     test('Narrowing a keyfile to owner-only is logged', () async {
       await writeKeyfile(mode: '644');
 
@@ -212,6 +228,21 @@ Future<void> _chmod(String mode, String path) async {
   final result = await Process.run('chmod', [mode, path]);
   expect(result.exitCode, 0, reason: '${result.stderr}');
 }
+
+Future<void> _chown(String owner, String path) async {
+  final result = await Process.run('chown', [owner, path]);
+  expect(result.exitCode, 0, reason: '${result.stderr}');
+}
+
+Future<String> _ownerOf(String path) async {
+  final result = await Process.run(
+      'stat', Platform.isMacOS ? ['-f', '%u:%g', path] : ['-c', '%u:%g', path]);
+  expect(result.exitCode, 0, reason: '${result.stderr}');
+  return (result.stdout as String).trim();
+}
+
+final _runningAsRoot =
+    (Process.runSync('id', ['-u']).stdout as String).trim() == '0';
 
 class _RecordedLogs implements LoggingHandler {
   final List<String> messages = [];

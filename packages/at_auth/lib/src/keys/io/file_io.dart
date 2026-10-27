@@ -201,7 +201,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     final temp = File('${file.path}.tmp');
     await _deleteLeftover(temp.path);
     final previousMode = _platformHasFileModes ? _modeOf(file) : null;
-    final ownerOnly = await _writeTemporary(temp, bytes);
+    final ownerOnly = await _writeTemporary(temp, bytes, _ownerToKeep(file));
     await temp.rename(file.path);
     if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
       _logger.info('${file.path} is now readable and writable by its owner '
@@ -209,13 +209,33 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
   }
 
+  /// When this process runs as root, the owner and group of [file] if it
+  /// exists, which the file replacing it keeps.
+  OwnerAndGroup? _ownerToKeep(File file) {
+    if (!ownerOnlyWritesAvailable || !runningAsRoot) return null;
+    try {
+      return ownerAndGroupOf(file.path);
+    } on FileSystemException catch (e) {
+      _logger.warning('Writing ${file.path} owned by root: the owner of the '
+          'file it replaces could not be read: $e');
+      return null;
+    }
+  }
+
   /// Writes [bytes] to [temp], owner-only where the platform has file modes,
-  /// and says whether it is.
-  Future<bool> _writeTemporary(File temp, List<int> bytes) async {
+  /// and given [owner] when one is named; says whether it is owner-only.
+  Future<bool> _writeTemporary(
+      File temp, List<int> bytes, OwnerAndGroup? owner) async {
     if (ownerOnlyWritesAvailable) {
       // NOTE: the temporary file is created by this write, owner-only before
       // any byte reaches it; anything already at its path fails the write.
-      if (writeNewOwnerOnly(temp.path, bytes)) return true;
+      final written = writeNewOwnerOnly(temp.path, bytes, owner: owner);
+      if (!written.ownerSet) {
+        _logger.warning('Wrote ${temp.path} owned by root: it could not be '
+            'given uid ${owner!.uid} and gid ${owner.gid}, which own the file '
+            'it replaces');
+      }
+      if (written.modeSet) return true;
       _logger.warning('Wrote ${temp.path} without owner-only permissions: '
           'its file system did not take mode ${_octal(ownerOnlyMode)}');
       return false;

@@ -267,7 +267,8 @@ mid-write can never truncate the keyfile, and a rewrite over an existing
 file first preserves the previous state as `<file>.bak` alongside it. On
 Linux and macOS the keyfile, its `.bak` and its `.pre-v1` copy are written
 readable and writable by their owner alone (mode 0600), whatever mode the
-keyfile had before.
+keyfile had before. Written as root, a file that already exists keeps its
+owner and group.
 
 ## Migrating from 3.x
 

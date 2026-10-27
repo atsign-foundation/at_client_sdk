@@ -1,11 +1,24 @@
 /// Mode 0600: read and write for the owner, nothing for anyone else.
 const ownerOnlyMode = 0x180;
 
+/// A file's owner and group, as numeric ids.
+typedef OwnerAndGroup = ({int uid, int gid});
+
 /// Whether [writeNewOwnerOnly] can run here: never, on a platform without
 /// `dart:ffi`.
 bool get ownerOnlyWritesAvailable => false;
 
+/// Whether this process runs with an effective user id of 0; never reported
+/// on a platform without `dart:ffi`.
+bool get runningAsRoot => false;
+
 /// Not available on a platform without `dart:ffi`; callers check
 /// [ownerOnlyWritesAvailable] first.
-bool writeNewOwnerOnly(String path, List<int> bytes) =>
+OwnerAndGroup? ownerAndGroupOf(String path) =>
+    throw UnsupportedError('Reading a file\'s owner needs dart:ffi');
+
+/// Not available on a platform without `dart:ffi`; callers check
+/// [ownerOnlyWritesAvailable] first.
+({bool modeSet, bool ownerSet}) writeNewOwnerOnly(String path, List<int> bytes,
+        {OwnerAndGroup? owner}) =>
     throw UnsupportedError('Owner-only file writes need dart:ffi');
