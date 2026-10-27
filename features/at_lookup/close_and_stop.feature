@@ -6,21 +6,23 @@ Feature: AtLookUp.close() closes the connection, and stop() ends the lookup
 
   Races: a request in flight when close() runs fails at once and the next
   call reconnects; calls made after close() share one new connection; stop()
-  wins over a reconnect in flight; close() after stop() changes nothing.
+  wins over a reconnect in flight; close() after stop() changes nothing; and
+  an authentication close() overtook marks only the connection it ran on.
   Replay: each reconnect authenticates afresh on its own connection, against
   a new challenge from the atServer, so nothing from the old connection is
   reused.
   DoS: nothing reconnects by itself after close(), and nothing ever after
   stop().
   Forgery and impersonation: a reconnect authenticates as the lookup's own
-  atSign with the authenticator it was built with; a stopped client's lookup,
-  and a superseded enrollment's after a retrofit, cannot reconnect; and a
-  client retrofitted on a caller's lookup logs in again as its new enrollment.
+  atSign, with the authenticator and enrollment it holds when it reconnects;
+  a stopped client's lookup, and a superseded enrollment's after a retrofit,
+  cannot reconnect; and a client retrofitted on a caller's lookup logs in
+  again as its new enrollment.
 
   Scenario: A call after close() reconnects
     Given a lookup that has authenticated and run a command
     When the caller closes it and then runs another command
-    Then the lookup opens a new connection, authenticates as the same atSign with the same credentials, and runs the command
+    Then the lookup opens a new connection, authenticates as the same atSign with the credentials it holds, and runs the command
 
   Scenario: close() fails a request in flight at once
     Given a lookup with a request waiting on its connection
@@ -49,6 +51,11 @@ Feature: AtLookUp.close() closes the connection, and stop() ends the lookup
     Given a stopped lookup
     When the caller closes it
     Then every later call still fails with StoppedException
+
+  Scenario: A late authentication marks only its own connection
+    Given a lookup closed while an authentication was in flight, and a command opening a new connection
+    When the old authentication succeeds
+    Then the new connection authenticates for itself before the command runs
 
   Scenario: A stopped client opens no connection
     Given an AtClient that has stopped
