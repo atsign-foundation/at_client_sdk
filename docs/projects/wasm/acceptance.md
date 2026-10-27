@@ -6,7 +6,7 @@
 explicit statement of what it does *not* establish.
 **Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`; T9 (the app-supplied
 transport) landed on `gkc-client-lifecycle` on 2026-09-13. §9a.1 amended 2026-10-18 for
-the per-passkey record design (K-1..K-9); no other gate was re-measured on that pass. The measured
+the per-passkey record design (K-1..K-9) and 2026-10-27 for K-10/K-11 and unrevoke; no other gate was re-measured on that pass. The measured
 baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see
@@ -433,16 +433,20 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
 
-**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add X-K5..X-K9; the 2026-10-21 revocation ruling adds X-K10.** Under the per-passkey record ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open. Read X-K2 as "the derived kek is imported non-extractable", and X-K3 as "a record present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error". X-K1 and X-K4 stand unchanged. None of the new gates below is built.
+**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add X-K5..X-K9; the 2026-10-21 revocation ruling adds X-K10; the 2026-10-27 K-10/K-11 and unrevoke rulings amend X-K9 and X-K10 and add X-K11..X-K14.** Under the per-passkey record ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open. Read X-K2 as "the derived kek is imported non-extractable", and X-K3 as "a record present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error". X-K1 and X-K4 stand unchanged. None of the new gates below is built.
 
 | # | Gate | Proves |
 | --- | --- | --- |
 | X-K5 | HKDF with `P` = bytes `00..1f` and atSign `@alice` yields the lookup key and kek in [`atkeys-derivation.md`](atkeys-derivation.md), and `@Alice`, `alice`, `@ali.ce` yield the same | K-1, K-3: the derivation and atSign canonicalisation are stable across implementations |
 | X-K6 | A record whose `v`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
-| X-K7 | A valid older record whose public keys no longer match the published ones is refused before PKAM | K-5: rollback |
+| X-K7 | A valid older document whose public keys no longer match the published ones is refused before the keys are used ("before PKAM" pending K-5′) | K-5: rollback |
 | X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
-| X-K9 | After a successful open the credential hint and local record are rewritten, and `navigator.storage.persist()` is requested once; with the replica deleted, the passkey alone restores it | K-6 clarification: eviction is a UX cost, not a loss |
-| X-K10 | A revoked enrollment's PKAM is refused and stays refused; a same-key re-enroll without approver action is refused with `AT0032`; the revoked enrollment's record is not refreshed | revocation is final (2026-10-21). The approver path is not gated until its mechanism is ruled |
+| X-K9 | After a successful open the credential hint is rewritten and `navigator.storage.persist()` is requested once; with IndexedDB cleared, the passkey alone restores the session (pointer → PKAM → document) | K-6 clarification, retained under K-10/K-11: eviction is a UX cost, not a loss |
+| X-K10 | A revoked enrollment's PKAM is refused with `AT0027` until an approver unrevokes it; a new `enroll:request` with the same APKAM public key is refused with `AT0032`, asserted on the message text `The apkamPublicKey is already held by another enrollment` (the code `AT0032` is also returned for a duplicate appName + deviceName) | revocation (2026-10-21): same-key re-enroll needs approver action |
+| X-K11 | The pointer `public:_<lookupHex>.atkeysv@<atSign>` is written once with no TTL, is readable by unauthenticated `lookup:` on the atSign's own atServer, opens only as `typ:"eid"`, and is absent from every `scan` (owner, `showhidden:true`, CRAM, APKAM, unauthenticated) | K-10 |
+| X-K12 | The document `atkeys.<eid>.a.__e@<atSign>` is read and written over PKAM by its enrollment; another enrollment is refused; CRAM can read it but its write is refused; it opens only as `typ:"atkeys"` and holds no APKAM private key; it is listed by its own enrollment's and CRAM's scans (not hidden) | K-11 |
+| X-K13 | After revoke the document is unreadable; after `enroll:unrevoke` by CRAM or a `__manage` holder with all target namespaces, the same `enrollmentId` PKAMs again with the same key, keeps its original expiry, and reads the document; unrevoke of an expired enrollment fails with `AT0028`; `enroll:approve` on a revoked enrollment is refused | R-a: re-enroll after revoke = unrevoke |
+| X-K14 | Unrevoke of an enrollment does not reinstate the enrollments it approved that the revoke cascaded to | revoke cascade is not undone |
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 

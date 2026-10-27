@@ -74,4 +74,3 @@ Freshness per write comes from the random IV.
 | A — salt | High. A return flow can migrate in one prompt with `prf.eval.second`; devices that next appear via recovery must re-enroll. |
 | B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
 | C2 — record format | Low. `v` migrates on the next open. |
-| Pointer name (K-10) | High. It is written once and has no TTL; a new name needs every passkey to open once under the old name and write the new one. |
