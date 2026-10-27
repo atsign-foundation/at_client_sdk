@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_commons/at_commons.dart';
@@ -290,12 +291,14 @@ class AtKeysAssurance {
       // discarded, leaving a store that reads as holding nothing.
       final emptied = !candidate.containsKey('version') &&
           !_holdsCredential(existingMaterials, existingLegacy);
-      // NOTE: a typed document holding no typed material is written in the
-      // flat shape, without the typed header; the atSign it names must be the
-      // one the candidate is written for.
-      final flattened =
-          !candidate.containsKey('version') && !_holdsTypedContent(existing);
-      if (!emptied && flattened) {
+      // NOTE: a typed document of the version this build writes, holding no
+      // typed material, is written in the flat shape, without the typed
+      // header. The atSign it names must be the one the candidate is written
+      // for, whenever the caller names that atSign.
+      final flattened = !candidate.containsKey('version') &&
+          existing['version'] == AtKeys.supportedVersion &&
+          !_holdsTypedContent(existing);
+      if (flattened && (atsign != null || !emptied)) {
         _assertSame(_asAtsign(existing['atsign']),
             _asAtsign(atsign?.toString()), 'map.atsign');
       } else if (!emptied) {
@@ -339,11 +342,11 @@ class AtKeysAssurance {
     'selfEncryptionKey',
   };
 
-  bool _holdsTypedContent(Map<String, dynamic> json) => const [
-        'enrollments',
-        'atsignKeys',
-        'keys'
-      ].any((field) => json[field] is List && (json[field] as List).isNotEmpty);
+  /// Whether [json] carries a typed container as anything but an empty list.
+  bool _holdsTypedContent(Map<String, dynamic> json) =>
+      const ['enrollments', 'atsignKeys', 'keys'].any((field) =>
+          json.containsKey(field) &&
+          !(json[field] is List && (json[field] as List).isEmpty));
 
   bool _holdsCredential(
           List<CryptographicMaterial> materials, Map<String, dynamic> legacy) =>

@@ -618,6 +618,88 @@ void main() {
       });
     });
   });
+
+  group('Given a typed keyfile with no typed key material', () {
+    const assurance = AtKeysAssurance();
+    const alice = '@alice🛠';
+
+    Map<String, dynamic> typedWithoutMaterial(
+            {String atsign = alice, Map<String, dynamic>? legacy}) =>
+        {
+          ...(legacy ?? _fixtureLegacyJson()),
+          'version': AtKeys.supportedVersion,
+          'atsign': atsign,
+          'keys': <Object?>[],
+        };
+
+    test(
+        'when it is rewritten flat for the atSign it names, then the rewrite '
+        'is accepted', () {
+      assurance.validateMapUpdate(
+          existing: typedWithoutMaterial(),
+          candidate: _fixtureLegacyJson(),
+          atsign: alice.toAtsign());
+    });
+
+    test(
+        'when it is rewritten flat for another atSign, then the rewrite is '
+        'refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: typedWithoutMaterial(atsign: '@bob🛠'),
+              candidate: _fixtureLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for');
+    });
+
+    test(
+        'when it holds no credential and is rewritten flat for another '
+        'atSign, then the rewrite is refused', () {
+      final publicOnly = {
+        for (final entry in _fixtureLegacyJson().entries)
+          if (entry.key == 'aesPkamPublicKey' ||
+              entry.key == 'aesEncryptPublicKey')
+            entry.key: entry.value,
+      };
+      expect(
+          () => assurance.validateMapUpdate(
+              existing:
+                  typedWithoutMaterial(atsign: '@bob🛠', legacy: publicOnly),
+              candidate: publicOnly,
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whether or not it holds a credential');
+    });
+
+    test(
+        'when its version is not the one this build writes, then a flat '
+        'rewrite is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: {...typedWithoutMaterial(), 'version': 2},
+              candidate: _fixtureLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()),
+          reason: 'a version this build does not write is not dropped');
+    });
+
+    test(
+        'when its keys field is anything but an empty list, then a flat '
+        'rewrite is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(existing: {
+                ...typedWithoutMaterial(),
+                'keys': {'unexpected': true}
+              }, candidate: _fixtureLegacyJson(), atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()),
+          reason: 'a keys field holding anything is not dropped');
+    });
+  });
 }
 
 final _createdAt = DateTime.utc(2024, 1, 1);
