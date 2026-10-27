@@ -3,9 +3,10 @@ Feature: Keyfiles are written owner-only
   .pre-v1 copies it keeps beside one, readable and writable by the owner
   alone (mode 0600), whatever the process umask and whatever mode the file
   had before. Written as root, a file that already exists keeps its owner
-  and group. Each write goes to a temporary file that is created with mode
-  0600 before any key material is written to it, and is then renamed into
-  place. On Windows the file takes its directory's permissions, as before.
+  and group, and a .bak or .pre-v1 copy written for the first time takes
+  the keyfile's. Each write goes to a temporary file that is created with
+  mode 0600 before any key material is written to it, and is then renamed
+  into place. On Windows the file takes its directory's permissions, as before.
 
   Races: every write already holds the keyfile's lock; the temporary file is
   0600 from the moment it exists, and a temporary file left by an interrupted
@@ -81,3 +82,10 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo, running as root, updates it
     Then the keyfile keeps that owner and group
     And the keyfile's mode is 0600
+
+  Scenario: Copies root writes for the first time take the keyfile's owner and group
+    Given @alice🛠's keyfile is in the flat shape, owned by another account, with mode 0600
+    And no .bak or .pre-v1 copy beside it
+    When FileAtKeysIo, running as root, updates it with typed key material
+    Then the .bak and the .pre-v1 copy have the keyfile's owner and group
+    And their mode is 0600
