@@ -6,7 +6,7 @@
 - fix: on Linux and macOS, when root rewrites a keyfile, the keyfile and the
   `.bak` and `.pre-v1` copies written beside it take the owner and group of
   the keyfile as it was read, and root does not rewrite a keyfile that is a
-  symbolic link.
+  symbolic link or whose directory is one.
 - build: requires `at_utils` ^3.2.0.
 - build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer

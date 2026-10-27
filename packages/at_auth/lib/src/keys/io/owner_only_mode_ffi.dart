@@ -10,8 +10,8 @@ const ownerOnlyMode = 0x180;
 /// A file's owner and group, as numeric ids.
 typedef OwnerAndGroup = ({int uid, int gid});
 
-/// What [readNoFollow] read: the file's bytes, and its owner and group, or
-/// null when this libc cannot report them.
+/// What [KeyfileDirectory.read] read: the file's bytes, and its owner and
+/// group, or null when this libc cannot report them.
 typedef KeyfileRead = ({List<int> bytes, OwnerAndGroup? owner});
 
 /// Whether [writeNewOwnerOnly] can run here: Linux or macOS, with the libc
@@ -21,34 +21,122 @@ bool get ownerOnlyWritesAvailable => _Libc.instance != null;
 /// Whether this process runs with an effective user id of 0.
 bool get runningAsRoot => _Libc.instance?.geteuid() == 0;
 
-/// Reads the file at [path] through one descriptor opened without following
-/// a symbolic link, taking its owner and group from that descriptor.
-///
-/// Throws [FileSystemException] when [path] is a symbolic link or anything
-/// other than a regular file, or cannot be read.
-KeyfileRead readNoFollow(String path) {
-  final libc = _Libc.instance!;
-  final flags = libc.openForReadingNoFollow;
-  if (flags == null) {
-    throw FileSystemException(
-        'Cannot open a file without following a link on this platform', path);
+/// A directory opened once, without following a symbolic link, in which a
+/// keyfile and its copies are read and written by name.
+final class KeyfileDirectory {
+  KeyfileDirectory._(this._libc, this._fd, this.path);
+
+  final _Libc _libc;
+  final int _fd;
+
+  /// The path the directory was opened at.
+  final String path;
+
+  /// Opens the directory at [path].
+  ///
+  /// Throws [FileSystemException] when [path] is a symbolic link, is not a
+  /// directory, or cannot be opened.
+  static KeyfileDirectory open(String path) {
+    final libc = _Libc.instance!;
+    final flags = libc.openDirectoryNoFollow;
+    if (flags == null) {
+      throw FileSystemException(
+          'Cannot open a directory without following a link on this platform',
+          path);
+    }
+    final fd = _withNative(path, (native) => libc.open(native, flags, 0));
+    if (fd < 0) {
+      throw FileSystemException(
+          'Cannot open the directory without following a link', path);
+    }
+    return KeyfileDirectory._(libc, fd, path);
   }
-  final nativePath = path.toNativeUtf8();
-  final int fd;
+
+  /// Whether anything is at [name] here, a symbolic link included.
+  bool exists(String name) {
+    final fd = _openAt(name, _libc.openForReadingNoFollow!, 0);
+    if (fd >= 0) {
+      _libc.close(fd);
+      return true;
+    }
+    final target = malloc<Uint8>(1);
+    try {
+      return _withNative(
+              name, (native) => _libc.readlinkat(_fd, native, target, 1)) >=
+          0;
+    } finally {
+      malloc.free(target);
+    }
+  }
+
+  /// Reads [name] through one descriptor opened without following a symbolic
+  /// link, taking its owner and group from that descriptor.
+  ///
+  /// Throws [FileSystemException] when [name] is a symbolic link or anything
+  /// other than a regular file, or cannot be read.
+  KeyfileRead read(String name) {
+    final fd = _openAt(name, _libc.openForReadingNoFollow!, 0);
+    if (fd < 0) {
+      throw FileSystemException(
+          'Cannot open the file without following a link', '$path/$name');
+    }
+    try {
+      final owner = _fdOwnerReader?.call(fd, '$path/$name');
+      return (bytes: _readAll(_libc, fd, '$path/$name'), owner: owner);
+    } finally {
+      _libc.close(fd);
+    }
+  }
+
+  /// Replaces [name] with [bytes] through `<name>.tmp`, which this call
+  /// creates readable and writable by its owner alone before any byte
+  /// reaches it, gives [owner] when one is named, and renames over [name].
+  ///
+  /// Says whether the file system took the mode and whether the owner was
+  /// set. Throws [FileSystemException] when the temporary file cannot be
+  /// created or written, or cannot be renamed into place.
+  ({bool modeSet, bool ownerSet}) replace(String name, List<int> bytes,
+      {OwnerAndGroup? owner}) {
+    final temp = '$name.tmp';
+    _withNative(temp, (native) => _libc.unlinkat(_fd, native, 0));
+    final fd = _openAt(temp, _libc.createNewForWriting, ownerOnlyMode);
+    if (fd < 0) {
+      throw FileSystemException('Cannot create the file', '$path/$temp');
+    }
+    final ({bool modeSet, bool ownerSet}) written;
+    try {
+      final ownerSet =
+          owner == null || _libc.fchown(fd, owner.uid, owner.gid) == 0;
+      final modeSet = _libc.fchmod(fd, ownerOnlyMode) == 0;
+      _writeAll(_libc, fd, bytes, '$path/$temp');
+      written = (modeSet: modeSet, ownerSet: ownerSet);
+    } finally {
+      _libc.close(fd);
+    }
+    final renamed = _withNative(
+        temp,
+        (from) =>
+            _withNative(name, (to) => _libc.renameat(_fd, from, _fd, to)));
+    if (renamed != 0) {
+      throw FileSystemException(
+          'Cannot rename the file into place', '$path/$name');
+    }
+    return written;
+  }
+
+  /// Closes the directory.
+  void close() => _libc.close(_fd);
+
+  int _openAt(String name, int flags, int mode) =>
+      _withNative(name, (native) => _libc.openat(_fd, native, flags, mode));
+}
+
+T _withNative<T>(String text, T Function(Pointer<Utf8>) use) {
+  final native = text.toNativeUtf8();
   try {
-    fd = libc.open(nativePath, flags, 0);
+    return use(native);
   } finally {
-    malloc.free(nativePath);
-  }
-  if (fd < 0) {
-    throw FileSystemException(
-        'Cannot open the file without following a link', path);
-  }
-  try {
-    final owner = _fdOwnerReader?.call(fd, path);
-    return (bytes: _readAll(libc, fd, path), owner: owner);
-  } finally {
-    libc.close(fd);
+    malloc.free(native);
   }
 }
 
@@ -120,6 +208,12 @@ List<int> _readAll(_Libc libc, int fd, String path) {
 }
 
 typedef _OpenFunction = int Function(Pointer<Utf8>, int, int);
+typedef _OpenAtFunction = int Function(int, Pointer<Utf8>, int, int);
+typedef _RenameAtFunction = int Function(
+    int, Pointer<Utf8>, int, Pointer<Utf8>);
+typedef _UnlinkAtFunction = int Function(int, Pointer<Utf8>, int);
+typedef _ReadLinkAtFunction = int Function(
+    int, Pointer<Utf8>, Pointer<Uint8>, int);
 typedef _FdModeFunction = int Function(int, int);
 typedef _FdOwnerFunction = int Function(int, int, int);
 typedef _ReadWriteFunction = int Function(int, Pointer<Uint8>, int);
@@ -130,7 +224,12 @@ final class _Libc {
   _Libc._(
       {required this.createNewForWriting,
       required this.openForReadingNoFollow,
+      required this.openDirectoryNoFollow,
       required this.open,
+      required this.openat,
+      required this.renameat,
+      required this.unlinkat,
+      required this.readlinkat,
       required this.fchmod,
       required this.fchown,
       required this.read,
@@ -144,7 +243,15 @@ final class _Libc {
   /// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC`, or null on an architecture whose
   /// `O_NOFOLLOW` this does not know.
   final int? openForReadingNoFollow;
+
+  /// `O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC`, null alongside
+  /// [openForReadingNoFollow].
+  final int? openDirectoryNoFollow;
   final _OpenFunction open;
+  final _OpenAtFunction openat;
+  final _RenameAtFunction renameat;
+  final _UnlinkAtFunction unlinkat;
+  final _ReadLinkAtFunction readlinkat;
   final _FdModeFunction fchmod;
   final _FdOwnerFunction fchown;
   final _ReadWriteFunction read;
@@ -175,11 +282,28 @@ final class _Libc {
       final open = libc.lookupFunction<
           Int32 Function(Pointer<Utf8>, Int32, VarArgs<(Uint32,)>),
           _OpenFunction>('open');
+      final openat = libc.lookupFunction<
+          Int32 Function(Int32, Pointer<Utf8>, Int32, VarArgs<(Uint32,)>),
+          _OpenAtFunction>('openat');
+      final renameat = libc.lookupFunction<
+          Int32 Function(Int32, Pointer<Utf8>, Int32, Pointer<Utf8>),
+          _RenameAtFunction>('renameat');
+      final unlinkat = libc.lookupFunction<
+          Int32 Function(Int32, Pointer<Utf8>, Int32),
+          _UnlinkAtFunction>('unlinkat');
+      final readlinkat = libc.lookupFunction<
+          IntPtr Function(Int32, Pointer<Utf8>, Pointer<Uint8>, Size),
+          _ReadLinkAtFunction>('readlinkat');
       if (Platform.isMacOS) {
         return _Libc._(
             createNewForWriting: 0x1000a01,
             openForReadingNoFollow: 0x1000100,
+            openDirectoryNoFollow: 0x1100100,
             open: open,
+            openat: openat,
+            renameat: renameat,
+            unlinkat: unlinkat,
+            readlinkat: readlinkat,
             fchmod: libc.lookupFunction<Int32 Function(Int32, Uint16),
                 _FdModeFunction>('fchmod'),
             fchown: fchown,
@@ -188,10 +312,16 @@ final class _Libc {
             close: close,
             geteuid: geteuid);
       }
+      final noFollow = _linuxNoFollow(Abi.current());
       return _Libc._(
           createNewForWriting: 0x800c1,
-          openForReadingNoFollow: _linuxOpenForReadingNoFollow(Abi.current()),
+          openForReadingNoFollow: noFollow?.file,
+          openDirectoryNoFollow: noFollow?.directory,
           open: open,
+          openat: openat,
+          renameat: renameat,
+          unlinkat: unlinkat,
+          readlinkat: readlinkat,
           fchmod: libc.lookupFunction<Int32 Function(Int32, Uint32),
               _FdModeFunction>('fchmod'),
           fchown: fchown,
@@ -205,16 +335,19 @@ final class _Libc {
   }
 }
 
-/// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC` on Linux, where `O_NOFOLLOW` is
-/// 0100000 on Arm and 0400000 on the generic layout x86 and RISC-V use.
-int? _linuxOpenForReadingNoFollow(Abi abi) {
+/// The Linux flags that open a file, and a directory, without following a
+/// symbolic link: `O_NOFOLLOW` and `O_DIRECTORY` are 0100000 and 040000 on
+/// Arm, and 0400000 and 0200000 on the generic layout x86 and RISC-V use.
+({int file, int directory})? _linuxNoFollow(Abi abi) {
   const cloexec = 0x80000;
-  if (abi == Abi.linuxArm || abi == Abi.linuxArm64) return cloexec | 0x8000;
+  if (abi == Abi.linuxArm || abi == Abi.linuxArm64) {
+    return (file: cloexec | 0x8000, directory: cloexec | 0x8000 | 0x4000);
+  }
   if (abi == Abi.linuxX64 ||
       abi == Abi.linuxIA32 ||
       abi == Abi.linuxRiscv32 ||
       abi == Abi.linuxRiscv64) {
-    return cloexec | 0x20000;
+    return (file: cloexec | 0x20000, directory: cloexec | 0x20000 | 0x10000);
   }
   return null;
 }

@@ -270,7 +270,7 @@ readable and writable by their owner alone (mode 0600), whatever mode the
 keyfile had before. Written as root, the keyfile and its `.bak` and `.pre-v1`
 copies take the owner and group of the keyfile as it was read; a keyfile that
 did not exist stays owned by root, and root does not rewrite a keyfile that is
-a symbolic link.
+a symbolic link or whose directory is one.
 
 ## Migrating from 3.x
 
