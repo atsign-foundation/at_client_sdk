@@ -2,9 +2,10 @@ Feature: Keyfiles are written owner-only
   On Linux and macOS, FileAtKeysIo writes every keyfile, and the .bak and
   .pre-v1 copies it keeps beside one, readable and writable by the owner
   alone (mode 0600), whatever the process umask and whatever mode the file
-  had before. Written as root, a file that already exists keeps its owner
-  and group, and a .bak or .pre-v1 copy written for the first time takes
-  the keyfile's. Each write goes to a temporary file that is created with
+  had before. Written as root, the keyfile and its .bak and .pre-v1 copies
+  take the owner and group of the keyfile as it was read; a keyfile that did
+  not exist stays owned by root, and root does not rewrite a keyfile that is
+  a symbolic link. Each write goes to a temporary file that is created with
   mode 0600 before any key material is written to it, and is then renamed
   into place. On Windows the file takes its directory's permissions, as before.
 
@@ -89,3 +90,30 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo, running as root, updates it with typed key material
     Then the .bak and the .pre-v1 copy have the keyfile's owner and group
     And their mode is 0600
+
+  Scenario: A backup owned by another account takes the keyfile's owner and group when root rewrites it
+    Given @alice🛠's keyfile is owned by one account, with mode 0600
+    And a .bak beside it is owned by a second account
+    When FileAtKeysIo, running as root, updates the keyfile
+    Then the .bak has the keyfile's owner and group
+    And the .bak's mode is 0600
+
+  Scenario: Root does not rewrite a keyfile that is a symbolic link
+    Given @alice🛠's keyfile is a symbolic link to a file owned by another account
+    When FileAtKeysIo, running as root, updates it
+    Then the update fails
+    And the file the link points to is unchanged
+
+  @race
+  Scenario: A keyfile replaced while root updates it is written with the owner it was read with
+    Given @alice🛠's keyfile is owned by one account, with mode 0600
+    When FileAtKeysIo, running as root, updates it, and the keyfile is replaced by a link to a second account's file before the update writes
+    Then the keyfile written is a file with the first account's owner and group
+    And the second account's file is unchanged
+
+  Scenario: A backup path that is a symbolic link is replaced when root rewrites the keyfile
+    Given @alice🛠's keyfile is owned by one account
+    And its .bak is a symbolic link to a second account's file
+    When FileAtKeysIo, running as root, updates the keyfile
+    Then the .bak is a file with the keyfile's owner and group
+    And the second account's file is unchanged
