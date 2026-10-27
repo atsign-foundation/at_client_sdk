@@ -264,7 +264,10 @@ lock is not reentrant.
 
 All three verbs write atomically (write-to-temp + rename), so a crash
 mid-write can never truncate the keyfile, and a rewrite over an existing
-file first preserves the previous state as `<file>.bak` alongside it.
+file first preserves the previous state as `<file>.bak` alongside it. On
+Linux and macOS the keyfile, its `.bak` and its `.pre-v1` copy are written
+readable and writable by their owner alone (mode 0600), whatever mode the
+file had before.
 
 ## Migrating from 3.x
 
@@ -300,9 +303,11 @@ directly.
 Behaviour that changed with no signature to catch it: a self-enrollment no
 longer approves its own request, since the atServer approves a retrofit
 outright; `waitForApproval` no longer pauses 500 ms before each attempt;
-and the first write that gives a flat keyfile typed material leaves a
+the first write that gives a flat keyfile typed material leaves a
 one-off `<keyfile>.pre-v1` copy of the flat document beside it, announced
-at `shout`.
+at `shout`; and on Linux and macOS every file `FileAtKeysIo` writes is mode
+0600, so a keyfile another account read through its group or other bits is
+no longer readable by that account once it has been rewritten.
 
 ### Before and after
 
