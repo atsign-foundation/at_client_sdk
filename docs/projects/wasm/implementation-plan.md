@@ -46,7 +46,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 > | Group | Status |
 > | --- | --- |
 > | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
-> | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. the VFS is settled by `decisions.md` D-25 (SimpleOPFS, one directory per atSign and enrollment) for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
+> | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. the VFS is settled by `decisions.md` D-26 (SimpleOPFS, one directory per atSign and enrollment) for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
 > | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
 > | Key-storage tasks | **unchanged, and now the whole storage story** |
 > | JS packaging tasks | **re-specified by D-23** — author the facade once in TypeScript; generate both `.js` and `.d.ts` |
@@ -323,7 +323,7 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
 > a browser waits on all of them. Re-verified 2026-09-14 on at_server trunk `1c51474d`:
 > P1 and P5 done; P2–P4 not started.
 
-- **P1 — VFS: done (D-25).** `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId),
+- **P1 — VFS: done (D-26).** `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId),
   in a dedicated worker; this sets `at_client_wasm`'s execution model. OQ-5.
 - **P2 — Split `src/impl/sqlite/sqlite_database.dart`'s `open`.** Prerequisite and the
   bulk of the work: retype the `_db` field and `raw` getter from `Database` to
@@ -1047,7 +1047,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 **What changed against the task lists above.**
 
 - **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (Layer B/C already live at `packages/at_client_wasm`). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
-- **W4 is done** (D-25): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
+- **W4 is done** (D-26): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
 - **D2 (browser onboarding) is no longer deferred.** It is K-1..K-9 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
 - **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.
 
@@ -1139,7 +1139,7 @@ Now verified **by execution** under T2.3 rather than by compile.
 - **W3 — First live browser session.** → T4.1, T4.2
 - **W4 — Payload measurement.** Compiled output + JS glue, plus `sqlite3.wasm` for a
   SQLite bundle (D-17), gzipped and
-  Brotli, for **both** compile targets. → X2. **Done (D-25):** +386 KB gz / +363 KB br / +375 KB
+  Brotli, for **both** compile targets. → X2. **Done (D-26):** +386 KB gz / +363 KB br / +375 KB
   dart2js gz, fixed per app; accepted.
 
 ---
@@ -1218,7 +1218,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   path.
 - **D3 — Argon2id performance work,** driven by C4.
 - **D4 — Raw IndexedDB backend** (V2, as all local storage is under D-17), only if W4's payload measurement rules `sqlite3.wasm`
-  out. **Not triggered:** W4 accepted `sqlite3.wasm` (D-25).
+  out. **Not triggered:** W4 accepted `sqlite3.wasm` (D-26).
 - **D5 — `at_client_cli` and `at_client_flutter` as true platform implementers.**
   Deferred under [`decisions.md`](decisions.md) D-4; the `_io` barrels serve until then.
 - **D6 — A `Clock` / `RandomSource` seam.** Portable under WASM, so not a port

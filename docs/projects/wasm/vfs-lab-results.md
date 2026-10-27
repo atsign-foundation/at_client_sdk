@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-13 · **Browser:** Chromium 156.0.8078.4 (Playwright headless) unless stated ·
 **Harness:** `packages/at_client_wasm/tool/vfs_lab/` (+ `tool/payload/measure.sh`) ·
-**Plan:** `plans/2026-10-12-vfs-live-test.md` (local) · **Settles:** W4, P1 ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)), and amends [D-21](decisions.md) via [D-25](decisions.md).
+**Plan:** `plans/2026-10-12-vfs-live-test.md` (local) · **Settles:** W4, P1 ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)), and amends [D-21](decisions.md) via [D-26](decisions.md).
 
 ## Verdict
 

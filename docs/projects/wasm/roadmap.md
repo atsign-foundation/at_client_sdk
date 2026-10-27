@@ -45,7 +45,7 @@ the second is on the path to first release. The default bundle also touches neit
 two process globals we do not own.
 
 Everything in the storage lane below remains correct; it is **deferred, not withdrawn**, and
-the VFS is settled by `decisions.md` D-25 (SimpleOPFS, one directory per atSign and enrollment).
+the VFS is settled by `decisions.md` D-26 (SimpleOPFS, one directory per atSign and enrollment).
 
 ---
 
@@ -60,13 +60,13 @@ canonical home rather than duplicating it.
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
 | [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove. Plus §9a: confidentiality, remote-only, deployment and surface-stability gates.                                                                                                  |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-25, plus K-1..K-9 for browser at-keys custody), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-26, plus K-1..K-9 for browser at-keys custody), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
 | [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
 | [`browser-onboarding.md`](browser-onboarding.md)   | How the browser holds the atSign's @keys: requirements R1–R7, the one-record-per-passkey model, enroll / return / recover flows, lifecycle, security properties and what does not hold. |
 | [`atkeys-derivation.md`](atkeys-derivation.md)     | The derivation behind K-1..K-5: constant PRF salt, one PRF call then HKDF, record format and AAD, test vector, cost of changing each choice later. |
 | [`pb3-storage-bundle.md`](pb3-storage-bundle.md)   | What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
-| [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](spike-indexeddb-storage.md) | The measurements behind D-25 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
+| [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](spike-indexeddb-storage.md) | The measurements behind D-26 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
 
 ---
 
@@ -185,7 +185,7 @@ at_client is not forked, and nothing below its doors names a platform type.
   in a browser once
   [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) gives it a
   web open path — and becomes the default in V2. Its **VFS** half is settled
-  separately by **D-25**: SimpleOPFS in a dedicated worker.)*
+  separately by **D-26**: SimpleOPFS in a dedicated worker.)*
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
   `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though
@@ -295,7 +295,7 @@ ruling that a removed default is preferable to a conditional default.
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** ([#2149], [#2183]); `at_client` joins with PB-3 stage 5 (open, [#2263])        |
 | **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **Landed** — S4–S6 ([#2162]); S1–S3 superseded by the transport work ([#2163], [#2164])  |
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Built, in review** — [#2223] (draft), with the web transport                           |
-| **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-25).         | T2 for storage   | **V1 built, in review** — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
+| **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 built, in review** — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **In review** — `at_client` side is PB-3 stages 4–5 (breaking, draft); `at_utils` not started |
 | **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-9; first live session partial — see [`implementation-plan.md`](implementation-plan.md) §5b |
 | **6 — JS/TS facade**    | The `@JSExport` facade and its TypeScript entry point; the npm package. See [`js-api.md`](js-api.md).                              | T6               | Dev harness only; the `@atsign/at-client-web` facade is a draft plan, gated on OQ-16      |

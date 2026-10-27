@@ -696,7 +696,7 @@ that decision can be revisited late, on the measured number from
 [`acceptance.md`](acceptance.md) X2, rather than committed to up front.
 
 **VFS choice** — `SimpleOpfsFileSystem` in a dedicated web worker, one directory per
-(atSign, enrollmentId) ([D-25](decisions.md)). SQLite runs in the worker; Dart stays on the
+(atSign, enrollmentId) ([D-26](decisions.md)). SQLite runs in the worker; Dart stays on the
 main thread (D-19) and reaches it across the async `AtKeyStore` boundary.
 `IndexedDbFileSystem` is an opt-in fallback only with flush-before-ack and a single-tab guard.
 

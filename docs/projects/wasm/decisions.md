@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-25 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-26 that govern the implementation-neutral `AtClient`
 work, the K-1..K-9 rulings on browser at-keys custody, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -11,7 +11,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings) — D-1..D-25, then [K-1..K-9 browser at-keys custody](#browser-at-keys-custody--k-1k-9)
+- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-9 browser at-keys custody](#browser-at-keys-custody--k-1k-9)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -722,7 +722,7 @@ identity integration** ([D-16](#d-16--the-browser-lane-keeps-enterprise-identity
 
 Escalate the remaining trade as a **product** decision before V2 needs it.
 
-> **Amended 2026-10-13 by [D-25](#d-25--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13).** The table above is partly wrong: SimpleOPFS *is* multi-atSign (one instance per directory), and IndexedDB's gap is un-flushed durability, not torn transactions. The pick-two framing no longer holds; the `WasmVfs` rejection does.
+> **Amended 2026-10-13 by [D-26](#d-26--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13).** The table above is partly wrong: SimpleOPFS *is* multi-atSign (one instance per directory), and IndexedDB's gap is un-flushed durability, not torn transactions. The pick-two framing no longer holds; the `WasmVfs` rejection does.
 
 ---
 
@@ -820,7 +820,7 @@ the bool's deprecation are a follow-up at_client change.
 
 ---
 
-### D-25 — Browser SQLite storage is **SimpleOPFS, one directory per (atSign, enrollmentId)**; W4 resolved (2026-10-13)
+### D-26 — Browser SQLite storage is **SimpleOPFS, one directory per (atSign, enrollmentId)**; W4 resolved (2026-10-13)
 
 Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) from a live lab, not a benchmark ([`vfs-lab-results.md`](vfs-lab-results.md)). It honours D-21's bound: nothing here is chosen on latency.
 
@@ -866,7 +866,7 @@ The browser lane holds the atSign's @keys as **one encrypted record per passkey*
 | K-8 | **PCAM private key lives inside the blob;** signing algorithm = first of `SigningAlgoType.strongestFirst` the browser can sign and the atServer verifies | 2026-10-13 |
 | K-9 | **A per-write data key is rejected** — its only job is sharing one key across passkeys, the `unlocks[]` pattern K-6 removes | 2026-10-15 |
 
-**K-6 clarification (2026-10-18).** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-25's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-25's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-25-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on.
+**K-6 clarification (2026-10-18).** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-26's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-26's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-26-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on.
 
 **Revocation is final (2026-10-21).** Applies to the per-passkey enrollment (browser-onboarding Q-3) under K-6/K-8.
 
@@ -1124,12 +1124,12 @@ field). Open for the remaining capabilities.
 abstraction, or file transfer becomes a separate optional native-only `AtFileTransfer`.
 The second is smaller; the first is the better API. See [`design.md`](design.md) §2.8.
 
-**OQ-5 — Which VFS?** **Resolved by D-25:** `SimpleOpfsFileSystem` in a dedicated web
+**OQ-5 — Which VFS?** **Resolved by D-26:** `SimpleOpfsFileSystem` in a dedicated web
 worker, one directory per (atSign, enrollmentId). `IndexedDbFileSystem` is an opt-in fallback
 only with flush-before-ack and a single-tab guard.
 
 **OQ-6 — What is the acceptable WASM payload budget?** Compiled `.wasm` +
-JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). **Resolved by D-25 (W4):** +386 KB gz, fixed per app, accepted; D4 (raw IndexedDB) is not triggered —
+JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). **Resolved by D-26 (W4):** +386 KB gz, fixed per app, accepted; D4 (raw IndexedDB) is not triggered —
 [`design.md`](design.md) §5, gate X2.
 
 **OQ-7 — Directory lookup from a browser.** `root.atsign.org:64` is a raw TLS socket.
@@ -1171,7 +1171,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 
 | Question | Now |
 | --- | --- |
-| **OQ-5** — which VFS | **Resolved by D-25** (2026-10-13): `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), dedicated worker. `WasmVfs` stays rejected (D-21). The V1 default bundle still needs no VFS (D-17); this applies to a consumer injecting a SQLite bundle |
+| **OQ-5** — which VFS | **Resolved by D-26** (2026-10-13): `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), dedicated worker. `WasmVfs` stays rejected (D-21). The V1 default bundle still needs no VFS (D-17); this applies to a consumer injecting a SQLite bundle |
 | **OQ-11** — instance-based `AtClientManager` | **Resolved by D-22** in the instance-based direction. The browser lane constructs its own manager; `getInstance()` is demoted over a major rather than deleted |
 | **OQ-12** — process-global factory registry | **Resolved by D-22** — instance-per-client |
 | **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |
@@ -1248,7 +1248,7 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
 | 2026-09-25 | **K-7 ruled.** OQ-P1 spike (#2269): PRF returns 32 bytes on 4 of 4 rows; `prf` is the unlock kind, `largeBlob` dropped. |
-| 2026-10-13 | **D-25 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Chromium, Firefox 157, WebKit and Safari 27.0.1 agree on E3/E4; Chromium, Firefox and Safari agree on E7. Scope limits in D-25. |
+| 2026-10-13 | **D-26 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Chromium, Firefox 157, WebKit and Safari 27.0.1 agree on E3/E4; Chromium, Firefox and Safari agree on E7. Scope limits in D-26. |
 | 2026-10-13 | **K-8 ruled; OQ-19 raised.** Live test L step 0a showed the shared `unlocks[]` copy leaks device count and accumulates dead entries; [`browser-onboarding.md`](browser-onboarding.md) proposes one record per passkey. PCAM private key moves inside the blob. |
 | 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
 | 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
