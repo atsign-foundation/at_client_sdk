@@ -77,7 +77,8 @@ void main() {
 
   /// Runs `at_activate auto_approve` until it has approved B, announced as
   /// the atServer announces a new request, and hands back what it printed.
-  Future<_CapturedStdout> autoApproveB() async {
+  Future<_CapturedStdout> autoApproveB(
+      {String appName = 'wavi', String deviceName = 'phone'}) async {
     final notifications = _MockNotificationService();
     when(() => client.notificationService).thenReturn(notifications);
     when(() => notifications.subscribe(
@@ -91,7 +92,8 @@ void main() {
             DateTime.now().millisecondsSinceEpoch,
             'key',
             false)
-          ..value = jsonEncode({'appName': 'wavi', 'deviceName': 'phone'})));
+          ..value =
+              jsonEncode({'appName': appName, 'deviceName': deviceName})));
     final args = AuthCliArgs().createAutoApproveCommandParser().parse([
       '-a',
       '@alice',
@@ -177,4 +179,12 @@ void main() {
         contains('Approval successful, but $b has since been revoked\n'));
     expect(out.text, isNot(contains('expires')));
   });
+
+  test('auto_approve matches --arx and --drx case-insensitively', () async {
+    serveB();
+
+    await autoApproveB(appName: 'Wavi', deviceName: 'PHONE');
+
+    expect(approvals, [b]);
+  }, timeout: const Timeout(Duration(seconds: 5)));
 }
