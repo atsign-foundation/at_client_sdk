@@ -1,7 +1,7 @@
 # at-keys derivation — decisions
 
 **Status:** decided · 2026-10-15
-**Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, D-1, D-2, D-9 · circulate to Gary, Xavier and Jeremy S.
+**Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
 
 ## Summary

@@ -36,10 +36,10 @@ An app client running in a browser must:
 
 | Element | Value |
 |---|---|
-| PRF salt | **constant** per RP: `SHA-256("atsign:keys:lookup:v1")` — see D-2 |
+| PRF salt | **constant** per RP: `SHA-256("atsign:keys:lookup:v1")` — see BO-2 |
 | PRF output `P` | one WebAuthn `get()` with `prf.eval.first = salt` |
 | Lookup key | `HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id\|<atSign>")`, 64 lowercase hex |
-| Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "atkeys-kek\|<atSign>")` — no stored salt (D-1) |
+| Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "atkeys-kek\|<atSign>")` — no stored salt (BO-1) |
 | Record | `{ v: 2, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID** |
 | Plaintext of `ct` | the full @keys JSON **including the PCAM private key** and its `signingAlgo` |
 | Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
@@ -106,7 +106,7 @@ sequenceDiagram
     A-->>B: P, userHandle = atSign, credential ID
     B->>S: lookup(HKDF(P,"atkeys-record-id|atSign")) on atSign's atServer — unauthenticated, no from:
     S-->>B: record
-    B->>B: open with kek; restored public keys must match the published ones (D-9)
+    B->>B: open with kek; restored public keys must match the published ones (BO-9)
     B->>B: store hint + record in IndexedDB
     B->>S: PKAM auth; refresh ttl
 ```
@@ -125,19 +125,19 @@ sequenceDiagram
 
 ## 4. Decisions
 
-> **Numbering.** These `D-n` are local to this doc and collide with the rulings of the same number in `decisions.md`. The binding ledger is `decisions.md` K-1..K-9: local D-1 → K-2 (and K-3), D-2 → K-1, D-4 and D-5 → K-8, D-6 → K-6 (TTL), D-7 → K-6 (grammar), D-9 → K-4 and K-5. D-3 and D-8 are design choices without a K ruling.
+> **Numbering.** These `BO-n` are local to this doc, prefixed so they cannot be read as the `decisions.md` D-n of the same number. The binding ledger is `decisions.md` K-1..K-9: local BO-1 → K-2 (and K-3), BO-2 → K-1, BO-4 and BO-5 → K-8, BO-6 → K-6 (TTL), BO-7 → K-6 (grammar), BO-9 → K-4 and K-5. BO-3 and BO-8 are design choices without a K ruling.
 
 | # | Decision | Why |
 |---|---|---|
-| D-1 | **One PRF evaluation, two HKDF derivations** (lookup, kek); **no stored salt** | a stored random salt is server-controlled: as a PRF input it lets the server make the blob key equal the lookup key it already knows (key substitution), and costs a second prompt; as an HKDF salt it adds nothing to a 256-bit PRF output. Labels carry the atSign |
-| D-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign it returns in `userHandle` then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
-| D-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
-| D-4 | **PCAM private key inside the blob**; for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
-| D-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. The PCAM key is a software key (D-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
-| D-6 | **`ttl` refreshed on open** prunes dead passkeys | the browser cannot learn that a passkey was deleted; expiry needs no one to know (R6) |
-| D-7 | **Reads by exact lookup key, unauthenticated; writes PKAM-authenticated**; records never appear in `scan` | recovery must read before auth; writes need an owner; enumeration would break R5 |
-| D-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
-| D-9 | **Restored public keys must match the published ones before PKAM**; AAD = the record's clear header | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade) |
+| BO-1 | **One PRF evaluation, two HKDF derivations** (lookup, kek); **no stored salt** | a stored random salt is server-controlled: as a PRF input it lets the server make the blob key equal the lookup key it already knows (key substitution), and costs a second prompt; as an HKDF salt it adds nothing to a 256-bit PRF output. Labels carry the atSign |
+| BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign it returns in `userHandle` then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
+| BO-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
+| BO-4 | **PCAM private key inside the blob**; for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
+| BO-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded in the blob | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. The PCAM key is a software key (BO-4), so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer, so ML-DSA may be the pick today (Q-4) |
+| BO-6 | **`ttl` refreshed on open** prunes dead passkeys | the browser cannot learn that a passkey was deleted; expiry needs no one to know (R6) |
+| BO-7 | **Reads by exact lookup key, unauthenticated; writes PKAM-authenticated**; records never appear in `scan` | recovery must read before auth; writes need an owner; enumeration would break R5 |
+| BO-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
+| BO-9 | **Restored public keys must match the published ones before PKAM**; AAD = the record's clear header | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade) |
 
 ---
 
@@ -146,11 +146,11 @@ sequenceDiagram
 | Property | Holds because |
 |---|---|
 | A compromised atServer cannot decrypt @keys | the blob key needs `P`, which needs the passkey plus platform authentication |
-| An outside reader cannot count devices or link a record to an atSign's passkeys | lookup keys are PRF-derived and records are not enumerable (D-7); records carry no atSign or credential ID |
+| An outside reader cannot count devices or link a record to an atSign's passkeys | lookup keys are PRF-derived and records are not enumerable (BO-7); records carry no atSign or credential ID |
 | The passkey private key never leaves the authenticator | WebAuthn |
-| Dead passkeys do not accumulate | D-6 |
+| Dead passkeys do not accumulate | BO-6 |
 | A stale device cannot resurrect removed records | no shared record, nothing merged |
-| A replayed older record is refused | D-9 public-key check |
+| A replayed older record is refused | BO-9 public-key check |
 
 **Does not hold:**
 
@@ -166,5 +166,5 @@ sequenceDiagram
 | Q-1 | `T` — record ttl (proposal: 90 days) | product |
 | Q-2 | ~~at-keys module grammar on the atServer~~ — **resolved 2026-10-15:** existing `update`/`lookup`/`delete` on `public:_<lookupHex>.atkeysv@<atSign>`, no server change (§2 Server row; probe P1–P7) | — |
 | Q-3 | ~~Bootstrap via APKAM enrollment~~ — **resolved 2026-10-13:** the browser enrolls, one enrollment per passkey; open: whether the portal envelope stays as a secondary bootstrap | me + Gary |
-| Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets D-5's current pick | me (probe) |
+| Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets BO-5's current pick | me (probe) |
 | Q-5 | Which platforms return PRF results from `create()` — decides whether enrollment is one prompt or two | me (probe) |
