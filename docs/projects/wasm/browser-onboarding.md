@@ -41,7 +41,7 @@ An app client running in a browser must:
 | Lookup key | `HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id\|<atSign>")`, 64 lowercase hex |
 | Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "atkeys-kek\|<atSign>")` — no stored salt (BO-1) |
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
-| Pointer (K-10) | `public:_<lookupHex>.atkeysv@<atSign>`, plaintext = the `enrollmentId`. **No TTL**, written once at enroll by an enrollment holding `atkeysv:rw` (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.atkeysv@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; `plookup` from another atServer leaves no cached copy. Existing verbs, no server change (at_server trunk `acd5a4ba`) |
+| Pointer (K-10) | `public:_<lookupHex>.atkeysv@<atSign>`, plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by an enrollment holding `atkeysv:rw` (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.atkeysv@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
 | Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
 | IndexedDB | credential-ID hint (for `allowCredentials`); whether a document replica is also kept is not ruled |
@@ -51,7 +51,7 @@ An app client running in a browser must:
 
 | Source | When |
 |---|---|
-| APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeysv:rw`. An OTP admits the request; it stays **pending** until an approver acts from an existing device (an OTP never approves). The APKAM key source is part of gate (c), proposed | **primary** |
+| APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeysv:rw`. An OTP admits the request, and it must be minted covering the app namespaces + `atkeysv:rw`: a narrower OTP is spent and the request refused (`UnAuthorizedException`, EVH:341-349); it stays **pending** until an approver acts from an existing device (an OTP never approves). The APKAM key source is part of gate (c), proposed | **primary** |
 | Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | secondary, for a user with no device to approve from (open) |
 
 Both converge on the same pointer + document pair.
@@ -76,10 +76,10 @@ sequenceDiagram
         A-->>B: P
     end
     B->>B: lookup = HKDF(P,"atkeys-record-id|atSign"); kek = HKDF(P,"atkeys-kek|atSign")
-    B->>S: enroll:request (namespaces + atkeysv:rw) → pending until approved
+    B->>S: enroll:request (namespaces + atkeysv:rw, OTP minted for both) → pending until approved
     B->>S: PKAM auth as the approved enrollment; keys:get
     B->>S: update atkeys.eid.a.__e (typ "atkeys": @keys without APKAM private key)
-    B->>S: update public:_lookupHex.atkeysv (typ "eid": enrollmentId), no TTL, once
+    B->>S: update public:_lookupHex.atkeysv (typ "eid": enrollmentId), no TTL, no ttr, once
     B->>B: IndexedDB: credential-ID hint
 ```
 
