@@ -60,3 +60,17 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo updates the keyfile
     Then reading the open temporary file returns none of the new document
     And the keyfile's mode is 0600
+
+  Scenario: Narrowing a keyfile to owner-only is logged
+    Given @alice🛠's keyfile has mode 0644
+    When FileAtKeysIo updates it
+    Then one info line names the keyfile, 0644 and 0600
+    And a second update logs nothing for it
+
+  @race
+  Scenario: A symbolic link left at the temporary file's path is replaced, not followed
+    Given @alice🛠's keyfile has mode 0600
+    And a symbolic link left at its temporary file's path points elsewhere
+    When FileAtKeysIo updates the keyfile
+    Then nothing is written where the link points
+    And the keyfile is a file with mode 0600
