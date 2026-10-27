@@ -14,7 +14,8 @@ Feature: AtLookUp.close() closes the connection, and stop() ends the lookup
   stop().
   Forgery and impersonation: a reconnect authenticates as the lookup's own
   atSign with the authenticator it was built with; a stopped client's lookup,
-  and a superseded enrollment's after a retrofit, cannot reconnect.
+  and a superseded enrollment's after a retrofit, cannot reconnect; and a
+  client retrofitted on a caller's lookup logs in again as its new enrollment.
 
   Scenario: A call after close() reconnects
     Given a lookup that has authenticated and run a command
@@ -58,6 +59,11 @@ Feature: AtLookUp.close() closes the connection, and stop() ends the lookup
     Given a client that rederived its connection after a self-retrofit
     When anything uses the previous lookup
     Then it fails with StoppedException
+
+  Scenario: A client retrofitted on a caller's lookup logs in again
+    Given a lookup, logged in as the legacy enrollment, that a self-retrofit was submitted on
+    When the retrofitted client takes the lookup over
+    Then its connection is closed before the client's first command, so the client's next login is as the new enrollment
 
   Scenario: A stopped monitor ends its lookup at once
     Given a monitor whose notification start is in flight
