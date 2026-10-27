@@ -198,12 +198,9 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// by its owner alone.
   Future<void> _replaceOwnerOnly(File file, List<int> bytes) async {
     final temp = File('${file.path}.tmp');
-    if (temp.existsSync()) await temp.delete();
+    await _deleteLeftover(temp.path);
     final previousMode = ownerOnlyModeSupported ? _modeOf(file) : null;
-    // NOTE: the temporary file is owner-only before any byte is written to
-    // it, and a leftover one is deleted, never written into.
-    final ownerOnly = ownerOnlyModeSupported && _createOwnerOnly(temp);
-    await temp.writeAsBytes(bytes);
+    final ownerOnly = await _writeTemporary(temp, bytes);
     await temp.rename(file.path);
     if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
       _logger.info('${file.path} is now readable and writable by its owner '
@@ -211,15 +208,23 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
   }
 
-  bool _createOwnerOnly(File temp) {
-    try {
-      createOwnerOnly(temp.path);
-      return true;
-    } on FileSystemException catch (e) {
-      _logger
-          .warning('Writing ${temp.path} without owner-only permissions: $e');
+  /// Writes [bytes] to [temp], owner-only where the platform has file modes,
+  /// and says whether it is.
+  Future<bool> _writeTemporary(File temp, List<int> bytes) async {
+    if (ownerOnlyWritesAvailable) {
+      // NOTE: the temporary file is created by this write, owner-only before
+      // any byte reaches it; anything already at its path fails the write.
+      if (writeNewOwnerOnly(temp.path, bytes)) return true;
+      _logger.warning('Wrote ${temp.path} without owner-only permissions: '
+          'its file system did not take mode ${_octal(ownerOnlyMode)}');
       return false;
     }
+    if (ownerOnlyModeSupported) {
+      _logger.warning('Writing ${temp.path} without owner-only permissions: '
+          'the libc calls that set the mode were not found');
+    }
+    await temp.writeAsBytes(bytes);
+    return false;
   }
 
   Future<String> _encodePassphraseEnvelope(
@@ -291,6 +296,17 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
         await transform(algorithm, field, document[field] as String);
   }
   return result;
+}
+
+/// Removes whatever an interrupted write left at [path], without following
+/// a symbolic link there.
+Future<void> _deleteLeftover(String path) async {
+  final type = FileSystemEntity.typeSync(path, followLinks: false);
+  if (type == FileSystemEntityType.link) {
+    await Link(path).delete();
+  } else if (type == FileSystemEntityType.file) {
+    await File(path).delete();
+  }
 }
 
 /// The permission bits of [file], or null when it does not exist.

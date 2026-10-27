@@ -23,8 +23,7 @@ void main() {
   late String keyfile;
 
   setUpAll(() {
-    // NOTE: AtSignLogger binds its handler at construction, and file_io.dart
-    // constructs its logger on first use, which is after this.
+    // NOTE: set before anything in this file calls FileAtKeysIo.
     AtSignLogger.defaultLoggingHandler = logs;
   });
 
@@ -155,6 +154,25 @@ void main() {
               'descriptor opened on the leftover reads only what it held');
       expect(_modeOf(keyfile), '0600',
           reason: 'the keyfile is owner-only, not the leftover\'s mode');
+    });
+
+    test(
+        'A symbolic link left at the temporary file\'s path is replaced, not '
+        'followed', () async {
+      await writeKeyfile(mode: '600');
+      final elsewhere = '${dir.path}/elsewhere';
+      Link('$keyfile.tmp').createSync(elsewhere);
+
+      await io().update(atsign.toAtsign(), (keys) => true);
+
+      expect(File(elsewhere).existsSync(), isFalse,
+          reason: 'nothing is written where a link left at the temporary '
+              'path points');
+      expect(FileSystemEntity.typeSync(keyfile, followLinks: false),
+          FileSystemEntityType.file,
+          reason: 'the keyfile is a file this write created, not the link');
+      expect(_modeOf(keyfile), '0600',
+          reason: 'the keyfile is readable and writable by its owner alone');
     });
 
     test('Narrowing a keyfile to owner-only is logged', () async {
