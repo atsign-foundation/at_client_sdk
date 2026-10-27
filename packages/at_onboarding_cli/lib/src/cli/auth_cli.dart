@@ -909,8 +909,8 @@ Future<List<Enrollment>> _list(
   String? arx,
   String? drx,
 }) async {
-  final ar = arx == null ? null : RegExp(arx);
-  final dr = drx == null ? null : RegExp(drx);
+  final ar = arx == null ? null : RegExp(arx, caseSensitive: false);
+  final dr = drx == null ? null : RegExp(drx, caseSensitive: false);
   final all = await atClient.enrollments.list(
       statuses:
           status == null ? null : [EnrollmentStatus.values.byName(status)]);
@@ -923,11 +923,19 @@ Future<List<Enrollment>> _list(
 }
 
 /// `at_activate list`: one row per enrollment, with the key expiry it asked
-/// for and when its record expires.
-Future<void> list(ArgResults ar, AtClient atClient) async {
+/// for, when its record expires, and whether its keys are anchored to the
+/// atSign's signing root.
+///
+/// [anchoring] answers for one enrollment, and defaults to
+/// `atClient.enrollments.anchoring`.
+Future<void> list(ArgResults ar, AtClient atClient,
+    // ignore: experimental_member_use
+    {Future<ChainResult> Function(String enrollmentId)? anchoring}) async {
   String? statusFilter = ar[AuthCliArgs.argNameEnrollmentStatus];
   String? arx = ar[AuthCliArgs.argNameAppNameRegex];
   String? drx = ar[AuthCliArgs.argNameDeviceNameRegex];
+  // ignore: experimental_member_use
+  anchoring ??= atClient.enrollments.anchoring;
 
   final records = await _list(statusFilter, atClient, arx: arx, drx: drx);
   stdout.write('Enrollment ID'.padRight(38));
@@ -936,6 +944,7 @@ Future<void> list(ArgResults ar, AtClient atClient) async {
   stdout.write('DeviceName'.padRight(38));
   stdout.write('KeysExpiry'.padRight(14));
   stdout.write('ExpiresAt'.padRight(26));
+  stdout.write('Anchored'.padRight(26));
   stdout.writeln('Namespaces');
   for (final e in records) {
     stdout.writeln('${(e.enrollmentId ?? '').padRight(38)}'
@@ -944,7 +953,26 @@ Future<void> list(ArgResults ar, AtClient atClient) async {
         '${(e.deviceName ?? '').padRight(38)}'
         '${_describeKeysExpiry(e.apkamKeysExpiryDuration).padRight(14)}'
         '${(e.expiresAt?.toIso8601String() ?? '-').padRight(26)}'
+        '${(await _describeAnchoring(e, anchoring)).padRight(26)}'
         '${e.namespace}');
+  }
+}
+
+/// Whether [e]'s keys are anchored, as a row shows it: `anchored`,
+/// `unsigned`, or the verdict for a key that fails followed by its kid; `-`
+/// for an enrollment that is not approved, and `?` when it could not be read.
+Future<String> _describeAnchoring(
+    Enrollment e,
+    // ignore: experimental_member_use
+    Future<ChainResult> Function(String enrollmentId) anchoring) async {
+  final id = e.enrollmentId;
+  if (id == null || e.enrollmentStatus != EnrollmentStatus.approved) {
+    return '-';
+  }
+  try {
+    return (await anchoring(id)).summary;
+  } on Exception {
+    return '?';
   }
 }
 
@@ -1075,14 +1103,8 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
   Completer completer = Completer();
 
-  RegExp? appRegex;
-  RegExp? deviceRegex;
-  if (arx != null) {
-    appRegex = RegExp(arx);
-  }
-  if (drx != null) {
-    deviceRegex = RegExp(drx);
-  }
+  final appRegex = arx == null ? null : RegExp(arx, caseSensitive: false);
+  final deviceRegex = drx == null ? null : RegExp(drx, caseSensitive: false);
 
   // listen for enrollment requests
   stdout.writeln('Listening for new enrollment requests');

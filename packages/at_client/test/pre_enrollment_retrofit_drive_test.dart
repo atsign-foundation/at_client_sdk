@@ -1,5 +1,4 @@
-// The retrofit surface is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use, deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
 import 'dart:convert';
 

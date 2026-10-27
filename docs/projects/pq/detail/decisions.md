@@ -2048,6 +2048,10 @@ have to wait.
 
 ### 22.2b Publishing a chain signature: the parent signs, the child publishes
 
+> ⚠️ **AMENDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** The parent still signs, and the
+> atServer writes the link for it through `enroll:link`; nothing is conveyed,
+> and the child stamps nothing.
+
 A conflict the chain model has to resolve, found by reading the two ends together. In the
 approval-graph chain **E2 signs E3's key** — but `_apsk` writes are restricted to *the owning
 enrollment's own* authenticated connection. The signer is the parent; the only permitted writer is
@@ -2217,6 +2221,12 @@ So an approver that cannot produce a root signature is an ordinary configuration
 edge case, and the walk must climb.
 
 ### 24.2 The rulings
+
+> ⚠️ **Rules 1 and 4 AMENDED 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** One map, `apskLinks`,
+> keyed by the `kid` a link vouches for, holds both kinds, and the kind follows
+> the `kid` of the key that signed it rather than a field name. A root link is
+> written through `enroll:link`, by a holder of the root for its own keys and
+> for every other enrollment's.
 
 | # | Ruling |
 |---|---|
@@ -5271,6 +5281,11 @@ has no signed children. The cascade a key rotation would otherwise trigger
 ([section 56.3](#563-three-retrofit-modes-and-the-signing-algorithm-selector)) dissolves into the sweep.
 
 ### 56.2 A root-holder conveys root links, not chain links attributed to itself
+
+> ⚠️ **AMENDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** Nothing conveys a link: a holder
+> of the root writes root links through `enroll:link`. Linking a key it has just
+> minted, it signs a chain link with a key it has already linked, which the
+> same start's root-linking step then replaces with a root link.
 
 Today `sweepUnanchoredEnrollments` signs a chain link with the *sweeper's* own
 APKAM key and conveys it. For a client authenticating with the atSign's own root
@@ -14699,7 +14714,7 @@ expiry sweep, up to about 10.5 minutes, instead of the lock's 2 minutes (a
 namespace key) or 15 seconds (the signing root). That is a delay, not a safety
 failure: mutual exclusion holds, and the delay ends on its own.
 
-## 144. The _apsk record: a fixed verifier cache, links cleared on republish, and refusals that say why (2026-09-30)
+## 144. The _apsk record: a fixed verifier cache, and refusals that say why (2026-09-30)
 
 **Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
 work-through (items 14–17 of the implementation plan's
@@ -14730,6 +14745,10 @@ failure never evicted, while the envelope sweep retried every minute, so a stale
 entry was kept alive by its own failures — measured with shortened timings.
 
 ### 144.2 A republish clears the links; a root holder re-anchors
+
+> ⛔ **SUPERSEDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** A link vouches for one key, and
+> every write of `_apsk` but `enroll:link` keeps the links for the keys it still
+> lists, so a republish neither clears nor re-signs a link.
 
 A republish of an enrollment's `_apsk` value removes the link fields from the
 record's `appMetadata` explicitly. The atServer otherwise keeps the stored
@@ -14822,8 +14841,8 @@ under three constraints:
   private data, and its public `_apsk` is read from the atServer; moves to
   `.r.__e` on a revoke, and back to `.a.__e`, still commit.
 
-Built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
-3.17.1: the `lookup`, `llookup` and HTTP GET handlers call
+Built in at_server#2858, merged on 2026-10-11, which ships in at_secondary_server
+3.18.0: the `lookup`, `llookup` and HTTP GET handlers call
 `EnrollmentManager.moveExpiredEnrollmentData`, which removes the enrollment when
 its record's expiry has passed, and the removal's pre-remove hook moves the data
 inside the critical section, committing nothing for `.d.__e`. Pinned by the
@@ -14837,8 +14856,8 @@ scenarios in at_server's `features/enrollment/expired_enrollment_data.feature`.
 and widened by him on 2026-10-10. The client half is built:
 `LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
 `__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
-built in at_server#2858, merged on 2026-10-11, which opens at_secondary_server
-3.17.1, and pinned by the scenarios in at_server's `features/caching/`.
+built in at_server#2858, merged on 2026-10-11, which ships in at_secondary_server
+3.18.0, and pinned by the scenarios in at_server's `features/caching/`.
 
 **The atServer (at_server).** A reader's atServer keeps no `cached:public:` copy
 of another atSign's public record whose owner gave it no ttr, or a ttr of 0.
@@ -15118,6 +15137,9 @@ Pinned by the `AtRpcReq.create` group in `test/rpc/at_rpc_types_test.dart`.
 
 ## 152. A conveyed link is stamped as it arrives, and its envelope kept until it is (2026-10-08)
 
+> ⛔ **SUPERSEDED on 2026-10-16 by [157](#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16).** Links are no longer conveyed, so
+> nothing is stamped and no envelope waits.
+
 **Decided by gkc on 2026-10-07 and 2026-10-08.** A link vouching for an
 enrollment's `_apsk` reached only the in-memory `SecretStore`, and only the
 startup's link step stamped it. The envelope carrying a link is deleted once it
@@ -15365,3 +15387,113 @@ that hold without an atServer, and the group of the expiry scenario's name in
 `enrollment_setup.dart` proves that one against the long-lived atServers. That
 two overlapping runs leave each other's enrollments alone is observable only
 in CI.
+
+## 157. A link vouches for one key, and the atServer writes it (2026-10-16)
+
+**Decided by gkc on 2026-10-16 and 2026-10-17**, grilled scenario by scenario;
+the record of the change across every atServer implementation is
+[atsign-foundation/at_protocol#385](https://github.com/atsign-foundation/at_protocol/pull/385),
+and the rows are [`acceptance.md` 18.2](../acceptance.md#182-links-one-per-key).
+Two defects drove it. A link signed the whole `_apsk` value, so adding or
+retiring a key left the links on the keys that had not changed vouching for
+nothing; and the enrollment a link vouched for had to stamp it itself, from an
+envelope with a seven-day life, so a chain link whose enrollment did not run in
+time was lost, and mending a chain always took a round trip through the
+enrollment being mended.
+
+1. **A link names one key**: `{v: 2, enrollmentId, kid, alg, pub}`, the
+   enrollment and the `kid`, `alg` and `pub` of one entry its `_apsk` lists. An
+   enrollment's links live in one map in that record's `appMetadata`,
+   `apskLinks`, keyed by the `kid` each vouches for. A bare `_apsk` is one
+   `rsa2048` entry whose `kid` the atServer and the walk derive from the key
+   the way every other `kid` is derived.
+2. **The kind follows the signer.** Every link names the `kid` of the key that
+   signed it. A `kid` among the active or retired keys of
+   `public:pq_signing_root@<atSign>` makes it a root link, an ML-DSA-65
+   signature over `at-root-link:` and the payload, checked against that root
+   key only; any other makes it a chain link, a JWS typed `at-chain-link+jws`
+   carrying the one signature its signer made, checked against that `kid` in
+   the signer enrollment's `_apsk`. A link that fails its check is `broken`
+   and never tried as the other kind.
+3. **`enroll:link` writes them.** One call per target enrollment covers any
+   number of its keys, all or nothing under the atServer's lock on enrollment
+   writes. The atServer admits the target itself, or any caller
+   `enroll:approve` would admit, and checks structure only: the target is
+   approved, each `kid` is listed and spelt in padded standard base64, each
+   payload names the target and that key, each link is at most 16 KiB, the
+   call and the record with every link it would hold fit the 500 KiB
+   enrollment-record limit, and the link stored for each `kid` is the one the
+   call names as `expect`. Every other write of `_apsk` keeps the map, less
+   links for keys the new value no longer lists, and is serialised with
+   `enroll:link`.
+4. **Every link traces to the root when it is written.** A voucher signs with
+   the signing root when it holds the root's private key and is fully
+   privileged, and otherwise with one of its own active client data signing
+   keys whose walk reads anchored. An authentication key takes no link and
+   signs none: it is dropped rather than retired once its enrollment mints a
+   client data signing key, so the atServer refuses a link for any listed key
+   equal to the record's `apkamPublicKey`, and an `enroll:update` may not make
+   a client data signing key the authentication key while it is listed beside
+   another or carries a link.
+5. **Who writes.** The approver, straight after approving; an enrollment that
+   mints a key, signing with one it has already linked, in the same reconcile
+   and before an outgoing key is retired; a holder of the root, for its own
+   keys at every start; and a holder's sweep, for every key on the atSign's
+   other approved enrollments without a sound root link. A fully privileged
+   enrollment whose atSign publishes no root mints one at start, so an atSign
+   that predates the root can be anchored at all.
+6. **The client decides what replaces what**, and says so through `expect`: a
+   root link replaces a chain link, or a root link that fails its check; a
+   chain link replaces only a chain link that does not walk to the root, never
+   a root link; and a voucher links no key its own chain passes through. A
+   refused call is read again and, if the record has changed, made once more
+   on what it now holds. *(Amended by gkc on 2026-10-18; it read "made once more
+   on what the record holds". An unchanged record means no other writer raced
+   this one, so the same call would meet the same answer, and the next start
+   or sweep tries again.)*
+7. **Content is signed with the keys that have a link** while there are any,
+   so a key waits for its link before it signs, and otherwise as before.
+8. **The walk follows keys.** It compares each link with the entry it is
+   stored on, `alg` and `pub` as well as `kid`, follows (enrollment, `kid`)
+   pairs, and reads a cycle, or more than sixteen keys, as `broken`.
+   `verifyChain` answers for an enrollment: anchored when every active key
+   with a link walks to the root, unsigned when none has one, else the
+   failing key's verdict; `at_activate list` and `EnrollmentRequestList` show
+   it. Content verification does not consult the walk yet.
+9. **What goes**: link envelopes and their seven-day window, stamping on
+   arrival, the startup's pending-link step, links held in the `SecretStore`,
+   the client's own writes of link fields, and the version 1 whole-value
+   links with their `apskChainLink` and `apskRootLink` fields, none of which
+   is read any more.
+
+Against an atServer without `enroll:link`, no link is written and every
+enrollment reads `unsigned`, which nothing acts on yet; the first production
+code that does should ship once `enroll:link` is on every atServer, or
+tolerate it. The atSign's own credential, running with no enrollment id, has
+no enrollment record for `enroll:link` to target, so `_apsk.primary` takes no
+link.
+
+**Built** in at_client, at_onboarding_cli and at_client_flutter. Proven
+in-process by `pq_signing_chain_test.dart`, `approve_link_flavour_test.dart`,
+`chain_sweep_test.dart` and `startup_call_order_test.dart`, the two approver
+views by `auth_cli_list_test.dart` and `enrollment_request_list_test.dart`, and
+live by `per_key_links_live_test.dart`;
+[`acceptance.md` 18.2](../acceptance.md#182-links-one-per-key) cites each
+against the clauses it proves.
+
+**Rejected.** Clearing or re-signing today's whole-value links after every
+republish, which kept the binding to the value and the round trip. Carrying
+links on `enroll:approve`, which covered approval only. A link inside each
+`_apsk` entry, which only the enrolling client composes, in a format at_auth
+owns. A record of its own beside `_apsk`, which no other write could touch,
+set aside for one read per hop and no new reserved name. A superset of the
+target's grants as the right to write, in favour of the approve gate, so
+writing a link takes the authority approving or revoking does. Signature
+checks on the atServer, since a caller passing the gate gains nothing by a bad
+link and the walk verifies signatures. A 1 MiB record bound, a cap on the
+number of linked keys, and no bound at all, in favour of the existing 500 KiB.
+
+Amends [22.2b](#222b-publishing-a-chain-signature-the-parent-signs-the-child-publishes),
+[24.2](#242-the-rulings) rules 1 and 4, and supersedes
+[144.2](#1442-a-republish-clears-the-links-a-root-holder-re-anchors) and
+[152](#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08).

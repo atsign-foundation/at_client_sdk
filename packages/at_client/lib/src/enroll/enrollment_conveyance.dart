@@ -7,19 +7,20 @@ import 'package:meta/meta.dart' show experimental;
 
 /// Conveys to an enrollment the secrets its approval entitles it to: its
 /// symmetric key when the approver minted one, before the approval, and
-/// after it an approval-chain link, the signing root when it is fully
-/// privileged, the nskey privates for its namespaces, and the existing app
-/// secrets they authorise.
+/// after it the signing root when it is fully privileged, the nskey privates
+/// for its namespaces, and the existing app secrets they authorise. After the
+/// approval it also links the enrollment's keys, through `enroll:link`.
 ///
 /// Whether a conveyance outcome fails the approval is the *caller's* policy,
 /// so implementations report the advertised key package's [KeyPackageStatus]
 /// and never enforce a response to it.
 @experimental
 abstract interface class EnrollmentConveyance {
-  /// Conveys everything [enrollment]'s approval entitles it to, and reports
-  /// the status of the key package it advertised.
+  /// Links [enrollment]'s keys, conveys everything its approval entitles it
+  /// to, and reports the status of the key package it advertised.
   ///
-  /// Nothing is conveyed unless the package verifies
+  /// Linking does not depend on the package. Nothing is conveyed unless the
+  /// package verifies
   /// ([KeyPackageStatus.present]): an enrollment that advertised none
   /// ([KeyPackageStatus.absent]) or one this version cannot read
   /// ([KeyPackageStatus.unsupported]) is left alone, neither being anything
@@ -47,23 +48,18 @@ abstract interface class EnrollmentConveyance {
   Future<void> conveyMintedApkamSymmetricKey(
       Enrollment pending, String apkamSymmetricKey);
 
-  /// Signs and conveys **root** links for approved enrollments that are not
-  /// yet root-anchored.
+  /// Root-links every key on this atSign's other approved enrollments that
+  /// lacks a sound root link, through `enroll:link`.
   ///
-  /// A scoped enrollment can never anchor itself, and its approver may be able
-  /// to sign nothing at all or only a provisional chain link, so unanchored is
-  /// its permanent state unless a fully privileged client — `rw` on `*` and
-  /// `__manage`, the class entitled to hold the signing root — repairs it.
-  /// Every approved enrollment with a discoverable key package and no
-  /// published *root* link gets one signed with the root private and conveyed.
-  /// The enrollment verifies it against the published signing root and stamps
-  /// it onto its own `_apsk` when it arrives; this client cannot stamp it
-  /// directly, because `_apsk` accepts writes only from its own enrollment's
-  /// connection, and that restriction is the guarantee the anchoring hangs
-  /// off.
+  /// An enrollment approved by one that held neither the signing root nor a
+  /// linked key has no link at all, and one linked by chain stays a hop away
+  /// from the root, so a fully privileged client — `rw` on `*` and
+  /// `__manage`, the class entitled to hold the signing root — anchors them.
+  /// A key with no link, a chain link, or a root link that fails its check
+  /// gets a root link; one whose root link passes its check is left alone.
   ///
-  /// The caller is responsible for privilege. Returns how many links were
-  /// conveyed.
+  /// The caller is responsible for privilege. Returns how many enrollments
+  /// had keys linked.
   Future<int> sweepUnanchoredEnrollments();
 }
 

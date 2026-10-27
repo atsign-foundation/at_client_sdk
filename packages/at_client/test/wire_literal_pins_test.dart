@@ -25,7 +25,8 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart'
     show
         AESKey,
@@ -169,36 +170,35 @@ void main() {
       expect(PairwiseSecretSharing.perEnrollmentSecretPrefix, '__en.');
       expect(enrollmentApkamSymmetricKeySecretName, '__en.apkamSymmetricKey');
       expect(PqSigningRoot.secretName, '__en.pqSigningRoot');
-      expect(PqSigningChain.linkSecretName, '__en.apskChainLink');
-      expect(PqSigningChain.rootLinkSecretName, '__en.apskRootLink');
       expect(NskeyPrivateFiling.secretNamePrefix, '__nskey.');
     });
 
     test('_apsk appMetadata link field names', () {
-      expect(PqSigningChain.linkField, 'apskChainLink');
-      expect(PqSigningChain.rootLinkField, 'apskRootLink');
-      // Inside the root-link document, naming the advertised root entry that
-      // signed it. A verifier narrows on this, so a rename would silently turn
-      // every labelled link into an unlabelled one — still verifiable, but the
-      // claim would stop being checked and nothing would go red.
+      // Every atServer implementation carries this field over on every write
+      // of an _apsk record but enroll:link, so a rename strands every link.
+      expect(PqSigningChain.linksField, 'apskLinks');
+      // Inside the root-link document, naming the root key that signed it,
+      // which is what makes it a root link at all.
       expect(PqSigningChain.rootLinkKidField, 'kid');
     });
 
-    test('a root link built by the signer emits its exact field set', () {
-      // The DOCUMENT, not the constants — a shape assertion that follows a
-      // renamed constant pins nothing. The signature member is excluded on
-      // purpose: ML-DSA signing is hedged, so it differs run to run.
-      final link = {
-        'v': 1,
-        'alg': PqSigningChain.rootLinkAlgo,
-        PqSigningChain.rootLinkKidField: 'kid-of-the-signer',
-        'payload': PqSigningChain.linkPayload(
-            childEnrollmentId: 'child-1', childApkamPublicKey: 'cHVibGlj'),
-        'signature': 'IGNORED',
-      };
+    test('a root link built by the signer emits its exact field set', () async {
+      // The DOCUMENT the signer builds, not the constants — a shape assertion
+      // that follows a renamed constant pins nothing.
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final link = await PqSigningChain.signRootLink(
+          PqSigningChain.linkPayload(
+              'child-1',
+              ApskSigningKey(
+                  kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'cHVibGlj')),
+          rootPrivate: pair.secretKey,
+          rootKid: 'kid-of-the-signer');
       expect(link.keys.toList(), ['v', 'alg', 'kid', 'payload', 'signature']);
+      expect(link['v'], 2);
+      expect(link['alg'], 'mldsa65');
+      expect(link['kid'], 'kid-of-the-signer');
       expect((link['payload'] as Map).keys.toList(),
-          ['v', 'childEnrollmentId', 'apkamPublicKey'],
+          ['v', 'enrollmentId', 'kid', 'alg', 'pub'],
           reason: 'the payload is the SIGNED region and is shared verbatim '
               'with the chain link, so a field added here changes what a '
               'chain link signs');
@@ -908,16 +908,18 @@ void main() {
       expect(parsed.publicKey, 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
     });
 
-    test('a chain-link payload emits its exact JSON shape', () {
+    test('a link payload emits its exact JSON shape', () {
       // Payload, not wrapper: these field names are the same under either
-      // wrapper shape and are compared against live records by verifiers.
-      // The signature covers signableTextOf of exactly this map (its JSON
-      // encoding under the JWS wrapper), so the key ORDER is
-      // cryptographically bound.
+      // wrapper shape, and every atServer implementation compares them with
+      // the key a link is written for. The signature covers signableTextOf of
+      // exactly this map (its JSON encoding under the JWS wrapper), so the key
+      // ORDER is cryptographically bound.
       expect(
           jsonEncode(PqSigningChain.linkPayload(
-              childEnrollmentId: 'c1', childApkamPublicKey: 'PK')),
-          '{"v":1,"childEnrollmentId":"c1","apkamPublicKey":"PK"}');
+              'c1',
+              ApskSigningKey(
+                  kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'PK'))),
+          '{"v":2,"enrollmentId":"c1","kid":"k1","alg":"rsa2048","pub":"PK"}');
     });
 
     test('the nskey advertisement version', () {
@@ -974,9 +976,11 @@ void main() {
       expect(
           utf8.decode(PqSigningChain.rootLinkSignableBytes(
               PqSigningChain.linkPayload(
-                  childEnrollmentId: 'c1', childApkamPublicKey: 'PK'))),
+                  'c1',
+                  ApskSigningKey(
+                      kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'PK')))),
           'at-root-link:'
-          '{"v":1,"childEnrollmentId":"c1","apkamPublicKey":"PK"}');
+          '{"v":2,"enrollmentId":"c1","kid":"k1","alg":"rsa2048","pub":"PK"}');
     });
 
     test('the envelope members, their order, and unpadded base64url', () {

@@ -15,6 +15,13 @@ dependencies:
 # at_cli_commons is a path dependency, so its own floors must resolve locally
 # too - a published at_client cannot satisfy them while the versions they need
 # are still unreleased. Transitive overrides are not automatic.
+#
+# TODO(at_chops-4.0.0): restore the `at_chops: path: ../../at_chops` override
+# below once at_client has migrated off the at_chops 3.x facade — 4.0.0 removed
+# AtChops/AtChopsImpl/AtChopsUtil and the AtSigning*/AtEncryption* result types,
+# which at_client still uses. Until then this example builds against the
+# published at_chops 3.x, which means it does NOT exercise local at_chops
+# changes.
 dependency_overrides:
   at_client:
     path: ../../at_client
@@ -22,8 +29,6 @@ dependency_overrides:
     path: ../../at_onboarding_cli
   at_auth:
     path: ../../at_auth
-  at_chops:
-    path: ../../at_chops
   at_commons:
     path: ../../at_commons
   at_lookup:

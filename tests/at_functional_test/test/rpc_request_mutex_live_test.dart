@@ -1,6 +1,3 @@
-// The enrollment fixture is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 library;
 
 import 'dart:async';

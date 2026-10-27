@@ -1,28 +1,18 @@
-// The substrate is deliberately marked @experimental.
-// ignore_for_file: experimental_member_use
-
-import 'dart:convert';
-
-import 'package:at_auth/at_auth.dart'
-    show
-        apskAdvertisement,
-        ApskSigningKey,
-        AtKeys,
-        CryptographicMaterial,
-        CryptographicMaterialRole,
-        InMemoryAtKeysIo,
-        CryptographicMaterialAlgorithm;
-import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo, RsaKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver;
 import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
+import 'package:at_client/src/signing/envelope_signature.dart' show apskUri;
+import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/enroll_link_fake.dart';
+import 'test_utils/link_fixtures.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/test_keypairs.dart';
 
 class _FakePrivilege implements EnrollmentPrivilegeResolver {
   _FakePrivilege(this.answer);
@@ -35,32 +25,34 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
   Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async => answer;
 }
 
-/// Generation 1 of a root filed under the algorithm this build mints.
-final rootSlot1 =
-    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
-
-/// Which link flavour an approval conveys is decided by the approver's
-/// privilege: the fully privileged class signs root links, and only a
-/// non-privileged approver leaves the provisional chain link.
+/// An approver links each key of the enrollment it approves, straight after
+/// approving, through `enroll:link`.
+///
+/// Catalogue: docs/projects/pq/acceptance.md UC-G3.5.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
   const namespace = 'buzz';
   late Map<String, String> remoteData;
   late Map<String, Metadata> remoteMetadata;
+  late List<EnrollVerbBuilder> linkCalls;
 
   setUpAll(() => registerFallbackValue(AtKey()));
   setUp(() {
     remoteData = {};
     remoteMetadata = {};
+    linkCalls = [];
   });
 
-  MockAtClient buildMockClient(String enrollmentId) {
+  MockAtClient buildMockClient(String enrollmentId,
+      {EnrollLinkSupport enrollLink = EnrollLinkSupport.supported}) {
     final atClient = buildRemoteBackedMockClient(
         atSign: atSign,
         enrollmentId: enrollmentId,
         remoteData: remoteData,
-        remoteMetadata: remoteMetadata);
+        remoteMetadata: remoteMetadata,
+        enrollLink: enrollLink,
+        enrollLinkLog: linkCalls);
     when(() => atClient.getAtKeys(
         regex: any(named: 'regex'),
         showHiddenKeys: any(named: 'showHiddenKeys'),
@@ -78,54 +70,25 @@ void main() {
     return atClient;
   }
 
-  /// Gives [client] the atSign's signing root — the private in its keys and
-  /// the record published.
-  Future<void> giveRoot(MockAtClient client) async {
-    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-    final io = InMemoryAtKeysIo();
-    await io.write(
-        atSign,
-        AtKeys()
-          ..addKey(CryptographicMaterial(
-            keyId: rootSlot1,
-            role: CryptographicMaterialRole.privateSigning,
-            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-            bytes: AtBytes(pair.secretKey),
-            createdAt: DateTime.now().toUtc(),
-          )));
-    when(() => client.atKeysIo).thenReturn(io);
-    remoteData['public:${PqSigningRoot.recordName}$atSign'] =
-        jsonEncode(apskAdvertisement(keys: [
-      ApskSigningKey.forPublicKey(
-          alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
-    ]));
-  }
-
-  /// Gives [client] a real data signing key of its own and no signing root.
-  Future<void> giveSigningKey(MockAtClient client, String enrollmentId) async {
-    final pair = RsaKeyPair.generate();
-    final io = InMemoryAtKeysIo();
-    final keys = AtKeys()
-      ..fileSigningMaterial(
-        enrollmentId: enrollmentId,
-        algorithm: CryptographicMaterialAlgorithm.rsa2048,
-        publicKey: pair.atPublicKey.publicKey,
-        privateKey: pair.atPrivateKey.privateKey,
-      );
-    await io.write(atSign, keys);
-    when(() => client.atKeysIo).thenReturn(io);
-  }
-
-  /// A registered enrollee plus the [Enrollment] record its approval reads.
-  Future<(AtClientSecretSharing, Enrollment)> registeredEnrollee() async {
+  /// A registered enrollee listing K1 and K2, and the [Enrollment] record its
+  /// approval reads; [keyPackage] false leaves the record without one.
+  Future<(AtClientSecretSharing, Enrollment)> enrolleeWithTwoKeys(
+      {bool keyPackage = true}) async {
     final enrolleeClient = buildMockClient(enrolleeId);
+    await withSigningKey(enrolleeClient);
+    await withSigningKey(enrolleeClient, alg: SigningAlgoType.mldsa65);
     final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
     await enrollee.register();
-    final advertised = await enrollee.signedKeyPackagePayload();
     final enrollment = Enrollment()
       ..enrollmentId = enrolleeId
       ..namespace = {namespace: 'rw'}
-      ..metadata = {'keyPackage': advertised.toJson()};
+      ..apkamPublicKey =
+          pkamKeyPairFor(atSign, enrolleeId).atPublicKey.publicKey;
+    if (keyPackage) {
+      enrollment.metadata = {
+        'keyPackage': (await enrollee.signedKeyPackagePayload()).toJson()
+      };
+    }
     return (enrollee, enrollment);
   }
 
@@ -135,108 +98,269 @@ void main() {
           listEnrollments: ({enrollmentListParams}) async => [],
           privilege: _FakePrivilege(privileged));
 
-  test('a fully privileged approver conveys a root link', () async {
-    final (enrollee, enrollment) = await registeredEnrollee();
+  Future<ApskRecord> record(AtClient c, String id) async =>
+      (await PqSigningChain(c).readRecord(id))!;
+
+  /// An approver whose own client data signing key carries a root link, and
+  /// which does not hold the root.
+  Future<MockAtClient> approverWithLinkedKey() async {
+    final root = await publishRoot(remoteData, atSign);
     final approver = buildMockClient('approver-1');
+    await withSigningKey(approver);
     await AtClientSecretSharing.forClient(approver).register();
-    await giveRoot(approver);
+    final own = (await record(approver, 'approver-1')).keys.single;
+    await PqSigningChain(approver).writeLinks('approver-1', {
+      own.kid: (
+        link: await root.voucher
+            .sign(PqSigningChain.linkPayload('approver-1', own)),
+        expect: null
+      )
+    });
+    linkCalls.clear();
+    return approver;
+  }
 
-    final status = await conveyanceFor(approver, privileged: true)
-        .conveySecretsTo(enrollment);
-    expect(status, KeyPackageStatus.present);
+  group('Given an approver holding the signing root', () {
+    test(
+        'when it approves B, then it calls enroll:link once for B with a '
+        'root link for each key, each expecting none, and B reads anchored',
+        () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
 
-    expect(await enrollee.sweepOnce(), greaterThan(0));
-    final names = enrollee.secretStore.listSecrets().map((s) => s.name);
-    expect(names, contains(PqSigningChain.rootLinkSecretName),
-        reason: 'the fully privileged class anchors the enrollments it '
-            'vouches for directly to the root — born anchored, not healed '
-            'later by the sweep');
-    expect(names, isNot(contains(PqSigningChain.linkSecretName)),
-        reason: 'the differential against the old design: root INSTEAD OF '
-            'chain, not alongside it');
+      final status = await conveyanceFor(approver, privileged: true)
+          .conveySecretsTo(enrollment);
 
-    final enrolleeClient = enrollee.atClient;
-    await PqSigningChain(enrolleeClient).publishPendingLink();
-    final result =
-        await PqSigningChain(enrolleeClient).verifyChain(enrollee, enrolleeId);
-    expect(result.verdict, ChainVerdict.anchored,
-        reason: 'the conveyed link must verify against the published signing '
-            'root, not merely look like one. Reason if not: ${result.reason}');
+      expect(status, KeyPackageStatus.present);
+      final keys = (await record(approver, enrolleeId)).keys;
+      expect(keys, hasLength(2), reason: 'the premise: K1 and K2 are listed');
+      final call = linkCalls.single;
+      expect(call.enrollmentId, enrolleeId);
+      expect(call.links!.keys, unorderedEquals(keys.map((k) => k.kid)));
+      for (final request in call.links!.values) {
+        expect(request['expect'], isNull);
+        expect(request['link']['payload'], isA<Map>(),
+            reason: 'a root link carries its payload as a JSON object');
+      }
+      final verdict = await PqSigningChain(enrollee.atClient)
+          .verifyChain(enrollee, enrolleeId);
+      expect(verdict.verdict, ChainVerdict.anchored, reason: verdict.reason);
+    });
+
+    test(
+        'when it is not fully privileged and approves B, then it signs no root '
+        'link with it', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+
+      final status = await conveyanceFor(approver, privileged: false)
+          .conveySecretsTo(enrollment);
+
+      expect(status, KeyPackageStatus.present);
+      expect(linkCalls, isEmpty,
+          reason: 'only a fully privileged approver vouches with the root, '
+              'and this one has no linked key of its own to vouch with');
+      expect(
+          (await PqSigningChain(enrollee.atClient)
+                  .verifyChain(enrollee, enrolleeId))
+              .verdict,
+          ChainVerdict.unsigned);
+    });
   });
 
-  test('a non-privileged approver conveys the provisional chain link',
-      () async {
-    final (enrollee, enrollment) = await registeredEnrollee();
-    final approver = buildMockClient('approver-1');
-    await AtClientSecretSharing.forClient(approver).register();
+  group('Given an approver whose own key walks to the root', () {
+    for (final privileged in [false, true]) {
+      test(
+          'when it approves B, then the links are chain links signed with that '
+          'key (${privileged ? 'fully privileged' : 'not fully privileged'})',
+          () async {
+        final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+        final approver = await approverWithLinkedKey();
 
-    final status = await conveyanceFor(approver, privileged: false)
-        .conveySecretsTo(enrollment);
-    expect(status, KeyPackageStatus.present);
+        await conveyanceFor(approver, privileged: privileged)
+            .conveySecretsTo(enrollment);
 
-    expect(await enrollee.sweepOnce(), greaterThan(0));
-    final names = enrollee.secretStore.listSecrets().map((s) => s.name);
-    expect(names, contains(PqSigningChain.linkSecretName),
-        reason: 'approval takes __manage, not necessarily *: an approver '
-            'outside the fully privileged class still vouches, provisionally, '
-            'and the sweep upgrades it later');
-    expect(names, isNot(contains(PqSigningChain.rootLinkSecretName)),
-        reason: 'it holds no root and signs no root links');
+        final links = linkCalls.single.links!.values;
+        expect(links, hasLength(2));
+        for (final request in links) {
+          expect(request['link']['signatures'], hasLength(1),
+              reason: 'a chain link is a JWS carrying its signer\'s one '
+                  'signature');
+        }
+        final verdict = await PqSigningChain(enrollee.atClient)
+            .verifyChain(enrollee, enrolleeId);
+        expect(verdict.verdict, ChainVerdict.anchored, reason: verdict.reason);
+      });
+    }
   });
 
-  test(
-      'a privileged approver holding NEITHER conveys no link, '
-      'and everything else still flows', () async {
-    final (enrollee, enrollment) = await registeredEnrollee();
-    final approver = buildMockClient('approver-1');
-    await AtClientSecretSharing.forClient(approver).register();
+  group('Given an approver holding neither the root nor a linked key', () {
+    test(
+        'when it approves B, then it sends no enroll:link, and the symmetric '
+        'key still arrives', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await withSigningKey(approver);
+      await AtClientSecretSharing.forClient(approver).register();
 
-    final conveyance = conveyanceFor(approver, privileged: true);
-    await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
-    final status = await conveyance.conveySecretsTo(enrollment);
-    expect(status, KeyPackageStatus.present);
+      final conveyance = conveyanceFor(approver, privileged: true);
+      await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+      final status = await conveyance.conveySecretsTo(enrollment);
 
-    expect(await enrollee.sweepOnce(), greaterThan(0));
-    final names =
-        enrollee.secretStore.listSecrets().map((s) => s.name).toList();
-    expect(names, contains(enrollmentApkamSymmetricKeySecretName),
-        reason: 'the symmetric key is what the enrollee is blocked polling '
-            'for; a missing link must never cost it that');
-    expect(names, isNot(contains(PqSigningChain.linkSecretName)),
-        reason: 'this approver holds no data signing key either, so the only '
-            'thing left to sign with is the APKAM authentication key — and '
-            'that key is DROPPED from the advertisement rather than retired, '
-            'so the link would become permanently unverifiable. Silence is '
-            'the honest outcome');
-    expect(names, isNot(contains(PqSigningChain.rootLinkSecretName)),
-        reason: 'nothing to sign a root link with either; the sweep anchors '
-            'this enrollment once possession heals');
+      expect(status, KeyPackageStatus.present);
+      expect(linkCalls, isEmpty);
+      expect(await enrollee.sweepOnce(), greaterThan(0));
+      final names =
+          enrollee.secretStore.listSecrets().map((s) => s.name).toList();
+      expect(names, contains(enrollmentApkamSymmetricKeySecretName),
+          reason: 'the symmetric key is what the enrollee is blocked polling '
+              'for; a missing link must never cost it that');
+    });
   });
 
-  test(
-      'a privileged approver with a data signing key but no root conveys a '
-      'CHAIN link', () async {
-    final (enrollee, enrollment) = await registeredEnrollee();
-    final approver = buildMockClient('approver-1');
-    // NOTE: before register(), because giving the key replaces this client's
-    // AtKeysIo and a registration written to the old one would be discarded.
-    await giveSigningKey(approver, 'approver-1');
-    await AtClientSecretSharing.forClient(approver).register();
+  group('Given an approver that links', () {
+    test('when it approves B, then no link travels in an envelope', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
 
-    final conveyance = conveyanceFor(approver, privileged: true);
-    await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
-    final status = await conveyance.conveySecretsTo(enrollment);
-    expect(status, KeyPackageStatus.present);
+      final conveyance = conveyanceFor(approver, privileged: true);
+      await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+      await conveyance.conveySecretsTo(enrollment);
 
-    expect(await enrollee.sweepOnce(), greaterThan(0));
-    final names =
-        enrollee.secretStore.listSecrets().map((s) => s.name).toList();
-    expect(names, contains(PqSigningChain.linkSecretName),
-        reason: 'it can sign something that keeps verifying, so it vouches '
-            'provisionally rather than leaving the enrollment unsigned');
-    expect(names, isNot(contains(PqSigningChain.rootLinkSecretName)),
-        reason: 'and it is a CHAIN link, not a root one — the two stamp into '
-            'distinct _apsk fields, so a chain link cannot mask the root link '
-            'the sweep later adds');
+      expect(linkCalls, hasLength(1), reason: 'the premise: it linked');
+      expect(await enrollee.sweepOnce(), greaterThan(0));
+      expect(
+          enrollee.secretStore.listSecrets().map((s) => s.name).where(
+              (n) => n.contains('apskChainLink') || n.contains('apskRootLink')),
+          isEmpty);
+    });
+
+    test(
+        'when B advertised no key package, then B\'s keys are linked all '
+        'the same', () async {
+      final (enrollee, enrollment) =
+          await enrolleeWithTwoKeys(keyPackage: false);
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+
+      final status = await conveyanceFor(approver, privileged: true)
+          .conveySecretsTo(enrollment);
+
+      expect(status, KeyPackageStatus.absent);
+      expect(linkCalls.single.enrollmentId, enrolleeId);
+      expect(
+          (await PqSigningChain(enrollee.atClient)
+                  .verifyChain(enrollee, enrolleeId))
+              .verdict,
+          ChainVerdict.anchored);
+    });
+
+    test(
+        'when B\'s _apsk is its authentication key, then it sends no '
+        'enroll:link and B reads unsigned', () async {
+      final enrolleeClient = buildMockClient(enrolleeId);
+      final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
+      await enrollee.register();
+      final enrollment = Enrollment()
+        ..enrollmentId = enrolleeId
+        ..namespace = {namespace: 'rw'}
+        ..apkamPublicKey =
+            pkamKeyPairFor(atSign, enrolleeId).atPublicKey.publicKey;
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+
+      await conveyanceFor(approver, privileged: true)
+          .conveySecretsTo(enrollment);
+
+      expect(linkCalls, isEmpty);
+      expect(
+          (await PqSigningChain(enrolleeClient)
+                  .verifyChain(enrollee, enrolleeId))
+              .verdict,
+          ChainVerdict.unsigned);
+    });
+  });
+
+  group('Given an atServer without enroll:link', () {
+    for (final support in [
+      EnrollLinkSupport.unknownToGrammar,
+      EnrollLinkSupport.noHandler,
+    ]) {
+      test(
+          'when an approver holding the root approves B and the atServer is '
+          '$support, then nothing is linked and the conveyance completes',
+          () async {
+        final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+        final approver = buildMockClient('approver-1', enrollLink: support);
+        await AtClientSecretSharing.forClient(approver).register();
+        await giveRoot(approver, remoteData);
+
+        final conveyance = conveyanceFor(approver, privileged: true);
+        await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+        final status = await conveyance.conveySecretsTo(enrollment);
+
+        expect(status, KeyPackageStatus.present);
+        expect(linkCalls, isNotEmpty, reason: 'the premise: it tried');
+        expect(
+            (await PqSigningChain(enrollee.atClient)
+                    .verifyChain(enrollee, enrolleeId))
+                .verdict,
+            ChainVerdict.unsigned);
+        expect(await enrollee.sweepOnce(), greaterThan(0));
+        expect(enrollee.secretStore.listSecrets().map((s) => s.name),
+            contains(enrollmentApkamSymmetricKeySecretName));
+      });
+    }
+  });
+
+  /// The link step's own guard, not `linkKeysOf`'s: a read of B's `_apsk`
+  /// that fails before any write is attempted.
+  group('Given a read of B\'s _apsk that fails once', () {
+    setUp(() => EnvelopeEnrollmentConveyance.verifyRetryPause = Duration.zero);
+    tearDown(() => EnvelopeEnrollmentConveyance.verifyRetryPause =
+        const Duration(seconds: 1));
+
+    test(
+        'when an approver holding the root approves B, then nothing is '
+        'linked and B\'s secrets are still conveyed', () async {
+      final (enrollee, enrollment) = await enrolleeWithTwoKeys();
+      final approver = buildMockClient('approver-1');
+      await AtClientSecretSharing.forClient(approver).register();
+      await giveRoot(approver, remoteData);
+      final apsk = apskUri(atSign, enrolleeId);
+      var fetches = 0;
+      when(() => approver.get(
+          any(that: predicate<AtKey>((k) => k.toString() == apsk)),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        if (++fetches == 1) {
+          throw AtConnectException('The connection was closed by this '
+              'client before a response arrived');
+        }
+        return Future.value(AtValue()..value = remoteData[apsk]);
+      });
+
+      final conveyance = conveyanceFor(approver, privileged: true);
+      await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+      final status = await conveyance.conveySecretsTo(enrollment);
+
+      expect(status, KeyPackageStatus.present,
+          reason: 'the approval has landed, so a failed link step must not '
+              'fail what follows it');
+      expect(fetches, greaterThan(1),
+          reason: 'the premise: the link step\'s read failed and the key '
+              'package check read again');
+      expect(linkCalls, isEmpty, reason: 'nothing was read, so nothing linked');
+      expect(await enrollee.sweepOnce(), greaterThan(0));
+      expect(enrollee.secretStore.listSecrets().map((s) => s.name),
+          contains(enrollmentApkamSymmetricKeySecretName));
+    });
   });
 }

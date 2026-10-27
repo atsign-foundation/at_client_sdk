@@ -39,18 +39,16 @@ void main() {
       );
       provenIn(
         'packages/at_client/test/pq_signing_chain_test.dart',
-        'climbs a chain link to an anchored parent',
-        proves: 'the walk itself: verifyChain returns anchored and states the '
-            'path it took, so the chain is self-describing rather than '
-            'trusted. The siblings pin the other two verdicts — unsigned '
-            'during the changeover, and chained where the parent is not the '
-            'root — which is what stops anchored being the only reachable '
-            'answer. No atServer is in this loop: the input is a document and '
-            'the output is a verdict over it',
-        clauses: [
-          'carries a chain link that `verifyChain` walks to the '
-              'signing root'
-        ],
+        'when the walk runs, then it continues from that key and reads '
+            'anchored through it',
+        proves: 'the walk itself: from a key whose link another enrollment\'s '
+            'key signed, it reads anchored and states the path it took, so the '
+            'chain is self-describing rather than trusted. The siblings pin '
+            'the other verdicts — unsigned with no link, and chained where the '
+            'signer key has none — which is what stops anchored being the only '
+            'reachable answer. No atServer is in this loop: the input is a '
+            'document and the output is a verdict over it',
+        clauses: ['which `verifyChain` walks to the signing root'],
       );
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',

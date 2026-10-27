@@ -21,9 +21,11 @@ Future<void> main() async {
 
   print('Signature (${signature.length} bytes): ${base64Encode(signature)}');
 
-  // Bob verifies the signature against Alice's public key.
-  final bool ok = await algo.verifyBytes(message,
+  // Bob verifies the signature against Alice's public key. verifyBytes returns
+  // normally iff the signature is good — a bad one throws
+  // AtSigningVerificationException rather than returning false.
+  await algo.verifyBytes(message,
       signature: signature, publicKey: kp.publicKey);
 
-  print('Verified: $ok');
+  print('Verified');
 }
