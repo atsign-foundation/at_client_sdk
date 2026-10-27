@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled 2026-10-27 · gate (c) proposed
+**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-12 fallbacks open
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
 
@@ -13,6 +13,7 @@
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
 | C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
+| D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks open | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
 ## Derivation and record
@@ -22,6 +23,8 @@ salt  = SHA-256("atsign:keys:lookup:v1")
 P     = WebAuthn get(prf.eval.first = salt)                 // one prompt
 lookup = HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id|<atSign>")   → 64 lowercase hex
 kek    = HKDF-SHA256(P, salt = ∅, info = "atkeys-kek|<atSign>")
+authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1|<atSign>")   → 32 bytes
+apkamKey = ML-DSA-65 keygen(seed = authSeed)                    // never stored (K-12)
 
 record = { v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
 AAD    = canonical JSON of the record without ct   (v, typ, alg, kdf, iv)
@@ -32,7 +35,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
                                                                the APKAM private key
 ```
 
-- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. Where the PKAM key comes from (a passkey-derived ML-DSA-65 key) is part of gate (c), proposed, not ruled.
+- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. The PKAM key is derived from the passkey (D, K-12); its fallbacks are open, not ruled.
 - `typ` in the AAD stops a pointer being opened as a document, or the reverse. Whether `v` changes with `typ` is open.
 
 - `<atSign>` comes from `userHandle`, so it is known before any derivation.
@@ -41,6 +44,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
   - salt `e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620`
   - lookup `7086a5038ed92fcd20309c479df67581a64cf9f8caf802ef81e7ecec8e4272fe`
   - kek `338114674b5a98898fe30e20b4e29e96907ac6ec58b615bc0a298e759cd520b0`
+  - authSeed `b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6`
 - These label strings are canonical. They replace `atkeys/lookup` and `atkeys/blob`.
 
 ## Why
@@ -58,6 +62,10 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
 
 Freshness per write comes from the random IV.
 
+### D — auth seed
+
+A separate label keeps the APKAM key independent of the lookup key (which the server knows) and of the kek. The key is derived, not stored, so the document holds no key that can sign as the enrollment, and a cleared browser loses no key the passkey cannot re-derive. The pointer only names the enrollment: a swapped or deleted pointer makes PKAM fail, which is denial of recovery, not disclosure.
+
 ### C — hardening
 
 | | Stops |
@@ -72,5 +80,6 @@ Freshness per write comes from the random IV.
 | Point | Cost |
 |---|---|
 | A — salt | High. A return flow can migrate in one prompt with `prf.eval.second`; devices that next appear via recovery must re-enroll. |
+| D — auth-seed label | High. A new label derives a different APKAM key, so every enrollment must be redone. |
 | B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
 | C2 — record format | Low. `v` migrates on the next open. |
