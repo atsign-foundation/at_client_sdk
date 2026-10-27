@@ -264,9 +264,16 @@ class AtKeysAssurance {
     }
   }
 
+  /// Refuses [candidate] as the next state of a store holding [existing]
+  /// when it drops anything [existing] holds.
+  ///
+  /// [atsign] is the atSign [candidate] is written for. A typed [existing]
+  /// holding no typed material may be rewritten in the flat shape only when
+  /// it names that atSign.
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
+    Atsign? atsign,
   }) {
     final existingMaterials = _decode(existing);
     final candidateMaterials = _decode(candidate);
@@ -283,7 +290,15 @@ class AtKeysAssurance {
       // discarded, leaving a store that reads as holding nothing.
       final emptied = !candidate.containsKey('version') &&
           !_holdsCredential(existingMaterials, existingLegacy);
-      if (!emptied) {
+      // NOTE: a typed document holding no typed material is written in the
+      // flat shape, without the typed header; the atSign it names must be the
+      // one the candidate is written for.
+      final flattened =
+          !candidate.containsKey('version') && !_holdsTypedContent(existing);
+      if (!emptied && flattened) {
+        _assertSame(_asAtsign(existing['atsign']),
+            _asAtsign(atsign?.toString()), 'map.atsign');
+      } else if (!emptied) {
         _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
         _assertSame(existing['version'], candidate['version'], 'map.version');
       }
@@ -323,6 +338,12 @@ class AtKeysAssurance {
     'aesEncryptPrivateKey',
     'selfEncryptionKey',
   };
+
+  bool _holdsTypedContent(Map<String, dynamic> json) => const [
+        'enrollments',
+        'atsignKeys',
+        'keys'
+      ].any((field) => json[field] is List && (json[field] as List).isNotEmpty);
 
   bool _holdsCredential(
           List<CryptographicMaterial> materials, Map<String, dynamic> legacy) =>

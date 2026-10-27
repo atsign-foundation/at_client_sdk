@@ -100,11 +100,7 @@ void main() {
         expect(
             _valuesOf(await io.read(atsign)), readBackOf(release, 'alice_key'),
             reason: 'reading it back gives every value at_auth $release read');
-      },
-          skip: is330
-              ? 'awaits an agreed change: FileAtKeysIo does not yet rewrite a '
-                  'typed keyfile that holds no typed key material'
-              : false);
+      });
 
       test(
           is330
@@ -156,6 +152,55 @@ void main() {
           isNot(jsonDecode(File(path).readAsStringSync())),
           reason: 'the fixture holds what at_auth 3.3.0 wrote, which is not '
               'what this build writes for the same keys');
+    });
+
+    test(
+        'A typed keyfile with no typed key material is rewritten in the flat '
+        'shape', () async {
+      final path = copyOf('3.3.0', 'alice_key');
+      final before =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      expect(
+          before,
+          allOf(containsPair('version', 1), containsPair('atsign', atsign),
+              containsPair('keys', isEmpty)),
+          reason: 'the Given: version 1, its atSign and an empty keys array');
+      expect(before.keys,
+          isNot(anyOf(contains('enrollments'), contains('atsignKeys'))),
+          reason: 'the Given: no typed key material');
+      final io = FileAtKeysIo(filePath: (_) => path);
+
+      await io.update(atsign.toAtsign(), (keys) => true);
+
+      final after =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      expect(
+          after.keys,
+          isNot(
+              anyOf(contains('version'), contains('atsign'), contains('keys'))),
+          reason: 'the keyfile is written in the flat shape');
+      expect({
+        for (final field in _legacyFieldsRead) field: after[field]
+      }, {
+        for (final field in _legacyFieldsRead) field: before[field]
+      }, reason: 'with every value it held, as it was at rest');
+      expect(_valuesOf(await io.read(atsign)), readBackOf('3.3.0', 'alice_key'),
+          reason: 'with every value it held, as at_auth 3.3.0 read it');
+    });
+
+    test('A keyfile naming another atSign is still refused', () async {
+      final path = copyOf('3.3.0', 'alice_key');
+      final document =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      File(path)
+          .writeAsStringSync(jsonEncode({...document, 'atsign': '@bob🛠'}));
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path)
+              .update(atsign.toAtsign(), (keys) => true),
+          throwsA(isA<AtKeysValidationException>()),
+          reason: 'a keyfile naming another atSign is not rewritten for '
+              '$atsign');
     });
 
     test(

@@ -121,6 +121,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     assurance.validateMapUpdate(
       existing: existing,
       candidate: document,
+      atsign: atsign,
     );
     await _preserveLegacyShape(file, existing, document);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
