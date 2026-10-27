@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-12 fallbacks open
+**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
 
@@ -13,7 +13,7 @@
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
 | C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
-| D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks open | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
+| D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks ruled by K-13 | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
 ## Derivation and record
@@ -35,7 +35,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
                                                                the APKAM private key
 ```
 
-- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. The PKAM key is derived from the passkey (D, K-12); its fallbacks are open, not ruled.
+- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. The PKAM key is derived from the passkey (D, K-12); its fallbacks are ruled by K-13 (browser-onboarding §3.5, §3.6).
 - `typ` in the AAD stops a pointer being opened as a document, or the reverse. Whether `v` changes with `typ` is open.
 
 - `<atSign>` comes from `userHandle`, so it is known before any derivation.
