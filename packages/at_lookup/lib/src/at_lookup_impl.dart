@@ -380,20 +380,20 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         //1. find secondary url for atsign from lookup library
         SecondaryAddress secondaryAddress =
             await secondaryAddressFinder.findSecondary(_currentAtSign);
-        _throwIfStopped();
+        _throwIfAbandoned();
         var host = secondaryAddress.host;
         var port = secondaryAddress.port;
         //2. create a connection to secondary server
         await createOutBoundConnection(
             host, port.toString(), _currentAtSign, _secureSocketConfig);
-        if (_stopped) {
-          // NOTE: stop() has already run and cannot see this socket, so it
-          // is destroyed here or not at all. Unset first: it has no listener,
-          // and a close arriving meanwhile would reach for one.
+        if (_stopped || (Abandonment.current?.isAbandoned ?? false)) {
+          // NOTE: close() or stop() has already run and cannot see this
+          // socket, so it is destroyed here or not at all. Unset first: it has
+          // no listener, and a close arriving meanwhile would reach for one.
           final orphan = _connection!;
           _connection = null;
           await orphan.close();
-          throw _stoppedException();
+          throw _abandonedException();
         }
         //3. listen to server response
         messageListener = socketListenerFactory.createListener(_connection!);
@@ -930,12 +930,18 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   bool _stopped = false;
   Future<void>? _stopping;
 
-  /// Abandoned by [stop], ending the work in flight and every socket still
-  /// being opened for this lookup, the atDirectory's included.
-  final Abandonment _abandonment = Abandonment();
+  /// Abandoned by [close] and by [stop], ending the work in flight and every
+  /// socket still being opened for this lookup, the atDirectory's included.
+  /// [close] replaces it, so calls made after it run.
+  Abandonment _abandonment = Abandonment();
 
   @override
-  Future<void> close() => stopNotifications();
+  Future<void> close() async {
+    final inFlight = _abandonment;
+    _abandonment = Abandonment();
+    inFlight.abandon();
+    await stopNotifications();
+  }
 
   @override
   Future<void> stop() => _stopping ??= _stop();
@@ -952,25 +958,46 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   StoppedException _stoppedException() =>
       StoppedException('the lookup for $_currentAtSign has been stopped');
 
+  /// What abandoned work fails with: a [StoppedException] once [stop] has
+  /// run, else the [ConnectionInvalidException] of a [close].
+  Exception _abandonedException() => _stopped
+      ? _stoppedException()
+      : ConnectionInvalidException(
+          'The connection to $_currentAtSign was closed by this client');
+
   void _throwIfStopped() {
     if (_stopped) throw _stoppedException();
   }
 
-  /// Runs [work] unless [stop] has been called, and fails it with a
-  /// [StoppedException] as soon as [stop] is called, without waiting for it.
-  ///
-  /// A failure that arrives after the stop - a read it aborted, a write to
-  /// the socket it destroyed - is reported as the [StoppedException] it is.
-  Future<T> _unlessStopped<T>(Future<T> Function() work) async {
+  /// Throws once [stop] has run, or once a [close] has abandoned the work
+  /// this runs inside.
+  void _throwIfAbandoned() {
     _throwIfStopped();
-    final closed = Completer<T>();
+    if (Abandonment.current?.isAbandoned ?? false) {
+      throw _abandonedException();
+    }
+  }
+
+  /// Runs [work] unless [stop] has been called, and fails it as soon as
+  /// [close] or [stop] is called, without waiting for it.
+  ///
+  /// A failure that arrives after that - a read it aborted, a write to the
+  /// socket it destroyed - is reported as the abandonment it is.
+  Future<T> _unlessStopped<T>(Future<T> Function() work) async {
+    _throwIfAbandoned();
+    final abandonment = _abandonment;
+    final ended = Completer<T>();
     final unregister =
-        _abandonment.onAbandon(() => closed.completeError(_stoppedException()));
-    final running = _abandonment.run(work);
+        abandonment.onAbandon(() => ended.completeError(_abandonedException()));
+    final running = abandonment.run(work);
     try {
-      return await Future.any([running, closed.future]);
+      return await Future.any([running, ended.future]);
     } on Exception catch (e) {
-      if (_stopped && e is! StoppedException) throw _stoppedException();
+      if (abandonment.isAbandoned &&
+          e is! StoppedException &&
+          e is! ConnectionInvalidException) {
+        throw _abandonedException();
+      }
       rethrow;
     } finally {
       unregister();
@@ -1135,6 +1162,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         if (!_isNotifying || generation != _notifyGeneration) return;
         try {
           if (!await _openNotificationStream(generation)) return;
+          if (generation != _notifyGeneration) return;
           logger.info('Notification connection re-established');
           _reconnectIx = 0;
           _startHeartbeat();
@@ -1312,7 +1340,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
 
-    if (!await _openNotificationStream(_notifyGeneration)) return;
+    final generation = _notifyGeneration;
+    if (!await _openNotificationStream(generation)) return;
+    // NOTE: a stopNotifications() that landed while `monitor:` went out owns
+    // the state now.
+    if (generation != _notifyGeneration) return;
     _isNotifying = true;
     _reconnectIx = 0;
     _startHeartbeat();
@@ -1332,6 +1364,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await requestResponseMutex.acquire();
     try {
       await createConnection();
+      if (generation != _notifyGeneration) {
+        await _closeConnection();
+        _throwIfStopped();
+        return false;
+      }
       if (_isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!, enrollmentId: enrollmentId);

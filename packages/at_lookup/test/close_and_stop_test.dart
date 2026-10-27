@@ -21,10 +21,17 @@ void main() {
   /// While set, a socket is not handed out until it completes.
   Completer<void>? connectGate;
 
+  /// While set, every new socket's flushes wait for it.
+  Completer<void>? flushGate;
+
+  /// Past the first notification reconnect delay of one second.
+  const pastFirstReconnect = Duration(milliseconds: 1400);
+
   setUp(() {
     sockets = [];
     authentications = [];
     connectGate = null;
+    flushGate = null;
     addressFinder = MockSecondaryAddressFinder();
     socketFactory = MockSecureSocketFactory();
     registerFallbackValue(SecureSocketConfig());
@@ -32,20 +39,22 @@ void main() {
         .thenAnswer((_) async => SecondaryAddress(host, port));
     when(() => socketFactory.createSocket(host, '$port', any()))
         .thenAnswer((_) async {
-      final s = FakeAtServerSocket();
+      final s = FakeAtServerSocket()..flushGate = flushGate;
       sockets.add(s);
       await connectGate?.future;
       return s;
     });
   });
 
-  AtLookupMuxable build() => AtLookUp.withSecureSocket(
+  AtLookupMuxable build({AtAuthenticator? authenticator}) =>
+      AtLookUp.withSecureSocket(
         atSign: '@alice',
         rootDomain: const AtRootDomain(host, 64),
-        authenticator: (executor) async {
-          authentications.add(executor);
-          return true;
-        },
+        authenticator: authenticator ??
+            (executor) async {
+              authentications.add(executor);
+              return true;
+            },
         secondaryAddressFinder: addressFinder,
         transport: AtLookupTransport(
           secureSocketConfig: SecureSocketConfig(),
@@ -120,8 +129,7 @@ void main() {
     atLookup.notifications.listen(null, onDone: notificationsDone.complete);
 
     await atLookup.close();
-    // Past the first reconnect delay, which is one second.
-    await Future.delayed(const Duration(milliseconds: 1400));
+    await Future.delayed(pastFirstReconnect);
 
     expect(atLookup.isNotifying, isFalse);
     expect(notificationsDone.isCompleted, isTrue,
@@ -142,7 +150,7 @@ void main() {
     expect(atLookup.isReconnectingNotifications, isTrue);
 
     await atLookup.close();
-    await Future.delayed(const Duration(milliseconds: 1400));
+    await Future.delayed(pastFirstReconnect);
 
     expect(sockets, hasLength(1),
         reason: 'a reconnect after close() reopens what its owner closed');
@@ -206,5 +214,190 @@ void main() {
     await expectLater(
         atLookup.executeCommand('noop:0\n'), throwsA(isA<StoppedException>()));
     expect(sockets, hasLength(1));
+  });
+  test('close() fails a connect in flight at once, and its late socket closes',
+      () async {
+    final atLookup = build();
+    connectGate = Completer<void>();
+    final request = inFlight(atLookup, 'noop:0\n');
+    await Future.delayed(const Duration(milliseconds: 50));
+    expect(sockets, hasLength(1), reason: 'the connect must be in flight');
+
+    await atLookup.close();
+    await request.settled.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the request waited for its connect'));
+    expect(request.thrown(), isA<ConnectionInvalidException>());
+
+    connectGate!.complete();
+    await eventually(() => sockets.first.destroyed,
+        'the socket the abandoned connect opened is closed');
+    expect(sockets.first.written, isEmpty);
+    connectGate = null;
+    expect(await answered(atLookup, 'noop:0\n'), 'data:ok',
+        reason: 'the lookup stays usable after close()');
+    await atLookup.stop();
+  });
+
+  test('close() during a notification start authenticates nothing', () async {
+    final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
+    connectGate = Completer<void>();
+    Object? thrown;
+    final starting = atLookup
+        .startNotifications()
+        .then<void>((_) {}, onError: (Object e) => thrown = e);
+    await Future.delayed(const Duration(milliseconds: 50));
+    expect(sockets, hasLength(1), reason: 'the start must be connecting');
+
+    await atLookup.close();
+    connectGate!.complete();
+    await starting.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the start waited for its connect'));
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    expect(thrown, isA<ConnectionInvalidException>());
+    expect(authentications, isEmpty,
+        reason: 'a start the owner closed under must not authenticate');
+    expect(atLookup.isNotifying, isFalse);
+    expect(sockets.single.destroyed, isTrue);
+    expect(sockets.single.written, isEmpty);
+    await atLookup.stop();
+  });
+
+  test(
+      'close() while a notification reconnect is connecting authenticates '
+      'nothing', () async {
+    final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
+    await atLookup.startNotifications();
+    expect(authentications, hasLength(1));
+    connectGate = Completer<void>();
+    await sockets.single.serverCloses();
+    await Future.delayed(pastFirstReconnect);
+    expect(sockets, hasLength(2), reason: 'the reconnect must be connecting');
+
+    await atLookup.close();
+    connectGate!.complete();
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    expect(authentications, hasLength(1),
+        reason: 'a reconnect the owner closed under must not authenticate');
+    expect(atLookup.isNotifying, isFalse);
+    expect(sockets.last.destroyed, isTrue);
+    expect(sockets.last.written, isEmpty);
+    await atLookup.stop();
+  });
+
+  test('close() while monitor: is being written leaves notifications off',
+      () async {
+    final atLookup = build()
+      ..heartbeatInterval = const Duration(milliseconds: 40);
+    flushGate = Completer<void>();
+    final starting = atLookup
+        .startNotifications()
+        .then<void>((_) {}, onError: (Object _) {});
+    await eventually(
+        () =>
+            sockets.isNotEmpty &&
+            sockets.single.written.any((w) => w.startsWith('monitor:')),
+        'monitor: must be on its way out');
+
+    await atLookup.close();
+    flushGate!.complete();
+    await starting;
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    expect(atLookup.isNotifying, isFalse,
+        reason: 'the close came after the start, so it wins');
+    expect(sockets, hasLength(1),
+        reason: 'nothing reconnects by itself after close()');
+    expect(sockets.single.written.where((w) => w == 'noop:0\n'), isEmpty,
+        reason: 'no heartbeat runs for notifications the owner closed');
+    await atLookup.stop();
+  });
+  test(
+      'stopNotifications() while a notification reconnect is connecting '
+      'authenticates nothing', () async {
+    final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
+    await atLookup.startNotifications();
+    expect(authentications, hasLength(1));
+    connectGate = Completer<void>();
+    await sockets.single.serverCloses();
+    await Future.delayed(pastFirstReconnect);
+    expect(sockets, hasLength(2), reason: 'the reconnect must be connecting');
+
+    await atLookup.stopNotifications();
+    connectGate!.complete();
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    expect(authentications, hasLength(1),
+        reason: 'a reconnect retired before it authenticated must not');
+    expect(atLookup.isNotifying, isFalse);
+    expect(sockets.last.destroyed, isTrue);
+    await atLookup.stop();
+  });
+
+  test('close() between a challenge and its answer sends the answer nowhere',
+      () async {
+    final challenged = Completer<void>();
+    final answering = Completer<void>();
+    Object? answerFailed;
+    final atLookup = build(authenticator: (executor) async {
+      await executor.sendSync('from:@alice\n');
+      challenged.complete();
+      await answering.future;
+      try {
+        await executor.sendSync('pkam:answer\n');
+      } on Exception catch (e) {
+        answerFailed = e;
+        rethrow;
+      }
+      return true;
+    });
+    Object? thrown;
+    final request = atLookup
+        .executeCommand('scan\n', auth: true)
+        .then<void>((_) {}, onError: (Object e) => thrown = e);
+    await Future.delayed(const Duration(milliseconds: 50));
+    await sockets.single.serverSends('data:challenge\n@');
+    await challenged.future.timeout(const Duration(seconds: 2));
+
+    await atLookup.close();
+    await request.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the request waited for its answer'));
+    answering.complete();
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    expect(thrown, isA<ConnectionInvalidException>());
+    expect(answerFailed, isA<ConnectionInvalidException>());
+    expect(sockets, hasLength(1),
+        reason: 'the answer must not open a connection of its own');
+    expect(sockets.single.written, ['from:@alice\n']);
+    await atLookup.stop();
+  });
+
+  test('close() during authentication sends the command nowhere', () async {
+    final authenticating = Completer<void>();
+    final authenticated = Completer<void>();
+    final atLookup = build(authenticator: (executor) async {
+      authenticating.complete();
+      await authenticated.future;
+      return true;
+    });
+    Object? thrown;
+    final request = atLookup
+        .executeCommand('scan\n', auth: true)
+        .then<void>((_) {}, onError: (Object e) => thrown = e);
+    await authenticating.future.timeout(const Duration(seconds: 2));
+
+    await atLookup.close();
+    await request.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the request waited for its authentication'));
+    authenticated.complete();
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    expect(thrown, isA<ConnectionInvalidException>());
+    expect(sockets, hasLength(1),
+        reason: 'the command must not open a connection of its own');
+    expect(sockets.single.written, isEmpty);
+    await atLookup.stop();
   });
 }
