@@ -594,11 +594,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return _verbResponseHandler(verbResponse);
   }
 
-  /// Records on the connection the identity it has just authenticated as, so
+  /// Records on [connection] the identity it has just authenticated as, so
   /// a later caller can tell which enrollment a live socket holds rather than
   /// which one the next authentication would use.
-  void _recordAuthentication({String? enrollmentId}) {
-    final metaData = _connection!.getMetaData()!;
+  void _recordAuthentication(OutboundConnection connection,
+      {String? enrollmentId}) {
+    final metaData = connection.getMetaData()!;
     metaData.isAuthenticated = true;
     metaData.authenticatedAsEnrollmentId = enrollmentId;
     metaData.authenticatedAt = DateTime.now().toUtc();
@@ -626,19 +627,23 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       });
 
   /// Runs [authenticate] against this connection, under the same mutex the
-  /// ladder's own methods take.
+  /// ladder's own methods take, and returns true once it has authenticated.
   ///
   /// [enrollmentId] is what gets recorded on the connection. It is a parameter
   /// rather than always this object's field because the two can differ: a
   /// caller reaching [pkamAuthenticate] names the enrollment in that call,
   /// while a verb going through [_process] has only the field to go on.
-  Future<void> _authenticateWith(AtAuthenticator authenticate,
+  Future<bool> _authenticateWith(AtAuthenticator authenticate,
       {String? enrollmentId}) async {
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
-      if (_connection!.getMetaData()!.isAuthenticated) {
-        return;
+      // NOTE: the authenticator can return after a close() and a reconnect,
+      // so its success is recorded on this connection, never on whichever
+      // one [_connection] holds by then.
+      final connection = _connection!;
+      if (connection.getMetaData()!.isAuthenticated) {
+        return true;
       }
       if (!await authenticate(this)) {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
@@ -648,7 +653,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // the ladder still needs the field. When the ladder goes, so does the
       // field, and the authenticator - which is the side that knows the
       // enrollment - becomes the only thing that can supply it.
-      _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
+      _recordAuthentication(connection,
+          enrollmentId: enrollmentId ?? this.enrollmentId);
+      return true;
     } finally {
       _pkamAuthenticationMutex.release();
     }
@@ -700,7 +707,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _recordAuthentication();
+          _recordAuthentication(_connection!);
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -723,8 +730,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // still running the ladder - the seam would look connected and do nothing
     // on the one call that matters most.
     if (authenticator != null) {
-      await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
-      return _connection!.getMetaData()!.isAuthenticated;
+      return _authenticateWith(authenticator!, enrollmentId: enrollmentId);
     }
     await createConnection();
     try {
@@ -764,7 +770,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _recordAuthentication(enrollmentId: enrollmentId);
+          _recordAuthentication(_connection!, enrollmentId: enrollmentId);
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -807,7 +813,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
         if (cramResponse == 'data:success') {
           logger.info('auth success');
-          _recordAuthentication();
+          _recordAuthentication(_connection!);
         } else {
           throw UnAuthenticatedException('Auth failed: $cramResponse');
         }

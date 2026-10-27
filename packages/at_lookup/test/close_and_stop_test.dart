@@ -400,4 +400,39 @@ void main() {
     expect(sockets.single.written, isEmpty);
     await atLookup.stop();
   });
+
+  test('A late authentication marks only its own connection', () async {
+    final authenticating = Completer<void>();
+    final authenticated = Completer<void>();
+    final atLookup = build(authenticator: (executor) async {
+      authentications.add(executor);
+      if (authentications.length == 1) {
+        authenticating.complete();
+        await authenticated.future;
+      }
+      return true;
+    });
+    Object? thrown;
+    final late = atLookup
+        .pkamAuthenticate()
+        .then<void>((_) {}, onError: (Object e) => thrown = e);
+    await authenticating.future.timeout(const Duration(seconds: 2));
+    await atLookup.close();
+    await late.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the authentication outlived the close'));
+    final response = atLookup.executeCommand('scan\n', auth: true);
+    await eventually(() => sockets.length == 2, 'the command reconnected');
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    authenticated.complete();
+    await Future.delayed(const Duration(milliseconds: 50));
+    await sockets.last.serverSends('data:ok\n@alice@');
+
+    expect(thrown, isA<ConnectionInvalidException>());
+    expect(await response, 'data:ok');
+    expect(authentications, hasLength(2),
+        reason: 'the new connection authenticates itself, whatever an '
+            'authentication on the old one reports');
+    await atLookup.stop();
+  });
 }
