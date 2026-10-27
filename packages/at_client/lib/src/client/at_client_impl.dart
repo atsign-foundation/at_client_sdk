@@ -2374,7 +2374,7 @@ class AtClientImpl implements AtClient {
     final previous = _remoteSecondary;
     _remoteSecondary = buildRemoteSecondary();
     try {
-      await previous?.atLookUp.close();
+      await previous?.closeConnection();
     } on Exception catch (e) {
       _logger.warning('The connection authenticated as '
           '${previousEnrollmentId ?? "the atSign itself"} could not be closed; '

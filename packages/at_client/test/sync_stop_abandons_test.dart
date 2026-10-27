@@ -226,7 +226,7 @@ void main() {
       when(() => localSecondary.executeVerb(any(),
               cameFromServer: any(named: 'cameFromServer')))
           .thenThrow(
-              StoppedException('the lookup for @abandon has been closed'));
+              StoppedException('the lookup for @abandon has been stopped'));
 
       await expectLater(
           sync.syncInternal(5, SyncRequest()..result = SyncResult(),

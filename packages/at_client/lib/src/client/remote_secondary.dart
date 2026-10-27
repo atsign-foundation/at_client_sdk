@@ -402,7 +402,11 @@ class RemoteSecondary implements Secondary {
   /// Closes the connection and ends this remote secondary for good. A
   /// connection meant to be re-established uses
   /// [AtLookupMuxable.dropConnection] instead.
+  ///
+  /// An [AtLookUp] that is not an [AtLookupMuxable] can only be closed, so a
+  /// later call through it opens a new connection.
   Future<void> closeConnection() async {
-    await atLookUp.close();
+    final lookUp = atLookUp;
+    await (lookUp is AtLookupMuxable ? lookUp.stop() : lookUp.close());
   }
 }
