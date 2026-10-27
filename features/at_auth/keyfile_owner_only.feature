@@ -2,7 +2,8 @@ Feature: Keyfiles are written owner-only
   On Linux and macOS, FileAtKeysIo writes every keyfile, and the .bak and
   .pre-v1 copies it keeps beside one, readable and writable by the owner
   alone (mode 0600), whatever the process umask and whatever mode the file
-  had before. Each write goes to a temporary file that is created with mode
+  had before. Written as root, a file that already exists keeps its owner
+  and group. Each write goes to a temporary file that is created with mode
   0600 before any key material is written to it, and is then renamed into
   place. On Windows the file takes its directory's permissions, as before.
 
@@ -74,3 +75,9 @@ Feature: Keyfiles are written owner-only
     When FileAtKeysIo updates the keyfile
     Then nothing is written where the link points
     And the keyfile is a file with mode 0600
+
+  Scenario: A keyfile rewritten by root keeps its owner and group
+    Given @alice🛠's keyfile is owned by another account, with mode 0600
+    When FileAtKeysIo, running as root, updates it
+    Then the keyfile keeps that owner and group
+    And the keyfile's mode is 0600
