@@ -30,7 +30,7 @@ what `at_auth` and the atServer actually expose:
 | **New device / app** for an existing user | `AtEnrollment.submit(EnrollmentRequest, otp)` → `approve` | ✅ fully machine-drivable — the enrollment OTP is minted **programmatically** (`otp:get`), and `setSpp` gives a semi-permanent passcode |
 | **Webhook-driven bulk approval** | an `autoApprove` daemon subscribing `.*\.new\.enrollments\.__manage`, regex-matching app/device | ⚠️ **already written**, but reachable only through `auth_cli.dart` — not exported from the barrel |
 | SCIM **disable user** | per-enrollment `AtEnrollment.revoke(enrollmentId)` | ⚠️ per-enrollment only; **no atSign-level primitive** — §2 |
-| SCIM **re-enable user** | `unrevoke` | ⚠️ exists on the wire and in the server handler; **no library API** |
+| SCIM **re-enable user** | at_client `Enrollments.unrevoke(enrollmentId)` | ✅ in at_client (with `delete`, `fetch`); ⚠️ at_auth has none. Reinstates the same enrollment and key, original expiry kept |
 | **Reconcile** directory ↔ atSigns | `AtEnrollment.list(statusFilters)` | ✅ |
 | **Policy** — who may hold an atSign in this tenant | `packages/at_policy` | ✅ right home, unused for this |
 
@@ -118,7 +118,7 @@ These are *don't-close-this-door* rules. None requires the IdP integration to be
 | **E2** | Build the sealed key envelope as a **reusable, pure-Dart component**, not welded inside the IndexedDB implementation | An IdP directory attribute (Entra schema extensions, Okta Universal Directory) is a plausible host-supplied key store. If sealing is reusable, that store inherits it. If not, writing plaintext atKeys into a directory attribute would be a serious regression — note that a host-supplied store receives **plaintext** across the port, and owns its own at-rest protection |
 | **E3** | **Redirect-based OIDC only** | Popups work today but break the moment any V2 storage option requires COOP `same-origin` |
 | **E4** | **No new process-global state**; one client per atSign, explicitly (D-22) | An IdP integration is inherently multi-identity: one service holding many users' atSigns. Under D-17 this can be *demonstrated* now, not merely promised |
-| **E5** | Export the enrollment lifecycle that already exists — `unrevoke`, `delete`, single `fetch`, and the `autoApprove` daemon | Cheap, non-breaking, additive. These are **library-API gaps, not server gaps**: all of them exist on the wire and in the atServer's enroll handler. The webhook-driven approval daemon is already written |
+| **E5** | Export the enrollment lifecycle that already exists — `unrevoke`, `delete`, single `fetch` in at_auth, and the `autoApprove` daemon | Cheap, non-breaking, additive. These are **library-API gaps, not server gaps**: all of them exist on the wire and in the atServer's enroll handler; at_client already exposes `Enrollments.unrevoke`/`delete`/`fetch`, at_auth does not. The webhook-driven approval daemon is already written |
 | **E6** | Make HTTP-client injection mandatory on the onboarding path | Needed for the browser anyway; it is also what lets §4's two defects be fixed independently |
 | **E7** | **Zero vendor-specific IdP code in the core SDK.** Expose generic SCIM/OIDC lifecycle hooks and build IdP integrations as pluggable adapters. | Hardcoding Microsoft Entra or Okta APIs creates massive technical debt. The SDK must remain provider-agnostic, relying on standard protocols so any IdP (Ping, Auth0, custom) can be plugged in without touching `at_client` or `at_auth`. |
 
