@@ -1,6 +1,6 @@
 # at_talk in the browser — demo
 
-**Status:** working end-to-end on one Mac (2026-10-27) · **Bead:** `at_client_sdk-5q6` · **Plan:** `plans/2026-10-22-at-talk-browser-demo.md` (local)
+**Status:** working end-to-end on one Mac (2026-10-27) · **Bead:** `at_client_sdk-5q6`
 
 A Chrome tab (`web/talk.html` on the `at_client_wasm` dev harness) chats end-to-end encrypted with the C `at_talk` example. Both directions work, and both builds (dart2js, dart2wasm) receive.
 
