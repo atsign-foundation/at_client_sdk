@@ -59,3 +59,15 @@ Feature: A keyfile the previous published at_auth wrote still reads and updates
     When FileAtKeysIo updates it, filing an enrollment's key material
     Then reading it back gives every value at_auth 3.2.0 read, and the new material
     And the .pre-v1 copy holds the 3.2.0 document byte for byte
+
+  Scenario: A typed keyfile with no typed key material is rewritten in the flat shape
+    Given a keyfile for @alice🛠 carrying version 1, its atSign and an empty keys array, and no typed key material
+    When FileAtKeysIo updates it without adding typed key material
+    Then the update succeeds
+    And the keyfile is written in the flat shape, with every value it held
+
+  @forgery
+  Scenario: A keyfile naming another atSign is still refused
+    Given a keyfile at @alice🛠's path whose atsign field names @bob🛠
+    When FileAtKeysIo updates it for @alice🛠
+    Then the update fails
