@@ -8,6 +8,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
+import 'package:at_auth/src/keys/io/owner_only_file.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_auth/src/keys/serialization/json_text.dart';
 import 'package:at_chops/at_chops.dart';
@@ -122,18 +123,19 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       existing: existing,
       candidate: document,
     );
-    await _preserveLegacyShape(file, existing, document);
+    final previous = await file.readAsBytes();
+    await _preserveLegacyShape(file, existing, document, previous);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
-    await file.copy('${file.path}.bak');
+    await _replaceOwnerOnly(File('${file.path}.bak'), previous);
     await _writeAtRestDocument(file, document);
   }
 
   /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
   static const legacyShapeBackupSuffix = '.pre-v1';
 
-  /// Copies the keyfile aside, once, at the moment its shape stops being the
-  /// flat one every published build can read.
+  /// Copies the keyfile's [previous] bytes aside, once, at the moment its
+  /// shape stops being the flat one every published build can read.
   ///
   /// Keyed on that transition and never overwritten, unlike the rolling `.bak`
   /// beside it, which the next write replaces.
@@ -141,12 +143,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     File file,
     Map<String, dynamic> existing,
     Map<String, dynamic> candidate,
+    List<int> previous,
   ) async {
     if (existing.containsKey('version')) return;
     if (!candidate.containsKey('version')) return;
     final backup = File('${file.path}$legacyShapeBackupSuffix');
     if (backup.existsSync()) return;
-    await file.copy(backup.path);
+    await _replaceOwnerOnly(backup, previous);
     _logger.shout(
         'Upgrading ${file.path} to the typed keyfile format: it now carries '
         'per-enrollment key material, which a build older than this one does '
@@ -185,12 +188,38 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     if (!file.parent.existsSync()) {
       await file.parent.create(recursive: true);
     }
-    // Write-to-temp then rename: a crash mid-write can never truncate the
-    // keyfile — the rename swaps in the fully-written temp file or leaves
-    // the original untouched.
+    await _replaceOwnerOnly(
+        file, utf8.encode(await _encodePassphraseEnvelope(document)));
+  }
+
+  /// Replaces [file] with [bytes] through a temporary file renamed over it,
+  /// so a crash mid-write leaves [file] as it was rather than truncated.
+  /// Where the platform has file modes, [file] ends up readable and writable
+  /// by its owner alone.
+  Future<void> _replaceOwnerOnly(File file, List<int> bytes) async {
     final temp = File('${file.path}.tmp');
-    await temp.writeAsString(await _encodePassphraseEnvelope(document));
+    if (temp.existsSync()) await temp.delete();
+    final previousMode = ownerOnlyModeSupported ? _modeOf(file) : null;
+    // NOTE: the temporary file is owner-only before any byte is written to
+    // it, and a leftover one is deleted, never written into.
+    final ownerOnly = ownerOnlyModeSupported && _createOwnerOnly(temp);
+    await temp.writeAsBytes(bytes);
     await temp.rename(file.path);
+    if (ownerOnly && previousMode != null && previousMode & 0x3f != 0) {
+      _logger.info('${file.path} is now readable and writable by its owner '
+          'alone: mode ${_octal(ownerOnlyMode)}, was ${_octal(previousMode)}');
+    }
+  }
+
+  bool _createOwnerOnly(File temp) {
+    try {
+      createOwnerOnly(temp.path);
+      return true;
+    } on FileSystemException catch (e) {
+      _logger
+          .warning('Writing ${temp.path} without owner-only permissions: $e');
+      return false;
+    }
   }
 
   Future<String> _encodePassphraseEnvelope(
@@ -263,6 +292,15 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
   }
   return result;
 }
+
+/// The permission bits of [file], or null when it does not exist.
+int? _modeOf(File file) {
+  final stat = file.statSync();
+  if (stat.type == FileSystemEntityType.notFound) return null;
+  return stat.mode & 0x1ff;
+}
+
+String _octal(int mode) => mode.toRadixString(8).padLeft(4, '0');
 
 // Copied from at_cli_commons to avoid a circular dependency.
 String getDefaultAtKeysFilePath(String homeDirectory, String atsign) {
