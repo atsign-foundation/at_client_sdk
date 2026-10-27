@@ -98,8 +98,6 @@ void main() {
   /// Catalogue: features/at_lookup/close_and_stop.feature
   test("A superseded enrollment's lookup cannot reconnect after a retrofit",
       () async {
-    // The client authenticates on this as the enrollment it was submitted
-    // as, retrofits, and rederives onto a connection of its own.
     final superseded = secureSocketLookUps()(
       atSign: atSign,
       rootDomain: AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
@@ -112,6 +110,10 @@ void main() {
         isFalse,
         reason: 'the premise: the client moved off the connection it was '
             'opened on');
+    expect(superseded.connection?.getMetaData()?.authenticatedAsEnrollmentId,
+        enrolled.enrollmentId,
+        reason: 'the premise: the connection authenticated as the enrollment '
+            'the retrofit superseded');
 
     await expectLater(superseded.executeCommand('scan\n', auth: true),
         throwsA(isA<StoppedException>()),
@@ -293,9 +295,8 @@ void main() {
 
     // Drop everything the process holds for this atSign, so the client below
     // is built the way a later run builds one: from the keyfile.
-    // NOTE: dropped rather than closed. A closed lookup is ended for good,
-    // and this client stays live until teardown, so its sync would go on
-    // reaching for a connection that can never be used again.
+    // NOTE: dropped, never stopped: this client stays live until teardown,
+    // and its sync still needs the connection.
     await (enrolled.client.getRemoteSecondary()?.atLookUp as AtLookupMuxable?)
         ?.dropConnection();
     for (final dropped in List.of(AtClientImpl.atClientInstanceMap.values)) {
