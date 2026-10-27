@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15
+**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · gate (c) and K-5′ proposed
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2295)
 
@@ -12,7 +12,7 @@
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
-| C4 | **Restored public keys must match the published ones before PKAM** | — |
+| C4 | **Restored public keys must match the published ones before PKAM**. Under K-11 the document arrives after PKAM; the rewording K-5′ ("before the keys are used") is proposed | — |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
 ## Derivation and record
@@ -23,10 +23,17 @@ P     = WebAuthn get(prf.eval.first = salt)                 // one prompt
 lookup = HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id|<atSign>")   → 64 lowercase hex
 kek    = HKDF-SHA256(P, salt = ∅, info = "atkeys-kek|<atSign>")
 
-record = { v: 2, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
-AAD    = canonical JSON of the record without ct   (v, alg, kdf, iv)
-ct     = AES-256-GCM(kek, iv, @keys JSON, AAD)
+record = { v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
+AAD    = canonical JSON of the record without ct   (v, typ, alg, kdf, iv)
+ct     = AES-256-GCM(kek, iv, plaintext, AAD)
+
+pointer  = public:_<lookup>.atkeysv@<atSign>     typ "eid"     plaintext = enrollmentId          no TTL, written once at enroll (K-10)
+document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys JSON without     read over PKAM by that enrollment (K-11)
+                                                               the APKAM private key
 ```
+
+- **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (same name, no TTL) plus the document. K-8's PCAM private key in the record is gone: the document holds no APKAM private key. Where the PKAM key comes from (a passkey-derived ML-DSA-65 key) is part of gate (c), proposed, not ruled.
+- `typ` in the AAD stops a pointer being opened as a document, or the reverse. Whether `v` changes with `typ` is open.
 
 - `<atSign>` comes from `userHandle`, so it is known before any derivation.
 - `<atSign>` in the labels is canonical, as at_commons `toAtsign()` produces it: lowercase, leading `@`, dots removed. `@Alice`, `alice` and `@ali.ce` all derive the same keys.
@@ -57,7 +64,7 @@ Freshness per write comes from the random IV.
 |---|---|
 | C1 atSign in labels | Linking or splicing records if a passkey is ever paired with two atSigns |
 | C2 AAD = clear header | Downgrade attacks via edits to `v`, `alg` or `kdf` |
-| C4 public-key check | **Rollback**: the server replays an older valid record whose keys have since been rotated |
+| C4 public-key check | **Rollback**: the server replays an older valid document whose keys have since been rotated |
 | C3 per-write data key (rejected) | Nothing here. Its job is letting several passkeys unlock one shared key, the `unlocks[]` pattern this design removes. |
 
 ## Cost of changing later
@@ -67,3 +74,4 @@ Freshness per write comes from the random IV.
 | A — salt | High. A return flow can migrate in one prompt with `prf.eval.second`; devices that next appear via recovery must re-enroll. |
 | B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
 | C2 — record format | Low. `v` migrates on the next open. |
+| Pointer name (K-10) | High. It is written once and has no TTL; a new name needs every passkey to open once under the old name and write the new one. |
