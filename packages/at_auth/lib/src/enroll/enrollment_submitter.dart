@@ -218,6 +218,8 @@ class EnrollmentSubmitter {
       {bool failOnBuilderError = false}) async {
     if (builder == null) return null;
 
+    // NOTE: a scratch store for the builder; what it files is copied out.
+    // ignore: invalid_use_of_visible_for_testing_member
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, keys);
     try {

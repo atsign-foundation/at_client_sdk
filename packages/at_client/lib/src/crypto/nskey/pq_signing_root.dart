@@ -32,6 +32,8 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
         signingRootMintLockTtl;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
+    show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -211,8 +213,10 @@ class PqSigningRoot {
   /// of the pair first.
   ///
   /// Returns the public half, or null when this client did not mint: it is not
-  /// fully privileged, a root is already published, or another of this atSign's
-  /// enrollments holds the mint lock.
+  /// fully privileged, its key source cannot file a private, a root is already
+  /// published, or another of this atSign's enrollments holds the mint lock.
+  /// Without a key source that can file the private, neither is the published
+  /// root read nor the mint lock taken.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {
     final atSign = atClient.getCurrentAtSign()?.toAtsign();
     if (atSign == null) return null;
@@ -221,6 +225,12 @@ class PqSigningRoot {
       _logger.info('Not minting the signing root for $atSign: this enrollment '
           'is not fully privileged, so it receives the root rather than '
           'creating it');
+      return null;
+    }
+    if (keysIo is! WrittenAtKeysIo) {
+      _logger.warning('Not minting the signing root for $atSign: this '
+          'client\'s key source cannot file a private, and a root whose '
+          'private nothing holds cannot be replaced');
       return null;
     }
 
@@ -396,9 +406,9 @@ class PqSigningRoot {
         return publicKey;
       }
 
-      // NOTE: the losing pair must be retired, not kept for a later start to
-      // republish — [mintIfAbsent] never runs on a start, so a kept pair is
-      // permanent, and it satisfies [requestPrivateIfAbsent]'s cheapest guard.
+      // NOTE: the losing pair is retired at once, not kept for a later start
+      // to republish: while it stays active it satisfies
+      // [requestPrivateIfAbsent]'s cheapest guard.
       try {
         await _retireSlot(atSign, slot);
       } catch (e2) {
@@ -419,14 +429,16 @@ class PqSigningRoot {
     return publicKey;
   }
 
-  /// Anchors this enrollment to the root it just published.
+  /// Links this enrollment's keys to the root it just published.
   ///
   /// Swallows its own failure: the root is published and the private filed, so
   /// the next start is free to retry.
   Future<void> _anchorSelf(String atSign) async {
     try {
-      await PqSigningChain(atClient).publishOwnRootLink(
-          isFullyPrivileged: () async => true, keysIo: keysIo);
+      await PqSigningChain(atClient).linkOwnKeys(
+          AtClientSecretSharing.forClient(atClient),
+          isFullyPrivileged: () async => true,
+          keysIo: keysIo);
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.warning('Minted the signing root for $atSign but could not '
@@ -542,15 +554,18 @@ class PqSigningRoot {
   /// the record publishes no root: a link signed with an unpublished root
   /// verifies against nothing.
   ///
-  /// A null `kid` means no public half is filed beside the private, and a
-  /// reader takes its absence as "try them all" rather than "reject".
+  /// The `kid` is the public half's filed beside the private, else that of
+  /// the advertised root the private corresponds to; it is null only when
+  /// neither can be found.
   Future<({Uint8List private, String? kid})?> signingKey(String atSign) async {
     final AtKeys? keys = await _readKeys(atSign);
     if (keys == null) return null;
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
+    var roots = const <ApskSigningKey>[];
     try {
-      if ((await publishedRoots(atClient, atSign)).isEmpty) {
+      roots = await publishedRoots(atClient, atSign);
+      if (roots.isEmpty) {
         _logger.info('$atSign holds a signing root private the record does '
             'not publish yet, so nothing is signed with it until it is');
         return null;
@@ -560,13 +575,14 @@ class PqSigningRoot {
       _logger.warning('Could not read whether the signing root $atSign holds '
           'is published, so it signs as though it is: $e');
     }
+    final private = Uint8List.fromList(material.bytes.bytes);
     final public = keys.getAtSignKey(
         material.keyId, CryptographicMaterialRole.publicVerification);
     return (
-      private: Uint8List.fromList(material.bytes.bytes),
-      kid: public == null
-          ? null
-          : publicKeyKid(Uint8List.fromList(public.bytes.bytes)),
+      private: private,
+      kid: public != null
+          ? publicKeyKid(Uint8List.fromList(public.bytes.bytes))
+          : (await _correspondingRoot(private, roots))?.kid,
     );
   }
 

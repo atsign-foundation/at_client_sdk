@@ -44,12 +44,12 @@ class PqStartupGates {
     this.collectConveyedKeys = true,
     this.startEnvelopeListener = true,
     this.mintInUseSigningKeys = true,
+    this.refreshOwnLinks = true,
     this.reconcileKeyPackage = true,
     this.seedNamespaceKeys = true,
     this.requestRootPrivate = true,
     this.requestMissingPrivates = true,
-    this.publishRootLink = true,
-    this.publishChainLink = true,
+    this.anchorOwnKeys = true,
     this.sweepUnanchoredEnrollments = true,
     this.reconcileEnrollmentSnapshot = true,
     this.askOnReadMiss = true,
@@ -62,12 +62,12 @@ class PqStartupGates {
         collectConveyedKeys = false,
         startEnvelopeListener = false,
         mintInUseSigningKeys = false,
+        refreshOwnLinks = false,
         reconcileKeyPackage = false,
         seedNamespaceKeys = false,
         requestRootPrivate = false,
         requestMissingPrivates = false,
-        publishRootLink = false,
-        publishChainLink = false,
+        anchorOwnKeys = false,
         sweepUnanchoredEnrollments = false,
         reconcileEnrollmentSnapshot = false,
         askOnReadMiss = false;
@@ -92,6 +92,11 @@ class PqStartupGates {
   /// Inert while that set is empty.
   final bool mintInUseSigningKeys;
 
+  /// Read-precondition: reads which of this enrollment's keys have a link,
+  /// so content is signed with those. Off, it signs with every key it
+  /// holds.
+  final bool refreshOwnLinks;
+
   /// Active: brings this enrollment's advertised key package into line with
   /// `AtClientPreference.keyEstablishmentAlgorithms` — minting, filing and
   /// advertising an encapsulation keypair for every algorithm the list names
@@ -110,14 +115,13 @@ class PqStartupGates {
   /// Active: broadcasts asks for nskey privates this enrollment lacks.
   final bool requestMissingPrivates;
 
-  /// Active: publishes this enrollment's self-signed root link.
-  final bool publishRootLink;
+  /// Active: links this enrollment's keys through `enroll:link`, minting the
+  /// signing root first when this enrollment is fully privileged and the
+  /// atSign publishes none.
+  final bool anchorOwnKeys;
 
-  /// Active: publishes the approval-chain link this enrollment was given.
-  final bool publishChainLink;
-
-  /// Active: a fully privileged client signs and conveys links for
-  /// approved enrollments that lack one.
+  /// Active: a holder of the signing root's private key root-links every key
+  /// on the atSign's other approved enrollments that lacks a sound root link.
   final bool sweepUnanchoredEnrollments;
 
   /// Writes the atServer's view of this enrollment's grants onto the keyfile.
@@ -161,12 +165,12 @@ class PqStartupGates {
         'collectConveyedKeys': collectConveyedKeys,
         'startEnvelopeListener': startEnvelopeListener,
         'mintInUseSigningKeys': mintInUseSigningKeys,
+        'refreshOwnLinks': refreshOwnLinks,
         'reconcileKeyPackage': reconcileKeyPackage,
         'seedNamespaceKeys': seedNamespaceKeys,
         'requestRootPrivate': requestRootPrivate,
         'requestMissingPrivates': requestMissingPrivates,
-        'publishRootLink': publishRootLink,
-        'publishChainLink': publishChainLink,
+        'anchorOwnKeys': anchorOwnKeys,
         'sweepUnanchoredEnrollments': sweepUnanchoredEnrollments,
         'reconcileEnrollmentSnapshot': reconcileEnrollmentSnapshot,
         'askOnReadMiss': askOnReadMiss,
@@ -239,11 +243,6 @@ class PqClientBootstrap {
     sharing.fileReceivedSecret = (secret) async {
       await filing?.filePending([secret]);
       await root.filePendingPrivate(_atSign, [secret]);
-      if (gates.publishChainLink &&
-          !_holdingLinkStamps &&
-          PqSigningChain.isLinkSecret(secret.name)) {
-        await chain.stampConveyedLink(secret);
-      }
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
@@ -298,12 +297,6 @@ class PqClientBootstrap {
   @visibleForTesting
   Future<void> Function()? holdBeforeMint;
 
-  // NOTE: true from the start of startup until its mint step has run. A mint
-  // republishes `_apsk` by enroll:update, which keeps the stored
-  // `appMetadata`, so a link stamped over the old key would ride the new one;
-  // a link arriving meanwhile is stamped by the link-publishing step instead.
-  bool _holdingLinkStamps = false;
-
   /// Completes when the last startup step has run. Steps fail
   /// independently and are logged, so this never completes with an error —
   /// it answers "has the startup finished?", not "did every step work?".
@@ -336,7 +329,6 @@ class PqClientBootstrap {
             _atClient.getCurrentAtSign()!, namespace);
 
     final steps = _steps;
-    _holdingLinkStamps = true;
     try {
       for (var i = 0; i < steps.length; i++) {
         if (_stopped) {
@@ -354,7 +346,6 @@ class PqClientBootstrap {
         }
       }
     } finally {
-      _holdingLinkStamps = false;
       _startupComplete.complete();
     }
   }
@@ -394,8 +385,7 @@ class PqClientBootstrap {
         (name: 'seedNamespaceKeys', run: _seedNamespaceKeys),
         (name: 'requestRootPrivate', run: _requestRootPrivate),
         (name: 'requestMissingPrivates', run: _requestMissingPrivates),
-        (name: 'publishRootLink', run: _publishRootLink),
-        (name: 'publishChainLink', run: _publishChainLink),
+        (name: 'anchorOwnKeys', run: _anchorOwnKeys),
         (name: 'sweepUnanchoredEnrollments', run: _sweepUnanchoredEnrollments),
         (
           name: 'reconcileEnrollmentSnapshot',
@@ -488,23 +478,34 @@ class PqClientBootstrap {
   /// set names and this enrollment does not hold, and retires every one it
   /// holds that the set no longer names.
   ///
+  /// Then records which of this enrollment's keys have a link, so content
+  /// signed from here on is signed with those, whether or not this start
+  /// mints, unless [PqStartupGates.refreshOwnLinks] is off.
+  ///
   /// Runs before every step that **publishes** — the namespace-key seeding and
-  /// both link publications — so a key minted on this start is already
-  /// advertised by the time one of those signs with it, and a key retired on
-  /// this start signs nothing more. Not before everything that signs: the
-  /// sweep steps run first and reply with whatever the keyfile already holds.
+  /// the linking of this enrollment's keys — so a key minted on this start is
+  /// already advertised by the time one of those signs with it, and a key
+  /// retired on this start signs nothing more. Not before everything that
+  /// signs: the sweep steps run first and reply with whatever the keyfile
+  /// already holds.
   Future<void> _mintInUseSigningKeys() async {
     try {
       await holdBeforeMint?.call();
-      if (!_gates.mintInUseSigningKeys) return;
-      await minting.reconcileSigningKeys();
+      if (_gates.mintInUseSigningKeys) await minting.reconcileSigningKeys();
     } catch (e, st) {
       if (_causedByStop(e)) rethrow;
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
-    } finally {
-      _holdingLinkStamps = false;
+    }
+    if (!_gates.refreshOwnLinks) return;
+    try {
+      await chain.refreshOwnLinks();
+    } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
+      _logger.warning('Could not read which keys of $_atSign\'s enrollment '
+          'have a link, so it signs content with every key it holds until '
+          'they are read: $e, $st');
     }
   }
 
@@ -608,44 +609,47 @@ class PqClientBootstrap {
     }
   }
 
-  /// Anchors this enrollment directly to its signing root, attempted before
-  /// the chain link because it needs no hop through whoever approved it.
-  Future<void> _publishRootLink() async {
-    if (!_gates.publishRootLink) return;
+  /// Links this enrollment's keys through `enroll:link`.
+  ///
+  /// A fully privileged enrollment whose atSign publishes no signing root
+  /// mints one first, on a key source that can keep it, and root-links its
+  /// own keys as it does. Otherwise a holder of the root's private key
+  /// root-links any of its keys that lacks a sound root link, and any other
+  /// enrollment links a key it lacks a link for with one of its keys that
+  /// walks to the root.
+  ///
+  /// A root minted here is primed into the secret store for answering other
+  /// enrollments, as [_hydrateHeldSecrets] primes one already held, unless
+  /// [PqStartupGates.hydrateHeldSecrets] is off.
+  Future<void> _anchorOwnKeys() async {
+    if (!_gates.anchorOwnKeys) return;
     try {
-      await chain.publishOwnRootLink(
+      if (await _privilege.isFullyPrivileged() &&
+          await root.mintIfAbsent(isFullyPrivileged: true) != null) {
+        final askIn = _atClient.getPreferences()?.namespace;
+        if (_gates.hydrateHeldSecrets && askIn != null && askIn.isNotEmpty) {
+          await root.hydrateStore(sharing, askIn);
+        }
+        return;
+      }
+      await chain.linkOwnKeys(sharing,
           isFullyPrivileged: _privilege.isFullyPrivileged, keysIo: _keysIo);
     } catch (e, st) {
       if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
-          'Anchoring $_atSign to its signing root failed; the '
-          'enrollment falls back to its approval-chain link and the next '
-          'start retries: $e, $st');
+          'Linking the keys of $_atSign\'s enrollment failed; until they are '
+          'linked it signs content as it did, and the next start retries: '
+          '$e, $st');
     }
   }
 
-  Future<void> _publishChainLink() async {
-    if (!_gates.publishChainLink) return;
-    try {
-      await chain.publishPendingLink();
-    } catch (e, st) {
-      if (_causedByStop(e)) rethrow;
-      logSwallowed(
-          _logger,
-          e,
-          'Publishing the approval-chain link failed for '
-          '$_atSign; the enrollment stays unsigned, which verifiers '
-          'tolerate, and the next start retries: $e, $st');
-    }
-  }
-
-  /// The chain sweep: a fully privileged client signs and conveys links for
-  /// approved enrollments that lack one.
+  /// The sweep: a fully privileged client root-links the keys on the atSign's
+  /// other approved enrollments that lack a sound root link.
   ///
-  /// Gated on privilege here rather than inside, because a link signed by an
-  /// unanchored sweeper adds a hop without reaching the root.
+  /// Gated on privilege here, because the sweep leaves privilege to its caller
+  /// and only a fully privileged enrollment holds the root's private key.
   Future<void> _sweepUnanchoredEnrollments() async {
     if (!_gates.sweepUnanchoredEnrollments) return;
     try {
@@ -685,9 +689,9 @@ class PqClientBootstrap {
     final keysIo = _keysIo;
     if (keysIo is! WrittenAtKeysIo) return;
 
-    // NOTE: the atSign's own credential has no record to fetch, and
-    // `enroll:fetch` is answered for whatever id it is handed rather than
-    // refused.
+    // NOTE: the atSign's own credential is treated as the atSign itself,
+    // never as an enrollment, and `enroll:fetch` is answered for whatever
+    // id it is handed rather than refused.
     final enrollmentId = _atClient.enrollmentId;
     if (enrollmentId == null || isAtSignCredential(enrollmentId)) return;
 

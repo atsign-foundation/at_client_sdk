@@ -9,7 +9,16 @@ wasm and stops them gaining browser-hostile imports. Not published; run by
 dart run wasm_shakedown                    # every gated package
 dart run wasm_shakedown --package at_auth  # just one (repeatable)
 dart run wasm_shakedown --config PATH      # a config other than the default
+dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
 ```
+
+`--resolve-from PACKAGE=DIR` walks and compiles one gate against `DIR`'s own package
+config instead of the workspace's, leaving the others alone. It is for a package outside
+the root `workspace:` list — `at_chops`, while 4.0.0 is detached — whose name otherwise
+resolves to the published copy in the pub cache, so its gate would measure a different
+package than this tree. `DIR` needs its own `dart pub get`, and a missing one is an error
+rather than a fall back to the workspace config. The `wasm_ratchet` job passes the flag;
+drop it there and here when at_chops rejoins `workspace:`.
 
 The default config is `.github/wasm_gates.yaml`, resolved against the pub workspace
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,
@@ -107,13 +116,15 @@ live walk. There is deliberately no way to write a baseline back from a run — 
 generator existed once and was removed, because the failure output already carries
 what it would have printed.
 
-Every gated package has an empty allow list. at_chops' and at_utils' ceilings are 0;
-at_auth's 2 is `at_lookup` and `chalkdart`, the latter through `at_progress.dart`.
+Every gated package has an empty allow list. at_chops' and at_utils' ceilings are 0 —
+nothing under their barrels reaches a blocked package. at_auth's 2 is `at_lookup` and
+`chalkdart`, the latter through `at_progress.dart`.
 
 Every run prints its figures whether or not it fails:
 
 ```
-package:at_auth/at_auth.dart — 951 files walked, 0/0 offenders, 2/2 blocked
+package:at_chops/at_chops.dart — 435 files walked, 0/0 offenders, 0/0 blocked
+package:at_auth/at_auth.dart — 950 files walked, 0/0 offenders, 2/2 blocked
 ```
 
 `min_files_walked` guards the rest — every other check is about what the walk did

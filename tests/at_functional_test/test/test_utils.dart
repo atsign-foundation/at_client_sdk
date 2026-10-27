@@ -201,6 +201,15 @@ class TestUtils {
   /// exercises.
   static PqPosture get sdkDefaultPosture => AtClientPreference().posture;
 
+  /// The startup steps a post-quantum client in this pack runs when its test
+  /// names none: every step except the start-time root step.
+  ///
+  /// ⚠️ That step mints a root on an atSign that has none, into the keyfile
+  /// the client opened on. Most files here open a shared atSign on a keyfile
+  /// that dies with the file, which would leave every later file a root whose
+  /// private nobody holds. A test about that step names its gates.
+  static const packStartupGates = PqStartupGates(anchorOwnKeys: false);
+
   /// A preference for [atsign] at [posture], carrying no storage path: what
   /// opens the store is the bundle passed to `open`, so a call site that
   /// forgets one fails loudly there rather than quietly opening the shared
@@ -209,6 +218,9 @@ class TestUtils {
   /// [keyEstablishmentAlgorithms] is what this atSign mints and advertises;
   /// [sealsToKeyAlgorithms] is the order in which, as a sender, it picks among
   /// the keys a recipient advertises.
+  ///
+  /// [pqStartupGates] defaults to [packStartupGates] at a posture that
+  /// configures the post-quantum providers.
   ///
   /// ⚠️ One atSign in one process holds one posture: every axis here is final
   /// at construction and [initAtClient] refuses a preference differing from
@@ -222,7 +234,8 @@ class TestUtils {
       PqStartupGates? pqStartupGates}) {
     var preference = AtClientPreference(
         posture: posture,
-        pqStartupGates: pqStartupGates,
+        pqStartupGates: pqStartupGates ??
+            (posture.configuresPqProviders ? packStartupGates : null),
         authenticationKeyAlgorithm: authenticationKeyAlgorithm,
         dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
         keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,

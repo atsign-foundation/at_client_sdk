@@ -1,5 +1,24 @@
 ## 3.15.0-rc9
 
+- feat: an approval by an enrollment that holds the atSign's signing root, or
+  a key anchored to it, anchors the enrollment it approves at once, and adding
+  or retiring a key no longer undoes that. It needs an atServer with
+  `enroll:link`; without one nothing is anchored, and everything else works as
+  before.
+- feat: `client.enrollments.anchoring` says whether an enrollment's keys are
+  anchored to the atSign's signing root, and names a key that is not.
+- feat: at a post-quantum posture, a fully privileged client whose atSign
+  publishes no signing root mints one when it starts.
+- feat: `Enrollment` carries the enrollment's authentication public key, as
+  `apkamPublicKey`.
+- experimental: `PqStartupGates.publishChainLink` is removed,
+  `PqStartupGates.publishRootLink` is renamed `anchorOwnKeys`, and
+  `PqSigningChain`'s methods are replaced.
+- build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
+- build: requires `at_auth` ^4.0.0-rc8.
+- chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
+  a test draws an analyzer warning: the store a client runs on must be durable,
+  since a client may file the atSign's signing root into it.
 - chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
   3.5.0, now throw `UnsupportedError` without contacting an atServer, since
   atServers refuse the `stream:` command these methods sent from 3.12.0. Both

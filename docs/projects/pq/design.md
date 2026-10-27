@@ -2462,14 +2462,14 @@ entry rather than the one a verifier checked: `.signature` is the first entry,
 and `.signerEnrollmentId` is its `enid`, which every entry shares.
 
 **A root link is not a `SignedEnvelope`, by design.** It is a map,
-`{v, alg, kid?, payload, signature}`, verified against the signing root
-published at `public:pq_signing_root@<atSign>`, and stamped into the `_apsk`
-record's `apskRootLink` field, where a chain link is a `SignedEnvelope` in
-`apskChainLink`. Having no protected header to carry a `typ`, it signs
-`at-root-link:` ahead of its payload instead
+`{v, alg, kid, payload, signature}`, verified against the root key its `kid`
+names among those published at `public:pq_signing_root@<atSign>`, and held in
+the `_apsk` record's `apskLinks` map beside chain links, which are
+`SignedEnvelope`s (9.8.3). Having no protected header to carry a `typ`, it
+signs `at-root-link:` ahead of its payload instead
 ([`decisions.md` 103.4](detail/decisions.md#1034-the-root-link-is-not-a-jws-so-it-gets-a-prefix)),
 through one codec, `PqSigningChain.rootLinkSignableBytes`, used by the signer
-and both verifiers.
+and the walk.
 
 ### 9.5 `enroll:update`
 
@@ -2649,8 +2649,7 @@ precondition for anyone moving to `pqActive`.
 ### 9.8 The data signing key an enrollment owns from birth
 
 9.1–9.7 describe the split. This describes the key's life: where it comes
-from, what names it, and what breaks when the record naming it changes under a
-signature. Built 2026-08-30; the rulings behind it are
+from, what names it, and the links that vouch for it. Built 2026-08-30; the rulings behind it are
 [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
 and [127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30).
 
@@ -2704,8 +2703,7 @@ reason creation and the heal path read differently.
 
 **The algorithm minted is the one the enrollment keeps** — rsa2048 at
 `pqReady`, ML-DSA-65 at `pqActive` — so the first start's reconciliation finds
-`wanted` already `held`, mints nothing, and does not rewrite `_apsk`. That
-matters far beyond avoiding churn; see 9.8.3.
+`wanted` already `held`, mints nothing, and does not rewrite `_apsk`.
 
 #### 9.8.2 The form `_apsk` takes follows the algorithm, and nothing else
 
@@ -2716,8 +2714,8 @@ and `apskValueOf` composes it again at every client start, republishing on any
 difference.
 
 ⚠️ **A second condition on either side makes them disagree about the shape of
-the same key**, and the client wins by republishing — which rewrites the record
-and discards whatever was bound to its old value. A key package used to force
+the same key**, and the client wins by republishing, which rewrites the record
+at its first start. A key package used to force
 the array on the at_auth side as well, on the grounds that a bare value cannot
 state the algorithm of whatever signed the package. Where that signer is
 rsa2048 the bare value states exactly it, and where it is not, the algorithm
@@ -2725,80 +2723,89 @@ had already chosen the array — so the condition fired only on the case it was
 wrong about: an APKAM-advertising rsa2048 enrollment in pq key-exchange mode,
 which a legacy posture plus `--key-exchange pq` reaches. Removed 2026-08-31.
 
-#### 9.8.3 The chain, and why a link is bound to the exact string
+#### 9.8.3 The chain: one link per key
 
-The key package signature and the root/chain link are **two hops of one
-chain**, joined by the `_apsk` record value:
+A link vouches for **one** key the `_apsk` record lists, not for the record's
+value. It signs `{v: 2, enrollmentId, kid, alg, pub}`, the enrollment and the
+`kid`, `alg` and `pub` of that one entry, and names the `kid` of the key that
+signed it. The record keeps its links in `appMetadata` under `apskLinks`, keyed
+by the `kid` each vouches for. `enroll:link` is the only operation that writes
+one, and every atServer implementation keeps the map over any other write of
+the record, dropping the links for keys the new value no longer lists
+([`decisions.md` 157](detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16)).
 
-1. the enrollee's `_apsk` value is a single string;
-2. the **key package** is signed by the private half of a key that string
-   advertises, and verified by parsing that exact string;
-3. the **link** signs `{v, childEnrollmentId, apkamPublicKey}`, where
-   `apkamPublicKey` is **that entire string**, read from the same record.
+Whether a link is a **root** link or a **chain** link follows from its signer.
+A `kid` among the active or retired keys of `public:pq_signing_root@<atSign>`
+makes it a root link, an ML-DSA-65 signature over `at-root-link:` and the
+payload, checked against that root key only. Any other `kid` makes it a chain
+link, a JWS typed `at-chain-link+jws` carrying the one signature its signer
+made, checked against that `kid` in the signer enrollment's `_apsk`, and the
+walk goes on from that key. A link that fails its check reads `broken`, and is
+never tried as the other kind. The walk compares each link with the entry it is
+stored on, `alg` and `pub` as well as `kid`, follows (enrollment, `kid`) pairs,
+and reads a cycle, or a chain of more than sixteen keys, as `broken`.
 
-The link does not sign the package; it signs the package's **verification
-key**, which is what a certificate chain is. They are joined operationally too:
-the link is neither signed nor delivered unless the package verifies first, and
-it is delivered by being sealed to that package.
+`verifyChain` answers for an enrollment: **anchored** when every active key
+carrying a link walks to the root, **unsigned** when none carries one, and
+otherwise the failing key's verdict, naming it. `at_activate list` and
+`EnrollmentRequestList` show that.
 
-⚠️ **`apkamPublicKey` is a misleading name and a remnant.** It was accurate
-when written, when `_apsk` held only the APKAM public key; it is now whatever
-`apskValueOf` composed — the APKAM authentication key on a legacy enrollment,
-a data signing key on any other, and a multi-key JSON advertisement rather than
-a key at all once anything is retired. It is a member of the signed preimage,
-so renaming it changes what verifies.
+Because a link names one key, adding or retiring a key leaves the links on the
+others standing, and a retired key keeps its link, so what it signed still walks
+to the root. While an enrollment has a key carrying a link it signs content with
+those keys only, so a key waits for its link before it signs.
 
-**Every verification of it is a whole-string comparison** — five of them in
-`PqSigningChain`. Any republish that changes the `_apsk` value therefore
-invalidates a link signed over the old one, and what becomes of that link
-depends on the path that republishes. The atSign's own credential publishes
-with `publishPublicSigningKey`, which removes the link fields from the record's
-`appMetadata`, so the enrollment goes from `chained` to `unsigned` rather than
-`broken`
-([ruling 144.2](detail/decisions.md#1442-a-republish-clears-the-links-a-root-holder-re-anchors)).
-One holding the signing root re-anchors in the same write, and any other is
-re-conveyed by the next fully privileged start's sweep, as a root link over the
-new value. An ordinary enrollment republishes through `enroll:update` instead,
-which carries no `appMetadata`, and the atServer keeps what is stored, so a
-link over the old value rides the new one and the walk reads it `broken`. The
-sweep then sends a chain-linked enrollment a root link, which anchors it, but
-skips one whose stale root link fills the field, and that one stays `broken`;
-both were observed against the atServer on 2026-10-08. A link that still
-vouches for the value being published is kept. This is why the mint must be
-inert at first start, and why 9.8.2's two composers must agree.
+⚠️ **An authentication key takes no link and signs none.** It is dropped rather
+than retired once its enrollment mints a client data signing key (9.8), so a
+link on it, or one it signed, would stop verifying the moment it leaves the
+record. The atServer refuses a link for any listed key equal to the enrollment
+record's `apkamPublicKey`, bare or listed, and an enrollment whose `_apsk` is
+its authentication key reads `unsigned` until it publishes a client data
+signing key.
 
-#### 9.8.4 What the approver conveys is a three-way branch
+#### 9.8.4 Who writes a link, and with what
 
-Privilege alone does not decide the link flavour; possession decides with it.
+Every writer calls `enroll:link`, which the atServer admits from the target
+enrollment itself, or from any caller `enroll:approve` would admit. A voucher
+signs with the signing root when it holds the root's private key and is fully
+privileged, and otherwise with one of its own active client data signing keys
+whose walk reads anchored; never with an authentication key.
 
-| Approver state | Conveys | Signed with |
-| -------------- | ------- | ----------- |
-| fully privileged, **holds** the root private | a **root** link | the atSign's ML-DSA-65 signing-root private — posture-invariant |
-| fully privileged, **no** root private, **holds a data signing key** | a **chain** link | that data signing key |
-| fully privileged, **no** root private, holding none | **nothing** | signing with the APKAM authentication key would produce a link that is *dropped* rather than retired, and so silently unverifiable |
-| **not** fully privileged | a **chain** link | its own signing keys |
+| Writer | When | What it links |
+| ------ | ---- | ------------- |
+| the approver | straight after `enroll:approve` | every key of the enrollment it approved |
+| an enrollment that mints a key | in the same reconcile, before an outgoing key is retired | the key it minted, by a chain link signed with one whose link walks to the root, which may be the one retiring, even when it holds the root; an outgoing key whose link walks to the root stays in service until the keys kept have such links, and any other outgoing key retires at once |
+| a holder of the root | at every start | its own keys, by root link |
+| a holder of the root's sweep | at every fully privileged start | every key on the atSign's other approved enrollments without a sound root link |
+| a fully privileged enrollment whose atSign publishes no root | at start | mints the root, on a key source that can file its private, then links as a holder |
 
-The second row overturns
-[`decisions.md` 67](detail/decisions.md#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)'s
-"root link or nothing" for that arm. 67 rested on the every-start pull healing
-possession; the pull has one production caller, a startup step, and the sweep
-that would anchor a missed enrollment is a **later** startup step — so nothing
-re-attempts the link for an enrollment approved while unpossessed, and it stays
-unsigned until some privileged root-holder next starts. A chain link cannot
-mask a root link: they stamp into distinct `_apsk` fields and a verifier reads
-the root one first.
+Each call states, per `kid`, the link it found there, and the atServer writes
+only if that is still what is stored, so two vouchers, or a voucher and a sweep,
+cannot lose each other's writes. The client decides what may replace what: a
+root link replaces a chain link, or a root link that fails its check; a chain
+link replaces only a chain link that does not walk to the root, never a root
+link; and a voucher links no key its own chain passes through. For that rule a
+link's kind follows its signer's `kid`, as it does for the walk. Only the first
+entry under a `kid` is linked, as the atServer reads the record, and a key not
+spelt in padded standard base64 takes no link, so neither can spoil the rest of
+a call. A refused call is read again and, if the record has changed, made once
+more on what it now holds. Every call sends a line or paragraph separator in its
+JSON as an escape, so the command stays one line and a stored link sent back as
+`expect` decodes to exactly what is stored. Against an atServer without
+`enroll:link`, nothing is linked and everything else completes as before: its
+first refusal, an `AT0003` for a command the client's own grammar reads or a
+reply naming nothing linked, holds for the client's lifetime, so no later step
+sends another, and the sweep stops, naming at warning the enrollments it leaves.
 
 ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
-approval takes only `__manage`** — so a `__manage`-only approver approves
-without being fully privileged, and the chain-link arm is an ordinary case
-rather than an edge. A client running as the atSign's own credential — no
-enrollment id, or `primary` — is fully privileged by construction, with no
-roster lookup.
-
-**The approver never writes the enrollee's `_apsk`.** It conveys the link as a
-sealed secret and the enrollee stamps it as it arrives; a link it cannot stamp
-yet keeps its envelope on the atServer for the next start
-([`decisions.md` 152](detail/decisions.md#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08)).
+approval takes only `__manage`**, so a `__manage`-only approver approves without
+being fully privileged, and links with a key of its own that walks to the root.
+A client running as the atSign's own credential, with no enrollment id or as
+`primary`, is fully privileged by construction, but is treated as the atSign
+itself, never as an enrollment
+([ruling 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)),
+so it sends no `enroll:link`, the sweep passes it by, and `_apsk.primary` takes
+no link.
 
 #### 9.8.5 Two coherence rules on the preference
 
@@ -2877,9 +2884,9 @@ The three rules are complementary, not redundant:
 
 A mint files before it publishes, and `serialiseApskWrite` holds the filing,
 the publish and the retirement, so no other **writer** composing from the
-keyfile republishes part way. A link write, which re-sends the record value it
-read, holds the same lock from that read through its put, so it can never put
-back a value a republish has just replaced. A stop between the filing and the
+keyfile republishes part way. A link is written by `enroll:link`, which the
+atServer serialises with every other write of the record, so it needs no lock
+in the client. A stop between the filing and the
 publish leaves a key held that the advertisement does not name yet, which the
 next start's
 `_apsk` republish, composed from the keyfile, puts right; publishing first could
