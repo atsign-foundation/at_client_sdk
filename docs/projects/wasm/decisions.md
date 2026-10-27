@@ -2,7 +2,7 @@
 
 **Status:** decision record (binding).
 **Scope:** the rulings D-1..D-26 that govern the implementation-neutral `AtClient`
-work, the K-1..K-9 rulings on browser at-keys custody, the measurements that drove them, the superseded positions from the predecessor
+work, the K-1..K-11 rulings on browser at-keys custody (K-6 and K-8 superseded; gate (c) and K-5′ proposed), the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
 [`design.md`](design.md); sequencing in [`implementation-plan.md`](implementation-plan.md);
@@ -11,7 +11,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-9 browser at-keys custody](#browser-at-keys-custody--k-1k-9)
+- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-11 browser at-keys custody](#browser-at-keys-custody--k-1k-11)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -906,39 +906,54 @@ Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/is
 **Scope limits (do not lean on this ruling beyond them).** Durability is characterised for renderer death only, not power loss or browser-process kill. Browser coverage is desktop Chromium, Firefox 157, WebKit and Safari 27.0.1; E2 is Chromium-only; mobile is out of scope. A bfcache-parked tab can keep the lock (seen on Firefox), so the app must release on `pagehide` and reacquire on `pageshow` (unbuilt). `sqlite3.wasm` compile time and memory are excluded.
 
 
-### Browser at-keys custody — K-1..K-9
+### Browser at-keys custody — K-1..K-11
 
-The browser lane holds the atSign's @keys as **one encrypted record per passkey**, derived from a single WebAuthn PRF call. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently.
+The browser lane holds the atSign's @keys behind a passkey, derived from a single WebAuthn PRF call: a **public pointer** (K-10) names the enrollment, and a **private per-enrollment document** (K-11) holds the sealed @keys. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently. Server evidence below is at_server trunk `acd5a4ba`; `EVH` = `enroll_verb_handler.dart`, `EM` = `enrollment_manager.dart`, `AVH` = `abstract_verb_handler.dart`.
 
 | ID | Ruling | Decided |
 | --- | --- | --- |
 | K-1 | **Constant PRF salt** `SHA-256("atsign:keys:lookup:v1")`; recovery is typing-free. Departs from the architect's model (salt derived from the atSign) | 2026-10-15 |
 | K-2 | **One PRF call, then HKDF; no stored salt.** A server-controlled salt as PRF input lets the server force the blob key to equal the lookup key it already knows | 2026-10-15 |
 | K-3 | **atSign in both HKDF labels** (`atkeys-record-id\|<atSign>`, `atkeys-kek\|<atSign>`), canonical per at_commons `toAtsign()` | 2026-10-15 |
-| K-4 | **AES-256-GCM, AAD = the record's clear header** (`v`, `alg`, `kdf`, `iv`) | 2026-10-15 |
-| K-5 | **Restored public keys must match the published ones before PKAM** (rollback defence) | 2026-10-15 |
-| K-6 | **One record per passkey** at `public:_<lookupHex>.atkeysv@<atSign>` on existing verbs, no server change (probed P1–P7); TTL refreshed on open. Resolves OQ-19 and browser-onboarding Q-2 | 2026-10-15 |
+| K-4 | **AES-256-GCM, AAD = the record's clear header** (`v`, `alg`, `kdf`, `iv`; plus `typ` under K-10/K-11) | 2026-10-15 |
+| K-5 | **Restored public keys must match the published ones before PKAM** (rollback defence). Under K-11 the document arrives after PKAM, so "before PKAM" cannot be met; the rewording K-5′ below is proposed, not ruled | 2026-10-15 |
+| K-6 | ~~One record per passkey at `public:_<lookupHex>.atkeysv@<atSign>`, TTL refreshed on open~~ **Superseded 2026-10-27 by K-10/K-11.** Survives: the name, its unauthenticated read and existing verbs with no server change (now K-10). Retired: the TTL and its refresh on open. Resolved OQ-19 and browser-onboarding Q-2 | 2026-10-15 |
 | K-7 | **`prf` is the passkey unlock kind; no `largeBlob`.** 4 of 4 tested rows return PRF; iOS Safari, Firefox, Windows Hello untested. The generated passphrase stays the recovery unlock | 2026-09-25 |
-| K-8 | **PCAM private key lives inside the blob;** signing algorithm = first of `SigningAlgoType.strongestFirst` the browser can sign and the atServer verifies | 2026-10-13 |
-| K-9 | **A per-write data key is rejected** — its only job is sharing one key across passkeys, the `unlocks[]` pattern K-6 removes | 2026-10-15 |
+| K-8 | ~~PCAM private key lives inside the blob~~ **superseded 2026-10-27 by K-11**: the document does not hold the APKAM private key. Survives until gate (c) rules: signing algorithm = first of `SigningAlgoType.strongestFirst` the browser can sign and the atServer verifies | 2026-10-13 |
+| K-9 | **A per-write data key is rejected** — its only job is sharing one key across passkeys, the `unlocks[]` pattern K-6 removed and K-10/K-11 keep removed | 2026-10-15 |
+| K-10 | **Enrollment pointer** `public:_<lookupHex>.atkeysv@<atSign>` (K-3 lookup label). Body = the K-4 codec sealing the `enrollmentId` under the kek, header `typ:"eid"` (in the AAD). **No TTL; written once at enroll**, by an enrollment holding `atkeysv:rw`. Read by unauthenticated `lookup:` on the atSign's own atServer. Hidden from every scan, `showhidden` included (`scan_verb_handler.dart:207-216`), and from the commit log (`hive_at_commit_log.dart:34-43`). Existing verbs, no server change | 2026-10-27 |
+| K-11 | **Enrollment document** `atkeys.<enrollmentId>.a.__e@<atSign>`, private, K-4 codec, header `typ:"atkeys"`: the sealed @keys, **without the APKAM private key**. Read and written over PKAM by that enrollment only (AVH:333-335; other enrollments refused, AVH:299-303); opening it needs the kek, no private key. CRAM can read it (AVH:208-210) but not write it (`reserved_namespace.dart:68-93`). Not `_`-prefixed, so own-enrollment and CRAM scans list it. Revoke moves it to `.r.__e`, delete to `.d.__e`, unrevoke moves it back (EM:498-515, 661-691). Probed P9, 2026-10-20, at_server `7c7e91b3` | 2026-10-27 |
 
-**K-6 clarification (2026-10-18).** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-26's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-26's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-26-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on.
+**Open flow (K-10, K-11).** Passkey tap → `P`, `userHandle` = atSign → unauthenticated `lookup:` of the pointer → unseal `enrollmentId` → PKAM → `llookup:` of the document → open with the kek. The source of the PKAM key (the passkey-derived ML-DSA-65 key of gate (c)) is proposed, not ruled.
 
-**Revocation is final (2026-10-21).** Applies to the per-passkey enrollment (browser-onboarding Q-3) under K-6/K-8.
+**Proposed, not ruled — gate (c).**
+
+| ID | Proposal | Status |
+| --- | --- | --- |
+| K-5′ | **Restored public keys must match the published ones before the keys are used**: the check runs after PKAM and before any encrypt or decrypt. Replaces K-5's wording | Proposed 2026-10-20 |
+| — | The APKAM key is derived from the passkey (auth seed → ML-DSA-65), never stored; signing algorithm fixed to `mldsa65`; rotation = new enrollment + approval | Proposed 2026-10-20 |
+
+**K-6 clarification (2026-10-18), retained under K-10/K-11 for the credential hint.** The local hint and record replica live in **IndexedDB, independent of the storage bundle** (D-12) and of D-26's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-26's single-writer lock refuses. Loss of the replica is recoverable (the passkey alone restores it, R3), so it needs no D-26-grade durability. On every successful open the client rewrites the hint and the replica and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on. Whether IndexedDB still keeps a document replica under K-11 is not ruled.
+
+**Revocation (ruled 2026-10-21; mechanism ruled 2026-10-27).** "Revocation is final" is an approver **policy**: the server lets CRAM and `__manage` holders reinstate a revoked enrollment with `enroll:unrevoke`.
 
 | Point | Ruling |
 | --- | --- |
-| Revoked enrollment | stays revoked; its PKAM stays refused |
-| Re-enroll after revoke | needs explicit approver action |
-| Same-key re-enroll | refused with `AT0032` while the revoked enrollment exists — intended, not a defect |
+| Revoked enrollment | stays revoked unless an approver reinstates it; its PKAM is refused with `AT0027` (`pkam_verb_handler.dart:253-256`) |
+| Re-enroll after revoke | the approver **reinstates** the revoked enrollment with `enroll:unrevoke` (at_client `Enrollments.unrevoke`): same `enrollmentId`, same stored APKAM public key, original expiry kept. No server change |
+| Unrevoke preconditions | target is revoked (EVH:1664-1666); caller is CRAM, or holds `__manage` plus all target namespaces (EVH:856-880); the original approver is still approved (EVH:930-946). An expired target fails with `AT0028` (EVH:683-687). `enroll:approve` refuses a revoked enrollment (EVH:1646-1648) |
+| Revoke cascade | revoking an enrollment also revokes every enrollment it approved (EVH:717, 756-759); unrevoke reinstates the target only |
+| Same-key new request | refused with `AT0032` while the revoked enrollment exists in any state (EVH:1721-1737, EM:765-781) — intended, not a defect. Approver `enroll:delete` then approval of a new request also works (fresh `enrollmentId`, fresh expiry) but is not the ruled path. A duplicate key is never accepted |
 | Per-re-enroll seed salt | none |
 | Revoked, passkey only | locked out by design |
-| Record (K-6) | the revoked enrollment cannot PKAM, so it cannot refresh the record's TTL; the record expires after `T`. Revocation does not delete it: the revoker cannot derive its name |
-| Mechanism | **open** — the approver reinstates the existing revoked enrollment (`unrevoke` exists on the wire, no library API: [`enterprise-identity.md`](enterprise-identity.md) E5), or the atServer accepts a duplicate key. Observed today (probe P9d3, at_server trunk `7c7e91b3`): a same-key re-enroll succeeds only after `enroll:delete` of the revoked enrollment |
+| Pointer (K-10) | revoke leaves it in place (the revoker cannot derive its name); after unrevoke it resolves again |
+| Document (K-11) | revoke makes it unreadable (`.r.__e`), unrevoke restores it, delete removes it (`.d.__e`) |
 
-**Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed.
+**R-a closed (2026-10-27):** unrevoke, as above. **R-b dissolved:** it asked whether a re-enrolling browser reuses the record's stored APKAM key or mints a fresh one; unrevoke reinstates the existing enrollment and its stored public key, and K-11 stores no private key.
 
-**Open against K.** At-keys record TTL `T` (proposal 90 days; product); the re-enroll-after-revoke mechanism (above); owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite another passkey's record (bead `m0j`, accepted gap); whether hardware-bound APKAM (PR #2295, "gate (c)") replaces or supplements this design. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+**Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed; `5vf.4`/`5vf.5` are re-scoped to the K-10 pointer and K-11 document.
+
+**Open against K.** Owner-binding guard so one `atkeysv:rw` enrollment cannot overwrite or delete another passkey's pointer (bead `m0j`, accepted gap); the gate (c) proposal above (K-5′, passkey-derived APKAM key, signing algorithm); whether IndexedDB keeps a document replica; whether header `v` changes with `typ`. #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
 
 **Reserved, not filed.** D-26..D-28 are held for PB-0's four unfiled rulings (the portal-requirements routing, R-5).
 
@@ -1105,6 +1120,7 @@ trunk commit the plan was *written against* — it never held the file.
 | R1's plan to lift `packages/at_auth/test/wasm/dep_tree_test.dart` into a shared *test* utility | Shipped as a standalone CLI, `tools/wasm_shakedown`, run as its own CI job rather than as a per-package test.                  |
 | The `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array and a merge-on-heal (PB-5 H/J, live-tested in L step 0a) | Superseded 2026-10-13/15 by K-6: one record per passkey, nothing shared, nothing merged. The code is not yet reworked (see K build state). |
 | PRF input derived from the atSign (`prfEvalInput(atSign)`) | Superseded by K-1: the salt is constant. |
+| K-6's per-passkey public record holding the @keys, with a TTL refreshed on open; K-8's PCAM private key inside that record | Superseded 2026-10-27 by K-10 (TTL-less pointer to the `enrollmentId`) and K-11 (private per-enrollment document, no APKAM private key). |
 
 **Resolved.** A prior merge-time follow-up here tracked four references to
 `docs/projects/wasm/plan.md` on the `at_client_sdk-atauth-wasm` branch. None reached trunk:
@@ -1267,7 +1283,7 @@ D-7 rules dart2js the target for the JS/TS artifact and D-23 puts one TypeScript
 
 ### OQ-19 — Do prf unlocks accumulate on the server copy? **RESOLVED 2026-10-15 by K-6**
 
-Live test L step 0a found every new passkey appended an unlock to one shared public record, that nothing pruned dead ones, and that a stale device merged them back. Replaced by one PRF-keyed record per passkey with a refreshed TTL ([`browser-onboarding.md`](browser-onboarding.md)). The implementation is still to do (K build state).
+Live test L step 0a found every new passkey appended an unlock to one shared public record, that nothing pruned dead ones, and that a stale device merged them back. Replaced by one PRF-keyed record per passkey with a refreshed TTL ([`browser-onboarding.md`](browser-onboarding.md)); since 2026-10-27 by K-10/K-11: one PRF-named pointer per passkey, without TTL, and one private document per enrollment. The implementation is still to do (K build state).
 
 ---
 
@@ -1312,3 +1328,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
 | 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |
 | 2026-10-21 | **Revocation is final.** A revoked enrollment's PKAM stays refused; re-enroll after revoke needs explicit approver action; same-key re-enroll refused with `AT0032` is intended; no per-re-enroll seed salt; revoked with only the passkey is locked out by design. Mechanism (reinstate vs duplicate key) open. K-1..K-9 unchanged. |
+| 2026-10-27 | **K-10, K-11 ruled; K-6, K-8 superseded; R-a closed; R-b dissolved.** K-10: TTL-less public pointer `public:_<lookupHex>.atkeysv@<atSign>` sealing the `enrollmentId` (`typ:"eid"`), written once at enroll, hidden from every scan, read unauthenticated. K-11: private document `atkeys.<eid>.a.__e@<atSign>`, read over PKAM by that enrollment only, no private key needed to open; CRAM reads but cannot write it; revoke, delete and unrevoke move it. K-6 survives as K-10's name and read grammar; K-8's signing-algorithm choice survives. Re-enroll after revoke = approver `enroll:unrevoke` (same `enrollmentId`, same public key, original expiry; no server change). "Revocation is final" restated as approver policy. Evidence: at_server trunk `acd5a4ba`. K-5′ and the rest of gate (c) stay proposed. |
