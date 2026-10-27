@@ -18,6 +18,9 @@ void main() {
   late MockSecureSocketFactory socketFactory;
   late List<AtCommandExecutor> authentications;
 
+  /// While set, the atServer's address is not answered until it completes.
+  Completer<void>? findGate;
+
   /// While set, a socket is not handed out until it completes.
   Completer<void>? connectGate;
 
@@ -30,13 +33,16 @@ void main() {
   setUp(() {
     sockets = [];
     authentications = [];
+    findGate = null;
     connectGate = null;
     flushGate = null;
     addressFinder = MockSecondaryAddressFinder();
     socketFactory = MockSecureSocketFactory();
     registerFallbackValue(SecureSocketConfig());
-    when(() => addressFinder.findSecondary('@alice'))
-        .thenAnswer((_) async => SecondaryAddress(host, port));
+    when(() => addressFinder.findSecondary('@alice')).thenAnswer((_) async {
+      await findGate?.future;
+      return SecondaryAddress(host, port);
+    });
     when(() => socketFactory.createSocket(host, '$port', any()))
         .thenAnswer((_) async {
       final s = FakeAtServerSocket()..flushGate = flushGate;
@@ -236,6 +242,50 @@ void main() {
     expect(await answered(atLookup, 'noop:0\n'), 'data:ok',
         reason: 'the lookup stays usable after close()');
     await atLookup.stop();
+  });
+
+  test('close() while the atServer is being looked up opens no connection',
+      () async {
+    final atLookup = build();
+    findGate = Completer<void>();
+    final request = inFlight(atLookup, 'noop:0\n');
+    await Future.delayed(const Duration(milliseconds: 50));
+    verify(() => addressFinder.findSecondary('@alice')).called(1);
+
+    await atLookup.close();
+    await request.settled.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the request waited for its lookup'));
+    expect(request.thrown(), isA<ConnectionInvalidException>());
+
+    findGate!.complete();
+    await Future.delayed(const Duration(milliseconds: 50));
+    expect(sockets, isEmpty,
+        reason: 'a connect close() abandoned opens no socket once the '
+            "atServer's address comes back");
+    findGate = null;
+    expect(await answered(atLookup, 'noop:0\n'), 'data:ok',
+        reason: 'the lookup stays usable after close()');
+    await atLookup.stop();
+  });
+
+  test('stop() while the atServer is being looked up opens no connection',
+      () async {
+    final atLookup = build();
+    findGate = Completer<void>();
+    final request = inFlight(atLookup, 'noop:0\n');
+    await Future.delayed(const Duration(milliseconds: 50));
+    verify(() => addressFinder.findSecondary('@alice')).called(1);
+
+    await atLookup.stop();
+    findGate!.complete();
+    await request.settled.timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('the request on the lookup was never failed'));
+    expect(request.thrown(), isA<StoppedException>());
+
+    await Future.delayed(const Duration(milliseconds: 50));
+    expect(sockets, isEmpty,
+        reason: "a stopped lookup opens no socket once the atServer's address "
+            'comes back');
   });
 
   test('close() during a notification start authenticates nothing', () async {
