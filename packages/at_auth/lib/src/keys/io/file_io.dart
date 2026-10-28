@@ -94,8 +94,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       final json = await _decodeAtRestDocument(utf8.decode(asRead.bytes), file);
       final keys = AtKeys.fromJson(await _selfDecryptLegacyFields(json));
       if (await mutate(keys) == false) return;
-      await _writeValidated(file, atsign, keys,
-          requireExisting: true, asRead: asRead);
+      await _writeValidated(file, atsign, keys, requireExisting: true);
     });
   }
 
@@ -113,11 +112,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// is how a device is decommissioned. An update in flight when the owner
   /// deletes it would put it back, and nothing said so.
   ///
-  /// [asRead] is the keyfile as [update] read it; without it the keyfile is
-  /// read here. Either way the copies and the keyfile written take the owner
-  /// that read reports.
+  /// The keyfile is read again here, even inside [update], so the candidate
+  /// is validated against, and `.bak` holds, what is on disk now: a keyfile
+  /// replaced while the mutation ran is refused or kept, never overwritten
+  /// unseen. The copies and the keyfile written take the owner that read
+  /// reports.
   Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
-      {bool requireExisting = false, KeyfileRead? asRead}) async {
+      {bool requireExisting = false}) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
     if (!file.existsSync()) {
@@ -130,7 +131,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       return;
     }
 
-    final previous = asRead ?? await _readForWrite(file);
+    final previous = await _readForWrite(file);
     final existing =
         await _decodeAtRestDocument(utf8.decode(previous.bytes), file);
     assurance.validateMapUpdate(
@@ -151,14 +152,20 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     if (!ownerOnlyWritesAvailable || !runningAsRoot) {
       return (bytes: await file.readAsBytes(), owner: null);
     }
-    if (FileSystemEntity.typeSync(file.path, followLinks: false) ==
-        FileSystemEntityType.link) {
+    final type = FileSystemEntity.typeSync(file.path, followLinks: false);
+    if (type == FileSystemEntityType.link) {
       throw FileSystemException(
           'Not rewriting the keyfile as root: it is a symbolic link',
           file.path);
     }
+    if (type != FileSystemEntityType.file) {
+      throw FileSystemException(
+          'Not rewriting the keyfile as root: it is not a regular file',
+          file.path);
+    }
     // NOTE: the bytes and the owner come from one descriptor, opened without
-    // following a symbolic link.
+    // following a symbolic link, and without blocking on a FIFO put there
+    // after the check above.
     final read = readNoFollow(file.path);
     if (read.owner == null) {
       _logger.warning('Writing ${file.path} owned by root: the owner of the '

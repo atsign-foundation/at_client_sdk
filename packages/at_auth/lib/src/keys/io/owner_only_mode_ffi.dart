@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:meta/meta.dart';
 
 /// Mode 0600: read and write for the owner, nothing for anyone else.
 const ownerOnlyMode = 0x180;
@@ -19,13 +20,23 @@ typedef KeyfileRead = ({List<int> bytes, OwnerAndGroup? owner});
 bool get ownerOnlyWritesAvailable => _Libc.instance != null;
 
 /// Whether this process runs with an effective user id of 0.
-bool get runningAsRoot => _Libc.instance?.geteuid() == 0;
+bool get runningAsRoot =>
+    runningAsRootForTesting ?? _Libc.instance?.geteuid() == 0;
+
+/// Stands in for the effective user id in [runningAsRoot] when set, so a
+/// test run by an account that is not root still drives the branch root
+/// takes.
+@visibleForTesting
+bool? runningAsRootForTesting;
 
 /// Reads the file at [path] through one descriptor opened without following
 /// a symbolic link, taking its owner and group from that descriptor.
 ///
 /// Throws [FileSystemException] when [path] is a symbolic link or anything
 /// other than a regular file, or cannot be read.
+///
+/// NOTE: opened non-blocking, so a FIFO at [path] is refused rather than
+/// blocking this isolate inside the open until something writes to it.
 KeyfileRead readNoFollow(String path) {
   final libc = _Libc.instance!;
   final flags = libc.openForReadingNoFollow;
@@ -63,13 +74,7 @@ KeyfileRead readNoFollow(String path) {
 ({bool modeSet, bool ownerSet}) writeNewOwnerOnly(String path, List<int> bytes,
     {OwnerAndGroup? owner}) {
   final libc = _Libc.instance!;
-  final nativePath = path.toNativeUtf8();
-  final int fd;
-  try {
-    fd = libc.open(nativePath, libc.createNewForWriting, ownerOnlyMode);
-  } finally {
-    malloc.free(nativePath);
-  }
+  final fd = _createNew(libc, path, ownerOnlyMode);
   if (fd < 0) {
     throw FileSystemException('Cannot create the file', path);
   }
@@ -81,6 +86,60 @@ KeyfileRead readNoFollow(String path) {
     return (modeSet: modeSet, ownerSet: ownerSet);
   } finally {
     libc.close(fd);
+  }
+}
+
+/// Creates a file at [path] holding [bytes], written through the descriptor
+/// that created it, so nothing put at [path] after the create is written
+/// through.
+///
+/// Returns false, having written nothing, when anything already exists at
+/// [path], a symbolic link included, or the file cannot be created. Throws
+/// [FileSystemException] when the file was created but [bytes] could not be
+/// written, after removing it.
+bool createNewWith(String path, List<int> bytes) {
+  final libc = _Libc.instance!;
+  // NOTE: 0666, narrowed by the umask, as dart:io creates a file.
+  final fd = _createNew(libc, path, 0x1b6);
+  if (fd < 0) return false;
+  try {
+    _writeAll(libc, fd, bytes, path);
+  } on FileSystemException {
+    libc.close(fd);
+    try {
+      File(path).deleteSync();
+    } on FileSystemException {
+      // NOTE: already gone; nothing left to remove.
+    }
+    rethrow;
+  }
+  libc.close(fd);
+  return true;
+}
+
+/// Sets the access and modification times of whatever is at [path] to now,
+/// without following a symbolic link there; says whether they were set.
+bool touchNoFollow(String path) {
+  final libc = _Libc.instance!;
+  final nativePath = path.toNativeUtf8();
+  try {
+    return libc.utimensat(
+            libc.currentDirectory, nativePath, nullptr, libc.noFollow) ==
+        0;
+  } finally {
+    malloc.free(nativePath);
+  }
+}
+
+/// Opens a file this call creates at [path] with [mode] for writing, or
+/// returns a negative number when anything is already there or it cannot be
+/// created.
+int _createNew(_Libc libc, String path, int mode) {
+  final nativePath = path.toNativeUtf8();
+  try {
+    return libc.open(nativePath, libc.createNewForWriting, mode);
+  } finally {
+    malloc.free(nativePath);
   }
 }
 
@@ -125,6 +184,8 @@ typedef _FdOwnerFunction = int Function(int, int, int);
 typedef _ReadWriteFunction = int Function(int, Pointer<Uint8>, int);
 typedef _CloseFunction = int Function(int);
 typedef _UidFunction = int Function();
+typedef _UtimensatFunction = int Function(
+    int, Pointer<Utf8>, Pointer<Void>, int);
 
 final class _Libc {
   _Libc._(
@@ -136,13 +197,16 @@ final class _Libc {
       required this.read,
       required this.write,
       required this.close,
-      required this.geteuid});
+      required this.geteuid,
+      required this.utimensat,
+      required this.currentDirectory,
+      required this.noFollow});
 
   /// `O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC`.
   final int createNewForWriting;
 
-  /// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC`, or null on an architecture whose
-  /// `O_NOFOLLOW` this does not know.
+  /// `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`, or null on an
+  /// architecture whose `O_NOFOLLOW` this does not know.
   final int? openForReadingNoFollow;
   final _OpenFunction open;
   final _FdModeFunction fchmod;
@@ -151,6 +215,13 @@ final class _Libc {
   final _ReadWriteFunction write;
   final _CloseFunction close;
   final _UidFunction geteuid;
+  final _UtimensatFunction utimensat;
+
+  /// `AT_FDCWD`.
+  final int currentDirectory;
+
+  /// `AT_SYMLINK_NOFOLLOW`.
+  final int noFollow;
 
   static final _Libc? instance = _lookUp();
 
@@ -170,6 +241,9 @@ final class _Libc {
           _FdOwnerFunction>('fchown');
       final geteuid =
           libc.lookupFunction<Uint32 Function(), _UidFunction>('geteuid');
+      final utimensat = libc.lookupFunction<
+          Int32 Function(Int32, Pointer<Utf8>, Pointer<Void>, Int32),
+          _UtimensatFunction>('utimensat');
       // NOTE: open's mode is variadic, and mode_t is 16 bits on macOS and
       // 32 bits on Linux.
       final open = libc.lookupFunction<
@@ -178,7 +252,7 @@ final class _Libc {
       if (Platform.isMacOS) {
         return _Libc._(
             createNewForWriting: 0x1000a01,
-            openForReadingNoFollow: 0x1000100,
+            openForReadingNoFollow: 0x1000104,
             open: open,
             fchmod: libc.lookupFunction<Int32 Function(Int32, Uint16),
                 _FdModeFunction>('fchmod'),
@@ -186,7 +260,10 @@ final class _Libc {
             read: read,
             write: write,
             close: close,
-            geteuid: geteuid);
+            geteuid: geteuid,
+            utimensat: utimensat,
+            currentDirectory: -2,
+            noFollow: 0x20);
       }
       return _Libc._(
           createNewForWriting: 0x800c1,
@@ -198,23 +275,29 @@ final class _Libc {
           read: read,
           write: write,
           close: close,
-          geteuid: geteuid);
+          geteuid: geteuid,
+          utimensat: utimensat,
+          currentDirectory: -100,
+          noFollow: 0x100);
     } on ArgumentError {
       return null;
     }
   }
 }
 
-/// `O_RDONLY | O_NOFOLLOW | O_CLOEXEC` on Linux, where `O_NOFOLLOW` is
-/// 0100000 on Arm and 0400000 on the generic layout x86 and RISC-V use.
+/// `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` on Linux, where
+/// `O_NOFOLLOW` is 0100000 on Arm and 0400000 on the generic layout x86 and
+/// RISC-V use, and `O_NONBLOCK` is 04000 on both.
 int? _linuxOpenForReadingNoFollow(Abi abi) {
-  const cloexec = 0x80000;
-  if (abi == Abi.linuxArm || abi == Abi.linuxArm64) return cloexec | 0x8000;
+  const cloexecNonBlock = 0x80000 | 0x800;
+  if (abi == Abi.linuxArm || abi == Abi.linuxArm64) {
+    return cloexecNonBlock | 0x8000;
+  }
   if (abi == Abi.linuxX64 ||
       abi == Abi.linuxIA32 ||
       abi == Abi.linuxRiscv32 ||
       abi == Abi.linuxRiscv64) {
-    return cloexec | 0x20000;
+    return cloexecNonBlock | 0x20000;
   }
   return null;
 }
