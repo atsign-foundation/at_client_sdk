@@ -121,7 +121,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**127 rows** — one scenario per catalogue use case (UC-A5.1 splits, and
+**128 rows** — one scenario per catalogue use case (UC-A5.1 splits, and
 UC-C1.3 and UC-G3.4 are withdrawn), plus the cross-cutting invariants.
 
 ⚠️ **This said "the catalogue's 53 use cases become 53 scenarios" until
@@ -174,7 +174,7 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**0 of the 127** rows are skipped. The per-key links ruling withdrew UC-G3.4,
+**0 of the 128** rows are skipped. The per-key links ruling withdrew UC-G3.4,
 rewrote UC-G3.5 and added UC-G3.12 to UC-G3.30, and the twenty rows sat skipped
 against a `perKeyLinks` blocker until at_client's half landed and each was
 cited to the tests that prove it. The burn-down went above zero the same

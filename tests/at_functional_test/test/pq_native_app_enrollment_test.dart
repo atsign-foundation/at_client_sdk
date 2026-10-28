@@ -50,6 +50,8 @@ void main() {
 
   /// One enrolment at [signingAlgo], under a pqActive preference so that the
   /// client would retrofit if its key material were not already strong enough.
+  /// An rsa2048 enrolment goes under the legacy key exchange, which at_auth
+  /// requires of rsa2048.
   Future<({String enrolledAs, String runningAs, AtKeys keys})> enrolAt(
       SigningAlgoType signingAlgo, String label) async {
     final keysIo = InMemoryAtKeysIo();
@@ -66,6 +68,9 @@ void main() {
       deviceName: 'pqnat-$label-$runId',
       atKeysIo: keysIo,
       signingAlgo: signingAlgo,
+      keyExchangeMode: signingAlgo == SigningAlgoType.rsa2048
+          ? EnrollmentKeyExchangeMode.legacy
+          : EnrollmentKeyExchangeMode.pq,
       storage: TestUtils.storage,
     );
     final runningAs = enrolled.client.enrollmentId!;

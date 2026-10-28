@@ -169,9 +169,10 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// atServer that reads an absent field as `rsa2048`. The name stays out
   /// there; nothing on this side repeats the mistake.
   ///
-  /// Independent of [keyExchangeMode]: how the symmetric key travels and which
-  /// algorithm authenticates the connection are separate questions, and both
-  /// constructors take this for that reason.
+  /// Chosen separately from [keyExchangeMode], since how the symmetric key
+  /// travels and which algorithm authenticates the connection are separate
+  /// questions, with one exception: [AtEnrollmentRequest.pq] refuses
+  /// `rsa2048`.
   final SigningAlgoType signingAlgo;
 
   /// How this request conveys the enrollment's symmetric key.
@@ -232,6 +233,10 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// if there is one, else the deprecated loose `atSign`. A request that only
   /// wants the key exchange — one that inspects what it advertised and never
   /// waits for approval — has nowhere to persist keys and needs no session.
+  ///
+  /// Throws [ArgumentError] for a [signingAlgo] of `rsa2048`, before anything
+  /// is sent: an enrollment whose keys travel post-quantum authenticates
+  /// post-quantum too.
   AtEnrollmentRequest.pq({
     this.session,
     @Deprecated('Provide `session` instead; its atSign is used.')
@@ -247,9 +252,10 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     required Stream<String> Function(AtKeys keys, AtLookUp atLookUp)
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
-    required this.signingAlgo,
+    required SigningAlgoType signingAlgo,
     super.advertisedSigningKey,
-  })  : keyExchangeMode = EnrollmentKeyExchangeMode.pq,
+  })  : signingAlgo = _authenticatingPostQuantum(signingAlgo),
+        keyExchangeMode = EnrollmentKeyExchangeMode.pq,
         encryptedAPKAMSymmetricKey = null,
         super(
           atSign: _atSignOf(session, atSign),
@@ -265,6 +271,17 @@ class AtEnrollmentRequest extends EnrollmentRequest {
       atSign ??
       (throw ArgumentError(
           'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)'));
+
+  /// [signingAlgo], unless it is `rsa2048`, which a pq request refuses.
+  static SigningAlgoType _authenticatingPostQuantum(
+          SigningAlgoType signingAlgo) =>
+      signingAlgo == SigningAlgoType.rsa2048
+          ? throw ArgumentError.value(
+              signingAlgo,
+              'signingAlgo',
+              'rsa2048 cannot authenticate an enrollment that uses the pq key '
+                  'exchange; use mldsa65, or the legacy key exchange')
+          : signingAlgo;
 }
 
 /// An APKAM-authenticated self-enrollment: the request an already-enrolled

@@ -70,9 +70,9 @@ void main() {
     await loader.setEncryptionKeys(approver, atSign);
     await AtClientSecretSharing.forClient(approver).register();
 
-    // The rung-0 enrollment: `enrolAndAuthenticate` submits over OTP, and that
-    // path mints RSA-2048 unconditionally — the starting state rung 1 advances
-    // FROM. An enrollment born ML-DSA would make rung 1 a no-op.
+    // The rung-0 enrollment: submitted under the legacy key exchange, which
+    // mints RSA-2048 as a legacy app does — the starting state rung 1
+    // advances FROM. An enrollment born ML-DSA would make rung 1 a no-op.
     keysIo = InMemoryAtKeysIo();
     final deviceName = 'ladder-$runId';
     final enrolled = await enrolAndAuthenticate(
@@ -80,6 +80,7 @@ void main() {
       atSign: atSign,
       namespace: namespace,
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       namespaces: {namespace: 'rw'},

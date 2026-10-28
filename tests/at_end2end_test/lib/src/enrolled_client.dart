@@ -98,7 +98,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   );
 
   Map<String, dynamic>? built;
-  final build = enrollmentKeyPackageBuilder(atSign);
+  final build =
+      enrollmentKeyPackageBuilder(atSign, signingAlgo: SigningAlgoType.mldsa65);
 
   final atLookUp = secureSocketLookUps()(
     atSign: atSign,
@@ -118,9 +119,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
         // advertised key package rather than RSA-wrapping one the enrollee sent.
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key EXCHANGE; the APKAM authentication keypair stays
-        // RSA-2048.
-        signingAlgo: SigningAlgoType.rsa2048,
+        // NOTE: at_auth refuses rsa2048 with the pq exchange.
+        signingAlgo: SigningAlgoType.mldsa65,
       ),
       atLookUp,
     );

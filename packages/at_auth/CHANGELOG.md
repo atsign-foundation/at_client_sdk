@@ -16,6 +16,10 @@
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
 - build: requires `at_utils` ^4.0.0-rc1.
+- breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
+  `ArgumentError`, before anything is sent: an enrollment that takes its keys
+  post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
+  legacy key exchange.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
   on must be durable.

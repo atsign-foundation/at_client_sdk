@@ -52,7 +52,8 @@ void main() {
 
     Map<String, dynamic>? built;
     AtKeys? enrolleeKeys;
-    final build = enrollmentKeyPackageBuilder(atSign);
+    final build = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65);
 
     final request = AtEnrollmentRequest.pq(
       session: TestUtils.enrollmentSession(atSign),
@@ -66,9 +67,9 @@ void main() {
         return built;
       },
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // UC-A2.1 is about the key exchange; which algorithm authenticates the
-      // connection is a separate axis.
-      signingAlgo: SigningAlgoType.rsa2048,
+      // UC-A2.1 is about the key exchange, which at_auth pairs with mldsa65
+      // authentication.
+      signingAlgo: SigningAlgoType.mldsa65,
     );
 
     final response = await AtEnrollment.create().submit(

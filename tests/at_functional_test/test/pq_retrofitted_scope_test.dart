@@ -28,11 +28,11 @@ import 'test_utils.dart';
 /// Each arm drives a real operation rather than stopping at "it
 /// authenticated": at_auth authenticates on its own connection before the
 /// client exists, so a client can report success and still be unable to run a
-/// verb. Each arm also asserts `runningAs != enrolledAs` first, because
-/// `enrolAndAuthenticate` submits an OTP enrollment and that path mints
-/// RSA-2048 unconditionally — a run in which the client did not move would
-/// satisfy every operational assertion below while measuring an ordinary
-/// enrollment.
+/// verb. Each arm also asserts `runningAs != enrolledAs` first: the
+/// enrollment is submitted under the legacy key exchange, which mints RSA-2048
+/// and carries no key package, the shape a production retrofit starts from,
+/// and a run in which the client did not move would satisfy every operational
+/// assertion below while measuring an ordinary enrollment.
 void main() {
   TestUtils.isolateStorage('pq_retrofitted_scope_test');
   late String atSign;
@@ -67,10 +67,11 @@ void main() {
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // pqReady asks for mldsa65 authentication that the OTP path's RSA-2048
-      // enrollment does not have, so the client retrofits. This preference is
-      // the independent variable of the file.
+      // pqReady asks for mldsa65 authentication that the legacy exchange's
+      // RSA-2048 enrollment does not have, so the client retrofits. This
+      // preference is the independent variable of the file.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       // NOTE: (appName, deviceName) is one-shot server state — an
@@ -278,6 +279,7 @@ void main() {
       // Legacy: this client must NOT retrofit, so that step 2 is the first and
       // only retrofit and the keyfile it reads is genuinely pre-PQ.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       deviceName: 'rs-cold-${uuid.v4().hashCode}',

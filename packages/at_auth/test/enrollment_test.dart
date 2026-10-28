@@ -390,6 +390,56 @@ void main() {
     });
   });
 
+  group('Given an enrollment request using the pq key exchange', () {
+    AtEnrollmentRequest pqRequest(SigningAlgoType signingAlgo) =>
+        AtEnrollmentRequest.pq(
+          session: AtAuthSession(
+            atSign: '@alice🛠',
+            rootDomain: const AtRootDomain('root.atsign.org', 64),
+            atKeysIo: InMemoryAtKeysIo(),
+          ),
+          appName: 'wavi',
+          deviceName: 'pixel',
+          otp: 'A123FE',
+          namespaces: {'wavi': 'rw'},
+          metadataBuilder: (_) => null,
+          apkamSymmetricKeyResolver: (_, __) => const Stream.empty(),
+          signingAlgo: signingAlgo,
+        );
+
+    test(
+        'when it is built with rsa2048, then it is refused naming both rsa2048 '
+        'and the pq key exchange', () {
+      expect(
+          () => pqRequest(SigningAlgoType.rsa2048),
+          throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+              allOf(contains('rsa2048'), contains('pq key exchange')))));
+    });
+
+    test('when it is built with mldsa65, then it is accepted', () {
+      expect(pqRequest(SigningAlgoType.mldsa65).signingAlgo,
+          SigningAlgoType.mldsa65);
+    });
+
+    test(
+        'when a legacy request is built with rsa2048 instead, then it is '
+        'accepted', () {
+      final request = AtEnrollmentRequest(
+        session: AtAuthSession(
+          atSign: '@alice🛠',
+          rootDomain: const AtRootDomain('root.atsign.org', 64),
+          atKeysIo: InMemoryAtKeysIo(),
+        ),
+        appName: 'wavi',
+        deviceName: 'pixel',
+        otp: 'A123FE',
+        namespaces: {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.rsa2048,
+      );
+      expect(request.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
+    });
+  });
+
   group('metadataBuilder', () {
     const atSign = '@alice🛠';
 
@@ -442,7 +492,7 @@ void main() {
           // here because pq mode requires one, and the conveyance it stands
           // for is covered separately.
           apkamSymmetricKeyResolver: _unusedResolver,
-          signingAlgo: SigningAlgoType.rsa2048,
+          signingAlgo: SigningAlgoType.mldsa65,
         );
 
     test(
@@ -599,20 +649,34 @@ void main() {
             String privateKey
           })? advertised}) async {
         final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+        Map<String, dynamic> keyPackage(AtKeysIo _) => {
+              'keyPackage': {'v': 1, 'keys': []}
+            };
+        // NOTE: rsa2048 rides the legacy exchange, since a pq request refuses
+        // it; a legacy request carries a key package just the same.
         await AtEnrollmentImpl().submit(
-            AtEnrollmentRequest.pq(
-              session: freshSession(),
-              appName: 'wavi',
-              deviceName: 'pixel',
-              namespaces: {'wavi': 'rw'},
-              otp: 'A123FE',
-              signingAlgo: signingAlgo,
-              advertisedSigningKey: advertised,
-              metadataBuilder: (_) async => {
-                'keyPackage': {'v': 1, 'keys': []}
-              },
-              apkamSymmetricKeyResolver: _unusedResolver,
-            ),
+            signingAlgo == SigningAlgoType.rsa2048
+                ? AtEnrollmentRequest(
+                    session: freshSession(),
+                    appName: 'wavi',
+                    deviceName: 'pixel',
+                    namespaces: {'wavi': 'rw'},
+                    otp: 'A123FE',
+                    signingAlgo: signingAlgo,
+                    advertisedSigningKey: advertised,
+                    metadataBuilder: keyPackage,
+                  )
+                : AtEnrollmentRequest.pq(
+                    session: freshSession(),
+                    appName: 'wavi',
+                    deviceName: 'pixel',
+                    namespaces: {'wavi': 'rw'},
+                    otp: 'A123FE',
+                    signingAlgo: signingAlgo,
+                    advertisedSigningKey: advertised,
+                    metadataBuilder: keyPackage,
+                    apkamSymmetricKeyResolver: _unusedResolver,
+                  ),
             mockAtLookUp);
         return jsonDecode(sent.single.substring(sent.single.indexOf('{')))
             as Map<String, dynamic>;
@@ -621,7 +685,7 @@ void main() {
       test('an rsa2048 APKAM key with a key package is spelled BARE', () async {
         // The case a key package used to force into the array. It is
         // reachable: a legacy posture names an empty signing set, so nothing
-        // is advertised, while `--key-exchange pq` still carries a package.
+        // is advertised, while a legacy request may still carry a package.
         final params = await paramsFor(signingAlgo: SigningAlgoType.rsa2048);
 
         expect(params['apskLegacy'], params['apkamPublicKey'],

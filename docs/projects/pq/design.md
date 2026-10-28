@@ -2720,8 +2720,8 @@ the array on the at_auth side as well, on the grounds that a bare value cannot
 state the algorithm of whatever signed the package. Where that signer is
 rsa2048 the bare value states exactly it, and where it is not, the algorithm
 had already chosen the array — so the condition fired only on the case it was
-wrong about: an APKAM-advertising rsa2048 enrollment in pq key-exchange mode,
-which a legacy posture plus `--key-exchange pq` reaches. Removed 2026-08-31.
+wrong about: an APKAM-advertising rsa2048 enrollment carrying a key package,
+which a legacy request with a key package reaches. Removed 2026-08-31.
 
 #### 9.8.3 The chain: one link per key
 

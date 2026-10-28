@@ -23,17 +23,16 @@ import 'test_utils.dart';
 /// and refuses to hand a cached client to a caller naming different rollout
 /// axes, so three postures need three cache keys.
 ///
-/// ⚠️ **The cells differ in the posture and in nothing else deliberate, with
-/// one stated exception:** all three enrollments are submitted in *pq* mode,
-/// because [enrolAndAuthenticate] builds only that kind. `keyExchangeMode` is
-/// therefore held constant across the cells and is **not** what this file
-/// measures.
+/// ⚠️ **The cells differ in the posture and in nothing else deliberate:** all
+/// three enrollments are submitted as a legacy app submits one, under the
+/// legacy key exchange with an RSA-2048 APKAM keypair, and each is then run at
+/// its stage. `keyExchangeMode` is held constant across the cells and is
+/// **not** what this file measures.
 ///
 /// ⚠️ **Each pq cell runs under a DIFFERENT enrollment id from the one it was
-/// enrolled as, and both ids are real.** The OTP path has no algorithm to ask
-/// with and its APKAM keypair is RSA-2048 always, so a pqReady or pqActive
-/// preference finds rsa2048 where it wants mldsa65 and the client self-enrols
-/// onto a new id inside `AtClientImpl.create`. `AtClient.enrollmentId` is the
+/// enrolled as, and both ids are real.** A pqReady or pqActive preference
+/// finds the legacy enrollment's rsa2048 where it wants mldsa65, and the
+/// client self-enrols onto a new id inside `AtClientImpl.create`. `AtClient.enrollmentId` is the
 /// id a client is authenticated as and [EnrolledClient.enrollmentId] is the id
 /// it was enrolled as; anything asserting what a client IS has to read the
 /// first, because reading the second compares ids no client is running under
@@ -79,6 +78,7 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: TestUtils.getPreference(atSign, posture: entry.value),
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         // NOTE: `(appName, deviceName)` is one-shot server state — a second
@@ -140,23 +140,23 @@ void main() {
         reason: 'three distinct enrollment ids, or two cells share a client '
             'cache key and one of them is not the stage it claims');
 
-    // The retrofit itself. A posture wanting a key the OTP path cannot mint
-    // must have MOVED its client off the enrollment it was handed; the posture
-    // wanting exactly what that path mints must have stayed. Both arms,
+    // The retrofit itself. A posture wanting a key the legacy enrollment does
+    // not hold must have MOVED its client off the enrollment it was handed; the posture
+    // wanting exactly what it holds must have stayed. Both arms,
     // because a changed id alone would also be produced by handing a cell the
     // wrong client.
     for (final entry in stages.entries) {
       final enrolledAs = cells[entry.key]!.enrollmentId;
       if (entry.value.authenticationKeyAlgorithm == SigningAlgoType.rsa2048) {
         expect(runningIds[entry.key], enrolledAs,
-            reason: '${entry.key}: this posture wants the rsa2048 key the OTP '
-                'enrollment already minted, so no retrofit is due and the '
+            reason: '${entry.key}: this posture wants the rsa2048 key the '
+                'legacy enrollment already minted, so no retrofit is due and the '
                 'client must still be running as the enrolled id $enrolledAs');
       } else {
         expect(runningIds[entry.key], isNot(enrolledAs),
             reason: '${entry.key}: this posture wants '
-                '${entry.value.authenticationKeyAlgorithm.name} while the OTP '
-                'enrollment minted rsa2048, so the client must have '
+                '${entry.value.authenticationKeyAlgorithm.name} while the '
+                'legacy enrollment minted rsa2048, so the client must have '
                 'retrofitted itself off the enrolled id $enrolledAs during '
                 'construction. Still running as it means the retrofit never '
                 'fired and this cell is a legacy client wearing a pq '

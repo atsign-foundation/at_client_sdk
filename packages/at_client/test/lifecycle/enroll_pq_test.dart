@@ -93,6 +93,31 @@ void main() {
   }
 
   test(
+      'an rsa2048 enrollment under the pq key exchange is refused before '
+      'anything is sent', () async {
+    final lookUp = MockAtLookupImpl();
+    await expectLater(
+        Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'wavi',
+            device: 'phone',
+            namespaces: {'wavi': 'rw'},
+            keys: InMemoryAtKeysIo(),
+            preference: AtClientPreference(posture: PqPosture.pqReady)
+              ..rootDomain = InternetAddress.loopbackIPv4.address
+              ..rootPort = await refusedPort()
+              ..hiveStoragePath = dir.path
+              ..namespace = 'lifecycle',
+            signingAlgo: SigningAlgoType.rsa2048,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: lookUp),
+        throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+            allOf(contains('rsa2048'), contains('pq key exchange')))));
+    verifyZeroInteractions(lookUp);
+  });
+
+  test(
       'a pq enrollment completes: the symmetric key sealed to its key '
       'package is opened, and the secrets under it read', () async {
     // The enrollee's atServer: answers by verb, and serves whatever the

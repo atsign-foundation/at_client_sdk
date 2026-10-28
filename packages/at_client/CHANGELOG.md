@@ -3,6 +3,10 @@
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
   keys it is given.
+- breaking: `Atsign.enroll` refuses an `rsa2048` request under the pq key
+  exchange before sending it, and a `PqPosture` refuses `rsa2048`
+  authentication with the pq key exchange, or seeding namespace keys without
+  it. Each refusal names both settings.
 - experimental: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.

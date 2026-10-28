@@ -81,7 +81,8 @@ a post-quantum enrollment needs the post-quantum providers, so under `legacy`
 at_client refuses such an approval when it reads the request; pass
 `--posture pqReady` to approve one. `enroll --key-exchange legacy|pq`
 chooses how the enrollment's symmetric key travels, for the approver that
-will pick the request up.
+will pick the request up; `pq` needs `--posture pqReady` or `pqActive`, since
+an rsa2048 enrollment with the pq key exchange is refused.
 
 ## APKAM enrollment
 

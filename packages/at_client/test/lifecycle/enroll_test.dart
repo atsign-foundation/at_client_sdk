@@ -385,7 +385,8 @@ void main() {
   /// what decides how the symmetric key travels and what the enrollment
   /// advertises, and the atServer parks it pending.
   Future<Map<String, dynamic>> submittedUnder(PqPosture posture,
-      {EnrollmentKeyExchangeMode? keyExchangeMode}) async {
+      {EnrollmentKeyExchangeMode? keyExchangeMode,
+      SigningAlgoType? signingAlgo}) async {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
@@ -423,6 +424,7 @@ void main() {
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         keyExchangeMode: keyExchangeMode,
+        signingAlgo: signingAlgo,
         atLookUp: lookUp);
 
     final command = sent.where((c) => c.startsWith('enroll:request:')).single;
@@ -487,8 +489,11 @@ void main() {
           reason: 'the mode decides how the key travels, not what the '
               'enrollment advertises');
 
+      // NOTE: mldsa65 named too, since the legacy posture's rsa2048 is refused
+      // with the pq exchange.
       final pqUnderLegacy = await submittedUnder(PqPosture.legacy,
-          keyExchangeMode: EnrollmentKeyExchangeMode.pq);
+          keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+          signingAlgo: SigningAlgoType.mldsa65);
       expect(pqUnderLegacy['encryptedAPKAMSymmetricKey'], isNull);
       expect(pqUnderLegacy['metadata']?['keyPackage'], isNotNull);
     });

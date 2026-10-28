@@ -43,7 +43,8 @@ void main() {
 
     Map<String, dynamic>? built;
     AtKeys? originalKeys;
-    final build = enrollmentKeyPackageBuilder(atSign);
+    final build = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65);
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
@@ -58,9 +59,8 @@ void main() {
           return built;
         },
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key exchange; the enrollment still authenticates with an
-        // RSA-2048 APKAM keypair.
-        signingAlgo: SigningAlgoType.rsa2048,
+        // NOTE: at_auth refuses rsa2048 with the pq exchange.
+        signingAlgo: SigningAlgoType.mldsa65,
       ),
       TestUtils.unauthenticatedLookUp(atSign),
     );

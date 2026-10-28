@@ -470,5 +470,48 @@ void main() {
         clauses: ['the same request against a'],
       );
     });
+
+    test(
+        'UC-A2.7 · an enrollment that exchanges keys post-quantum '
+        'authenticates post-quantum', () {
+      // GIVEN an app enrolling, or a program building a PqPosture of its own.
+      // WHEN  the request pairs an rsa2048 APKAM key with the pq key exchange;
+      //       or a posture does, or seeds namespace keys without it.
+      // THEN  it is refused where it is built, naming both, and nothing
+      //       reaches the atServer; an rsa2048 request under the legacy key
+      //       exchange is accepted.
+      provenIn(
+        'packages/at_auth/test/enrollment_test.dart',
+        'when it is built with rsa2048, then it is refused naming both',
+        proves: 'the refusal at the one constructor every caller goes '
+            'through, on its message naming both rsa2048 and the pq key '
+            'exchange; the accepted arms are the mldsa65 request and the '
+            'rsa2048 legacy request beside it',
+        clauses: [
+          'it is refused where it is built',
+          'the arm that stays',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/lifecycle/enroll_pq_test.dart',
+        'an rsa2048 enrollment under the pq key exchange is refused before',
+        proves: 'Atsign.enroll refuses before anything is sent: the mocked '
+            'lookup it was handed sees no interaction at all',
+        clauses: ['nothing reaches the atServer'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_posture_test.dart',
+        'a posture pairing rsa2048 authentication with the pq key exchange',
+        proves: 'the posture constructor refuses the same pairing, naming '
+            'both',
+        clauses: ['the constructor throws, naming both'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_posture_test.dart',
+        'a posture that seeds namespace keys without the pq key exchange',
+        proves: 'a seeding posture must convey through key packages, so the '
+            'constructor refuses one on the legacy exchange, naming both',
+      );
+    });
   });
 }

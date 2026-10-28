@@ -117,6 +117,9 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: TestUtils.getPreference(atSign, posture: entry.value),
+        // NOTE: the stage's own exchange, as `Atsign.enroll` takes it: the
+        // legacy cell must authenticate, and so advertise, RSA-2048.
+        keyExchangeMode: entry.value.keyExchangeMode,
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         // `(appName, deviceName)` is one-shot server state, so a second run
@@ -125,9 +128,8 @@ void main() {
             '${DateTime.now().microsecondsSinceEpoch}',
         storage: TestUtils.storage,
       );
-      // NOTE: the id the client RUNS as, not the one it was enrolled as — a pq
-      // posture retrofits during construction and advertises its `_apsk` under
-      // the new id.
+      // NOTE: the id the client RUNS as, which is the id its `_apsk` is
+      // advertised under.
       stdout.writeln('##RELPEER## ${entry.key} runs as '
           '${cells[entry.key]!.client.enrollmentId}');
     }

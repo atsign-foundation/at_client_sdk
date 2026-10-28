@@ -108,6 +108,22 @@ class PqPosture {
           'a posture that writes post-quantum data it cannot read seals '
               'records its own atSign cannot open; set configuresPqProviders too');
     }
+    if (seedNamespaceKeys && keyExchangeMode != EnrollmentKeyExchangeMode.pq) {
+      throw ArgumentError.value(
+          seedNamespaceKeys,
+          'seedNamespaceKeys',
+          'a posture that seeds namespace keys must use the pq key exchange, '
+              'since a minter conveys the private to key packages; set '
+              'keyExchangeMode to pq, or seedNamespaceKeys to false');
+    }
+    if (authenticationKeyAlgorithm == SigningAlgoType.rsa2048 &&
+        keyExchangeMode == EnrollmentKeyExchangeMode.pq) {
+      throw ArgumentError.value(
+          authenticationKeyAlgorithm,
+          'authenticationKeyAlgorithm',
+          'rsa2048 cannot authenticate an enrollment that uses the pq key '
+              'exchange; use mldsa65, or the legacy key exchange');
+    }
     return PqPosture._(
       authenticationKeyAlgorithm: authenticationKeyAlgorithm,
       dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,

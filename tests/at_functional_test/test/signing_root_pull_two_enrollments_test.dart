@@ -90,9 +90,9 @@ void main() {
         namespace: namespace,
         // `legacyPlusPqProviders`, not `PqPosture.legacy`: these clients have to
         // ANSWER and COLLECT over the envelope channel, and a posture configuring
-        // no post-quantum providers runs none of that startup. The authentication
-        // algorithm stays rsa2048 here, so no retrofit fires and the enrollment id
-        // is stable.
+        // no post-quantum providers runs none of that startup. The enrollment
+        // authenticates mldsa65, which this posture's rsa2048 floor never
+        // retrofits, so the enrollment id is stable.
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',

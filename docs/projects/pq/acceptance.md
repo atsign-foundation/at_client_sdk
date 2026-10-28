@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**116 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 118 use cases and 127 scenarios —
+**117 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 119 use cases and 128 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -79,6 +79,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A2.4  | The key package advertises the KEM the deployment configured                        | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A2.5  | An enrollment amends its own key package (`enroll:update`)                          | PROVEN    | `key_package_amendment_live_test.dart` |
 | UC-A2.6  | Only the enrollment itself may amend its metadata                                   | PROVEN    | `key_package_amendment_live_test.dart` |
+| UC-A2.7  | An enrollment that exchanges keys post-quantum authenticates post-quantum           | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A3.1  | Self write/read, namespace key already exists                                       | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.2  | A client mints and publishes the nskey for each namespace it is authorised for      | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.3  | Self write with no namespace key has no PQ fallback                                 | PROVEN    | `a3_self_data_test.dart`     |
@@ -748,6 +749,28 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   anything reaches an atServer. Which construction a peer seals under is not one of
   them: it is a claim about what a *sender* stamps, which only a real peer and a real
   atServer can show, and it is cited to `key_package_amendment_live_test.dart`.
+
+### 3.7 UC-A2.7 — An enrollment that exchanges keys post-quantum authenticates post-quantum
+
+- **Given:** an app enrolling on `@alice`, through `at_activate enroll`, a Flutter flow,
+  `Atsign.enroll` or `AtEnrollmentRequest.pq` directly; or a program building a
+  `PqPosture` of its own.
+- **When:** the enrollment request pairs an `rsa2048` APKAM key with the pq key exchange.
+- **Then:** it is refused where it is built, naming both `rsa2048` and the pq key
+  exchange, and nothing reaches the atServer.
+- **When:** a `PqPosture` pairs `rsa2048` authentication with the pq key exchange, or
+  seeds namespace keys without the pq key exchange.
+- **Then:** the constructor throws, naming both.
+- **Then (the arm that stays):** an `rsa2048` request under the legacy key exchange is
+  accepted. It is the shape a retrofit starts from, and it carries no key package unless
+  its caller adds one.
+- **Why:** an `rsa2048` enrollment that advertised a key package retrofits at its first
+  start onto a successor with a key package of its own, so whatever was conveyed to the
+  first is sealed to a key the running client never reads.
+- **Impl/verify:** unit rows: `packages/at_auth/test/enrollment_test.dart` for the
+  request, `packages/at_client/test/pq_posture_test.dart` for the posture, and
+  `packages/at_client/test/lifecycle/enroll_pq_test.dart` for `Atsign.enroll` refusing
+  before it connects.
 
 ## 4. A3 · E2EE within one atSign (self data) + self notification
 
@@ -4083,9 +4106,9 @@ and is the rule the two composers were breaking.
   cannot state the algorithm of whatever signed the package, is wrong where that
   signer is rsa2048 — the bare value states exactly it — and redundant where it
   is not, the algorithm having already chosen the array. What is left is an
-  rsa2048-advertising enrollment in pq key-exchange mode, which
-  `--posture legacy --key-exchange pq` reaches: the client rewrites `_apsk` at
-  its first start.
+  rsa2048-advertising enrollment carrying a key package, which a legacy request
+  with a key package reaches (a pq request refuses rsa2048, UC-A2.7): the
+  client rewrites `_apsk` at its first start.
 
 ### 18.2 Links, one per key
 

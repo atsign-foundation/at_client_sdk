@@ -104,10 +104,11 @@ class EnrolledClient {
 /// [signingAlgo] is the algorithm the enrollment's APKAM **authentication**
 /// keypair is minted under, a different axis from the key EXCHANGE above: how
 /// the symmetric key travels and which algorithm authenticates the connection
-/// are separate questions. Under the default `rsa2048` a client whose posture
-/// wants better retrofits itself on first construction and comes up on a new
-/// enrollment id; pass `mldsa65` for one that is post-quantum from birth and
-/// therefore never retrofits.
+/// are separate questions, save that at_auth refuses `rsa2048` with the pq
+/// exchange. It defaults to `mldsa65` for the pq exchange, post-quantum from
+/// birth and never retrofitting, and to `rsa2048` for the legacy exchange,
+/// which a client whose posture wants better retrofits on first construction,
+/// coming up on a new enrollment id: the production shape of a retrofit.
 ///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
@@ -129,7 +130,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   String? deviceName,
   Map<String, String>? namespaces,
   AtKeysIo? atKeysIo,
-  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  SigningAlgoType? signingAlgo,
   EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
 
   /// The connection the client is opened on, instead of one it builds.
@@ -151,11 +152,13 @@ Future<EnrolledClient> enrolAndAuthenticate({
   );
 
   final legacyMode = keyExchangeMode == EnrollmentKeyExchangeMode.legacy;
+  final algo = signingAlgo ??
+      (legacyMode ? SigningAlgoType.rsa2048 : SigningAlgoType.mldsa65);
 
   Map<String, dynamic>? built;
   // NOTE: the key package is signed by the APKAM keypair this enrolment is
   // about to submit, so the builder must be told the same algorithm.
-  final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
+  final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: algo);
 
   final submission = secureSocketLookUps()(
     atSign: atSign,
@@ -180,7 +183,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
               deviceName: resolvedDeviceName,
               namespaces: namespaces ?? {namespace: 'rw'},
               otp: otp,
-              signingAlgo: signingAlgo,
+              signingAlgo: algo,
             )
           : AtEnrollmentRequest.pq(
               session: session,
@@ -191,7 +194,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
               metadataBuilder: (keysIo) async => built = await build(keysIo),
               apkamSymmetricKeyResolver:
                   enrollmentApkamSymmetricKeyResolver(atSign),
-              signingAlgo: signingAlgo,
+              signingAlgo: algo,
             ),
       submission,
     );

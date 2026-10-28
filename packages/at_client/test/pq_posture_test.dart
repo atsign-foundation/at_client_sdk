@@ -147,6 +147,49 @@ void main() {
       expect(custom.disallowLegacyEncryption, false);
     });
 
+    test(
+        'a posture pairing rsa2048 authentication with the pq key exchange is '
+        'refused, naming both', () {
+      expect(
+          () => PqPosture(
+                authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+                dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
+                seedNamespaceKeys: true,
+                keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+                writesPqByDefault: false,
+                configuresPqProviders: true,
+                disallowLegacyEncryption: false,
+                mintLegacyMaterial: true,
+                sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+                keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
+              ),
+          throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+              allOf(contains('rsa2048'), contains('pq key exchange')))));
+    });
+
+    test(
+        'a posture that seeds namespace keys without the pq key exchange is '
+        'refused, naming both', () {
+      expect(
+          () => PqPosture(
+                authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+                dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
+                seedNamespaceKeys: true,
+                keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+                writesPqByDefault: false,
+                configuresPqProviders: true,
+                disallowLegacyEncryption: false,
+                mintLegacyMaterial: true,
+                sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+                keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
+              ),
+          throwsA(isA<ArgumentError>().having(
+              (e) => '${e.message}',
+              'message',
+              allOf(contains('seeds namespace keys'),
+                  contains('pq key exchange')))));
+    });
+
     test('a posture that would refuse its own writes is rejected', () {
       // Rejected at construction rather than accepted and left to fail at the
       // first put, where the app would read it as a data-path bug.
