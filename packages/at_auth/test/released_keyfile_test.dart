@@ -206,6 +206,21 @@ void main() {
               'rewritten for $atsign, even with keys that name $atsign');
     });
 
+    test('Flushing other keys for its own atSign is still refused', () async {
+      final path = copyOf('3.3.0', 'alice_key');
+      final before = File(path).readAsStringSync();
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path)
+              .flush(atsign.toAtsign(), legacyAtKeys()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.legacy'))),
+          reason: 'the credential at_auth 3.3.0 wrote is not replaced by a '
+              'flat rewrite for the atSign it names');
+      expect(File(path).readAsStringSync(), before,
+          reason: 'the keyfile is left as it was');
+    });
+
     test(
         'The current build reads every value at_auth 3.3.0 wrote under a '
         'passphrase', () async {
