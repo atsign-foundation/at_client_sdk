@@ -9,7 +9,7 @@
     {
       "id": 2,
       "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
-      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern."
+      "expected_output": "States that at_client 4.0 removed AtCollectionModel, so code using it no longer compiles. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern, and shows no AtCollectionModel code, not even as a before/after comparison."
     },
     {
       "id": 3,
@@ -34,7 +34,7 @@
     {
       "id": 7,
       "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
-      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them from package:at_client/at_client.dart (NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly)."
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them through the app's platform package (package:at_client_cli/at_client_cli.dart or package:at_client_flutter/at_client_flutter.dart, both re-exporting package:at_client/at_client.dart), NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly."
     },
     {
       "id": 8,
@@ -64,7 +64,7 @@
     {
       "id": 13,
       "prompt": "what's the difference between at_client and at_client_flutter",
-      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client."
+      "expected_output": "Explains that at_client is the platform-neutral core (AtClient, AtCollection, Query, NotificationService, AtClientPreference, AtClientManager, the Atsign verbs), public but meant for building platform packages and for programs that pass every dependency themselves. at_client_flutter is the Flutter platform package: it re-exports at_client's API and adds the auth dialogs, KeychainStorage and KeychainAtKeysIo, with defaults for storage and keys. An app depends on and imports its one platform package — at_client_flutter for Flutter, at_client_cli for a CLI, daemon or server — not at_client beside it."
     },
     {
       "id": 14,
@@ -84,12 +84,12 @@
     {
       "id": 17,
       "prompt": "I want a user to edit an item that another atsign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
-      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
+      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the removed AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
     },
     {
       "id": 18,
       "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass."
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService (at_auth's, re-exported by at_client_flutter; the app does not import at_auth) configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. May note that at_client 4.0's open reports this as the cause noAtServer, thrown as AtOpenRefusedException on the first open of those keys on a device. Recommending the discontinued at_onboarding_flutter package does NOT pass."
     },
     {
       "id": 19,
@@ -109,12 +109,12 @@
     {
       "id": 22,
       "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
-      "expected_output": "Shows the server mutex: atClient.tryAcquireServerMutex(key, ttl: ...) on a self key of the client's own atSign, which returns a lease to the one instance that takes the lock and null when its record already exists (another instance's, or its own within the ttl), and throws any other failure; it needs an atServer from p3.13.0. Mentions that the ttl (at most 15 minutes) is the only release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process; hiveStoragePath/commitLogPath are deprecated) and stops its client when done."
+      "expected_output": "Shows the server mutex: atClient.tryAcquireServerMutex(key, ttl: ...) on a self key of the client's own atSign, which returns a lease to the one instance that takes the lock and null when its record already exists (another instance's, or its own within the ttl), and throws any other failure; it needs an atServer from p3.13.0. Mentions that the ttl (at most 15 minutes) is the only release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_client_cli, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage or CliKeys.storageFor per process, or CLIBase's -s; at_client ignores the deprecated hiveStoragePath, and 4.0 removed commitLogPath) and stops its client when done. Naming at_cli_commons as the package to add does NOT pass."
     },
     {
       "id": 23,
       "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
-      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes."
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_client_cli — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client_cli as the single SDK dependency and importing package:at_client_cli/at_client_cli.dart. May mention CliKeys with Atsign(atSign).open(...) for a program that names its own keyfile and store, and that CLIBase throws SecondaryServerConnectivityException only for an outage. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT add at_cli_commons or at_onboarding_cli (deprecated re-exports of at_client_cli), does NOT use AtOnboardingService or createAtClient (gone), does NOT hand-roll keyfile parsing, and does NOT use Flutter dialog classes."
     },
     {
       "id": 24,

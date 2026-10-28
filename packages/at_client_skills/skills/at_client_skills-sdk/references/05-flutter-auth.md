@@ -12,7 +12,7 @@ Add the packages with `dart pub add` (pins the latest compatible versions):
 
 ```sh
 dart pub add at_client_flutter
-# at_client_flutter re-exports at_client
+# the app's one SDK dependency: it re-exports at_client's API
 ```
 
 ---
@@ -51,7 +51,8 @@ void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 
 Pass no `storage` and the dialogs open Hive in the app's support directory
 (`getApplicationSupportDirectory()`), or under `preference.hiveStoragePath`
-while the app still sets it. That field and `commitLogPath` are deprecated: an
+while the app still sets it. That field is deprecated (at_client itself
+ignores it, and it goes in 5.0), and at_client 4.0 removed `commitLogPath`: an
 app that keeps its store anywhere else, or wants another backend, passes an
 `AtClientStorage` as `storage`, such as `HiveAtClientStorage`, which comes
 through `package:at_client_flutter`.

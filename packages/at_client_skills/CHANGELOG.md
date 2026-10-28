@@ -2,6 +2,9 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Teaches at_client 4.0: one platform package per app (`at_client_cli` or
+  `at_client_flutter`), the storage, transport and atDirectory finder every
+  client is opened with, and what 4.0 removed, named as removed.
 - Multiple instances of one agent take their lock with
   `tryAcquireServerMutex`.
 - Storage: each backend comes from its own import, `HiveAtClientStorage` from
@@ -27,9 +30,8 @@
   `stop()` does and does not do (new `references/15-client-lifecycle.md`;
   `SKILL.md` §11; later sections renumbered).
 - The package map, the headless-agent and sync references and the
-  deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
-  `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage
-  object.
+  deprecation guide drop `at_auth` and `setCurrentAtSign`, and point from
+  `hiveStoragePath` to a storage object.
 - Evals: the two auth evals follow the new flows; two new evals cover
   logout / switching and the connection state.
 - The connections an `AtLookUpFactory` builds no longer include a file
