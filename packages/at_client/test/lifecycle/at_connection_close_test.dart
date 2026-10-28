@@ -70,9 +70,9 @@ void main() {
       final lookUp = MockAtLookupImpl();
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
       late AtClient client;
-      // What the remote does when the stop closes its lookup underneath a
+      // What the remote does when the stop ends its lookup underneath a
       // request in flight: classifies the failure and reports it.
-      when(() => lookUp.close()).thenAnswer((_) async {
+      when(() => lookUp.stop()).thenAnswer((_) async {
         await client.connection.report(offline());
       });
       client = await buildAtClient(
@@ -87,7 +87,7 @@ void main() {
 
       await client.stop();
 
-      verify(() => lookUp.close()).called(greaterThan(0));
+      verify(() => lookUp.stop()).called(greaterThan(0));
       expect(before.cause, isNot(AtConnectionCause.stopped));
       expect(client.connection.current.cause, AtConnectionCause.stopped,
           reason: 'the connection state is closed before the services and '

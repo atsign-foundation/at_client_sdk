@@ -300,7 +300,8 @@ void main() {
             ..atKeysIo = InMemoryAtKeysIo(),
           testCramSecret);
 
-      // NOTE: a closed lookup refuses every later call, the PKAM included.
+      // NOTE: the PKAM runs on this lookup next, so the onboard only drops
+      // its connection.
       verifyNever(() => mockAtLookUp.close());
       verify(() => mockAtLookUp.dropConnection()).called(1);
     });

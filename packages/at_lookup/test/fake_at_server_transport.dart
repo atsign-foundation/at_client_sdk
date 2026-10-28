@@ -40,6 +40,10 @@ class FakeAtServerTransport implements AtTransport {
   int resumeCount = 0;
   int cancelCount = 0;
   int flushCount = 0;
+
+  /// While set, [flush] does not return until it completes, as a socket's
+  /// does while its buffer drains.
+  Completer<void>? flushGate;
   bool destroyed = false;
 
   Future<void> serverSends(String data) async {
@@ -78,7 +82,10 @@ class FakeAtServerTransport implements AtTransport {
   }
 
   @override
-  Future<void> flush() async => flushCount++;
+  Future<void> flush() async {
+    flushCount++;
+    await flushGate?.future;
+  }
 
   @override
   void destroy() {

@@ -52,6 +52,7 @@ class MockAtLookUp extends Mock implements AtLookUp {
 class MockAtLookupImpl extends Mock implements AtLookupImpl {
   MockAtLookupImpl() {
     _answerCommandsWithNothing(this);
+    when(stop).thenAnswer((_) async {});
   }
 }
 

@@ -48,7 +48,7 @@ class _SilentServer {
   }
 }
 
-/// `close()` ends a lookup whose connect is waiting on a peer that never
+/// `stop()` ends a lookup whose connect is waiting on a peer that never
 /// answers, over the real TLS transport: the call in flight fails at once and
 /// the socket it was opening closes.
 void main() {
@@ -77,8 +77,8 @@ void main() {
       );
 
   /// Starts a request on [atLookup], waits for [silent] to accept its
-  /// connection, closes the lookup, and returns what the request threw.
-  Future<Object?> closeWhileConnecting(AtLookupMuxable atLookup) async {
+  /// connection, stops the lookup, and returns what the request threw.
+  Future<Object?> stopWhileConnecting(AtLookupMuxable atLookup) async {
     Object? thrown;
     final pending = atLookup
         .executeCommand('noop:0\n')
@@ -90,8 +90,8 @@ void main() {
     expect(silent.connections, hasLength(1),
         reason: 'the connect must be waiting on the silent peer');
 
-    await atLookup.close().timeout(const Duration(seconds: 2),
-        onTimeout: () => fail('close() waited for the connect'));
+    await atLookup.stop().timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('stop() waited for the connect'));
     await pending.timeout(const Duration(seconds: 2),
         onTimeout: () => fail('the request waited for its connect'));
     return thrown;
@@ -102,7 +102,7 @@ void main() {
     when(() => finder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress('127.0.0.1', silent.port));
 
-    final thrown = await closeWhileConnecting(build(finder));
+    final thrown = await stopWhileConnecting(build(finder));
 
     expect(thrown, isA<StoppedException>());
     await silent.connections.single.ended.timeout(const Duration(seconds: 2),
@@ -114,7 +114,7 @@ void main() {
   test('an atDirectory that never answers the handshake', () async {
     final finder = CacheableSecondaryAddressFinder('127.0.0.1', silent.port);
 
-    final thrown = await closeWhileConnecting(build(finder));
+    final thrown = await stopWhileConnecting(build(finder));
 
     expect(thrown, isA<StoppedException>());
     await silent.connections.single.ended.timeout(const Duration(seconds: 2),
@@ -124,7 +124,7 @@ void main() {
     expect(silent.connections, hasLength(1),
         reason: 'an abandoned atDirectory lookup is not retried');
     expect(recorded.at('SEVERE'), isEmpty,
-        reason: 'a close the owner asked for is not an atDirectory failure');
+        reason: 'a stop the owner asked for is not an atDirectory failure');
   });
 
   test('an atDirectory that completes the handshake and then says nothing',
@@ -173,8 +173,8 @@ void main() {
     expect(ended, hasLength(1), reason: 'the handshake must have completed');
     await Future.delayed(const Duration(milliseconds: 200));
 
-    await atLookup.close().timeout(const Duration(seconds: 2),
-        onTimeout: () => fail('close() waited for the atDirectory'));
+    await atLookup.stop().timeout(const Duration(seconds: 2),
+        onTimeout: () => fail('stop() waited for the atDirectory'));
     await pending.timeout(const Duration(seconds: 2),
         onTimeout: () => fail('the request waited for the atDirectory'));
 

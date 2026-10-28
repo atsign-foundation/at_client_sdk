@@ -209,8 +209,8 @@ class SecondaryUrlFinder {
     throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
   }
 
-  /// Whether the owner this lookup runs for has closed, which ends it
-  /// quietly rather than as a failure to retry or report.
+  /// Whether the owner this lookup runs for has closed or stopped, which ends
+  /// it quietly rather than as a failure to retry or report.
   static bool get _abandoned => Abandonment.current?.isAbandoned ?? false;
 
   Future<String?> _findSecondary(String atsign, DateTime deadline) async {
@@ -264,7 +264,8 @@ class SecondaryUrlFinder {
         await Future.delayed(Duration(milliseconds: 5));
         if (_abandoned) {
           throw SocketException(
-              'atDirectory lookup for $atsign abandoned: its owner has closed');
+              'atDirectory lookup for $atsign abandoned: its owner has closed or '
+              'stopped');
         }
         if (ans) {
           response = secondary;
