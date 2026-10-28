@@ -688,17 +688,28 @@ void main() {
           reason: 'a version this build does not write is not dropped');
     });
 
-    test(
-        'when its keys field is anything but an empty list, then a flat '
-        'rewrite is refused', () {
-      expect(
-          () => assurance.validateMapUpdate(existing: {
-                ...typedWithoutMaterial(),
-                'keys': {'unexpected': true}
-              }, candidate: _fixtureLegacyJson(), atsign: alice.toAtsign()),
-          throwsA(isA<AtKeysAssuranceException>()),
-          reason: 'a keys field holding anything is not dropped');
-    });
+    for (final (shape, keys) in <(String, Object)>[
+      ('a map', {'unexpected': true}),
+      (
+        'a populated list',
+        [
+          {'keyId': 'auth:rsa2048:1'}
+        ]
+      ),
+    ]) {
+      test(
+          'when its keys field is $shape, then a flat rewrite is refused '
+          'for the atSign it names', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), 'keys': keys},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'a keys field holding anything is not dropped');
+      });
+    }
   });
 }
 
