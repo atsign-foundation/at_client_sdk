@@ -825,6 +825,26 @@ void main() {
           reason: 'atSigns are compared folded');
     });
 
+    for (final (shape, existing) in <(String, Map<String, dynamic>)>[
+      (
+        'absent',
+        {...noCredential(content: pendingEnrollment())}..remove('atsign')
+      ),
+      ('null', {...noCredential(content: pendingEnrollment()), 'atsign': null}),
+    ]) {
+      test(
+          'when it holds pending content and no credential, and its atsign '
+          'field is $shape, then a flat rewrite for an atSign is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: existing,
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'the keyfile names no owner to compare with');
+      });
+    }
+
     test(
         'when its version is not the one this build writes and it holds no '
         'credential, then a flat rewrite for another atSign is refused', () {
@@ -845,7 +865,7 @@ void main() {
     const alice = '@alice🛠';
 
     /// A flat keyfile holding no credential whose `atsign` field is [atsign].
-    Map<String, dynamic> flatNaming(String atsign) =>
+    Map<String, dynamic> flatNaming(Object? atsign) =>
         {..._publicOnlyLegacyJson(), 'atsign': atsign};
 
     test(
@@ -899,6 +919,24 @@ void main() {
           reason: 'a keyfile that names no atSign is not compared with the '
               'atSign the write names');
     });
+
+    for (final (shape, value) in <(String, Object)>[
+      ('an empty string', ''),
+      ('not an atSign', 42),
+    ]) {
+      test(
+          'when its atsign field is $shape, then a flat rewrite for an atSign '
+          'is refused', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: flatNaming(value),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'the keyfile names no atSign the write can match');
+      });
+    }
 
     test(
         'when it is rewritten flat with no atSign named, then the rewrite is '
