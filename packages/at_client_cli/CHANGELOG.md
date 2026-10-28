@@ -12,7 +12,8 @@
   store a command-line program keeps for an atSign, ready for at_client's
   `Atsign.activate`, `open` and `enroll`.
 - breaking: `AtOnboardingService`, `AtOnboardingPreference`, `createAtClient`,
-  `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener` and the
+  `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener`,
+  `EnrollmentDetails`, `PrintAllArgParserUsage` and the
   `AtOnboardingException` family are not carried over. A program opens its
   client with `CLIBase` or `Atsign.open`; the README's migration table names
   what replaces each.

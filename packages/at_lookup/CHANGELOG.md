@@ -18,8 +18,10 @@
   form, and an answer longer than 512 bytes, or that is not a host name and a
   port, is refused.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
-- breaking: `CacheableSecondaryAddressFinder` and `SecureSocketUtil` now come
-  from `at_lookup_io.dart`, not `at_lookup.dart`.
+- breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
+  `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and
+  `AtLookupSecureSocketFactory` now come from `at_lookup_io.dart`, not
+  `at_lookup.dart`.
 - feat: `FixedSecondaryAddressFinder` resolves every atSign to one fixed
   address.
 - breaking: `AtLookupImpl` requires `secondaryAddressFinder` and

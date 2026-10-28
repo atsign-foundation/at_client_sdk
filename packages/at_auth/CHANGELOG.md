@@ -1,12 +1,21 @@
 ## 4.0.0-rc8
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `ServerEnrollmentRequest` and `EnrollmentServerResponse` are
+  removed; at_client's `client.enrollments.list()` returns each `Enrollment`.
+- breaking: `KeyAlgorithmType`, `CryptographicKeyType`, `KeyPartStatus` and
+  `AtKeysMaterial` are removed; `CryptographicMaterialAlgorithm`,
+  `CryptographicMaterialRole` and `KeyEntryStatus` replace them.
+- breaking: `RegistrarApiEndpoint` loses `getFreeAtsign`,
+  `getFreeAtsignByCategory`, `registerPerson` and `validatePerson`, and
+  `HttpMethod` loses `get`, with the `RegistrarService` methods that used
+  them.
 - BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
   longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
   hold, under the algorithm they name.
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
-- build: requires `at_utils` ^3.2.0.
+- build: requires `at_utils` ^4.0.0-rc1.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
   on must be durable.

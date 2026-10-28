@@ -1,6 +1,11 @@
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
+  keys it is given.
+- experimental: `AtClient.telemetry` is removed, with
+  `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
+  `SyncTelemetryEvent`.
 - breaking: `AtClientUtil.findSecondary` is removed. Use
   `RemoteSecondary.findSecondaryUrl`.
 - breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; pass
@@ -105,7 +110,7 @@
   enrollment.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0-rc8.
-- build: requires `at_lookup` ^3.7.0-rc5.
+- build: requires `at_lookup` ^4.0.0-rc1.
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.
