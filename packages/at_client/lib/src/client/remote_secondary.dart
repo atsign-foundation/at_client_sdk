@@ -255,6 +255,7 @@ class RemoteSecondary implements Secondary {
           'Removed in 4.0.')
       sync = false,
       bool cameFromServer = false}) async {
+    _throwIfStopped();
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');
@@ -296,6 +297,7 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> executeCommand(String atCommand, {bool auth = false}) async {
+    _throwIfStopped();
     if (atCommand.length > _preference.maxDataSize) {
       throw BufferOverFlowException(
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
@@ -329,6 +331,7 @@ class RemoteSecondary implements Secondary {
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
   Future<bool> authenticateCram(String? secret) async {
+    _throwIfStopped();
     if (secret == null) {
       throw UnAuthenticatedException('Cram secret cannot be null');
     }
@@ -338,6 +341,7 @@ class RemoteSecondary implements Secondary {
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String?> sync(int lastSyncedId, {String? regex}) async {
+    _throwIfStopped();
     var syncVerbBuilder = SyncVerbBuilder()
       ..commitId = lastSyncedId
       ..regex = regex
@@ -399,10 +403,23 @@ class RemoteSecondary implements Secondary {
     return Intent.fetchData;
   }
 
-  /// Closes the connection and ends this remote secondary for good. A
-  /// connection meant to be re-established uses
-  /// [AtLookupMuxable.dropConnection] instead.
+  /// Closes the connection and ends this remote secondary for good: every
+  /// later call through it fails with [StoppedException]. A connection meant
+  /// to be re-established uses [AtLookupMuxable.dropConnection] instead.
+  ///
+  /// An [AtLookupMuxable] is stopped. Any other [AtLookUp] can only be
+  /// closed, so it opens a new connection for whoever calls it directly.
   Future<void> closeConnection() async {
-    await atLookUp.close();
+    _stopped = true;
+    final lookUp = atLookUp;
+    await (lookUp is AtLookupMuxable ? lookUp.stop() : lookUp.close());
+  }
+
+  bool _stopped = false;
+
+  void _throwIfStopped() {
+    if (_stopped) {
+      throw StoppedException('the connection for $_atSign has been stopped');
+    }
   }
 }

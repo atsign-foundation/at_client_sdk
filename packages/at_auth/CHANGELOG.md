@@ -1,11 +1,19 @@
 ## 4.0.0-rc8
 
+- fix: on Linux and macOS, a keyfile, and the `.bak` and `.pre-v1` copies
+  written beside it, are readable and writable by their owner alone (mode
+  0600), whatever mode the keyfile had before.
+- fix: on Linux and macOS, when root rewrites a keyfile, the keyfile and the
+  `.bak` and `.pre-v1` copies written beside it take the owner and group of
+  the keyfile as it was read, and root does not rewrite a keyfile that is a
+  symbolic link or anything other than a regular file.
 - fix: a keyfile at_auth 3.3.0 wrote, which carries `version`, its atSign and
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.
 - fix: `FileAtKeysIo` refuses to write keys for one atSign over a keyfile
   that names another atSign, including one that holds no credential yet.
 - build: requires `at_utils` ^3.2.0.
+- build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
   on must be durable.
