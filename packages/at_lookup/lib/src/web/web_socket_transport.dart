@@ -37,6 +37,7 @@ class WebSocketTransport implements AtTransport {
   final WebSocketPort _port;
   final int _maxInboundBytes;
   final Duration _flushTimeout;
+  final int _highWaterMark;
   final Duration _flushPollInterval;
   final AtSignLogger _logger;
 
@@ -55,10 +56,12 @@ class WebSocketTransport implements AtTransport {
     this.description, {
     int maxInboundBytes = 10240000,
     Duration flushTimeout = const Duration(seconds: 30),
+    int highWaterMark = 65536,
     Duration flushPollInterval = const Duration(milliseconds: 10),
     AtSignLogger? logger,
   })  : _maxInboundBytes = maxInboundBytes,
         _flushTimeout = flushTimeout,
+        _highWaterMark = highWaterMark,
         _flushPollInterval = flushPollInterval,
         _logger = logger ?? AtSignLogger('WebSocketTransport') {
     _port.onMessage.listen(_receive);
@@ -81,14 +84,15 @@ class WebSocketTransport implements AtTransport {
     _port.send(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
   }
 
-  /// Completes once the socket's `bufferedAmount` is zero, polling for it.
+  /// Completes once the socket's `bufferedAmount` is at most `highWaterMark`,
+  /// at once when it already is, polling for it otherwise.
   ///
-  /// Throws [AtTimeoutException] if it is not zero within `flushTimeout`, and
+  /// Throws [AtTimeoutException] if it is not within `flushTimeout`, and
   /// [AtIOException] if the socket closes first.
   @override
   Future<void> flush() async {
     final elapsed = Stopwatch()..start();
-    while (_port.bufferedAmount > 0) {
+    while (_port.bufferedAmount > _highWaterMark) {
       if (_closed || !_port.isOpen) {
         throw AtIOException(
             'WebSocket to $description closed with ${_port.bufferedAmount} '

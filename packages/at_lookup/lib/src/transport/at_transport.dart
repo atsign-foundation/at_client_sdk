@@ -37,7 +37,9 @@ abstract interface class AtTransport {
   /// is a failed connection.
   void add(List<int> bytes);
 
-  /// Completes once everything passed to [add] has left this process.
+  /// Completes once everything passed to [add] has left this process, or,
+  /// for a transport that bounds what it queues, once what is still queued is
+  /// within that bound.
   ///
   /// Throws `AtIOException` when the channel fails first, or
   /// `AtTimeoutException` when an implementation that bounds the wait gives

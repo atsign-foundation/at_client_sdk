@@ -192,30 +192,44 @@ void main() {
       await transport().flush();
     });
 
-    test('does not complete while bufferedAmount is above zero', () async {
+    test('completes at once while 64 KiB or less is queued', () async {
       final t = transport();
-      port.bufferedAmount = 512;
+      port.bufferedAmount = 65536;
+      var flushed = false;
+      final flush = t.flush().then((_) => flushed = true);
+
+      await pumpEventQueue(times: 2);
+      expect(flushed, isTrue,
+          reason: 'a command no bigger than the mark does not wait a poll');
+      await flush;
+    });
+
+    test(
+        'does not complete while more than 64 KiB is queued, and completes '
+        'once it is within that', () async {
+      final t = transport();
+      port.bufferedAmount = 65537;
       var flushed = false;
       final flush = t.flush().then((_) => flushed = true);
 
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(flushed, isFalse);
 
-      port.bufferedAmount = 0;
+      port.bufferedAmount = 65536;
       await flush;
       expect(flushed, isTrue);
     });
 
     test('throws AtTimeoutException when the buffer never drains', () async {
       final t = transport(flushTimeout: const Duration(milliseconds: 30));
-      port.bufferedAmount = 512;
+      port.bufferedAmount = 65537;
       await expectLater(t.flush(), throwsA(isA<AtTimeoutException>()));
     });
 
     test('throws AtIOException when the socket closes before it drains',
         () async {
       final t = transport();
-      port.bufferedAmount = 512;
+      port.bufferedAmount = 65537;
       final flush = t.flush();
       port.closeFromPeer();
       await expectLater(flush, throwsA(isA<AtIOException>()));
