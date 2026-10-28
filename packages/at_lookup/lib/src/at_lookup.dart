@@ -235,6 +235,9 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// back-pressure reaches the atServer through TCP. A WebSocket cannot be
   /// paused, so its transport holds frames up to a bound and past it closes
   /// the connection.
+  ///
+  /// Listen as soon as you read it: until a listener arrives, notifications
+  /// are held without bound, and none of that back-pressure applies.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
