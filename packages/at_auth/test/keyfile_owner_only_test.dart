@@ -495,8 +495,8 @@ void main() {
 
         await expectLater(
             lock.synchronized(() async {}),
-            throwsA(isA<FileSystemException>().having((e) => e.message,
-                'message', contains('errno = $_eacces'))),
+            throwsA(isA<FileSystemException>().having(
+                (e) => e.message, 'message', contains('errno = $_eacces'))),
             reason: 'an unwritable directory is told apart from a lock '
                 'another process holds');
       }, skip: _notRoot);

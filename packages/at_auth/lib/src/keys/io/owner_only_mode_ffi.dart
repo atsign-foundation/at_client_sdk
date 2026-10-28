@@ -142,8 +142,7 @@ bool touchNoFollow(String path) {
 /// Opens [path] with [flags], creating it with [mode] when [flags] say to;
 /// returns the descriptor, negative when the open failed, with the error it
 /// failed with when this libc can report one.
-({int fd, OSError? error}) _open(
-    _Libc libc, String path, int flags, int mode) {
+({int fd, OSError? error}) _open(_Libc libc, String path, int flags, int mode) {
   final nativePath = path.toNativeUtf8();
   try {
     final fd = libc.open(nativePath, flags, mode);
@@ -174,8 +173,8 @@ void _writeAll(_Libc libc, int fd, List<int> bytes, String path) {
     while (written < bytes.length) {
       final count = libc.write(fd, buffer + written, bytes.length - written);
       if (count <= 0) {
-        throw FileSystemException('Cannot write the file', path,
-            count < 0 ? _lastError(libc) : null);
+        throw FileSystemException(
+            'Cannot write the file', path, count < 0 ? _lastError(libc) : null);
       }
       written += count;
     }
