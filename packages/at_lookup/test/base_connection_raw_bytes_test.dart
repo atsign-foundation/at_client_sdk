@@ -48,11 +48,14 @@ void main() {
 
     subscription.pause();
     await socket.serverSends('data:ok\n');
-    expect(socket.isPaused, isTrue);
-    expect(received, isEmpty);
+    expect(socket.isPaused, isTrue,
+        reason: 'pausing a subscription to inbound pauses the socket');
+    expect(received, isEmpty,
+        reason: 'nothing is delivered while the subscription is paused');
 
     subscription.resume();
     await socket.settle();
-    expect(received, ['data:ok\n']);
+    expect(received, ['data:ok\n'],
+        reason: 'resuming delivers what arrived while paused');
   });
 }
