@@ -168,6 +168,28 @@ void main() {
               'whatever the authenticator reports');
     });
 
+    test('pkamAuthenticate with no authenticator refuses rather than fails',
+        () async {
+      await expectLater(
+          newAtLookup().pkamAuthenticate(),
+          throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+              'message', contains('requires an AtAuthenticator'))),
+          reason: 'a lookup has no credential of its own to fall back on');
+    });
+
+    test('a connect that fails names whose atServer it was', () async {
+      when(() => mockTransportFactory.connect(atServerHost, '12345')).thenThrow(
+          SecondaryConnectException(
+              'unable to connect to atServer on 127.0.0.1:12345'));
+
+      await expectLater(
+          newAtLookup().executeCommand('from:@alice\n'),
+          throwsA(isA<SecondaryConnectException>().having((e) => e.message,
+              'message', startsWith('@alice: unable to connect'))),
+          reason: 'the transport knows the address, only the lookup knows '
+              'the atSign');
+    });
+
     test('a refused pkam auth records nothing', () async {
       final metaData = primeConnection([fromChallenge]);
       final atLookup = newAtLookup()

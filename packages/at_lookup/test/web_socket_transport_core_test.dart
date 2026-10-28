@@ -67,6 +67,71 @@ void main() {
     });
 
     test(
+        'frames held while paused, then a close from the far end, are all '
+        'delivered before inbound is done', () async {
+      final t = transport(maxInboundBytes: 100);
+      final received = <String>[];
+      final done = Completer<void>();
+      final subscription = t.inbound.listen(
+          (bytes) => received.add(utf8.decode(bytes)),
+          onDone: done.complete);
+      subscription.pause();
+
+      port.receive('abcd');
+      port.receive('efgh');
+      port.closeFromPeer();
+      await pumpEventQueue();
+      subscription.resume();
+      await done.future;
+
+      expect(received, ['abcd', 'efgh'],
+          reason: 'the far end closing ends inbound after what it sent');
+    });
+
+    test(
+        'a listener that pauses during a drain stops it, and what it left '
+        'still counts against the bound', () async {
+      final t = transport(maxInboundBytes: 10);
+      final received = <String>[];
+      late StreamSubscription<List<int>> subscription;
+      subscription = t.inbound.listen((bytes) {
+        received.add(utf8.decode(bytes));
+        subscription.pause();
+      });
+      subscription.pause();
+      port.receive('1234');
+      port.receive('5678');
+      await pumpEventQueue();
+
+      subscription.resume();
+      await pumpEventQueue();
+      expect(received, ['1234'], reason: 'the premise: the drain met a pause');
+      expect(port.closeCalls, 0);
+
+      port.receive('1234567');
+      await pumpEventQueue();
+
+      expect(port.closeCalls, 1,
+          reason: '5678 is still held, so 11 bytes are held against a bound '
+              'of 10');
+    });
+
+    test('exactly the bound may be held, and one byte more closes the socket',
+        () async {
+      final t = transport(maxInboundBytes: 10);
+      final subscription = t.inbound.listen((_) {}, onError: (_) {});
+      subscription.pause();
+
+      port.receive('1234567890');
+      await pumpEventQueue();
+      expect(port.closeCalls, 0, reason: '10 bytes held, a bound of 10');
+
+      port.receive('1');
+      await pumpEventQueue();
+      expect(port.closeCalls, 1, reason: '11 bytes held, a bound of 10');
+    });
+
+    test(
         'held bytes past the bound close the socket and end inbound with '
         'an AtIOException, logged once', () async {
       final t = transport(maxInboundBytes: 10);

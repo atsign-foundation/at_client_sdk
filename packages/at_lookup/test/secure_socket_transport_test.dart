@@ -134,16 +134,26 @@ void main() {
         () async {
       final cleartext =
           await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-      cleartext.listen((socket) => socket.destroy());
-      addTearDown(cleartext.close);
+      final accepted = <Socket>[];
+      cleartext.listen((socket) async {
+        accepted.add(socket);
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        await socket.flush();
+      });
+      addTearDown(() async {
+        for (final socket in accepted) {
+          socket.destroy();
+        }
+        await cleartext.close();
+      });
 
       await expectLater(
           factory.connect('127.0.0.1', '${cleartext.port}',
               timeout: Duration(seconds: 5)),
-          throwsA(isA<SecondaryConnectException>()),
-          reason:
-              'HandshakeException is not a SocketException; before 4.0.0 it '
-              'escaped createOutBoundConnection raw');
+          throwsA(isA<SecondaryConnectException>().having(
+              (e) => e.message, 'message', contains('HandshakeException'))),
+          reason: 'a far end answering in cleartext fails the TLS handshake, '
+              'and a HandshakeException is not a SocketException');
     });
   });
 }
