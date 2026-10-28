@@ -100,6 +100,20 @@ jobs:
           path: packages/*/acceptance-report.json
           if-no-files-found: warn
 
+  # test/web is @TestOn('browser'), so only `-p chrome` runs it.
+  at_lookup_browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Run at_lookup's browser tests in Chrome
+        working-directory: packages/at_lookup
+        run: |
+          dart pub get
+          dart test -p chrome --concurrency=1 test/web
+
   build_and_test_ffi:
     runs-on: ubuntu-latest
     env:
