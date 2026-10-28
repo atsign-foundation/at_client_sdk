@@ -115,8 +115,9 @@ final client = await Atsign('@alice').open(
 
 What goes, because at_client has it or nobody uses it: the
 `AtOnboardingService` adapter (its three members are `CLIBase` and
-`Atsign.open`), `createAtClient` (a second `CLIBase`), `OnboardingUtil`'s
-registrar HTTP (at_auth's `RegistrarService` makes the same calls: `getFreeAtSign`, `registerPerson`, `sendActivationOtp`, `verifyActivation`), `AuthKeyType`
+`Atsign.open`), `createAtClient` (a second `CLIBase`), `OnboardingUtil` as
+API (its free-atSign v3 calls stay private behind `at_register` and `onboard`;
+see [ruling 6](decisions.md#6-four-helpers-go-with-no-shim)), `AuthKeyType`
 (the legacy keyfile field names, which at_auth owns), `AtOnboardingException`
 and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `SyncProgressListener` that prints; six files use it, three of them this repo's own examples).
@@ -176,7 +177,7 @@ branch. That is a decision for gkc ([section 6](#6-decisions-to-make), D1).
 | `at_onboarding_cli/lib/src/util/home_directory_util.dart`        | merged into `lib/src/util/`                    | one home-directory helper                                                                      |
 | `at_onboarding_cli/lib/src/onboard/`                              | removed                                        | the adapter; ruling 6's callers move to `CLIBase` or `Atsign.open` at the bump                 |
 | `at_onboarding_cli/lib/src/util/create_at_client_cli.dart`       | removed                                        | `CLIBase`                                                                                      |
-| `at_onboarding_cli/lib/src/util/onboarding_util.dart`            | removed                                        | at_auth's `RegistrarService`; `onboard`'s email path calls it                                  |
+| `at_onboarding_cli/lib/src/util/onboarding_util.dart`            | `lib/src/register/`, unexported                | the free-atSign v3 calls `at_register` and `onboard` make; not at_auth's `RegistrarService`, which is v4 |
 | `at_onboarding_cli/lib/src/util/{auth_key_type,at_onboarding_exceptions,print_full_parser_usage}.dart` | removed | no callers outside                                                                     |
 | `tests/at_client_cli_functional_tests*`                       | `tests/at_client_cli_functional_tests*`        | the packs, their CI jobs in `at_libraries.yaml`, and the `runLocal.sh` runners                 |
 | `.github/workflows/at_libraries.yaml` matrix entries              | one entry                                      |                                                                                                |
@@ -219,7 +220,7 @@ D3 as 4, D4 as 8, D5 as 5, D6 as 7, D7 as 6 and D8 as 11.
 | D4 | The binaries: keep `at_activate` and `at_register`, or one `at_client_cli` binary with subcommands? | Keep both names; scripts and READMEs across the ecosystem invoke them. The library entry points are what change.                                                            |
 | D5 | Does `AtOnboardingService` survive as a shim member, or end with ruling 6's callers moving?       | End it in the shim generation: the shim re-exports `at_client_cli`, and the adapter's 5 call sites move to `open` or `CLIBase` at the bump; ruling 6 is amended to say so. |
 | D6 | The keys-and-store conventions: a small type (`CliKeys`), or free functions beside `getHomeDirectory`? | A small type with the two builders and the passphrase, so a program has one place to look; the existing free path helpers stay for the 10 files that use them.           |
-| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop them all: `RegistrarService` already makes `OnboardingUtil`'s four calls, and none of the others has a caller a dependency bump cannot fix.                          |
+| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop them all from the API, and none has a caller a dependency bump cannot fix. `OnboardingUtil`'s v3 calls stay private: `RegistrarService` is v4 and makes none of them. |
 | D8 | Where the design and rulings live once ruled                                                       | `docs/projects/client-cli/` with a `decisions.md` in the lifecycle ledger's shape, and a pointer row in the PQ plan's P1 band while it is in flight.                       |
 
 ## 7. Relationship to the other plans

@@ -6,7 +6,7 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -14,7 +14,6 @@ import 'utils/at_client_cache.dart';
 import 'utils/enrollment_operations.dart';
 import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
-import 'utils/virtualenv_ports.dart';
 
 final logger = AtSignLogger('OnboardingEnrollmentTest');
 
@@ -32,14 +31,13 @@ void main() {
   String atSign5 = '@purnima🛠';
   String atSign6 = '@srie';
 
-  /// A client on the master keyfile [preference] names, through the adapter a
-  /// program built on this package uses; the caller stops it.
+  /// A client on the master keyfile [settings] names; the caller stops it.
   Future<AtClient> masterClient(
-      String atSign, AtOnboardingPreference preference) async {
-    final service = AtOnboardingServiceImpl(atSign, preference);
-    expect(await service.authenticate(), true,
+      String atSign, auth_cli.EnrollerSettings settings) async {
+    final client = await openClient(atSign, settings);
+    expect(client.connection.current.isOnline, true,
         reason: 'the freshly activated keys must authenticate');
-    return service.atClient!;
+    return client;
   }
 
   group('A group of tests to assert on authenticate functionality', () {
@@ -50,12 +48,12 @@ void main() {
       // since cram keys get deleted on server for already onboarded atsign
 
       //1. Activate the atSign
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign1);
+      final settings_1 = settingsForAuth(atSign1);
       logger.info('activating $atSign1');
-      await activateThroughCli(atSign1, preference_1);
+      await activateThroughCli(atSign1, settings_1);
       logger.info('successfully activated $atSign1');
 
-      var keysFile = File(preference_1.atKeysFilePath!);
+      var keysFile = File(settings_1.atKeysFilePath);
       expect(keysFile.existsSync(), true);
       var keysFileJson = jsonDecode(keysFile.readAsStringSync());
       expect(keysFileJson['enrollmentId'], isNotEmpty);
@@ -63,13 +61,12 @@ void main() {
 
       //2. authenticate first client
       logger.info('authenticating $atSign1 using onboarding keys');
-      final master = await masterClient(atSign1, preference_1);
+      final master = await masterClient(atSign1, settings_1);
       logger.info('successfully authenticated $atSign1');
       await _setLastReceivedNotificationDateTime(master, atSign1);
 
       Map<String, String> namespaces = {"buzz": "rw"};
-      AtOnboardingPreference enrollPreference_2 =
-          getPreferenceForEnroll(atSign1);
+      final enrollSettings_2 = settingsForEnroll(atSign1);
 
       //3.1 test invalid otp
       logger.info('trying enrollment with invalid OTP');
@@ -79,11 +76,10 @@ void main() {
               app: 'buzz',
               device: 'iphone',
               namespaces: namespaces,
-              keys: keyfileOf(enrollPreference_2),
-              preference: enrollPreference_2,
-              lookUps: secureSocketLookUps(),
-              secondaryAddressFinder: CacheableSecondaryAddressFinder(
-                  enrollPreference_2.rootDomain, enrollPreference_2.rootPort)),
+              keys: enrollSettings_2.keysFor(atSign1),
+              preference: enrollSettings_2.preference,
+              lookUps: enrollSettings_2.lookUps,
+              secondaryAddressFinder: enrollSettings_2.secondaryAddressFinder),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
@@ -124,11 +120,10 @@ void main() {
           app: 'buzz',
           device: 'iphone',
           namespaces: namespaces,
-          keys: keyfileOf(enrollPreference_2),
-          preference: enrollPreference_2,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              enrollPreference_2.rootDomain, enrollPreference_2.rootPort),
+          keys: enrollSettings_2.keysFor(atSign1),
+          preference: enrollSettings_2.preference,
+          lookUps: enrollSettings_2.lookUps,
+          secondaryAddressFinder: enrollSettings_2.secondaryAddressFinder,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       logger.info('enroll response ${pending.enrollmentId}');
       expect(pending.enrollmentId, isNotEmpty);
@@ -145,7 +140,7 @@ void main() {
 
       // 4.5 assert that the keys file is complete for the enrolled app
       logger.info('Verifying atKeys file');
-      final enrolledClientKeysFile = File(enrollPreference_2.atKeysFilePath!);
+      final enrolledClientKeysFile = File(enrollSettings_2.atKeysFilePath);
       expect(await enrolledClientKeysFile.exists(), true);
       var enrolledClientKeysFileJson =
           jsonDecode(enrolledClientKeysFile.readAsStringSync());
@@ -155,12 +150,12 @@ void main() {
       // 4.6 Authenticate now with the approved enrollment's keys
       logger.info('Authenticating with enrollment atKeys');
       await master.stop();
-      final enrolled = AtOnboardingServiceImpl(atSign1, enrollPreference_2);
-      expect(await enrolled.authenticate(), true);
-      expect(enrolled.atClient!.enrollmentId, pending.enrollmentId);
+      final enrolled = await openClient(atSign1, enrollSettings_2);
+      expect(enrolled.connection.current.isOnline, true);
+      expect(enrolled.enrollmentId, pending.enrollmentId);
       enrolledClientKeysFile.deleteSync();
 
-      await enrolled.atClient!.stop();
+      await enrolled.stop();
       logger.info('Enroll / approve / auth test completed');
     });
 
@@ -170,11 +165,11 @@ void main() {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
       //1. Activate the atSign
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign3);
-      await activateThroughCli(atSign3, preference_1);
+      final settings_1 = settingsForAuth(atSign3);
+      await activateThroughCli(atSign3, settings_1);
 
       //2. authenticate first client
-      final client = await masterClient(atSign3, preference_1);
+      final client = await masterClient(atSign3, settings_1);
       await client.stop();
     });
 
@@ -183,22 +178,16 @@ void main() {
         () async {
       // when testing activation use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      // preference without appName and deviceName
-      AtOnboardingPreference preference_1 = AtOnboardingPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort
-        ..storagePath = 'storage/hive/client'
-        ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
-        ..namespace =
-            'wavi' // unique identifier that can be used to identify data from your app
-        // Omitting this would put the keyfile the activation generates in the
-        // home directory's real keys dir.
-        ..atKeysFilePath = testKeysFile(atSign4)
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort;
+      final settings_1 = auth_cli.EnrollerSettings(
+          vePreference(
+              namespace: 'wavi',
+              cramSecret:
+                  at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)),
+          atKeysFilePath: testKeysFile(atSign4),
+          storagePath: 'storage/hive/client');
 
-      await activateThroughCli(atSign4, preference_1);
-      expect(File(preference_1.atKeysFilePath!).existsSync(), true);
+      await activateThroughCli(atSign4, settings_1);
+      expect(File(settings_1.atKeysFilePath).existsSync(), true);
     });
 
     test(
@@ -207,11 +196,11 @@ void main() {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
       //1. Activate the atSign
-      AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign5);
-      await activateThroughCli(atSign5, preference_1);
+      final settings_1 = settingsForAuth(atSign5);
+      await activateThroughCli(atSign5, settings_1);
 
       //2. authenticate first client
-      final master = await masterClient(atSign5, preference_1);
+      final master = await masterClient(atSign5, settings_1);
       await _setLastReceivedNotificationDateTime(master, atSign5);
 
       //3. a passcode from the first client
@@ -247,7 +236,7 @@ void main() {
           }, count: 1, max: -1));
 
       //5. enroll second client, and wait for the decision
-      final enrollPreference = getPreferenceForEnroll(atSign5);
+      final enrollSettings = settingsForEnroll(atSign5);
       // Legacy named for the same reason as the approve test above: this
       // one asserts the RSA-wrapped key is present in the notification
       // and then hand-builds the deny wire, so it is about the legacy
@@ -257,11 +246,10 @@ void main() {
           app: 'buzz',
           device: 'iphone',
           namespaces: namespaces,
-          keys: keyfileOf(enrollPreference),
-          preference: enrollPreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              enrollPreference.rootDomain, enrollPreference.rootPort),
+          keys: enrollSettings.keysFor(atSign5),
+          preference: enrollSettings.preference,
+          lookUps: enrollSettings.lookUps,
+          secondaryAddressFinder: enrollSettings.secondaryAddressFinder,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final decided = expectLater(
           pending.awaitApproval(retryInterval: Duration(seconds: 5)),
@@ -273,7 +261,7 @@ void main() {
 
       // The denial emptied the keyfile: nothing authenticates from it.
       expect(
-          (await keyfileOf(enrollPreference).read(atSign5))
+          (await enrollSettings.keysFor(atSign5).read(atSign5))
               .holdsAuthenticationMaterial,
           false,
           reason: 'a denied enrollment leaves no credential behind');
@@ -296,22 +284,20 @@ void main() {
       String enrollmentAtKeysFilePath =
           testKeysFile(atSign6, suffix: 'wavi_key');
 
-      AtOnboardingPreference preference = AtOnboardingPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort
-        ..storagePath = '$storageDir/hive/client'
-        ..namespace =
-            'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort;
+      final masterSettings = auth_cli.EnrollerSettings(
+          vePreference(
+              namespace: 'wavi',
+              cramSecret: at_demos.cramKeyMap[atSign6] ?? atSign6.substring(1)),
+          atKeysFilePath: masterKeysFilePath,
+          storagePath: '$storageDir/hive/client');
+      final enrollSettings = auth_cli.EnrollerSettings(
+          vePreference(namespace: 'wavi'),
+          atKeysFilePath: enrollmentAtKeysFilePath,
+          storagePath: '$storageDir/hive/client');
 
       // Activate. Creates a master atKeys file at the location provided in
       // variable 'masterKeysFilePath'
-      await activateThroughCli(
-          atSign6,
-          preference
-            ..cramSecret = at_demos.cramKeyMap[atSign6] ?? atSign6.substring(1)
-            ..atKeysFilePath = masterKeysFilePath);
+      await activateThroughCli(atSign6, masterSettings);
       AtClientManager.getInstance().reset();
 
       // Fetch otp
@@ -328,17 +314,15 @@ void main() {
       // the symmetric key the approver encapsulated to its key package - which
       // on top of the 10s wait below overruns the 30s test timeout. The pq
       // enrolment path is covered by `pq_native_enroll_test.dart`.
-      preference.atKeysFilePath = enrollmentAtKeysFilePath;
       final pending = await Atsign(atSign6).enroll(
           otp: otp!,
           app: appName,
           device: deviceName,
           namespaces: namespaces,
-          keys: keyfileOf(preference),
-          preference: preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              preference.rootDomain, preference.rootPort),
+          keys: enrollSettings.keysFor(atSign6),
+          preference: enrollSettings.preference,
+          lookUps: enrollSettings.lookUps,
+          secondaryAddressFinder: enrollSettings.secondaryAddressFinder,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');
@@ -360,15 +344,10 @@ void main() {
 
       // Authenticate using the newly created atKeys file that only has
       // access to wavi namespace
-      AtOnboardingService onboardingService = AtOnboardingServiceImpl(
-        atSign6,
-        preference..atKeysFilePath = enrollmentAtKeysFilePath,
-      );
-      bool authStatus = await onboardingService.authenticate();
-      expect(authStatus, true);
+      final client = await openClient(atSign6, enrollSettings);
+      expect(client.connection.current.isOnline, true);
 
-      // Fetch the atClient. Then update a key with buzz namespace
-      AtClient? client = onboardingService.atClient;
+      // Update a key with buzz namespace
       AtKey buzzKey = AtKey.public(
         'dummy_key_27',
         namespace: 'buzz',
@@ -379,12 +358,12 @@ void main() {
 
       // The put operation is expected to fail as the new enrollment only has
       // access to wavi namespace
-      await expectLater(client?.put(buzzKey, 'value'), throwsA(predicate((e) {
+      await expectLater(client.put(buzzKey, 'value'), throwsA(predicate((e) {
         return e.toString() == expectedExceptionMessage;
       })));
-      client?.notificationService.stopAllSubscriptions();
-      client?.syncService.removeAllProgressListeners();
-      await client?.stop();
+      client.notificationService.stopAllSubscriptions();
+      client.syncService.removeAllProgressListeners();
+      await client.stop();
     });
 
     test('validate enrollment only has specified level of authorization',
@@ -398,22 +377,20 @@ void main() {
       String enrollmentAtKeysFilePath =
           testKeysFile(atSign2, suffix: 'wavi_key');
 
-      AtOnboardingPreference preference = AtOnboardingPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort
-        ..storagePath = '$storageDir/hive/client'
-        ..namespace =
-            'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort;
+      final masterSettings = auth_cli.EnrollerSettings(
+          vePreference(
+              namespace: 'wavi',
+              cramSecret: at_demos.cramKeyMap[atSign2] ?? atSign2.substring(1)),
+          atKeysFilePath: masterKeysFilePath,
+          storagePath: '$storageDir/hive/client');
+      final enrollSettings = auth_cli.EnrollerSettings(
+          vePreference(namespace: 'wavi'),
+          atKeysFilePath: enrollmentAtKeysFilePath,
+          storagePath: '$storageDir/hive/client');
 
       // Activate. Creates a master atKeys file at the location provided in
       // variable 'masterKeysFilePath'
-      await activateThroughCli(
-          atSign2,
-          preference
-            ..cramSecret = at_demos.cramKeyMap[atSign2] ?? atSign2.substring(1)
-            ..atKeysFilePath = masterKeysFilePath);
+      await activateThroughCli(atSign2, masterSettings);
       AtClientManager.getInstance().reset();
 
       // Fetch otp
@@ -429,17 +406,15 @@ void main() {
       // the symmetric key the approver encapsulated to its key package - which
       // on top of the 10s wait below overruns the 30s test timeout. The pq
       // enrolment path is covered by `pq_native_enroll_test.dart`.
-      preference.atKeysFilePath = enrollmentAtKeysFilePath;
       final pending = await Atsign(atSign2).enroll(
           otp: otp!,
           app: appName,
           device: deviceName,
           namespaces: namespaces,
-          keys: keyfileOf(preference),
-          preference: preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              preference.rootDomain, preference.rootPort),
+          keys: enrollSettings.keysFor(atSign2),
+          preference: enrollSettings.preference,
+          lookUps: enrollSettings.lookUps,
+          secondaryAddressFinder: enrollSettings.secondaryAddressFinder,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');
@@ -460,15 +435,10 @@ void main() {
 
       // Authenticate using the newly created atKeys file that only has
       // read access to the delta namespace
-      AtOnboardingService onboardingService = AtOnboardingServiceImpl(
-        atSign2,
-        preference..atKeysFilePath = enrollmentAtKeysFilePath,
-      );
-      bool authStatus = await onboardingService.authenticate();
-      expect(authStatus, true);
+      final client = await openClient(atSign2, enrollSettings);
+      expect(client.connection.current.isOnline, true);
 
-      // Fetch the atClient. Then update a key with delta namespace
-      AtClient? client = onboardingService.atClient;
+      // Update a key with delta namespace
       AtKey deltaKey = AtKey.public(
         'dummy_key_28',
         namespace: 'delta',
@@ -479,11 +449,11 @@ void main() {
 
       // The put operation is expected to fail as the new enrollment only has
       // read access to 'delta' namespace
-      await expectLater(client?.put(deltaKey, 'value'), throwsA(predicate((e) {
+      await expectLater(client.put(deltaKey, 'value'), throwsA(predicate((e) {
         return e.toString() == expectedExceptionMessage;
       })));
 
-      await client?.stop();
+      await client.stop();
     });
 
     tearDown(() async {
@@ -560,36 +530,25 @@ Future<void> _setLastReceivedNotificationDateTime(
       lastReceivedNotificationAtKey, jsonEncode(atNotification.toJson()));
 }
 
-AtOnboardingPreference getPreferenceForAuth(String atSign) {
+/// The master keyfile [atSign]'s activation writes, and the store its
+/// clients keep.
+auth_cli.EnrollerSettings settingsForAuth(String atSign) {
   atSign = AtUtils.fixAtSign(atSign);
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..rootPort = virtualenvRootPort
-    ..storagePath = 'storage/hive/client'
-    ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
-    ..namespace =
-        'wavi' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath = testKeysFile(atSign)
-    ..appName = 'wavi'
-    ..deviceName = 'pixel'
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..rootPort = virtualenvRootPort;
-
-  return atOnboardingPreference;
+  return auth_cli.EnrollerSettings(
+      vePreference(
+          namespace: 'wavi',
+          cramSecret: at_demos.cramKeyMap[atSign] ?? atSign.substring(1)),
+      atKeysFilePath: testKeysFile(atSign),
+      storagePath: 'storage/hive/client');
 }
 
-AtOnboardingPreference getPreferenceForEnroll(String atSign) {
+/// The keyfile a `buzz` enrollment of [atSign] is filed in, and the store
+/// its clients keep.
+auth_cli.EnrollerSettings settingsForEnroll(String atSign) {
   atSign = AtUtils.fixAtSign(atSign);
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..namespace =
-        'buzz' // unique identifier that can be used to identify data from your app
-    ..storagePath = 'storage/hive/enrolled'
-    ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
-    ..appName = 'buzz'
-    ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..rootPort = virtualenvRootPort;
-  return atOnboardingPreference;
+  return auth_cli.EnrollerSettings(vePreference(namespace: 'buzz'),
+      atKeysFilePath: testKeysFile(atSign, suffix: 'buzzkey'),
+      storagePath: 'storage/hive/enrolled');
 }
 
 Future<void> tearDownFunc() async {

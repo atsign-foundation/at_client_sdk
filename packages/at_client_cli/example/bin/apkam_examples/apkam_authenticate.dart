@@ -5,24 +5,25 @@ import 'package:at_client_cli/at_client_cli.dart';
 import '../util/custom_arg_parser.dart';
 
 /// Opens a client on an enrolled keyfile. The keyfile names the enrollment
-/// the client runs as; nothing has to be read out of it first.
+/// the client runs as, and the client keeps that enrollment's own store.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'info';
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
   final String atSign = argResults['atsign'];
-  final preference = AtOnboardingPreference()
-    ..namespace =
-        'wavi' // unique identifier that can be used to identify data from your app
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..storagePath = 'storage/$atSign';
+  final preference = AtClientPreference()
+    ..namespace = 'wavi'
+    ..rootDomain = 'vip.ve.atsign.zone';
+  final keys = CliKeys.fileFor(atSign, path: argResults['atKeysPath']);
+  final enrollmentId = (await keys.read(atSign)).enrollmentToAuthenticateAs();
 
   final client = await Atsign(atSign).open(
-      keys: FileAtKeysIo(filePath: (_) => argResults['atKeysPath']),
+      keys: keys,
       preference: preference,
-      storage: preference.storageFor(atSign),
-      lookUps: preference.lookUps,
-      secondaryAddressFinder: preference.secondaryAddressFinder);
+      storage: CliKeys.storageFor(atSign, program: 'wavi', id: enrollmentId),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preference.rootDomain, preference.rootPort));
   print('running as enrollment ${client.enrollmentId}; the connection is '
       '${client.connection.current}');
   print(await client.getKeys());

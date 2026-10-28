@@ -5,10 +5,10 @@ import 'package:at_utils/at_utils.dart';
 /// The one directory every `.atKeys` file this package generates is allowed to
 /// live in, and the only place a test may get a keyfile path from.
 ///
-/// ⚠️ Set `AtOnboardingPreference.atKeysFilePath` from [testKeysFile] on every
-/// preference and pass `-k` to every `auth_cli` invocation: both fall back to
-/// `~/.atsign/keys`, which on a developer machine holds live personal keyfiles
-/// a test would overwrite.
+/// ⚠️ Name a keyfile from [testKeysFile] wherever a test names one, and pass
+/// `-k` to every `auth_cli` invocation: `CliKeys` with no path and the CLI
+/// without `-k` both fall back to `~/.atsign/keys`, which on a developer
+/// machine holds live personal keyfiles a test would overwrite.
 ///
 /// Emptied when a test process first asks for it rather than in a tearDown, so
 /// an aborted run cannot poison the next one; that relies on

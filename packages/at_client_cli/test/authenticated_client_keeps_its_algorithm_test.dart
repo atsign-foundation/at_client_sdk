@@ -65,12 +65,11 @@ void main() {
     addTearDown(() => storage.deleteSync(recursive: true));
     // The posture is named, not inherited: an inherited default supplies
     // mldsa65, and the test would then compare mldsa65 with mldsa65.
-    final preference = AtOnboardingPreference(posture: PqPosture.legacy)
-      ..atKeysFilePath = await pqKeyfile(atSign, enrollmentId)
+    final keyfile = await pqKeyfile(atSign, enrollmentId);
+    final preference = AtClientPreference(posture: PqPosture.legacy)
       ..namespace = 'unit_test'
       ..rootDomain = InternetAddress.loopbackIPv4.address
-      ..rootPort = await refusedPort()
-      ..storagePath = storage.path;
+      ..rootPort = await refusedPort();
     expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
         reason: 'the rig must supply the legacy algorithm, or this test '
             'discriminates nothing');
@@ -83,13 +82,21 @@ void main() {
             InternetAddress.loopbackIPv4.address, preference.rootPort),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: SecureSocketConfig()));
-    final service = AtOnboardingServiceImpl(atSign, preference, atLookUp: own);
+    final client = await Atsign(atSign).open(
+        keys: CliKeys.fileFor(atSign, path: keyfile),
+        preference: preference,
+        storage: CliKeys.storageFor(atSign,
+            program: 'unit_test', path: storage.path),
+        atLookUp: own,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, preference.rootPort));
 
-    expect(await service.authenticate(), isFalse,
+    expect(client.connection.current.isOnline, isFalse,
         reason: 'nothing listens, so the client is offline; the stamping '
             'under test happened when the client was built');
 
-    expect(identical(own, service.atClient!.getRemoteSecondary()!.atLookUp),
+    expect(identical(own, client.getRemoteSecondary()!.atLookUp),
         isTrue,
         reason: 'the client\'s connection wraps the lookup it was handed; if '
             'it built its own, the assertions below are about the wrong '

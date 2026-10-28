@@ -70,14 +70,22 @@ repositories. This replaces the client lifecycle's
 
 ## 6. Four helpers go with no shim
 
-`LIVE`. `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil` and
-`createAtClient` are removed in at_client_cli 1.0.0.
+`AMENDED` 2026-10-28. `MySyncProgressListener`, `AuthKeyType`,
+`OnboardingUtil` and `createAtClient` leave at_client_cli's API in 1.0.0.
+`OnboardingUtil`'s registrar calls stay as at_client_cli's private code behind
+`at_register` and `onboard`'s email path, their only users: they are the
+free-atSign v3 API (`get-free-atsign`, `register-person`, `validate-person`
+and the activation OTP pair), and at_auth's `RegistrarService` makes none of
+the first three, being the v4 API with a required API key. They move to
+at_auth if the free-atSign flow is wanted outside the CLI.
 
-Why: outside this repository they have 2, 0, 0 and 1 callers, and only one
-of those programs (atGettingStarted, one four-line `SyncProgressListener`)
-would not be changing code at the bump anyway. at_auth's `RegistrarService`
-makes `OnboardingUtil`'s four calls. Rejected: keeping them deprecated in
-1.0.0, which needs a 2.0.0 to remove them.
+Why: outside this repository the four have 2, 0, 0 and 1 callers, and only
+one of those programs (atGettingStarted, one four-line
+`SyncProgressListener`) would not be changing code at the bump anyway.
+Rejected: keeping them deprecated in 1.0.0, which needs a 2.0.0 to remove
+them; porting the tools to `RegistrarService`, which needs an API key and has
+no free-atSign flow; and moving the v3 calls into at_auth now, public API for
+one caller.
 
 ## 7. The keys-and-store conventions are a small type, `CliKeys`
 

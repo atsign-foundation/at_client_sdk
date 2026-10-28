@@ -1,14 +1,13 @@
 import 'dart:io';
 
 import 'package:at_demo_data/at_demo_data.dart';
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
 import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
-import 'utils/virtualenv_ports.dart';
 import 'package:at_client/at_client_io.dart';
 
 /// Proves that an app enrolling through `at_onboarding_cli` can be
@@ -27,14 +26,12 @@ void main() {
     // run against this VE, recycle it before reading anything into a failure
     // here.
     await activateThroughCli(
-        atSign,
-        _preference(atSign, masterKeysFilePath)
-          ..cramSecret = cramKeyMap[atSign]);
+        atSign, _settings(masterKeysFilePath, cramSecret: cramKeyMap[atSign]));
 
-    // NOTE: every CLI command below builds its own client through
-    // `createAtClient`, which mints a fresh storage path per call, and each
-    // enrolment builds its own service for the same atSign. Without this
-    // eviction they all run against the client the onboard left in the cache.
+    // NOTE: every CLI command below builds its own client, on a storage path
+    // it mints per call, and each enrolment opens its own client for the same
+    // atSign. Without this eviction they all run against the client the
+    // onboard left in the cache.
     await evictCachedAtClients();
 
     // A semi-permanent passcode, so each enrolment below does not need its own
@@ -58,18 +55,17 @@ void main() {
         String keysFilePath
       })> enrolAt(SigningAlgoType signingAlgo, String label) async {
     final apkamKeysFilePath = testKeysFile(atSign, suffix: label);
-    final preference = _preference(atSign, apkamKeysFilePath);
+    final settings = _settings(apkamKeysFilePath);
 
     final pending = await Atsign(atSign).enroll(
         otp: 'ABC123',
         app: 'buzz',
         device: label,
         namespaces: {'e2etest': 'rw'},
-        keys: keyfileOf(preference),
-        preference: preference,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: CacheableSecondaryAddressFinder(
-            preference.rootDomain, preference.rootPort),
+        keys: settings.keysFor(atSign),
+        preference: settings.preference,
+        lookUps: settings.lookUps,
+        secondaryAddressFinder: settings.secondaryAddressFinder,
         signingAlgo: signingAlgo);
     final enrollmentId = pending.enrollmentId;
     logger.info('$label: submitted $enrollmentId as ${signingAlgo.name}');
@@ -90,17 +86,16 @@ void main() {
     final keys =
         await FileAtKeysIo(filePath: (_) => apkamKeysFilePath).read(atSign);
 
-    // A FRESH service, its client stopped afterwards: a client stays live in
-    // this process until stopped, and a second open for the atSign is refused
-    // while one is. At the legacy posture deliberately — authenticate()
-    // builds a client, and at the SDK default that client retrofits an
-    // rsa2048 enrolment on the spot, revoking the enrolment this helper hands
-    // back.
+    // A FRESH client, stopped afterwards: a client stays live in this process
+    // until stopped, and a second open for the atSign is refused while one
+    // is. At the legacy posture deliberately — at a post-quantum posture the
+    // client retrofits an rsa2048 enrolment on the spot, revoking the
+    // enrolment this helper hands back.
     await evictCachedAtClients();
-    final reader = AtOnboardingServiceImpl(atSign,
-        _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy));
-    final authenticated = await reader.authenticate();
-    await reader.atClient?.stop();
+    final reader = await openClient(
+        atSign, _settings(apkamKeysFilePath, posture: PqPosture.legacy));
+    final authenticated = reader.connection.current.isOnline;
+    await reader.stop();
 
     stdout.writeln('##CLI## $label (${signingAlgo.name}): id=$enrollmentId '
         'keyfileAlgo=${keys.authenticationAlgorithmFor(enrollmentId)} '
@@ -160,8 +155,8 @@ void main() {
 
   // `authenticated == true` is a client opened at the legacy posture, which
   // retrofits nothing. `at_activate list --posture pqReady` runs the shipped
-  // binary path: it builds its own client through `createAtClient` at a
-  // posture that asks for ML-DSA-65, retrofits the enrolment on the spot, and
+  // binary path: it builds its own client at a posture that asks for
+  // ML-DSA-65, retrofits the enrolment on the spot, and
   // then sends `enroll:list` with `auth: true` over the retrofitted client's
   // connection. The posture is named because an unnamed one is at_client's
   // default, which retrofits nothing.
@@ -234,10 +229,9 @@ void main() {
     expect(published, 0, reason: 'the master keys must still work');
 
     await evictCachedAtClients();
-    final nskey = AtOnboardingServiceImpl(
-        atSign, _preference(atSign, masterKeysFilePath));
-    expect(await nskey.authenticate(), isTrue);
-    final record = await nskey.atClient!
+    final nskey = await openClient(atSign, _settings(masterKeysFilePath));
+    expect(nskey.connection.current.isOnline, isTrue);
+    final record = await nskey
         .getRemoteSecondary()!
         .executeCommand('llookup:public:__nskey.e2etest$atSign\n', auth: true);
     stdout.writeln('##CLI## nskey after retrofit: '
@@ -250,14 +244,9 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 6)));
 }
 
-AtOnboardingPreference _preference(String atSign, String atKeysFilePath,
-        {PqPosture? posture}) =>
-    (posture == null
-        ? AtOnboardingPreference()
-        : AtOnboardingPreference(posture: posture))
-      ..namespace = 'buzz'
-      ..atKeysFilePath = atKeysFilePath
-      ..appName = 'buzz'
-      ..deviceName = 'iphone'
-      ..rootDomain = 'vip.ve.atsign.zone'
-      ..rootPort = virtualenvRootPort;
+auth_cli.EnrollerSettings _settings(String atKeysFilePath,
+        {PqPosture? posture, String? cramSecret}) =>
+    auth_cli.EnrollerSettings(
+        vePreference(
+            namespace: 'buzz', posture: posture, cramSecret: cramSecret),
+        atKeysFilePath: atKeysFilePath);

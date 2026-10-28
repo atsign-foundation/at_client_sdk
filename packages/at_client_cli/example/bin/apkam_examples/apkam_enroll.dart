@@ -14,12 +14,13 @@ Future<void> main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
   final String atSign = argResults['atsign'];
-  final preference = AtOnboardingPreference()
-    ..namespace =
-        'buzz' // unique identifier that can be used to identify data from your app
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..storagePath = 'storage/$atSign';
-  final keys = FileAtKeysIo(filePath: (_) => argResults['atKeysPath']);
+  final preference = AtClientPreference()
+    ..namespace = 'buzz'
+    ..rootDomain = 'vip.ve.atsign.zone';
+  final keys = CliKeys.fileFor(atSign, path: argResults['atKeysPath']);
+  final lookUps = secureSocketLookUps();
+  final secondaryAddressFinder = CacheableSecondaryAddressFinder(
+      preference.rootDomain, preference.rootPort);
 
   // run otp:get from an enrolled client and pass the passcode
   final pending = await Atsign(atSign).resumeEnrollment(
@@ -27,8 +28,8 @@ Future<void> main(List<String> args) async {
           device: 'iphone',
           keys: keys,
           preference: preference,
-          lookUps: preference.lookUps,
-          secondaryAddressFinder: preference.secondaryAddressFinder) ??
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder) ??
       await Atsign(atSign).enroll(
           otp: argResults['otp'],
           app: 'buzz',
@@ -36,13 +37,14 @@ Future<void> main(List<String> args) async {
           namespaces: {'buzz': 'rw'},
           keys: keys,
           preference: preference,
-          lookUps: preference.lookUps,
-          secondaryAddressFinder: preference.secondaryAddressFinder);
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
   print('enrollment ${pending.enrollmentId} awaits approval');
   pending.progress.listen((event) => print('${event.group}: ${event.msg}'));
 
   final client = await pending.client(preference,
-      storage: preference.storageFor(atSign),
+      storage: CliKeys.storageFor(atSign,
+          program: 'buzz', id: pending.enrollmentId),
       retryInterval: Duration(seconds: 10));
   print('approved: this device runs as enrollment ${client.enrollmentId}');
   await client.stop();

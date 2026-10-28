@@ -7,15 +7,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart'
     show AtClient, AtClientImpl, PqPosture;
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
-import 'utils/virtualenv_ports.dart';
 
-/// Proves that `at_onboarding_cli` can activate an atSign PQ-native, so the
+/// Proves that `at_client_cli` can activate an atSign PQ-native, so the
 /// capability is one an end user can reach.
 ///
 /// ⚠️ One-shot server state: CRAM activation works once per atSign per
@@ -29,16 +28,13 @@ void main() {
   // The posture rides the constructor, which is the whole point: an app
   // becomes post-quantum by naming a stage, not by setting an algorithm on a
   // preference the activation path may or may not read.
-  AtOnboardingPreference preference() =>
-      AtOnboardingPreference(posture: PqPosture.pqReady)
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = virtualenvRootPort
-        ..storagePath = 'test/storage/hive/$atSign'
-        ..namespace = 'wavi'
-        ..cramSecret = at_demos.cramKeyMap[atSign]
-        ..atKeysFilePath = keysFilePath
-        ..appName = 'wavi'
-        ..deviceName = 'pq-cli';
+  auth_cli.EnrollerSettings settings() => auth_cli.EnrollerSettings(
+      vePreference(
+          namespace: 'wavi',
+          posture: PqPosture.pqReady,
+          cramSecret: at_demos.cramKeyMap[atSign]),
+      atKeysFilePath: keysFilePath,
+      storagePath: 'test/storage/hive/$atSign');
 
   setUp(() {
     // An activation refuses to overwrite a keyfile, so a leftover from an
@@ -50,7 +46,7 @@ void main() {
   });
 
   test('an activation under the pqReady posture is PQ-native', () async {
-    await activateThroughCli(atSign, preference());
+    await activateThroughCli(atSign, settings());
 
     final keys = await FileAtKeysIo(filePath: (_) => keysFilePath).read(atSign);
     final enrollmentId = keys.storedEnrollmentId;
@@ -67,9 +63,9 @@ void main() {
     // A fresh connection authenticating from the keyfile alone. No RSA APKAM
     // exists anywhere, so this can only succeed by ML-DSA.
     //
-    // Under a bare preference, deliberately: that is what `at_activate` hands
-    // `createAtClient`, so its posture is `legacy` and its
-    // `authenticationKeyAlgorithm` is `rsa2048`. Everything below runs on this
+    // Under a bare preference, deliberately: that is what an `at_activate`
+    // command naming no `--posture` runs under, so its posture is `legacy`
+    // and its `authenticationKeyAlgorithm` is `rsa2048`. Everything below runs on this
     // client rather than the activation client, which was built under
     // `pqReady` and so cannot tell a working resolution from a posture that
     // agrees with it. A client reading its algorithm off the preference signs
@@ -80,21 +76,18 @@ void main() {
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
-    final reader = AtOnboardingServiceImpl(
+    final client = await openClient(
         atSign,
         // Named, not inherited, and identically in both arms: the reader's
         // preference is the FALLBACK for how this client authenticates, and
         // the comparison needs that fallback to be rsa2048 — in the PQ arm so
         // that mldsa65 proves the keyfile won, in the legacy arm so that there
         // is anything to contrast with.
-        AtOnboardingPreference(posture: PqPosture.legacy)
-          ..rootDomain = 'vip.ve.atsign.zone'
-          ..rootPort = virtualenvRootPort
-          ..storagePath = 'test/storage/hive/$atSign-reader'
-          ..namespace = 'wavi'
-          ..atKeysFilePath = keysFilePath);
-    expect(await reader.authenticate(), true);
-    final client = reader.atClient!;
+        auth_cli.EnrollerSettings(
+            vePreference(namespace: 'wavi', posture: PqPosture.legacy),
+            atKeysFilePath: keysFilePath,
+            storagePath: 'test/storage/hive/$atSign-reader'));
+    expect(client.connection.current.isOnline, true);
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'the keyfile is the authority on how this enrollment '
             'authenticates; the preference above names rsa2048, so resolving '
@@ -174,15 +167,13 @@ void main() {
     // activation. Everything else — the reader's bare preference, the command
     // driven — is held identical, so a difference in outcome can only come
     // from the key material the activation minted.
-    final activation = AtOnboardingPreference(posture: PqPosture.legacy)
-      ..rootDomain = 'vip.ve.atsign.zone'
-      ..rootPort = virtualenvRootPort
-      ..storagePath = 'test/storage/hive/$legacyAtSign'
-      ..namespace = 'wavi'
-      ..cramSecret = at_demos.cramKeyMap[legacyAtSign]
-      ..atKeysFilePath = legacyKeysFile
-      ..appName = 'wavi'
-      ..deviceName = 'legacy-cli';
+    final activation = auth_cli.EnrollerSettings(
+        vePreference(
+            namespace: 'wavi',
+            posture: PqPosture.legacy,
+            cramSecret: at_demos.cramKeyMap[legacyAtSign]),
+        atKeysFilePath: legacyKeysFile,
+        storagePath: 'test/storage/hive/$legacyAtSign');
     await activateThroughCli(legacyAtSign, activation);
 
     final keys =
@@ -191,21 +182,18 @@ void main() {
         reason: 'a legacy activation keeps its APKAM in the flat fields, '
             'which is what makes it the rsa2048 arm');
 
-    final reader = AtOnboardingServiceImpl(
+    final AtClient client = await openClient(
         legacyAtSign,
         // Named, not inherited, and identically in both arms: the reader's
         // preference is the FALLBACK for how this client authenticates, and
         // the comparison needs that fallback to be rsa2048 — in the PQ arm so
         // that mldsa65 proves the keyfile won, in the legacy arm so that there
         // is anything to contrast with.
-        AtOnboardingPreference(posture: PqPosture.legacy)
-          ..rootDomain = 'vip.ve.atsign.zone'
-          ..rootPort = virtualenvRootPort
-          ..storagePath = 'test/storage/hive/$legacyAtSign-reader'
-          ..namespace = 'wavi'
-          ..atKeysFilePath = legacyKeysFile);
-    expect(await reader.authenticate(), true);
-    final AtClient client = reader.atClient!;
+        auth_cli.EnrollerSettings(
+            vePreference(namespace: 'wavi', posture: PqPosture.legacy),
+            atKeysFilePath: legacyKeysFile,
+            storagePath: 'test/storage/hive/$legacyAtSign-reader'));
+    expect(client.connection.current.isOnline, true);
 
     // The rig check: the two arms must actually differ, or the comparison is
     // of a case with itself.

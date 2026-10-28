@@ -71,8 +71,8 @@ class XorCryptoProvider implements CryptoProvider {
 //                         names an unregistered provider throws
 //                         CryptoProviderNotRegistered.
 // ---------------------------------------------------------------------------
-AtOnboardingPreference buildPreference() {
-  return AtOnboardingPreference()
+AtClientPreference buildPreference() {
+  return AtClientPreference()
     ..crypto = CryptoConfig(
       defaultProviderId: XorCryptoProvider.providerId,
       providers: [XorCryptoProvider()],

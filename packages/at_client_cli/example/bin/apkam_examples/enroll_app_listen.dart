@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 
-import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
 
 /// Listens for enrollment requests on an atSign and approves or denies each
@@ -14,14 +14,14 @@ void main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
   final String atSign = argResults['atsign'];
 
-  final keys = FileAtKeysIo(filePath: (_) => argResults['atKeysPath']);
+  final keys = CliKeys.fileFor(atSign, path: argResults['atKeysPath']);
   final enrollmentId = (await keys.read(atSign)).enrollmentToAuthenticateAs();
-  final preference = AtSignPreference.getAlicePreference();
+  final preference = AtClientPreference()..rootDomain = 'vip.ve.atsign.zone';
   final client = await Atsign(atSign).open(
       keys: keys,
       preference: preference,
       namespace: 'wavi',
-      storage: AtSignPreference.getAliceStorage(atSign, enrollmentId),
+      storage: CliKeys.storageFor(atSign, program: 'wavi', id: enrollmentId),
       lookUps: secureSocketLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));

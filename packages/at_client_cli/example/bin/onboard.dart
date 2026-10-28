@@ -5,26 +5,26 @@ import 'package:at_client_cli/at_client_cli.dart';
 import 'util/custom_arg_parser.dart';
 
 /// Activates an atSign with its CRAM secret, writing its first keys to the
-/// keyfile named. Run `get_cram_key.dart` first if you do not hold the secret.
+/// keyfile named. Without the secret, `at_activate onboard -a <atSign>`
+/// fetches one from the registrar against an emailed verification code.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'finest';
 
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
   final String atSign = argResults['atsign'];
-  final preference = AtOnboardingPreference()
-    ..namespace =
-        'wavi' // unique identifier that can be used to identify data from your app
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..storagePath = 'storage/$atSign';
+  final preference = AtClientPreference()
+    ..namespace = 'wavi'
+    ..rootDomain = 'vip.ve.atsign.zone';
 
   final client = await Atsign(atSign).activate(
       cramSecret: argResults['cram'],
-      keys: FileAtKeysIo(filePath: (_) => argResults['atKeysPath']),
+      keys: CliKeys.fileFor(atSign, path: argResults['atKeysPath']),
       preference: preference,
-      storage: preference.storageFor(atSign),
-      lookUps: preference.lookUps,
-      secondaryAddressFinder: preference.secondaryAddressFinder,
+      storage: CliKeys.storageFor(atSign, program: 'wavi'),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preference.rootDomain, preference.rootPort),
       onProgress: (event) => print('${event.group}: ${event.msg}'));
   print('$atSign is activated; its first enrollment is '
       '${client.enrollmentId}, and its keys are at ${argResults['atKeysPath']}');

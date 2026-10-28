@@ -43,12 +43,15 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  Future<AtOnboardingPreference> preference() async =>
+  Future<AtClientPreference> preference() async =>
       AuthCliArgs.preferenceUnder(PqPosture.legacy)
         ..rootDomain = InternetAddress.loopbackIPv4.address
         ..rootPort = await refusedPort()
-        ..namespace = 'at_activate'
-        ..storagePath = '${dir.path}/storage';
+        ..namespace = 'at_activate';
+
+  EnrollerSettings settingsFor(AtClientPreference pref, String keysPath) =>
+      EnrollerSettings(pref,
+          atKeysFilePath: keysPath, storagePath: '${dir.path}/storage');
 
   Future<void> expectOwnerOnly(String path) async {
     if (Platform.isWindows) return;
@@ -108,9 +111,8 @@ void main() {
         'the client', () async {
       final server = atServer();
       final keysPath = '${dir.path}/${atSign}_key.atKeys';
-      final pref = (await preference())
-        ..atKeysFilePath = keysPath
-        ..cramSecret = cramSecret;
+      final pref =
+          settingsFor((await preference())..cramSecret = cramSecret, keysPath);
 
       await activate(atSign, pref, atLookUp: server.lookUp);
 
@@ -133,13 +135,12 @@ void main() {
         'key, before minting anything', () async {
       final server = atServer(activated: true);
       final keysPath = '${dir.path}/${atSign}_key.atKeys';
-      final pref = (await preference())
-        ..atKeysFilePath = keysPath
-        ..cramSecret = cramSecret;
+      final pref =
+          settingsFor((await preference())..cramSecret = cramSecret, keysPath);
 
       await expectLater(
           activate(atSign, pref, atLookUp: server.lookUp),
-          throwsA(isA<AtActivateException>().having(
+          throwsA(isA<AtClientException>().having(
               (e) => e.message, 'message', contains('already activated'))));
 
       expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
@@ -150,9 +151,8 @@ void main() {
       final server = atServer();
       final keysPath = '${dir.path}/${atSign}_key.atKeys';
       File(keysPath).writeAsStringSync('{}');
-      final pref = (await preference())
-        ..atKeysFilePath = keysPath
-        ..cramSecret = cramSecret;
+      final pref =
+          settingsFor((await preference())..cramSecret = cramSecret, keysPath);
 
       await expectLater(activate(atSign, pref, atLookUp: server.lookUp),
           throwsA(isA<AtKeysFileOverwriteException>()));
@@ -233,16 +233,15 @@ void main() {
       return (lookUp: lookUp, sent: sent);
     }
 
-    Future<AtClient> enrol(AtOnboardingPreference pref, String keysPath,
+    Future<AtClient> enrol(AtClientPreference pref, String keysPath,
             MockAtLookupImpl lookUp) =>
         enrolDevice(
             atSign: atSign,
-            preference: pref,
+            settings: settingsFor(pref, keysPath),
             app: 'wavi',
             device: 'phone',
             otp: 'ABC123',
             namespaces: {'wavi': 'rw'},
-            atKeysFilePath: keysPath,
             signingAlgo: SigningAlgoType.rsa2048,
             retryInterval: const Duration(milliseconds: 10),
             atLookUp: lookUp);
@@ -283,8 +282,9 @@ void main() {
           keys: FileAtKeysIo(filePath: (_) => keysPath),
           preference: pref,
           atLookUp: first.lookUp,
-          lookUps: pref.lookUps,
-          secondaryAddressFinder: pref.secondaryAddressFinder);
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
       expect(
           (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
               .pendingEnrollmentIds,

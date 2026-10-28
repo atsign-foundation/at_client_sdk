@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client/at_client.dart'
-    show EnrollmentKeyExchangeMode, PqPosture;
+    show AtClientPreference, EnrollmentKeyExchangeMode, PqPosture;
 import 'package:at_commons/at_commons.dart';
-import 'package:at_client_cli/at_client_cli.dart';
 import 'package:meta/meta.dart';
 
 enum AuthCliCommand {
@@ -146,7 +145,7 @@ class AuthCliArgs {
 
   /// The posture an **enroller** command — `onboard` or `enroll` — runs at:
   /// whatever `--posture` named, else at_client's default, the one
-  /// `AtOnboardingPreference()` carries.
+  /// `AtClientPreference()` carries.
   ///
   /// `notice` is non-null exactly when the default was taken, and is for the
   /// command to print.
@@ -154,7 +153,7 @@ class AuthCliArgs {
       ArgResults results) {
     final named = postureIn(results);
     if (named != null) return (posture: named, notice: null);
-    final inherited = AtOnboardingPreference().posture;
+    final inherited = AtClientPreference().posture;
     return (
       posture: inherited,
       notice: 'No --posture given, so this runs at "${nameOf(inherited)}", '
@@ -169,7 +168,7 @@ class AuthCliArgs {
   /// post-quantum providers, so approving a post-quantum enrolment under it
   /// is refused by at_client when the request is read, not here.
   static PqPosture postureForApprover(ArgResults results) =>
-      postureIn(results) ?? AtOnboardingPreference().posture;
+      postureIn(results) ?? AtClientPreference().posture;
 
   /// The key-exchange modes a `--key-exchange` argument may name.
   static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {
@@ -189,10 +188,10 @@ class AuthCliArgs {
   ///
   /// A posture is final in `AtClientPreference`, so it can only be set at
   /// construction.
-  static AtOnboardingPreference preferenceUnder(PqPosture? posture) =>
+  static AtClientPreference preferenceUnder(PqPosture? posture) =>
       posture == null
-          ? AtOnboardingPreference()
-          : AtOnboardingPreference(posture: posture);
+          ? AtClientPreference()
+          : AtClientPreference(posture: posture);
   static const argNameMaxRetries = 'max-retries';
 
   /// How many times, two seconds apart, `onboard` asks whether a newly

@@ -5,11 +5,10 @@ import 'package:args/args.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_client_cli/src/register/api_call_status.dart';
-import 'package:at_client_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_client_cli/src/register/register_api_result.dart';
 import 'package:at_client_cli/src/register/register_api_task.dart';
 
-import 'package:at_client_cli/src/util/onboarding_util.dart';
+import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/registrar_api_constants.dart';
 
 ///Class containing logic to register a free atsign to email provided
@@ -106,7 +105,7 @@ class RegistrationFlow {
       if (result.apiCallStatus == ApiCallStatus.success) {
         params.addAll(result.data);
       } else {
-        throw AtOnboardingException(result.exceptionMessage);
+        throw _RegistrarException(result.exceptionMessage);
       }
     }
   }
@@ -225,14 +224,14 @@ Future<void> main(List<String> args) async {
       stderr.writeln(
           '[Unable to run Register CLI] Please re-run with your email address');
       stderr
-          .writeln('Usage: \'dart run register_cli.dart -e email@email.com\'');
+          .writeln('Usage: \'at_register -e email@email.com\'');
       exit(1);
     } else if (e.toString().contains('Could not find an option or flag')) {
       stderr
           .writeln('[Unable to run Register CLI] The option entered is invalid.'
               ' Please use the \'-e\' flag to input your email');
       stderr
-          .writeln('Usage: \'dart run register_cli.dart -e email@email.com\'');
+          .writeln('Usage: \'at_register -e email@email.com\'');
       exit(2);
     } else {
       stderr.writeln(
@@ -241,7 +240,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('Cause: $e');
       exit(3);
     }
-  } on AtOnboardingException catch (e) {
+  } on _RegistrarException catch (e) {
     stderr.writeln(
         '[Error] Failed getting an atsign. It looks like something went wrong on our side.\n'
         'Please try again or contact support@atsign.com, quoting the text displayed below.');
@@ -264,4 +263,14 @@ Future<void> main(List<String> args) async {
       exit(6);
     }
   }
+}
+
+/// The registrar refused a step of the registration.
+class _RegistrarException implements Exception {
+  final String message;
+
+  _RegistrarException(this.message);
+
+  @override
+  String toString() => message;
 }

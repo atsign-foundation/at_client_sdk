@@ -2,14 +2,12 @@ import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_demo_data/at_demo_data.dart';
-import 'package:at_client_cli/at_client_cli.dart';
-import 'package:at_utils/at_utils.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
 import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
-import 'utils/virtualenv_ports.dart';
 
 /// The CLI's enrollment commands against a real atServer: a request is
 /// submitted through at_client, decided through `at_activate`, and the
@@ -29,11 +27,9 @@ void main() {
 
   // Runs once before all tests.
   setUpAll(() async {
-    await activateThroughCli(
-        atSign,
-        getOnboardingPreference(atSign, masterKeysFilePath)
-          // Fetched cram key from the at_demos repo.
-          ..cramSecret = cramKeyMap[atSign]);
+    // Fetched cram key from the at_demos repo.
+    await activateThroughCli(atSign,
+        _settings(masterKeysFilePath, cramSecret: cramKeyMap[atSign]));
     // NOTE: the static client cache is keyed on `(atSign, enrollmentId)`
     // alone, so without this eviction the CLI commands below run against the
     // client the activation left behind rather than the one they ask for.
@@ -69,7 +65,7 @@ void main() {
     test(
         'A test to verify end-to-end flow of approve revoke unrevoke of an enrollment',
         () async {
-      final preference = getOnboardingPreference(atSign, apkamKeysFilePath);
+      final settings = _settings(apkamKeysFilePath);
 
       // Submit enrollment request; the keyfile named holds it pending.
       final pending = await Atsign(atSign).enroll(
@@ -77,11 +73,10 @@ void main() {
           app: 'wavi',
           device: 'local-device',
           namespaces: {'e2etest': 'rw'},
-          keys: keyfileOf(preference),
-          preference: preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              preference.rootDomain, preference.rootPort));
+          keys: settings.keysFor(atSign),
+          preference: settings.preference,
+          lookUps: settings.lookUps,
+          secondaryAddressFinder: settings.secondaryAddressFinder);
       String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');
@@ -173,9 +168,8 @@ void main() {
 
     test('A test to verify password protected of atKeys file', () async {
       // The pass-phrase encrypts the atKeys file the enrollment writes.
-      final preference =
-          getOnboardingPreference(atSign, passwordProtectedKeysFilePath)
-            ..passPhrase = passPhrase;
+      final settings =
+          _settings(passwordProtectedKeysFilePath, passPhrase: passPhrase);
 
       // Submit enrollment request
       final pending = await Atsign(atSign).enroll(
@@ -183,11 +177,10 @@ void main() {
           app: 'buzz',
           device: 'local-device',
           namespaces: {'e2etest': 'rw'},
-          keys: keyfileOf(preference),
-          preference: preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              preference.rootDomain, preference.rootPort));
+          keys: settings.keysFor(atSign),
+          preference: settings.preference,
+          lookUps: settings.lookUps,
+          secondaryAddressFinder: settings.secondaryAddressFinder);
       String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');
@@ -247,42 +240,35 @@ void main() {
 }
 
 /// Whether the keys in [atKeysFilePath] authenticate [atSign] as
-/// [enrollmentId], through an [AtOnboardingService] created for this call
-/// alone and whose client is stopped before this returns.
+/// [enrollmentId], through a client opened for this call alone and stopped
+/// before this returns.
 ///
 /// A client stays live in this process until stopped, and a second open for
 /// the same atSign is refused while one is; a keyfile the atServer refuses
-/// answers false, the way a program calling `authenticate()` sees it.
+/// answers false.
 Future<bool> authenticateWithApkamKeys(
     String atSign, String atKeysFilePath, String enrollmentId,
     {String? passPhrase}) async {
   await evictCachedAtClients();
-  AtOnboardingPreference preference =
-      getOnboardingPreference(atSign, atKeysFilePath);
-  if (passPhrase != null) {
-    preference.passPhrase = passPhrase;
+  final AtClient client;
+  try {
+    client = await openClient(
+        atSign, _settings(atKeysFilePath, passPhrase: passPhrase));
+  } on AtOpenRefusedException {
+    return false;
   }
-  AtOnboardingService onboardingService =
-      AtOnboardingServiceImpl(atSign, preference);
-  final online = await onboardingService.authenticate();
+  final online = client.connection.current.isOnline;
   if (online) {
-    expect(onboardingService.atClient!.enrollmentId, enrollmentId,
+    expect(client.enrollmentId, enrollmentId,
         reason: 'the keyfile names the enrollment the client runs as');
   }
-  await onboardingService.atClient?.stop();
+  await client.stop();
   return online;
 }
 
-AtOnboardingPreference getOnboardingPreference(
-    String atSign, String atKeysFilePath) {
-  atSign = AtUtils.fixAtSign(atSign);
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..namespace = 'buzz'
-    ..atKeysFilePath = atKeysFilePath
-    ..appName = 'buzz'
-    ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..rootPort = virtualenvRootPort;
-
-  return atOnboardingPreference;
-}
+auth_cli.EnrollerSettings _settings(String atKeysFilePath,
+        {String? cramSecret, String? passPhrase}) =>
+    auth_cli.EnrollerSettings(
+        vePreference(namespace: 'buzz', cramSecret: cramSecret),
+        atKeysFilePath: atKeysFilePath,
+        passPhrase: passPhrase);

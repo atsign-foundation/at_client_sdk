@@ -1,29 +1,69 @@
 import 'package:at_client/at_client_io.dart';
-import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 
-/// Activates [atSign] with the CRAM secret on [preference], writing its first
-/// keys to the keyfile the preference names, and stops the client the
+import 'virtualenv_ports.dart';
+
+/// A preference on the virtualenv's atDirectory, at [posture] when one is
+/// named and the SDK default otherwise; [cramSecret] is what an activation
+/// under it spends.
+AtClientPreference vePreference(
+        {String? namespace, PqPosture? posture, String? cramSecret}) =>
+    (posture == null
+        ? AtClientPreference()
+        : AtClientPreference(posture: posture))
+      ..rootDomain = 'vip.ve.atsign.zone'
+      ..rootPort = virtualenvRootPort
+      ..namespace = namespace
+      ..cramSecret = cramSecret;
+
+/// Activates [atSign] with the CRAM secret on [settings]' preference, writing
+/// its first keys to the keyfile [settings] names, and stops the client the
 /// activation opened once its startup has settled; a test opens its own
 /// afterwards, the way a program does.
 Future<void> activateThroughCli(
-    String atSign, AtOnboardingPreference preference) async {
+    String atSign, auth_cli.EnrollerSettings settings) async {
   final client = await Atsign(atSign).activate(
-      cramSecret: preference.cramSecret!,
-      keys: FileAtKeysIo(
-          filePath: (_) => preference.atKeysFilePath!,
-          passPhrase: preference.passPhrase),
-      preference: preference,
-      lookUps: secureSocketLookUps(),
-      secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          preference.rootDomain, preference.rootPort),
-      storage: preference.storageFor(atSign));
+      cramSecret: settings.preference.cramSecret!,
+      keys: settings.keysFor(atSign),
+      preference: settings.preference,
+      storage: settings.storageFor(atSign),
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
   await auth_cli.awaitStartupTail(client);
   await client.stop();
 }
 
-/// The store the enrollment verbs write into for the keyfile [preference]
-/// names.
-FileAtKeysIo keyfileOf(AtOnboardingPreference preference) => FileAtKeysIo(
-    filePath: (_) => preference.atKeysFilePath!,
-    passPhrase: preference.passPhrase);
+/// A client of [atSign] on the keyfile and store [settings] name, through
+/// `Atsign.open`, made the manager's current client.
+///
+/// Every client of [atSign] still live in this process is stopped first,
+/// since `open` refuses while one is. A first open the atServer refuses
+/// throws [AtOpenRefusedException]; otherwise the client comes back online
+/// or not, and its `connection` says which.
+Future<AtClient> openClient(
+    String atSign, auth_cli.EnrollerSettings settings) async {
+  for (final live in AtClientImpl.liveClientsFor(atSign)) {
+    await live.stop();
+  }
+  final client = await Atsign(atSign).open(
+      keys: settings.keysFor(atSign),
+      preference: settings.preference,
+      storage: settings.storageFor(atSign),
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
+  AtClientManager.getInstance().use(client);
+  return client;
+}
+
+/// [openClient], failing the test unless the client comes up online.
+Future<AtClient> openOnline(
+    String atSign, auth_cli.EnrollerSettings settings) async {
+  final client = await openClient(atSign, settings);
+  final state = client.connection.current;
+  if (!state.isOnline) {
+    await client.stop();
+    throw StateError('$atSign did not come online from '
+        '${settings.atKeysFilePath}: $state');
+  }
+  return client;
+}

@@ -4,13 +4,12 @@ import 'package:args/args.dart' show ArgParserException;
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart' show PqPosture;
+import 'package:at_client/at_client.dart' show AtClientPreference, PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 
 import 'package:at_client_cli/src/util/at_file_util.dart';
-import 'package:at_client_cli/src/keys/at_onboarding_preference.dart';
 import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
 
@@ -232,17 +231,17 @@ void postureArgumentTests() {
       final parser = args.createOnboardCommandParser();
       expect(parser.options[AuthCliArgs.argNameHashingAlgoType]!.hide, isTrue);
 
-      final preference = onboardingPreferenceFrom(parser.parse([
+      final preference = enrollerSettingsFrom(parser.parse([
         '-a',
         '@alice',
         '--${AuthCliArgs.argNameHashingAlgoType}',
         'argon2id',
-      ]));
+      ])).preference;
       expect(
           // ignore: deprecated_member_use
           preference.hashingAlgoType,
           // ignore: deprecated_member_use
-          AtOnboardingPreference().hashingAlgoType,
+          AtClientPreference().hashingAlgoType,
           reason: 'the argument is accepted for compatibility and reaches no '
               'preference');
     });
@@ -277,7 +276,7 @@ void postureArgumentTests() {
       // this cannot fail until the default moves, and the row below is what
       // discriminates until then.
       expect(AuthCliArgs.preferenceUnder(null).posture,
-          same(AtOnboardingPreference().posture));
+          same(AtClientPreference().posture));
     });
 
     test(
@@ -290,7 +289,6 @@ void postureArgumentTests() {
       for (final path in const [
         'lib/src/commands/auth_cli.dart',
         'lib/src/commands/auth_cli_args.dart',
-        'lib/src/util/create_at_client_cli.dart',
       ]) {
         final lines = File(path).readAsLinesSync();
         expect(lines, isNotEmpty,
@@ -306,7 +304,6 @@ void postureArgumentTests() {
       }
       for (final path in const [
         'lib/src/commands/auth_cli.dart',
-        'lib/src/util/create_at_client_cli.dart',
       ]) {
         expect(byFile[path] ?? const <String>[], isEmpty,
             reason: 'a command and a client factory take the posture they are '
@@ -317,7 +314,7 @@ void postureArgumentTests() {
       expect(args, hasLength(3),
           reason: 'expected the three postureNames entries and nothing else: '
               'an unnamed posture is at_client\'s default, inherited through '
-              'AtOnboardingPreference(), so no line here decides one. '
+              'AtClientPreference(), so no line here decides one. '
               'Anything else is a default in disguise:\n${args.join('\n')}');
     });
 
@@ -326,7 +323,7 @@ void postureArgumentTests() {
       // per row.
       final source = File('lib/src/commands/auth_cli.dart').readAsStringSync();
       final calls =
-          RegExp(r'(?<![A-Za-z_])createAtClient\(').allMatches(source).toList();
+          RegExp(r'await _commandClient\(').allMatches(source).toList();
       expect(calls, isNotEmpty,
           reason: 'if this finds nothing the rest of the row proves nothing');
 
@@ -339,7 +336,7 @@ void postureArgumentTests() {
         }
       }
       expect(without, isEmpty,
-          reason: 'auth_cli.dart lines $without call createAtClient without a '
+          reason: 'auth_cli.dart lines $without call _commandClient without a '
               'posture, so those commands ignore --posture');
     });
 
@@ -380,7 +377,7 @@ void postureArgumentTests() {
         () {
       final parsed = args.createEnrollCommandParser().parse([]);
       final resolved = AuthCliArgs.postureForEnroller(parsed);
-      final inherited = AtOnboardingPreference().posture;
+      final inherited = AtClientPreference().posture;
       expect(resolved.posture, same(inherited),
           reason: 'one default for the whole SDK: when at_client moves its '
               'default, every command here moves with it');
@@ -404,7 +401,7 @@ void postureArgumentTests() {
     test('an approver with no --posture runs at at_client\'s default', () {
       final parsed = args.createStatusCommandParser().parse([]);
       expect(AuthCliArgs.postureForApprover(parsed),
-          same(AtOnboardingPreference().posture),
+          same(AtClientPreference().posture),
           reason: 'the same default as an enroller: at_client decides, and a '
               'post-quantum approval under a posture with no post-quantum '
               'providers is refused by at_client when the request is read');

@@ -6,11 +6,12 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
@@ -35,10 +36,9 @@ void main() {
   /// reachable by a bare `pkam:` and by nothing else — and its encryption
   /// public key published.
   ///
-  /// ⛔ Deliberately NOT `AtOnboardingServiceImpl.onboard()`, which sends
-  /// `enroll:request` on the CRAM connection and so creates a second, ordinary
-  /// enrollment whose id the keyfile would carry; the state under test is a
-  /// keyfile that names none.
+  /// ⛔ Deliberately NOT an activation, which sends `enroll:request` on the
+  /// CRAM connection and so creates a second, ordinary enrollment whose id the
+  /// keyfile would carry; the state under test is a keyfile that names none.
   Future<void> makeLegacyAtSign(String atSign) async {
     // CRAM is the authenticator; the first command that needs it runs it.
     final atLookup = secureSocketLookUps()(
@@ -81,14 +81,10 @@ void main() {
         as Map<String, dynamic>;
   }
 
-  AtOnboardingPreference preferenceFor(String atSign, PqPosture posture) =>
-      AtOnboardingPreference(posture: posture)
-        ..rootDomain = rootDomain
-        ..rootPort = virtualenvRootPort
-        ..storagePath = 'storage/hive/$atSign'
-        ..atKeysFilePath = testKeysFile(atSign)
-        ..appName = 'wavi'
-        ..deviceName = 'pixel';
+  auth_cli.EnrollerSettings settingsFor(String atSign, PqPosture posture) =>
+      auth_cli.EnrollerSettings(vePreference(posture: posture),
+          atKeysFilePath: testKeysFile(atSign),
+          storagePath: 'storage/hive/$atSign');
 
   /// The `.atKeys` a legacy onboarding would have written: the flat PKAM
   /// keypair, the encryption keypair and the self-encryption key, and no
@@ -96,15 +92,15 @@ void main() {
   Future<void> writeLegacyKeyfile(String atSign) async {
     final aes = at_demos.aesKeyMap[atSign]!;
     final map = <String, String?>{
-      AuthKeyType.aesEncryptedPkamPublicKey:
+      'aesPkamPublicKey':
           EncryptionUtil.encryptValue(at_demos.pkamPublicKeyMap[atSign]!, aes),
-      AuthKeyType.aesEncryptedPkamPrivateKey:
+      'aesPkamPrivateKey':
           EncryptionUtil.encryptValue(at_demos.pkamPrivateKeyMap[atSign]!, aes),
-      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
+      'aesEncryptPublicKey': EncryptionUtil.encryptValue(
           at_demos.encryptionPublicKeyMap[atSign]!, aes),
-      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
+      'aesEncryptPrivateKey': EncryptionUtil.encryptValue(
           at_demos.encryptionPrivateKeyMap[atSign]!, aes),
-      AuthKeyType.selfEncryptionKey: aes,
+      'selfEncryptionKey': aes,
       atSign: aes,
     };
     final file = File(testKeysFile(atSign));
@@ -114,13 +110,11 @@ void main() {
 
   Future<AtClient> clientFor(String atSign, PqPosture posture) async {
     await writeLegacyKeyfile(atSign);
-    final service =
-        AtOnboardingServiceImpl(atSign, preferenceFor(atSign, posture));
-    expect(await service.authenticate(), true,
+    final client = await openClient(atSign, settingsFor(atSign, posture));
+    expect(client.connection.current.isOnline, true,
         reason: 'authentication is with the FLAT key; a failure here is the '
             'fixture, not the behaviour under test');
-    final client = service.atClient;
-    return client!;
+    return client;
   }
 
   setUpAll(() async {

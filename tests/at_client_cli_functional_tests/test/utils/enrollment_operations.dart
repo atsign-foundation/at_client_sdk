@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 
 import 'at_client_cache.dart';
+import 'lifecycle.dart';
 import 'test_keys_dir.dart';
-import 'virtualenv_ports.dart';
 
 /// The approving side of an enrollment, driven from a keyfile that holds
 /// `__manage`: a passcode for a request to quote, and the decision on it.
@@ -24,17 +24,10 @@ class EnrollmentOperations {
 
   EnrollmentOperations(this.atsign);
 
-  /// A client on [atKeysFilePath], online, through the adapter a program
-  /// built on this package uses.
+  /// A client on [atKeysFilePath], online.
   Future<AtClient> _clientFor(String atKeysFilePath) async {
     await evictCachedAtClients();
-    final service = AtOnboardingServiceImpl(
-        atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
-    if (!await service.authenticate()) {
-      throw StateError('$atsign did not come online from $atKeysFilePath: '
-          '${service.atClient?.connection.current}');
-    }
-    return service.atClient!;
+    return openOnline(atsign, settingsFor(atKeysFilePath: atKeysFilePath));
   }
 
   Future<void> _release(AtClient client) async {
@@ -93,14 +86,9 @@ class EnrollmentOperations {
     return pending.first.enrollmentId!;
   }
 
-  AtOnboardingPreference getOnboardingPreference(
-      {String? cramKey, String? atKeysFilePath}) {
-    return AtOnboardingPreference()
-      ..storagePath = '$storageDir/hive/$atsign/1'
-      ..rootDomain = 'vip.ve.atsign.zone'
-      ..rootPort = virtualenvRootPort
-      ..cramSecret = cramKey
-      // NOTE: a null here falls through to the home directory's real keys dir.
-      ..atKeysFilePath = atKeysFilePath ?? testKeysFile(atsign);
-  }
+  auth_cli.EnrollerSettings settingsFor(
+          {String? cramKey, String? atKeysFilePath}) =>
+      auth_cli.EnrollerSettings(vePreference(cramSecret: cramKey),
+          atKeysFilePath: atKeysFilePath ?? testKeysFile(atsign),
+          storagePath: '$storageDir/hive/$atsign/1');
 }

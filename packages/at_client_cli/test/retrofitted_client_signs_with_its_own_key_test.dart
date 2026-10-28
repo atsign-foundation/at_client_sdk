@@ -92,20 +92,23 @@ void main() {
             InternetAddress.loopbackIPv4.address, port),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: SecureSocketConfig()));
-    final service = AtOnboardingServiceImpl(
-        atSign,
-        AtOnboardingPreference(posture: PqPosture.legacy)
-          ..atKeysFilePath = keysFilePath
+    final client = await Atsign(atSign).open(
+        keys: CliKeys.fileFor(atSign, path: keysFilePath),
+        preference: AtClientPreference(posture: PqPosture.legacy)
           ..namespace = namespace
           ..rootDomain = InternetAddress.loopbackIPv4.address
-          ..rootPort = port
-          ..storagePath = storage.path,
-        atLookUp: own);
-    expect(await service.authenticate(), isFalse,
+          ..rootPort = port,
+        storage:
+            CliKeys.storageFor(atSign, program: namespace, path: storage.path),
+        atLookUp: own,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, port));
+    expect(client.connection.current.isOnline, isFalse,
         reason: 'offline by construction; what is under test was installed '
             'when the client was built');
 
-    final adopted = service.atClient!.getRemoteSecondary()!.atLookUp;
+    final adopted = client.getRemoteSecondary()!.atLookUp;
     expect(identical(adopted, own), isTrue,
         reason: 'the client wraps the lookup it was handed; if it built its '
             'own, everything below is about the wrong object');

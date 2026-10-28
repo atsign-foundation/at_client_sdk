@@ -2,6 +2,10 @@
 
 - breaking: at_cli_commons is a deprecated re-export of at_client_cli, which
   now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
+- breaking: `MySyncProgressListener` is gone, and `CLIBase`'s `preference` is
+  an `AtClientPreference`.
+- fix: on Windows, `standardAtClientStorageDir` returns its directory under
+  `TEMP` rather than overflowing the stack.
 
 ## 3.1.2-rc3
 

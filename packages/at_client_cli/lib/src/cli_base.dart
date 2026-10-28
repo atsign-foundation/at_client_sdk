@@ -148,7 +148,7 @@ class CLIBase {
     String? namespace,
     Set<String> hide = const {},
     bool addLegacyRootDomainArg = true,
-    AtOnboardingPreference? preference,
+    AtClientPreference? preference,
     AtLookUpFactory? lookUps,
   }) async {
     parser ??= createArgsParser(
@@ -212,10 +212,10 @@ class CLIBase {
   final bool syncDisabled;
   final int maxConnectAttempts;
 
-  final AtOnboardingPreference? preference;
+  final AtClientPreference? preference;
 
-  /// Builds every connection the client opens; with none, the preference's
-  /// (TLS on TCP, or the proxy convention when its root domain names one).
+  /// Builds every connection the client opens; with none, TLS on TCP, or the
+  /// proxy convention when the root domain names one.
   final AtLookUpFactory? lookUps;
 
   late final String atKeysFilePathToUse;
@@ -322,16 +322,11 @@ class CLIBase {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
     }
 
-    final AtOnboardingPreference atOnboardingConfig =
-        preference ?? AtOnboardingPreference();
-    atOnboardingConfig
-      ..storagePath = localStoragePathToUse
+    final config = (preference ?? AtClientPreference())
       ..namespace = nameSpace
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
-      ..fetchOfflineNotifications = true
-      ..atKeysFilePath = atKeysFilePathToUse
-      ..passPhrase = passPhrase;
+      ..fetchOfflineNotifications = true;
 
     if (!File(atKeysFilePathToUse).existsSync()) {
       // no atKeys file
@@ -340,7 +335,7 @@ class CLIBase {
       stderr.writeln(''
           '    => If you do not have an atKeys file,'
           ' this package will help you get started:'
-          ' https://pub.dev/packages/at_onboarding_cli');
+          ' https://pub.dev/packages/at_client_cli');
       throw ArgumentError(msg);
     }
 
@@ -349,13 +344,18 @@ class CLIBase {
     final AtClient client;
     try {
       client = await Atsign(atSign).open(
-          keys: FileAtKeysIo(
-              filePath: (_) => atKeysFilePathToUse, passPhrase: passPhrase),
-          preference: atOnboardingConfig,
+          keys: CliKeys.fileFor(atSign,
+              path: atKeysFilePathToUse, passPhrase: passPhrase),
+          preference: config,
           namespace: nameSpace,
-          storage: atOnboardingConfig.storageFor(atSign),
-          lookUps: lookUps ?? atOnboardingConfig.lookUps,
-          secondaryAddressFinder: atOnboardingConfig.secondaryAddressFinder,
+          storage: CliKeys.storageFor(atSign,
+              program: nameSpace, path: localStoragePathToUse),
+          lookUps: lookUps ??
+              (atRootDomain.rootDomain.startsWith('proxy:')
+                  ? proxyLookUps()
+                  : secureSocketLookUps()),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              atRootDomain.rootDomain, atRootDomain.rootPort),
           serviceFactory: atServiceFactory);
     } on AtOpenRefusedException catch (e) {
       stderr.writeln();

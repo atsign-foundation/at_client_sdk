@@ -4,12 +4,15 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/at_auth_io.dart'
+    show FileAtKeysIo, fileRetrofitSerializer;
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
-import 'package:at_client_cli/src/util/home_directory_util.dart';
+import 'package:at_client_cli/src/commands/parser_usage.dart';
+import 'package:at_client_cli/src/register/onboarding_util.dart';
+import 'package:at_client_cli/src/register/registrar_api_constants.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_utils/at_utils_io.dart'
@@ -144,7 +147,8 @@ Future<int> main(List<String> arguments) async {
     arguments: ['onboard', ...arguments],
     warning: 'Deprecated: no command was given, so this runs "onboard". '
         'Name the command, as in "at_activate onboard -a <atSign>", because '
-        'at_activate 3.0 will refuse an invocation with no command.',
+        'a later major of at_client_cli will refuse an invocation with no '
+        'command.',
   );
 }
 
@@ -257,7 +261,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await setSpp(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -275,7 +279,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await outputOtp(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -289,7 +293,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // - setting spp, generating otp, etc
         await interactive(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -299,7 +303,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.list:
         await list(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -309,7 +313,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.fetch:
         await fetch(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -320,7 +324,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.approve:
         await approve(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -330,7 +334,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.auto:
         await autoApprove(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -340,7 +344,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.deny:
         await deny(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -351,7 +355,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.revoke:
         await revoke(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -370,7 +374,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.unrevoke:
         await unrevoke(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -381,7 +385,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.delete:
         await deleteEnrollment(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -454,10 +458,12 @@ Future<int> status(ArgResults ar) async {
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    final AtLookUp al = onboardingPreferenceFrom(ar).lookUps(
+    final settings = enrollerSettingsFrom(ar);
+    final AtLookUp al = settings.lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
       authenticator: null,
+      secondaryAddressFinder: settings.secondaryAddressFinder,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
@@ -504,7 +510,7 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
     stdout.writeln('Version: $packageVersion');
     return false;
   }
-  final preference = onboardingPreferenceFrom(argResults);
+  final settings = enrollerSettingsFrom(argResults);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
   logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
@@ -526,7 +532,7 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
         !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
-    await activate(atSign, preference,
+    await activate(atSign, settings,
         maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
         atLookUp: atLookUp);
     return true;
@@ -537,7 +543,7 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
 }
 
 /// CRAM-activates [atSign] and writes its first keys to the keyfile
-/// [preference] names, fetching the CRAM secret from the registrar when the
+/// [settings] names, fetching the CRAM secret from the registrar when the
 /// preference carries none. An atSign that is already activated is refused
 /// before anything is minted. The client the activation opens is stopped
 /// before this returns: a command's process ends with the command.
@@ -545,36 +551,40 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
 /// [maxRetries] bounds the wait for a newly registered atSign to be
 /// provisioned: that many polls, [provisioningPollInterval] apart.
 @visibleForTesting
-Future<void> activate(String atSign, AtOnboardingPreference preference,
+Future<void> activate(String atSign, EnrollerSettings settings,
     {int maxRetries = 50, AtLookupMuxable? atLookUp}) async {
-  final atKeysFilePath = preference.atKeysFilePath!;
+  final preference = settings.preference;
+  final atKeysFilePath = settings.atKeysFilePath;
   AtFileUtil.ensureWritable(File(atKeysFilePath));
-  preference.cramSecret ??= await _cramSecretFromRegistrar(atSign, preference);
-  if (await _isActivated(atSign, preference, atLookUp)) {
-    throw AtActivateException('atsign $atSign is already activated');
+  preference.cramSecret ??=
+      await _cramSecretFromRegistrar(atSign, settings.registrarUrl);
+  if (await _isActivated(atSign, settings, atLookUp)) {
+    throw AtClientException.message('atsign $atSign is already activated');
   }
 
   final client = await Atsign(atSign).activate(
       cramSecret: preference.cramSecret!,
-      keys: FileAtKeysIo(
-          filePath: (_) => atKeysFilePath, passPhrase: preference.passPhrase),
+      keys: settings.keysFor(atSign),
       preference: preference,
-      storage: preference.storageFor(atSign),
+      storage: settings.storageFor(atSign),
       provisioningBudget: provisioningPollInterval * maxRetries,
       provisioningPollInterval: provisioningPollInterval,
       onProgress: printProgress,
       atLookUp: atLookUp,
-      lookUps: preference.lookUps,
-      secondaryAddressFinder: preference.secondaryAddressFinder);
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
   stdout.writeln('[Success] Your keyfile stored at path: $atKeysFilePath');
   await AtFileUtil.setSecureFilePermissions(atKeysFilePath);
-  if (preference.passPhrase != null) {
+  if (settings.passPhrase != null) {
     stdout.writeln(
         '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
   }
   await awaitStartupTail(client);
   await client.stop();
 }
+
+/// How long a command waits for the client's post-quantum startup to finish.
+const Duration startupTailBound = Duration(seconds: 30);
 
 /// Waits for [client]'s post-quantum startup, bounded by [startupTailBound].
 ///
@@ -595,22 +605,21 @@ Future<void> awaitStartupTail(AtClient client) async {
 /// The CRAM secret for [atSign] from the registrar: it emails a verification
 /// code to the atSign's owner, who types it in here.
 Future<String> _cramSecretFromRegistrar(
-    String atSign, AtOnboardingPreference preference) async {
+    String atSign, String registrarUrl) async {
   final util = OnboardingUtil();
-  await util.requestAuthenticationOtp(atSign,
-      authority: preference.registrarUrl);
+  await util.requestAuthenticationOtp(atSign, authority: registrarUrl);
   final otp = util.getVerificationCodeFromUser();
-  return util.getCramKey(atSign, otp, authority: preference.registrarUrl);
+  return util.getCramKey(atSign, otp, authority: registrarUrl);
 }
 
 /// Whether [atSign]'s atServer already holds an encryption public key, which
 /// an activation publishes and nothing else does. Asked through
 /// [connection] when there is one, since a proxied atServer is not the
-/// atDirectory's to report on; otherwise over a connection the preference's
-/// lookUps builds. An atServer that cannot be asked is taken as not activated,
-/// and the activation's own wait reports why.
-Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
-    AtLookUp? connection) async {
+/// atDirectory's to report on; otherwise over a connection [settings] builds.
+/// An atServer that cannot be asked is taken as not activated, and the
+/// activation's own wait reports why.
+Future<bool> _isActivated(
+    String atSign, EnrollerSettings settings, AtLookUp? connection) async {
   if (connection != null) {
     try {
       final response = await connection
@@ -625,10 +634,12 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
       return false;
     }
   }
-  final lookUp = preference.lookUps(
+  final lookUp = settings.lookUps(
       atSign: atSign,
-      rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-      authenticator: null);
+      rootDomain: AtRootDomain(
+          settings.preference.rootDomain, settings.preference.rootPort),
+      authenticator: null,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
   try {
     final check = await checkAtSignServer(lookUp, atSign);
     if (check.cause != null) {
@@ -652,7 +663,7 @@ Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
   }
-  final preference = onboardingPreferenceFrom(argResults);
+  final settings = enrollerSettingsFrom(argResults);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
 
   Map<String, String> namespaces = {};
@@ -671,12 +682,11 @@ Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
 
   final client = await enrolDevice(
     atSign: atSign,
-    preference: preference,
+    settings: settings,
     app: argResults[AuthCliArgs.argNameAppName],
     device: argResults[AuthCliArgs.argNameDeviceName],
     otp: argResults[AuthCliArgs.argNamePasscode],
     namespaces: namespaces,
-    atKeysFilePath: argResults[AuthCliArgs.argNameAtKeys],
     apkamKeysExpiry: parseDuration(apkamKeysExpiry),
     maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
     // NOTE: the minted key's algorithm has to agree with the posture the
@@ -700,18 +710,17 @@ Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
 /// Enrols this device as [app] on [device], waits for the approval, and
 /// opens a client on the keys it completes, which the caller stops.
 ///
-/// The keyfile at [atKeysFilePath] is the resume record: a request submitted
+/// The keyfile [settings] names is the resume record: a request submitted
 /// earlier for the same app and device is waited on again rather than
 /// repeated, and a keyfile already holding live keys is refused.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
-  required AtOnboardingPreference preference,
+  required EnrollerSettings settings,
   required String app,
   required String device,
   required String otp,
   required Map<String, String> namespaces,
-  required String atKeysFilePath,
   required SigningAlgoType signingAlgo,
   EnrollmentKeyExchangeMode? keyExchangeMode,
   Duration? apkamKeysExpiry,
@@ -719,16 +728,17 @@ Future<AtClient> enrolDevice({
   Duration retryInterval = approvalPollInterval,
   AtLookupMuxable? atLookUp,
 }) async {
-  final keys = FileAtKeysIo(
-      filePath: (_) => atKeysFilePath, passPhrase: preference.passPhrase);
+  final preference = settings.preference;
+  final atKeysFilePath = settings.atKeysFilePath;
+  final keys = settings.keysFor(atSign);
   var pending = await Atsign(atSign).resumeEnrollment(
       app: app,
       device: device,
       keys: keys,
       preference: preference,
       atLookUp: atLookUp,
-      lookUps: preference.lookUps,
-      secondaryAddressFinder: preference.secondaryAddressFinder);
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
   if (pending != null) {
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
         '${pending.enrollmentId}, submitted earlier from this keyfile');
@@ -744,14 +754,14 @@ Future<AtClient> enrolDevice({
         keyExchangeMode: keyExchangeMode,
         apkamKeysExpiry: apkamKeysExpiry,
         atLookUp: atLookUp,
-        lookUps: preference.lookUps,
-        secondaryAddressFinder: preference.secondaryAddressFinder);
+        lookUps: settings.lookUps,
+        secondaryAddressFinder: settings.secondaryAddressFinder);
   }
   stdout.writeln('Enrollment ID: ${pending.enrollmentId}');
   final narration = pending.progress.listen(printProgress);
   try {
     final client = await pending.client(preference,
-        storage: preference.storageFor(atSign),
+        storage: settings.storageFor(atSign),
         retryInterval: retryInterval,
         maxRetries: maxRetries);
     await AtFileUtil.setSecureFilePermissions(atKeysFilePath);
@@ -1256,8 +1266,8 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
         'The --${AuthCliArgs.argNamePassPhrase} option is mandatory for the "decrypt" command');
   }
 
-  final atKeysFilePath =
-      ar[AuthCliArgs.argNameAtKeys] ?? HomeDirectoryUtil.getAtKeysPath(atSign);
+  final String atKeysFilePath = ar[AuthCliArgs.argNameAtKeys] ??
+      getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign);
   if (atKeysFilePath.isEmpty) {
     throw ArgumentError(
         'The --${AuthCliArgs.argNameAtKeys} option must not be empty');
@@ -1282,11 +1292,11 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
       '${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
 }
 
-/// The preference the arguments describe, under the posture an enroller
+/// What `onboard` and `enroll` are told, under the posture an enroller
 /// command runs at; the posture is final on a preference, so it is fixed at
 /// construction.
 @visibleForTesting
-AtOnboardingPreference onboardingPreferenceFrom(ArgResults ar) {
+EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
   final atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -1305,15 +1315,129 @@ AtOnboardingPreference onboardingPreferenceFrom(ArgResults ar) {
   if (enroller.notice != null) {
     stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
   }
-  return AuthCliArgs.preferenceUnder(enroller.posture)
-    ..rootDomain = rootDomain.rootDomain
-    ..rootPort = rootDomain.rootPort
-    ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
-    ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
-    ..atKeysFilePath =
-        ar[AuthCliArgs.argNameAtKeys] ?? HomeDirectoryUtil.getAtKeysPath(atSign)
-    ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
-    ..storagePath = HomeDirectoryUtil.getHiveStoragePath(atSign);
+  return EnrollerSettings(
+      AuthCliArgs.preferenceUnder(enroller.posture)
+        ..rootDomain = rootDomain.rootDomain
+        ..rootPort = rootDomain.rootPort
+        ..cramSecret = ar[AuthCliArgs.argNameCramSecret],
+      atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
+          getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
+      passPhrase: ar[AuthCliArgs.argNamePassPhrase],
+      registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn]);
+}
+
+/// What `onboard` and `enroll` are told: the preference the client runs
+/// under, the keyfile and its passphrase, the registrar to ask, and where the
+/// client's store is when not where at_activate keeps it.
+@visibleForTesting
+class EnrollerSettings {
+  final AtClientPreference preference;
+  final String atKeysFilePath;
+  final String? passPhrase;
+  final String registrarUrl;
+  final String? storagePath;
+
+  EnrollerSettings(this.preference,
+      {required this.atKeysFilePath,
+      this.passPhrase,
+      this.registrarUrl = RegistrarApiConstants.apiHostProd,
+      this.storagePath});
+
+  /// The keyfile store at [atKeysFilePath].
+  FileAtKeysIo keysFor(String atSign) =>
+      CliKeys.fileFor(atSign, path: atKeysFilePath, passPhrase: passPhrase);
+
+  /// The store at [storagePath], or the one at_activate keeps for [atSign].
+  AtClientStorage storageFor(String atSign) =>
+      CliKeys.storageFor(atSign, program: commandNamespace, path: storagePath);
+
+  AtLookUpFactory get lookUps => _lookUpsFor(preference);
+
+  SecondaryAddressFinder get secondaryAddressFinder => _atDirectoryOf(preference);
+}
+
+/// The namespace at_activate's clients run under, and the program its stores
+/// are kept for.
+const String commandNamespace = 'at_activate';
+
+/// TLS on TCP, or the proxy convention when [preference]'s root domain names
+/// one.
+AtLookUpFactory _lookUpsFor(AtClientPreference preference) =>
+    preference.rootDomain.startsWith('proxy:')
+        ? proxyLookUps()
+        : secureSocketLookUps();
+
+/// The atDirectory [preference] names, asked over TLS.
+SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
+    CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort);
+
+/// A client for the commands that only read or administer an atSign — `otp`,
+/// `list`, `spp`, `approve` and the rest — opened from its keyfile, syncing
+/// nothing, on a store of this run's own that [deleteStorage] removes, and
+/// made the manager's current client.
+///
+/// The connection is given [maxConnectAttempts] tries, three seconds apart,
+/// to come online; a client the atServer refuses, or that is still offline
+/// after that, is stopped and an [UnAuthenticatedException] says so.
+///
+/// [waitForPqStartup] holds the command until the client's post-quantum
+/// startup has finished, bounded by [startupTailBound]; a command that reads
+/// what that startup leaves behind needs it, one that sends a single verb and
+/// exits does not. [posture] is how far into the post-quantum rollout this
+/// invocation runs; null means at_client's default.
+Future<AtClient> _commandClient(
+    {required String atSign,
+    String? atKeysFilePath,
+    String? rootDomain,
+    String? passPhrase,
+    PqPosture? posture,
+    bool waitForPqStartup = true,
+    int maxConnectAttempts = 5}) async {
+  const retryInterval = Duration(seconds: 3);
+  atSign = AtUtils.fixAtSign(atSign);
+  storageDir = standardAtClientStorageDir(
+    atSign: atSign,
+    progName: commandNamespace,
+    uniqueID: '${DateTime.now().millisecondsSinceEpoch}',
+  );
+  final parsedRootDomain =
+      AtRootDomain.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
+  final preference = AuthCliArgs.preferenceUnder(posture)
+    ..namespace = commandNamespace
+    ..rootDomain = parsedRootDomain.rootDomain
+    ..rootPort = parsedRootDomain.rootPort;
+
+  stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
+  final AtClient client;
+  try {
+    client = await Atsign(atSign).open(
+        keys: CliKeys.fileFor(atSign,
+            path: atKeysFilePath, passPhrase: passPhrase),
+        preference: preference,
+        storage: CliKeys.storageFor(atSign,
+            program: commandNamespace, path: storageDir!.path),
+        lookUps: _lookUpsFor(preference),
+        secondaryAddressFinder: _atDirectoryOf(preference),
+        serviceFactory: ServiceFactoryWithNoOpSyncService());
+  } on AtOpenRefusedException catch (e) {
+    stderr.writeln(chalk.brightRed(e.message));
+    throw UnAuthenticatedException(e.message);
+  }
+  final state = await client.connection.awaitOnline(
+      budget: retryInterval * maxConnectAttempts, retryInterval: retryInterval);
+  if (!state.isOnline) {
+    await client.stop();
+    stderr.writeln();
+    final msg = 'Failed to connect within $maxConnectAttempts attempts: '
+        '${state.outcome.name}'
+        '${state.cause == null ? '' : ' (${state.cause!.name})'}';
+    stderr.writeln(chalk.brightRed(msg));
+    throw UnAuthenticatedException(msg);
+  }
+  stderr.writeln(chalk.brightGreen('Connected'));
+  AtClientManager.getInstance().use(client);
+  if (waitForPqStartup) await awaitStartupTail(client);
+  return client;
 }
 
 String _lastProgressGroup = '';

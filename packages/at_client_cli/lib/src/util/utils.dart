@@ -49,7 +49,7 @@ Directory standardAtClientStorageDir({
   required String uniqueID,
 }) {
   if (Platform.isWindows) {
-    return standardAtClientStorageDir(
+    return standardWindowsAtClientStorageDir(
       atSign: atSign,
       progName: progName,
       uniqueID: uniqueID,

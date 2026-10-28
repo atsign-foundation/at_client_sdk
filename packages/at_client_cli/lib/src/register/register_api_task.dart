@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'package:at_client_cli/src/util/onboarding_util.dart';
+import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/register_api_result.dart';
 
 /// Represents a task in an AtSign registration cycle
