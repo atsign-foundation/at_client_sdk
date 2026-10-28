@@ -125,7 +125,7 @@ class CLIBase {
   static final ArgParser argsParser = createArgsParser();
 
   /// Constructs a CLIBase from a list of command-line arguments
-  /// and calls [init] on it.
+  /// and calls [init] on it, which says what it throws.
   ///
   /// Allowing [parser] to be supplied enables callers to do something like this:
   /// ```
@@ -312,7 +312,15 @@ class CLIBase {
     }
   }
 
-  /// Does the various things required to create an AtClient object
+  /// Opens [atClient] on the keyfile and store, and waits for it to come
+  /// online.
+  ///
+  /// Throws [AtCredentialRefusedException] when the atServer refuses the
+  /// keys, [AtEnrollmentPendingException] when the keyfile holds only an
+  /// enrollment request, [SecondaryNotFoundException] when the atDirectory
+  /// has no atServer for the atSign, and [SecondaryServerConnectivityException]
+  /// when the atServer is not reached within [maxConnectAttempts] tries. No
+  /// client is left open when it throws.
   Future<void> init() async {
     AtServiceFactory? atServiceFactory;
 
@@ -356,9 +364,9 @@ class CLIBase {
               atRootDomain.rootDomain, atRootDomain.rootPort),
           serviceFactory: atServiceFactory);
     } on AtOpenRefusedException catch (e) {
-      stderr.writeln();
-      stderr.writeln(chalk.brightRed(e.message));
-      rethrow;
+      throw _reported(_openFailure(e.state));
+    } on AtEnrollmentPendingException catch (e) {
+      throw _reported(e);
     }
     // NOTE: one client, asked again until it is online or the budget is
     // spent; a refusal ends the wait at once, since waiting cannot change it.
@@ -367,16 +375,36 @@ class CLIBase {
         retryInterval: retryDuration);
     if (!state.isOnline) {
       await client.stop();
-      stderr.writeln();
-      final msg = 'Failed to connect within $maxConnectAttempts attempts: '
-          '${state.outcome.name}'
-          '${state.cause == null ? '' : ' (${state.cause!.name})'}';
-      stderr.writeln(chalk.brightRed(msg));
-      throw SecondaryServerConnectivityException(msg);
+      throw _reported(_openFailure(state));
     }
     stderr.writeln(chalk.brightGreen('Connected'));
 
     AtClientManager.getInstance().use(client);
     atClient = client;
+  }
+
+  /// What an open that ended in [state] throws: the atServer's refusal, an
+  /// atSign the atDirectory has no atServer for, or an atServer not reached
+  /// within [maxConnectAttempts] tries.
+  AtException _openFailure(AtConnectionState state) {
+    if (state.isRefused) {
+      return AtCredentialRefusedException(atSign, state);
+    }
+    if (state.cause == AtConnectionCause.noAtServer) {
+      return SecondaryNotFoundException(
+          '$atSign is not in the atDirectory at ${atRootDomain.rootDomain}: '
+          'check the atSign, and that it has been activated');
+    }
+    return SecondaryServerConnectivityException(
+        'Failed to connect within $maxConnectAttempts attempts: '
+        '${state.outcome.name}'
+        '${state.cause == null ? '' : ' (${state.cause!.name})'}');
+  }
+
+  /// [e], once written to stderr after the progress line.
+  AtException _reported(AtException e) {
+    stderr.writeln();
+    stderr.writeln(chalk.brightRed(e.message));
+    return e;
   }
 }

@@ -40,9 +40,11 @@ enum AtConnectionCause {
   /// The atServer answered `AT0029`: the enrollment has expired.
   invalidEnrollment,
 
-  /// The atServer answered `AT0025` or `AT0026`: the enrollment was denied,
-  /// or is not yet approved.
+  /// The atServer answered `AT0026`: the enrollment is not yet approved.
   enrollmentNotApproved,
+
+  /// The atServer answered `AT0025`: the enrollment was denied.
+  enrollmentDenied,
 
   /// A refusal the atServer gave no code this build knows for.
   otherRefusal,
@@ -230,7 +232,7 @@ const Map<String, AtConnectionCause> _refusalCodes = {
   'AT0027': AtConnectionCause.revoked,
   'AT0401': AtConnectionCause.unauthenticated,
   'AT0029': AtConnectionCause.invalidEnrollment,
-  'AT0025': AtConnectionCause.enrollmentNotApproved,
+  'AT0025': AtConnectionCause.enrollmentDenied,
   'AT0026': AtConnectionCause.enrollmentNotApproved,
 };
 
@@ -375,7 +377,15 @@ class AtCredentialRefusedException extends AtException {
 
   AtCredentialRefusedException(this.atSign, this.state)
       : super('the atServer refused $atSign\'s keys (${state.cause?.name})'
-            '${state.error == null ? '' : ': ${state.error}'}');
+            '${state.error == null ? '' : ': ${state.error}'}'
+            '${_enrollmentNote(state.cause)}');
+
+  static String _enrollmentNote(AtConnectionCause? cause) => switch (cause) {
+        AtConnectionCause.enrollmentNotApproved =>
+          '; the enrollment awaits approval',
+        AtConnectionCause.enrollmentDenied => '; the enrollment was denied',
+        _ => '',
+      };
 }
 
 class AtOpenRefusedException extends AtException {

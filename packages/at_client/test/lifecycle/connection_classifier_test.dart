@@ -63,7 +63,7 @@ void main() {
       expectClassified(
           UnAuthenticatedException(deniedText),
           AtConnectionOutcome.refused,
-          AtConnectionCause.enrollmentNotApproved,
+          AtConnectionCause.enrollmentDenied,
           'AT0025 is a denied enrollment');
       expectClassified(
           UnAuthenticatedException(pendingText),
@@ -202,6 +202,31 @@ void main() {
       expect(classifyConnectionFailure(AtException('something else')), isNull,
           reason: 'an AtException carrying neither a code nor connectivity '
               'text is not read as either');
+    });
+  });
+
+  group('Given the atServer refuses an enrollment\'s keys', () {
+    String messageFor(AtConnectionCause cause) =>
+        AtCredentialRefusedException('@alice', AtConnectionState.refused(cause))
+            .message;
+
+    test(
+        'when it is not yet approved, then the message says it awaits '
+        'approval', () {
+      expect(messageFor(AtConnectionCause.enrollmentNotApproved),
+          endsWith('; the enrollment awaits approval'));
+    });
+
+    test('when it was denied, then the message says so', () {
+      expect(messageFor(AtConnectionCause.enrollmentDenied),
+          endsWith('; the enrollment was denied'));
+    });
+
+    test('when it is revoked, then the message says neither', () {
+      final message = messageFor(AtConnectionCause.revoked);
+      expect(message, isNot(contains('awaits approval')));
+      expect(message, isNot(contains('was denied')));
+      expect(message, contains('@alice'));
     });
   });
 }

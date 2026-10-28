@@ -137,18 +137,29 @@ at_onboarding_cli's line).
 
 ## 10. `CLIBase` tells a refusal from an outage
 
-`LIVE`. Every refusal throws `AtCredentialRefusedException` naming the atSign
-and the cause, whether or not the device has held the atSign online, and an
-enrollment awaiting approval says so; an atServer not answering within
-`maxConnectAttempts` throws `SecondaryServerConnectivityException`. No client
-is left open in either case. The scenarios are
+`AMENDED` 2026-10-28. Every refusal by the atServer throws
+`AtCredentialRefusedException` naming the atSign and the cause, whether or
+not the device has held the atSign online. Its message says when the
+enrollment awaits approval (`AT0026`, cause `enrollmentNotApproved`) or was
+denied (`AT0025`, cause `enrollmentDenied`). An atServer not answering
+within `maxConnectAttempts` throws `SecondaryServerConnectivityException`.
+A keyfile still holding only its enrollment request throws at_client's
+`AtEnrollmentPendingException`, and an atSign the atDirectory has no
+atServer for throws `SecondaryNotFoundException`, as noports does. No
+client is left open in any case. The scenarios are
 [`cli_base_open.feature`](../../../features/at_client_cli/cli_base_open.feature).
 
 Why: a refusal stands until someone acts, and a retry loop that catches the
-outage exception must not keep repeating an open the atServer will keep
-refusing. Rejected: keeping `AtOpenRefusedException` for a first-open refusal
-(two refusal types for a loop to tell apart), and `AtAuthenticationException`,
-the type the removed adapter threw.
+outage exception must not keep repeating an open that cannot succeed. The
+two causes are split because the atServer answers each differently, and
+telling a denied enrollment it awaits approval leaves its owner waiting for
+nothing. Rejected: keeping `AtOpenRefusedException` for a first-open
+refusal (two refusal types for a loop to tell apart);
+`AtAuthenticationException`, the type the removed adapter threw; one
+message for both enrollment causes; converting the pending keyfile into
+`AtCredentialRefusedException`, whose message would say the atServer
+refused when no atServer was asked; and treating an atSign the atDirectory
+does not know as an outage or a refusal.
 
 ## 11. Rulings live here
 

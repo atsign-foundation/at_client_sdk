@@ -93,6 +93,9 @@
   publishes no signing root mints one when it starts.
 - feat: `Enrollment` carries the enrollment's authentication public key, as
   `apkamPublicKey`.
+- feat: a denied enrollment is refused with the new cause
+  `AtConnectionCause.enrollmentDenied`, and `enrollmentNotApproved` means one
+  not yet approved. `AtCredentialRefusedException` says which.
 - experimental: `PqStartupGates.publishChainLink` is removed,
   `PqStartupGates.publishRootLink` is renamed `anchorOwnKeys`, and
   `PqSigningChain`'s methods are replaced.

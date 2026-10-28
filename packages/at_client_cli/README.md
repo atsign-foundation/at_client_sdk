@@ -123,8 +123,18 @@ Future<void> main(List<String> args) async {
 by default), `-r` the atDirectory, `-s` the local store and `-P` the keyfile's
 pass-phrase; `--help` lists the rest. `fromCommandLineArgs` waits up to
 `--max-connect-attempts` tries, 3 seconds apart, for the client to come
-online, and throws if it does not. Pass `preference:` an
-`AtClientPreference` to set anything the flags do not.
+online. Otherwise it stops the client and throws:
+
+- `AtCredentialRefusedException` when the atServer refuses the keys, naming
+  the cause, and saying when the enrollment awaits approval or was denied;
+- `AtEnrollmentPendingException` when the keyfile still holds only its
+  enrollment request;
+- `SecondaryNotFoundException` when the atDirectory has no atServer for the
+  atSign;
+- `SecondaryServerConnectivityException` when the atServer is not reached in
+  time, the one a retry loop should catch.
+
+Pass `preference:` an `AtClientPreference` to set anything the flags do not.
 
 ### The lifecycle verbs, with `CliKeys`
 
@@ -214,6 +224,7 @@ at_onboarding_cli 1.x wrote is read unchanged.
 | `package:at_onboarding_cli/at_onboarding_cli.dart`, `package:at_cli_commons/at_cli_commons.dart` | `package:at_client_cli/at_client_cli.dart`                                                                                                                              |
 | `dart pub global activate at_onboarding_cli`                                                     | `dart pub global activate at_client_cli`; the old command still installs the same tools                                                                                 |
 | `CLIBase(..., preference: AtOnboardingPreference())`                                             | unchanged, except that `preference:` takes an `AtClientPreference`                                                                                                      |
+| `CLIBase` on a refused first open, `AtOpenRefusedException`                                      | `AtCredentialRefusedException` for every refusal; `SecondaryNotFoundException` for an atSign the atDirectory does not know; `SecondaryServerConnectivityException` only for an outage |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, then `.atClient`                         | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`                                                                                        |
 | `.onboard()`                                                                                     | `Atsign(atSign).activate(...)`, or `at_activate onboard`                                                                                                                |
 | `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)`       | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; `Atsign.resumeEnrollment` picks a pending request up after a restart                                  |
