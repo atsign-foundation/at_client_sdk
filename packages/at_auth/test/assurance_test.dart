@@ -710,6 +710,55 @@ void main() {
             reason: 'a keys field holding anything is not dropped');
       });
     }
+
+    // The flat rewrite drops every typed container, so it is only taken when
+    // none holds anything — not just `keys`. A pending-only or snapshot-only
+    // container is no credential, so nothing else refuses its loss: the owner
+    // check is what keeps the typed header, and it must hold even when the
+    // caller names the atSign the keyfile names, as FileAtKeysIo always does.
+    for (final (shape, container) in <(String, Map<String, dynamic>)>[
+      (
+        'an enrollment snapshot with no keys',
+        {
+          'enrollments': [
+            {'enrollmentId': 'e-1', 'keys': <Object?>[]}
+          ]
+        }
+      ),
+      (
+        'an enrollment holding pending material',
+        {
+          'enrollments': [
+            {
+              'enrollmentId': 'e-1',
+              'keys': encodeAtKeysDocument(
+                  [_pendingAuthenticationMaterial('e-1')])
+            }
+          ]
+        }
+      ),
+      (
+        'atsignKeys holding pending material',
+        {
+          'atsignKeys': encodeAtKeysDocument([
+            _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+          ])
+        }
+      ),
+    ]) {
+      test(
+          'when it holds $shape, then a flat rewrite is refused for the '
+          'atSign it names', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), ...container},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'a typed container holding anything is not dropped');
+      });
+    }
   });
 }
 
