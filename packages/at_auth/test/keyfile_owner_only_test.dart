@@ -536,6 +536,33 @@ void main() {
         reason: 'a libc without strerror still writes owner-only, and its '
             'failures carry no OS error');
   });
+
+  test('A call that fails is reported as failed when errno cannot be looked up',
+      () {
+    osErrorsUnavailableForTesting = true;
+    addTearDown(() => osErrorsUnavailableForTesting = false);
+    final existing = '${dir.path}/existing';
+    File(existing).writeAsStringSync('theirs');
+    final link = '${dir.path}/link';
+    Link(link).createSync(existing);
+
+    expect(createNewWith(existing, utf8.encode('token')), isA<OSError>(),
+        reason: 'a create that fails is not taken for one that succeeded, so '
+            'the lock stays with its holder');
+    expect(
+        () => writeNewOwnerOnly(existing, utf8.encode('written')),
+        throwsA(isA<FileSystemException>()
+            .having((e) => e.message, 'message', 'Cannot create the file')
+            .having((e) => e.osError, 'osError', isNull)));
+    expect(
+        () => readNoFollow(link),
+        throwsA(isA<FileSystemException>()
+            .having((e) => e.message, 'message',
+                'Cannot open the file without following a link')
+            .having((e) => e.osError, 'osError', isNull)));
+    expect(File(existing).readAsStringSync(), 'theirs',
+        reason: 'the file already at the path is unchanged');
+  });
 }
 
 Future<String> _readNoFollowInIsolate(String path) =>

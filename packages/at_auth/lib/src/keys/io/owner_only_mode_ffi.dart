@@ -40,6 +40,11 @@ bool? runningAsRootForTesting;
   return (ownerOnlyWrites: libc != null, osErrors: libc?.errors != null);
 }
 
+/// Stands in for a libc whose errno cannot be looked up when true, so a test
+/// drives the calls below as they run there.
+@visibleForTesting
+bool osErrorsUnavailableForTesting = false;
+
 /// Reads the file at [path] through one descriptor opened without following
 /// a symbolic link, taking its owner and group from that descriptor.
 ///
@@ -159,7 +164,7 @@ bool touchNoFollow(String path) {
 /// NOTE: best effort, since errno can change between the two calls; use it
 /// only in messages, never in a decision.
 OSError? _lastError(_Libc libc) {
-  final errors = libc.errors;
+  final errors = osErrorsUnavailableForTesting ? null : libc.errors;
   if (errors == null) return null;
   final code = errors.errno().value;
   return OSError(_describe(errors.strerror(code)), code);
