@@ -88,7 +88,7 @@ void main() {
     // connection wraps and stamps it, and the open comes back offline without
     // a network.
     final own = AtLookupImpl(atSign, InternetAddress.loopbackIPv4.address, port,
-        secondaryAddressFinder: ProxySecondaryAddressFinder(
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
             InternetAddress.loopbackIPv4.address, port),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: SecureSocketConfig()));

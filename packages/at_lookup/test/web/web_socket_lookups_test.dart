@@ -36,7 +36,7 @@ void main() {
     });
 
     test('a caller\'s secondaryAddressFinder wins', () {
-      final own = ProxySecondaryAddressFinder('h', 1);
+      final own = FixedSecondaryAddressFinder('h', 1);
       expect(
           build(webSocketLookUps(), secondaryAddressFinder: own)
               .secondaryAddressFinder,
@@ -44,39 +44,35 @@ void main() {
     });
   });
 
-  group('proxyWebSocketLookUps', () {
-    test('every atSign resolves to the proxy', () async {
-      final lookUp = build(proxyWebSocketLookUps(host: 'proxy', port: 8443));
+  group('fixedAddressWebSocketLookUps', () {
+    test(
+        'every atSign resolves to the one atServer, reached at '
+        'wss://<host>:<port>/ws', () async {
+      final lookUp =
+          build(fixedAddressWebSocketLookUps(host: 'atserver', port: 8443));
       final address =
           await lookUp.secondaryAddressFinder.findSecondary('@anyone');
-      expect('$address', 'proxy:8443');
-    });
 
-    test('each connection opens with from:<atSign> and nothing else', () async {
-      final executor = RecordingExecutor();
-      await build(proxyWebSocketLookUps(host: 'proxy', port: 8443))
-          .onConnect!(executor);
-      expect(executor.sent, ['from:@alice\n']);
-    });
-
-    test('onConnect replaces the from: preamble', () {
-      Future<void> own(AtCommandExecutor _) async {}
+      expect('$address', 'atserver:8443');
       expect(
-          build(proxyWebSocketLookUps(
-                  host: 'proxy', port: 8443, onConnect: own))
+          lookUp.transportFactory,
+          isA<WebSocketTransportFactory>()
+              .having((f) => f.path, 'path', '/ws')
+              .having((f) => f.scheme, 'scheme', 'wss'));
+    });
+
+    test('sends no preamble unless given an onConnect', () {
+      Future<void> own(AtCommandExecutor _) async {}
+
+      expect(
+          build(fixedAddressWebSocketLookUps(host: 'atserver', port: 8443))
+              .onConnect,
+          isNull);
+      expect(
+          build(fixedAddressWebSocketLookUps(
+                  host: 'atserver', port: 8443, onConnect: own))
               .onConnect,
           same(own));
     });
   });
-}
-
-class RecordingExecutor implements AtCommandExecutor {
-  final sent = <String>[];
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    sent.add(command);
-    return 'data:ok';
-  }
 }

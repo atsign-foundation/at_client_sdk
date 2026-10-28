@@ -11,7 +11,7 @@
 /// [CacheableSecondaryAddressFinder], which resolves an atSign to a host by
 /// asking the atDirectory over raw TLS. A caller that imports `at_lookup.dart`
 /// alone supplies both — its own [AtTransportFactory], and a
-/// [SecondaryAddressFinder] such as `ProxySecondaryAddressFinder`.
+/// [SecondaryAddressFinder] such as `FixedSecondaryAddressFinder`.
 library;
 
 import 'package:at_commons/at_commons.dart'

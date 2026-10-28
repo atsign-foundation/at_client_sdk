@@ -8,8 +8,8 @@
 ///
 /// A browser cannot open raw TLS, so [webSocketLookUps] asks the atDirectory
 /// over HTTPS and opens `wss://` straight to the atServer, which upgrades
-/// `/ws` on its own TLS port. [proxyWebSocketLookUps] sends every atSign
-/// through one proxy instead, for development.
+/// `/ws` on its own TLS port. [fixedAddressWebSocketLookUps] skips the
+/// atDirectory and connects every atSign to one atServer, for development.
 library;
 
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
@@ -54,15 +54,13 @@ AtLookUpFactory webSocketLookUps({
         finderFor: (rootDomain) => HttpsSecondaryAddressFinder(
             rootDomain.rootDomain,
             port: directoryPort),
-        onConnectFor: (_) => onConnect);
+        onConnect: onConnect);
 
-/// An [AtLookUpFactory] for development, with every atSign resolving to the
-/// proxy at `wss://host:port` + [path].
+/// An [AtLookUpFactory] for development, connecting every atSign to the
+/// atServer at `wss://host:port` + [path] without asking the atDirectory.
 ///
-/// Each connection opens with [proxyPreamble] for its atSign, which tells
-/// the proxy which atServer to reach, unless [onConnect] is given to run
-/// instead. The proxy ends TLS and so sees the session in the clear.
-AtLookUpFactory proxyWebSocketLookUps({
+/// [onConnect] runs on each connection before anything else is sent on it.
+AtLookUpFactory fixedAddressWebSocketLookUps({
   required String host,
   required int port,
   String path = '/ws',
@@ -70,23 +68,13 @@ AtLookUpFactory proxyWebSocketLookUps({
 }) =>
     _webSocketLookUps(
         path: path,
-        finderFor: (_) => ProxySecondaryAddressFinder(host, port),
-        onConnectFor: (atSign) => onConnect ?? proxyPreamble(atSign));
-
-/// Sends `from:<atSign>` on a connection, which tells a proxy fronting many
-/// atServers which one the connection is for.
-Future<void> Function(AtCommandExecutor connection) proxyPreamble(
-        String atSign) =>
-    (connection) async {
-      await connection.sendSync('from:$atSign\n');
-    };
+        finderFor: (_) => FixedSecondaryAddressFinder(host, port),
+        onConnect: onConnect);
 
 AtLookUpFactory _webSocketLookUps({
   required String path,
   required SecondaryAddressFinder Function(AtRootDomain rootDomain) finderFor,
-  required Future<void> Function(AtCommandExecutor connection)? Function(
-          String atSign)
-      onConnectFor,
+  required Future<void> Function(AtCommandExecutor connection)? onConnect,
 }) {
   final transport = webSocketTransport(path: path);
   return ({
@@ -103,6 +91,6 @@ AtLookUpFactory _webSocketLookUps({
         transport: transport,
         secondaryAddressFinder: secondaryAddressFinder ?? finderFor(rootDomain),
         clientConfig: clientConfig,
-        onConnect: onConnectFor(atSign),
+        onConnect: onConnect,
       );
 }

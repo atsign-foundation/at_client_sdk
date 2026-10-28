@@ -27,12 +27,13 @@ non-optional.
 
 - `WebSocketTransport.inbound` is bounded in bytes. On overflow the connection is closed
   and a warning is logged.
-- `flush()` waits for `bufferedAmount == 0`, bounded by `flushTimeout`.
+- `flush()` waits while more than 64 KiB is queued (`bufferedAmount`), bounded by
+  `flushTimeout`; a smaller command returns at once.
 - `add()` throws `AtIOException` on a socket that is not open.
 - The `AtTransport` and `notifications` docs state the web exception to TCP back-pressure.
 
-**Proxy path is dev-only:** `proxyWebSocketLookUps(host:, port:)` with the
-`from:<atSign>` preamble. A proxy ends TLS and sees the session in the clear.
+**Fixed-address path is dev-only:** `fixedAddressWebSocketLookUps(host:, port:)`
+connects every atSign to one atServer without asking the atDirectory.
 
 ## Residual
 
