@@ -46,12 +46,21 @@ abstract class BaseConnection extends AtConnection {
     }
   }
 
-  @Deprecated('Removed in 4.0.0, where a connection is read through its '
-      'inbound stream and written through write()')
+  @Deprecated('Read through BaseConnection.inbound and write raw bytes '
+      'through BaseConnection.add(). Removed in 4.0.0.')
   @override
   Socket getSocket() {
     return _socket;
   }
+
+  /// The bytes arriving from the far end: the socket itself, so pausing a
+  /// subscription to it reaches the far end.
+  Stream<List<int>> get inbound => getSocket();
+
+  /// Writes raw bytes, without waiting for them to leave.
+  ///
+  /// Unlike [write], does not update [AtConnectionMetaData.lastAccessed].
+  void add(List<int> bytes) => getSocket().add(bytes);
 
   @override
   Future<void> write(String data) async {
@@ -60,8 +69,8 @@ abstract class BaseConnection extends AtConnection {
       throw ConnectionInvalidException('write(): Connection is invalid');
     }
     try {
-      _socket.write(data);
-      await _socket.flush();
+      getSocket().write(data);
+      await getSocket().flush();
       getMetaData()!.lastAccessed = DateTime.now().toUtc();
     } on Exception {
       getMetaData()!.isStale = true;
