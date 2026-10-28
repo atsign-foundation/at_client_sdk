@@ -167,12 +167,15 @@ abstract interface class AtLookUp {
   /// Default signing algorithm for pkam signature is [SigningAlgoType.rsa2048] and default hashing algorithm is [HashingAlgoType.sha256]
   ///
   /// Optionally pass enrollmentId if the client is enrolled using APKAM
-  Future<bool> pkamAuthenticate({String? enrollmentId});
+  Future<bool> pkamAuthenticate(
+      {@Deprecated('Name the enrollment in the AtAuthenticator instead. '
+          'Removed in 4.0.0.')
+      String? enrollmentId});
 
   /// Generates digest using from verb response and [secret] and performs a
   /// CRAM authentication to secondary server
-  @Deprecated('Authenticate with an AtAuthenticator: at_auth 4 builds one with '
-      'authenticatorForCramSecret(). Removed in 4.0.0')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   Future<bool> cramAuthenticate(String secret);
 
   /// Closes this lookup's connection: the next call opens a new one and
@@ -191,18 +194,18 @@ abstract interface class AtLookUp {
   /// material to authenticate. Callers that read this for crypto which is not
   /// authentication should be handed their own key material - that is what
   /// at_auth EnrollmentApprover.approve takes its approverKeys for.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   set atChops(AtChops? atChops);
 
   OutboundConnection? get connection;
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   AtChops? get atChops;
 
+  @Deprecated('Pass the SecondaryAddressFinder when building the lookup. '
+      'Removed in 4.0.0.')
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
@@ -212,27 +215,23 @@ abstract interface class AtLookUp {
   /// Deprecated together with [hashingAlgoType]: the two are read on the same
   /// lines when the PKAM signature is built, so they are one setting and they
   /// move together.
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   set signingAlgoType(SigningAlgoType signingAlgoType);
 
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   SigningAlgoType get signingAlgoType;
 
   /// Hashing algorithm for pkam signature
   ///
   /// Deprecated together with [signingAlgoType]; see the note there.
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   set hashingAlgoType(HashingAlgoType hashingAlgoType);
 
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   HashingAlgoType get hashingAlgoType;
 
   /// EnrollmentId has to be set for clients that are enrolled through APKAM.
@@ -241,22 +240,20 @@ abstract interface class AtLookUp {
   /// deliberately not [AtConnectionMetaData.authenticatedAsEnrollmentId] -
   /// what a live socket actually authenticated as. That distinction survives
   /// the deprecation; the two are not interchangeable.
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
+  @Deprecated('Name the enrollment in the AtAuthenticator passed to '
+      'AtLookUp.withSecureSocket. To ask "which enrollment am I", read '
+      'your own client state - not this field, and not '
       'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
       'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
+      'authentication will use. Removed in 4.0.0.')
   set enrollmentId(String? enrollmentId);
 
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
+  @Deprecated('Name the enrollment in the AtAuthenticator passed to '
+      'AtLookUp.withSecureSocket. To ask "which enrollment am I", read '
+      'your own client state - not this field, and not '
       'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
       'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
+      'authentication will use. Removed in 4.0.0.')
   String? get enrollmentId;
 }
 
