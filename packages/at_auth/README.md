@@ -249,8 +249,9 @@ Persistence has three verbs:
   file exists, `flush` first validates that nothing it holds would be lost
   (key material is never removed — a key's `status` may only move forward,
   `active` → `retired` → `dead`), then rewrites it; flushing a legacy
-  file upgrades it in place to a typed-keys document. If the file does
-  not exist, `flush` creates it.
+  file upgrades it in place to a typed-keys document. `flush` refuses a
+  keyfile that holds no credential and names an atSign other than
+  `atsign`. If the file does not exist, `flush` creates it.
 
 **Do not hand-roll `read` → mutate → `flush`.** Those three steps
 interleave: two callers running concurrently both read the same state, and

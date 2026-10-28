@@ -22,6 +22,9 @@ pubspec_overrides.yaml
 # The upgrade check's released arms are pinned the same way, for the same
 # reason.
 !/tests/upgrade/released/*/pubspec.lock
+# The keyfile capture arms are pinned the same way: a fixture's provenance names
+# the lockfile it was written under.
+!/tests/keyfile_capture/released/*/pubspec.lock
 
 # Avoid committing generated Javascript files:
 *.dart.js

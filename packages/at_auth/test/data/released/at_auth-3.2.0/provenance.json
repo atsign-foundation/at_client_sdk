@@ -1,0 +1,28 @@
+{
+  "writer": {
+    "package": "at_auth",
+    "version": "3.2.0",
+    "archiveSha256": "722cfadbf0795c705d9aada225fc142e9cba7827356c0485fe62b7d454ade142"
+  },
+  "lockfile": {
+    "path": "tests/keyfile_capture/released/3.2.0/pubspec.lock",
+    "sha256": "dcd7ae5e8c14926dcfdc80159116b0b23fa93ddf68d3e24ddb244881f6079ce6"
+  },
+  "dart": "3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+  "command": "cd tests/keyfile_capture/released/3.2.0 && dart pub get && dart run bin/capture.dart <empty output directory>",
+  "capturedAt": "2026-10-27T15:56:52.832449Z",
+  "atsign": "@alice🛠",
+  "fixtures": [
+    {
+      "keyfile": {
+        "name": "alice_key.atKeys",
+        "sha256": "d5dbe83ee80f5f477e0554fc30710629c117b5700de4d3fe2cc39ebd9802d46a"
+      },
+      "readBack": {
+        "name": "alice_key.read_back.json",
+        "sha256": "d9a60258e1767a21a42fdc8c4ec312321d94615767dacdb1669ed21ac30797e7"
+      },
+      "passphrase": null
+    }
+  ]
+}
