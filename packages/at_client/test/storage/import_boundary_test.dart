@@ -26,7 +26,7 @@ const Map<String, _Backend> _backends = {
       'package:at_client/src/storage/sqlite/',
       'package:at_client/sqlite.dart',
     ],
-    owners: ['src/storage/sqlite/', 'sqlite.dart', 'src/storage/memory/'],
+    owners: ['src/storage/sqlite/', 'sqlite.dart'],
   ),
 };
 

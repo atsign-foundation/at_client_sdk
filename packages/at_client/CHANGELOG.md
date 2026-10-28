@@ -60,6 +60,9 @@
   holds: pass the atSign's keyfile, such as `FileAtKeysIo()`.
 - breaking: `AtReachability.noKeySource` is removed, since every client has a
   key source.
+- feat: `InMemoryAtClientStorage` is pure Dart and needs no native library. A
+  SQLite database held in memory is still
+  `SqliteAtClientStorage(..., dbPath: SqliteAtClientStorage.inMemoryPath)`.
 - chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
   read by nothing in at_client, and go in 5.0.0.
 - build: at_client no longer depends on archive, http,
