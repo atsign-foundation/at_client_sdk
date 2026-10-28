@@ -9,7 +9,7 @@ environment:
 dependencies:
   at_cli_commons:
     path: ..
-  at_client: ^3.8.0
+  at_client: ^4.0.0
   args: ^2.7.0
 
 # at_cli_commons is a path dependency, so its own floors must resolve locally

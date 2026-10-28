@@ -1,5 +1,6 @@
 ## 1.2.1-rc1
 
+- build: requires `at_client` ^4.0.0.
 - chore(deps): at_utils ^4.0.0-rc1
 
 ## 1.2.0

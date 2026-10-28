@@ -33,7 +33,7 @@ dependencies:
   at_policy:
     path: ..
   at_cli_commons: ^1.2.1
-  at_client: ^3.7.0
+  at_client: ^4.0.0
 
 dev_dependencies:
   lints: ^3.0.0

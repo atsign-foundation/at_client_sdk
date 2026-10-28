@@ -5,7 +5,7 @@
 - feat: `AtOnboardingPreference.secondaryAddressFinder` chooses how a client
   opened under it finds its atServer; unset, it asks the atDirectory at
   `rootDomain`, as before.
-- build: requires `at_client` ^3.15.0-rc9.
+- build: requires `at_client` ^4.0.0.
 - chore(deps): at_utils ^4.0.0-rc1
 
 ## 2.0.0-rc8

@@ -15,7 +15,7 @@ environment:
 dependencies:
   # The floor is the oldest released arm, so this package cannot compile
   # against anything that version lacks.
-  at_client: ">=3.14.0 <4.0.0"
+  at_client: ">=3.14.0 <5.0.0"
   at_commons: ">=5.5.0 <6.0.0"
   pq_matrix_scenario:
     path: ../../pq_matrix/scenario

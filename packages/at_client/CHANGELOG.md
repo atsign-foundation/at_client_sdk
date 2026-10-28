@@ -1,4 +1,4 @@
-## 3.15.0-rc9
+## 4.0.0
 
 - breaking: `AtClientUtil.findSecondary` is removed. Use
   `RemoteSecondary.findSecondaryUrl`.

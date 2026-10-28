@@ -10,7 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_client: ^3.7.0
+  at_client: ^4.0.0
   at_utils: ^4.0.0-rc1
   json_annotation: ^4.9.0
 
