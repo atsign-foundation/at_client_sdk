@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -15,6 +16,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
+import 'test_utils/hive_store.dart';
 
 class MockSecondaryKeyStore extends Mock
     implements AtKeyValueStore<String, AtData, AtMetaData?> {
@@ -77,6 +79,18 @@ class MockSecondaryKeyStore extends Mock
       const Stream.empty();
 }
 
+/// An in-memory storage whose keystore is [_keyStore], so a client built on
+/// it reads exactly what that keystore answers.
+class _MockKeyStoreStorage extends InMemoryAtClientStorage {
+  _MockKeyStoreStorage(this._keyStore, {required super.atSign})
+      : super(closedByClient: true);
+
+  final AtKeyValueStore<String, AtData, AtMetaData?> _keyStore;
+
+  @override
+  AtKeyValueStore<String, AtData, AtMetaData?> get keyStore => _keyStore;
+}
+
 class MockAtClientImpl extends Mock implements AtClientImpl {
   // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
   // non-nullable function type, and the services read it off the impl.
@@ -122,7 +136,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -139,7 +154,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -156,7 +172,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -175,7 +192,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -193,7 +211,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -224,7 +243,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -245,7 +265,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -271,7 +292,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -298,7 +320,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -325,7 +348,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -357,7 +381,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -406,7 +431,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       return LocalSecondary(atClient,
           keyStore: atClient.getLocalSecondary()!.keyStore);
@@ -473,22 +499,20 @@ void main() {
     late LocalSecondary localSecondary;
     late AtClient atClient;
     final String namespace = 'validate_get_keys';
-    final preference = AtClientPreference()
-      ..syncRegex = '.$namespace'
-      ..hiveStoragePath =
-          '*&@should not be used by these tests, we will mock local storage';
+    final preference = AtClientPreference()..syncRegex = '.$namespace';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
 
       mockSecondaryKeyStore = MockSecondaryKeyStore();
       atClient = await AtClientImpl.create(atSign, namespace, preference,
           atClientManager: AtClientManager(atSign),
-          localSecondaryKeyStore: mockSecondaryKeyStore);
+          storage: _MockKeyStoreStorage(mockSecondaryKeyStore, atSign: atSign));
       localSecondary =
           LocalSecondary(atClient, keyStore: mockSecondaryKeyStore);
     });
 
     tearDown(() async {
+      await atClient.stop();
       AtClientImpl.atClientInstanceMap.remove(atSign);
     });
 
@@ -958,7 +982,7 @@ void main() {
       remote = MockRemoteSecondary();
       final c = await AtClientImpl.create(
           atSign, 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
-          remoteSecondary: remote);
+          remoteSecondary: remote, storage: hiveStoreAt(atSign, 'test/hive'));
       c.syncService = MockSyncService();
       c.enrollmentId = enrollmentId;
       return c;

@@ -18,6 +18,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
 
 void main() {
   const storageDir = 'test/hive';
@@ -35,6 +36,7 @@ void main() {
       'wavi',
       preference,
       atClientManager: atClientManager,
+      storage: hiveStoreFor(atSign, preference),
     );
     atClient.syncService = MockSyncService();
     // NOTE: with no [syncQueue] the client's own queue, as its storage holds

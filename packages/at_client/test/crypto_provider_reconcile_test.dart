@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
+import 'test_utils/hive_store.dart';
 
 /// Minimal provider — registration is all this test exercises; encrypt/decrypt
 /// are never invoked here.
@@ -33,15 +34,17 @@ void main() {
         'creating the same atSign again with a new provider config adopts it '
         'onto the cached client', () async {
       final atSign = '@cryptoreconcile';
+      final storage = hiveStoreAt(atSign, 'test/hive');
 
-      final first =
-          await AtClientImpl.create(atSign, 'wavi', prefWith('providerA'))
-              as AtClientImpl;
+      final first = await AtClientImpl.create(
+              atSign, 'wavi', prefWith('providerA'), storage: storage)
+          as AtClientImpl;
       expect(CryptoConfig.forClient(first).lookup('providerA'), isNotNull,
           reason: 'first create() must adopt the preference provider');
 
-      final again =
-          await AtClientImpl.create(atSign, 'wavi', prefWith('providerB'));
+      final again = await AtClientImpl.create(
+          atSign, 'wavi', prefWith('providerB'),
+          storage: storage);
 
       expect(identical(again, first), isTrue,
           reason: 'the cached client is handed back, so _init does not run '

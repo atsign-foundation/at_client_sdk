@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 import 'test_util.dart';
+import '../test_utils/hive_store.dart';
 
 void main() {
   test('sync from remote to local', () async {
@@ -9,7 +10,10 @@ void main() {
     var preference = TestUtil.getAlicePreference();
     var atClientManager = AtClientManager.getInstance()
       ..use(await buildAtClient(
-          atSign: atsign, namespace: 'wavi', preference: preference));
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
@@ -31,7 +35,10 @@ void main() {
     var preference = TestUtil.getPreferenceLocal();
     var atClientManager = AtClientManager.getInstance()
       ..use(await buildAtClient(
-          atSign: atsign, namespace: 'wavi', preference: preference));
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     var syncService = atClient.syncService;
     // // To setup encryption keys

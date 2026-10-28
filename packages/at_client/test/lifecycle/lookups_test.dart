@@ -13,6 +13,7 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -94,7 +95,8 @@ void main() {
         atSign: '@lookups',
         namespace: 'wavi',
         preference: preference(),
-        lookUps: recording) as AtClientImpl;
+        lookUps: recording,
+        storage: hiveStoreFor('@lookups', preference())) as AtClientImpl;
 
     expect(client.getRemoteSecondary()!.atLookUp, same(built.first),
         reason: 'the client\'s own connection');
@@ -115,7 +117,8 @@ void main() {
     final client = await buildAtClient(
         atSign: '@nofactory',
         namespace: 'wavi',
-        preference: preference()) as AtClientImpl;
+        preference: preference(),
+        storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;
 
     expect(client.getRemoteSecondary()!.atLookUp, isA<AtLookupImpl>());
     expect(
@@ -133,7 +136,8 @@ void main() {
     final client = await Atsign('@opened').open(
         keys: await typedKeyfile('@opened', enrollmentId: 'primary'),
         preference: preference(),
-        lookUps: recording);
+        lookUps: recording,
+        storage: hiveStoreFor(Atsign('@opened'), preference()));
 
     expect(client.connection.current.isOnline, isTrue,
         reason: 'the factory\'s mock said yes to the PKAM');

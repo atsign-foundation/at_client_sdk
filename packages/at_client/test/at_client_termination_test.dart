@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 AtClientPreference _createPreference(String storagePath) =>
     AtClientPreference()..hiveStoragePath = 'test/hive/$storagePath';
@@ -17,6 +18,8 @@ Future<AtClient> _buildAtClient(String atSign) => buildAtClient(
       atSign: atSign,
       namespace: 'test',
       preference: _createPreference(atSign.replaceAll('@', '')),
+      storage:
+          hiveStoreFor(atSign, _createPreference(atSign.replaceAll('@', ''))),
     );
 
 void main() {
@@ -41,6 +44,8 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_integration'),
+            storage:
+                hiveStoreFor(atSign, _createPreference('stop_integration')),
           ) as AtClientImpl;
 
           expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
@@ -77,6 +82,7 @@ void main() {
             'test',
             _createPreference('stop_errors'),
             remoteSecondary: mockRemoteSecondary,
+            storage: hiveStoreFor(atSign, _createPreference('stop_errors')),
           ) as AtClientImpl;
           await atClient.stop();
           expect(atClient.isStopped, true);

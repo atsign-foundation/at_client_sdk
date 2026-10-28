@@ -9,15 +9,12 @@ import 'package:path_provider/path_provider.dart';
 /// under the preference's `hiveStoragePath` while the app sets it, or under
 /// the app's support directory, the one at_client_mobile's examples gave
 /// `hiveStoragePath`, so an app that followed them finds its store.
-///
-/// Null when [preference] asks for no local store and none was passed, which
-/// at_client refuses.
-Future<AtClientStorage?> storageOrDefault(
+Future<AtClientStorage> storageOrDefault(
   String atSign,
   AtClientPreference preference,
   AtClientStorage? storage,
 ) async {
-  if (storage != null || !preference.isLocalStoreRequired) return storage;
+  if (storage != null) return storage;
   final path =
       // ignore: deprecated_member_use
       preference.hiveStoragePath ??

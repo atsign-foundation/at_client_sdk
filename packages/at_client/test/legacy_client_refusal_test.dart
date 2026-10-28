@@ -18,6 +18,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 void main() {
   const atSign = '@alice';
@@ -86,6 +87,7 @@ void main() {
       remoteSecondary: remoteSecondary,
       atKeysIo: await keyfileHolding(atSign,
           selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus='),
+      storage: hiveStoreAt(atSign, storageDir),
     );
 
     records[record('pq_stamped').toString()] = (

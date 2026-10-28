@@ -12,6 +12,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -118,7 +119,8 @@ void main() {
         app: 'wavi',
         device: 'laptop',
         onProgress: (event) => progress.add(event.msg),
-        atLookUp: server.lookUp);
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     final keys = await store.read(atSign);
     expect(keys.holdsAuthenticationMaterial, isTrue);
@@ -167,6 +169,7 @@ void main() {
         appName: 'wavi',
         deviceName: 'pq-native',
         manager: manager,
+        storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp);
     expect(adopted, same(manager));
 
@@ -195,7 +198,8 @@ void main() {
             keys: InMemoryAtKeysIo(),
             preference: await preference(),
             provisioningBudget: const Duration(milliseconds: 600),
-            provisioningPollInterval: const Duration(milliseconds: 100)),
+            provisioningPollInterval: const Duration(milliseconds: 100),
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtTimeoutException>()));
     expect(DateTime.now().difference(started),
         lessThan(const Duration(seconds: 10)),
@@ -211,7 +215,8 @@ void main() {
             cramSecret: 'not-it',
             keys: store,
             preference: await preference(),
-            atLookUp: server.lookUp),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
             'message', startsWith('Cram authentication failed for $atSign'))));
     await expectLater(
@@ -219,28 +224,6 @@ void main() {
         reason: 'nothing was minted for a secret the atServer refused');
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
-  });
-  test(
-      'a preference asking for no local store, with none passed, is refused '
-      'before the CRAM secret is spent', () async {
-    final server = atServer();
-    final pref = await preference()
-      ..isLocalStoreRequired = false;
-
-    await expectLater(
-        () => Atsign(atSign).activate(
-            cramSecret: cramSecret,
-            keys: InMemoryAtKeysIo(),
-            preference: pref,
-            app: 'wavi',
-            device: 'laptop',
-            atLookUp: server.lookUp),
-        throwsA(isA<ArgumentError>()));
-
-    expect(server.sent, isEmpty,
-        reason: 'refused after the activation, the one-time secret is spent '
-            'on keys no client can open; so the refusal comes first');
-    verifyNever(() => server.lookUp.pkamAuthenticate());
   });
 }
 

@@ -5,6 +5,8 @@
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.
+- fix: a dialog gives every client a store, so `ApkamActivationDialog` no
+  longer refuses a preference that sets `isLocalStoreRequired` false.
 - build: requires `at_client` ^3.15.0-rc9.
 - chore(deps): at_utils ^4.0.0-rc1
 

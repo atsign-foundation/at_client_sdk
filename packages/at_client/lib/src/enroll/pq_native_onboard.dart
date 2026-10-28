@@ -58,7 +58,7 @@ Future<AtClientManager> pqNativeOnboard({
   /// The store the activated client opens. An activation builds the
   /// atSign's first client, so there is no earlier holder to inherit
   /// from and the caller supplies it.
-  AtClientStorage? storage,
+  required AtClientStorage storage,
   AtLookupMuxable? atLookUp,
 }) async {
   if (atKeysIo is! WrittenAtKeysIo) {

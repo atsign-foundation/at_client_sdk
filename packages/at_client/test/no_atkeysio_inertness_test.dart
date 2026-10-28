@@ -16,6 +16,7 @@ library;
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:hive/hive.dart';
@@ -105,6 +106,8 @@ void main() {
         ..hiveStoragePath = storageDir,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
+      storage: HiveAtClientStorage(
+          atSign: atSign, storagePath: storageDir, closedByClient: true),
       // Deliberately NO atKeysIo — its absence is the property under test.
     );
     await untilStartupChainDone();
@@ -140,6 +143,8 @@ void main() {
         ..hiveStoragePath = storageDir,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
+      storage: HiveAtClientStorage(
+          atSign: atSign, storagePath: storageDir, closedByClient: true),
     );
     await untilStartupChainDone();
     events.clear();

@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:test/test.dart';
 
@@ -34,7 +35,11 @@ void main() {
     final preference = AtClientPreference();
     await expectLater(
         () => buildAtClient(
-            atSign: atSign, namespace: namespace, preference: preference),
+            atSign: atSign,
+            namespace: namespace,
+            preference: preference,
+            storage:
+                HiveAtClientStorage(atSign: atSign, storagePath: 'test/hive')),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 

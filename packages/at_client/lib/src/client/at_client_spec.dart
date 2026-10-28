@@ -132,10 +132,9 @@ abstract class AtClient {
   /// connection, whose state ends as `offline(stopped)`. Every connection the
   /// client opened is closed by the time this returns, the monitor's and
   /// sync's included, and so is one it was handed. The client's claim on its
-  /// storage is released; storage built with `closedByClient: true`, and the
-  /// Hive store opened from `preference.hiveStoragePath`, is closed, while
-  /// storage the caller supplied otherwise stays open for the caller to
-  /// close.
+  /// storage is released; storage built with `closedByClient: true` is
+  /// closed, while storage the caller supplied otherwise stays open for the
+  /// caller to close.
   ///
   /// Does not drain: work in flight is not awaited, and fails with
   /// [StoppedException] where the stop cut it off. A sync round is abandoned

@@ -7,6 +7,7 @@ import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 /// Two AtClients for one atSign, side by side in one process, each given its
 /// own `hiveStoragePath`.
@@ -47,6 +48,7 @@ void main() {
         ..isLocalStoreRequired = true
         ..syncRegex = ''
         ..hiveStoragePath = path,
+      storage: hiveStoreAt(atSign, path),
     );
     // NOTE: AtClientImpl.create leaves the sync service to its caller - only
     // AtClientManager wires one - and a write on a client without one is

@@ -158,7 +158,7 @@ abstract class AtServiceFactory {
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
   });
 
   Future<NotificationService> notificationService(
@@ -186,7 +186,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
   }) async {
     return await AtClientImpl.create(
       atSign,

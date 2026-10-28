@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 void main() {
   String currentAtSign = '@alice';
@@ -30,7 +31,8 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
-            selfEncryptionKey: AESKey.generate(32).key));
+            selfEncryptionKey: AESKey.generate(32).key),
+        storage: hiveStoreFor(currentAtSign, atClientPreference));
     atClient.syncService = MockSyncService();
 
     // During decryption, fetches the encryption public key from local keystore.
@@ -40,7 +42,11 @@ void main() {
         encryptionKeyPair.atPublicKey.publicKey);
   });
 
-  tearDownAll(() {
+  // NOTE: each test's client is built from keys of its own, so it gets a
+  // store of its own too; one test's shared-key copies are unreadable to the
+  // next.
+  tearDown(() async {
+    await atClient.stop();
     Directory('test/unit_test_storage').deleteSync(recursive: true);
   });
 

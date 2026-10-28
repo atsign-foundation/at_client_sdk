@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 
 import 'test_util.dart';
+import '../test_utils/hive_store.dart';
 
 void main() async {
   try {
@@ -9,7 +10,8 @@ void main() async {
       ..use(await buildAtClient(
           atSign: atSign,
           namespace: 'wavi',
-          preference: TestUtil.getAlicePreference()));
+          preference: TestUtil.getAlicePreference(),
+          storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
     final atClient = atClientManager.atClient;
     // Option 1. Get string keys and convert to AtKey
     var result = await atClient.getKeys();

@@ -35,6 +35,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recording_remote.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -150,7 +151,7 @@ void main() {
                 'status': 'approved',
               }
             }),
-        atKeysIo: keysIo,
+        atKeysIo: keysIo, storage: hiveStoreAt(atSign, storageDir),
       );
 
   /// Files a client data signing key for `e-1` in [io], so its `_apsk` lists

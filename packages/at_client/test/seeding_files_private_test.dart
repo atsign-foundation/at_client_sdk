@@ -22,6 +22,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/recording_remote.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -69,7 +70,7 @@ void main() {
         ..seedNamespaceKeys = true,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
-      atKeysIo: inner,
+      atKeysIo: inner, storage: hiveStoreAt(atSign, storageDir),
     );
 
     // NOTE: the mint publishes only after the private is durable, so the

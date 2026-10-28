@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
+import 'test_utils/hive_store.dart';
 
 /// A client that already exists keeps the rollout axes it was built under, and
 /// a caller handing over different ones is refused rather than ignored.
@@ -227,11 +228,14 @@ void main() {
     });
 
     test('and the cache actually asks it', () async {
-      final first = await AtClientImpl.create(atSign, 'wavi', signing());
+      final storage = hiveStoreFor(atSign, signing());
+      final first = await AtClientImpl.create(atSign, 'wavi', signing(),
+          storage: storage);
 
       await expectLater(
           AtClientImpl.create(atSign, 'wavi',
-              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
+              storage: storage),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
@@ -239,7 +243,9 @@ void main() {
       // every second create.
       expect(
           identical(
-              await AtClientImpl.create(atSign, 'wavi', signing()), first),
+              await AtClientImpl.create(atSign, 'wavi', signing(),
+                  storage: storage),
+              first),
           isTrue);
     });
 
@@ -247,7 +253,8 @@ void main() {
       // NOTE: the substrate read these axes at a startup that has already run,
       // so accepting a replacement would leave the client reporting a stage it
       // never applied.
-      final client = await AtClientImpl.create(atSign, 'wavi', preference());
+      final client = await AtClientImpl.create(atSign, 'wavi', preference(),
+          storage: hiveStoreFor(atSign, preference()));
 
       expect(
           () => client.setPreferences(preference(

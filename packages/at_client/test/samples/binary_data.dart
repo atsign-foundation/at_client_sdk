@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:path/path.dart';
 import 'test_util.dart';
+import '../test_utils/hive_store.dart';
 
 void main() async {
   try {
@@ -12,7 +13,8 @@ void main() async {
       ..use(await buildAtClient(
           atSign: atsign,
           namespace: 'wavi',
-          preference: TestUtil.getAlicePreference()));
+          preference: TestUtil.getAlicePreference(),
+          storage: hiveStoreFor(atsign, TestUtil.getAlicePreference())));
     var atClient = atClientManager.atClient;
     var imageLocation = 'image.jpg'; //path to your image file
     var imageData = getdata(imageLocation);

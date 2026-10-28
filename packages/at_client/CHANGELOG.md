@@ -46,6 +46,16 @@
   removed: open a client with `Atsign(atSign).open(...)` and make it current
   with `AtClientManager.getInstance().use(client)`, which does not stop the
   previous one.
+- breaking: every call that builds a client (`Atsign.open` and `activate`,
+  `PendingEnrollment.client`, `buildAtClient`, `selfRetrofit`,
+  `pqNativeOnboard`, `AtClientImpl.create`) takes a required `storage`.
+  at_client no longer opens a store under `hiveStoragePath`: to keep using
+  that store, pass `HiveAtClientStorage(atSign: ..., storagePath: <that
+  path>, closedByClient: true)`.
+- breaking: `AtClientImpl.create`'s `localSecondaryKeyStore` is removed; pass
+  a `storage`.
+- chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
+  read by nothing in at_client, and go in 5.0.0.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the

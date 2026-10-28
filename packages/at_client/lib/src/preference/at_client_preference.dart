@@ -233,16 +233,12 @@ class AtClientPreference {
     return Set.unmodifiable(algorithms);
   }
 
-  /// Local device path of hive storage, used when no [AtClientStorage] is
-  /// supplied to [buildAtClient].
-  ///
-  /// Setting this leaves the client owning its store: it opens the store and
-  /// closes it again when it stops. Supplying a bundle instead chooses the
-  /// backend as well as the location, and can hand the lifetime back with
-  /// `closedByClient: true`, so nothing is given up by supplying one.
-  @Deprecated('Supply an AtClientStorage instead, which chooses the backend as '
-      'well as the location; pass closedByClient: true to keep having the '
-      'client close it. Will be removed in the next major release.')
+  /// Read by nothing in at_client, which opens a client only on the
+  /// [AtClientStorage] it is given. at_onboarding_cli and at_client_flutter
+  /// still read it when an app gives them no storage.
+  @Deprecated('at_client ignores this: pass an AtClientStorage, such as '
+      'HiveAtClientStorage(storagePath: ..., closedByClient: true) for the '
+      'same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
   /// Syncing strategy of the client [SyncStrategy]
@@ -252,12 +248,13 @@ class AtClientPreference {
 
   bool _isLocalStoreRequired = true;
 
-  /// Read only when a client is passed neither a storage nor a keystore: true
-  /// opens the default store under [hiveStoragePath], and false is refused,
-  /// since every client keeps local storage.
+  /// Read by nothing: every client is given its storage.
+  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
+      'Removed in 5.0.0.')
   bool get isLocalStoreRequired => _isLocalStoreRequired;
 
-  @Deprecated("LocalStore is always required")
+  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
+      'Removed in 5.0.0.')
   set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
   /// Shared secret of the atSign

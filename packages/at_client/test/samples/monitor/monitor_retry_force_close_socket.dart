@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import '../test_util.dart';
+import '../../test_utils/hive_store.dart';
 
 void main() async {
   try {
@@ -8,7 +9,8 @@ void main() async {
       ..use(await buildAtClient(
           atSign: aliceAtSign,
           namespace: 'wavi',
-          preference: TestUtil.getAlicePreference()));
+          preference: TestUtil.getAlicePreference(),
+          storage: hiveStoreFor(aliceAtSign, TestUtil.getAlicePreference())));
 
     atClientManager.atClient.notificationService
         .subscribe()

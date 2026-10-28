@@ -19,6 +19,8 @@ class MockPendingEnrollment extends Mock implements PendingEnrollment {}
 
 class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
+class FakeAtClientStorage extends Fake implements AtClientStorage {}
+
 /// The three dialogs over the lifecycle verbs: a failure is shown and the
 /// dialog answers as it always has, and what reaches the verb is what the
 /// caller asked for. The verbs are async, so a failure reaches a dialog as a
@@ -29,6 +31,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(InMemoryAtKeysIo());
     registerFallbackValue(FakeAtClientPreference());
+    registerFallbackValue(FakeAtClientStorage());
     PathProviderPlatform.instance = FakePathProvider(supportPath);
   });
 
@@ -341,61 +344,6 @@ void main() {
         reason:
             'an app passing no storage gets this package\'s default, which '
             'the client closes when it stops',
-      );
-      verifyNever(
-        () => flows.enroll(
-          any(),
-          otp: any(named: 'otp'),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
-          namespaces: any(named: 'namespaces'),
-          keys: any(named: 'keys'),
-          preference: any(named: 'preference'),
-          signingAlgo: any(named: 'signingAlgo'),
-          keyExchangeMode: any(named: 'keyExchangeMode'),
-          lookUps: any(named: 'lookUps'),
-        ),
-      );
-    });
-    testWidgets('ApkamActivationDialog refuses a preference asking for no '
-        'local store before any request goes out', (tester) async {
-      // ignore: deprecated_member_use
-      final preference = AtClientPreference()..isLocalStoreRequired = false;
-      await pumpOpener(
-        tester,
-        (context) => ApkamActivationDialog(
-          atSign: '@alice',
-          rootDomain: AtRootDomain.atsignDomain,
-          appName: 'app',
-          deviceName: 'device',
-          namespaces: const {'*': 'rw'},
-          preference: preference,
-          keys: InMemoryAtKeysIo(),
-          themeData: ThemeData(),
-          flows: flows,
-        ),
-        (_) {},
-      );
-      await tester.tap(find.text('open'));
-      await tester.pump();
-
-      expect(
-        tester.takeException(),
-        isA<ArgumentError>(),
-        reason:
-            'at_client refuses this client; the dialog says so before '
-            'the passcode is spent on a request, not after the approver '
-            'has approved it',
-      );
-      verifyNever(
-        () => flows.resumeEnrollment(
-          any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
-          keys: any(named: 'keys'),
-          preference: any(named: 'preference'),
-          lookUps: any(named: 'lookUps'),
-        ),
       );
       verifyNever(
         () => flows.enroll(

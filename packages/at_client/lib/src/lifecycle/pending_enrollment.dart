@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
@@ -137,21 +136,17 @@ class PendingEnrollment {
 
   /// Waits for the decision, then opens a client on the completed keys.
   ///
-  /// A client it could not build for want of local storage is refused with
-  /// an [ArgumentError] before the wait starts.
-  ///
   /// The client is the caller's to stop. See `Atsign.open` for [preference],
   /// [namespace], [storage] and [connectBudget]; see [awaitApproval] for
   /// [retryInterval] and [maxRetries] and for what a denial does.
   Future<AtClient> client(
     AtClientPreference preference, {
     String? namespace,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    AtClientImpl.refuseWithoutStorage(atSign, preference, storage: storage);
     await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
     return atSign.open(
         keys: keys,

@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 /// A client that holds NO enrollment gives itself one — driven through
 /// `AtClientImpl.create`, not through the pieces.
@@ -95,7 +96,9 @@ void main() {
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
     await AtClientImpl.create(atSign, 'buzz', preferenceAt(posture, atSign),
-        remoteSecondary: mockRemote, atKeysIo: keysIo);
+        remoteSecondary: mockRemote,
+        atKeysIo: keysIo,
+        storage: hiveStoreFor(atSign, preferenceAt(posture, atSign)));
 
     final captured = <String>[];
     try {

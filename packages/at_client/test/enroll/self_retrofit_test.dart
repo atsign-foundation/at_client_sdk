@@ -11,6 +11,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -136,6 +137,7 @@ void main() {
         deviceName: 'laptop',
         namespaces: const {'wavi': 'rw'},
         signingAlgo: SigningAlgoType.mldsa65,
+        storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp);
 
     expect(client.enrollmentId, newId,
@@ -174,6 +176,7 @@ void main() {
         deviceName: 'laptop',
         namespaces: const {'wavi': 'rw'},
         signingAlgo: SigningAlgoType.mldsa65,
+        storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp);
 
     final submitted = server.sent.indexWhere(
@@ -223,7 +226,8 @@ void main() {
           });
           servers.add(server);
           return server.lookUp;
-        });
+        },
+        storage: hiveStoreAt(atSign, dir.path));
 
     expect(client.enrollmentId, newId,
         reason: 'the premise: the client retrofitted as it opened');

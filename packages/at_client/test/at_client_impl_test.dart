@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
+import 'test_utils/hive_store.dart';
 
 /// Stops and drops every cached client for [atSign], including those filed
 /// under `atSign|enrollmentId`.
@@ -57,13 +58,14 @@ void main() {
     });
 
     test('resolves to the client that superseded it', () async {
+      final storage = hiveStoreFor(atSign, pref());
       final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-new');
+          enrollmentId: 'enroll-new', storage: storage);
       AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
           '$atSign|enroll-new';
 
       final again = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old');
+          enrollmentId: 'enroll-old', storage: storage);
 
       expect(identical(again, settled), isTrue,
           reason: 'naming the id captured BEFORE a retrofit must reach the '
@@ -101,7 +103,7 @@ void main() {
           '$atSign|evicted';
 
       final built = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old');
+          enrollmentId: 'enroll-old', storage: hiveStoreFor(atSign, pref()));
 
       expect((built as AtClientImpl).enrollmentId, 'enroll-old');
       expect(AtClientImpl.atClientInstanceMap.containsKey('$atSign|enroll-old'),
@@ -132,14 +134,16 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test current atsign - backward compatibility', () async {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
-      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
@@ -148,7 +152,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
     });
   });
@@ -174,7 +179,10 @@ void main() {
     });
 
     Future<AtClient> build(String atSign) => buildAtClient(
-        atSign: atSign, namespace: namespace, preference: atClientPreference);
+        atSign: atSign,
+        namespace: namespace,
+        preference: atClientPreference,
+        storage: hiveStoreFor(atSign, atClientPreference));
 
     test('A test to verify change', () async {
       final atClientManager = AtClientManager.getInstance();
@@ -244,8 +252,10 @@ void main() {
         ..sharedBy = '@sender'
         ..sharedWith = '@receiver';
 
-      client = await buildAtClient(atSign: '@sender', preference: pref)
-          as AtClientImpl;
+      client = await buildAtClient(
+          atSign: '@sender',
+          preference: pref,
+          storage: hiveStoreFor('@sender', pref)) as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
       //this test is only to ensure that when this method is run
@@ -298,7 +308,8 @@ void main() {
           atSign: '@alice',
           namespace: 'wavi',
           preference: pref,
-          enrollmentId: testEnrollmentId);
+          enrollmentId: testEnrollmentId,
+          storage: hiveStoreFor('@alice', pref));
       expect(atClient.enrollmentId, testEnrollmentId);
     });
 
@@ -324,7 +335,8 @@ void main() {
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -362,7 +374,8 @@ void main() {
       final atClient = await buildAtClient(
           atSign: atSign,
           namespace: 'wavi',
-          preference: AtClientPreference()..hiveStoragePath = 'test/hive');
+          preference: AtClientPreference()..hiveStoragePath = 'test/hive',
+          storage: hiveStoreAt(atSign, 'test/hive'));
       expect(
           () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -377,7 +390,10 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       final atClient = await buildAtClient(
-          atSign: atSign, namespace: 'wavi', preference: pref);
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: pref,
+          storage: hiveStoreFor(atSign, pref));
       expect(
           () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -389,7 +405,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(atSign, pref));
 
       when(() => mockRemoteSecondary.executeCommand(
           any(that: startsWith('otp:put:ABC123')),
@@ -409,7 +426,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor('@alice', pref));
       var key = TestUtils.createRandomString(250);
       var atKey = AtKey.fromString('$key@alice');
 
@@ -442,6 +460,7 @@ void main() {
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
       final atKey = (AtKey.shared('phone',
               namespace: 'buzz', sharedBy: '@alice')
@@ -474,6 +493,7 @@ void main() {
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
       final atKey =
           (AtKey.shared('phone', namespace: 'buzz', sharedBy: '@alice')
@@ -527,6 +547,7 @@ void main() {
         preferences,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
       // No crypto config => the legacy default. The built-in legacy provider
       // is the runtime's fallback, so it is intentionally not in the config
@@ -557,6 +578,7 @@ void main() {
         preferences,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -572,6 +594,7 @@ void main() {
           ..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@ready'),
+        storage: hiveStoreAt('@ready', 'test/hive'),
       );
       expect(
           CryptoConfig.eraDefaultFor(ready)!
@@ -591,7 +614,8 @@ void main() {
             ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
           remoteSecondary: mockRemoteSecondary,
-          atKeysIo: await typedKeyfile('@alice'));
+          atKeysIo: await typedKeyfile('@alice'),
+          storage: hiveStoreFor('@alice', preferences));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       // Every gate, listed rather than sampled: this client does nothing at
@@ -653,7 +677,8 @@ void main() {
             ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
           remoteSecondary: mockRemoteSecondary,
-          atKeysIo: await typedKeyfile('@bob'));
+          atKeysIo: await typedKeyfile('@bob'),
+          storage: hiveStoreFor('@bob', preferences));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       expect([
@@ -685,6 +710,7 @@ void main() {
         preferences,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -709,6 +735,7 @@ void main() {
         preferences,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -737,6 +764,7 @@ void main() {
         preferences,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       expect(CryptoConfig.forClient(ac).lookup('test-provider'),
@@ -759,6 +787,7 @@ void main() {
           preferences,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: keysIo,
+          storage: hiveStoreFor('@alice', preferences),
         ),
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
@@ -768,6 +797,7 @@ void main() {
         'adopts the new crypto config when a cached AtClient is re-used with '
         'an updated preference', () async {
       // First creation registers only the legacy provider.
+      final storage = hiveStoreAt('@alice', 'test/hive');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -776,6 +806,7 @@ void main() {
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
       expect(CryptoConfig.forClient(ac1).lookup('late-provider'), isNull);
 
@@ -793,6 +824,7 @@ void main() {
           ),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
 
       expect(identical(ac1, ac2), true);
@@ -808,6 +840,7 @@ void main() {
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: keysIo,
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
 
       expect(identical(ac.atKeysIo, keysIo), true);
@@ -821,6 +854,7 @@ void main() {
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
 
       expect(ac.atKeysIo, isNull);
@@ -830,12 +864,14 @@ void main() {
         'cached re-use retains the original atKeysIo (no adoption, unlike '
         'crypto config)', () async {
       final firstKeysIo = await typedKeyfile('@alice');
+      final storage = hiveStoreAt('@alice', 'test/hive');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: firstKeysIo,
+        storage: storage,
       );
 
       AtClient ac2 = await AtClientImpl.create(
@@ -844,6 +880,7 @@ void main() {
         AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
 
       expect(identical(ac1, ac2), true);

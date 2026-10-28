@@ -63,9 +63,7 @@ extension AtsignLifecycle on Atsign {
   /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
   ///
   /// [namespace] defaults to the preference's. [storage] is the client's
-  /// local storage, borrowed unless it was built with `closedByClient: true`;
-  /// with none, a Hive store opens under `preference.hiveStoragePath`, and
-  /// with no path either the open is refused with an [ArgumentError].
+  /// local storage, borrowed unless it was built with `closedByClient: true`.
   /// [lookUps] builds every connection the client opens - its own, its
   /// sync's, its monitor's - and is how an application chooses the transport
   /// or a proxy convention; with none, TLS on TCP from the preference.
@@ -86,7 +84,7 @@ extension AtsignLifecycle on Atsign {
     required AtKeysIo keys,
     required AtClientPreference preference,
     String? namespace,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     AtServiceFactory? serviceFactory,
@@ -169,9 +167,6 @@ extension AtsignLifecycle on Atsign {
   /// answers or [provisioningBudget] is spent, five minutes with none, and
   /// then throws [AtTimeoutException].
   ///
-  /// A client it could not build for want of local storage is refused with
-  /// an [ArgumentError] before the [cramSecret] is spent.
-  ///
   /// See [open] for [namespace], [storage], [lookUps], [atLookUp] and
   /// [connectBudget]; the activation runs on a connection [lookUps] builds,
   /// or on a supplied [atLookUp], which is taken as having already reached
@@ -181,7 +176,7 @@ extension AtsignLifecycle on Atsign {
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     String? namespace,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
     String app = firstEnrollmentAppName,
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
@@ -193,7 +188,6 @@ extension AtsignLifecycle on Atsign {
     AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    AtClientImpl.refuseWithoutStorage(this, preference, storage: storage);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);

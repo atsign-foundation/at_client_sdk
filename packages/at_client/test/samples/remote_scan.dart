@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 
 import 'test_util.dart';
+import '../test_utils/hive_store.dart';
 
 void main() async {
   try {
@@ -10,7 +11,10 @@ void main() async {
     final preference = TestUtil.getAlicePreference();
     var atClientManager = AtClientManager.getInstance()
       ..use(await buildAtClient(
-          atSign: atsign, namespace: 'wavi', preference: preference));
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     // auth scan
     var authScanResult = await atClient

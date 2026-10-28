@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 const _owner = '@alice';
 const _namespace = 'wavi';
@@ -142,6 +143,7 @@ void main() {
         AtClientPreference(posture: PqPosture.legacy)
           ..hiveStoragePath = '${storage.path}/hive',
         remoteSecondary: remote,
+        storage: hiveStoreAt(_owner, '${storage.path}/hive'),
       );
     });
 

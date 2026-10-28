@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/no_op_services.dart';
+import '../test_utils/hive_store.dart';
 
 /// A stopping client fails its own in-flight requests by closing their
 /// connections, and what those requests fail with says nothing about the
@@ -82,7 +83,8 @@ void main() {
             ..hiveStoragePath = dir.path
             ..monitorAutoStart = false,
           atLookUp: lookUp,
-          syncServiceBuilder: (_) => NoOpSyncService());
+          syncServiceBuilder: (_) => NoOpSyncService(),
+          storage: hiveStoreAt('@stopquiet', dir.path));
       final before = client.connection.current;
 
       await client.stop();

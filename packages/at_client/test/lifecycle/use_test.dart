@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
+import '../test_utils/hive_store.dart';
 
 class _RecordingListener implements AtSignChangeListener {
   final events = <SwitchAtSignEvent>[];
@@ -40,7 +41,8 @@ void main() {
         ..rootPort = 1
         ..hiveStoragePath = '${dir.path}/$atSign'
         ..namespace = 'lifecycle',
-      atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+      atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+      storage: hiveStoreAt(atSign, '${dir.path}/$atSign'));
 
   test(
       'use makes the client current, notifies the listeners, and stops '

@@ -3,6 +3,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 void main() {
   group('A group of switch atsign tests', () {
@@ -26,7 +27,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          atLookUp: mockAtLookUp);
+          atLookUp: mockAtLookUp,
+          storage: hiveStoreFor(aliceAtSign, alicePreference));
       expect(atClient.getCurrentAtSign(), aliceAtSign);
       expect(atClient.getRemoteSecondary()!.atLookUp, mockAtLookUp);
       expect(atClient.getRemoteSecondary()!.atLookUp.runtimeType, MockAtLookUp);
@@ -38,12 +40,18 @@ void main() {
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       atClientManager.use(await buildAtClient(
-          atSign: aliceAtSign, namespace: 'wavi', preference: alicePreference));
+          atSign: aliceAtSign,
+          namespace: 'wavi',
+          preference: alicePreference,
+          storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
       atClientManager.use(await buildAtClient(
-          atSign: bobAtSign, namespace: 'buzz', preference: bobPreference));
+          atSign: bobAtSign,
+          namespace: 'buzz',
+          preference: bobPreference,
+          storage: hiveStoreFor(bobAtSign, bobPreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
     });
 
@@ -53,14 +61,20 @@ void main() {
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       atClientManager.use(await buildAtClient(
-          atSign: aliceAtSign, namespace: 'wavi', preference: alicePreference));
+          atSign: aliceAtSign,
+          namespace: 'wavi',
+          preference: alicePreference,
+          storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
       final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
       atClientManager.use(await buildAtClient(
-          atSign: bobAtSign, namespace: 'buzz', preference: bobPreference));
+          atSign: bobAtSign,
+          namespace: 'buzz',
+          preference: bobPreference,
+          storage: hiveStoreFor(bobAtSign, bobPreference)));
       atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);

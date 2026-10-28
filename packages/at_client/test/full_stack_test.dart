@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 import 'test_utils/no_op_services.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
@@ -89,7 +90,8 @@ void main() {
               encryptionKeyPair: RsaKeyPair.create(
                   alicesRSAKeyPair.publicKey.toString(),
                   alicesRSAKeyPair.privateKey.toString()),
-              selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
+              selfEncryptionKey: selfEncryptionKey),
+          storage: hiveStoreFor('@alice', fullStackPrefs))) as AtClientImpl;
       localStore = atClient.getLocalSecondary()!.keyStore!;
       localSecondary = atClient.getLocalSecondary()!;
       atClient.syncService = NoOpSyncService();

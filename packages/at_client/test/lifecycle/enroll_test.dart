@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -178,7 +179,8 @@ void main() {
     expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
 
     final client = await pending.client(await preference(),
-        retryInterval: const Duration(milliseconds: 10));
+        retryInterval: const Duration(milliseconds: 10),
+        storage: hiveStoreFor(pending.atSign, await preference()));
 
     final completed = await store.read(atSign);
     expect(completed.enrollmentToAuthenticateAs(), enrollmentId);
@@ -197,8 +199,10 @@ void main() {
     await submit(store, atServer(decide: (_) async => true));
 
     await expectLater(
-        () async =>
-            Atsign(atSign).open(keys: store, preference: await preference()),
+        () async => Atsign(atSign).open(
+            keys: store,
+            preference: await preference(),
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
@@ -257,7 +261,8 @@ void main() {
     final pending = await submit(store, server);
 
     final client = await pending.client(await preference(),
-        retryInterval: const Duration(milliseconds: 10));
+        retryInterval: const Duration(milliseconds: 10),
+        storage: hiveStoreFor(pending.atSign, await preference()));
 
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, isEmpty);
@@ -295,7 +300,8 @@ void main() {
 
     await expectLater(
         () async => pending.client(await preference(),
-            retryInterval: const Duration(milliseconds: 10)),
+            retryInterval: const Duration(milliseconds: 10),
+            storage: hiveStoreFor(pending.atSign, await preference())),
         throwsA(isA<AtEnrollmentException>()
             .having((e) => e.message, 'message', contains('denied'))));
 

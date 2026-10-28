@@ -19,6 +19,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -70,7 +71,8 @@ void main() {
             selfEncryptionKey: selfEncryptionKey,
             enrollmentId: enrollmentId,
             apkamKeyPair: RsaKeyPair.generate()),
-        remoteSecondary: mockRemoteSecondary);
+        remoteSecondary: mockRemoteSecondary,
+        storage: hiveStoreAt(currentAtSign, 'test/hive'));
     atClient.syncService = MockSyncService();
 
     when(() => mockRemoteSecondary
@@ -130,7 +132,8 @@ void main() {
           atSign: '@enrolledbuild',
           namespace: 'wavi',
           preference: pref,
-          enrollmentId: enrollmentId);
+          enrollmentId: enrollmentId,
+          storage: hiveStoreFor('@enrolledbuild', pref));
       expect(atClient.enrollmentId, enrollmentId);
       await atClient.stop();
     });
@@ -161,7 +164,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -203,7 +207,8 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
-          remoteSecondary: secondary);
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
 
@@ -239,7 +244,8 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
-          remoteSecondary: secondary);
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
 
@@ -291,7 +297,8 @@ void main() {
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive',
-          remoteSecondary: secondary);
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(atSign, 'test/hive'));
 
       // Approval seals the approver's own encryption private key and
       // self-encryption key for the enrollee, so a client that holds neither
@@ -373,7 +380,8 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -392,6 +400,7 @@ void main() {
       expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
       expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+      await client.stop();
     });
 
     test(
@@ -418,7 +427,8 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
-          remoteSecondary: mockRemoteSecondary);
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;

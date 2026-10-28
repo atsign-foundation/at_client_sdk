@@ -104,7 +104,7 @@ Future<AtClient> selfRetrofit({
   required Map<String, String> namespaces,
   Duration? apkamKeysExpiryDuration,
   SigningAlgoType? signingAlgo,
-  AtClientStorage? storage,
+  required AtClientStorage storage,
   AtLookUp? atLookUp,
   AtLookUpFactory? lookUps,
   Duration connectBudget = AtConnection.defaultBudget,

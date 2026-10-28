@@ -9,6 +9,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:test/test.dart';
 
 import 'storage_contract.dart';
+import '../test_utils/hive_store.dart';
 
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
@@ -68,8 +69,8 @@ void main() {
   test(
       'a second storage for one atSign at the same location is refused; '
       'stop() releases it', () async {
-    final first = await AtClientImpl.create('@releaseguard', 'wavi', pref())
-        as AtClientImpl;
+    final first = await AtClientImpl.create('@releaseguard', 'wavi', pref(),
+        storage: hiveStoreFor('@releaseguard', pref())) as AtClientImpl;
     final sameStore =
         HiveAtClientStorage(atSign: '@releaseguard', storagePath: dir.path);
     await expectLater(
@@ -185,12 +186,12 @@ void main() {
   test(
       'a fresh create() after stop() gets a new client on freshly opened '
       'storage', () async {
-    final first = await AtClientImpl.create('@releasefresh', 'wavi', pref())
-        as AtClientImpl;
+    final first = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     final firstStorage = first.storage;
     await first.stop();
-    final again = await AtClientImpl.create('@releasefresh', 'wavi', pref())
-        as AtClientImpl;
+    final again = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     expect(identical(again, first), isFalse,
         reason: 'the stopped client left the instance map');
     expect(identical(again.storage, firstStorage), isFalse,
@@ -202,12 +203,14 @@ void main() {
       () async {
     final bad = pref()
       ..crypto = const CryptoConfig(defaultProviderId: 'no-such-provider');
-    await expectLater(AtClientImpl.create('@releasefail', 'wavi', bad),
+    await expectLater(
+        AtClientImpl.create('@releasefail', 'wavi', bad,
+            storage: hiveStoreFor('@releasefail', bad)),
         throwsA(isA<Exception>()),
         reason: 'the default provider is not registered, so create() throws '
             'after the storage was attached');
-    final ok = await AtClientImpl.create('@releasefail', 'wavi', pref())
-        as AtClientImpl;
+    final ok = await AtClientImpl.create('@releasefail', 'wavi', pref(),
+        storage: hiveStoreFor('@releasefail', pref())) as AtClientImpl;
     expect(ok.storage, isNotNull,
         reason: 'a failed build must not leave its claim behind, or no client '
             'for that atSign could ever be built in this isolate again');
@@ -268,8 +271,8 @@ void main() {
 
   test('a client with no injected storage still owns and closes its own',
       () async {
-    final client =
-        await AtClientImpl.create('@ownsits', 'wavi', pref()) as AtClientImpl;
+    final client = await AtClientImpl.create('@ownsits', 'wavi', pref(),
+        storage: hiveStoreFor('@ownsits', pref())) as AtClientImpl;
     final own = client.storage!;
     await client.stop();
     await expectLater(() => own.attach(FakeClient('@ownsits', null)),

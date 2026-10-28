@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
 
 /// The signing algorithm is a fact about the enrollment's key material — you
 /// cannot sign ML-DSA with an RSA key — so the client resolves it from the
@@ -30,6 +31,7 @@ void main() {
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     expect(ac.signingAlgoType, SigningAlgoType.mldsa65,
@@ -68,6 +70,7 @@ void main() {
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: io,
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     expect(ac.signingAlgoType, SigningAlgoType.rsa2048,
@@ -108,6 +111,7 @@ void main() {
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: _FailsFirstReadAtKeysIo(InMemoryAtKeysIo.holding(atSign, keys)),
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     // The resolution read threw, so the preference's rsa2048 stands — the

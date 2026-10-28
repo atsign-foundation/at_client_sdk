@@ -2,23 +2,20 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/memory.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData, AtKeyValueStore, AtMetaData;
-import 'package:at_persistence_secondary_server/hive.dart' show HiveInstances;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-import 'storage/storage_contract.dart' show FakeClient;
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -423,7 +420,8 @@ void main() {
           ..hiveStoragePath = dir.path
           ..namespace = 'wavi'
           ..monitorAutoStart = false,
-        lookUps: recording) as AtClientImpl;
+        lookUps: recording,
+        storage: hiveStoreAt(atSign, dir.path)) as AtClientImpl;
 
     test('a second stop waits for the teardown the first one started',
         () async {
@@ -451,72 +449,6 @@ void main() {
       for (final lookUp in built) {
         verify(() => lookUp.stop()).called(1);
       }
-    });
-
-    test('a client restarted after a stop tears down again on the next stop',
-        () async {
-      // A client built on a bare keystore is the one that can restart:
-      // releasing storage is what makes a stop final, and this one holds no
-      // storage of its own.
-      final keys = InMemoryAtClientStorage(atSign: '@restartable');
-      await keys.attach(FakeClient('@restartable', null));
-      addTearDown(keys.close);
-      final restartable = await AtClientImpl.create(
-          '@restartable',
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = dir.path
-            ..namespace = 'wavi'
-            ..monitorAutoStart = false,
-          localSecondaryKeyStore: keys.keyStore,
-          lookUps: recording) as AtClientImpl;
-      int teardowns() => recorded
-          .at('INFO')
-          .where((m) => m.contains('stopping at_client for @restartable'))
-          .length;
-      await restartable.stop();
-      expect(teardowns(), 1);
-
-      await restartable.start();
-      await restartable.stop();
-
-      expect(teardowns(), 2,
-          reason: 'the second stop ran a teardown of its own. Holding the '
-              'first one\'s future past a restart would answer this caller '
-              'from it and tear down nothing');
-    });
-
-    test('a stop closes the sync queue a bare-keystore client opened itself',
-        () async {
-      final keys = InMemoryAtClientStorage(atSign: '@ownqueue');
-      await keys.attach(FakeClient('@ownqueue', null));
-      addTearDown(keys.close);
-      final client = await AtClientImpl.create(
-          '@ownqueue',
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = dir.path
-            ..namespace = 'wavi'
-            ..monitorAutoStart = false,
-          localSecondaryKeyStore: keys.keyStore,
-          lookUps: recording) as AtClientImpl;
-      final queueBox = HiveBoxSyncQueueStore.boxNameFor('@ownqueue');
-      final hive = HiveInstances.forPath(dir.path);
-      await client.getLocalSecondary()!.executeVerb(UpdateVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = 'k'
-          ..sharedBy = '@ownqueue'
-          ..namespace = 'wavi')
-        ..value = 'v');
-      expect(hive.isBoxOpen(queueBox), isTrue,
-          reason: 'the write opened the queue, so the box named here is the '
-              'one the stop is asked about');
-
-      await client.stop();
-
-      expect(hive.isBoxOpen(queueBox), isFalse,
-          reason: 'no storage closes this queue for the client, and a '
-              'stopped client keeps nothing open');
     });
 
     test('closes every connection it opened: its own, sync\'s, the monitor\'s',

@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
 
 /// What a client built without a keyfile does with the key material it found
 /// in its own local store: says what it found, and authenticates with its PKAM
@@ -41,7 +42,8 @@ void main() {
       String name, Map<String, String> seed) async {
     final path = '$root/$name';
     AtClientImpl.atClientInstanceMap.clear();
-    final seeder = await AtClientImpl.create(atSign, 'wavi', pref(path));
+    final seeder = await AtClientImpl.create(atSign, 'wavi', pref(path),
+        storage: hiveStoreFor(atSign, pref(path)));
     seeder.syncService = MockSyncService();
     for (final entry in seed.entries) {
       await seeder.getLocalSecondary()!.putValue(entry.key, entry.value);
@@ -50,7 +52,8 @@ void main() {
 
     AtClientImpl.atClientInstanceMap.clear();
     logs.records.clear();
-    final client = await AtClientImpl.create(atSign, 'wavi', pref(path));
+    final client = await AtClientImpl.create(atSign, 'wavi', pref(path),
+        storage: hiveStoreFor(atSign, pref(path)));
     client.syncService = MockSyncService();
     return client as AtClientImpl;
   }

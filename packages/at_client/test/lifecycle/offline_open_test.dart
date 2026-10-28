@@ -6,6 +6,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
+import '../test_utils/hive_store.dart';
 
 /// A client is obtainable with no atServer reachable, and serves everything
 /// its local storage holds. The client lifecycle's ruling that `open` works
@@ -52,7 +53,8 @@ void main() {
         atSign: atSign,
         namespace: 'offline',
         preference: preference,
-        atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+        atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        storage: hiveStoreFor(atSign, preference));
     built.stop();
     // Generous on purpose: this pins that the build awaits no network round
     // trip, and a build that did would wait out the 30 s connect budget or
@@ -100,7 +102,8 @@ void main() {
               ..rootPort = await refusedPort()
               ..hiveStoragePath = dir.path
               ..namespace = 'offline',
-            atKeysIo: keys);
+            atKeysIo: keys,
+            storage: hiveStoreAt(atSign, dir.path));
 
     test('a granted namespace is written and read', () async {
       const atSign = '@enrolledoffline';

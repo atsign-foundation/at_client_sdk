@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -63,7 +64,8 @@ void main() {
         atSign: '@unattempted',
         namespace: 'lifecycle',
         preference: await preference(),
-        atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'));
+        atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'),
+        storage: hiveStoreFor('@unattempted', await preference()));
     final state = client.connection.current;
     expect(state.outcome, AtConnectionOutcome.offline);
     expect(state.cause, AtConnectionCause.unattempted,
@@ -74,7 +76,8 @@ void main() {
     const atSign = '@offline';
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
-        preference: await preference());
+        preference: await preference(),
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     final state = client.connection.current;
     expect(state.isOffline, isTrue);
@@ -92,7 +95,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        atLookUp: lookUpAnswering(() async => true));
+        atLookUp: lookUpAnswering(() async => true),
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     expect(client.connection.current.isOnline, isTrue);
     expect(await (client as AtClientImpl).hasBeenOnline(), isTrue,
@@ -111,7 +115,8 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            atLookUp: revoked),
+            atLookUp: revoked,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtOpenRefusedException>()
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)
             .having((e) => e.atSign, 'atSign', atSign)),
@@ -132,7 +137,8 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            atLookUp: missing),
+            atLookUp: missing,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtOpenRefusedException>().having(
             (e) => e.state.cause, 'cause', AtConnectionCause.noAtServer)));
   });
@@ -147,14 +153,18 @@ void main() {
     final first = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        atLookUp: lookUpAnswering(() async => true));
+        atLookUp: lookUpAnswering(() async => true),
+        storage: hiveStoreFor(Atsign(atSign), pref));
     expect(first.connection.current.isOnline, isTrue);
     await first.stop();
 
     final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
         'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
-    final second = await Atsign(atSign)
-        .open(keys: keys, preference: pref, atLookUp: revoked);
+    final second = await Atsign(atSign).open(
+        keys: keys,
+        preference: pref,
+        atLookUp: revoked,
+        storage: hiveStoreFor(Atsign(atSign), pref));
 
     final state = second.connection.current;
     expect(state.isRefused, isTrue,
@@ -174,7 +184,8 @@ void main() {
           atSign: atSign,
           namespace: 'lifecycle',
           preference: pref,
-          atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+          atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+          storage: hiveStoreFor(atSign, pref));
       final local = client.getLocalSecondary()!;
       // NOTE: the at-rest name 3.14.0 gave its sync cursor, which it built
       // with no namespace and its put stored under the preference's.
@@ -199,8 +210,11 @@ void main() {
       final keys = await typedKeyfile(atSign, enrollmentId: 'primary');
       await storeAsSynced(atSign, pref);
 
-      final client = await Atsign(atSign)
-          .open(keys: keys, preference: pref, atLookUp: revoked(atSign));
+      final client = await Atsign(atSign).open(
+          keys: keys,
+          preference: pref,
+          atLookUp: revoked(atSign),
+          storage: hiveStoreFor(Atsign(atSign), pref));
 
       expect(client.connection.current.isRefused, isTrue,
           reason: 'the store holds what this principal synced before the '
@@ -222,7 +236,8 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              atLookUp: revoked(atSign)),
+              atLookUp: revoked(atSign),
+              storage: hiveStoreFor(Atsign(atSign), pref)),
           throwsA(isA<AtOpenRefusedException>()),
           reason: 'the control: the records a client leaves say nothing about '
               'having been online, the cursor does, so the test above passes '
@@ -240,7 +255,8 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              atLookUp: revoked(atSign)),
+              atLookUp: revoked(atSign),
+              storage: hiveStoreFor(Atsign(atSign), pref)),
           throwsA(isA<AtOpenRefusedException>()),
           reason: 'a store this release has marked was online as the '
               'enrollment it names, and the cursor says nothing about which');
@@ -257,7 +273,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        atLookUp: lookUp);
+        atLookUp: lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.isOffline, isTrue);
 
     final flipped = expectLater(
@@ -283,7 +300,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        atLookUp: lookUp);
+        atLookUp: lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.cause, AtConnectionCause.unreachable);
 
     reachable = true;
@@ -306,7 +324,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        atLookUp: lookUp);
+        atLookUp: lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.cause, AtConnectionCause.unreachable);
 
     final state = await client.connection.awaitOnline(
@@ -332,7 +351,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        atLookUp: lookUp);
+        atLookUp: lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
     final started = DateTime.now();
 
     final state = await client.connection.awaitOnline(
@@ -363,7 +383,8 @@ void main() {
         namespace: 'lifecycle',
         preference: await preference(),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
-        atLookUp: lookUp) as AtClientImpl;
+        atLookUp: lookUp,
+        storage: hiveStoreFor(atSign, await preference())) as AtClientImpl;
 
     final state = await client.connection.awaitOnline(
         budget: const Duration(seconds: 5),
@@ -380,7 +401,8 @@ void main() {
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
         atLookUp: lookUpAnswering(() async => true),
-        serviceFactory: _NoSyncFactory());
+        serviceFactory: _NoSyncFactory(),
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     expect(client.syncService, isA<_NoSync>(),
         reason: 'the factory\'s sync service, not the default one');

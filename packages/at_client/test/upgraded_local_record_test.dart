@@ -14,6 +14,7 @@ import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/no_op_services.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
 
 class _FakeMonitor extends Fake implements Monitor {
   @override
@@ -100,8 +101,9 @@ void main() {
           ..namespace = namespace
           ..hiveStoragePath = dir.path,
         remoteSecondary: MockRemoteSecondary(),
-        atKeysIo: await keyfileHolding(atSign,
-            selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
+        atKeysIo:
+            await keyfileHolding(atSign, selfEncryptionKey: selfEncryptionKey),
+        storage: hiveStoreAt(atSign, dir.path))) as AtClientImpl;
     atClient.syncService = NoOpSyncService();
     store = atClient.getLocalSecondary()!.keyStore!;
     await atClient

@@ -42,9 +42,7 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -78,15 +76,14 @@ class AtClientImpl implements AtClient {
 
   @override
   Atsign get atSign => _atSign;
-  AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
 
-  /// The keystore and sync queue this client holds; null when an external
-  /// keystore was injected, storage is not required, or [stop] has released it.
+  /// The keystore and sync queue this client holds; null before [_init] runs
+  /// or once [stop] has released it.
   AtClientStorage? _storage;
 
-  /// Storage handed to this client by its caller, if any. Whether this client
-  /// closes it on [stop] is the bundle's own [AtClientStorage.closedByClient].
-  AtClientStorage? _injectedStorage;
+  /// The storage this client was built with. Whether this client closes it on
+  /// [stop] is the bundle's own [AtClientStorage.closedByClient].
+  late final AtClientStorage _injectedStorage;
 
   bool _storageReleased = false;
 
@@ -682,24 +679,22 @@ class AtClientImpl implements AtClient {
   /// ⚠️ **On a cache hit almost every argument here is ignored, silently.** The
   /// cache is static and keyed only by that pair, so a second call naming the
   /// same atSign and enrollment hands back the FIRST client — built with the
-  /// first caller's preference, storage path, collaborators and key source.
+  /// first caller's preference, collaborators and key source.
   /// What the second caller passed is dropped without a log line, and the only
   /// thing adopted from it is `preferences.crypto`, so that providers added
   /// after first creation take effect.
   ///
   /// Concretely, on a cache hit these do nothing: [remoteSecondary],
-  /// [encryptionService], [localSecondaryKeyStore], [atKeysIo],
-  /// [atLookUp], and every field of [preferences] except `crypto`. A
-  /// preference naming a different storage location is among them: a storage
-  /// bundle refuses a second open at a location already open, but on a cache
-  /// hit nothing opens, so the path is dropped.
+  /// [encryptionService], [atKeysIo], [atLookUp], and every field of
+  /// [preferences] except `crypto`.
   ///
   /// Two mismatches are **refused** rather than ignored: a [storage] the cached
   /// client does not hold, and a preference naming different rollout axes —
-  /// see [refuseChangedRolloutAxes]. A client it would build with no local
-  /// storage is refused as [refuseWithoutStorage] says. A test or an app
-  /// that needs a genuinely different client must not rely on passing
-  /// different arguments here.
+  /// see [refuseChangedRolloutAxes]. A test or an app that needs a genuinely
+  /// different client must not rely on passing different arguments here.
+  ///
+  /// [storage] is borrowed unless it was built with `closedByClient: true`, in
+  /// which case the client closes it when it stops.
   ///
   /// With [atKeysIo] the enrollment is the keys' own answer,
   /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -717,14 +712,11 @@ class AtClientImpl implements AtClient {
     AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
-    @Deprecated('Pass storage instead, such as InMemoryAtClientStorage from '
-        'package:at_client/memory.dart; removed in 4.0')
-    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
 
     /// When true, [enrollmentId], or what the keys name, is the principal
     /// exactly: a null means the atSign's own credential and never falls
@@ -733,15 +725,6 @@ class AtClientImpl implements AtClient {
     bool exactEnrollment = false,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
-
-    if (storage != null && localSecondaryKeyStore != null) {
-      throw ArgumentError.value(
-          'storage and localSecondaryKeyStore',
-          'storage',
-          'a storage bundle carries the keystore AND the sync queue, so an '
-              'injected keystore replaces it rather than combining with it. '
-              'Supply one or the other for $currentAtSign');
-    }
 
     if (atKeysIo != null) {
       final logger = AtSignLogger('AtClientImpl ($currentAtSign)');
@@ -774,16 +757,16 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
-      if (storage != null && !storage.isHeldBy(atClientImpl!)) {
+      if (!storage.isHeldBy(atClientImpl!)) {
         throw ArgumentError.value(
             storage,
             'storage',
             'the client already built for $currentAtSign does not hold this '
                 'storage, and a built client never changes storage. Pass the '
-                'storage it holds, or none');
+                'storage it holds');
       }
       refuseChangedRolloutAxes(
-          running: atClientImpl!.getPreferences(),
+          running: atClientImpl.getPreferences(),
           asked: preferences,
           cacheKey: cacheKey);
       await atClientImpl.start();
@@ -802,7 +785,6 @@ class AtClientImpl implements AtClient {
         preferences,
         remoteSecondary: remoteSecondary,
         encryptionService: encryptionService,
-        localSecondaryKeyStore: localSecondaryKeyStore,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         lookUps: lookUps,
@@ -833,58 +815,18 @@ class AtClientImpl implements AtClient {
     return atClientInstanceMap[filedKey];
   }
 
-  /// Throws the [ArgumentError] a client built from these arguments throws,
-  /// so a caller can refuse before an irreversible step, such as a CRAM
-  /// activation or an enrollment request, rather than after it. Every client
-  /// keeps local storage: a [storage], a [localSecondaryKeyStore] whose queue
-  /// lives under `preference.hiveStoragePath`, or the default store under
-  /// that path.
-  static void refuseWithoutStorage(
-    String atSign,
-    AtClientPreference preference, {
-    AtClientStorage? storage,
-    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
-  }) {
-    if (storage != null) return;
-    if (localSecondaryKeyStore != null) {
-      if (preference.hiveStoragePath != null) return;
-      throw ArgumentError(
-          'a client built on a bare keystore holds its sync queue under '
-              'preference.hiveStoragePath, and $atSign names none. Set it, '
-              'or pass a storage instead of the keystore',
-          'preference.hiveStoragePath');
-    }
-    if (!preference.isLocalStoreRequired) {
-      throw ArgumentError(
-          'every client keeps local storage, and none was passed for '
-              '$atSign. Pass a storage: InMemoryAtClientStorage, from '
-              'package:at_client/memory.dart, keeps nothing on disk',
-          'preference.isLocalStoreRequired');
-    }
-    if (preference.hiveStoragePath == null) {
-      throw ArgumentError(
-          'every client keeps local storage, and none was passed for '
-              '$atSign. Pass a storage, or set preference.hiveStoragePath '
-              'for the default Hive store',
-          'preference.hiveStoragePath');
-    }
-  }
-
   AtClientImpl._(
     String theAtSign,
     String? namespace,
     AtClientPreference preference, {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
-    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     this.enrollmentId,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
   }) {
-    refuseWithoutStorage(theAtSign, preference,
-        storage: storage, localSecondaryKeyStore: localSecondaryKeyStore);
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
@@ -899,7 +841,6 @@ class AtClientImpl implements AtClient {
       AtNetworkTimeouts.defaultTimeout =
           AtNetworkTimeouts.cap(preference.networkTimeout!);
     }
-    _localSecondaryKeyStore = localSecondaryKeyStore;
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
@@ -1012,24 +953,14 @@ class AtClientImpl implements AtClient {
     // NOTE: resolved before anything signs, so nothing signs with the
     // preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
-    AtSyncQueue? syncQueue;
-    if (_localSecondaryKeyStore == null) {
-      final injected = _injectedStorage;
-      final AtClientStorage storage;
-      if (injected != null) {
-        storage = injected;
-      } else {
-        storage = defaultStorageFor(_atSign, preference!.hiveStoragePath!);
-      }
-      await storage.attach(this);
-      _storage = storage;
-      syncQueue = storage.syncQueue;
-    }
+    final storage = _injectedStorage;
+    await storage.attach(this);
+    _storage = storage;
 
     localSecondary = LocalSecondary(
       this,
-      keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
-      syncQueue: syncQueue,
+      keyStore: storage.keyStore,
+      syncQueue: storage.syncQueue,
       onEvent: emitDataEvent,
     );
     if (_atKeysIo == null) {

@@ -5,6 +5,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
+import 'test_utils/hive_store.dart';
 
 /// `AtClientImpl.create` runs a client as the enrollment its keys authenticate
 /// as, and a caller's disagreeing id loses.
@@ -51,14 +52,16 @@ void main() {
   test('a legacy keyfile runs the client as its flat stored enrollment',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'));
+        atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
+        storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'stored-1');
   });
 
   test('a disagreeing id is ignored and the keys win', () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
         atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
-        enrollmentId: 'somebody-else');
+        enrollmentId: 'somebody-else',
+        storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'stored-1',
         reason: 'the keys decide; a caller cannot run a client as an '
             'enrollment its keys do not authenticate as');
@@ -72,7 +75,9 @@ void main() {
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        atKeysIo: io, enrollmentId: 'apkam-1');
+        atKeysIo: io,
+        enrollmentId: 'apkam-1',
+        storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'apkam-1',
         reason: 'no material, so nothing to derive from; the caller\'s id '
             'is the credential\'s');
@@ -81,7 +86,7 @@ void main() {
   test('a keyfile that predates enrollments runs the client as primary',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        atKeysIo: await keyfile());
+        atKeysIo: await keyfile(), storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'primary');
   });
 }
