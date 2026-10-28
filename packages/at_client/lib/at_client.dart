@@ -51,7 +51,6 @@ export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/notification_service.dart';
 export 'package:at_client/src/service/sync_service.dart';
 export 'package:at_client/src/util/at_client_util.dart';
-export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
 

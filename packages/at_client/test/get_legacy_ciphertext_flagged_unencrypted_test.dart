@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:crypton/crypton.dart';

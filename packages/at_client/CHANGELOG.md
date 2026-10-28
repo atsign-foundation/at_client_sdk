@@ -41,6 +41,8 @@
   `lookUps` you pass, `secureSocketLookUps(config: ...)`.
 - breaking: `AtClientPreference.enforceNamespace` is removed: every key but a
   `local:` one needs a namespace.
+- breaking: `EncryptionUtil` is no longer exported; use at_chops'
+  `AESEncryptionAlgo` and `RsaEncryptionAlgo`.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the

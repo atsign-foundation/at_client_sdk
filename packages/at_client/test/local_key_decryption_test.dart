@@ -4,6 +4,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 

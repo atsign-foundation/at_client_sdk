@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'test_utils.dart';
 import 'package:test/test.dart';
