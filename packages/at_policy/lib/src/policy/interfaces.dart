@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart' hide StringBuffer;
-import 'package:at_utils/at_logger.dart';
 import 'package:at_policy/src/policy/impl.dart';
 import 'package:at_policy/src/policy/models.dart';
 

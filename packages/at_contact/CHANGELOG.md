@@ -1,6 +1,6 @@
-## 3.1.1-rc1
+## 4.0.0
 
-- build: requires `at_client` ^4.0.0.
+- breaking: requires `at_client` ^4.0.0, so an app takes at_client 4 with it.
 - chore(deps): at_utils ^4.0.0-rc1
 
 ## 3.1.0
