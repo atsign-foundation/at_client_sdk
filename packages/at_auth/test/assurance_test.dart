@@ -711,11 +711,8 @@ void main() {
       });
     }
 
-    // The flat rewrite drops every typed container, so it is only taken when
-    // none holds anything — not just `keys`. A pending-only or snapshot-only
-    // container is no credential, so nothing else refuses its loss: the owner
-    // check is what keeps the typed header, and it must hold even when the
-    // caller names the atSign the keyfile names, as FileAtKeysIo always does.
+    // NOTE: typedWithoutMaterial() carries the fixture's flat secrets, so
+    // each keyfile these cases build holds a credential.
     for (final (shape, container) in <(String, Map<String, dynamic>)>[
       (
         'an enrollment snapshot with no keys',
@@ -731,8 +728,8 @@ void main() {
           'enrollments': [
             {
               'enrollmentId': 'e-1',
-              'keys': encodeAtKeysDocument(
-                  [_pendingAuthenticationMaterial('e-1')])
+              'keys':
+                  encodeAtKeysDocument([_pendingAuthenticationMaterial('e-1')])
             }
           ]
         }
