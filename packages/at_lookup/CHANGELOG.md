@@ -4,6 +4,9 @@
   and connects over `wss://`; `proxyWebSocketLookUps(host:, port:)` goes
   through a proxy instead.
 - feat: `AtLookUp.withTransport` builds a lookup over any transport.
+- fix: nothing else goes out on a connection until its `onConnect` has
+  finished, and a connection whose `onConnect` fails is closed, so the next
+  call opens one and runs `onConnect` again.
 - fix: in a browser, a connect to an atServer gives up after the network
   timeout, and closing a lookup stops a connect or atDirectory lookup still in
   progress.

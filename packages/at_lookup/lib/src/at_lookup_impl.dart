@@ -144,7 +144,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Future<void> createConnection() => _unlessStopped(_createConnection);
 
   Future<void> _createConnection() async {
-    var created = false;
     await _createConnectionMutex.acquire();
     try {
       _throwIfStopped();
@@ -183,16 +182,26 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           messageListener.onDisconnect = _onNotificationConnectionLost;
         }
         messageListener.listen();
-        created = true;
         logger.finer('New connection created OK');
+        // NOTE: under the mutex, so no command uses the connection before
+        // its preamble has run.
+        await _runOnConnect();
       }
     } finally {
       _createConnectionMutex.release();
     }
-    // NOTE: outside the mutex, and writing to the connection directly rather
-    // than through `_sendCommand`, which would come back here.
-    if (created && onConnect != null) {
-      await onConnect!(_ConnectionPreamble(this));
+  }
+
+  /// Runs [onConnect] on the connection just opened, closing it if
+  /// [onConnect] fails so that the next call opens one and runs it again.
+  Future<void> _runOnConnect() async {
+    final preamble = onConnect;
+    if (preamble == null) return;
+    try {
+      await preamble(_ConnectionPreamble(this));
+    } catch (_) {
+      await _closeConnection();
+      rethrow;
     }
   }
 

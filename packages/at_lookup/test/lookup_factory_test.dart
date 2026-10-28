@@ -114,6 +114,94 @@ void main() {
     await lookUp.close();
   });
 
+  test(
+      'a caller arriving while onConnect waits for its reply sends nothing '
+      'until onConnect has finished', () async {
+    final lookUp = AtLookUp.withSecureSocket(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain(host, 64),
+      authenticator: (executor) async {
+        await executor.sendSync('noop:auth\n');
+        return true;
+      },
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transportFactory),
+      onConnect: (connection) => connection.sendSync('from:@alice\n'),
+    );
+
+    final command = lookUp.executeCommand('noop:0\n')..ignore();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final transport = transportFactory.created.single;
+    await transport.settle();
+    expect(transport.written, ['from:@alice\n'],
+        reason: 'the premise: the preamble is out, waiting for its reply');
+
+    final authentication = lookUp.pkamAuthenticate()..ignore();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await transport.settle();
+
+    expect(transport.written, ['from:@alice\n'],
+        reason: 'pkamAuthenticate takes no request lock, so only the '
+            'connection lock keeps it off a connection whose preamble is '
+            'still waiting for its reply');
+
+    await transport.serverSends('data:challenge\n@alice@');
+    await transport.settle();
+    expect(transport.written, hasLength(3),
+        reason: 'the control: both callers go ahead once the preamble has '
+            'its reply');
+    expect(transport.written.first, 'from:@alice\n');
+
+    await lookUp.close();
+    await Future.wait([command, authentication].map((f) => f.then((_) {},
+        onError: (_) {})));
+  });
+
+  test(
+      'a connection whose onConnect fails is closed, and the next command '
+      'opens one and runs onConnect first', () async {
+    var attempts = 0;
+    final lookUp = AtLookUp.withSecureSocket(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain(host, 64),
+      authenticator: null,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transportFactory),
+      onConnect: (connection) async {
+        await connection.sendSync('from:@alice\n');
+        if (++attempts == 1) {
+          throw AtException('the proxy refused the preamble');
+        }
+      },
+    );
+
+    final first = expectLater(
+        lookUp.executeCommand('noop:0\n'),
+        throwsA(isA<AtException>().having((e) => e.message, 'message',
+            'the proxy refused the preamble')));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await transportFactory.created.single.settle();
+    await transportFactory.created.single.serverSends('data:no\n@alice@');
+    await first;
+    expect(transportFactory.created.single.written, ['from:@alice\n'],
+        reason: 'nothing goes out on a connection whose preamble failed');
+
+    final second = lookUp.executeCommand('noop:1\n');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(transportFactory.created, hasLength(2),
+        reason: 'the failed connection was closed, so a new one was opened');
+    await transportFactory.last.settle();
+    expect(transportFactory.last.written, ['from:@alice\n'],
+        reason: 'and onConnect ran on it before the command');
+    await transportFactory.last.serverSends('data:challenge\n@alice@');
+    await transportFactory.last.settle();
+    expect(transportFactory.last.written, ['from:@alice\n', 'noop:1\n']);
+    await transportFactory.last.serverSends('data:ok\n@alice@');
+    expect(await second, 'data:ok');
+
+    await lookUp.close();
+  });
+
   test('a lookup built with no onConnect sends the command first (control)',
       () async {
     final lookUp = AtLookUp.withSecureSocket(
