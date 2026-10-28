@@ -234,11 +234,11 @@ class AtClientPreference {
   }
 
   /// Read by nothing in at_client, which opens a client only on the
-  /// [AtClientStorage] it is given. at_onboarding_cli and at_client_flutter
+  /// [AtClientStorage] it is given. at_client_flutter's flows and dialogs
   /// still read it when an app gives them no storage.
   @Deprecated('at_client ignores this: pass an AtClientStorage, such as '
-      'HiveAtClientStorage(storagePath: ..., closedByClient: true) for the '
-      'same store. Removed in 5.0.0.')
+      'HiveAtClientStorage(atSign: ..., storagePath: ..., '
+      'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
   /// Syncing strategy of the client [SyncStrategy]
