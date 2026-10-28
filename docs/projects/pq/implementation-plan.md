@@ -443,8 +443,8 @@ and built on `gkc-pq-key-caching`*
    its route, and a failed one fails the write (`ck_sibling_copy_test.dart`).
    Found and fixed on the way: `AtClient.ensureReachable`, which the mint on
    demand goes through, minted on a client with no key source, publishing a
-   key whose private lived only in memory; it now answers `noKeySource`
-   (`no_atkeysio_inertness_test.dart`). Built: a sender holding no key
+   key whose private lived only in memory; at_client 4.0.0 gives every client
+   a key source, so no client is in that position. Built: a sender holding no key
    covering `ckNs` calls `ensureReachable(ckNs)` first, at the recipient's
    level rather than the value's own, and where that mints nothing the share
    goes without a copy and the warning names why. Built: a restart resumes a

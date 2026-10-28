@@ -7,8 +7,6 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show recordResolvedSigningAlgo;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -53,8 +51,8 @@ class CountingKeysIo extends InMemoryAtKeysIo {
   }
 }
 
-/// Where a client's signing keys come from, and what answers when the keyfile
-/// holds none.
+/// Where a client's signing keys come from: its keyfile, and never its local
+/// store.
 void main() {
   const atSign = '@alice';
   const enrollmentId = 'enroll-a';
@@ -91,12 +89,13 @@ void main() {
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
-  setUp(() {
+  setUp(() async {
     atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
-    when(() => atClient.atKeysIo).thenReturn(null);
+    when(() => atClient.atKeysIo)
+        .thenReturn(await keySource(withAuthentication));
 
-    // The pair a client built without a key source authenticates with.
+    // The same pair in the local store, which signing never reads.
     final localSecondary = MockLocalSecondary();
     when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
     when(() => localSecondary.getPkamPublicKey())
@@ -114,15 +113,6 @@ void main() {
   });
 
   group('signingKeys', () {
-    test('falls back to the APKAM authentication keypair with no key source',
-        () async {
-      final keys = await signer.signingKeys;
-
-      expect(keys, hasLength(1));
-      expect(keys.single.publicKey, pkamPublicKey());
-      expect(keys.single.algorithm, SigningAlgoType.rsa2048);
-    });
-
     test('the keyfile\'s APKAM keypair answers a keyfile client', () async {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileLegacyMaterial(
@@ -163,8 +153,8 @@ void main() {
 
       expect((await signer.signingKeys).single.publicKey,
           other.atPublicKey.publicKey,
-          reason: 'the keyfile is the source; the local store answers only a '
-              'client that has no keyfile');
+          reason: 'the keyfile is the source; the local store is never read '
+              'to sign');
     });
 
     test('a keyfile client never signs with its local store\'s keypair',
@@ -173,14 +163,6 @@ void main() {
 
       await expectLater(
           signer.signingKeys, throwsA(isA<AtKeyNotFoundException>()));
-    });
-
-    test('the fallback signs under the algorithm the client resolved',
-        () async {
-      recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
-
-      expect(
-          (await signer.signingKeys).single.algorithm, SigningAlgoType.mldsa65);
     });
 
     test('the keyfile\'s signing material wins over the authentication keypair',
@@ -346,12 +328,18 @@ void main() {
     });
 
     test('a single non-rsa2048 key publishes the array', () async {
-      recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileApkamMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+              publicKey: base64Encode(mlDsaPair.publicKey),
+              privateKey: base64Encode(mlDsaPair.secretKey))));
 
       final advertised = jsonDecode(await signer.publicSigningKeyValue);
       expect(advertised['v'], 1);
       expect((advertised['keys'] as List).single['alg'], 'mldsa65');
-      expect((advertised['keys'] as List).single['pub'], pkamPublicKey());
+      expect((advertised['keys'] as List).single['pub'],
+          base64Encode(mlDsaPair.publicKey));
     });
 
     test('several keys publish the array, strongest first', () async {

@@ -118,29 +118,4 @@ void main() {
         reason: 'and byte-exact, or the enrollee files a key that opens '
             'nothing');
   });
-
-  test('an approver with no atKeysIo approves cleanly and conveys none',
-      () async {
-    final enrollee =
-        AtClientSecretSharing.forClient(buildMockClient(enrolleeId));
-    await enrollee.register();
-    final advertised = await enrollee.signedKeyPackagePayload();
-
-    final approver = buildMockClient('approver-2');
-    when(() => approver.atKeysIo).thenReturn(null);
-    await AtClientSecretSharing.forClient(approver).register();
-    stubPendingEnrollment(approver, advertised);
-
-    final response =
-        await EnrollmentServiceImpl(approver, _RecordingAtEnrollment()).approve(
-            EnrollmentRequestDecision.approved(
-                enrollmentId: enrolleeId,
-                apkamSymmetricKey: AtBytes.fromString(''),
-                atSign: atSign));
-
-    expect(response.enrollmentStatus, EnrollmentStatus.approved,
-        reason: 'the push is best-effort: a client with no durable key source '
-            'must still approve — the enrollee heals by pulling at its next '
-            'start');
-  });
 }

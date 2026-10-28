@@ -3,6 +3,7 @@ import 'package:test/test.dart';
 
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
 
 void main() {
   test('sync from remote to local', () async {
@@ -13,6 +14,7 @@ void main() {
           atSign: atsign,
           namespace: 'wavi',
           preference: preference,
+          atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     // // To setup encryption keys
@@ -38,6 +40,7 @@ void main() {
           atSign: atsign,
           namespace: 'wavi',
           preference: preference,
+          atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     var syncService = atClient.syncService;

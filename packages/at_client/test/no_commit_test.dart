@@ -16,6 +16,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/no_keys.dart';
 
 void main() {
   AtSignLogger.root_level = 'shout';
@@ -72,6 +73,7 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
+          atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
@@ -106,6 +108,7 @@ void main() {
       when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:-1');
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
+          atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));

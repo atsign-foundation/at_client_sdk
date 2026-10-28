@@ -16,6 +16,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -88,6 +89,8 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
     when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.atKeysIo).thenAnswer(
+        (_) => keysHoldingApkam(atSign, atClient.enrollmentId, pair));
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);

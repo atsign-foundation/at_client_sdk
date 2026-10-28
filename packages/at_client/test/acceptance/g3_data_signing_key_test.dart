@@ -186,11 +186,10 @@ void main() {
       'UC-G3.6 · a legacy enrollment\'s authentication keypair signs data in '
       'memory only', () {
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
-        'falls back to the APKAM authentication keypair with no key source',
-        proves: 'the fallback is read from the local store rather than the '
-            'keyfile — this client has no key source at all, so nothing could '
-            'have been filed for it to find',
-        clauses: ['from the local store for a client without one']);
+        'the keyfile\'s APKAM keypair answers a keyfile client',
+        proves: 'the authentication keypair the keyfile holds is what signs '
+            'for an enrollment with no signing material',
+        clauses: ['read on the call from the keyfile']);
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'the keyfile\'s signing material wins over the authentication keypair',
         proves: 'the control: the fallback is a fallback, not a preference');

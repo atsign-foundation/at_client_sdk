@@ -41,7 +41,7 @@ Future<AtClient> buildAtClient({
   required AtClientPreference preference,
   String? namespace,
   required AtClientStorage storage,
-  AtKeysIo? atKeysIo,
+  required AtKeysIo atKeysIo,
   String? enrollmentId,
   AtLookUp? atLookUp,
   AtLookUpFactory? lookUps,
@@ -104,8 +104,7 @@ Future<AtClient> buildAtClient({
 /// `AtClientImpl.create` applies, asked here so the refusal above names the
 /// principal that would be built.
 Future<String?> _principalOf(
-    String atSign, AtKeysIo? atKeysIo, String? enrollmentId) async {
-  if (atKeysIo == null) return enrollmentId;
+    String atSign, AtKeysIo atKeysIo, String? enrollmentId) async {
   final AtKeys keys;
   try {
     keys = await atKeysIo.read(atSign);

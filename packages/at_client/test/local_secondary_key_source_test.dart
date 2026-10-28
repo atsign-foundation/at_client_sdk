@@ -26,7 +26,7 @@ void main() {
     ..namespace = 'unit'
     ..rootDomain = 'test.atsign.wtf';
 
-  Future<AtClient> clientWith({required InMemoryAtKeysIo? keySource}) async =>
+  Future<AtClient> clientWith({required InMemoryAtKeysIo keySource}) async =>
       AtClientImpl.create(atSign, 'unit', prefs(),
           remoteSecondary: MockRemoteSecondary(),
           storage:
@@ -146,13 +146,15 @@ void main() {
     });
   });
 
-  test('control: with no key source the read falls through to the keystore',
-      () async {
+  test(
+      'control: with a key source holding nothing the read falls through to '
+      'the keystore', () async {
     // The keystore is empty, so every tier misses and the keystore's exception
     // comes back — which is what the legacy self-key path catches. Without
     // this arm the tests above would pass on a getter that answered from
     // anywhere at all.
-    final local = (await clientWith(keySource: null)).getLocalSecondary()!;
+    final local =
+        (await clientWith(keySource: InMemoryAtKeysIo())).getLocalSecondary()!;
 
     await expectLater(() => local.getEncryptionSelfKey(),
         throwsA(isA<KeyNotFoundException>()));

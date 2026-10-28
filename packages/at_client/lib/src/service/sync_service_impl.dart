@@ -12,8 +12,6 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/sync_service.dart';
-import 'package:at_client/src/signing/keyless_pkam_key.dart'
-    show pkamPrivateKeyWithoutKeyfile;
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -208,7 +206,6 @@ class SyncServiceImpl implements SyncService {
   @visibleForTesting
   static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
       RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-          privateKey: pkamPrivateKeyWithoutKeyfile(atClient),
           enrollmentId: atClient.enrollmentId,
           atKeysIo: atClient.atKeysIo,
           secondaryAddressFinder:

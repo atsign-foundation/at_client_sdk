@@ -154,7 +154,7 @@ abstract class AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtKeysIo? atKeysIo,
+    required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,
@@ -182,7 +182,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtKeysIo? atKeysIo,
+    required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,

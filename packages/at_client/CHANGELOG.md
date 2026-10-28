@@ -6,8 +6,7 @@
   `lookUps` to choose how it connects.
 - breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
   the `atChops` parameters of `AtClientImpl.create` and
-  `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`; given
-  none, it uses those its local store holds.
+  `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
 - breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
@@ -56,6 +55,11 @@
   a `storage`.
 - breaking: `LocalSecondary` takes a required `syncQueue`, the one the
   client's storage holds.
+- breaking: `AtClientImpl.create` and `buildAtClient` take a required
+  `atKeysIo`, and a client no longer signs with a PKAM key its local store
+  holds: pass the atSign's keyfile, such as `FileAtKeysIo()`.
+- breaking: `AtReachability.noKeySource` is removed, since every client has a
+  key source.
 - chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
   read by nothing in at_client, and go in 5.0.0.
 - build: at_client no longer depends on archive, http,

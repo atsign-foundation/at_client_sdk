@@ -19,6 +19,7 @@ import 'test_utils/mocks.dart';
 
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 void main() {
   const storageDir = 'test/hive';
@@ -35,6 +36,7 @@ void main() {
       atSign,
       'wavi',
       preference,
+      atKeysIo: noKeysFor(atSign),
       atClientManager: atClientManager,
       storage: hiveStoreFor(atSign, preference),
     );

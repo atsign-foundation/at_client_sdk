@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 
 /// A bare mock, shadowing the shared one in `test_utils/mocks.dart` whose
 /// concrete `getPreferences()` override cannot be stubbed.
@@ -101,6 +102,8 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
     when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.atKeysIo).thenAnswer(
+        (_) => keysHoldingApkam(atSign, atClient.enrollmentId, pair));
     // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
     // broadcasts a pull to the namespace's other enrollments, and here there
     // are none - which is the situation these tests are in. Matched on the
@@ -301,20 +304,6 @@ void main() {
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
             .read(namespace, advertisement.nskeyKid),
         isNotNull);
-  });
-
-  test('and a client with no key source mints into memory only', () async {
-    // NOTE: `atKeysIo` is left unstubbed, so mocktail answers null and there is
-    // nothing to derive a filing from.
-    final c = client();
-
-    final ring = PublishedNskeyKeyRing(c.client);
-    expect(ring.privateFiling, isNull);
-
-    final advertisement = await ring.mintAndPublish(namespace);
-    expect(advertisement.nskeyKid, isNotEmpty);
-    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true),
-        hasLength(1));
   });
 
   test('the published advertisement emits its exact wire shape — raw literals',
@@ -649,6 +638,8 @@ void main() {
     when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
     when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);
     when(() => other.enrollmentId).thenReturn('enroll-minter');
+    when(() => other.atKeysIo)
+        .thenAnswer((_) => keysHoldingApkam(atSign, other.enrollmentId, pair));
 
     final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
     final minted = await xWing.keyPairFromSeed(xWing.newSeed());

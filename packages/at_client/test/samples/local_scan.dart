@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
 
 void main() async {
   try {
@@ -11,6 +12,7 @@ void main() async {
           atSign: atSign,
           namespace: 'wavi',
           preference: TestUtil.getAlicePreference(),
+          atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
 
     var result = await atClientManager.atClient.getKeys();

@@ -48,7 +48,6 @@ import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_client/src/signing/keyless_pkam_key.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
@@ -101,7 +100,7 @@ class AtClientImpl implements AtClient {
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
 
-  AtKeysIo? _atKeysIo;
+  late final AtKeysIo _atKeysIo;
 
   EncryptionService? _encryptionService;
 
@@ -176,9 +175,6 @@ class AtClientImpl implements AtClient {
 
       if (_preference?.seedNamespaceKeys != true) {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
-      }
-      if (_atKeysIo == null) {
-        return const AtReachabilityResult(AtReachability.noKeySource);
       }
 
       // NOTE: safe here only because `MintLock` holds an in-flight guard for
@@ -712,7 +708,7 @@ class AtClientImpl implements AtClient {
     AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
-    AtKeysIo? atKeysIo,
+    required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     String? enrollmentId,
@@ -726,29 +722,27 @@ class AtClientImpl implements AtClient {
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
-    if (atKeysIo != null) {
-      final logger = AtSignLogger('AtClientImpl ($currentAtSign)');
-      AtKeys? keys;
-      try {
-        keys = await atKeysIo.read(currentAtSign);
-      } on Exception catch (e) {
-        logger.warning('Could not read the keys for $currentAtSign, so which '
-            'enrollment they authenticate as is unknown; running as '
-            '${enrollmentId ?? "the atSign's own credential"}: $e');
+    final logger = AtSignLogger('AtClientImpl ($currentAtSign)');
+    AtKeys? keys;
+    try {
+      keys = await atKeysIo.read(currentAtSign);
+    } on Exception catch (e) {
+      logger.warning('Could not read the keys for $currentAtSign, so which '
+          'enrollment they authenticate as is unknown; running as '
+          '${enrollmentId ?? "the atSign's own credential"}: $e');
+    }
+    if (keys != null && !keys.holdsAuthenticationMaterial) {
+      logger.finer('The keys for $currentAtSign hold no authentication '
+          'material, so they name no enrollment; running as '
+          '${enrollmentId ?? "the atSign's own credential"}');
+    } else if (keys != null) {
+      final derived = keys.enrollmentToAuthenticateAs();
+      if (enrollmentId != null && enrollmentId != derived) {
+        logger.shout('$currentAtSign was asked to run as enrollment '
+            '$enrollmentId, but its keys authenticate as $derived; using '
+            '$derived');
       }
-      if (keys != null && !keys.holdsAuthenticationMaterial) {
-        logger.finer('The keys for $currentAtSign hold no authentication '
-            'material, so they name no enrollment; running as '
-            '${enrollmentId ?? "the atSign's own credential"}');
-      } else if (keys != null) {
-        final derived = keys.enrollmentToAuthenticateAs();
-        if (enrollmentId != null && enrollmentId != derived) {
-          logger.shout('$currentAtSign was asked to run as enrollment '
-              '$enrollmentId, but its keys authenticate as $derived; using '
-              '$derived');
-        }
-        enrollmentId = derived;
-      }
+      enrollmentId = derived;
     }
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
     final cacheKey = exactEnrollment
@@ -821,7 +815,7 @@ class AtClientImpl implements AtClient {
     AtClientPreference preference, {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
-    AtKeysIo? atKeysIo,
+    required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
     this.enrollmentId,
@@ -963,9 +957,6 @@ class AtClientImpl implements AtClient {
       syncQueue: storage.syncQueue,
       onEvent: emitDataEvent,
     );
-    if (_atKeysIo == null) {
-      recordLocalPkamPrivateKey(this, await _readLocalKeyMaterial());
-    }
     _validateDefaultCryptoProvider();
 
     // Wire the event-driven expiry timer to the data-events stream.
@@ -1491,7 +1482,6 @@ class AtClientImpl implements AtClient {
         _preference!,
         atLookUp: atLookUp,
         lookUps: lookUps,
-        privateKey: pkamPrivateKeyWithoutKeyfile(this),
         enrollmentId: enrollmentId,
         atKeysIo: _atKeysIo,
         connection: _connection,
@@ -2030,13 +2020,13 @@ class AtClientImpl implements AtClient {
 
   /// Resolves this client's PKAM signing algorithm from the enrollment's key
   /// material — the authoritative source; you cannot sign ML-DSA with an RSA
-  /// key. A null resolution (a legacy flat-fields enrollment, or no keyfile
-  /// source at all) leaves the preference's value as the fallback.
+  /// key. A null resolution (a legacy flat-fields enrollment) leaves the
+  /// preference's value as the fallback.
   Future<void> _resolveSigningAlgoFromKeyMaterial() async {
     final id = enrollmentId;
-    if (_atKeysIo == null || id == null || isAtSignCredential(id)) return;
+    if (id == null || isAtSignCredential(id)) return;
     try {
-      final keys = await _atKeysIo!.read(_atSign);
+      final keys = await _atKeysIo.read(_atSign);
       resolved_algo.recordResolvedSigningAlgo(
           this, keys.signingAlgorithmForEnrollment(id));
     } on Exception catch (e) {
@@ -2115,7 +2105,6 @@ class AtClientImpl implements AtClient {
   Future<void> _settleEnrollmentIdentity() async {
     final id = enrollmentId;
     final keysIo = _atKeysIo;
-    if (keysIo == null) return;
     final ownKeys = isAtSignCredential(id);
     final subject = ownKeys ? 'this atSign\'s own keys' : id!;
 
@@ -2234,47 +2223,6 @@ class AtClientImpl implements AtClient {
           '${previousEnrollmentId ?? "the atSign itself"} could not be closed; '
           'it will idle out: $e');
     }
-  }
-
-  /// The PKAM private key [localSecondary] holds, or null when it holds none,
-  /// which is the ordinary state before onboarding.
-  Future<String?> _readLocalKeyMaterial() async {
-    String? pkamPublicKey, pkamPrivateKey;
-    String? encryptionPublicKey, encryptionPrivateKey;
-    try {
-      encryptionPublicKey =
-          await localSecondary!.getEncryptionPublicKey(_atSign);
-      encryptionPrivateKey = await localSecondary!.getEncryptionPrivateKey();
-    } on KeyNotFoundException catch (e) {
-      _logger.finer('No encryption key pair in $_atSign\'s local store: $e');
-    }
-    try {
-      pkamPublicKey = await localSecondary!.getPkamPublicKey();
-      pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
-    } on KeyNotFoundException catch (e) {
-      _logger.finer('No PKAM key pair in $_atSign\'s local store: $e');
-    }
-    final holdsEncryption =
-        encryptionPublicKey != null && encryptionPrivateKey != null;
-    final holdsPkam = pkamPublicKey != null && pkamPrivateKey != null;
-
-    // NOTE: said once, after both reads, because what matters is what this
-    // client ended up holding rather than which lookup missed. A store with
-    // neither keypair is the ordinary state before onboarding; a store with
-    // one of the two is a broken store, and only that is worth a warning.
-    // Each miss keeps its own detail at `finer`.
-    if (!holdsEncryption && !holdsPkam) {
-      _logger.info('$_atSign\'s local store holds no key material, so this '
-          'client holds none: it authenticates and decrypts nothing until the '
-          'store is populated.');
-    } else if (!holdsEncryption || !holdsPkam) {
-      _logger.warning('$_atSign\'s local store holds '
-          '${holdsPkam ? 'a PKAM' : 'an encryption'} key pair but '
-          'not the other. A half-populated store is not a state onboarding '
-          'produces, and this client will fail at whichever of the two it '
-          'needs first.');
-    }
-    return holdsPkam ? pkamPrivateKey : null;
   }
 
   /// Whether a write to a destination with no post-quantum key may go out

@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 /// Supplies the enrollment record the client would otherwise fetch, through
 /// the `@visibleForTesting` seam on `LocalSecondary`.
@@ -35,6 +36,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
@@ -121,6 +123,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
@@ -191,6 +194,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
@@ -259,6 +263,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
@@ -309,6 +314,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
@@ -395,6 +401,7 @@ void main() {
       final privilegedEnrollment = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = privilegedEnrollment;
@@ -460,6 +467,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
@@ -507,6 +515,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
@@ -584,6 +593,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;

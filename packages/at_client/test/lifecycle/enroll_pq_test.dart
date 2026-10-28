@@ -17,7 +17,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 import '../test_utils/remote_backed_client.dart';
+import '../test_utils/test_keypairs.dart' show pkamKeyPairFor;
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -179,7 +181,8 @@ void main() {
       return Future.value(
           remoteData.keys.where(regex.hasMatch).map(AtKey.fromString).toList());
     });
-    when(() => approver.atKeysIo).thenReturn(null);
+    when(() => approver.atKeysIo).thenReturn(keysHoldingApkam(
+        atSign, 'approver-1', pkamKeyPairFor(atSign, 'approver-1')));
     await AtClientSecretSharing.forClient(approver).register();
     stubApproveListReads(
         approver.getRemoteSecondary()!,

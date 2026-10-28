@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart';
+import 'test_utils/no_keys.dart';
 
 /// An [AtLookUp] that is not an [AtLookupMuxable]: it carries no
 /// notifications, and stops like any other.
@@ -16,6 +17,7 @@ void main() {
     final server = FakeAtServer(atSign: '@stopped');
     final client = await AtClientImpl.create(
         '@stopped', 'wavi', AtClientPreference()..monitorAutoStart = false,
+        atKeysIo: noKeysFor('@stopped'),
         lookUps: server.lookUps,
         storage: InMemoryAtClientStorage(
             atSign: '@stopped', closedByClient: true)) as AtClientImpl;
@@ -46,6 +48,7 @@ void main() {
     when(plain.close).thenAnswer((_) async {});
     final client = await AtClientImpl.create(
             '@plain', 'wavi', AtClientPreference()..monitorAutoStart = false,
+            atKeysIo: noKeysFor('@plain'),
             atLookUp: plain,
             lookUps: server.lookUps,
             storage:

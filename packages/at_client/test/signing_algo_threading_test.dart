@@ -121,10 +121,6 @@ void main() {
           reason: 'the one builder every connection of the client uses');
       expect(wiring, contains('atKeysIo: atClient.atKeysIo'),
           reason: 'the keys name the algorithm the monitor signs with');
-      expect(wiring,
-          contains('privateKey: pkamPrivateKeyWithoutKeyfile(atClient)'),
-          reason: 'and a client with no keyfile signs with the key its local '
-              'store or preference holds');
       expect(wiring, contains('enrollmentId: atClient.enrollmentId'),
           reason: 'and as the right enrollment, or the atServer refuses it');
     });

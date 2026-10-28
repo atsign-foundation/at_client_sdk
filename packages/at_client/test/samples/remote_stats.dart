@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 
 import 'test_util.dart';
+import '../test_utils/no_keys.dart';
 
 void main() async {
   try {
@@ -14,6 +15,7 @@ void main() async {
           atSign: atsign,
           namespace: 'wavi',
           preference: preference,
+          atKeysIo: noKeysFor(atsign),
           storage: InMemoryAtClientStorage(atSign: atsign)));
     var atClient = atClientManager.atClient;
     var statsResult = await atClient

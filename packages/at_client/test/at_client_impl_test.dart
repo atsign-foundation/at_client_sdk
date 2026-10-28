@@ -14,6 +14,7 @@ import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 /// Stops and drops every cached client for [atSign], including those filed
 /// under `atSign|enrollmentId`.
@@ -60,12 +61,16 @@ void main() {
     test('resolves to the client that superseded it', () async {
       final storage = hiveStoreFor(atSign, pref());
       final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-new', storage: storage);
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-new',
+          storage: storage);
       AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
           '$atSign|enroll-new';
 
       final again = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old', storage: storage);
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-old',
+          storage: storage);
 
       expect(identical(again, settled), isTrue,
           reason: 'naming the id captured BEFORE a retrofit must reach the '
@@ -84,10 +89,12 @@ void main() {
       // NOTE: two clients live at the same moment need separate storage — one
       // location holds one.
       final first = await AtClientImpl.create(atSign, 'wavi', pref(),
+          atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-new',
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
       final other = await AtClientImpl.create(atSign, 'wavi', pref(),
+          atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-old',
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
@@ -103,7 +110,9 @@ void main() {
           '$atSign|evicted';
 
       final built = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old', storage: hiveStoreFor(atSign, pref()));
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-old',
+          storage: hiveStoreFor(atSign, pref()));
 
       expect((built as AtClientImpl).enrollmentId, 'enroll-old');
       expect(AtClientImpl.atClientInstanceMap.containsKey('$atSign|enroll-old'),
@@ -134,6 +143,7 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atKeysIo: noKeysFor(atSign),
           atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
@@ -143,6 +153,7 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
@@ -152,6 +163,7 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atKeysIo: noKeysFor(atSign),
           atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
@@ -182,6 +194,7 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: atClientPreference,
+        atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, atClientPreference));
 
     test('A test to verify change', () async {
@@ -255,6 +268,7 @@ void main() {
       client = await buildAtClient(
           atSign: '@sender',
           preference: pref,
+          atKeysIo: noKeysFor('@sender'),
           storage: hiveStoreFor('@sender', pref)) as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
@@ -308,6 +322,7 @@ void main() {
           atSign: '@alice',
           namespace: 'wavi',
           preference: pref,
+          atKeysIo: noKeysFor('@alice'),
           enrollmentId: testEnrollmentId,
           storage: hiveStoreFor('@alice', pref));
       expect(atClient.enrollmentId, testEnrollmentId);
@@ -335,6 +350,7 @@ void main() {
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
@@ -375,6 +391,7 @@ void main() {
           atSign: atSign,
           namespace: 'wavi',
           preference: AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor(atSign),
           storage: hiveStoreAt(atSign, 'test/hive'));
       expect(
           () async => await atClient.setSPP(invalidSPP),
@@ -393,6 +410,7 @@ void main() {
           atSign: atSign,
           namespace: 'wavi',
           preference: pref,
+          atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, pref));
       expect(
           () async => await atClient.setSPP(invalidSPP),
@@ -405,6 +423,7 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
+          atKeysIo: noKeysFor(atSign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(atSign, pref));
 
@@ -426,6 +445,7 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
+          atKeysIo: noKeysFor('@alice'),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor('@alice', pref));
       var key = TestUtils.createRandomString(250);
@@ -844,20 +864,6 @@ void main() {
       );
 
       expect(identical(ac.atKeysIo, keysIo), true);
-    });
-
-    test('has no default key source when none is injected', () async {
-      // No atKeysIo: the client falls back to reading key material out of the
-      // local secondary, which is the shape this test is about.
-      AtClient ac = await AtClientImpl.create(
-        '@alice',
-        'buzz',
-        AtClientPreference()..hiveStoragePath = 'test/hive',
-        remoteSecondary: mockRemoteSecondary,
-        storage: hiveStoreAt('@alice', 'test/hive'),
-      );
-
-      expect(ac.atKeysIo, isNull);
     });
 
     test(

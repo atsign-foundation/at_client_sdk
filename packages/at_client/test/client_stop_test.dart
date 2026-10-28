@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -420,6 +421,7 @@ void main() {
           ..hiveStoragePath = dir.path
           ..namespace = 'wavi'
           ..monitorAutoStart = false,
+        atKeysIo: noKeysFor(atSign),
         lookUps: recording,
         storage: hiveStoreAt(atSign, dir.path)) as AtClientImpl;
 

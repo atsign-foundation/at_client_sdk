@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 const _owner = '@alice';
 const _namespace = 'wavi';
@@ -142,6 +143,7 @@ void main() {
         _namespace,
         AtClientPreference(posture: PqPosture.legacy)
           ..hiveStoragePath = '${storage.path}/hive',
+        atKeysIo: noKeysFor(_owner),
         remoteSecondary: remote,
         storage: hiveStoreAt(_owner, '${storage.path}/hive'),
       );

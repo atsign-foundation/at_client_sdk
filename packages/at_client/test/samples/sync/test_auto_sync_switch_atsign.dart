@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 
 import '../test_util.dart';
 import '../../test_utils/hive_store.dart';
+import '../../test_utils/no_keys.dart';
 
 void main() async {
   AtSignLogger.root_level = 'finer';
@@ -13,6 +14,7 @@ void main() async {
         atSign: atSign,
         namespace: 'wavi',
         preference: TestUtil.getAlicePreference(),
+        atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
   final atClient = atClientManager.atClient;
   // phone.me@alice🛠
@@ -28,6 +30,7 @@ void main() async {
         atSign: '@bob🛠',
         namespace: 'wavi',
         preference: TestUtil.getBobPreference(),
+        atKeysIo: noKeysFor('@bob🛠'),
         storage: hiveStoreFor('@bob🛠', TestUtil.getBobPreference())));
   // phone.me@alice🛠
   for (var i = 0; i < 2; i++) {

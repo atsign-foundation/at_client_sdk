@@ -14,6 +14,7 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -95,6 +96,7 @@ void main() {
         atSign: '@lookups',
         namespace: 'wavi',
         preference: preference(),
+        atKeysIo: noKeysFor('@lookups'),
         lookUps: recording,
         storage: hiveStoreFor('@lookups', preference())) as AtClientImpl;
 
@@ -118,6 +120,7 @@ void main() {
         atSign: '@nofactory',
         namespace: 'wavi',
         preference: preference(),
+        atKeysIo: noKeysFor('@nofactory'),
         storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;
 
     expect(client.getRemoteSecondary()!.atLookUp, isA<AtLookupImpl>());

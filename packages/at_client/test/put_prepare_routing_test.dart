@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/no_keys.dart';
 
 /// Records the route a put hands the provider's prepare step, which is the
 /// route any record the provider writes there (a content key's conveyance)
@@ -55,6 +56,7 @@ void main() {
               ..remoteLocalPref = remoteLocalPref
               ..crypto = CryptoConfig(
                   defaultProviderId: provider.id, providers: [provider]),
+            atKeysIo: noKeysFor('@alice'),
             remoteSecondary: remote,
             storage:
                 InMemoryAtClientStorage(atSign: '@alice', closedByClient: true))

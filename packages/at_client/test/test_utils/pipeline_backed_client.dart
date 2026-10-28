@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
 
 /// A record as the atServer serves it: the value bytes and the raw `metaData`
 /// map, exactly as they travel.
@@ -82,6 +83,7 @@ Future<AtClient> buildPipelineBackedClient({
     atSign,
     namespace,
     preference,
+    atKeysIo: noKeysFor(atSign),
     remoteSecondary: remoteSecondary,
     enrollmentId: enrollmentId,
     storage: hiveStoreFor(atSign, preference),

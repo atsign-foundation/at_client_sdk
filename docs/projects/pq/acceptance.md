@@ -1449,8 +1449,7 @@ deliberate skip with a reason, not an oversight.
   replacement, and there is no generation to have an opinion about.
 - **Then, the start-of-client ask follows the posture:** it runs only where
   `AtClientPreference.seedNamespaceKeys` is true, so it never runs at
-  `PqPosture.legacy`, and a client with no key source seeds nothing whatever the
-  posture asks for.
+  `PqPosture.legacy`.
 - **Then, a yes with nowhere to convey is refused, and refused LOUDLY:** the
   policy is consulted **before** the substrate check, deliberately. A client
   with no secret-sharing substrate or private filing that replaced its namespace
@@ -4362,8 +4361,7 @@ Threats, answered for the whole set:
   *Given* an enrollment holding no typed `sign:` material.
   *When* something asks `ApkamSigning.signingKeys` what may sign.
   *Then* it answers with the APKAM **authentication** keypair, read on the
-  call from the keyfile, or from the local store for a client without one, and
-  **never filed** as signing material — so
+  call from the keyfile, and **never filed** as signing material — so
   `AtKeys.signingKeysFor` still returns nothing for that enrollment, and
   `apskEntries` advertises that same key on exactly the same condition, which
   is what keeps what signs and what is advertised from drifting apart.

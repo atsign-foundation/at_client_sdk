@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 
 /// A bare mock, shadowing the shared one whose concrete `getPreferences()`
 /// cannot be stubbed.
@@ -53,6 +54,8 @@ void main() {
 
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.atKeysIo).thenAnswer(
+        (_) => keysHoldingApkam(atSign, atClient.enrollmentId, pair));
     when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
         keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]));
     when(() => atClient.dataEvents)

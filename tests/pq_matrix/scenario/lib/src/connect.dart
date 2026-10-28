@@ -37,11 +37,10 @@ class ClientSpec {
 
 /// How an arm attaches its client to the manager.
 ///
-/// A callback rather than a branch because each at_client takes a keyless
-/// client's credential differently: this tree's client takes no `AtChops`,
-/// and a released one authenticates a keyless client only through one — and
-/// an arm attached without a key source performs zero post-quantum writes by
-/// design.
+/// A callback rather than a branch because each at_client takes a client's
+/// credential differently: this tree's client takes its keys as an
+/// `AtKeysIo` and no `AtChops`, and a released one authenticates a client
+/// with no key source only through an `AtChops`.
 typedef Attach = Future<AtClientManager> Function(
     ClientSpec spec, AtClientPreference preference);
 

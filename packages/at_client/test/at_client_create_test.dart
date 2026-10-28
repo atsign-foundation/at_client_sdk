@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 /// Runs an installed [AtAuthenticator] for real and records what it sent.
 class _RecordingExecutor implements AtCommandExecutor {
@@ -71,6 +72,7 @@ void main() {
         atSign: '@factoryheld',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factoryheld'),
         storage: storage);
 
     expect(storage.isHeldBy(client), isTrue,
@@ -88,6 +90,7 @@ void main() {
         atSign: '@factoryaddr',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factoryaddr'),
         storage: hiveStoreFor('@factoryaddr', pref()));
 
     final own = (client as AtClientImpl).secondaryAddressFinder;
@@ -119,6 +122,7 @@ void main() {
         atSign: '@factorysolo',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factorysolo'),
         storage: hiveStoreFor('@factorysolo', pref()));
 
     expect(client.getCurrentAtSign(), '@factorysolo');
@@ -140,6 +144,7 @@ void main() {
         atSign: '@factorywired',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factorywired'),
         storage: hiveStoreFor('@factorywired', pref()));
 
     expect(() => client.syncService, returnsNormally);
@@ -155,6 +160,7 @@ void main() {
         atSign: '@factorybuilder',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factorybuilder'),
         syncServiceBuilder: (_) => noOp,
         storage: hiveStoreFor('@factorybuilder', pref()));
 
@@ -171,6 +177,7 @@ void main() {
         atSign: '@factorytwice',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
 
     await expectLater(
@@ -178,6 +185,7 @@ void main() {
             atSign: '@factorytwice',
             namespace: 'wavi',
             preference: pref(),
+            atKeysIo: noKeysFor('@factorytwice'),
             storage: hiveStoreFor('@factorytwice', pref())),
         throwsA(isA<StateError>()
             .having((e) => e.message, 'message', contains('already live'))),
@@ -189,6 +197,7 @@ void main() {
         atSign: '@factorytwice',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
     expect(second, isNot(same(first)),
         reason: 'stop() frees the atSign, so the refusal is about a LIVE '
@@ -235,6 +244,7 @@ void main() {
         atSign: atSign,
         namespace: 'wavi',
         preference: offline('own'),
+        atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, offline('own')));
     expect(own.enrollmentId, isNull,
         reason: 'the atSign\'s own credential is a third principal: with '
@@ -259,6 +269,7 @@ void main() {
         atSign: '@factoryother',
         namespace: 'wavi',
         preference: offline('e1'),
+        atKeysIo: noKeysFor('@factoryother'),
         storage: hiveStoreFor('@factoryother', offline('e1')));
     expect(other.getCurrentAtSign(), '@factoryother',
         reason: 'the control: the same directory is another store for '
@@ -314,6 +325,7 @@ void main() {
         atSign: '@factorynolocal',
         namespace: 'wavi',
         preference: pref()..isLocalStoreRequired = false,
+        atKeysIo: noKeysFor('@factorynolocal'),
         storage: storage);
 
     expect(storage.isHeldBy(client), isTrue,
@@ -335,6 +347,7 @@ void main() {
             atSign: '@factoryhalfbuilt',
             namespace: 'wavi',
             preference: pref(),
+            atKeysIo: noKeysFor('@factoryhalfbuilt'),
             storage: first,
             syncServiceBuilder: (_) => throw StateError('builder exploded')),
         throwsA(isA<StateError>().having(
@@ -359,6 +372,7 @@ void main() {
         atSign: '@factoryhalfbuilt',
         namespace: 'wavi',
         preference: pref(),
+        atKeysIo: noKeysFor('@factoryhalfbuilt'),
         storage: second);
 
     expect(second.isHeldBy(client), isTrue,

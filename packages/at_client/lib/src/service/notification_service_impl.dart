@@ -37,8 +37,6 @@ import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/client/remote_secondary.dart'
     show clientAuthenticator;
-import 'package:at_client/src/signing/keyless_pkam_key.dart'
-    show pkamPrivateKeyWithoutKeyfile;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
@@ -349,7 +347,6 @@ class NotificationServiceImpl extends NotificationService {
                 AtRootDomain(preference.rootDomain, preference.rootPort),
             authenticator: clientAuthenticator(atSign,
                 atKeysIo: atClient.atKeysIo,
-                privateKey: pkamPrivateKeyWithoutKeyfile(atClient),
                 cramSecret: preference.cramSecret,
                 enrollmentId: atClient.enrollmentId),
             secondaryAddressFinder: this.secondaryAddressFinder,

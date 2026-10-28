@@ -65,12 +65,11 @@ abstract class AtClient {
   /// peer that fetched in between holds a generation the owner may no longer
   /// be able to open.
   ///
-  /// Answers rather than throws for the three cases that are configuration and
-  /// not failure — a posture that does not seed, a namespace this enrollment
-  /// cannot hold a key for, and a client with no key source to file a private
-  /// half in. Read [AtReachabilityResult.isReachable] rather than comparing the
-  /// outcome, and [AtReachabilityResult.holdsPrivate] for whether this client
-  /// can also open what peers seal there.
+  /// Answers rather than throws for the two cases that are configuration and
+  /// not failure — a posture that does not seed, and a namespace this
+  /// enrollment cannot hold a key for. Read [AtReachabilityResult.isReachable]
+  /// rather than comparing the outcome, and [AtReachabilityResult.holdsPrivate]
+  /// for whether this client can also open what peers seal there.
   ///
   /// Nothing is left in flight when this returns [AtReachability.published]:
   /// the advertisement is an awaited remote write rather than a local-first

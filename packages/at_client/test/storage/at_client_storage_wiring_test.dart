@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:test/test.dart';
+import '../test_utils/no_keys.dart';
 
 void main() {
   test(
@@ -14,8 +15,8 @@ void main() {
     final given = HiveAtClientStorage(
         atSign: '@storagewire', storagePath: dir.path, closedByClient: true);
     final client = await AtClientImpl.create(
-            '@storagewire', 'wavi', AtClientPreference(), storage: given)
-        as AtClientImpl;
+        '@storagewire', 'wavi', AtClientPreference(),
+        atKeysIo: noKeysFor('@storagewire'), storage: given) as AtClientImpl;
 
     final storage = client.storage;
     expect(storage, same(given));

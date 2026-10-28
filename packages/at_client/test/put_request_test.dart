@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_crypto_provider.dart';
+import 'test_utils/no_keys.dart';
 
 class MockPutRequestTransformer extends Mock implements PutRequestTransformer {}
 
@@ -182,6 +183,7 @@ void main() {
 
       AtClientImpl atClientImpl = await AtClientImpl.create(
               '@bob', 'wavi', AtClientPreference()..maxDataSize = 1,
+              atKeysIo: noKeysFor('@bob'),
               remoteSecondary: mockRemoteSecondary,
               storage:
                   InMemoryAtClientStorage(atSign: '@bob', closedByClient: true))

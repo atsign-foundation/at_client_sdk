@@ -21,6 +21,7 @@ import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/memory_sync_queue.dart';
+import 'test_utils/no_keys.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -133,6 +134,7 @@ void main() {
           atSign: '@enrolledbuild',
           namespace: 'wavi',
           preference: pref,
+          atKeysIo: noKeysFor('@enrolledbuild'),
           enrollmentId: enrollmentId,
           storage: hiveStoreFor('@enrolledbuild', pref));
       expect(atClient.enrollmentId, enrollmentId);
@@ -165,6 +167,7 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
@@ -208,6 +211,7 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
@@ -245,6 +249,7 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
@@ -298,6 +303,7 @@ void main() {
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive',
+          atKeysIo: noKeysFor(atSign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(atSign, 'test/hive'));
 
@@ -381,6 +387,7 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
@@ -428,6 +435,7 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
+          atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =

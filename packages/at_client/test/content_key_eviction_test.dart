@@ -5,6 +5,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     show CommitOp;
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 
 /// The eviction trigger for coarse forward secrecy: a client drops a cached
 /// content key when it observes that key's conveyance record being deleted.
@@ -176,6 +177,7 @@ void main() {
               // runs no post-quantum startup, which is the startup under test.
               AtClientPreference(posture: PqPosture.pqReady)
                 ..hiveStoragePath = 'test/hive/evictionwiring',
+              atKeysIo: noKeysFor('@evictionwiring'),
               storage:
                   hiveStoreAt('@evictionwiring', 'test/hive/evictionwiring'))
           as AtClientImpl;

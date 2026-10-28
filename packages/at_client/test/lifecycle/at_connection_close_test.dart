@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/no_op_services.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
 
 /// A stopping client fails its own in-flight requests by closing their
 /// connections, and what those requests fail with says nothing about the
@@ -82,6 +83,7 @@ void main() {
           preference: AtClientPreference()
             ..hiveStoragePath = dir.path
             ..monitorAutoStart = false,
+          atKeysIo: noKeysFor('@stopquiet'),
           atLookUp: lookUp,
           syncServiceBuilder: (_) => NoOpSyncService(),
           storage: hiveStoreAt('@stopquiet', dir.path));

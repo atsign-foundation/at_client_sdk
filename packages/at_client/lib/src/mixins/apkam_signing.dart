@@ -7,17 +7,11 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
 import 'package:at_commons/at_commons.dart'
-    show
-        AtKey,
-        AtKeyNotFoundException,
-        EnrollmentConstants,
-        KeyNotFoundException;
+    show AtKey, AtKeyNotFoundException, EnrollmentConstants;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri, canSignEnvelopeWith;
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
@@ -195,8 +189,7 @@ mixin ApkamSigning {
 
   /// The APKAM **authentication** keypair as a signing key: the keyfile's for
   /// [enrollmentId] — typed material first, the flat pair as `rsa2048`
-  /// otherwise — else the pair its local store holds, for a client built
-  /// without a key source; null when it holds neither.
+  /// otherwise — or null when it holds neither.
   ///
   /// Two jobs, one key, for as long as an enrollment holds no signing material
   /// of its own: it authenticates the connection and it signs what the
@@ -208,33 +201,11 @@ mixin ApkamSigning {
   Future<ApkamSigningKeys?> get authenticationSigningKey async {
     final fromKeyfile = (await _readKeyfile('authentication key'))
         ?.authenticationKeyPairFor(enrollmentId);
-    if (fromKeyfile != null) {
-      return ApkamSigningKeys(
-        algorithm: fromKeyfile.algorithm,
-        publicKey: fromKeyfile.publicKey,
-        privateKey: fromKeyfile.privateKey,
-      );
-    }
-    final local = atClient.getLocalSecondary();
-    if (local == null || atClient.atKeysIo != null) return null;
-    final String? publicKey;
-    final String? privateKey;
-    try {
-      publicKey = await local.getPkamPublicKey();
-      privateKey = await local.getPkamPrivateKey();
-    } on KeyNotFoundException {
-      return null;
-    }
-    if (publicKey == null ||
-        publicKey.isEmpty ||
-        privateKey == null ||
-        privateKey.isEmpty) {
-      return null;
-    }
+    if (fromKeyfile == null) return null;
     return ApkamSigningKeys(
-      algorithm: signingAlgoOf(atClient),
-      publicKey: publicKey,
-      privateKey: privateKey,
+      algorithm: fromKeyfile.algorithm,
+      publicKey: fromKeyfile.publicKey,
+      privateKey: fromKeyfile.privateKey,
     );
   }
 

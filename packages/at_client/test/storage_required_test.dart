@@ -27,8 +27,10 @@ Future<void> app(AtClientPreference preference, AtKeysIo keys,
   await Atsign('@alice').activate(
       cramSecret: 'x', keys: written, preference: preference$storage);
   await pending.client(preference$storage);
-  await buildAtClient(atSign: '@alice', preference: preference$storage);
-  await AtClientImpl.create('@alice', null, preference$storage);
+  await buildAtClient(
+      atSign: '@alice', preference: preference, atKeysIo: keys$storage);
+  await AtClientImpl.create('@alice', null, preference,
+      atKeysIo: keys$storage);
   await selfRetrofit(
       session: session,
       preference: preference,
