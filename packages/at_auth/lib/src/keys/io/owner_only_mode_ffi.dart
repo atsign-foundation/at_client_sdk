@@ -48,8 +48,9 @@ bool osErrorsUnavailableForTesting = false;
 /// Reads the file at [path] through one descriptor opened without following
 /// a symbolic link, taking its owner and group from that descriptor.
 ///
-/// Throws [FileSystemException] when [path] is a symbolic link or anything
-/// other than a regular file, or cannot be read.
+/// Throws [FileSystemException], carrying the OS error when this libc can
+/// report one, when [path] is a symbolic link or anything other than a
+/// regular file, or cannot be read.
 ///
 /// NOTE: opened non-blocking, so a FIFO at [path] is refused rather than
 /// blocking this isolate inside the open until something writes to it.
@@ -78,9 +79,10 @@ KeyfileRead readNoFollow(String path) {
 /// when one is named.
 ///
 /// Says whether the file system took the mode and whether the owner was set;
-/// the bytes are written either way. Throws [FileSystemException] when
-/// anything already exists at [path], a symbolic link included, or the file
-/// cannot be created or written.
+/// the bytes are written either way. Throws [FileSystemException], carrying
+/// the OS error when this libc can report one, when anything already exists
+/// at [path], a symbolic link included, or the file cannot be created or
+/// written.
 ({bool modeSet, bool ownerSet}) writeNewOwnerOnly(String path, List<int> bytes,
     {OwnerAndGroup? owner}) {
   final libc = _Libc.instance!;
