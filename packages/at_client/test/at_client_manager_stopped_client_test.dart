@@ -3,9 +3,8 @@ import 'package:test/test.dart';
 
 void main() {
   group('setCurrentAtSign after stop()', () {
-    AtClientPreference pref() => AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+    AtClientPreference pref() =>
+        AtClientPreference()..hiveStoragePath = 'test/hive';
 
     test(
         'the same-atSign short-circuit never hands back a stopped client, and '

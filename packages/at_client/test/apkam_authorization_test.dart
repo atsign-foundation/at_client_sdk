@@ -33,11 +33,7 @@ void main() {
         () async {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
@@ -122,11 +118,7 @@ void main() {
         () async {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"wavi": "rw"});
@@ -195,11 +187,7 @@ void main() {
         () async {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
@@ -265,12 +253,8 @@ void main() {
       }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      var enrolledAtClient = await AtClientImpl.create(
-          '@alice',
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+      var enrolledAtClient = await AtClientImpl.create('@alice', 'wavi',
+          AtClientPreference()..hiveStoragePath = 'test/hive');
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});
@@ -319,11 +303,7 @@ void main() {
         () async {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
@@ -408,11 +388,7 @@ void main() {
         () async {
       final privilegedEnrollment = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = privilegedEnrollment;
       seedEnrollment(atClient, {"*": "rw"});
@@ -475,12 +451,8 @@ void main() {
       }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      var enrolledAtClient = await AtClientImpl.create(
-          '@alice',
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+      var enrolledAtClient = await AtClientImpl.create('@alice', 'wavi',
+          AtClientPreference()..hiveStoragePath = 'test/hive');
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});
@@ -526,11 +498,7 @@ void main() {
         () async {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
-          '@alice',
-          'all',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+          '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive');
       atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
@@ -605,12 +573,8 @@ void main() {
       }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
-      var enrolledAtClient = await AtClientImpl.create(
-          '@alice',
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit');
+      var enrolledAtClient = await AtClientImpl.create('@alice', 'wavi',
+          AtClientPreference()..hiveStoragePath = 'test/hive');
       enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});

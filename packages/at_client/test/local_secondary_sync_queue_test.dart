@@ -29,8 +29,7 @@ void main() {
     final preference = AtClientPreference()
       ..isLocalStoreRequired = true
       ..syncRegex = ''
-      ..hiveStoragePath = storageDir
-      ..commitLogPath = '$storageDir/commit';
+      ..hiveStoragePath = storageDir;
     final atClient = await AtClientImpl.create(
       atSign,
       'wavi',

@@ -74,7 +74,6 @@ Future<AtClient> buildPipelineBackedClient({
   // provider-less stage builds its own preference.
   final preference = AtClientPreference(posture: PqPosture.pqReady)
     ..hiveStoragePath = storagePath
-    ..commitLogPath = '$storagePath/commit'
     ..isLocalStoreRequired = true;
   if (crypto != null) preference.crypto = crypto;
 

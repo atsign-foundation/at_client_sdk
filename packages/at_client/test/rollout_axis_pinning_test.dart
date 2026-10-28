@@ -20,8 +20,7 @@ void main() {
           posture: posture ?? PqPosture.legacy,
           authenticationKeyAlgorithm: authenticationKeyAlgorithm,
           dataSigningKeyAlgorithms: dataSigningKeyAlgorithms)
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
 
   /// The same, but holding a data signing key.
   ///

@@ -30,8 +30,7 @@ void main() {
 
   AtClientPreference pref() => AtClientPreference()
     ..isLocalStoreRequired = true
-    ..hiveStoragePath = dir.path
-    ..commitLogPath = '${dir.path}/commit';
+    ..hiveStoragePath = dir.path;
 
   test(
       'the store the outgoing client built crosses the switch open, and the '

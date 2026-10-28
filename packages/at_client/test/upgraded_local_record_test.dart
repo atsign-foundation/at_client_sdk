@@ -97,8 +97,7 @@ void main() {
         namespace,
         AtClientPreference()
           ..namespace = namespace
-          ..hiveStoragePath = dir.path
-          ..commitLogPath = dir.path,
+          ..hiveStoragePath = dir.path,
         remoteSecondary: MockRemoteSecondary(),
         atKeysIo: await keyfileHolding(atSign,
             selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;

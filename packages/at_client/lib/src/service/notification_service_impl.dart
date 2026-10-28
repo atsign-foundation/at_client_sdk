@@ -334,7 +334,7 @@ class NotificationServiceImpl extends NotificationService {
             atClient.getPreferences()!.rootPort);
 
     final preference = atClient.getPreferences()!;
-    lookUps ??= defaultLookUps(preference);
+    lookUps ??= defaultLookUps();
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,

@@ -82,8 +82,7 @@ void main() {
       atSign,
       namespace,
       AtClientPreference(posture: PqPosture.legacy)
-        ..hiveStoragePath = storageDir
-        ..commitLogPath = '$storageDir/commit',
+        ..hiveStoragePath = storageDir,
       remoteSecondary: remoteSecondary,
       atKeysIo: await keyfileHolding(atSign,
           selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus='),

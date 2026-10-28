@@ -31,8 +31,7 @@ void main() {
   AtClientPreference pref(String path) => AtClientPreference()
     ..isLocalStoreRequired = true
     ..syncRegex = ''
-    ..hiveStoragePath = path
-    ..commitLogPath = '$path/commit';
+    ..hiveStoragePath = path;
 
   /// Builds a client on its own store, seeds it with [seed], then builds a
   /// SECOND client on that same store and returns it, running — the second is

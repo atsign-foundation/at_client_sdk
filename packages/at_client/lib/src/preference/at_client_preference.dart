@@ -1,6 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart' show internal, visibleForTesting;
-import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
@@ -246,14 +245,6 @@ class AtClientPreference {
       'client close it. Will be removed in the next major release.')
   String? hiveStoragePath;
 
-  /// Local device path of commit log.
-  ///
-  /// Read by nothing: the client keeps no commit log of its own, so whatever
-  /// is set here has no effect.
-  @Deprecated('Nothing reads this; the client is commit-log-free. Will be '
-      'removed in the next major release.')
-  String? commitLogPath;
-
   /// Syncing strategy of the client [SyncStrategy]
   /// [Deprecated] Use [SyncService]
   @Deprecated("Use [SyncService]")
@@ -278,12 +269,6 @@ class AtClientPreference {
   /// Specifies the namespace of an app.
   String? namespace;
 
-  /// Read by nothing: the Hive storage makes its own key and keeps it beside
-  /// the keystore.
-  @Deprecated('Nothing reads this; the Hive storage keeps its own key beside '
-      'the keystore. Removed in 4.0')
-  List<int>? keyStoreSecret;
-
   /// Domain of the root server. Defaults to root.atsign.org
   String rootDomain = 'root.atsign.org';
 
@@ -293,17 +278,12 @@ class AtClientPreference {
   /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
   int syncIntervalMins = 10;
 
-  /// Read by nothing: setting it changes no timeout.
-  @Deprecated('Read by nothing; removed in v4')
-  int outboundConnectionTimeout = 600000;
-
   /// The process-wide default network timeout: the maximum wall-clock the SDK
   /// will spend reaching/using the atServer (connect + retries + waiting for a
   /// response) before giving up. When set on the `AtClientPreference` used to
   /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
   /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies. This supersedes
-  /// [outboundConnectionTimeout], which nothing reads.
+  /// the existing default (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
@@ -363,38 +343,6 @@ class AtClientPreference {
   ///
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
-
-  /// When true, the TLS keys of every connection are logged to
-  /// [tlsKeysSavePath].
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..decryptPackets = true) to the verb that opens the client. Read by '
-      'the default factory until removed in 4.0.')
-  bool decryptPackets = false;
-
-  /// Where the TLS keys are written when [decryptPackets] is set.
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..tlsKeysSavePath = ...) to the verb that opens the client. Read by '
-      'the default factory until removed in 4.0.')
-  String? tlsKeysSavePath;
-
-  /// Path to the trusted certificates the TLS security context is built from.
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..pathToCerts = ...) to the verb that opens the client. Read by the '
-      'default factory until removed in 4.0.')
-  String? pathToCerts;
-
-  /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the
-  /// string representation of the AtKey.
-  /// * When set to true, keys such as public:foo@alice or @bob:foo@alice will be rejected
-  /// because they do not have a namespace. But keys such as public:foo.bar@alice of @bob:foo.bar.baz.bash@alice will be accepted.
-  /// * When set to false keys such as public:foo@alice or @bob:foo@alice will not be rejected
-  /// * Defaults to true, as applications should always be placing keys within a namespace
-  @Deprecated(
-      "namespace presence will become mandatory in next major version of the SDK")
-  bool enforceNamespace = true;
 
   /// Fetch the notifications received while the client was offline, from the
   /// last one it received. Defaults to true.

@@ -199,8 +199,7 @@ With no `lookUps`, connections are TLS on TCP with the defaults;
 `secureSocketLookUps` is that default, taking a `SecureSocketConfig` and an
 `onConnect` run on each new connection before anything else (a proxy that
 routes on `from:` is what that is for). A factory of your own can hand back
-any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
-`tlsKeysSavePath` are deprecated in favour of the factory's config.
+any `AtLookUp`.
 
 Every client keeps local storage, even if only in memory. A client given none
 opens Hive under `preference.hiveStoragePath` until 4.0. One given none and

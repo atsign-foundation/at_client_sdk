@@ -34,6 +34,13 @@
 - breaking: `ConnectivityListener` is removed; use a connectivity package of
   the app's choice.
 - breaking: `RemoteSecondary.addStreamData` is removed.
+- breaking: `AtClientPreference`'s `commitLogPath`, `keyStoreSecret` and
+  `outboundConnectionTimeout` are removed; nothing read them.
+- breaking: `AtClientPreference`'s `decryptPackets`, `tlsKeysSavePath` and
+  `pathToCerts` are removed; set them on the `SecureSocketConfig` of the
+  `lookUps` you pass, `secureSocketLookUps(config: ...)`.
+- breaking: `AtClientPreference.enforceNamespace` is removed: every key but a
+  `local:` one needs a namespace.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the
@@ -65,8 +72,6 @@
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.
-- chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
-  nothing reads it, and it is removed in v4.
 - `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to
   `StdErrLoggingHandler` from `at_utils_io.dart` to keep them off stdout.
 

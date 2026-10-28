@@ -99,7 +99,7 @@ class RemoteSecondary implements Secondary {
     // supplies below from whichever of the four shapes this client holds -
     // none of them are set on the lookup itself.
     this.atLookUp = atLookUp ??
-        (lookUps ?? defaultLookUps(preference))(
+        (lookUps ?? defaultLookUps())(
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           authenticator: null,

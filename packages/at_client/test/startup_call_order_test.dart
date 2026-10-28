@@ -135,8 +135,7 @@ void main() {
         // NOTE: named rather than defaulted — the default posture runs no
         // post-quantum startup at all, and this exercises exactly that startup.
         AtClientPreference(posture: PqPosture.pqReady)
-          ..hiveStoragePath = storageDir
-          ..commitLogPath = '$storageDir/commit',
+          ..hiveStoragePath = storageDir,
         enrollmentId: 'e-1',
         remoteSecondary: buildRecordingRemote(
             events: events,

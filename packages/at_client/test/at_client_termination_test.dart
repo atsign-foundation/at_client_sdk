@@ -10,9 +10,8 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 
-AtClientPreference _createPreference(String storagePath) => AtClientPreference()
-  ..hiveStoragePath = 'test/hive/$storagePath'
-  ..commitLogPath = 'test/hive/$storagePath';
+AtClientPreference _createPreference(String storagePath) =>
+    AtClientPreference()..hiveStoragePath = 'test/hive/$storagePath';
 
 Future<AtClient> _initializeAtClient(String atSign) async {
   final atClientManager = AtClientManager.getInstance();

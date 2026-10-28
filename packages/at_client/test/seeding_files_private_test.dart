@@ -66,7 +66,6 @@ void main() {
       // post-quantum startup at all, and that startup is what this exercises.
       AtClientPreference(posture: PqPosture.pqReady)
         ..hiveStoragePath = storageDir
-        ..commitLogPath = '$storageDir/commit'
         ..seedNamespaceKeys = true,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),

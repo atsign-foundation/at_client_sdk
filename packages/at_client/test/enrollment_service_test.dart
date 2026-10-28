@@ -61,12 +61,8 @@ void main() {
   setUpAll(() async {
     encryptionKeyPair = RsaKeyPair.generate();
     selfEncryptionKey = AESKey.generate(32).key;
-    atClient = await AtClientImpl.create(
-        currentAtSign,
-        'wavi',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/commit',
+    atClient = await AtClientImpl.create(currentAtSign, 'wavi',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         enrollmentId: enrollmentId,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
@@ -126,9 +122,7 @@ void main() {
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
-      var pref = AtClientPreference()
-        ..hiveStoragePath = "test/hive"
-        ..commitLogPath = "test/hive/commit";
+      var pref = AtClientPreference()..hiveStoragePath = "test/hive";
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign('@alice', 'wavi', pref, enrollmentId: enrollmentId);
       expect(atClientManager.atClient.enrollmentId, enrollmentId);
@@ -158,8 +152,7 @@ void main() {
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
@@ -201,12 +194,8 @@ void main() {
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
 
-      final client = await AtClientImpl.create(
-          currentAtsign,
-          'buzz',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
+      final client = await AtClientImpl.create(currentAtsign, 'buzz',
+          AtClientPreference()..hiveStoragePath = 'test/hive',
           remoteSecondary: secondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
@@ -241,12 +230,8 @@ void main() {
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
 
-      final client = await AtClientImpl.create(
-          currentAtsign,
-          'buzz',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
+      final client = await AtClientImpl.create(currentAtsign, 'buzz',
+          AtClientPreference()..hiveStoragePath = 'test/hive',
           remoteSecondary: secondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
@@ -298,8 +283,7 @@ void main() {
           atSign,
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
+            ..hiveStoragePath = 'test/hive',
           remoteSecondary: secondary);
 
       // Approval seals the approver's own encryption private key and
@@ -379,8 +363,7 @@ void main() {
           EnrollmentStatus.approved
         ];
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
           remoteSecondary: mockRemoteSecondary);
@@ -425,8 +408,7 @@ void main() {
       EnrollmentListRequestParam listRequestParam = EnrollmentListRequestParam()
         ..enrollmentListFilter = [EnrollmentStatus.approved];
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
           remoteSecondary: mockRemoteSecondary);

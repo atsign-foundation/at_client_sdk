@@ -21,9 +21,7 @@ void main() {
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
-    final preferences = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+    final preferences = AtClientPreference()..hiveStoragePath = 'test/hive';
 
     final ac = await AtClientImpl.create(
       atSign,
@@ -48,8 +46,7 @@ void main() {
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
     final preferences = AtClientPreference(posture: PqPosture.legacy)
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
 
     // A keyfile with no typed entries at all — the flat-fields legacy shape.
     // NOTE: the legacy posture above is deliberate — a pqReady client holding
@@ -102,9 +99,7 @@ void main() {
           apkamPublicKey: flatPair.atPublicKey.publicKey,
           apkamPrivateKey: flatPair.atPrivateKey.privateKey);
 
-    final preferences = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+    final preferences = AtClientPreference()..hiveStoragePath = 'test/hive';
 
     final ac = await AtClientImpl.create(
       atSign,

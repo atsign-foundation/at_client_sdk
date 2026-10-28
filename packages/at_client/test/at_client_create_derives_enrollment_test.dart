@@ -30,8 +30,7 @@ void main() {
 
   AtClientPreference pref() => AtClientPreference(posture: PqPosture.legacy)
     ..isLocalStoreRequired = true
-    ..hiveStoragePath = dir.path
-    ..commitLogPath = '${dir.path}/commit';
+    ..hiveStoragePath = dir.path;
 
   String b64(String s) => base64Encode(utf8.encode(s));
 

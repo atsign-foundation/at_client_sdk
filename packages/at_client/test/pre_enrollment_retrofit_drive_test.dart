@@ -48,7 +48,6 @@ void main() {
   AtClientPreference preferenceAt(PqPosture posture, String atSign) =>
       AtClientPreference(posture: posture)
         ..hiveStoragePath = 'test/hive/$atSign'
-        ..commitLogPath = 'test/hive/$atSign/commit'
         // NOTE: unroutable as a backstop. The refusal below stops the
         // retrofit before the step that would dial this, so nothing should
         // reach it - and if anything ever does, it must fail rather than

@@ -140,8 +140,7 @@ void main() {
         _owner,
         _namespace,
         AtClientPreference(posture: PqPosture.legacy)
-          ..hiveStoragePath = '${storage.path}/hive'
-          ..commitLogPath = '${storage.path}/commit',
+          ..hiveStoragePath = '${storage.path}/hive',
         remoteSecondary: remote,
       );
     });

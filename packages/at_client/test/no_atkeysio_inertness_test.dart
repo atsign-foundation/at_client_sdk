@@ -102,8 +102,7 @@ void main() {
       // posture runs no post-quantum startup at all, so the client would be
       // inert whether or not the absent AtKeysIo mattered.
       AtClientPreference(posture: PqPosture.pqReady)
-        ..hiveStoragePath = storageDir
-        ..commitLogPath = '$storageDir/commit',
+        ..hiveStoragePath = storageDir,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
       // Deliberately NO atKeysIo — its absence is the property under test.
@@ -138,8 +137,7 @@ void main() {
       atSign,
       'buzz',
       AtClientPreference(posture: PqPosture.pqReady)
-        ..hiveStoragePath = storageDir
-        ..commitLogPath = '$storageDir/commit',
+        ..hiveStoragePath = storageDir,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
     );

@@ -266,9 +266,7 @@ void main() {
 
   group('a posture that configures no post-quantum providers', () {
     AtClientPreference at(PqPosture posture) =>
-        AtClientPreference(posture: posture)
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path';
+        AtClientPreference(posture: posture)..hiveStoragePath = 'test/hive';
 
     test('refuses a crypto config that registers them', () {
       // NOTE: the only row that fails if the refusal is deleted — every other

@@ -174,8 +174,7 @@ void main() {
           // NOTE: the posture is named rather than defaulted — the default
           // runs no post-quantum startup, which is the startup under test.
           AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive/evictionwiring'
-            ..commitLogPath = 'test/hive/evictionwiring') as AtClientImpl;
+            ..hiveStoragePath = 'test/hive/evictionwiring') as AtClientImpl;
       final registered = <SyncProgressListener>[];
       final sync = _RecordingSyncService(registered);
 

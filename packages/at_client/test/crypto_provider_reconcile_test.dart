@@ -34,7 +34,6 @@ void main() {
   group('setCurrentAtSign crypto-config adoption', () {
     AtClientPreference prefWith(String providerId) => AtClientPreference()
       ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path'
       ..crypto = CryptoConfig(
           defaultProviderId: 'legacy', providers: [_StubProvider(providerId)]);
 

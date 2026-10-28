@@ -889,7 +889,7 @@ class AtClientImpl implements AtClient {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
-    this.lookUps = lookUps ?? defaultLookUps(preference);
+    this.lookUps = lookUps ?? defaultLookUps();
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -1949,24 +1949,12 @@ class AtClientImpl implements AtClient {
 
     ensureLowerCase(atKey);
 
-    // validate the atKey
-    // * Setting the validateOwnership to true to perform KeyOwnerShip validation and KeyShare validation
-    // * Setting enforceNamespace to true unless specifically set to false in the AtClientPreference
-    bool enforceNamespace = true;
-    // ignore: deprecated_member_use_from_same_package
-    if (preference != null && preference!.enforceNamespace == false) {
-      enforceNamespace = false;
-    }
-    // Clients should be able to store any local keys they want
-    if (atKey.isLocal) {
-      enforceNamespace = false;
-    }
     var validationResult = AtKeyValidators.get().validate(
       atKey.toString(),
       ValidationContext()
         ..atSign = _atSign
         ..validateOwnership = true
-        ..enforceNamespace = enforceNamespace,
+        ..enforceNamespace = !atKey.isLocal,
     );
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.

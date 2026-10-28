@@ -197,7 +197,7 @@ Future<AtAuthSession> retrofitIdentity({
       await authenticatedLookUp(
           session.atSign, session.atKeysIo, session.rootDomain,
           enrollmentId: session.enrollmentId,
-          lookUps: lookUps ?? defaultLookUps(preference));
+          lookUps: lookUps ?? defaultLookUps());
 
   // NOTE: the preference's value, not the posture's — an app may set
   // `authenticationKeyAlgorithm` beside a posture, and reading

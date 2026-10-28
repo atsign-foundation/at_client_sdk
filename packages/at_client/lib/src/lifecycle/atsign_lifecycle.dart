@@ -214,7 +214,7 @@ extension AtsignLifecycle on Atsign {
     // The activation's own connection, built the way the application chose
     // and closed when it is done; a supplied one is the caller's to close.
     final connection = atLookUp ??
-        (lookUps ?? defaultLookUps(preference))(
+        (lookUps ?? defaultLookUps())(
             atSign: this, rootDomain: rootDomain, authenticator: null);
     try {
       await activateAtSign(
@@ -336,7 +336,7 @@ extension AtsignLifecycle on Atsign {
     request.apkamKeysExpiryDuration = apkamKeysExpiry;
 
     final lookUp = atLookUp ??
-        (lookUps ?? defaultLookUps(preference))(
+        (lookUps ?? defaultLookUps())(
             atSign: this, rootDomain: rootDomain, authenticator: null);
     final AtEnrollmentResponse response;
     try {
@@ -365,7 +365,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
-        lookUps: lookUps ?? defaultLookUps(preference));
+        lookUps: lookUps ?? defaultLookUps());
   }
 
   /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
@@ -416,7 +416,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
-          lookUps: lookUps ?? defaultLookUps(preference));
+          lookUps: lookUps ?? defaultLookUps());
     }
     return null;
   }

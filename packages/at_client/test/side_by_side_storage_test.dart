@@ -46,8 +46,7 @@ void main() {
       AtClientPreference()
         ..isLocalStoreRequired = true
         ..syncRegex = ''
-        ..hiveStoragePath = path
-        ..commitLogPath = '$path/commit',
+        ..hiveStoragePath = path,
     );
     // NOTE: AtClientImpl.create leaves the sync service to its caller - only
     // AtClientManager wires one - and a write on a client without one is

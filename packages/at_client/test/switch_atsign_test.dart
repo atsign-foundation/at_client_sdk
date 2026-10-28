@@ -10,8 +10,7 @@ void main() {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       final mockAtLookUp = MockAtLookUp();
       // The real RemoteSecondary wraps this lookup, and closing the client
       // closes the lookup - so an unstubbed close() answers null into the
@@ -32,14 +31,11 @@ void main() {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      final bobPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+      final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
@@ -49,16 +45,13 @@ void main() {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
-      final bobPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+      final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       atClientManager.atClient.syncService

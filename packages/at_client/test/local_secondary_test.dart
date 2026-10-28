@@ -119,8 +119,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -137,8 +136,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -155,8 +153,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -175,8 +172,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -194,8 +190,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -226,8 +221,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -248,8 +242,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -275,8 +268,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -303,8 +295,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -331,8 +322,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -364,8 +354,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -414,8 +403,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       atClient.syncService = MockSyncService();
@@ -487,8 +475,7 @@ void main() {
     final preference = AtClientPreference()
       ..syncRegex = '.$namespace'
       ..hiveStoragePath =
-          '*&@should not be used by these tests, we will mock local storage'
-      ..commitLogPath = 'test/hive/commit';
+          '*&@should not be used by these tests, we will mock local storage';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
 
@@ -969,11 +956,7 @@ void main() {
     Future<AtClient> client({String? enrollmentId}) async {
       remote = MockRemoteSecondary();
       final c = await AtClientImpl.create(
-          atSign,
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
+          atSign, 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
           remoteSecondary: remote);
       c.syncService = MockSyncService();
       c.enrollmentId = enrollmentId;

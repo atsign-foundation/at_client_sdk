@@ -16,9 +16,7 @@ void main() {
       'shares that storage\'s queue rather than opening one of its own',
       () async {
     final dir = Directory.systemTemp.createTempSync('at_client_wiring_');
-    final pref = AtClientPreference()
-      ..hiveStoragePath = dir.path
-      ..commitLogPath = '${dir.path}/commit';
+    final pref = AtClientPreference()..hiveStoragePath = dir.path;
     final client =
         await AtClientImpl.create('@storagewire', 'wavi', pref) as AtClientImpl;
 

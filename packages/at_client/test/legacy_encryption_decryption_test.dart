@@ -21,8 +21,7 @@ void main() {
 
   setUp(() async {
     AtClientPreference atClientPreference = AtClientPreference()
-      ..hiveStoragePath = 'test/unit_test_storage/hive'
-      ..commitLogPath = 'test/unit_test_storage/commit';
+      ..hiveStoragePath = 'test/unit_test_storage/hive';
 
     encryptionKeyPair = RsaKeyPair.generate();
 

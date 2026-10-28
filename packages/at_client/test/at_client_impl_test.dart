@@ -47,7 +47,6 @@ void main() {
     const atSign = '@alice';
     AtClientPreference pref() => AtClientPreference()
       ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/commit'
       ..isLocalStoreRequired = true;
 
     setUp(() async {
@@ -133,8 +132,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       expect(atClient.getCurrentAtSign(), atSign);
@@ -142,8 +140,7 @@ void main() {
     test('test current atsign - backward compatibility', () async {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
       expect(atClient.getCurrentAtSign(), atSign);
     });
@@ -151,8 +148,7 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
@@ -163,8 +159,7 @@ void main() {
     String atSign = '@alice';
     String namespace = 'wavi';
     AtClientPreference atClientPreference = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
 
     setUp(() async {
       await _dropCachedClients(atSign);
@@ -199,8 +194,7 @@ void main() {
       String atSign = '@alice';
       String namespace = 'wavi';
       AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
 
@@ -225,8 +219,7 @@ void main() {
       String atSign3 = '@emoji';
       String namespace = 'wavi';
       AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign1, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -261,8 +254,7 @@ void main() {
       String atSign3 = '@emoji';
       String namespace = 'wavi';
       AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign1, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -288,8 +280,7 @@ void main() {
     late AtClientManager manager;
     late AtClientImpl client;
     AtClientPreference pref = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
     test('Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
@@ -343,8 +334,7 @@ void main() {
 
   group('A group of tests related to apkam/enrollments', () {
     AtClientPreference pref = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
@@ -412,13 +402,9 @@ void main() {
         'A test to verify exception is thrown when SPP contains special characters',
         () async {
       String invalidSPP = 'abc#12';
-      var atClientManager =
-          await AtClientManager.getInstance().setCurrentAtSign(
-              atSign,
-              'wavi',
-              AtClientPreference()
-                ..hiveStoragePath = 'test/hive'
-                ..commitLogPath = 'test/hive/path');
+      var atClientManager = await AtClientManager.getInstance()
+          .setCurrentAtSign(atSign, 'wavi',
+              AtClientPreference()..hiveStoragePath = 'test/hive');
       expect(
           () async => await atClientManager.atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -431,8 +417,7 @@ void main() {
         () async {
       String invalidSPP = 'abc1234';
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, 'wavi', pref);
       expect(
@@ -444,8 +429,7 @@ void main() {
 
     test('A test to verify SPP is created successfully', () async {
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
           remoteSecondary: mockRemoteSecondary);
 
@@ -465,8 +449,7 @@ void main() {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     test('test max length for put method', () async {
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       var key = TestUtils.createRandomString(250);
@@ -498,9 +481,7 @@ void main() {
       final client = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
       );
@@ -532,9 +513,7 @@ void main() {
       final client = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
       );
@@ -583,8 +562,7 @@ void main() {
     test('defaults to the legacy crypto config when none is configured',
         () async {
       AtClientPreference preferences = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -614,8 +592,7 @@ void main() {
       // reads post-quantum records and legacy does not, so this arm covers the
       // default posture and not the legacy one.
       AtClientPreference preferences = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -634,8 +611,7 @@ void main() {
         '@ready',
         'buzz',
         AtClientPreference(posture: PqPosture.pqReady)
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+          ..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@ready'),
       );
@@ -654,8 +630,7 @@ void main() {
       // half — a peer seals to it and the record comes back refused.
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: await typedKeyfile('@alice'));
@@ -717,8 +692,7 @@ void main() {
     test('a configuring posture leaves both steps on', () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: await typedKeyfile('@bob'));
@@ -746,8 +720,7 @@ void main() {
     test('the legacy posture configures no post-quantum providers', () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -771,8 +744,7 @@ void main() {
         () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.pqActive)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -796,7 +768,6 @@ void main() {
       final provider = _RecordingCryptoProvider('test-provider');
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path'
         ..crypto = CryptoConfig(
           defaultProviderId: 'test-provider',
           providers: [provider],
@@ -818,7 +789,6 @@ void main() {
         () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path'
         ..crypto = const CryptoConfig(
           defaultProviderId: 'missing-provider',
         );
@@ -845,7 +815,6 @@ void main() {
         'buzz',
         AtClientPreference()
           ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path'
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
@@ -860,7 +829,6 @@ void main() {
         'buzz',
         AtClientPreference()
           ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path'
           ..crypto = CryptoConfig(
             defaultProviderId: 'legacy',
             providers: [provider],
@@ -879,9 +847,7 @@ void main() {
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: keysIo,
       );
@@ -895,9 +861,7 @@ void main() {
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
       );
 
@@ -911,9 +875,7 @@ void main() {
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: firstKeysIo,
       );
@@ -921,9 +883,7 @@ void main() {
       AtClient ac2 = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
       );

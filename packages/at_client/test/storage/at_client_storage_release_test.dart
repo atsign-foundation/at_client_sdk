@@ -64,9 +64,7 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  AtClientPreference pref() => AtClientPreference()
-    ..hiveStoragePath = dir.path
-    ..commitLogPath = '${dir.path}/commit';
+  AtClientPreference pref() => AtClientPreference()..hiveStoragePath = dir.path;
 
   test(
       'a second storage for one atSign at the same location is refused; '
