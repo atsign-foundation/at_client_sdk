@@ -83,7 +83,7 @@ void main() {
   });
 
   test('does not return a value whose signature does not verify', () async {
-    expect(await lookupVerified('evil', signatureOver('good')), 'data:null',
+    expect(await lookupVerified('changed', signatureOver('good')), 'data:null',
         reason: 'a value signed for other data is not verified data');
   });
 }
