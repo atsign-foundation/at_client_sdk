@@ -28,13 +28,10 @@ void main() {
     expect(received, ['data:ok\n']);
   });
 
-  test('inbound takes a List<int> transformer, such as utf8.decoder',
-      () async {
+  test('inbound takes a List<int> transformer, such as utf8.decoder', () async {
     final socket = FakeAtServerSocket();
     final connection = OutboundConnectionImpl(socket);
     final received = <String>[];
-    // As the bare socket upcast, this compiled and then failed its run-time
-    // check: Utf8Decoder is not a StreamTransformer<Uint8List, String>.
     connection.inbound.transform(utf8.decoder).listen(received.add);
 
     await socket.serverSends('data:ok\n');
