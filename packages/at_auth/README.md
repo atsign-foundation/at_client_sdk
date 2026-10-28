@@ -329,7 +329,9 @@ final client = await Atsign(atSign).open(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
     storage: HiveAtClientStorage(                // package:at_client/hive.dart
         atSign: atSign, storagePath: storagePath, closedByClient: true),
-    preference: AtClientPreference()..namespace = 'my_app');
+    preference: AtClientPreference()..namespace = 'my_app',
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64));
 client.connection.current;                       // did the atServer accept the keys
 final keys = await client.atKeysIo!.read(atSign); // the material, from the store
 // Which enrollment the keyfile authenticates as, with no client built:
@@ -357,7 +359,8 @@ final enrollmentId = await activateAtSign(
 await lookUp.close();
 // 4.0, in at_client: the activation and the client it opens
 final client = await Atsign(atSign).activate(
-    cramSecret: cramSecret, keys: keys, preference: preference);
+    cramSecret: cramSecret, keys: keys, preference: preference,
+    storage: storage, lookUps: lookUps, secondaryAddressFinder: atDirectory);
 ```
 
 **Request an enrollment and wait for its approval**
@@ -377,8 +380,10 @@ final approved = await enrollment.waitForApproval(submitted);
 // 4.0: the same handshake, filed in `keys` so a restart resumes it
 final pending = await Atsign(atSign).enroll(
     otp: otp, app: 'my_app', device: 'laptop',
-    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference);
-final client = await pending.client(preference);   // throws AtEnrollmentException on a denial
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: atDirectory);
+final client = await pending.client(preference,
+    storage: storage);                             // throws AtEnrollmentException on a denial
 ```
 
 **Approve, deny, revoke; passcodes**

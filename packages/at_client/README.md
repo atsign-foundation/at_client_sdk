@@ -133,19 +133,25 @@ summary is:
 for a client; every verb hands back an `AtClient` the app owns and stops.
 
 ```dart
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 // Every client keeps local storage, here Hive in a directory the app picks.
 AtClientStorage storage() => HiveAtClientStorage(
     atSign: '@alice', storagePath: '/data/alice', closedByClient: true);
 
+// How the client reaches its atServer, and the atDirectory that says where.
+final lookUps = secureSocketLookUps();
+final atDirectory = CacheableSecondaryAddressFinder('root.atsign.org', 64);
+
 // Log in: a client on keys the app already holds. It comes back online,
 // offline or refused, and says which; offline it serves its local store.
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: storage(),
-    preference: AtClientPreference()..namespace = 'todos');
+    preference: AtClientPreference()..namespace = 'todos',
+    lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 client.connection.current;                  // online | offline | refused
 client.connection.changes.listen((state) => print(state));
 await client.connection.awaitOnline();      // wait, with a budget
@@ -153,17 +159,20 @@ await client.connection.awaitOnline();      // wait, with a budget
 // Onboard: activate a newly registered atSign with its CRAM secret. The
 // keys it mints land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, storage: storage(), preference: preference);
+    cramSecret: secret, keys: keys, storage: storage(), preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: atDirectory);
 
 // Enroll: ask the atSign's owner to approve this app. The request is filed
 // in `keys` as pending, so a restart resumes it rather than repeating it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
-    preference: preference);
+    preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 final enrolled = await pending.client(preference,
     storage: storage());                                 // waits for approval
 final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
-    device: 'phone', keys: keys, preference: preference);
+    device: 'phone', keys: keys, preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.
 final requests = await owner.enrollments.pending();
@@ -178,24 +187,28 @@ final passcode = await owner.enrollments.otp();
 AtClientManager.getInstance().use(client);
 ```
 
-Three things are the platform's to supply, and every verb takes them the
-same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
-Flutter keychain, memory); **`storage:`**, the client's local store, each
+Four things are the platform's to supply, and every verb takes them the
+same way; at_client_cli and at_client_flutter supply each for their apps.
+**`keys:`** is where the atSign's keys live (`FileAtKeysIo`, the
+Flutter keychain, memory); **`storage:`** is the client's local store, each
 backend from its own import (`HiveAtClientStorage` from
 `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 `package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
-`package:at_client/memory.dart`); and **`lookUps:`**, how
-the client reaches its atServer. The last is an `AtLookUpFactory`, a function
+`package:at_client/memory.dart`); **`secondaryAddressFinder:`** is the
+atDirectory that says where the atServer is (`CacheableSecondaryAddressFinder`
+natively); and **`lookUps:`** is how the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
 monitor's - so a transport or a proxy convention is chosen once:
 
 ```dart
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
     preference: AtClientPreference()..namespace = 'todos',
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
         config: SecureSocketConfig()..pathToCerts = '/certs',
         onConnect: (connection) => connection.sendSync('from:@alice\n')));
