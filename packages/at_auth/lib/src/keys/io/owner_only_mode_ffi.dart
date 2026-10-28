@@ -162,7 +162,17 @@ OSError? _lastError(_Libc libc) {
   final errors = libc.errors;
   if (errors == null) return null;
   final code = errors.errno().value;
-  return OSError(errors.strerror(code).toDartString(), code);
+  return OSError(_describe(errors.strerror(code)), code);
+}
+
+/// [description] decoded as UTF-8, or empty when the locale's character set
+/// is another one.
+String _describe(Pointer<Utf8> description) {
+  try {
+    return description.toDartString();
+  } on FormatException {
+    return '';
+  }
 }
 
 void _writeAll(_Libc libc, int fd, List<int> bytes, String path) {
