@@ -6,3 +6,5 @@
 
 **at_utils** is the Utility library for Atsign Protocol projects. It contains
 utility classes for atsign, atmetadata, configuration and logger.
+
+Upgrading from 3.x: the io logging handlers, `PseudoServerSocket` and `ApplicationConfiguration` are in `package:at_utils/at_utils_io.dart`; see [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).

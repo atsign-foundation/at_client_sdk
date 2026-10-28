@@ -13,17 +13,23 @@ notifications.
 `at_client` runs on **both Dart (CLI / server)** and **Flutter
 (mobile / desktop / IoT)**. It is intentionally platform-neutral:
 the actual onboarding dialogs, secure key storage, and CLI scaffolding
-live in sibling packages that depend on `at_client`. **Flutter web
-is not supported** — atSign onboarding and key storage rely on
-platform plugins that don't have web implementations today.
+live in the platform packages that depend on `at_client`, and an app
+imports its platform package rather than this one
+([the SDK shape](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/sdk-shape.md)).
+**Flutter web is not supported** — atSign onboarding and key storage rely
+on platform plugins that don't have web implementations today.
+
+Upgrading from 3.x: see
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).
 
 ## Which package do I actually want?
 
-| If you're building…                        | Start with                                                                                                               |
-|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI or server app**               | [`at_cli_commons`](../at_cli_commons) for boilerplate + [`at_onboarding_cli`](../at_onboarding_cli) to provision atSigns |
-| A **Flutter app** (mobile/desktop/IoT)     | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets (web not supported)  |
-| **Understanding** the atSign lifecycle     | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup            |
+| If you're building…                                     | Start with                                                                                                         |
+|---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **platform package**, or a program that passes every dependency itself | this package                                                                      |
+| **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 
 ## Core surface
 

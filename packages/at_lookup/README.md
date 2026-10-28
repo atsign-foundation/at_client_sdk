@@ -4,6 +4,9 @@
 
 # at_lookup library
 
+Upgrading from 3.x: see [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).
+
+
 ## Overview:
 
 The AtLookup Library is the low-level direct implementation of the Atsign Protocol verbs. The AtLookup package is an interface

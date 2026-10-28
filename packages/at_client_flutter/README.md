@@ -233,6 +233,8 @@ atKeysIo.write(atSign, atKeys);
 
 ## Migrating from 1.x
 
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app through the whole move, at_client included; this section covers at_client_flutter's own changes.
+
 2.0 removes the two services that orchestrated at_auth for an app, and an app
 no longer imports at_auth. The dialogs take the atSign, the keys store and the
 `AtClientPreference`, and hand back the `AtClient` they opened; an app with

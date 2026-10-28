@@ -268,6 +268,8 @@ file first preserves the previous state as `<file>.bak` alongside it.
 
 ## Migrating from 3.x
 
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app through the whole move; this section covers at_auth's own changes.
+
 4.0 keeps the key material, the `.atKeys` stores and the enrollment
 handshakes, and hands everything an application used to call to
 [`at_client`](../at_client)'s `Atsign` verbs. An app on `at_client_flutter`

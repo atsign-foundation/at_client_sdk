@@ -210,6 +210,8 @@ Worked examples covering each flow are in [`example/bin/`](example/bin).
 
 ## Moving from at_onboarding_cli and at_cli_commons
 
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes a program through the whole move, at_client included; this section covers this package's own changes.
+
 at_client_cli carries both packages' code. Their last majors,
 at_onboarding_cli 2.0.0 and at_cli_commons 4.0.0, re-export it under a
 deprecated library and keep the `at_activate` and `at_register` executables,

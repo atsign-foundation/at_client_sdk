@@ -1,4 +1,5 @@
 ## 4.0.0-rc1
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer from a
   browser: `webSocketLookUps()` finds it through the atDirectory over HTTPS
   and connects over `wss://`; `fixedAddressWebSocketLookUps(host:, port:)`

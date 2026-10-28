@@ -1,5 +1,6 @@
 ## 4.0.0
 
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: at_cli_commons is a deprecated re-export of at_client_cli, which
   now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
 - breaking: `MySyncProgressListener` is gone, and `CLIBase`'s `preference` is

@@ -1,5 +1,6 @@
 ## 1.0.0
 
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:
   `CLIBase`, the at_activate and at_register tools, and the library behind
   them. `AtActivate.main` and `AtRegister.main` run the tools inside another

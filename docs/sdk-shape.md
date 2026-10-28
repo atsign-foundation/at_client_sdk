@@ -68,4 +68,5 @@ and the **foundation** libraries beneath it never assume a platform at all.
    themselves.
 10. **Upgrading is a platform-package bump.** A core major brings a major of
     each platform package. An app moves by changing its platform package's
-    constraint, plus any feature packages', following the upgrade guide.
+    constraint, plus any feature packages', following
+    [the upgrade guide](upgrade-to-4.md).
