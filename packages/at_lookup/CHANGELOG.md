@@ -42,9 +42,8 @@
 - fix: a refused CRAM authentication's exception carries the atServer's
   response, and a response line starting `stream:` is refused as unexpected
   (AT0014).
-- fix: `lookup(..., verifyData: true)` returns `data:null` for a value whose
-  signature does not verify, as it already did for one whose check threw,
-  instead of returning the value.
+- fix: `lookup(..., verifyData: true)` returns the value only when its
+  signature verifies against the sharer's public key.
 - perf: a response is read as soon as it arrives, rather than up to 10ms
   later.
 - chore: opening and closing a connection log at finer rather than info.
