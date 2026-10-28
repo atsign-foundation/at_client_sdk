@@ -701,6 +701,31 @@ void main() {
     }
 
     test(
+        'when it holds a credential and is rewritten flat for the atSign it '
+        'names with other legacy fields, then the rewrite is refused', () {
+      final existing = typedWithoutMaterial();
+      for (final key in auth_constants.keySchemaList) {
+        for (final (change, candidate) in <(String, Map<String, dynamic>)>[
+          (
+            'changed',
+            {..._fixtureLegacyJson(), key: 'changed-${existing[key]}'}
+          ),
+          ('removed', _fixtureLegacyJson()..remove(key)),
+        ]) {
+          expect(
+              () => assurance.validateMapUpdate(
+                  existing: existing,
+                  candidate: candidate,
+                  atsign: alice.toAtsign()),
+              throwsA(isA<AtKeysAssuranceException>()
+                  .having((e) => e.message, 'message', contains('map.legacy'))),
+              reason: '$key $change: the credential it holds is not replaced '
+                  'by the flat rewrite for the atSign it names');
+        }
+      }
+    });
+
+    test(
         'when it is rewritten flat for another atSign, then the rewrite is '
         'refused', () {
       expect(
