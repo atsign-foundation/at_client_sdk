@@ -342,7 +342,7 @@ void main() {
 
     test(
         'A flat keyfile naming another atSign and holding no credential is '
-        'still refused', () async {
+        'refused', () async {
       final path = await flatKeyfileFor('@bob🛠');
       final before = File(path).readAsStringSync();
 

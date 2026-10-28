@@ -11,7 +11,7 @@
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.
 - fix: `FileAtKeysIo` refuses to write keys for one atSign over a keyfile
-  that names another atSign, including one that holds no credential yet.
+  that holds no credential and names another atSign.
 - build: requires `at_utils` ^3.2.0.
 - build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
