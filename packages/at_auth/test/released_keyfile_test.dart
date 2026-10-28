@@ -221,6 +221,101 @@ void main() {
               'equal what at_auth 3.3.0 read');
     });
   });
+
+  group(
+      'A keyfile the previous published at_auth wrote still reads and '
+      'updates: a keyfile holding only pending content', () {
+    final pendingContent = <(String, AtKeys Function(Atsign owner))>[
+      (
+        'a pending enrollment',
+        (owner) => AtKeys(atsign: owner)
+          ..addKey(symmetricKey('pending', enrollmentId: 'e-1')
+              .withStatus(CryptographicMaterialStatus.pending))
+      ),
+      (
+        'an enrollment with no keys yet',
+        (owner) => AtKeys(atsign: owner)
+          ..recordEnrollmentSnapshot('e-1', appName: 'app')
+      ),
+      (
+        'pending keys of its own atSign',
+        (owner) => AtKeys(atsign: owner)
+          ..addKey(symmetricKey('pending')
+              .withStatus(CryptographicMaterialStatus.pending))
+      ),
+    ];
+
+    /// Writes a keyfile for [owner] holding [content], at a path every
+    /// atSign shares.
+    Future<String> keyfileFor(String owner, AtKeys content) async {
+      final path = '${dir.path}/shared.atKeys';
+      await FileAtKeysIo(filePath: (_) => path).write(owner, content);
+      final written =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      expect(written,
+          allOf(containsPair('version', 1), containsPair('atsign', owner)),
+          reason: 'the Given: a typed keyfile whose atsign field names $owner');
+      expect(
+          written.keys, anyOf(contains('enrollments'), contains('atsignKeys')),
+          reason: 'the Given: it holds pending content');
+      expect([
+        written['aesPkamPrivateKey'],
+        written['aesEncryptPrivateKey'],
+        written['selfEncryptionKey'],
+      ], everyElement(isNull), reason: 'the Given: it holds no credential');
+      return path;
+    }
+
+    for (final (shape, content) in pendingContent) {
+      test(
+          'A keyfile naming another atSign and holding only pending content '
+          'is still refused: $shape', () async {
+        final path = await keyfileFor('@bob🛠', content('@bob🛠'.toAtsign()));
+        final before = File(path).readAsStringSync();
+
+        await expectLater(
+            FileAtKeysIo(filePath: (_) => path)
+                .flush(atsign.toAtsign(), legacyAtKeys()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'a keyfile whose atsign field names another atSign is not '
+                'rewritten for $atsign, whatever pending content it holds');
+        expect(File(path).readAsStringSync(), before,
+            reason: 'the keyfile is left as it was');
+      });
+
+      test(
+          'A keyfile holding only its own pending content is rewritten in '
+          'the flat shape: $shape', () async {
+        final path = await keyfileFor(atsign, content(atsign.toAtsign()));
+        final io = FileAtKeysIo(filePath: (_) => path);
+
+        await io.flush(atsign.toAtsign(), legacyAtKeys());
+
+        final after =
+            jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+        expect(after.keys, isNot(contains('version')),
+            reason: 'the keyfile is written in the flat shape');
+        expectLegacyAtKeys(await io.read(atsign), legacyAtKeys());
+      });
+    }
+
+    test(
+        'A keyfile naming another atSign and holding only pending content is '
+        'still refused: as when it holds nothing typed', () async {
+      final path = '${dir.path}/shared.atKeys';
+      File(path).writeAsStringSync(
+          jsonEncode({'version': 1, 'atsign': '@bob🛠', 'keys': <Object?>[]}));
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path)
+              .flush(atsign.toAtsign(), legacyAtKeys()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'a keyfile whose atsign field names another atSign is not '
+              'rewritten for $atsign');
+    });
+  });
 }
 
 /// The values a released reader's read-back records, by field name.

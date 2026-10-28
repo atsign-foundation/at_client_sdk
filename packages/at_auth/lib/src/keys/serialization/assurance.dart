@@ -269,8 +269,12 @@ class AtKeysAssurance {
   /// when it drops anything [existing] holds.
   ///
   /// [atsign] is the atSign [candidate] is written for. A typed [existing]
-  /// holding no typed material may be rewritten in the flat shape only when
-  /// it names that atSign.
+  /// may be rewritten in the flat shape only:
+  /// - when it is of the version this build writes and holds no typed
+  ///   material, and then, if it holds a credential or [atsign] is given,
+  ///   only when it names [atsign];
+  /// - when it holds no credential, and then, if [atsign] is given, only
+  ///   when it names no atSign other than [atsign].
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
@@ -288,7 +292,8 @@ class AtKeysAssurance {
       // NOTE: a typed document holding no credential — every material
       // pending, none of the flat secrets — is a request awaiting approval,
       // and a candidate that drops the typed header is that request
-      // discarded, leaving a store that reads as holding nothing.
+      // discarded, leaving a store that reads as holding nothing. A write
+      // the caller names another atSign for may not discard it.
       final emptied = !candidate.containsKey('version') &&
           !_holdsCredential(existingMaterials, existingLegacy);
       // NOTE: a typed document of the version this build writes, holding no
@@ -304,6 +309,9 @@ class AtKeysAssurance {
       } else if (!emptied) {
         _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
         _assertSame(existing['version'], candidate['version'], 'map.version');
+      } else if (atsign != null && existing['atsign'] != null) {
+        _assertSame(_asAtsign(existing['atsign']), _asAtsign(atsign.toString()),
+            'map.atsign');
       }
     } else if (candidate.containsKey('version') &&
         existingLegacy.containsKey('atsign')) {

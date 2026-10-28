@@ -632,6 +632,48 @@ void main() {
           'keys': <Object?>[],
         };
 
+    Map<String, dynamic> pendingEnrollment() => {
+          'enrollments': [
+            {
+              'enrollmentId': 'e-1',
+              'keys':
+                  encodeAtKeysDocument([_pendingAuthenticationMaterial('e-1')])
+            }
+          ]
+        };
+
+    /// A typed keyfile holding no credential: the fixture's public keys,
+    /// and [content].
+    Map<String, dynamic> noCredential(
+            {String atsign = alice, Map<String, dynamic> content = const {}}) =>
+        {
+          ...typedWithoutMaterial(
+              atsign: atsign, legacy: _publicOnlyLegacyJson()),
+          ...content
+        };
+
+    /// Typed containers holding only pending content, by shape.
+    List<(String, Map<String, dynamic>)> pendingContent() => [
+          (
+            'an enrollment snapshot with no keys',
+            {
+              'enrollments': [
+                {'enrollmentId': 'e-1', 'keys': <Object?>[]}
+              ]
+            }
+          ),
+          ('an enrollment holding pending material', pendingEnrollment()),
+          (
+            'atsignKeys holding pending material',
+            {
+              'atsignKeys': encodeAtKeysDocument([
+                _symmetricMaterial()
+                    .withStatus(CryptographicMaterialStatus.pending)
+              ])
+            }
+          ),
+        ];
+
     test(
         'when it is rewritten flat for the atSign it names, then the rewrite '
         'is accepted', () {
@@ -675,12 +717,7 @@ void main() {
     test(
         'when it holds no credential and is rewritten flat for another '
         'atSign, then the rewrite is refused', () {
-      final publicOnly = {
-        for (final entry in _fixtureLegacyJson().entries)
-          if (entry.key == 'aesPkamPublicKey' ||
-              entry.key == 'aesEncryptPublicKey')
-            entry.key: entry.value,
-      };
+      final publicOnly = _publicOnlyLegacyJson();
       expect(
           () => assurance.validateMapUpdate(
               existing:
@@ -730,36 +767,7 @@ void main() {
 
     // NOTE: typedWithoutMaterial() carries the fixture's flat secrets, so
     // each keyfile these cases build holds a credential.
-    for (final (shape, container) in <(String, Map<String, dynamic>)>[
-      (
-        'an enrollment snapshot with no keys',
-        {
-          'enrollments': [
-            {'enrollmentId': 'e-1', 'keys': <Object?>[]}
-          ]
-        }
-      ),
-      (
-        'an enrollment holding pending material',
-        {
-          'enrollments': [
-            {
-              'enrollmentId': 'e-1',
-              'keys':
-                  encodeAtKeysDocument([_pendingAuthenticationMaterial('e-1')])
-            }
-          ]
-        }
-      ),
-      (
-        'atsignKeys holding pending material',
-        {
-          'atsignKeys': encodeAtKeysDocument([
-            _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
-          ])
-        }
-      ),
-    ]) {
+    for (final (shape, container) in pendingContent()) {
       test(
           'when it holds $shape, then a flat rewrite is refused for the '
           'atSign it names', () {
@@ -773,8 +781,73 @@ void main() {
             reason: 'a typed container holding anything is not dropped');
       });
     }
+
+    for (final (shape, container) in pendingContent()) {
+      test(
+          'when it holds $shape and no credential, then a flat rewrite for '
+          'another atSign is refused', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: noCredential(atsign: '@bob🛠', content: container),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'the atSign the keyfile names is the one it is rewritten '
+                'for, whatever pending content it holds');
+      });
+
+      test(
+          'when it holds $shape and no credential, then a flat rewrite for '
+          'the atSign it names is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: noCredential(content: container),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'a write for the atSign the keyfile names may discard its '
+                'pending content');
+      });
+    }
+
+    test(
+        'when it holds pending content and no credential, and names its '
+        'atSign in another spelling, then a flat rewrite for that atSign is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: noCredential(
+                  atsign: '@Alice🛠', content: pendingEnrollment()),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'atSigns are compared folded');
+    });
+
+    test(
+        'when its version is not the one this build writes and it holds no '
+        'credential, then a flat rewrite for another atSign is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: {...noCredential(atsign: '@bob🛠'), 'version': 2},
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whatever version it carries');
+    });
   });
 }
+
+/// The fixture's public keys alone: flat fields that hold no credential.
+Map<String, dynamic> _publicOnlyLegacyJson() => {
+      for (final entry in _fixtureLegacyJson().entries)
+        if (entry.key == 'aesPkamPublicKey' ||
+            entry.key == 'aesEncryptPublicKey')
+          entry.key: entry.value,
+    };
 
 final _createdAt = DateTime.utc(2024, 1, 1);
 

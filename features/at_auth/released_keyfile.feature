@@ -7,7 +7,8 @@ Feature: A keyfile the previous published at_auth wrote still reads and updates
   and the values that release read back from the same file, which are what
   this build must read.
 
-  Races: none arise; each test works on its own copy of a fixture. Replay:
+  Races: none arise; each test works on its own keyfile, a copy of a
+  fixture or one it writes. Replay:
   none; the fixtures' keys and enrollment ids are never presented to an
   atServer. Denial of service: the fixtures are fixed. Forgery: a fixture's
   origin is checked by a scenario that shows this build would not write it.
@@ -71,3 +72,16 @@ Feature: A keyfile the previous published at_auth wrote still reads and updates
     Given a keyfile at @alice🛠's path whose atsign field names @bob🛠
     When FileAtKeysIo updates it for @alice🛠
     Then the update fails
+
+  @forgery
+  Scenario: A keyfile naming another atSign and holding only pending content is still refused
+    Given a keyfile at @alice🛠's path whose atsign field names @bob🛠, holding no credential and only a pending enrollment, an enrollment with no keys yet, or pending keys of @bob🛠's own
+    When FileAtKeysIo flushes @alice🛠's keys to it
+    Then the flush fails, as it does when that keyfile holds nothing typed
+    And the keyfile is left as it was
+
+  Scenario: A keyfile holding only its own pending content is rewritten in the flat shape
+    Given a keyfile for @alice🛠 holding no credential and only a pending enrollment, an enrollment with no keys yet, or pending keys of @alice🛠's own
+    When FileAtKeysIo flushes @alice🛠's keys to it
+    Then the flush succeeds
+    And the keyfile is written in the flat shape, with @alice🛠's keys

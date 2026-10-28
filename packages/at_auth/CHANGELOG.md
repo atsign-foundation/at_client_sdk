@@ -3,6 +3,8 @@
 - fix: a keyfile at_auth 3.3.0 wrote, which carries `version`, its atSign and
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.
+- fix: `FileAtKeysIo` refuses to write keys for one atSign over a keyfile
+  that names another atSign and holds only pending keys or enrollment records.
 - build: requires `at_utils` ^3.2.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
