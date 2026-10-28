@@ -12,7 +12,8 @@ import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
+import 'package:at_utils/at_utils_io.dart'
+    show ChalkFunction, StdErrLoggingHandler;
 import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
@@ -1315,6 +1316,15 @@ AtOnboardingPreference onboardingPreferenceFrom(ArgResults ar) {
 String _lastProgressGroup = '';
 int _progressPad = 10;
 
+/// One step of an activation or an enrollment as [printProgress] shows it:
+/// the group padded to [pad] and coloured by the event's type, then the
+/// message, on one line.
+@visibleForTesting
+String progressLine(ProgressEvent pe, int pad) =>
+    '${pe.type.chalkFn(pe.group.padLeft(pad))} : ${pe.msg}'
+        .replaceAll('\n', '\\n')
+        .replaceAll('\t', ' ');
+
 /// Narrates one step of an activation or an enrollment on stderr, the group
 /// padded so the steps line up.
 void printProgress(ProgressEvent pe) {
@@ -1325,10 +1335,7 @@ void printProgress(ProgressEvent pe) {
     _progressPad = pe.group.length;
   }
   _lastProgressGroup = pe.group;
-  String output =
-      '${pe.type.chalkFn(pe.group.padLeft(_progressPad))} : ${pe.msg}'
-          .replaceAll('\n', '\\n')
-          .replaceAll('\t', ' ');
+  String output = progressLine(pe, _progressPad);
   int viewableLength = '${pe.group.padLeft(_progressPad)} : ${pe.msg}'
       .replaceAll('\n', '\\n')
       .replaceAll('\t', ' ')

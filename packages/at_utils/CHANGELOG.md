@@ -1,5 +1,7 @@
 ## 4.0.0-rc1
-- BREAKING: `at_utils.dart` no longer exports `PseudoServerSocket`, `ApplicationConfiguration`, `FileLoggingHandler`, `StdErrLoggingHandler`, `CLILoggingHandler`, or `AtSignLogger.stdErrLoggingHandler` — import `at_utils_io.dart` for these. The default barrel is now dart:io-free.
+- BREAKING: `at_utils.dart` no longer exports `PseudoServerSocket`, `ApplicationConfiguration`, `FileLoggingHandler`, `StdErrLoggingHandler` or `CLILoggingHandler` — import `at_utils_io.dart` for these. `at_utils.dart`, `at_logger.dart` and `at_progress.dart` reach no dart:io, so a browser build can use them.
+- BREAKING: a `ProgressEvent` prints without terminal colour codes. A CLI that colours progress by type gets `chalkFn` from `at_utils_io.dart`.
+- deprecated: `AtSignLogger.stdErrLoggingHandler`, for removal in 5.0.0 — use `StdErrLoggingHandler()` from `at_utils_io.dart`. It still writes to stderr natively, and writes to the console on the web.
 - BREAKING: removed `AtUtils.formatAtSign` (deprecated since 3.x)
 
 ## 3.5.0

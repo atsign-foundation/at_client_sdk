@@ -55,25 +55,15 @@ at_chops:
       because: the FFI algorithms it exists to quarantine
 
 at_auth:
-  # Gated since the 4.0.0 barrel split (#2179). at_auth.dart holds key material,
-  # the stores' interfaces and the auth flows; anything needing a filesystem, a
-  # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
-  #
-  # One inherited blocked package, not at_auth's own code: chalkdart. at_utils
-  # came off with the 4.0.0 barrel split, which cleaned at_utils.dart and
-  # at_logger.dart -- but not at_progress.dart, which still exports
-  # src/logging/progress.dart and its chalkdart import. That barrel is how
-  # chalkdart is still reachable here: at_auth.dart and several of the files
-  # behind it import it. Porting at_progress.dart takes chalkdart off. at_lookup
-  # came off with its 4.0.0 transport split.
-  #
-  # at_auth builds no connection of its own - its atServer check asks over the
-  # lookup it is handed - so nothing it reaches imports at_lookup_io.dart or
-  # at_server_status.
+  # at_auth.dart holds key material, the stores' interfaces and the auth flows;
+  # anything needing a filesystem, a raw socket or the dart:io HTTP stack is in
+  # at_auth_io.dart. at_auth builds no connection of its own - its atServer
+  # check asks over the lookup it is handed - so nothing it reaches imports
+  # at_lookup_io.dart.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 1
+      max_blocked_packages: 0
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
@@ -83,28 +73,39 @@ at_auth:
       because: the filesystem code it exists to quarantine
 
 at_utils:
-  # Gated by the 4.0.0 barrel split. at_utils.dart holds AtSignLogger, AtUtils and
-  # atmetadata; PseudoServerSocket, ApplicationConfiguration and the file/stderr/CLI
-  # logging handlers (all dart:io, plus chalkdart for CLI coloring) moved to
-  # at_utils_io.dart.
+  # at_utils.dart, at_logger.dart and at_progress.dart hold what a browser can
+  # run: AtSignLogger, AtUtils, atmetadata and the progress events. The file,
+  # stderr and CLI logging handlers, the progress colours, PseudoServerSocket
+  # and ApplicationConfiguration need dart:io, or chalkdart, which pulls it in,
+  # so they are in at_utils_io.dart. AtSignLogger.stdErrLoggingHandler comes
+  # through a conditional import: the console handler on the web, the stderr
+  # handler natively. The second control walks that native branch.
   ratchets:
     - barrel: package:at_utils/at_utils.dart
       allowed_offenders: []
       max_blocked_packages: 0
       min_files_walked: 90
-    # at_progress.dart still reaches chalkdart through src/logging/progress.dart.
-    # Baselined at 1 so the one-way ceiling can only tighten to 0.
+    - barrel: package:at_utils/at_logger.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 10
     - barrel: package:at_utils/at_progress.dart
       allowed_offenders: []
-      max_blocked_packages: 1
-      min_files_walked: 10
+      max_blocked_packages: 0
+      min_files_walked: 1
   probe:
     - package:at_utils/at_utils.dart
+    - package:at_utils/at_logger.dart
+    - package:at_utils/at_progress.dart
   controls:
     - barrel: package:at_utils/at_utils_io.dart
       reaches_file: lib/src/networking/pseudo_server_socket.dart
       reaches_library: dart:io
       because: the native code it exists to quarantine
+    - barrel: package:at_utils/at_utils.dart
+      reaches_file: lib/src/logging/io_handlers.dart
+      reaches_library: dart:io
+      because: the stderr handler AtSignLogger holds on the native branch
 
 at_lookup:
   # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the

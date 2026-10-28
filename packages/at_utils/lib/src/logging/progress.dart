@@ -1,7 +1,3 @@
-// ignore_for_file: implicit_call_tearoffs
-
-import 'package:chalkdart/chalk.dart';
-
 /// When implemented on a given class, other code can subscribe to
 /// [ProgressEvent]s and choose how to provide feedback to users - e.g. by
 /// logging to stderr or stdout in a CLI program, or adding to a UI widget in
@@ -24,27 +20,8 @@ class ProgressEvent {
   });
 
   @override
-  String toString() => '${time.toIso8601String()}'
-      ' | ${type.chalkFn('$type | $group')}'
-      ' | $msg';
+  String toString() => '${time.toIso8601String()} | $type | $group | $msg';
 }
 
 /// The type of [ProgressEvent]
 enum ProgressEventType { info, success, warning, error }
-
-/// A useful extension to assist in colour-coding output based on the
-/// [ProgressEventType]
-extension ChalkFunction on ProgressEventType {
-  Function get chalkFn {
-    switch (this) {
-      case ProgressEventType.info:
-        return chalk.blue;
-      case ProgressEventType.success:
-        return chalk.green;
-      case ProgressEventType.warning:
-        return chalk.orange;
-      case ProgressEventType.error:
-        return chalk.red;
-    }
-  }
-}

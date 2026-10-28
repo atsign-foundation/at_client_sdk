@@ -1,6 +1,8 @@
 // ignore_for_file: non_constant_identifier_names
 
 import 'package:at_utils/src/logging/handlers.dart';
+import 'package:at_utils/src/logging/platform_stderr_handler.dart'
+    if (dart.library.io) 'package:at_utils/src/logging/platform_stderr_handler_io.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:logging/logging.dart' as logging;
 
@@ -13,6 +15,13 @@ class AtSignLogger {
 
   static final ConsoleLoggingHandler consoleLoggingHandler =
       ConsoleLoggingHandler();
+
+  /// Writes log events to stderr where the platform has one, and to the
+  /// console on the web, which has none; the two platforms need different
+  /// handlers, so each gets its own through a conditional import.
+  @Deprecated('Use StdErrLoggingHandler() from '
+      'package:at_utils/at_utils_io.dart; removed in 5.0.0')
+  static final LoggingHandler stdErrLoggingHandler = platformStdErrHandler();
 
   /// The default logging handler to log events.
   ///
