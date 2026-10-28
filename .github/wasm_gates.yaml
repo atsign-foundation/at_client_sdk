@@ -174,3 +174,58 @@ at_client:
       reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
       reaches_library: dart:ffi
       because: the native crypto backends the VM's branch of a conditional import takes
+
+at_contact:
+  # A feature package on core alone: at_client.dart and the foundation, no
+  # platform package and no native code of its own, so its control looks
+  # through at_client at the native crypto backends the VM branch takes.
+  ratchets:
+    - barrel: package:at_contact/at_contact.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1141 files.
+      min_files_walked: 1050
+  probe:
+    - package:at_contact/at_contact.dart
+  controls:
+    - barrel: package:at_contact/at_contact.dart
+      through_package: at_client
+      reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
+      reaches_library: dart:ffi
+      because: the native crypto backends at_client's conditional import takes on the VM
+
+at_policy:
+  # As at_contact: core and the foundation only. at_client_cli is a dev
+  # dependency, for the example, and never reaches a consumer.
+  ratchets:
+    - barrel: package:at_policy/at_policy.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1122 files.
+      min_files_walked: 1000
+  probe:
+    - package:at_policy/at_policy.dart
+  controls:
+    - barrel: package:at_policy/at_policy.dart
+      through_package: at_client
+      reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
+      reaches_library: dart:ffi
+      because: the native crypto backends at_client's conditional import takes on the VM
+
+at_telemetry:
+  # Depends on at_utils' logger and two crypto packages, not on at_client; its
+  # control looks through at_utils at the stderr handler on the native branch.
+  ratchets:
+    - barrel: package:at_telemetry/at_telemetry.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 162 files.
+      min_files_walked: 140
+  probe:
+    - package:at_telemetry/at_telemetry.dart
+  controls:
+    - barrel: package:at_telemetry/at_telemetry.dart
+      through_package: at_utils
+      reaches_file: lib/src/logging/io_handlers.dart
+      reaches_library: dart:io
+      because: the stderr handler AtSignLogger holds on the native branch
