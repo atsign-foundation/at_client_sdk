@@ -70,8 +70,11 @@ extension AtsignLifecycle on Atsign {
   /// sync's, its monitor's - and is how an application chooses the transport
   /// or a proxy convention; with none, TLS on TCP from the preference.
   /// [atLookUp] is a connection to use instead of one built, for a caller
-  /// that already holds one; the client takes it over, and stopping the client
-  /// closes it for good. [serviceFactory] supplies the client's
+  /// that already holds one; the client takes it over and installs its own
+  /// credentials on it, so a caller that goes on using it acts as the client;
+  /// stopping the client stops it, or closes it when it is not an
+  /// [AtLookupMuxable].
+  /// [serviceFactory] supplies the client's
   /// notification, sync and enrollment services in place of the defaults; a
   /// process that must not sync hands in a factory whose sync service does
   /// nothing.

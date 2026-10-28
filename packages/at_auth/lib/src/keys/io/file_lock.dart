@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/keys/io/owner_only_mode_stub.dart'
+    if (dart.library.ffi) 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
 import 'package:meta/meta.dart';
 
 /// An inter-process advisory lock for a keyfile's read-modify-write.
@@ -74,6 +77,11 @@ class AtKeysFileLock {
   }
 
   void _refresh() {
+    if (ownerOnlyWritesAvailable) {
+      // NOTE: the heartbeat does not follow a symbolic link at the lock's path.
+      touchNoFollow(lockPath);
+      return;
+    }
     try {
       File(lockPath).setLastModifiedSync(DateTime.now());
     } on FileSystemException {
@@ -88,39 +96,48 @@ class AtKeysFileLock {
       await parent.create(recursive: true);
     }
     while (true) {
-      File? created;
       // Kept so a timeout can name the real failure. A create that fails
       // because the directory is not writable, or the disk is full, is
       // indistinguishable here from one that failed because the lock is held
       // — and it is not something contention will ever fix.
       FileSystemException? lastFailure;
-      try {
-        // The atomic step: an O_EXCL create fails if the file exists, so
-        // exactly one contender wins however many race.
-        created = await File(lockPath).create(exclusive: true);
-      } on FileSystemException catch (e) {
-        created = null; // Held by someone — the contention path below.
-        lastFailure = e;
-      }
-
-      if (created != null) {
-        final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
+      final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
+      if (ownerOnlyWritesAvailable) {
+        // NOTE: the token is written through the descriptor the exclusive
+        // create opened, never by reopening the lock's path. A token that
+        // does not land takes the lock back down and propagates, for the
+        // reason given below.
+        if (createNewWith(lockPath, utf8.encode(token))) return token;
+        lastFailure = FileSystemException('Cannot create the lock', lockPath);
+      } else {
+        File? created;
         try {
-          await created.writeAsString(token, flush: true);
-          return token;
-        } on FileSystemException {
-          // The create succeeded but the token did not land (disk full, a
-          // vanished parent). An empty lock we hold could never be released
-          // by token comparison — a guaranteed stall for every contender
-          // until staleness breaks it — so take it back down and let the
-          // real IO failure propagate rather than proceed holding an
-          // unreleasable lock, or retry a failure contention cannot fix.
+          // The atomic step: an O_EXCL create fails if the file exists, so
+          // exactly one contender wins however many race.
+          created = await File(lockPath).create(exclusive: true);
+        } on FileSystemException catch (e) {
+          created = null; // Held by someone — the contention path below.
+          lastFailure = e;
+        }
+
+        if (created != null) {
           try {
-            created.deleteSync();
+            await created.writeAsString(token, flush: true);
+            return token;
           } on FileSystemException {
-            // Already gone; nothing left to leak.
+            // The create succeeded but the token did not land (disk full, a
+            // vanished parent). An empty lock we hold could never be released
+            // by token comparison — a guaranteed stall for every contender
+            // until staleness breaks it — so take it back down and let the
+            // real IO failure propagate rather than proceed holding an
+            // unreleasable lock, or retry a failure contention cannot fix.
+            try {
+              created.deleteSync();
+            } on FileSystemException {
+              // Already gone; nothing left to leak.
+            }
+            rethrow;
           }
-          rethrow;
         }
       }
 

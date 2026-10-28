@@ -7,6 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_functional_test/src/enrollment_approval.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:uuid/uuid.dart';
 
 /// A live, APKAM-authenticated client for one approved enrollment, with its
@@ -130,6 +131,9 @@ Future<EnrolledClient> enrolAndAuthenticate({
   AtKeysIo? atKeysIo,
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
+
+  /// The connection the client is opened on, instead of one it builds.
+  AtLookUp? atLookUp,
 }) async {
   final otp = (await approver.enrollments.otp()).value;
 
@@ -153,7 +157,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // about to submit, so the builder must be told the same algorithm.
   final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
 
-  final atLookUp = secureSocketLookUps()(
+  final submission = secureSocketLookUps()(
     atSign: atSign,
     rootDomain: AtRootDomain(rootDomain, rootPort),
     authenticator: null,
@@ -189,10 +193,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
                   enrollmentApkamSymmetricKeyResolver(atSign),
               signingAlgo: signingAlgo,
             ),
-      atLookUp,
+      submission,
     );
   } finally {
-    await atLookUp.close();
+    await submission.close();
   }
 
   // The approver reads the mode off the request: a legacy request carries
@@ -209,7 +213,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
       preference: preference
         ..rootDomain = rootDomain
         ..rootPort = rootPort,
-      storage: storage.forPrincipal(atSign, resolvedDeviceName));
+      storage: storage.forPrincipal(atSign, resolvedDeviceName),
+      atLookUp: atLookUp);
 
   // Null in legacy mode: only the pq metadataBuilder populates `built`, and
   // there is no key package to read a kid out of.
