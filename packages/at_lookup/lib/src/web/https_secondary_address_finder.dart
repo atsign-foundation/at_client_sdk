@@ -51,13 +51,7 @@ class HttpsSecondaryAddressFinder implements SecondaryAddressFinder {
       final response = await window
           .fetch(uri.toString().toJS, RequestInit(signal: abort.signal))
           .toDart;
-      if (response.status == 404) {
-        throw SecondaryNotFoundException('No entry in atDirectory for $name');
-      }
-      if (!response.ok) {
-        throw RootServerConnectivityException(
-            'atDirectory $host answered ${response.status} for $name');
-      }
+      checkAtDirectoryStatus(host, name, response.status);
       final answer = AtDirectoryAnswer(name);
       final body = response.body;
       if (body != null) {

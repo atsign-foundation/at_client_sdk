@@ -22,6 +22,31 @@ void main() {
     });
   });
 
+  group('checkAtDirectoryStatus', () {
+    test('a 2xx is an answer', () {
+      for (final status in [200, 204, 299]) {
+        expect(() => checkAtDirectoryStatus('root.atsign.org', '@alice', status),
+            returnsNormally,
+            reason: '$status');
+      }
+    });
+
+    test('a 404 is SecondaryNotFoundException', () {
+      expect(() => checkAtDirectoryStatus('root.atsign.org', '@alice', 404),
+          throwsA(isA<SecondaryNotFoundException>()));
+    });
+
+    test('any other status is RootServerConnectivityException', () {
+      for (final status in [199, 301, 403, 500, 503]) {
+        expect(
+            () => checkAtDirectoryStatus('root.atsign.org', '@alice', status),
+            throwsA(isA<RootServerConnectivityException>().having(
+                (e) => e.message, 'message', contains('answered $status'))),
+            reason: '$status');
+      }
+    });
+  });
+
   group('AtDirectoryAnswer', () {
     SecondaryAddress addressIn(String answer) =>
         (AtDirectoryAnswer('@alice')..add(utf8.encode(answer))).address;

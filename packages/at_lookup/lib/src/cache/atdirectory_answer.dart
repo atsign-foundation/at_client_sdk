@@ -20,6 +20,19 @@ Uri atDirectoryUri(String scheme, String host, int port, String atSign) =>
         port: port,
         pathSegments: [atSign.toAtsign()]);
 
+/// Throws when the atDirectory at [host], answering [status] for [atSign],
+/// gave no answer: [SecondaryNotFoundException] for a `404`, and
+/// [RootServerConnectivityException] for any other status outside `2xx`.
+void checkAtDirectoryStatus(String host, String atSign, int status) {
+  if (status == 404) {
+    throw SecondaryNotFoundException('No entry in atDirectory for $atSign');
+  }
+  if (status < 200 || status > 299) {
+    throw RootServerConnectivityException(
+        'atDirectory $host answered $status for $atSign');
+  }
+}
+
 /// An atDirectory's answer for [atSign], collected as it arrives.
 class AtDirectoryAnswer {
   static final _hostPort = RegExp(r'^((?=[^:]{1,253}:)[A-Za-z0-9_-]{1,63}'
