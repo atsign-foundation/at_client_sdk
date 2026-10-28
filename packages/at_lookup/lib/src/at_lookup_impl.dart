@@ -304,6 +304,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
+      if (!isDataValid) {
+        logger.severe('Data signature verification failed for key: $key '
+            'sharedBy: $sharedBy');
+        return 'data:null';
+      }
       return 'data:$value';
     } on StoppedException {
       rethrow;
