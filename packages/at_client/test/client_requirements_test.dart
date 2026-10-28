@@ -13,13 +13,15 @@ void main() {
   final probe = '${Directory.current.absolute.path}/test/_client_probe.dart';
 
   /// An app that builds a client through every entry point that builds one,
-  /// naming its storage only when [storage] and its keys only when [keys],
-  /// and its transport everywhere.
-  String app({required bool storage, required bool keys}) {
+  /// naming its storage only when [storage], its keys only when [keys] and
+  /// its transport only when [transport].
+  String app(
+      {required bool storage, required bool keys, bool transport = true}) {
     final s = storage ? ', storage: store' : '';
     final k = keys ? ', keys: keys' : '';
     final kio = keys ? ', atKeysIo: keys' : '';
-    const t = ', lookUps: lookUps, secondaryAddressFinder: finder';
+    final t =
+        transport ? ', lookUps: lookUps, secondaryAddressFinder: finder' : '';
     return '''
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
@@ -66,8 +68,9 @@ Future<void> app(AtClientPreference preference, WrittenAtKeysIo keys,
     ];
   }
 
-  test('the control: an app naming storage and keys everywhere compiles',
-      () async {
+  test(
+      'the control: an app naming storage, keys and transport everywhere '
+      'compiles', () async {
     expect(await errorsIn(app(storage: true, keys: true)), isEmpty,
         reason: 'so each refusal below is about the one argument left out');
   });
@@ -98,5 +101,20 @@ Future<void> app(AtClientPreference preference, WrittenAtKeysIo keys,
         reason: 'one refusal for each of the five calls that take keys: '
             'PendingEnrollment.client and selfRetrofit take theirs from the '
             'enrollment and the session');
+  });
+
+  test('Every client is given its transport', () async {
+    final refused =
+        await errorsIn(app(storage: true, keys: true, transport: false));
+
+    expect(refused, hasLength(12), reason: refused.join('\n'));
+    for (final name in ['lookUps', 'secondaryAddressFinder']) {
+      expect(refused.where((e) => e.contains("'$name'")), hasLength(6),
+          reason: 'every call that takes a transport is refused for want of '
+              '$name');
+    }
+    expect(refused.map((e) => e.split(':').first).toSet(), hasLength(6),
+        reason: 'refusals at each of the six calls that take a transport: '
+            'PendingEnrollment.client takes its own from the enrollment');
   });
 }

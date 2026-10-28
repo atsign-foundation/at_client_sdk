@@ -54,7 +54,7 @@ Feature: at_client 4.0.0 builds for the web, with a pure-Dart memory storage
   Scenario: A native program keeps what it had
     Given a native program that reads its keys from a file and connects over TLS
     When it imports at_client_io.dart beside at_client.dart
-    Then FileAtKeysIo and secureSocketLookUps are there, and it opens, syncs and notifies as it did on at_client 3
+    Then FileAtKeysIo, secureSocketLookUps and CacheableSecondaryAddressFinder are there, and once it names its transport and atDirectory lookup it opens, syncs and notifies as it did on at_client 3
 
   Scenario: Every client is given its storage
     Given at_client 4.0.0
@@ -65,6 +65,11 @@ Feature: at_client 4.0.0 builds for the web, with a pure-Dart memory storage
     Given at_client 4.0.0
     When an app builds a client without passing its keys
     Then the app does not compile until it names an AtKeysIo
+
+  Scenario: Every client is given its transport
+    Given at_client 4.0.0
+    When an app builds a client without passing its lookUps or its secondaryAddressFinder
+    Then the app does not compile until it names both
 
   Scenario: No deprecation promises removal in 4.0
     Given at_client 4.0.0
