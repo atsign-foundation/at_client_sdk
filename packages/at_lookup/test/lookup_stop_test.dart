@@ -164,16 +164,26 @@ void main() {
       connectGate!.complete();
     });
 
-    test('called again, waits for the first stop', () async {
+    test(
+        'called again, returns the future of the first stop and tears down '
+        'once', () async {
       final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();
+      final ups = atLookup.notificationConnectionUp.toList();
 
       final first = atLookup.stop();
       final second = atLookup.stop();
-
-      expect(identical(second, first), isTrue,
-          reason: 'a second stop is the first one, not another teardown');
       await Future.wait([first, second]);
+
+      expect(
+          await ups.timeout(const Duration(seconds: 5),
+              onTimeout: () => fail('stop() left notificationConnectionUp '
+                  'open')),
+          [false],
+          reason: 'one teardown reports the connection down once');
+      expect(identical(second, first), isTrue,
+          reason: 'a second stop returns the future of the first, so it '
+              'waits for that teardown');
       expect(atLookup.isNotifying, isFalse);
       expect(identical(atLookup.stop(), first), isTrue,
           reason: 'a stop after the first has finished is the same stop');
