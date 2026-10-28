@@ -80,10 +80,8 @@ connect attempt waits before the client comes back offline, 5 s by default).
 A client holds one `AtClientStorage`, and one store is held by one live client.
 Both platform packages re-export `HiveAtClientStorage`, the durable store
 native apps use; `CliKeys.storageFor(atSign, program:)` is one at the path
-`CLIBase` uses. The other backends come from at_client's own imports, which an
-app adds `at_client` for: `SqliteAtClientStorage` from
-`package:at_client/sqlite.dart` and `InMemoryAtClientStorage` from
-`package:at_client/memory.dart`.
+`CLIBase` uses. Both also re-export the other backends,
+`SqliteAtClientStorage` and `InMemoryAtClientStorage`.
 
 ```dart
 HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true)

@@ -140,8 +140,8 @@ Pass `preference:` an `AtClientPreference` to set anything the flags do not.
 
 A program that does not take `CLIBase`'s flags calls at_client's verbs
 itself. The one import carries them, since at_client_cli re-exports
-at_client's native API, the Hive store, the registrar and the logging
-handlers. `CliKeys` gives the verbs the keyfile and store a command-line
+at_client's native API, its storage backends and mixins, the registrar and
+the logging handlers. `CliKeys` gives the verbs the keyfile and store a command-line
 program keeps:
 
 ```dart

@@ -151,8 +151,8 @@ directly into your own app. Do not take a dependency on `at_backupkey_flutter`.
 
 ### at_invitation_flutter
 
-This package is deprecated. Use `AtClientInvitations` from
-`package:at_client/at_client_mixins.dart`; the Flutter app in
+This package is deprecated. Use `AtClientInvitations`, which both platform
+packages re-export; the Flutter app in
 `packages/at_client_flutter/example/invitations` shows it end to end. Do not
 take a dependency on `at_invitation_flutter`.
 

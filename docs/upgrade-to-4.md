@@ -37,7 +37,8 @@ dependencies:
 Import `package:at_client_cli/at_client_cli.dart` in place of
 `at_client.dart`, `at_onboarding_cli.dart`, `at_cli_commons.dart`,
 `at_logger.dart` and `at_client_io.dart`. It re-exports at_client's native
-API, the Hive store, the registrar and the io logging handlers. Install the
+API, its storage backends and mixins, the registrar and the io logging
+handlers. Install the
 tools with `dart pub global activate at_client_cli`.
 
 at_onboarding_cli 2.0.0 and at_cli_commons 4.0.0 re-export at_client_cli, so

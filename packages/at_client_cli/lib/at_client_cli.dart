@@ -1,9 +1,9 @@
 /// The Atsign Protocol for a Dart command-line program, daemon or server:
 /// [CLIBase], which turns the standard flags into an open client, [CliKeys],
 /// and the at_activate and at_register tools as [AtActivate] and
-/// [AtRegister]. It re-exports at_client's native API, the Hive store, the
-/// registrar and the logging handlers, so a program needs no other SDK
-/// import.
+/// [AtRegister]. It re-exports at_client's native API, its storage backends
+/// and mixins, the registrar and the logging handlers, so a program needs no
+/// other SDK import.
 library;
 
 export 'package:at_auth/at_auth.dart'
@@ -16,6 +16,9 @@ export 'package:at_auth/at_auth.dart'
         RegisterOperation;
 export 'package:at_client/at_client_io.dart';
 export 'package:at_client/hive.dart';
+export 'package:at_client/memory.dart';
+export 'package:at_client/sqlite.dart';
+export 'package:at_client/at_client_mixins.dart';
 export 'package:at_utils/at_utils_io.dart'
     show CLILoggingHandler, FileLoggingHandler, StdErrLoggingHandler;
 

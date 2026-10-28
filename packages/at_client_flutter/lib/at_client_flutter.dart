@@ -2,6 +2,9 @@ library;
 
 export 'package:at_client/at_client_io.dart';
 export 'package:at_client/hive.dart';
+export 'package:at_client/memory.dart';
+export 'package:at_client/sqlite.dart';
+export 'package:at_client/at_client_mixins.dart';
 export 'package:at_auth/at_auth.dart' show RegistrarService;
 
 export 'src/keychain/keychain_data.dart';

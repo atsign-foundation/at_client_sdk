@@ -4,6 +4,9 @@
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `EnrollmentStore` is removed, as `EnrollmentData` was.
+- feat: `package:at_client_flutter/at_client_flutter.dart` also re-exports the
+  SQLite and in-memory stores and at_client's mixins (`AtClientInvitations`,
+  `EnrollmentUpdater`), so an app needs no second SDK import.
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.

@@ -6,8 +6,9 @@
   them. `AtActivate.main` and `AtRegister.main` run the tools inside another
   program.
 - feat: `package:at_client_cli/at_client_cli.dart` is the only SDK import a
-  command-line program needs: it re-exports at_client's native API, the Hive
-  store, `RegistrarService` and the io logging handlers.
+  command-line program needs: it re-exports at_client's native API, the Hive,
+  SQLite and in-memory stores, at_client's mixins (`AtClientInvitations`,
+  `EnrollmentUpdater`), `RegistrarService` and the io logging handlers.
 - feat: `CliKeys.fileFor` and `CliKeys.storageFor` are the keyfile and local
   store a command-line program keeps for an atSign, ready for at_client's
   `Atsign.activate`, `open` and `enroll`.

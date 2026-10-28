@@ -14,7 +14,6 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
     show AtEnrollmentResponse, EnrollmentRequestDecision;
-import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

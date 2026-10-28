@@ -36,8 +36,8 @@ dart pub add at_client_flutter   # the one SDK dependency
 ```
 
 `at_client_flutter` re-exports at_client's native API
-(`export 'package:at_client/at_client_io.dart'`) and the Hive store, so a
-Flutter app only needs this one entry.
+(`export 'package:at_client/at_client_io.dart'`), its Hive, SQLite and
+in-memory stores and its mixins, so a Flutter app only needs this one entry.
 
 `at_client_flutter` adds:
 
@@ -87,8 +87,8 @@ dart pub add at_client_cli   # the one SDK dependency
 ```
 
 `at_client_cli` covers every native Dart program that isn't Flutter. Beside
-at_client's native API, the Hive store, the registrar and the io logging
-handlers (`StdErrLoggingHandler`, `FileLoggingHandler`, `CLILoggingHandler`),
+at_client's native API, its Hive, SQLite and in-memory stores and its mixins,
+the registrar and the io logging handlers (`StdErrLoggingHandler`, `FileLoggingHandler`, `CLILoggingHandler`),
 it provides:
 
 - `CLIBase` — one-line arg parsing + `.atKeys` loading + an online client;
@@ -161,8 +161,8 @@ directly into your own app.
 
 ### `at_invitation_flutter` ⛔
 
-**Deprecated.** Use `AtClientInvitations` from
-`package:at_client/at_client_mixins.dart`, shown in
+**Deprecated.** Use `AtClientInvitations`, which both platform packages
+re-export, shown in
 `packages/at_client_flutter/example/invitations`.
 
 ### `at_sync_ui_flutter` / `at_theme_flutter` ⛔
@@ -212,7 +212,7 @@ platform package does not carry.
 | `at_commons` | Only for `package:at_commons/at_builders.dart` (the verb builders); `AtKey`, `Metadata` and `Atsign` come through the platform package |
 | `at_utils` | Not for `AtSignLogger`, which the platform package re-exports; a `^3.x` constraint cannot resolve beside at_client 4 |
 | `at_lookup` | Rarely needed; low-level verb implementation |
-| `at_client` | Only for an import the platform package does not re-export: `at_client_mixins.dart` (`AtClientInvitations`), `memory.dart` (`InMemoryAtClientStorage`), `sqlite.dart` (`SqliteAtClientStorage`) |
+| `at_client` | Never in an app: the platform package re-exports all of it, the storage backends and mixins included |
 
 ---
 

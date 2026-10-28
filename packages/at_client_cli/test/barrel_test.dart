@@ -45,6 +45,13 @@ void main() {
       expect(RegisterAtSignResult, isA<Type>());
     });
 
+    test('when it picks a storage backend or a mixin, then each is nameable',
+        () {
+      expect(InMemoryAtClientStorage, isA<Type>());
+      expect(SqliteAtClientStorage, isA<Type>());
+      expect(EnrollmentUpdater, isA<Type>());
+    });
+
     test('when it embeds the tools, then their entry points are nameable', () {
       expect(AtActivate.main, isA<Function>());
       expect(AtRegister.main, isA<Function>());
