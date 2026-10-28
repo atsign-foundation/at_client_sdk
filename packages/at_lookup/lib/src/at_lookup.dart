@@ -100,6 +100,9 @@ abstract interface class AtLookUp {
   /// [onConnect] runs on every connection this lookup opens, once it is up
   /// and before anything else is sent on it: a proxy that needs `from:` first
   /// to learn which atServer the connection is for is the case it exists for.
+  /// It talks only through the executor it is handed, since a call back into
+  /// the lookup waits for it to finish, and a connection whose [onConnect]
+  /// fails is closed.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
