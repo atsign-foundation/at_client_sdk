@@ -52,7 +52,7 @@ void main() {
       expect(success, isTrue,
           reason: 'Onboarding should succeed and generate master key file');
 
-      filesToCleanup.add('../../packages/at_onboarding_cli/$masterKeyFile');
+      filesToCleanup.add('../../packages/at_client_cli/$masterKeyFile');
     }, timeout: Timeout(Duration(minutes: 3)));
 
     test('step 2: generate OTP using master keys', () async {
@@ -65,7 +65,7 @@ void main() {
 
     test('step 3 & 4: submit enrollment request and approve concurrently',
         () async {
-      filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
+      filesToCleanup.add('../../packages/at_client_cli/$enrollmentKeyFile');
 
       // Start enrollment request (this will wait for approval)
       Future<bool> enrollmentFuture = submitEnrollmentRequest(

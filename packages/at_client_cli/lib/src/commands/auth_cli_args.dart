@@ -1,0 +1,700 @@
+import 'dart:io';
+
+import 'package:args/args.dart';
+import 'package:at_client/at_client.dart'
+    show EnrollmentKeyExchangeMode, PqPosture;
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client_cli/at_client_cli.dart';
+import 'package:meta/meta.dart';
+
+enum AuthCliCommand {
+  help(usage: 'Show help'),
+  status(
+      usage: 'Check the status of an atSign - will return one of '
+          '\n  4 if the atDirectory cannot be reached'
+          '\n  3 if atDirectory is reachable but the atSign does not exist'
+          '\n  2 if the atSign exists but the atServer cannot be reached'
+          '\n  1 if the atServer is reachable but there is no public:publickey@<atsign>'
+          '\n  0 if the atServer is reachable and public:publickey@<atsign> exists'),
+  onboard(
+      usage: '"onboard" is used when first authenticating to an atServer.'
+          ' It generates "atKeys" (stored to filesystem or keychain) which'
+          ' may be used for authentication thereafter.'
+          '\n\n'
+          'When another program'
+          ' needs to be able to authenticate, it may use the atKeys file if it is'
+          ' available - however when the program is on a different device, or on '
+          ' the same device but in a different, sandboxed app, the recommended'
+          ' approach is to use the "enroll" command.'),
+  otp(
+      usage: 'Generate a one-time passcode which may be used by a single'
+          ' enrollment request.'
+          '\n\n'
+          'Note that the passcode is used only to allow the'
+          ' atServer to identify that an enrollment request is not'
+          ' spurious / malicious / spam - i.e. enrollment requests which have a valid'
+          ' passcode will be accepted.'),
+  spp(
+      usage: 'Set a semi-permanent passcode which may be used by multiple'
+          ' enrollment requests. This is particularly useful when programs will '
+          ' need to be run on many different devices.'
+          '\n\n'
+          'Note that the passcode is used only to allow the'
+          ' atServer to identify that an enrollment request is not'
+          ' spurious / malicious / spam - i.e. enrollment requests which have a valid'
+          ' passcode will be accepted.'),
+  interactive(usage: 'Run in interactive mode'),
+  list(usage: 'List enrollment requests'),
+  fetch(usage: 'Fetch a specific enrollment request'),
+  approve(usage: 'Approve a pending enrollment request'),
+  auto(
+      usage: 'Listen for new enrollment requests which match the parameters'
+          ' supplied, and auto-approve them. Will exit after N (defaults to 1)'
+          ' enrollment requests have been approved.'),
+  deny(usage: 'Deny a pending enrollment request'),
+  revoke(usage: 'Revoke approval of a previously-approved enrollment'),
+  unrevoke(usage: 'Restores access to the previously revoked enrollment'),
+  delete(
+      usage: 'Deletes an enrollment. Requires an enrollmentId to be provided'
+          '\nNOTE: Can ONLY delete denied and revoked enrollments'),
+  enroll(
+      usage: 'Enroll is used when a program needs to authenticate and'
+          ' "atKeys" are not available, and "onboard" has already been run'
+          ' by another program.'
+          '\n\n'
+          'Enrollment requests require a valid passcode in order'
+          ' for them to be accepted by the atServer; accepted requests will then'
+          ' be delivered to some other program(s) which have'
+          ' permission to approve or deny the requests. Typically that will be'
+          ' the program which first onboarded; however it can also be an enrolled'
+          ' program which has "rw" access to the "__manage" namespace.'),
+  decrypt(
+      usage: 'Decrypts a passphrase-protected atKeys file and writes it to the '
+          'targetKeys file'),
+  version(
+    usage: 'Print version. The version printed is the at_onboarding_cli '
+        'package version. It prints a format similar to "Version: x.xx.x"',
+  );
+
+  const AuthCliCommand({this.usage = ''});
+
+  final String usage;
+}
+
+class AuthCliArgs {
+  static const defaultAtDirectoryFqdn = 'root.atsign.org';
+  static const defaultAtRegistrarFqdn = 'my.atsign.com';
+  late final ArgParser _aap;
+  late final ArgParser _sap;
+
+  final String atDirectoryFqdn;
+  final String atRegistrarFqdn;
+
+  static const argNameHelp = 'help';
+  static const argNameVerbose = 'verbose';
+  static const argNameDebug = 'debug';
+  static const argNameAtSign = 'atsign';
+  static const argNameCramSecret = 'cramkey';
+  static const argNameAtKeys = 'keys';
+  static const argNameTargetAtKeys = 'target-keys';
+  static const argNameRootServer = 'root-server';
+  static const argNameAtDirectoryFqdn =
+      'rootServer'; // alias to argNameRootServer
+  static const argNameRegistrarFqdn = 'registrarUrl';
+  static const argNameSpp = 'spp';
+  static const argNameAppName = 'app';
+  static const argNameDeviceName = 'device';
+  static const argNamePasscode = 'passcode';
+  static const argAbbrPasscode = 's';
+  static const argNameNamespaceAccessList = 'namespaces';
+  static const argNameEnrollmentId = 'enrollmentId';
+  static const argNameEnrollmentStatus = 'enrollmentStatus';
+  static const argNameAppNameRegex = 'arx';
+  static const argAbbrAppNameRegex = 'A';
+  static const argNameDeviceNameRegex = 'drx';
+  static const argAbbrDeviceNameRegex = 'D';
+  static const argNameLimit = 'limit';
+  static const argAbbrLimit = 'L';
+  static const argNameMaxConnectAttempts = 'mca';
+  static const argNameExpiry = 'expiry';
+  static const argAbbrExpiry = 'e';
+  static const argNameAutoApproveExisting = 'approve-existing';
+  static const argNamePassPhrase = 'passPhrase';
+  static const argNameHashingAlgoType = 'hashingAlgoType';
+  static const argNamePosture = 'posture';
+  static const argNameKeyExchange = 'key-exchange';
+
+  /// The postures a `--posture` argument may name.
+  static const Map<String, PqPosture> postureNames = {
+    'legacy': PqPosture.legacy,
+    'pqReady': PqPosture.pqReady,
+    'pqActive': PqPosture.pqActive,
+  };
+
+  /// The posture [results] names, or null when it named none.
+  static PqPosture? postureIn(ArgResults results) {
+    final named = results[argNamePosture];
+    return named == null ? null : postureNames[named];
+  }
+
+  /// The name `--posture` spells [posture] by, or `custom` for one no stage
+  /// defines.
+  static String nameOf(PqPosture posture) => postureNames.entries
+      .where((entry) => identical(entry.value, posture))
+      .map((entry) => entry.key)
+      .firstWhere((_) => true, orElse: () => 'custom');
+
+  /// The posture an **enroller** command — `onboard` or `enroll` — runs at:
+  /// whatever `--posture` named, else at_client's default, the one
+  /// `AtOnboardingPreference()` carries.
+  ///
+  /// `notice` is non-null exactly when the default was taken, and is for the
+  /// command to print.
+  static ({PqPosture posture, String? notice}) postureForEnroller(
+      ArgResults results) {
+    final named = postureIn(results);
+    if (named != null) return (posture: named, notice: null);
+    final inherited = AtOnboardingPreference().posture;
+    return (
+      posture: inherited,
+      notice: 'No --posture given, so this runs at "${nameOf(inherited)}", '
+          'at_client\'s default'
+          '${nameOf(inherited) == 'legacy' ? ': classical keys throughout, no post-quantum key material, and a keyfile a previously published build can read' : ''}'
+          '. Name --posture legacy, pqReady or pqActive to choose.',
+    );
+  }
+
+  /// The posture an **approver** command runs at: whatever `--posture` named,
+  /// else at_client's default. A legacy posture configures none of the
+  /// post-quantum providers, so approving a post-quantum enrolment under it
+  /// is refused by at_client when the request is read, not here.
+  static PqPosture postureForApprover(ArgResults results) =>
+      postureIn(results) ?? AtOnboardingPreference().posture;
+
+  /// The key-exchange modes a `--key-exchange` argument may name.
+  static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {
+    'legacy': EnrollmentKeyExchangeMode.legacy,
+    'pq': EnrollmentKeyExchangeMode.pq,
+  };
+
+  /// The key-exchange mode [results] names, or null when it named none, which
+  /// leaves the choice to the posture.
+  static EnrollmentKeyExchangeMode? keyExchangeIn(ArgResults results) {
+    final named = results[argNameKeyExchange];
+    return named == null ? null : keyExchangeNames[named];
+  }
+
+  /// A preference under [posture], or under whatever the at_client this was
+  /// built against defaults to when [posture] is null.
+  ///
+  /// A posture is final in `AtClientPreference`, so it can only be set at
+  /// construction.
+  static AtOnboardingPreference preferenceUnder(PqPosture? posture) =>
+      posture == null
+          ? AtOnboardingPreference()
+          : AtOnboardingPreference(posture: posture);
+  static const argNameMaxRetries = 'max-retries';
+
+  /// How many times, two seconds apart, `onboard` asks whether a newly
+  /// registered atSign has been provisioned before giving up.
+  static const int defaultActivationCheckRetries = 50;
+
+  /// How many consecutive failures to reach the atServer `enroll` rides out
+  /// while waiting for its approval.
+  static const int defaultApprovalRetries = 5;
+  static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
+  static const argNameYes = 'yes';
+  static const argNameVersion = 'version';
+
+  ArgParser get parser {
+    return _aap;
+  }
+
+  ArgParser get sharedArgsParser {
+    return _sap;
+  }
+
+  AuthCliArgs(
+      {this.atDirectoryFqdn = defaultAtDirectoryFqdn,
+      this.atRegistrarFqdn = defaultAtRegistrarFqdn}) {
+    _aap = createMainParser();
+    _sap = createSharedArgParser(hide: false);
+  }
+
+  /// Creates an ArgParser with commands for each of AuthCliCommand
+  @visibleForTesting
+  ArgParser createMainParser() {
+    final p = ArgParser(
+        usageLineLength: stdout.hasTerminal ? stdout.terminalColumns : null);
+
+    p.addFlag(
+      argNameHelp,
+      abbr: 'h',
+      negatable: false,
+      hide: true,
+    );
+
+    p.addFlag(
+      argNameVersion,
+      negatable: false,
+      hide: true,
+    );
+
+    for (final c in AuthCliCommand.values) {
+      p.addCommand(c.name, createParserForCommand(c));
+    }
+
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createParserForCommand(AuthCliCommand c) {
+    switch (c) {
+      case AuthCliCommand.status:
+        return createStatusCommandParser();
+
+      case AuthCliCommand.help:
+        return createHelpCommandParser();
+
+      case AuthCliCommand.onboard:
+        return createOnboardCommandParser();
+
+      case AuthCliCommand.enroll:
+        return createEnrollCommandParser();
+
+      case AuthCliCommand.interactive:
+        return createInteractiveCommandParser();
+
+      case AuthCliCommand.spp:
+        return createSppCommandParser();
+
+      case AuthCliCommand.otp:
+        return createOtpCommandParser();
+
+      case AuthCliCommand.list:
+        return createListCommandParser();
+
+      case AuthCliCommand.fetch:
+        return createFetchCommandParser();
+
+      case AuthCliCommand.approve:
+        return createApproveCommandParser();
+
+      case AuthCliCommand.auto:
+        return createAutoApproveCommandParser();
+
+      case AuthCliCommand.deny:
+        return createDenyCommandParser();
+
+      case AuthCliCommand.revoke:
+        return createRevokeCommandParser();
+
+      case AuthCliCommand.unrevoke:
+        return createUnRevokeCommandParser();
+
+      case AuthCliCommand.delete:
+        return createDeleteCommandParser();
+
+      case AuthCliCommand.decrypt:
+        return createDecryptCommandParser();
+
+      case AuthCliCommand.version:
+        return createVersionCommandParser();
+    }
+  }
+
+  /// Make an ArgParser with the args which are common to every command
+  @visibleForTesting
+  ArgParser createSharedArgParser(
+      {required bool hide, bool forOnboard = false}) {
+    ArgParser p = ArgParser(
+        usageLineLength: stdout.hasTerminal ? stdout.terminalColumns : null);
+    p.addOption(
+      argNameAtSign,
+      abbr: 'a',
+      help: 'The atSign',
+      mandatory: true,
+      hide: hide,
+    );
+    p.addOption(
+      argNameRootServer,
+      aliases: const [argNameAtDirectoryFqdn],
+      abbr: 'r',
+      help: 'atDirectory (aka root) server domain (e.g., root.atsign.org)',
+      defaultsTo: atDirectoryFqdn,
+      mandatory: false,
+      hide: hide,
+    );
+    p.addOption(
+      argNameAtKeys,
+      abbr: 'k',
+      help:
+          'Path to atKeys file to create (onboard / enroll) or use (approve / deny / etc)',
+      mandatory: false,
+      hide: hide,
+    );
+    p.addFlag(
+      argNameHelp,
+      abbr: 'h',
+      negatable: false,
+      hide: hide,
+    );
+    p.addFlag(
+      argNameVerbose,
+      abbr: 'v',
+      help: 'INFO-level logging',
+      negatable: false,
+      hide: hide,
+    );
+    p.addFlag(
+      argNameDebug,
+      help: 'FINEST-level logging',
+      negatable: false,
+      hide: true,
+    );
+    p.addOption(
+      argNameMaxConnectAttempts,
+      help: 'Max # attempts to make initial connection to atServer.'
+          ' Note: there is a 3-second delay between connection attempts.',
+      mandatory: false,
+      defaultsTo: "10",
+      hide: hide,
+    );
+    p.addOption(
+      argNameRegistrarFqdn,
+      abbr: 'g',
+      help: 'url to the registrar api',
+      mandatory: false,
+      defaultsTo: atRegistrarFqdn,
+      hide: !forOnboard,
+    );
+    p.addOption(
+      argNameCramSecret,
+      aliases: const ['license-key'],
+      abbr: 'c',
+      help: 'CRAM key',
+      mandatory: false,
+      hide: !forOnboard,
+    );
+    p.addOption(argNamePassPhrase,
+        abbr: 'P',
+        help:
+            'Pass Phrase to encrypt/decrypt the password protected atKeys file',
+        mandatory: false,
+        hide: hide);
+    p.addOption(argNameHashingAlgoType,
+        help: 'Ignored: a passphrase-protected atKeys file is always '
+            'Argon2id. Accepted so existing scripts still run',
+        mandatory: false,
+        hide: true);
+    // NOTE: no defaultsTo. An unset value must stay distinguishable so that
+    // postureForEnroller can announce at_client's default when it takes it.
+    p.addOption(argNamePosture,
+        help: 'How far into the post-quantum rollout to run. legacy drives no '
+            'upgrade and configures no post-quantum providers, so it cannot '
+            'read post-quantum data or approve a post-quantum enrolment; '
+            'pqReady moves the credentials and keeps writes on the legacy '
+            'provider; pqActive makes post-quantum writes the default. Unset, '
+            'every command runs at at_client\'s default posture',
+        mandatory: false,
+        allowed: postureNames.keys,
+        hide: hide);
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createHelpCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true, forOnboard: false);
+
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createOnboardCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true, forOnboard: true);
+    p.addOption(
+      argNameMaxRetries,
+      help:
+          'Maximum number of attempts to check if atServer has been activated',
+      defaultsTo: '$defaultActivationCheckRetries',
+      mandatory: false,
+      hide: false,
+    );
+    p.addFlag(
+      argNameAllowBadRegistrarCerts,
+      help: 'Allow invalid (expired, wrong domain name, etc) registrar certs',
+      defaultsTo: false,
+      negatable: false,
+      hide: true,
+    );
+    p.addFlag(
+      argNameYes,
+      abbr: 'y',
+      help: 'Skip the key backup warning prompt',
+      defaultsTo: false,
+      negatable: false,
+      hide: false,
+    );
+    p.addFlag(
+      argNameVersion,
+      help: 'Print version',
+      defaultsTo: false,
+      negatable: false,
+      hide: true,
+    );
+
+    return p;
+  }
+
+  ArgParser createInteractiveCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    return p;
+  }
+
+  /// auth spp : require atSign, spp [, atKeys path] [, atDirectory]
+  @visibleForTesting
+  ArgParser createSppCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(
+      argNameSpp,
+      abbr: argAbbrPasscode,
+      help: 'The semi-permanent enrollment passcode to set for this atSign',
+      mandatory: true,
+    );
+    p.addOption(argNameExpiry,
+        abbr: argAbbrExpiry,
+        help:
+            'The duration for which the SPP remains active. The time duration can be passed as "2d,1h,10m,20s,999ms" for 2 days 1 hour 10 minutes 20 seconds 999 milliseconds',
+        mandatory: false);
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createStatusCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    return p;
+  }
+
+  /// auth otp : require atSign [, atKeys path] [, atDirectory]
+  @visibleForTesting
+  ArgParser createOtpCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(argNameExpiry,
+        abbr: argAbbrExpiry,
+        help:
+            'The duration for which the OTP remains active. The time duration can be passed as "2d,1h,10m,20s,999ms" for 2 days 1 hour 10 minutes 20 seconds 999 milliseconds',
+        mandatory: false);
+    return p;
+  }
+
+  /// auth enroll : require atSign, app name, device name, namespaces, otp [, atKeys path]
+  ///     If atKeys file doesn't exist, then this is a new enrollment
+  ///     If it does exist, then the enrollment request has been made and we need
+  ///         to try to auth, and act appropriately on the atServer response
+  @visibleForTesting
+  ArgParser createEnrollCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(
+      argNamePasscode,
+      abbr: argAbbrPasscode,
+      help: 'The passcode to present with this enrollment request.',
+      mandatory: true,
+    );
+    p.addOption(
+      argNameAppName,
+      abbr: 'p',
+      help: 'The name of the app being enrolled',
+      mandatory: true,
+    );
+    p.addOption(
+      argNameDeviceName,
+      abbr: 'd',
+      help: 'A name for the device on which this app is running',
+      mandatory: true,
+    );
+    p.addOption(
+      argNameNamespaceAccessList,
+      abbr: 'n',
+      help:
+          'The namespace access list as comma-separated list of name:value pairs'
+          ' e.g. "buzz:rw,contacts:rw,__manage:rw"',
+      mandatory: true,
+    );
+    p.addOption(argNameExpiry,
+        abbr: argAbbrExpiry,
+        help:
+            'The duration for which the APKAM keys remains active. The time duration can be passed as "2d,1h,10m,20s,999ms" for 2 days 1 hour 10 minutes 20 seconds 999 milliseconds',
+        mandatory: false);
+    p.addOption(
+      argNameMaxRetries,
+      help: 'Consecutive failures to reach the atServer to ride out before '
+          'giving up. Waiting for the approval itself is not bounded',
+      defaultsTo: '$defaultApprovalRetries',
+      mandatory: false,
+      hide: false,
+    );
+    // NOTE: on `enroll` alone, not on the shared parser — a key-exchange mode
+    // means something only where an enrollment request is built. No
+    // defaultsTo: an unset value means the posture decides.
+    p.addOption(argNameKeyExchange,
+        help: 'How this enrollment\'s symmetric key travels. pq means the '
+            'approver seals it to the key package this request advertises, so '
+            'nothing RSA-wrapped rides the request; legacy means this app '
+            'wraps it to the atSign\'s encryption public key. Defaults to '
+            'whatever --posture implies. Name legacy explicitly when the '
+            'approving app predates conveyance: a pq request that nothing '
+            'conveys to leaves the enrollment approved and unable to decrypt',
+        mandatory: false,
+        allowed: keyExchangeNames.keys);
+    return p;
+  }
+
+  /// auth list-enroll-requests
+  @visibleForTesting
+  ArgParser createListCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(
+      argNameEnrollmentStatus,
+      abbr: 's',
+      help:
+          'A specific status to filter by; if not supplied, all enrollments will be listed',
+      allowed: EnrollmentStatus.values.map((c) => c.name).toList(),
+      mandatory: false,
+    );
+    _addAppNameRegexOption(p, mandatory: false);
+    _addDeviceNameRegexOption(p, mandatory: false);
+    return p;
+  }
+
+  /// auth list-enroll-requests
+  @visibleForTesting
+  ArgParser createFetchCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p, mandatory: true);
+    return p;
+  }
+
+  void _addAppNameRegexOption(ArgParser p, {required bool mandatory}) {
+    p.addOption(
+      argNameAppNameRegex,
+      abbr: argAbbrAppNameRegex,
+      help: 'Filter requests via regular expression on app name'
+          ' (case-insensitive)',
+      mandatory: mandatory,
+    );
+  }
+
+  void _addDeviceNameRegexOption(ArgParser p, {required bool mandatory}) {
+    p.addOption(
+      argNameDeviceNameRegex,
+      abbr: argAbbrDeviceNameRegex,
+      help: 'Filter requests via regular expression on device name'
+          ' (case-insensitive)',
+      mandatory: mandatory,
+    );
+  }
+
+  void _addEnrollmentIdOption(
+    ArgParser p, {
+    bool mandatory = false,
+    bool hide = false,
+  }) {
+    p.addOption(
+      argNameEnrollmentId,
+      abbr: 'i',
+      help: 'The ID of the enrollment request',
+      mandatory: mandatory,
+      hide: hide,
+    );
+  }
+
+  /// auth approve
+  @visibleForTesting
+  ArgParser createApproveCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p);
+    _addAppNameRegexOption(p, mandatory: false);
+    _addDeviceNameRegexOption(p, mandatory: false);
+    return p;
+  }
+
+  /// auth approve
+  @visibleForTesting
+  ArgParser createAutoApproveCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p, hide: true);
+    _addAppNameRegexOption(p, mandatory: true);
+    _addDeviceNameRegexOption(p, mandatory: true);
+    p.addOption(
+      argNameLimit,
+      abbr: argAbbrLimit,
+      help: 'Listen until this many requests have been approved',
+      mandatory: false,
+      defaultsTo: "1",
+    );
+    p.addFlag(
+      argNameAutoApproveExisting,
+      help: 'Before starting to listen, approve any matching enrollment'
+          ' requests which already exist. Note: any approvals will count'
+          ' towards the limit.',
+      negatable: false,
+      defaultsTo: false,
+    );
+    return p;
+  }
+
+  /// auth deny
+  @visibleForTesting
+  ArgParser createDenyCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p);
+    _addAppNameRegexOption(p, mandatory: false);
+    _addDeviceNameRegexOption(p, mandatory: false);
+    return p;
+  }
+
+  /// auth revoke
+  @visibleForTesting
+  ArgParser createRevokeCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p);
+    _addAppNameRegexOption(p, mandatory: false);
+    _addDeviceNameRegexOption(p, mandatory: false);
+    return p;
+  }
+
+  /// Restore the revoked enrollment Id.
+  @visibleForTesting
+  ArgParser createUnRevokeCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p);
+    _addAppNameRegexOption(p, mandatory: false);
+    _addDeviceNameRegexOption(p, mandatory: false);
+    return p;
+  }
+
+  /// auth delete denied enrollment: requires enrollmentId and atKeysFile path
+  /// requires the enrollment to be denied
+  @visibleForTesting
+  ArgParser createDeleteCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    _addEnrollmentIdOption(p, mandatory: true);
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createDecryptCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(argNameTargetAtKeys,
+        abbr: 't',
+        mandatory: true,
+        help: 'Target atKeys file to write the decrypted keys');
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createVersionCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true, forOnboard: false);
+    return p;
+  }
+}

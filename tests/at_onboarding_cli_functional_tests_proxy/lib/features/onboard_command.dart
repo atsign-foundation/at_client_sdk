@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -9,7 +9,7 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 Future<bool> onboardAtSign(String atSign, String cramKey, String keyFile, String rootServer) async {
   logger.info('Onboarding $atSign to generate keys...');
 
-  String onboardCommand = 'dart run bin/activate_cli.dart onboard -a $atSign --cramkey $cramKey --keys $keyFile --rootServer $rootServer';
+  String onboardCommand = 'dart run bin/at_activate.dart onboard -a $atSign --cramkey $cramKey --keys $keyFile --rootServer $rootServer';
   logger.info('Executing command: $onboardCommand');
   List<String> commandParts = onboardCommand.split(' ');
   String executable = commandParts[0];

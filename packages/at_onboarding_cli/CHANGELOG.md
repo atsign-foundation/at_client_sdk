@@ -1,13 +1,9 @@
-## 2.0.0-rc9
+## 2.0.0
 
-- feat: `at_activate list` shows whether each approved enrollment's keys are
-  anchored to the atSign's signing root, naming a key that is not.
-- feat: `AtOnboardingPreference.secondaryAddressFinder` chooses how a client
-  opened under it finds its atServer; unset, it asks the atDirectory at
-  `rootDomain`, as before.
-- build: requires `at_client` ^4.0.0.
-- chore(deps): at_utils ^4.0.0-rc1
-
+- breaking: at_onboarding_cli is a deprecated re-export of at_client_cli,
+  which now carries its code and its at_activate and at_register tools.
+  Depend on at_client_cli; `dart pub global activate at_client_cli` installs
+  the tools, and activating this package still does.
 ## 2.0.0-rc8
 
 - feat: `at_activate list` shows the key expiry each enrollment asked for and

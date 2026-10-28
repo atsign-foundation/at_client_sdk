@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -45,7 +45,7 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
   }
 
   logger.info('Testing enrollment keys by running list command...');
-  String listCommand = 'dart run bin/activate_cli.dart list --keys $keyFile -a $atSign --rootServer $rootServer';
+  String listCommand = 'dart run bin/at_activate.dart list --keys $keyFile -a $atSign --rootServer $rootServer';
   logger.info('Executing command: $listCommand');
   List<String> listParts = listCommand.split(' ');
 

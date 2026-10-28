@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -11,9 +11,9 @@ Future<List<String>> listPendingEnrollments(String atSign, String rootServer, {S
 
   String listCommand;
   if (keyFile != null) {
-    listCommand = 'dart run bin/activate_cli.dart list -s pending -a $atSign --rootServer $rootServer --keys $keyFile';
+    listCommand = 'dart run bin/at_activate.dart list -s pending -a $atSign --rootServer $rootServer --keys $keyFile';
   } else {
-    listCommand = 'dart run bin/activate_cli.dart list -s pending -a $atSign --rootServer $rootServer';
+    listCommand = 'dart run bin/at_activate.dart list -s pending -a $atSign --rootServer $rootServer';
   }
   logger.info('Executing command: $listCommand');
   List<String> listParts = listCommand.split(' ');

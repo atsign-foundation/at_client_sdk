@@ -10065,7 +10065,7 @@ encryption keypair and the APKAM symmetric key, and a retrofitted client's
 AtChops carries no symmetric key.
 
 **Proven at two layers.**
-`packages/at_onboarding_cli/test/retrofitted_client_signs_with_its_own_key_test.dart`
+`packages/at_client_cli/test/retrofitted_client_signs_with_its_own_key_test.dart`
 drives `authenticate()` against a client already running as a retrofitted
 enrolment and runs the installed authenticator, with two mutations red for
 different reasons — restoring the caller's signer reddens on at_chops' refusal,

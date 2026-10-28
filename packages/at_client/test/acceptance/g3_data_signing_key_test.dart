@@ -749,7 +749,7 @@ void main() {
       'UC-G3.25 · the approver\'s view shows whether each enrollment is '
       'anchored', () {
     provenIn(
-        'packages/at_onboarding_cli/test/auth_cli_list_test.dart',
+        'packages/at_client_cli/test/auth_cli_list_test.dart',
         'at_activate list shows whether each approved enrollment is anchored, '
             'naming a key that fails',
         proves: 'the CLI view: an Anchored column reading anchored, unsigned, '

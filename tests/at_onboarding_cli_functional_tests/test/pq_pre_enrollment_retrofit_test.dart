@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
-import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 

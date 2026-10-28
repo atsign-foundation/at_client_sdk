@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -9,7 +9,7 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 Future<bool> approveEnrollment(String atSign, String enrollmentId, String keyFile, String rootServer) async {
   logger.info('Approving enrollment $enrollmentId for $atSign...');
 
-  String approveCommand = 'dart run bin/activate_cli.dart approve -a $atSign -i $enrollmentId --rootServer $rootServer --keys $keyFile';
+  String approveCommand = 'dart run bin/at_activate.dart approve -a $atSign -i $enrollmentId --rootServer $rootServer --keys $keyFile';
   logger.info('Executing command: $approveCommand');
   List<String> approveParts = approveCommand.split(' ');
 

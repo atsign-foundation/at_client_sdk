@@ -1,6 +1,6 @@
 import 'package:at_client/at_client_io.dart';
-import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
+import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 
 /// Activates [atSign] with the CRAM secret on [preference], writing its first
 /// keys to the keyfile the preference names, and stops the client the

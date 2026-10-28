@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration commandTimeout = Duration(seconds: 120);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -9,7 +9,7 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 Future<String> generateOtpWithExistingKeys(String atSign, String keyFile, String rootServer) async {
   logger.info('Generating OTP for $atSign using existing keys: $keyFile');
 
-  String otpCommand = 'dart run bin/activate_cli.dart otp -a $atSign --rootServer $rootServer --keys $keyFile';
+  String otpCommand = 'dart run bin/at_activate.dart otp -a $atSign --rootServer $rootServer --keys $keyFile';
   logger.info('Executing command: $otpCommand');
   List<String> otpParts = otpCommand.split(' ');
 

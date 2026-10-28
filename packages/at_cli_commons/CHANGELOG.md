@@ -1,7 +1,7 @@
-## 3.1.2-rc4
+## 4.0.0
 
-- build: requires `at_client` ^4.0.0.
-- chore(deps): at_utils ^4.0.0-rc1
+- breaking: at_cli_commons is a deprecated re-export of at_client_cli, which
+  now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
 
 ## 3.1.2-rc3
 

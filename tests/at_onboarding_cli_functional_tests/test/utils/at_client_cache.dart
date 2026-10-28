@@ -10,7 +10,7 @@ import 'virtualenv_ports.dart';
 /// `testKeysFile` assumes, so a relative `-k` resolves the same way in parent
 /// and child.
 const String _activateCli =
-    '../../packages/at_onboarding_cli/bin/activate_cli.dart';
+    '../../packages/at_client_cli/bin/at_activate.dart';
 
 /// How long a CLI command may take before this helper gives up on it.
 ///

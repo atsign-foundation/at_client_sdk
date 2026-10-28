@@ -33,7 +33,7 @@ Future<void> stopDockerServices() async {
 }
 
 Future<void> cleanupAllKeyFiles() async {
-  const String workingDirectory = '../../packages/at_onboarding_cli';
+  const String workingDirectory = '../../packages/at_client_cli';
   Directory workingDir = Directory(workingDirectory);
   List<FileSystemEntity> files = workingDir.listSync();
 

@@ -8,15 +8,13 @@ command line), the approving side, and helpers — every path handing back the
 
 ## Status
 
-Draft, 2026-09-13. One decision is ruled: **D1, the timing** — gkc ruled on
-2026-09-13 that this happens now, as at_onboarding_cli's 2.0: `at_client_cli`
-1.0.0 publishes together with the shims `at_onboarding_cli` 2.0.0 and
-`at_cli_commons` 4.0.0. The remaining decisions in
-[section 6](#6-decisions-to-make) are **paused** until gkc has brought his
-colleagues up to speed; nothing is built until they are ruled. The measurements in
-[section 1](#1-what-exists-today-measured) were taken on branch
-`gkc-client-lifecycle` at the tip that holds at_onboarding_cli 2.0.0-rc1 and
-at_cli_commons 3.1.2, against pub.dev's published 1.16.1-rc1 and 3.1.1.
+Adopted 2026-10-28 for at_client 4.0.0's release. Every decision in
+[section 6](#6-decisions-to-make) is ruled, and [`decisions.md`](decisions.md)
+holds the rulings; where a ruling differs from this design, the ruling holds.
+The measurements in [section 1](#1-what-exists-today-measured) were taken on
+2026-09-13 on branch `gkc-client-lifecycle`, at the tip that holds
+at_onboarding_cli 2.0.0-rc1 and at_cli_commons 3.1.2, against pub.dev's
+published 1.16.1-rc1 and 3.1.1; ruling 5 re-measures the adapter's use.
 
 ## 1. What exists today, measured
 
@@ -209,6 +207,9 @@ final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByCl
 ```
 
 ## 6. Decisions to make
+
+All eight are ruled in [`decisions.md`](decisions.md): D1 as ruling 1, D2 as 2,
+D3 as 4, D4 as 8, D5 as 5, D6 as 7, D7 as 6 and D8 as 11.
 
 | Id | Question                                                                                          | Recommendation                                                                                                                                                              |
 | -- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

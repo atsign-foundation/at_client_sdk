@@ -14,8 +14,8 @@ environment:
 dependency_overrides:
   at_policy:
     path: ..
-  at_cli_commons:
-    path: ../../at_cli_commons
+  at_client_cli:
+    path: ../../at_client_cli
   at_client:
     path: ../../at_client
   at_commons:
@@ -24,15 +24,13 @@ dependency_overrides:
     path: ../../at_auth
   at_lookup:
     path: ../../at_lookup
-  at_onboarding_cli:
-    path: ../../at_onboarding_cli
   at_utils:
     path: ../../at_utils
 
 dependencies:
   at_policy:
     path: ..
-  at_cli_commons: ^1.2.1
+  at_client_cli: ^1.0.0
   at_client: ^4.0.0
 
 dev_dependencies:

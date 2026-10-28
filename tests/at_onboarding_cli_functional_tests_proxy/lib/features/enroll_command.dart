@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:at_utils/at_logger.dart';
 
-const String workingDirectory = '../../packages/at_onboarding_cli';
+const String workingDirectory = '../../packages/at_client_cli';
 const Duration enrollmentTimeout = Duration(seconds: 180);
 
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
@@ -9,7 +9,7 @@ final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 Future<bool> submitEnrollmentRequest(String otp, String atSign, String deviceId, String keyFile, String rootServer, String appName, String namespaces) async {
   logger.info('Submitting enrollment request for $atSign with device ID: $deviceId');
 
-  String enrollCommand = 'dart run bin/activate_cli.dart enroll -s $otp -a $atSign --rootServer $rootServer -d $deviceId -n "$namespaces" --app $appName --keys $keyFile';
+  String enrollCommand = 'dart run bin/at_activate.dart enroll -s $otp -a $atSign --rootServer $rootServer -d $deviceId -n "$namespaces" --app $appName --keys $keyFile';
   logger.info('Executing command: $enrollCommand');
   List<String> enrollParts = enrollCommand.split(' ');
 

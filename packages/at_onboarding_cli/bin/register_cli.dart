@@ -1,6 +1,3 @@
-import 'package:at_onboarding_cli/src/register_cli/register.dart'
-    as register_cli;
+import 'package:at_client_cli/at_client_cli.dart' show AtRegister;
 
-Future<void> main(List<String> args) async {
-  await register_cli.main(args);
-}
+Future<void> main(List<String> args) => AtRegister.main(args);
