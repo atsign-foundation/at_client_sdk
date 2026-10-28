@@ -839,6 +839,79 @@ void main() {
               'for, whatever version it carries');
     });
   });
+
+  group('Given a flat keyfile holding no credential', () {
+    const assurance = AtKeysAssurance();
+    const alice = '@alice🛠';
+
+    /// A flat keyfile holding no credential whose `atsign` field is [atsign].
+    Map<String, dynamic> flatNaming(String atsign) =>
+        {..._publicOnlyLegacyJson(), 'atsign': atsign};
+
+    test(
+        'when it names another atSign and is rewritten flat for this one, '
+        'then the rewrite is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@bob🛠'),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whether or not it is typed');
+    });
+
+    test(
+        'when it is rewritten flat for the atSign it names, then the rewrite '
+        'is accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming(alice),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'a write for the atSign the keyfile names may replace its '
+              'fields');
+    });
+
+    test(
+        'when it names its atSign in another spelling, then a flat rewrite '
+        'for that atSign is accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@Alice🛠'),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'atSigns are compared folded');
+    });
+
+    test(
+        'when it names no atSign, then a flat rewrite for an atSign is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: _publicOnlyLegacyJson(),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'a keyfile that names no atSign is not compared with the '
+              'atSign the write names');
+    });
+
+    test(
+        'when it is rewritten flat with no atSign named, then the rewrite is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@bob🛠'),
+              candidate: _publicOnlyLegacyJson()),
+          returnsNormally,
+          reason: 'a write that names no atSign is not compared with the '
+              'atSign the keyfile names');
+    });
+  });
 }
 
 /// The fixture's public keys alone: flat fields that hold no credential.

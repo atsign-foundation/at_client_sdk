@@ -85,3 +85,15 @@ Feature: A keyfile the previous published at_auth wrote still reads and updates
     When FileAtKeysIo flushes @alice🛠's keys to it
     Then the flush succeeds
     And the keyfile is written in the flat shape, with @alice🛠's keys
+
+  @forgery
+  Scenario: A flat keyfile naming another atSign and holding no credential is still refused
+    Given a flat keyfile at @alice🛠's path whose atsign field names @bob🛠 and that holds no credential
+    When FileAtKeysIo flushes @alice🛠's keys to it
+    Then the flush fails
+    And the keyfile is left as it was
+
+  Scenario: A flat keyfile holding no credential is rewritten for the atSign it names
+    Given a flat keyfile whose atsign field names @alice🛠 and that holds no credential
+    When FileAtKeysIo flushes @alice🛠's keys to it
+    Then the flush succeeds, and the keyfile holds @alice🛠's keys

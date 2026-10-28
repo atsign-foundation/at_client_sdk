@@ -268,13 +268,15 @@ class AtKeysAssurance {
   /// Refuses [candidate] as the next state of a store holding [existing]
   /// when it drops anything [existing] holds.
   ///
-  /// [atsign] is the atSign [candidate] is written for. A typed [existing]
-  /// may be rewritten in the flat shape only:
-  /// - when it is of the version this build writes and holds no typed
-  ///   material, and then, if it holds a credential or [atsign] is given,
-  ///   only when it names [atsign];
-  /// - when it holds no credential, and then, if [atsign] is given, only
-  ///   when it names no atSign other than [atsign].
+  /// [atsign] is the atSign [candidate] is written for. A flat [candidate]
+  /// is refused over:
+  /// - a typed [existing] of the version this build writes holding no typed
+  ///   material, when it holds a credential or [atsign] is given, unless it
+  ///   names [atsign];
+  /// - an [existing], typed or flat, holding no credential, when [atsign] is
+  ///   given and [existing] names another atSign.
+  ///
+  /// Any other typed [existing] holding a credential keeps its typed header.
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
@@ -325,13 +327,21 @@ class AtKeysAssurance {
       // `AtKeys.fromJson` has already normalized the reserved side.
       _assertSame(_asAtsign(existingLegacy.remove('atsign')),
           _asAtsign(candidate['atsign']), 'map.atsign');
+    } else if (!candidate.containsKey('version') &&
+        atsign != null &&
+        existingLegacy['atsign'] != null &&
+        !_holdsCredential(existingMaterials, existingLegacy)) {
+      _assertSame(_asAtsign(existingLegacy['atsign']),
+          _asAtsign(atsign.toString()), 'map.atsign');
     }
     // NOTE: the legacy fields are protected because they are the credential
     // every published reader authenticates and decrypts with. A document that
     // holds none — no active typed material and none of the flat secrets —
     // is not a credential yet: an enrollment's keys filed at submission and
     // not accepted, or the stub a denied one leaves behind. Its legacy fields
-    // are the pending request's, and the next request may replace them.
+    // are the pending request's, and the next request for the atSign it
+    // names may replace them; one the caller names another atSign for may
+    // not.
     if (_holdsCredential(existingMaterials, existingLegacy)) {
       _assertLegacyPreserved(
         existingLegacy,

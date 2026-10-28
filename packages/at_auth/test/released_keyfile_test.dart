@@ -316,6 +316,58 @@ void main() {
               'rewritten for $atsign');
     });
   });
+
+  group(
+      'A keyfile the previous published at_auth wrote still reads and '
+      'updates: a flat keyfile holding no credential', () {
+    /// Writes a flat keyfile whose atsign field names [owner] and that holds
+    /// no credential, at a path every atSign shares.
+    Future<String> flatKeyfileFor(String owner) async {
+      final path = '${dir.path}/shared.atKeys';
+      await FileAtKeysIo(filePath: (_) => path)
+          .write(owner, AtKeys()..metadata['atsign'] = owner);
+      final written =
+          jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+      expect(written.keys, isNot(contains('version')),
+          reason: 'the Given: a flat keyfile');
+      expect(written, containsPair('atsign', owner),
+          reason: 'the Given: its atsign field names $owner');
+      expect([
+        written['aesPkamPrivateKey'],
+        written['aesEncryptPrivateKey'],
+        written['selfEncryptionKey'],
+      ], everyElement(isNull), reason: 'the Given: it holds no credential');
+      return path;
+    }
+
+    test(
+        'A flat keyfile naming another atSign and holding no credential is '
+        'still refused', () async {
+      final path = await flatKeyfileFor('@bob🛠');
+      final before = File(path).readAsStringSync();
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path)
+              .flush(atsign.toAtsign(), legacyAtKeys()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'a flat keyfile whose atsign field names another atSign is '
+              'not rewritten for $atsign');
+      expect(File(path).readAsStringSync(), before,
+          reason: 'the keyfile is left as it was');
+    });
+
+    test(
+        'A flat keyfile holding no credential is rewritten for the atSign it '
+        'names', () async {
+      final path = await flatKeyfileFor(atsign);
+      final io = FileAtKeysIo(filePath: (_) => path);
+
+      await io.flush(atsign.toAtsign(), legacyAtKeys());
+
+      expectLegacyAtKeys(await io.read(atsign), legacyAtKeys());
+    });
+  });
 }
 
 /// The values a released reader's read-back records, by field name.
