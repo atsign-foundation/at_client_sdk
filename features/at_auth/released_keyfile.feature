@@ -74,6 +74,13 @@ Feature: A keyfile the previous published at_auth wrote still reads and updates
     Then the update fails
 
   @forgery
+  Scenario: Flushing other keys for its own atSign is still refused
+    Given the keyfile at_auth 3.3.0 wrote for @alice🛠
+    When FileAtKeysIo flushes other keys for @alice🛠 to it
+    Then the flush fails
+    And the keyfile is left as it was
+
+  @forgery
   Scenario: A keyfile naming another atSign and holding only pending content is still refused
     Given a keyfile at @alice🛠's path whose atsign field names @bob🛠, holding no credential and only a pending enrollment, an enrollment with no keys yet, or pending keys of @bob🛠's own
     When FileAtKeysIo flushes @alice🛠's keys to it
