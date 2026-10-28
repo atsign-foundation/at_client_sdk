@@ -295,7 +295,6 @@ AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
     ..atKeysFilePath = testKeysFile(atSign)
-    ..downloadPath = testKeysDir
     ..appName = 'wavi'
     ..deviceName = 'pixel';
 

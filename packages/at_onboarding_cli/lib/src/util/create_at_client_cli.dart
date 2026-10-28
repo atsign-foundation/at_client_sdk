@@ -49,8 +49,6 @@ Future<AtClient> createAtClient(
   final atKeysFilePathToUse =
       (atKeysFilePath ?? '$homeDir/.atsign/keys/${atSign}_key.atKeys')
           .replaceAll('/', Platform.pathSeparator);
-  final downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
-      .replaceAll('/', Platform.pathSeparator);
   final parsedRootDomain =
       AtRootDomain.parse(rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn);
 
@@ -60,8 +58,7 @@ Future<AtClient> createAtClient(
     ..rootDomain = parsedRootDomain.rootDomain
     ..rootPort = parsedRootDomain.rootPort
     ..passPhrase = passPhrase
-    ..storagePath = storageDir?.path
-    ..downloadPath = downloadPathToUse;
+    ..storagePath = storageDir?.path;
 
   stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
   final AtClient client;

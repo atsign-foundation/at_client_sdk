@@ -310,11 +310,6 @@ class AtClientPreference {
   /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
 
-  /// Directory for file transfer: [AtClient.downloadFile] saves files there by
-  /// default, and an upload keeps a copy of each file it sends under its
-  /// `sent-files`.
-  String? downloadPath;
-
   /// regex to perform sync
   String? syncRegex;
 

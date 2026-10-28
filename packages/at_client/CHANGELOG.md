@@ -27,6 +27,15 @@
 - breaking: `RemoteSecondary.isAvailable` is removed; at_lookup's
   `checkAtSignServer` says whether an atSign's atServer is reachable.
 - breaking: `AtClientPreference.atProtocolEmitted` is removed; it was ignored.
+- breaking: the file-transfer API is removed: `uploadFile`, `downloadFile`,
+  `reuploadFiles`, `shareFiles`, `FileTransferObject`, `FileStatus`,
+  `EncryptionService.encryptFileInChunks` and `decryptFileInChunks`, and
+  `AtClientPreference.downloadPath`. File transfer belongs in the app.
+- breaking: `ConnectivityListener` is removed; use a connectivity package of
+  the app's choice.
+- breaking: `RemoteSecondary.addStreamData` is removed.
+- build: at_client no longer depends on archive, http,
+  internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the
   client holds no key to sign with, including while its keyfile cannot be
   read.

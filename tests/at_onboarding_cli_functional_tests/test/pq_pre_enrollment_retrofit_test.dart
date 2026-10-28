@@ -86,7 +86,6 @@ void main() {
         ..rootPort = virtualenvRootPort
         ..storagePath = 'storage/hive/$atSign'
         ..atKeysFilePath = testKeysFile(atSign)
-        ..downloadPath = testKeysDir
         ..appName = 'wavi'
         ..deviceName = 'pixel';
 

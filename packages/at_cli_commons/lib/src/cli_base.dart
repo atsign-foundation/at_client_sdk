@@ -329,7 +329,6 @@ class CLIBase {
     atOnboardingConfig
       ..storagePath = localStoragePathToUse
       ..namespace = nameSpace
-      ..downloadPath = downloadPathToUse
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true

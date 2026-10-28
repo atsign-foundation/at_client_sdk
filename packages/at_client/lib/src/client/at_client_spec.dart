@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:at_client/src/client/at_reachability.dart';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/src/client/data_event.dart';
@@ -16,7 +15,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/stream/file_transfer_object.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -660,39 +658,6 @@ abstract class AtClient {
       'Commit-log compaction was removed with the commit-log-free keystore; '
       'this is now a no-op and will be removed in a future major release')
   Future<void> stopCompactionJob();
-
-  /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
-  /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<Map<String, FileTransferObject>> uploadFile(
-      List<File> files, List<String> sharedWithAtSigns);
-
-  /// Downloads the list of files for a given [transferId] shared by [sharedByAtSign]
-  /// Optionally you can pass [downloadPath] to download the files.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
-      {String? downloadPath});
-
-  /// re uploads file in [fileTransferObject.fileUrl]
-  /// returns list of [FileStatus] which contains upload status of each file.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<List<FileStatus>> reuploadFiles(
-      List<File> files, FileTransferObject fileTransferObject);
-
-  /// re sends file notifications to [sharedWithAtSigns]
-  /// returns [Map<String, FileTransferObject>] which contains transfer status for each atsign.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<Map<String, FileTransferObject>> shareFiles(
-      List<String> sharedWithAtSigns,
-      String key,
-      String fileUrl,
-      String encryptionKey,
-      List<FileStatus> fileStatus,
-      {DateTime? date});
 
   /// Note - this method name is misleading as 'current' implies the atSign
   /// could change - but an AtClient should only ever have one atSign.

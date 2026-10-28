@@ -17,7 +17,6 @@ export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 export 'package:at_client/src/lifecycle/enrollments.dart';
 export 'package:at_client/src/lifecycle/pending_enrollment.dart';
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
-export 'package:at_client/src/listener/connectivity_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';

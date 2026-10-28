@@ -24,7 +24,6 @@ void main() {
   AtSignLogger.root_level = 'WARNING';
 
   final String atSign = AtUtils.fixAtSign('@denise');
-  final String keysDir = testKeysDir;
   final String keysFilePath = testKeysFile(atSign);
 
   // The posture rides the constructor, which is the whole point: an app
@@ -38,7 +37,6 @@ void main() {
         ..namespace = 'wavi'
         ..cramSecret = at_demos.cramKeyMap[atSign]
         ..atKeysFilePath = keysFilePath
-        ..downloadPath = keysDir
         ..appName = 'wavi'
         ..deviceName = 'pq-cli';
 
@@ -183,7 +181,6 @@ void main() {
       ..namespace = 'wavi'
       ..cramSecret = at_demos.cramKeyMap[legacyAtSign]
       ..atKeysFilePath = legacyKeysFile
-      ..downloadPath = keysDir
       ..appName = 'wavi'
       ..deviceName = 'legacy-cli';
     await activateThroughCli(legacyAtSign, activation);

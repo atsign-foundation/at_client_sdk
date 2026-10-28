@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
@@ -49,19 +48,16 @@ import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/signing/keyless_pkam_key.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
-import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
-import 'package:at_client/src/util/constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -2422,214 +2418,6 @@ class AtClientImpl implements AtClient {
         'Default crypto provider "$id" is not registered. '
         'Add it to AtClientPreference.crypto.providers.',
       );
-    }
-  }
-
-  @override
-  Future<Map<String, FileTransferObject>> uploadFile(
-    List<File> files,
-    List<String> sharedWithAtSigns,
-  ) async {
-    var encryptionKey = _encryptionService!.generateFileEncryptionKey();
-    var key = TextConstants.fileTransferKey + Uuid().v4();
-    var fileStatus = await _uploadFiles(key, files, encryptionKey);
-    // ignore: prefer_interpolation_to_compose_strings
-    var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
-
-    return shareFiles(
-      sharedWithAtSigns,
-      key,
-      fileUrl,
-      encryptionKey,
-      fileStatus,
-    );
-  }
-
-  @override
-  Future<Map<String, FileTransferObject>> shareFiles(
-    List<String> sharedWithAtSigns,
-    String key,
-    String fileUrl,
-    String encryptionKey,
-    List<FileStatus> fileStatus, {
-    DateTime? date,
-  }) async {
-    var result = <String, FileTransferObject>{};
-    for (var sharedWithAtSign in sharedWithAtSigns) {
-      var fileTransferObject = FileTransferObject(
-        key,
-        encryptionKey,
-        fileUrl,
-        sharedWithAtSign,
-        fileStatus,
-        date: date,
-      );
-      try {
-        var atKey = AtKey()
-          ..key = key
-          ..sharedWith = sharedWithAtSign
-          ..metadata = Metadata()
-          ..metadata.ttr = -1
-          // file transfer key will be deleted after 30 days
-          ..metadata.ttl = 2592000000
-          ..sharedBy = _atSign;
-
-        var notificationResult = await notificationService.notify(
-          NotificationParams.forUpdate(
-            atKey,
-            value: jsonEncode(fileTransferObject.toJson()),
-          ),
-        );
-
-        if (notificationResult.notificationStatusEnum ==
-            NotificationStatusEnum.delivered) {
-          fileTransferObject.sharedStatus = true;
-        } else {
-          fileTransferObject.sharedStatus = false;
-        }
-      } on StoppedException {
-        rethrow;
-      } on Exception catch (e) {
-        fileTransferObject.sharedStatus = false;
-        fileTransferObject.error = e.toString();
-      }
-      result[sharedWithAtSign] = fileTransferObject;
-    }
-    return result;
-  }
-
-  Future<List<FileStatus>> _uploadFiles(
-    String transferId,
-    List<File> files,
-    String encryptionKey,
-  ) async {
-    var fileStatuses = <FileStatus>[];
-    for (var file in files) {
-      var fileStatus = FileStatus(
-        fileName: file.path.split(Platform.pathSeparator).last,
-        isUploaded: false,
-        size: await file.length(),
-      );
-      try {
-        final encryptedFile = await _encryptionService!.encryptFileInChunks(
-          file,
-          encryptionKey,
-          _preference!.fileEncryptionChunkSize,
-        );
-        var response =
-            await FileTransferService().uploadToFileBinWithStreamedRequest(
-          encryptedFile,
-          transferId,
-          fileStatus.fileName!,
-        );
-        encryptedFile.deleteSync();
-        if (response != null && response.statusCode == 201) {
-          final responseStr = await response.stream.bytesToString();
-          var responseMap = jsonDecode(responseStr);
-          fileStatus.fileName = responseMap['file']['filename'];
-          fileStatus.isUploaded = true;
-        }
-
-        // storing sent files in a a directory.
-        if (preference?.downloadPath != null) {
-          var sentFilesDirectory = await Directory(
-            '${preference!.downloadPath!}${Platform.pathSeparator}sent-files',
-          ).create();
-          await File(file.path).copy(
-            sentFilesDirectory.path +
-                Platform.pathSeparator +
-                (fileStatus.fileName ?? ''),
-          );
-        }
-      } on Exception catch (e) {
-        fileStatus.error = e.toString();
-      }
-      fileStatuses.add(fileStatus);
-    }
-    return fileStatuses;
-  }
-
-  @override
-  Future<List<FileStatus>> reuploadFiles(
-    List<File> files,
-    FileTransferObject fileTransferObject,
-  ) async {
-    var response = await _uploadFiles(
-      fileTransferObject.transferId,
-      files,
-      fileTransferObject.fileEncryptionKey,
-    );
-    return response;
-  }
-
-  @override
-  Future<List<File>> downloadFile(
-    String transferId,
-    String sharedByAtSign, {
-    String? downloadPath,
-  }) async {
-    downloadPath ??= preference!.downloadPath;
-    if (downloadPath == null) {
-      throw Exception('downloadPath not found');
-    }
-    var atKey = AtKey()
-      ..key = transferId
-      ..sharedBy = sharedByAtSign;
-    var result = await get(atKey);
-    FileTransferObject fileTransferObject;
-    try {
-      if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
-        _logger.severe("FileTransferObject is null");
-        throw AtClientException(
-          error_codes['AtClientException'],
-          'FileTransferObject is null',
-        );
-      }
-      fileTransferObject = FileTransferObject.fromJson(
-        jsonDecode(result.value),
-      )!;
-    } on Exception catch (e) {
-      throw Exception('json decode exception in download file ${e.toString()}');
-    }
-    var downloadedFiles = <File>[];
-    var fileDownloadResponse = await FileTransferService().downloadFromFileBin(
-      fileTransferObject,
-      downloadPath,
-    );
-    if (fileDownloadResponse.isError) {
-      throw Exception('download fail');
-    }
-    var encryptedFileList = Directory(
-      fileDownloadResponse.filePath!,
-    ).listSync();
-    try {
-      for (var encryptedFile in encryptedFileList) {
-        var decryptedFile = await _encryptionService!.decryptFileInChunks(
-          File(encryptedFile.path),
-          fileTransferObject.fileEncryptionKey,
-          _preference!.fileEncryptionChunkSize,
-          ivBase64: fileTransferObject.ivBase64,
-        );
-        decryptedFile.copySync(
-          downloadPath +
-              Platform.pathSeparator +
-              encryptedFile.path.split(Platform.pathSeparator).last,
-        );
-        downloadedFiles.add(
-          File(
-            downloadPath +
-                Platform.pathSeparator +
-                encryptedFile.path.split(Platform.pathSeparator).last,
-          ),
-        );
-        decryptedFile.deleteSync();
-      }
-      // deleting temp directory
-      Directory(fileDownloadResponse.filePath!).deleteSync(recursive: true);
-      return downloadedFiles;
-    } catch (e) {
-      print('error in downloadFile: $e');
-      return [];
     }
   }
 

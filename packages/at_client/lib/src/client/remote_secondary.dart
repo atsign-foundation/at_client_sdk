@@ -203,10 +203,6 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  void addStreamData(List<int> data) {
-    atLookUp.connection!.add(data);
-  }
-
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to
   /// secondary server
   Future<bool> authenticateCram(String? secret) async {
