@@ -1,4 +1,4 @@
-// The signature here is made the way the atServer's owner makes one, through
+// The signature here is made the way the atSign's owner makes one, through
 // at_chops' RSA SHA-256 signing, which at_chops 3.x deprecates.
 // ignore_for_file: deprecated_member_use
 import 'dart:convert';
@@ -22,6 +22,7 @@ void main() {
   late List<FakeAtServerSocket> sockets;
   late MockSecondaryAddressFinder addressFinder;
   late MockSecureSocketFactory socketFactory;
+  // Stands in for the sharer's key pair.
   final bob = AtChopsUtil.generateAtPkamKeyPair();
 
   setUp(() {
