@@ -79,8 +79,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   OutboundConnection? get connection => _connection;
 
+  late SecondaryAddressFinder _secondaryAddressFinder;
+
   @override
-  late SecondaryAddressFinder secondaryAddressFinder;
+  SecondaryAddressFinder get secondaryAddressFinder => _secondaryAddressFinder;
+
+  @override
+  @Deprecated('Pass the SecondaryAddressFinder when building the lookup. '
+      'Removed in 4.0.0.')
+  set secondaryAddressFinder(SecondaryAddressFinder finder) =>
+      _secondaryAddressFinder = finder;
 
   late String _currentAtSign;
 
@@ -94,16 +102,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// longer used" - was false. The ladder in [_process] reads this field and
   /// calls authenticate() with it, and before the authenticator seam landed
   /// that was the leg most ladder traffic took.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one from a bare private key with '
-      'authenticatorForPrivateKey(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   String? privateKey;
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one that falls back to CRAM with '
-      'authenticatorFor(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   String? cramSecret;
 
   /// Takes over authentication entirely when set, in place of the
@@ -131,6 +135,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late SecureSocketConfig _secureSocketConfig;
 
+  @Deprecated('Pass the socket factory in the AtLookupTransport the lookup '
+      'is built with. Removed in 4.0.0.')
   late final AtLookupSecureSocketFactory socketFactory;
 
   late final AtLookupSecureSocketListenerFactory socketListenerFactory;
@@ -159,7 +165,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// reports them as `info`, so nothing breaks while the list is worked
   /// through.
   @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
-      'AtLookupMuxable. Removed in the next major release.')
+      'AtLookupMuxable. Removed in 4.0.0.')
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {this.privateKey,
       this.cramSecret,
@@ -173,7 +179,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _currentAtSign = atSign;
     _rootDomain = rootDomain;
     _rootPort = rootPort;
-    this.secondaryAddressFinder = secondaryAddressFinder ??
+    _secondaryAddressFinder = secondaryAddressFinder ??
         CacheableSecondaryAddressFinder(rootDomain, rootPort);
     _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
     // Stores the client configurations.
@@ -196,6 +202,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         .toString();
   }
 
+  @Deprecated('Use executeVerb with a DeleteVerbBuilder; removed in 4.0.0')
   @override
   Future<bool> delete(String key,
       {String? sharedWith, bool isPublic = false}) async {
@@ -209,6 +216,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return deleteResult.isNotEmpty; //replace with call back
   }
 
+  @Deprecated('Use executeVerb with an LLookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> llookup(String key,
       {String? sharedBy, String? sharedWith, bool isPublic = false}) async {
@@ -236,6 +244,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return llookupResult;
   }
 
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true,
@@ -295,6 +304,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
+      if (!isDataValid) {
+        logger.severe('Data signature verification failed for key: $key '
+            'sharedBy: $sharedBy');
+        return 'data:null';
+      }
       return 'data:$value';
     } on StoppedException {
       rethrow;
@@ -305,6 +319,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     }
   }
 
+  @Deprecated('Use executeVerb with a PLookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> plookup(String key, String sharedBy) async {
     var builder = PLookupVerbBuilder()
@@ -316,6 +331,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return plookupResult;
   }
 
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   @override
   Future<List<String>> scan(
       {String? regex,
@@ -334,6 +350,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return (scanResult.isNotEmpty) ? List.from(jsonDecode(scanResult)) : [];
   }
 
+  @Deprecated('Use executeVerb with an UpdateVerbBuilder; removed in 4.0.0')
   @override
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata}) async {
@@ -366,7 +383,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Future<void> createConnection() => _unlessStopped(_createConnection);
 
   Future<void> _createConnection() async {
-    var created = false;
     await _createConnectionMutex.acquire();
     try {
       _throwIfStopped();
@@ -406,16 +422,26 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           messageListener.onDisconnect = _onNotificationConnectionLost;
         }
         messageListener.listen();
-        created = true;
         logger.finer('New connection created OK');
+        // NOTE: under the mutex, so no command uses the connection before
+        // its preamble has run.
+        await _runOnConnect();
       }
     } finally {
       _createConnectionMutex.release();
     }
-    // NOTE: outside the mutex, and writing to the connection directly rather
-    // than through `_sendCommand`, which would come back here.
-    if (created && onConnect != null) {
-      await onConnect!(_ConnectionPreamble(this));
+  }
+
+  /// Runs [onConnect] on the connection just opened, closing it if
+  /// [onConnect] fails so that the next call opens one and runs it again.
+  Future<void> _runOnConnect() async {
+    final preamble = onConnect;
+    if (preamble == null) return;
+    try {
+      await preamble(_ConnectionPreamble(this));
+    } catch (_) {
+      await _closeConnection();
+      rethrow;
     }
   }
 
@@ -663,7 +689,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
-  /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   Future<bool> authenticate(String? privateKey) =>
       _unlessStopped(() => _authenticateWithPrivateKey(privateKey));
 
@@ -720,7 +747,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   @override
-  Future<bool> pkamAuthenticate({String? enrollmentId}) =>
+  Future<bool> pkamAuthenticate(
+          {@Deprecated('Name the enrollment in the AtAuthenticator instead. '
+              'Removed in 4.0.0.')
+          String? enrollmentId}) =>
       _unlessStopped(() => _pkamAuthenticate(enrollmentId: enrollmentId));
 
   Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
@@ -784,6 +814,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   final Mutex _cramAuthenticationMutex = Mutex();
 
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   @override
   Future<bool> cramAuthenticate(String secret) =>
       _unlessStopped(() => _cramAuthenticate(secret));
@@ -824,7 +856,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     }
   }
 
-  @Deprecated('use AtLookup().cramAuthenticate()')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   // ignore: non_constant_identifier_names
   Future<bool> authenticate_cram(String? secret) async {
     secret ??= cramSecret;
@@ -1461,40 +1494,35 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await _connection!.write(command);
   }
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   @override
   set atChops(AtChops? atChops) {
     _atChops = atChops;
   }
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   @override
   AtChops? get atChops => _atChops;
 
   /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   @override
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   @override
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
+  @Deprecated('Name the enrollment in the AtAuthenticator passed to '
+      'AtLookUp.withSecureSocket. To ask "which enrollment am I", read '
+      'your own client state - not this field, and not '
       'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
       'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
+      'authentication will use. Removed in 4.0.0.')
   @override
   String? enrollmentId;
 }
@@ -1510,6 +1538,7 @@ class AtLookupSecureSocketFactory {
   }
 }
 
+@Deprecated('Renamed AtLookupMessageListenerFactory in 4.0.0.')
 class AtLookupSecureSocketListenerFactory {
   const AtLookupSecureSocketListenerFactory();
 

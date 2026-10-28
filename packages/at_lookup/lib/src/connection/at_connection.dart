@@ -7,6 +7,8 @@ abstract class AtConnection {
   void write(String data);
 
   /// Retrieves the socket of underlying connection
+  @Deprecated('Read through BaseConnection.inbound and write raw bytes '
+      'through BaseConnection.add(). Removed in 4.0.0.')
   Socket getSocket();
 
   /// closes the underlying connection

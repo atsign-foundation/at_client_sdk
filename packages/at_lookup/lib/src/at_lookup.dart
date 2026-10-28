@@ -100,6 +100,9 @@ abstract interface class AtLookUp {
   /// [onConnect] runs on every connection this lookup opens, once it is up
   /// and before anything else is sent on it: a proxy that needs `from:` first
   /// to learn which atServer the connection is for is the case it exists for.
+  /// It talks only through the executor it is handed, since a call back into
+  /// the lookup waits for it to finish, and a connection whose [onConnect]
+  /// fails is closed.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -124,23 +127,38 @@ abstract interface class AtLookUp {
   }
 
   /// update
+  @Deprecated('Use executeVerb with an UpdateVerbBuilder; removed in 4.0.0')
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata});
 
   /// lookup
+  ///
+  /// {@template at_lookup.lookup.verifyData}
+  /// `verifyData: true` never worked before at_lookup 3.7.0: earlier releases
+  /// returned the value even when its signature did not verify. From 3.7.0 it
+  /// returns the value only when its signature verifies against the sharer's
+  /// public key. That key is fetched through the same atServer as the value,
+  /// so the check rests on that atServer and on the sharer's. Proper data
+  /// verification will come in a future minor version of at_client.
+  /// {@endtemplate}
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true, bool verifyData = false});
 
   /// plookup
+  @Deprecated('Use executeVerb with a PLookupVerbBuilder; removed in 4.0.0')
   Future<String> plookup(String key, String sharedBy);
 
+  @Deprecated('Use executeVerb with an LLookupVerbBuilder; removed in 4.0.0')
   Future<String> llookup(String key,
       {String? sharedBy, String? sharedWith, bool isPublic = false});
 
   /// delete
+  @Deprecated('Use executeVerb with a DeleteVerbBuilder; removed in 4.0.0')
   Future<bool> delete(String key, {String? sharedWith, bool isPublic = false});
 
   /// scan
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   Future<List<String>> scan({String? regex, String? sharedBy});
 
   Future<String?> executeVerb(VerbBuilder builder,
@@ -158,10 +176,15 @@ abstract interface class AtLookUp {
   /// Default signing algorithm for pkam signature is [SigningAlgoType.rsa2048] and default hashing algorithm is [HashingAlgoType.sha256]
   ///
   /// Optionally pass enrollmentId if the client is enrolled using APKAM
-  Future<bool> pkamAuthenticate({String? enrollmentId});
+  Future<bool> pkamAuthenticate(
+      {@Deprecated('Name the enrollment in the AtAuthenticator instead. '
+          'Removed in 4.0.0.')
+      String? enrollmentId});
 
   /// Generates digest using from verb response and [secret] and performs a
   /// CRAM authentication to secondary server
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   Future<bool> cramAuthenticate(String secret);
 
   /// Closes this lookup's connection: the next call opens a new one and
@@ -180,18 +203,18 @@ abstract interface class AtLookUp {
   /// material to authenticate. Callers that read this for crypto which is not
   /// authentication should be handed their own key material - that is what
   /// at_auth EnrollmentApprover.approve takes its approverKeys for.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   set atChops(AtChops? atChops);
 
   OutboundConnection? get connection;
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket instead. '
+      'Removed in 4.0.0.')
   AtChops? get atChops;
 
+  @Deprecated('Pass the SecondaryAddressFinder when building the lookup. '
+      'Removed in 4.0.0.')
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
@@ -201,27 +224,23 @@ abstract interface class AtLookUp {
   /// Deprecated together with [hashingAlgoType]: the two are read on the same
   /// lines when the PKAM signature is built, so they are one setting and they
   /// move together.
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   set signingAlgoType(SigningAlgoType signingAlgoType);
 
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   SigningAlgoType get signingAlgoType;
 
   /// Hashing algorithm for pkam signature
   ///
   /// Deprecated together with [signingAlgoType]; see the note there.
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   set hashingAlgoType(HashingAlgoType hashingAlgoType);
 
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
+  @Deprecated('Sign in the AtAuthenticator passed to AtLookUp.withSecureSocket, '
+      'which chooses its own algorithms. Removed in 4.0.0.')
   HashingAlgoType get hashingAlgoType;
 
   /// EnrollmentId has to be set for clients that are enrolled through APKAM.
@@ -230,22 +249,20 @@ abstract interface class AtLookUp {
   /// deliberately not [AtConnectionMetaData.authenticatedAsEnrollmentId] -
   /// what a live socket actually authenticated as. That distinction survives
   /// the deprecation; the two are not interchangeable.
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
+  @Deprecated('Name the enrollment in the AtAuthenticator passed to '
+      'AtLookUp.withSecureSocket. To ask "which enrollment am I", read '
+      'your own client state - not this field, and not '
       'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
       'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
+      'authentication will use. Removed in 4.0.0.')
   set enrollmentId(String? enrollmentId);
 
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
+  @Deprecated('Name the enrollment in the AtAuthenticator passed to '
+      'AtLookUp.withSecureSocket. To ask "which enrollment am I", read '
+      'your own client state - not this field, and not '
       'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
       'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
+      'authentication will use. Removed in 4.0.0.')
   String? get enrollmentId;
 }
 
@@ -359,6 +376,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
   /// authenticated atSign (`at_server_status` scans unauthenticated) - and
   /// [showHiddenKeys], which asks the atServer to include `public:__` keys.
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   @override
   Future<List<String>> scan(
       {String? regex,
@@ -367,6 +385,9 @@ abstract interface class AtLookupMuxable implements AtLookUp {
       bool showHiddenKeys = false});
 
   /// As [AtLookUp.lookup], and additionally [metadata].
+  ///
+  /// {@macro at_lookup.lookup.verifyData}
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true, bool verifyData = false, bool metadata = false});

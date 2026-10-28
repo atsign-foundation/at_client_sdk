@@ -323,8 +323,10 @@ class OutboundMessageListener {
         if (_isValidResponse(result)) {
           return result;
         }
-        //ignore any other response
+        // NOTE: a stray line leaves the rest of the stream unaccounted for,
+        // so the connection that carried it is not reused.
         _buffer.clear();
+        await closeConnection();
         throw AtLookUpException('AT0014', 'Unexpected response found');
       }
 
