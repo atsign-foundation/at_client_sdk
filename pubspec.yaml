@@ -20,8 +20,8 @@ workspace:
   - packages/at_utils
   - tests/at_end2end_test
   - tests/at_functional_test
-  - tests/at_onboarding_cli_functional_tests
-  - tests/at_onboarding_cli_functional_tests_proxy
+  - tests/at_client_cli_functional_tests
+  - tests/at_client_cli_functional_tests_proxy
   - tools/wasm_shakedown
 
 dependencies:

@@ -40,7 +40,7 @@ using whatever `at_virtual_env:local` already held.
 
 **Is:** all three at_client_sdk runners — `tests/at_functional_test/runLocal.sh`,
 `tests/at_end2end_test/runLocal.sh`,
-`tests/at_onboarding_cli_functional_tests/runLocal.sh` — contain **zero**
+`tests/at_client_cli_functional_tests/runLocal.sh` — contain **zero**
 `docker build` lines. They default `VIRTUALENV_IMAGE` to `at_virtual_env:local`
 and skip `docker compose pull` for it, because a local image is on no registry.
 
@@ -63,7 +63,7 @@ went green may have been measuring a server nobody intended.
 - `.` -> `tests/at_functional_test/runLocal.sh` -> `docker compose pull SKIPPED`
 - `.` -> `tests/at_functional_test/runLocal.sh` -> `docker build` x0
 - `.` -> `tests/at_end2end_test/runLocal.sh` -> `docker build` x0
-- `.` -> `tests/at_onboarding_cli_functional_tests/runLocal.sh` -> `docker build` x0
+- `.` -> `tests/at_client_cli_functional_tests/runLocal.sh` -> `docker build` x0
 - `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
 - `at_server@45846a7b` -> `tests/at_end2end_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
 - `at_server@45846a7b` -> `tests/at_functional_test/runDualCompare.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`

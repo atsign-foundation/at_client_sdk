@@ -642,7 +642,7 @@ keyfile.
 
 ⛔ **The harness half of this is DISCHARGED, and this section said otherwise
 until 2026-08-27 — while a passage later in this same
-file said the opposite.** It read: *"`tests/at_onboarding_cli_functional_tests` has
+file said the opposite.** It read: *"`tests/at_client_cli_functional_tests` has
 **no `runLocal.sh`**, and its `docker-compose.yaml` defaults to
 `atsigncompany/virtualenv:vip` … So there is no local path to functionally
 verify anything in at_onboarding_cli."* All three clauses are false.
@@ -886,7 +886,7 @@ atServer-side implementation, or the flag's removal from at_commons.
   authenticator*; they went through `AtLookUp.withSecureSocket` and
   `_installAuthenticator` supplied one afterwards where the site needed it,
   and they were not uniform. Verify with
-  `tests/at_onboarding_cli_functional_tests/runLocal.sh` and the proxy pack
+  `tests/at_client_cli_functional_tests/runLocal.sh` and the proxy pack
   beside it.
 - **`at_onboarding_service_impl.onboard` builds its `FileAtKeysIo` without the
   passphrase**, where the read path requires one. That asymmetry is deliberate
@@ -894,7 +894,7 @@ atServer-side implementation, or the flag's removal from at_commons.
   passphrase belongs there too. It was left alone rather than changed as a side
   effect of sharing a helper; the read path's omission was a real bug and is
   fixed.
-- **`check_test_env.dart` in `tests/at_onboarding_cli_functional_tests` is dead
+- **`check_test_env.dart` in `tests/at_client_cli_functional_tests` is dead
   code.** It polls `lookup:publickey@sitaram` until it answers — state only
   pkamLoad creates — so in a suite that deliberately runs without pkamLoad it
   can never pass, and hangs for its five-minute timeout. CI does not call it.

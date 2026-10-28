@@ -35,7 +35,7 @@ it.
 The row read "**180** live test declarations across 65 files … a looser
 `grep -o 'test('` gives 225 and an indentation-anchored one 224". All three
 figures were scoped to `tests/at_functional_test` and `tests/at_end2end_test`
-alone. `tests/at_onboarding_cli_functional_tests` and its `_proxy` sibling are
+alone. `tests/at_client_cli_functional_tests` and its `_proxy` sibling are
 live packs too, and the CLI one builds clients from a `PqPosture` in two arms —
 the best live evidence for UC-C1.6.
 

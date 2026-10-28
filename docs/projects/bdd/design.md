@@ -286,7 +286,7 @@ a fixed rule the corpus rail checks:
 |---|---|---|
 | `tests/at_functional_test` | `test/gherkin_<section>_test.dart`, `@Tags(['pq'])` before `library;` | `@live` scenarios with no product-surface tag |
 | `tests/at_end2end_test` | `test/pq/gherkin_<section>_test.dart` (under `test/pq/` so the `paths:` allowlist never names it, tagged `pq` as `suite_manifest_test` requires) | `@live` scenarios tagged `@legacy-server` (the pinned pre-PQ image) or `@zero-grace` (the `@eve🛠` secondary with `apkamSelfEnrollmentGraceHours=0`, which only this pack's virtualenv provisions and two retrofit rows need) |
-| `tests/at_onboarding_cli_functional_tests` | `test/gherkin_<section>_test.dart` | `@live @cli` |
+| `tests/at_client_cli_functional_tests` | `test/gherkin_<section>_test.dart` | `@live @cli` |
 | `packages/at_client` | `test/acceptance/gherkin_<section>_test.dart`, declared in `manifest.dart` so `architecture_guard_test` keeps enumerating | `@in-process` scenarios |
 | `packages/at_auth` | `test/gherkin_<section>_test.dart` | `@in-process` scenarios about the keyfile alone, if at_auth stays a host ([`decisions.md`](decisions.md)); otherwise none, and at_client binds them since it depends on at_auth |
 

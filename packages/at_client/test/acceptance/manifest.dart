@@ -49,7 +49,7 @@ const guardFiles = <String>[
 const livePackPaths = <String>[
   'tests/at_functional_test/',
   'tests/at_end2end_test/',
-  'tests/at_onboarding_cli_functional_tests/',
+  'tests/at_client_cli_functional_tests/',
 ];
 
 /// Rows allowed to rest on an in-process proof, each with the reason.

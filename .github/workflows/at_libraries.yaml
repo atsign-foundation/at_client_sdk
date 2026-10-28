@@ -266,10 +266,10 @@ jobs:
           dart run wasm_shakedown --config .github/wasm_gates.yaml
           --resolve-from at_chops=packages/at_chops
 
-  functional_tests_at_onboarding_cli:
+  functional_tests_at_client_cli:
     runs-on: ubuntu-latest
     env:
-      # The TRUNK-TRACKING atServer build. at_onboarding_cli_functional_tests
+      # The TRUNK-TRACKING atServer build. at_client_cli_functional_tests
       # activates an atSign with a post-quantum keypair, which needs an
       # atServer that verifies ML-DSA PKAM — that lands on trunk well before
       # it is released, so the published `vip` cannot run it. The proxy leg
@@ -280,8 +280,8 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - at_onboarding_cli_functional_tests
-          - at_onboarding_cli_functional_tests_proxy
+          - at_client_cli_functional_tests
+          - at_client_cli_functional_tests_proxy
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

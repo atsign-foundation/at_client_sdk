@@ -320,7 +320,7 @@ void main() {
   test('UC-G3.11 · a pre-enrollment atSign gives itself a first enrollment',
       () {
     provenIn(
-        'tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
+        'tests/at_client_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
         'a pre-enrollment atSign at a post-quantum posture gives itself its '
             'first enrollment',
         proves: 'the whole row against a real atServer, and it reads the '
@@ -336,7 +336,7 @@ void main() {
           'its own retrofit, so sibling clones',
         ]);
     provenIn(
-        'tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
+        'tests/at_client_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
         'the same atSign shape at a legacy posture does not',
         proves: 'the control, live, on the same fixture with only the posture '
             'differing — and it can go red while every assertion above stays '

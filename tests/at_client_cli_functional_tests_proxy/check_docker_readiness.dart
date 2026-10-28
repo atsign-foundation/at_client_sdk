@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:at_onboarding_cli_functional_tests_proxy/virtualenv_ports.dart';
+import 'package:at_client_cli_functional_tests_proxy/virtualenv_ports.dart';
 
 import 'lib/docker_utils.dart';
 

@@ -243,7 +243,7 @@ Substrate mechanics are cited to `design.md`; substrate-related rulings to
 
 **Evidence standard — what counts as proof.** A row is proven by a test that
 drives a **real atServer**: `tests/at_functional_test`, `tests/at_end2end_test`
-or `tests/at_onboarding_cli_functional_tests`. A proof that runs in-process is
+or `tests/at_client_cli_functional_tests`. A proof that runs in-process is
 acceptable **only where a live test would be prohibitively costly or
 impossible**, and the bar for that is "there is no atServer
 in the loop at all" — parsing, format composition, provider selection, crypto
@@ -1711,7 +1711,7 @@ map and be refused rather than obeyed.
   (the startup route, four arms on one throwaway atSign),
   `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart` (the
   explicit `selfRetrofit` route) and
-  `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart`
+  `tests/at_client_cli_functional_tests/test/pq_native_enroll_test.dart`
   (`at_activate list`, the shipped binary).
   `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`
   drives the signing-root step in-flow (privileged mint, clone request+verify,
@@ -2217,8 +2217,8 @@ proven. The problem is legibility rather than coverage.
 | **at_client `dart test`** | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
 | **`tests/at_functional_test`** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery, and the rollout matrix. `docker compose down` before each run; cap runs at 180000 ms. |
 | **`tests/at_end2end_test`** | cross-atSign shares and notifications, retrofit, the capability→active transition. |
-| **`tests/at_onboarding_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
-| **`tests/at_onboarding_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
+| **`tests/at_client_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
+| **`tests/at_client_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
 
 #### The in-package files the citations lean on
 
@@ -2273,7 +2273,7 @@ Three `provenIn` citations reach a CLI pack, over two rows: **UC-G3.11** cites
 `pq_native_enroll_test.dart` once. None reaches the **proxy** pack.
 
 Re-derive rather than quoting:
-`git grep -c at_onboarding_cli_functional_tests -- packages/at_client/test/acceptance`.
+`git grep -c at_client_cli_functional_tests -- packages/at_client/test/acceptance`.
 The CLI pack's two-arm posture differential — the best live evidence for
 UC-C1.6 and a second live proof of UC-A1.1 — is still invisible from this
 catalogue. The strict matcher gives **194** live `test()` declarations across
@@ -2600,7 +2600,7 @@ pieces:
 - Every runner emits the runner's own JSON stream, opt-in:
   `ACCEPTANCE_REPORT=<path> ./runLocal.sh`, wired into all three of
   `at_functional_test`, `at_end2end_test` and
-  `at_onboarding_cli_functional_tests`. A run without it is byte-for-byte what
+  `at_client_cli_functional_tests`. A run without it is byte-for-byte what
   it was. The unit suites need no wiring — `dart test --file-reporter json:…`
   in `packages/at_client` and `packages/at_auth` covers the 67 citations that
   point at them.

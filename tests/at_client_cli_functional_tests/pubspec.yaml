@@ -1,4 +1,4 @@
-name: at_onboarding_cli_functional_tests
+name: at_client_cli_functional_tests
 description: functional tests for at_onboarding_cli.
 version: 1.0.0
 publish_to: none

@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # Run the onboarding-CLI *proxy* functional suite locally, the way CI runs it
-# (.github/workflows/at_libraries.yaml, functional_tests_at_onboarding_cli,
-# matrix entry at_onboarding_cli_functional_tests_proxy).
+# (.github/workflows/at_libraries.yaml, functional_tests_at_client_cli,
+# matrix entry at_client_cli_functional_tests_proxy).
 #
-# It is a sibling of tests/at_onboarding_cli_functional_tests/runLocal.sh and
+# It is a sibling of tests/at_client_cli_functional_tests/runLocal.sh and
 # shares its two rules, for the same reasons:
 #
 #  1. pkamLoad is NOT started. These tests CRAM-onboard, so they need atSigns
@@ -68,7 +68,7 @@ export VE_SECONDARY_LOW=$((BASE_PORT + 1))
 export VE_SECONDARY_HIGH=$((BASE_PORT + 97))
 export VE_PROXY_PORT=$((BASE_PORT + 98))
 export VE_REDIS_PORT=$((BASE_PORT + 99))
-export COMPOSE_PROJECT_NAME="at_onboarding_cli_functional_tests_proxy-${BASE_PORT}"
+export COMPOSE_PROJECT_NAME="at_client_cli_functional_tests_proxy-${BASE_PORT}"
 # CI runs docker-compose.yaml; a local run, and every compose call made from
 # the Dart readiness check, uses local-compose.yaml.
 export COMPOSE_FILE=local-compose.yaml

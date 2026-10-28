@@ -39,8 +39,8 @@ jobs:
         package:
           - at_end2end_test
           - at_functional_test
-          - at_onboarding_cli_functional_tests
-          - at_onboarding_cli_functional_tests_proxy
+          - at_client_cli_functional_tests
+          - at_client_cli_functional_tests_proxy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

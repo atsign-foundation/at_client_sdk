@@ -4,7 +4,7 @@
 # an atServer that verifies ML-DSA PKAM.
 # A distinct project name, plus base-port templating, let this run alongside
 # the functional and e2e virtualenvs. Unset, the legacy ports stand.
-name: at_onboarding_cli_functional_tests
+name: at_client_cli_functional_tests
 services:
   virtualenv:
     image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}

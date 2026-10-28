@@ -1,4 +1,4 @@
-# at_onboarding_cli_functional_tests_proxy
+# at_client_cli_functional_tests_proxy
 
 The onboarding-CLI functional tests, run through a proxy rather than straight
 at the virtualenv. A second container, `at_proxyserver`, sits in front of the

@@ -222,7 +222,7 @@ void main() {
             '_apsk the atServer serves for its enrollment',
       );
       provenIn(
-        'tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart',
+        'tests/at_client_cli_functional_tests/test/pq_native_enroll_test.dart',
         'a legacy enrolment that retrofits at start can still run a verb',
         proves:
             'the same property through the shipped binary: at_activate list on '

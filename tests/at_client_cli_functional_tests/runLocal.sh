@@ -65,7 +65,7 @@ if [[ -n "${VIRTUALENV_BASE_PORT:-}" ]]; then
   export VE_REDIS_PORT=$((BASE_PORT + 99))
   export VE_SECONDARY_LOW=$((BASE_PORT + 1))
   export VE_SECONDARY_HIGH=$((BASE_PORT + 98))
-  export COMPOSE_PROJECT_NAME="at_onboarding_cli_functional_tests-${BASE_PORT}"
+  export COMPOSE_PROJECT_NAME="at_client_cli_functional_tests-${BASE_PORT}"
   echo "*** Using base port ${BASE_PORT} (range ${BASE_PORT}-$((BASE_PORT + 99)))"
 else
   echo "*** Using legacy fixed ports (64 / 25000-25999 / 6379)"

@@ -129,7 +129,7 @@ it stopped being parked.
 | **`apsk_server_side_test.dart` poisons the shared atSign for the rest of the run** | It leaves two records on `@alice🛠` — a non-base64 literal over the attacker enrollment's `_apsk`, and a healed enrollment whose key package stays signed by a key its `_apsk` dropped — so every later `listForNamespace` logs SEVERE (314 lines in one CI run). Give the file its own atSign, or restore what it overwrites and restart the healed client. | Nothing |
 | **`CkManager`'s missing-cut-time guard cannot fire** | `CkManager.ensureCurrent` returns early when the cached content key has no `cutAt`, but `putAsCurrent` always records one and the cache is in-memory, so the branch is unreachable and its comment describes a persistence that does not exist. Delete the guard and the comment (making the cache durable is a feature, not this). | Nothing |
 | **where `mintAdvertisedSigningKey` lives was never put to gkc** | It sits in `packages/at_client/lib/src/enroll/signing_key_mint.dart` and at_onboarding_cli imports it across the package boundary; decide whether it belongs in at_auth beside the enrollment machinery that uses it. | gkc |
-| **`runCliCommand` streams the CLI child's log unprefixed** | `tests/at_onboarding_cli_functional_tests/test/utils/at_client_cache.dart` writes the child's stdout verbatim into its own, so two processes' lines cannot be told apart. Prefix or pid-tag them and say so in the dartdoc, noting that `auth_cli` sets `root_level = 'shout'`, so an un-`-v`'d child reads like a stalled one. | Nothing |
+| **`runCliCommand` streams the CLI child's log unprefixed** | `tests/at_client_cli_functional_tests/test/utils/at_client_cache.dart` writes the child's stdout verbatim into its own, so two processes' lines cannot be told apart. Prefix or pid-tag them and say so in the dartdoc, noting that `auth_cli` sets `root_level = 'shout'`, so an un-`-v`'d child reads like a stalled one. | Nothing |
 | **test-helper cleanup: a required `signingAlgo`, and one `EnrolledClient`** | Make `enrolAndAuthenticate`'s `signingAlgo` required — its `rsa2048` default hands a PQ-posture caller a legacy enrollment that retrofits into a different id — and let the compiler enumerate the call sites; then port the e2e `EnrolledClient` copy (an ancestor 205 diff lines behind, lacking `signingAlgo`, `atKeysIo`, `keyExchangeMode`, `reuse` and the `kpid` getter), run the e2e pack, and move what is shared into a never-published `tests/packages/test_helpers`. | Nothing |
 | **there is no supported way to wait for the PQ startup tail** | Nothing on the `AtClient` interface says when the unawaited PQ startup has finished writing the keyfile; the CLI pack reaches through `@experimental` `pqBootstrap.startupComplete`. Decide whether the interface carries it — an in-repo test can reach through, an application cannot. | gkc |
 | **a rotating atSign could tell its senders** | A sender learns of a rotation only by re-resolving the advertisement, up to 30 minutes of ttl plus grace later, and keeps sealing to the superseded generation meanwhile. Every `.__ck.` conveyance record is addressed to a sender, which suggests a rotating atSign can enumerate exactly who must re-cut; probe that scan before designing on it. | Nothing. A probe first |
@@ -1074,7 +1074,7 @@ find packages tests -name '*.dart' -not -path '*/.dart_tool/*' -print0 \
 cd packages/at_client && dart analyze lib test && dart format . -o none --set-exit-if-changed && dart test --concurrency=1
 for p in at_auth at_lookup at_commons at_chops at_onboarding_cli at_policy; do (cd packages/$p && dart test --concurrency=1); done
 cd packages/at_client_flutter && flutter analyze       # `dart analyze` skips a Flutter package silently
-for t in at_functional_test at_end2end_test at_onboarding_cli_functional_tests at_onboarding_cli_functional_tests_proxy; do (cd tests/$t && dart analyze test); done
+for t in at_functional_test at_end2end_test at_client_cli_functional_tests at_client_cli_functional_tests_proxy; do (cd tests/$t && dart analyze test); done
 
 # The four live packs, each through its own runner (the atsign-live-testing skill has the fixture rules).
 # Pin the image by building it from a ref you name: no label on at_virtual_env:local says which atServer it holds.
@@ -1082,8 +1082,8 @@ VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh 26000 test -x pq
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh 26000 test/pq -x legacy-server
 VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 bash tests/at_end2end_test/runLocal.sh 26000 test/pq -t legacy-server
-bash tests/at_onboarding_cli_functional_tests/runLocal.sh 47000
-bash tests/at_onboarding_cli_functional_tests_proxy/runLocal.sh 48000
+bash tests/at_client_cli_functional_tests/runLocal.sh 47000
+bash tests/at_client_cli_functional_tests_proxy/runLocal.sh 48000
 ```
 
 ⛔ **There is no command for "which atServer build is in `at_virtual_env:local`".**

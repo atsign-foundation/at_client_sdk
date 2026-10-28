@@ -178,7 +178,7 @@ branch. That is a decision for gkc ([section 6](#6-decisions-to-make), D1).
 | `at_onboarding_cli/lib/src/util/create_at_client_cli.dart`       | removed                                        | `CLIBase`                                                                                      |
 | `at_onboarding_cli/lib/src/util/onboarding_util.dart`            | removed                                        | at_auth's `RegistrarService`; `onboard`'s email path calls it                                  |
 | `at_onboarding_cli/lib/src/util/{auth_key_type,at_onboarding_exceptions,print_full_parser_usage}.dart` | removed | no callers outside                                                                     |
-| `tests/at_onboarding_cli_functional_tests*`                       | `tests/at_client_cli_functional_tests*`        | the packs, their CI jobs in `at_libraries.yaml`, and the `runLocal.sh` runners                 |
+| `tests/at_client_cli_functional_tests*`                       | `tests/at_client_cli_functional_tests*`        | the packs, their CI jobs in `at_libraries.yaml`, and the `runLocal.sh` runners                 |
 | `.github/workflows/at_libraries.yaml` matrix entries              | one entry                                      |                                                                                                |
 
 ## 5. Migration for programs

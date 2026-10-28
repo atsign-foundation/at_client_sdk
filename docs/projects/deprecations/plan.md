@@ -61,8 +61,8 @@ symbols beside them are the addresses.
 `dart analyze --fatal-infos lib test` exits 0 in every Dart member of the
 workspace, `flutter analyze` reports no `deprecated_member_use` in
 at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
-`tests/at_end2end_test`, `tests/at_onboarding_cli_functional_tests` and
-`tests/at_onboarding_cli_functional_tests_proxy`) are green.
+`tests/at_end2end_test`, `tests/at_client_cli_functional_tests` and
+`tests/at_client_cli_functional_tests_proxy`) are green.
 
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
 the 4 live packs and `tools/wasm_shakedown`. On 2026-09-14 every one of
@@ -109,7 +109,7 @@ copy, so it is the one that has to end up showing the right thing.
 | at_client_flutter                   | 2.0.0-rc1       |   0 |    0 |
 | tests/at_functional_test            | (unpublished)   |   0 |    0 |
 | tests/at_end2end_test               | (unpublished)   |   0 |    0 |
-| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 |    0 |
+| tests/at_client_cli_functional_tests | (unpublished) | 0 |    0 |
 | at_contact                          | (see pubspec)   |   0 |    0 |
 
 41 uses on 2026-09-13, from 1403 when this plan was written and 785 when
@@ -811,8 +811,8 @@ rather than ignored: it is the bridge step 6 replaces with the keyfile.
 at_onboarding_cli's `lib` goes 33 to 34 for it (`dart analyze` in
 `packages/at_onboarding_cli`, counted by path): the ladder read gone, the
 bridge counted. Both CLI packs re-ran green with it — `./runLocal.sh 47000`
-in `tests/at_onboarding_cli_functional_tests`: +21; `./runLocal.sh 48000` in
-`tests/at_onboarding_cli_functional_tests_proxy`: +4 — so all four live packs
+in `tests/at_client_cli_functional_tests`: +21; `./runLocal.sh 48000` in
+`tests/at_client_cli_functional_tests_proxy`: +4 — so all four live packs
 have run green on this tree, on `at_virtual_env:local`. The ladder fields on the lookup are still written, as
 step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
 `@Deprecated`, getter and setter, with the replacement in the text. at_client's
