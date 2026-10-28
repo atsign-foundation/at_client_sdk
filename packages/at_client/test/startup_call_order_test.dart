@@ -26,7 +26,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
@@ -36,6 +36,7 @@ import 'test_utils/mocks.dart';
 import 'test_utils/recording_remote.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -137,6 +138,8 @@ void main() {
         // post-quantum startup at all, and this exercises exactly that startup.
         AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = storageDir,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: 'e-1',
         remoteSecondary: buildRecordingRemote(
             events: events,

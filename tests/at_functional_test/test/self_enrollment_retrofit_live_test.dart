@@ -11,7 +11,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -102,7 +102,8 @@ void main() {
       [String Function(String)? pathFor]) async {
     final keysIo = FileAtKeysIo(filePath: pathFor ?? keysFilePath);
     final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
+            lookUps: secureSocketLookUps());
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -151,7 +152,8 @@ void main() {
 
     expect(
         await Atsign(atSign).authenticatesAs(
-            keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain),
+            keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain,
+            lookUps: secureSocketLookUps()),
         newId,
         reason: 'the retrofit that carries the rollout window must be usable '
             'immediately, exactly as the PQ one is, and the keyfile alone '
@@ -218,7 +220,7 @@ void main() {
     expect(
         await Atsign(atSign).authenticatesAs(
             keys: FileAtKeysIo(filePath: keysFilePath),
-            rootDomain: rootDomain),
+            rootDomain: rootDomain, lookUps: secureSocketLookUps()),
         newId,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → signer → pkam dispatch, all genuinely ML-DSA, and the '
@@ -238,6 +240,8 @@ void main() {
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2C,
         namespaces: {namespace: 'rw'},
@@ -349,6 +353,8 @@ void main() {
         session: session,
         preference:
             TestUtils.getPreference(atSign, posture: PqPosture.pqActive),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2D,
         namespaces: {namespace: 'rw'},
@@ -404,6 +410,8 @@ void main() {
     final client = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2E,
         namespaces: {namespace: 'rw'},

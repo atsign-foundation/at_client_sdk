@@ -9,7 +9,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexHolder;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -20,6 +20,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   AtSignLogger.root_level = 'shout';
@@ -395,6 +396,8 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'sshnp', AtClientPreference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:

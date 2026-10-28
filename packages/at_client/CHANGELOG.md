@@ -60,6 +60,15 @@
   holds: pass the atSign's keyfile, such as `FileAtKeysIo()`.
 - breaking: `AtReachability.noKeySource` is removed, since every client has a
   key source.
+- breaking: `FileAtKeysIo`, `secureSocketLookUps` and
+  `CacheableSecondaryAddressFinder` come from the new `at_client_io.dart`;
+  `at_client.dart` no longer exports them, and builds for the web.
+- breaking: every call that builds a client, `enroll`, `resumeEnrollment` and
+  `AtServiceFactory.atClient` take a required `lookUps` and
+  `secondaryAddressFinder`, and `authenticatesAs`, `retrofitIdentity` and
+  `RemoteSecondary` a required `lookUps`. `secureSocketLookUps()` and
+  `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`
+  connect as at_client 3 did.
 - feat: `InMemoryAtClientStorage` is pure Dart and needs no native library. A
   SQLite database held in memory is still
   `SqliteAtClientStorage(..., dbPath: SqliteAtClientStorage.inMemoryPath)`.

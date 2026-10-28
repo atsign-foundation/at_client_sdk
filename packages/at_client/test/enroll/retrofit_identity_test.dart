@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -111,6 +111,7 @@ void main() {
               enrollmentId: legacyId),
           atLookUp: lookUp,
           preference: preference(),
+          lookUps: secureSocketLookUps(),
           appName: 'wavi',
           deviceName: 'laptop',
           namespaces: const {'*': 'rw', '__manage': 'rw'},

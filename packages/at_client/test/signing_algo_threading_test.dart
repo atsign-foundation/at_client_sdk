@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -37,6 +37,7 @@ void main() {
           AtClientPreference()
             // ignore: deprecated_member_use_from_same_package
             ..signingAlgoType = SigningAlgoType.rsa2048,
+          lookUps: secureSocketLookUps(),
           atLookUp: lookUp,
           atKeysIo: InMemoryAtKeysIo.holding(atSign, keys),
           enrollmentId: enrollmentId,
@@ -115,7 +116,7 @@ void main() {
     test('the monitor connection authenticates from the client\'s keys', () {
       final source = File('lib/src/service/notification_service_impl.dart')
           .readAsStringSync();
-      final wiring = source.substring(source.indexOf('lookUp: lookUps('));
+      final wiring = source.substring(source.indexOf('lookUp: lookUps!('));
 
       expect(wiring, contains('authenticator: clientAuthenticator(atSign,'),
           reason: 'the one builder every connection of the client uses');

@@ -202,15 +202,24 @@ class SyncServiceImpl implements SyncService {
 
   /// Sync's own connection, built from the same credentials the client
   /// holds, so its authenticator matches the client's rather than falling to
-  /// a different one.
+  /// a different one, and over the client's transport.
+  ///
+  /// Throws an [ArgumentError] for a client that is not an [AtClientImpl],
+  /// which holds no transport to build it with; pass `remoteSecondary` to
+  /// [create] instead.
   @visibleForTesting
-  static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
-      RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-          enrollmentId: atClient.enrollmentId,
-          atKeysIo: atClient.atKeysIo,
-          secondaryAddressFinder:
-              atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
-          lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
+  static RemoteSecondary remoteSecondaryFor(AtClient atClient) {
+    if (atClient is! AtClientImpl) {
+      throw ArgumentError.value(atClient, 'atClient',
+          'holds no transport to build sync\'s connection with: pass one');
+    }
+    return RemoteSecondary(
+        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+        enrollmentId: atClient.enrollmentId,
+        atKeysIo: atClient.atKeysIo,
+        secondaryAddressFinder: atClient.secondaryAddressFinder,
+        lookUps: atClient.lookUps);
+  }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary,
       {required bool ownsRemoteSecondary})

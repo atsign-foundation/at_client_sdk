@@ -12,7 +12,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
@@ -56,7 +55,7 @@ import 'package:at_client/src/transformer/response_transformer/get_response_tran
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -681,8 +680,9 @@ class AtClientImpl implements AtClient {
   /// after first creation take effect.
   ///
   /// Concretely, on a cache hit these do nothing: [remoteSecondary],
-  /// [encryptionService], [atKeysIo], [atLookUp], and every field of
-  /// [preferences] except `crypto`.
+  /// [encryptionService], [atKeysIo], [atLookUp], [lookUps],
+  /// [secondaryAddressFinder], and every field of [preferences] except
+  /// `crypto`.
   ///
   /// Two mismatches are **refused** rather than ignored: a [storage] the cached
   /// client does not hold, and a preference naming different rollout axes —
@@ -710,7 +710,8 @@ class AtClientImpl implements AtClient {
     EncryptionService? encryptionService,
     required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     String? enrollmentId,
     required AtClientStorage storage,
 
@@ -782,6 +783,7 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder,
         enrollmentId: enrollmentId,
         storage: storage,
       );
@@ -817,15 +819,15 @@ class AtClientImpl implements AtClient {
     EncryptionService? encryptionService,
     required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required this.lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     this.enrollmentId,
     required AtClientStorage storage,
-  }) {
+  }) : _givenAddressFinder = secondaryAddressFinder {
     _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
-    this.lookUps = lookUps ?? defaultLookUps();
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -878,20 +880,17 @@ class AtClientImpl implements AtClient {
   String get _atServerAddressKey =>
       AtKey.local('lifecycle.atserver', _atSign).build().toString();
 
-  SecondaryAddressFinder? _defaultAddressFinder;
+  final SecondaryAddressFinder _givenAddressFinder;
   DurableSecondaryAddressFinder? _secondaryAddressFinder;
 
   /// The atDirectory lookup every connection of this client resolves its
-  /// atServer with: the process-wide finder when one is registered, else one
-  /// of this client's own, either way remembering the answer in this
+  /// atServer with: the process-wide finder when one is registered, else the
+  /// one the client was built with, either way remembering the answer in this
   /// client's storage so a start with the atDirectory unreachable still
   /// finds the atServer.
   SecondaryAddressFinder get secondaryAddressFinder =>
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
-          inner: () =>
-              processSecondaryAddressFinder() ??
-              (_defaultAddressFinder ??= CacheableSecondaryAddressFinder(
-                  _preference!.rootDomain, _preference!.rootPort)),
+          inner: () => processSecondaryAddressFinder() ?? _givenAddressFinder,
           read: () async {
             final store = localSecondary?.keyStore;
             if (store == null) return null;
@@ -1469,9 +1468,8 @@ class AtClientImpl implements AtClient {
   /// authentication.
   ///
   /// Builds every connection this client opens: its own, its sync's, its
-  /// monitor's. The application's, when it supplied one to the verb that
-  /// built the client; otherwise TLS on TCP from the preference.
-  late final AtLookUpFactory lookUps;
+  /// monitor's, as the application chose when it built the client.
+  final AtLookUpFactory lookUps;
 
   /// [atLookUp] injects an already-built lookup; passing none lets
   /// [RemoteSecondary] open its own connection through [lookUps], separate

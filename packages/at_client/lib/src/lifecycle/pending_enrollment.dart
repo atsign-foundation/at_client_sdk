@@ -10,7 +10,8 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUpFactory, AtLookupMuxable;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -38,6 +39,7 @@ class PendingEnrollment {
   final EnrollmentKeyExchangeMode keyExchangeMode;
   final AtLookupMuxable? _atLookUp;
   final AtLookUpFactory _lookUps;
+  final SecondaryAddressFinder _secondaryAddressFinder;
   final AtEnrollment _enrollment = AtEnrollment.create();
   final AtSignLogger _logger;
 
@@ -45,9 +47,10 @@ class PendingEnrollment {
   Stream<ProgressEvent> get progress => _enrollment.progressStream;
 
   /// [lookUps] builds the connection the approval handshake runs on and the
-  /// ones the client opened on the completed keys uses; [atLookUp] is a
-  /// connection for the handshake instead, for a caller that already holds
-  /// one, and is left open.
+  /// ones the client opened on the completed keys uses, each to the atServer
+  /// [secondaryAddressFinder] finds; [atLookUp] is a connection for the
+  /// handshake instead, for a caller that already holds one, and is left
+  /// open.
   PendingEnrollment({
     required this.atSign,
     required this.enrollmentId,
@@ -60,8 +63,10 @@ class PendingEnrollment {
     required this.keyExchangeMode,
     AtLookupMuxable? atLookUp,
     required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,
+        _secondaryAddressFinder = secondaryAddressFinder,
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
 
   /// Waits for the manager's decision, and on approval completes the keys in
@@ -108,7 +113,11 @@ class PendingEnrollment {
     // The handshake's connection, built the way the application chose and
     // closed when it is done; a supplied one is the caller's to close.
     final handshake = _atLookUp ??
-        _lookUps(atSign: atSign, rootDomain: rootDomain, authenticator: null);
+        _lookUps(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: _secondaryAddressFinder);
     try {
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,
@@ -155,6 +164,7 @@ class PendingEnrollment {
         storage: storage,
         atLookUp: _atLookUp,
         lookUps: _lookUps,
+        secondaryAddressFinder: _secondaryAddressFinder,
         connectBudget: connectBudget);
   }
 

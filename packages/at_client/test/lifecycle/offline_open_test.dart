@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 /// A client is obtainable with no atServer reachable, and serves everything
 /// its local storage holds. The client lifecycle's ruling that `open` works
@@ -53,6 +54,8 @@ void main() {
         atSign: atSign,
         namespace: 'offline',
         preference: preference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preference),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
         storage: hiveStoreFor(atSign, preference));
     built.stop();
@@ -102,6 +105,8 @@ void main() {
               ..rootPort = await refusedPort()
               ..hiveStoragePath = dir.path
               ..namespace = 'offline',
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             atKeysIo: keys,
             storage: hiveStoreAt(atSign, dir.path));
 

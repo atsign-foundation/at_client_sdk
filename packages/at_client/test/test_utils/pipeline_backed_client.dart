@@ -1,11 +1,12 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A record as the atServer serves it: the value bytes and the raw `metaData`
 /// map, exactly as they travel.
@@ -83,6 +84,8 @@ Future<AtClient> buildPipelineBackedClient({
     atSign,
     namespace,
     preference,
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: atDirectoryOf(preference),
     atKeysIo: noKeysFor(atSign),
     remoteSecondary: remoteSecondary,
     enrollmentId: enrollmentId,

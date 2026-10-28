@@ -1,8 +1,9 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 void main() async {
   AtSignLogger.root_level = 'finer';
@@ -12,6 +13,8 @@ void main() async {
         atSign: atSign,
         namespace: 'wavi',
         preference: TestUtil.getAlicePreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
         atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
   final atClient = atClientManager.atClient;

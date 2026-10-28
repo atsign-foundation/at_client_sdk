@@ -11,7 +11,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -19,6 +19,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   const atSign = '@alice';
@@ -84,6 +85,8 @@ void main() {
       namespace,
       AtClientPreference(posture: PqPosture.legacy)
         ..hiveStoragePath = storageDir,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: remoteSecondary,
       atKeysIo: await keyfileHolding(atSign,
           selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus='),

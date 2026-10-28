@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_onboarding_cli/src/onboard/at_onboarding_service.dart';
@@ -72,7 +72,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
               defaultPath: _defaultStoragePath),
           serviceFactory: atServiceFactory,
           atLookUp: _atLookUp,
-          lookUps: atOnboardingPreference.lookUps);
+          lookUps: atOnboardingPreference.lookUps,
+          secondaryAddressFinder:
+              atOnboardingPreference.secondaryAddressFinder);
     } on AtOpenRefusedException catch (e) {
       logger.warning(e.message);
       return false;

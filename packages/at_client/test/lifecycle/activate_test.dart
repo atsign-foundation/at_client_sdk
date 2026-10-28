@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
 import 'package:at_chops/at_chops.dart' show SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -116,6 +117,8 @@ void main() {
         cramSecret: cramSecret,
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         app: 'wavi',
         device: 'laptop',
         onProgress: (event) => progress.add(event.msg),
@@ -170,7 +173,9 @@ void main() {
         deviceName: 'pq-native',
         manager: manager,
         storage: hiveStoreAt(atSign, dir.path),
-        atLookUp: server.lookUp);
+        atLookUp: server.lookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory);
     expect(adopted, same(manager));
 
     final keys = await store.read(atSign);
@@ -197,6 +202,8 @@ void main() {
             cramSecret: cramSecret,
             keys: InMemoryAtKeysIo(),
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             provisioningBudget: const Duration(milliseconds: 600),
             provisioningPollInterval: const Duration(milliseconds: 100),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -215,6 +222,8 @@ void main() {
             cramSecret: 'not-it',
             keys: store,
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: server.lookUp,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<UnAuthenticatedException>().having((e) => e.message,

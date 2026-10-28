@@ -9,7 +9,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
@@ -130,7 +130,8 @@ void main() {
     final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
         ConfigUtil.getYaml()['root_server']['port'] ?? 64);
     final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
+            lookUps: secureSocketLookUps());
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -189,6 +190,8 @@ void main() {
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
     );
     privileged = client;
     privilegedKeysIo = session.atKeysIo;
@@ -274,6 +277,8 @@ void main() {
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
     );
 
     expect(clone.enrollmentId, isNotNull);
@@ -385,6 +390,8 @@ void main() {
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
               posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestPreferences.atDirectory,
           storage: TestPreferences.getInstance()
               .storageForCoLocatedClient(atSign, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
@@ -403,6 +410,8 @@ void main() {
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e2-$runId'),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
       storage: TestPreferences.getInstance()
           .storageForCoLocatedClient(atSign, device: 'rf-e2-$runId'),
       appName: 'rf-e2',

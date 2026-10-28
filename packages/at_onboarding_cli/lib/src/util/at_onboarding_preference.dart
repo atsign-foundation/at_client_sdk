@@ -1,6 +1,6 @@
 import 'dart:core';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_onboarding_cli/src/util/proxy_lookups.dart';
@@ -55,6 +55,19 @@ class AtOnboardingPreference extends AtClientPreference {
       _lookUps ?? (isUsingProxy ? proxyLookUps() : secureSocketLookUps());
 
   set lookUps(AtLookUpFactory? value) => _lookUps = value;
+
+  SecondaryAddressFinder? _secondaryAddressFinder;
+
+  /// Finds the atServer each connection a client opened under this
+  /// preference reaches. Unset, it asks the atDirectory at [rootDomain] and
+  /// [rootPort] over TLS, a `proxy:` root naming the proxy itself; a program
+  /// with its own lookup sets it.
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _secondaryAddressFinder ??
+      CacheableSecondaryAddressFinder(rootDomain, rootPort);
+
+  set secondaryAddressFinder(SecondaryAddressFinder? value) =>
+      _secondaryAddressFinder = value;
 
   /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
   String? passPhrase;

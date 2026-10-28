@@ -8,7 +8,7 @@ library;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
@@ -89,8 +89,8 @@ void main() {
   /// refusal throws.
   Future<AtAuthSession> authenticateLegacy(String label) async {
     final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
-    final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain());
+    final enrollmentId = await Atsign(atSign).authenticatesAs(
+        keys: keysIo, rootDomain: rootDomain(), lookUps: secureSocketLookUps());
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain(),
@@ -139,7 +139,8 @@ void main() {
           .storageForCoLocatedClient(atSign, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
-      namespaces: {namespace: 'rw'},
+      namespaces: {namespace: 'rw'}, lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
     );
     expect(AtClientImpl.signingAlgoOf(upgraded), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the revocation '

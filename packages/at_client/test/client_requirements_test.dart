@@ -13,11 +13,13 @@ void main() {
   final probe = '${Directory.current.absolute.path}/test/_client_probe.dart';
 
   /// An app that builds a client through every entry point that builds one,
-  /// naming its storage only when [storage] and its keys only when [keys].
+  /// naming its storage only when [storage] and its keys only when [keys],
+  /// and its transport everywhere.
   String app({required bool storage, required bool keys}) {
     final s = storage ? ', storage: store' : '';
     final k = keys ? ', keys: keys' : '';
     final kio = keys ? ', atKeysIo: keys' : '';
+    const t = ', lookUps: lookUps, secondaryAddressFinder: finder';
     return '''
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
@@ -26,21 +28,22 @@ import 'package:at_client/at_client_mixins.dart'
 
 Future<void> app(AtClientPreference preference, WrittenAtKeysIo keys,
     PendingEnrollment pending, AtAuthSession session,
-    AtClientStorage store) async {
-  await Atsign('@alice').open(preference: preference$k$s);
+    AtClientStorage store, AtLookUpFactory lookUps,
+    SecondaryAddressFinder finder) async {
+  await Atsign('@alice').open(preference: preference$k$s$t);
   await Atsign('@alice').activate(
-      cramSecret: 'x', preference: preference$k$s);
+      cramSecret: 'x', preference: preference$k$s$t);
   await pending.client(preference$s);
-  await buildAtClient(atSign: '@alice', preference: preference$kio$s);
-  await AtClientImpl.create('@alice', null, preference$kio$s);
+  await buildAtClient(atSign: '@alice', preference: preference$kio$s$t);
+  await AtClientImpl.create('@alice', null, preference$kio$s$t);
   await selfRetrofit(
       session: session,
       preference: preference,
       appName: 'a',
       deviceName: 'd',
-      namespaces: const {}$s);
+      namespaces: const {}$s$t);
   await pqNativeOnboard(
-      atSign: '@alice', cramSecret: 'x', preference: preference$kio$s);
+      atSign: '@alice', cramSecret: 'x', preference: preference$kio$s$t);
 }
 ''';
   }

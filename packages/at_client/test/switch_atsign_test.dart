@@ -1,10 +1,11 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   group('A group of switch atsign tests', () {
@@ -28,6 +29,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           atLookUp: mockAtLookUp,
           storage: hiveStoreFor(aliceAtSign, alicePreference));
@@ -45,6 +48,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
@@ -54,6 +59,8 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(bobPreference),
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
@@ -68,6 +75,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
@@ -79,6 +88,8 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(bobPreference),
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference)));
       atClientManager.atClient.syncService

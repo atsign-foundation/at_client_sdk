@@ -1,5 +1,5 @@
 import 'package:args/args.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import 'util/custom_arg_parser.dart';
@@ -23,6 +23,8 @@ Future<void> main(List<String> args) async {
       keys: FileAtKeysIo(filePath: (_) => argResults['atKeysPath']),
       preference: preference,
       storage: preference.storageFor(atSign),
+      lookUps: preference.lookUps,
+      secondaryAddressFinder: preference.secondaryAddressFinder,
       onProgress: (event) => print('${event.group}: ${event.msg}'));
   print('$atSign is activated; its first enrollment is '
       '${client.enrollmentId}, and its keys are at ${argResults['atKeysPath']}');

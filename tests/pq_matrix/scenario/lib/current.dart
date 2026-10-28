@@ -5,13 +5,15 @@
 /// may import this library.
 library;
 
-import 'package:at_client/at_client.dart'
+import 'package:at_client/at_client_io.dart'
     show
         AtClientManager,
         AtClientPreference,
         AtKeys,
+        CacheableSecondaryAddressFinder,
         InMemoryAtKeysIo,
-        buildAtClient;
+        buildAtClient,
+        secureSocketLookUps;
 import 'package:at_client/hive.dart' show HiveAtClientStorage;
 import 'package:at_demo_data/at_demo_data.dart'
     show
@@ -46,6 +48,9 @@ Future<AtClientManager> attachWithDemoKeys(
       namespace: spec.namespace,
       preference: preference,
       atKeysIo: InMemoryAtKeysIo.holding(atSign, keys),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preference.rootDomain, preference.rootPort),
       storage: HiveAtClientStorage(
           atSign: atSign, storagePath: spec.storagePath, closedByClient: true));
   return AtClientManager(atSign)..use(client);

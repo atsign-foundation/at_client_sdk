@@ -3,7 +3,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -92,6 +92,8 @@ void main() {
     requester = await Atsign(bob).open(
         keys: bobKeys,
         preference: TestUtils.getPreference(bob, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(bob));
     rpcClient = AtRpcClient(

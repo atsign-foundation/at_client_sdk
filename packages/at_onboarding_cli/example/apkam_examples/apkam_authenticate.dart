@@ -1,5 +1,5 @@
 import 'package:args/args.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import '../util/custom_arg_parser.dart';
@@ -20,7 +20,9 @@ Future<void> main(List<String> args) async {
   final client = await Atsign(atSign).open(
       keys: FileAtKeysIo(filePath: (_) => argResults['atKeysPath']),
       preference: preference,
-      storage: preference.storageFor(atSign));
+      storage: preference.storageFor(atSign),
+      lookUps: preference.lookUps,
+      secondaryAddressFinder: preference.secondaryAddressFinder);
   print('running as enrollment ${client.enrollmentId}; the connection is '
       '${client.connection.current}');
   print(await client.getKeys());

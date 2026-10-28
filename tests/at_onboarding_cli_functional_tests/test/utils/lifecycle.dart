@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 
@@ -14,6 +14,9 @@ Future<void> activateThroughCli(
           filePath: (_) => preference.atKeysFilePath!,
           passPhrase: preference.passPhrase),
       preference: preference,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preference.rootDomain, preference.rootPort),
       storage: preference.storageFor(atSign));
   await auth_cli.awaitStartupTail(client);
   await client.stop();

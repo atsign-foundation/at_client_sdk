@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 
 import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
@@ -16,11 +16,15 @@ void main(List<String> args) async {
 
   final keys = FileAtKeysIo(filePath: (_) => argResults['atKeysPath']);
   final enrollmentId = (await keys.read(atSign)).enrollmentToAuthenticateAs();
+  final preference = AtSignPreference.getAlicePreference();
   final client = await Atsign(atSign).open(
       keys: keys,
-      preference: AtSignPreference.getAlicePreference(),
+      preference: preference,
       namespace: 'wavi',
-      storage: AtSignPreference.getAliceStorage(atSign, enrollmentId));
+      storage: AtSignPreference.getAliceStorage(atSign, enrollmentId),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preference.rootDomain, preference.rootPort));
 
   await for (final announced in client.enrollments.requests) {
     final request = await client.enrollments.fetch(announced.enrollmentId!);

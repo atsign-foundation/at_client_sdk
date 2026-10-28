@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
@@ -69,6 +69,7 @@ Future<AtClient> createAtClient(
         preference: preference,
         storage: preference.storageFor(atSign),
         lookUps: preference.lookUps,
+        secondaryAddressFinder: preference.secondaryAddressFinder,
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {
     stderr.writeln(chalk.brightRed(e.message));

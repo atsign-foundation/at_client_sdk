@@ -5,7 +5,7 @@
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
@@ -323,6 +323,8 @@ void main() {
         preference:
             TestUtils.getPreference(peerAtSign, posture: PqPosture.legacy)
               ..namespace = namespace,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(peerAtSign));
     addTearDown(peer.stop);

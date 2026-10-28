@@ -1,7 +1,8 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// A client that already exists keeps the rollout axes it was built under, and
 /// a caller handing over different ones is refused rather than ignored.
@@ -231,12 +232,18 @@ void main() {
     test('and the cache actually asks it', () async {
       final storage = hiveStoreFor(atSign, signing());
       final first = await AtClientImpl.create(atSign, 'wavi', signing(),
-          atKeysIo: noKeysFor(atSign), storage: storage);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(signing()),
+          atKeysIo: noKeysFor(atSign),
+          storage: storage);
 
       await expectLater(
           AtClientImpl.create(atSign, 'wavi',
               signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
-              atKeysIo: noKeysFor(atSign), storage: storage),
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
+              atKeysIo: noKeysFor(atSign),
+              storage: storage),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
@@ -245,7 +252,10 @@ void main() {
       expect(
           identical(
               await AtClientImpl.create(atSign, 'wavi', signing(),
-                  atKeysIo: noKeysFor(atSign), storage: storage),
+                  lookUps: secureSocketLookUps(),
+                  secondaryAddressFinder: atDirectoryOf(signing()),
+                  atKeysIo: noKeysFor(atSign),
+                  storage: storage),
               first),
           isTrue);
     });
@@ -255,6 +265,8 @@ void main() {
       // so accepting a replacement would leave the client reporting a stage it
       // never applied.
       final client = await AtClientImpl.create(atSign, 'wavi', preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference()),
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference()));
 

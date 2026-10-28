@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_builders.dart';
@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   String currentAtSign = '@alice';
@@ -28,6 +29,8 @@ void main() {
 
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(atClientPreference),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,

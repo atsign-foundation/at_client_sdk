@@ -8,7 +8,7 @@ library;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey, ckSiblingCopyKey;
@@ -584,6 +584,8 @@ void main() {
         keys: peerKeys,
         preference:
             TestUtils.getPreference(peer, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: ns,
         storage: TestUtils.storageForPrincipal(peer, 'snd-peer'));
     addTearDown(peerClient.stop);

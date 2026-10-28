@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
@@ -120,8 +120,9 @@ void main() {
     test(
         'Test to verify exception gets stacked in remote secondary executeVerb',
         () async {
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary('@alice', AtClientPreference());
+      RemoteSecondary remoteSecondary = RemoteSecondary(
+          '@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookup;
       try {
         await remoteSecondary.executeVerb(lookupVerbBuilder);

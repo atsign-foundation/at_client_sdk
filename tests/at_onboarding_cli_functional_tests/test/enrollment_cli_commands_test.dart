@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
@@ -78,7 +78,10 @@ void main() {
           device: 'local-device',
           namespaces: {'e2etest': 'rw'},
           keys: keyfileOf(preference),
-          preference: preference);
+          preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              preference.rootDomain, preference.rootPort));
       String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');
@@ -181,7 +184,10 @@ void main() {
           device: 'local-device',
           namespaces: {'e2etest': 'rw'},
           keys: keyfileOf(preference),
-          preference: preference);
+          preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              preference.rootDomain, preference.rootPort));
       String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');

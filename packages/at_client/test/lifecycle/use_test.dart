@@ -1,10 +1,11 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _RecordingListener implements AtSignChangeListener {
   final events = <SwitchAtSignEvent>[];
@@ -41,6 +42,8 @@ void main() {
         ..rootPort = 1
         ..hiveStoragePath = '${dir.path}/$atSign'
         ..namespace = 'lifecycle',
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: await refusingAtDirectory(),
       atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
       storage: hiveStoreAt(atSign, '${dir.path}/$atSign'));
 

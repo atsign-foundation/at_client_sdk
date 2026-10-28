@@ -10,7 +10,7 @@ import 'dart:async' show Completer;
 import 'dart:convert' show jsonDecode;
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 // ignore: implementation_imports
@@ -210,7 +210,9 @@ void main() {
         preference: preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
         namespace: namespace,
-        storage: TestUtils.storageFor(atSign));
+        storage: TestUtils.storageFor(atSign),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory);
     await loader.setEncryptionKeys(approver, atSign);
     await AtClientSecretSharing.forClient(approver).register();
     approvers[atSign] = approver;

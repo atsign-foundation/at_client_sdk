@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 AtClientPreference _createPreference(String storagePath) =>
     AtClientPreference()..hiveStoragePath = 'test/hive/$storagePath';
@@ -19,6 +20,8 @@ Future<AtClient> _buildAtClient(String atSign) => buildAtClient(
       atSign: atSign,
       namespace: 'test',
       preference: _createPreference(atSign.replaceAll('@', '')),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage:
           hiveStoreFor(atSign, _createPreference(atSign.replaceAll('@', ''))),
@@ -46,6 +49,8 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_integration'),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             storage:
                 hiveStoreFor(atSign, _createPreference('stop_integration')),
@@ -84,6 +89,8 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_errors'),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             remoteSecondary: mockRemoteSecondary,
             storage: hiveStoreFor(atSign, _createPreference('stop_errors')),
@@ -106,6 +113,7 @@ void main() {
         final remoteSecondary = RemoteSecondary(
           '@test',
           AtClientPreference(),
+          lookUps: secureSocketLookUps(),
           atLookUp: mockAtLookup,
         );
 

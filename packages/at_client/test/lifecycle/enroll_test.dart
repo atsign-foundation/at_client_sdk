@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:mocktail/mocktail.dart';
@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -133,6 +134,8 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: store,
           preference: await preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
   test('submission files the minted keys as pending in the store named',
@@ -173,6 +176,8 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server);
     expect(File(path).existsSync(), isTrue,
         reason: 'the submission is on disk before anyone approves it');
@@ -202,6 +207,8 @@ void main() {
         () async => Atsign(atSign).open(
             keys: store,
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
@@ -214,14 +221,24 @@ void main() {
     final pref = await preference();
 
     final resumed = await Atsign(atSign).resumeEnrollment(
-        app: 'wavi', device: 'phone', keys: store, preference: pref);
+        app: 'wavi',
+        device: 'phone',
+        keys: store,
+        preference: pref,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
     expect(resumed?.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
 
     expect(
         await Atsign(atSign).resumeEnrollment(
-            app: 'wavi', device: 'tablet', keys: store, preference: pref),
+            app: 'wavi',
+            device: 'tablet',
+            keys: store,
+            preference: pref,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'another device\'s request is not this one');
     expect(
@@ -229,7 +246,9 @@ void main() {
             app: 'wavi',
             device: 'phone',
             keys: InMemoryAtKeysIo(),
-            preference: pref),
+            preference: pref,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'and a store holding nothing resumes nothing');
   });
@@ -333,6 +352,8 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: denying);
 
     await expectLater(
@@ -352,6 +373,8 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: atServer(decide: (_) async => true));
     expect(
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
@@ -397,6 +420,8 @@ void main() {
           ..rootDomain = InternetAddress.loopbackIPv4.address
           ..rootPort = 1
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         keyExchangeMode: keyExchangeMode,
         atLookUp: lookUp);
 

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show selfRetrofit;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -133,6 +134,8 @@ void main() {
         preference: AtClientPreference()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         appName: 'wavi',
         deviceName: 'laptop',
         namespaces: const {'wavi': 'rw'},
@@ -172,6 +175,8 @@ void main() {
         preference: AtClientPreference()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         appName: 'wavi',
         deviceName: 'laptop',
         namespaces: const {'wavi': 'rw'},
@@ -212,6 +217,7 @@ void main() {
             dataSigningKeyAlgorithms: {SigningAlgoType.mldsa65})
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
+        secondaryAddressFinder: defaultAtDirectory,
         lookUps: (
             {required atSign,
             required rootDomain,

@@ -3,12 +3,13 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 /// The signing algorithm is a fact about the enrollment's key material — you
 /// cannot sign ML-DSA with an RSA key — so the client resolves it from the
@@ -28,6 +29,8 @@ void main() {
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
       enrollmentId: enrollmentId,
@@ -67,6 +70,8 @@ void main() {
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: io,
       enrollmentId: enrollmentId,
@@ -108,6 +113,8 @@ void main() {
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: _FailsFirstReadAtKeysIo(InMemoryAtKeysIo.holding(atSign, keys)),
       enrollmentId: enrollmentId,

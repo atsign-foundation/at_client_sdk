@@ -564,7 +564,8 @@ Future<void> activate(String atSign, AtOnboardingPreference preference,
       provisioningPollInterval: provisioningPollInterval,
       onProgress: printProgress,
       atLookUp: atLookUp,
-      lookUps: preference.lookUps);
+      lookUps: preference.lookUps,
+      secondaryAddressFinder: preference.secondaryAddressFinder);
   stdout.writeln('[Success] Your keyfile stored at path: $atKeysFilePath');
   await AtFileUtil.setSecureFilePermissions(atKeysFilePath);
   if (preference.passPhrase != null) {
@@ -726,7 +727,8 @@ Future<AtClient> enrolDevice({
       keys: keys,
       preference: preference,
       atLookUp: atLookUp,
-      lookUps: preference.lookUps);
+      lookUps: preference.lookUps,
+      secondaryAddressFinder: preference.secondaryAddressFinder);
   if (pending != null) {
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
         '${pending.enrollmentId}, submitted earlier from this keyfile');
@@ -742,7 +744,8 @@ Future<AtClient> enrolDevice({
         keyExchangeMode: keyExchangeMode,
         apkamKeysExpiry: apkamKeysExpiry,
         atLookUp: atLookUp,
-        lookUps: preference.lookUps);
+        lookUps: preference.lookUps,
+        secondaryAddressFinder: preference.secondaryAddressFinder);
   }
   stdout.writeln('Enrollment ID: ${pending.enrollmentId}');
   final narration = pending.progress.listen(printProgress);

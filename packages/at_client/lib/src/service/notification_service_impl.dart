@@ -18,7 +18,6 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -37,7 +36,7 @@ import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/client/remote_secondary.dart'
     show clientAuthenticator;
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -84,7 +83,7 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Atsign get atSign => atClient.atSign;
 
-  late SecondaryAddressFinder secondaryAddressFinder;
+  final SecondaryAddressFinder secondaryAddressFinder;
 
   /// Notifications held back because the nskey private that opens them has not
   /// been filed yet, keyed by the generation they are waiting for.
@@ -297,12 +296,14 @@ class NotificationServiceImpl extends NotificationService {
   ///   builds reports `online` into each time it reaches `listening`; the
   ///   caller that built the client passes it, since this service holds the
   ///   client as its interface and the interface's double has none.
+  /// - [secondaryAddressFinder] finds the atServer of each atSign a
+  ///   notification goes to, and the monitor's own.
   /// - [lookUps] builds the monitor's connection; the caller passes the
-  ///   client's own factory for the same reason, and TLS on TCP is the
-  ///   default when none arrives.
+  ///   client's own factory for the same reason. Required unless [monitor]
+  ///   is given.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
+      required SecondaryAddressFinder secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps}) async {
     return NotificationServiceImpl._(
@@ -318,7 +319,7 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
+      required this.secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}',
@@ -327,12 +328,7 @@ class NotificationServiceImpl extends NotificationService {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
-    this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
-            atClient.getPreferences()!.rootPort);
-
     final preference = atClient.getPreferences()!;
-    lookUps ??= defaultLookUps();
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
@@ -341,7 +337,7 @@ class NotificationServiceImpl extends NotificationService {
           // `atClient.getRemoteSecondary()!.atLookUp` here instead would
           // collapse the two sockets into one - a one-line change, and NOT
           // safe yet, for the reason Monitor's `lookUp` gives.
-          lookUp: lookUps(
+          lookUp: lookUps!(
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
@@ -349,7 +345,7 @@ class NotificationServiceImpl extends NotificationService {
                 atKeysIo: atClient.atKeysIo,
                 cramSecret: preference.cramSecret,
                 enrollmentId: atClient.enrollmentId),
-            secondaryAddressFinder: this.secondaryAddressFinder,
+            secondaryAddressFinder: secondaryAddressFinder,
           )
             // The muxable heartbeats now, so the preference has to reach it or
             // it is silently ignored - and at_lookup's own default is 30s

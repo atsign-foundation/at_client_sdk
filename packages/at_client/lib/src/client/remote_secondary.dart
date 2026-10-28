@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:at_client/src/lifecycle/lookups.dart';
 
 import 'package:at_auth/at_auth.dart'
     show
@@ -72,8 +71,10 @@ class RemoteSecondary implements Secondary {
   /// [connection] is the client's connection state, which every verb here
   /// then reports into; a secondary built without one reports nowhere.
   ///
+  /// [lookUps] builds the connection unless [atLookUp] is one to use instead.
   /// [secondaryAddressFinder] resolves the atServer address; with none, the
-  /// process-wide finder is read per lookup.
+  /// process-wide finder is read per lookup, and with neither, [lookUps]
+  /// finds it its own way.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtLookUp? atLookUp,
@@ -84,7 +85,7 @@ class RemoteSecondary implements Secondary {
       AtKeysIo? atKeysIo,
       AtConnection? connection,
       SecondaryAddressFinder? secondaryAddressFinder,
-      AtLookUpFactory? lookUps}) {
+      required AtLookUpFactory lookUps}) {
     _atSign = AtUtils.fixAtSign(atSign);
     _secondaryAddressFinder = secondaryAddressFinder;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
@@ -99,7 +100,7 @@ class RemoteSecondary implements Secondary {
     // supplies below from whichever of the four shapes this client holds -
     // none of them are set on the lookup itself.
     this.atLookUp = atLookUp ??
-        (lookUps ?? defaultLookUps())(
+        lookUps(
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           authenticator: null,

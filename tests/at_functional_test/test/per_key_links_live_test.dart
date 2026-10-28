@@ -6,7 +6,7 @@ library;
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show MlDsa65KeyPair, RsaKeyPair;
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
@@ -54,6 +54,8 @@ void main() {
         namespaces: namespaces ?? {namespace: 'rw'},
         keys: keys,
         preference: TestUtils.getPreference(atSign, posture: posture),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         signingAlgo: signingAlgo);
     await approver.enrollments.approve(pending.enrollmentId);
     final client = await pending.client(
@@ -107,6 +109,8 @@ void main() {
             pqStartupGates: const PqStartupGates(
                 anchorOwnKeys: false, sweepUnanchoredEnrollments: false))
           ..namespace = namespace,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await AtClientSecretSharing.forClient(owner).register();
@@ -283,6 +287,8 @@ void main() {
         namespaces: {namespace: 'rw'},
         keys: InMemoryAtKeysIo(),
         preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         signingAlgo: SigningAlgoType.mldsa65);
     addTearDown(() => rootHolder.client.enrollments.deny(pending.enrollmentId));
     await expectLater(

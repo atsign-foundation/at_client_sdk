@@ -5,7 +5,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
@@ -369,6 +369,8 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       preference: AtClientPreference(posture: PqPosture.legacy)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestUtils.atDirectory,
       namespace: namespace,
       storage: InMemoryAtClientStorage(
           atSign: currentAtSign, closedByClient: true)));

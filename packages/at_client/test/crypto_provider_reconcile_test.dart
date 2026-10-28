@@ -1,7 +1,8 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Minimal provider — registration is all this test exercises; encrypt/decrypt
 /// are never invoked here.
@@ -39,13 +40,19 @@ void main() {
 
       final first = await AtClientImpl.create(
           atSign, 'wavi', prefWith('providerA'),
-          atKeysIo: noKeysFor(atSign), storage: storage) as AtClientImpl;
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(atSign),
+          storage: storage) as AtClientImpl;
       expect(CryptoConfig.forClient(first).lookup('providerA'), isNotNull,
           reason: 'first create() must adopt the preference provider');
 
       final again = await AtClientImpl.create(
           atSign, 'wavi', prefWith('providerB'),
-          atKeysIo: noKeysFor(atSign), storage: storage);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(atSign),
+          storage: storage);
 
       expect(identical(again, first), isTrue,
           reason: 'the cached client is handed back, so _init does not run '

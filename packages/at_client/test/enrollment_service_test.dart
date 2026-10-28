@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
@@ -22,6 +22,7 @@ import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/memory_sync_queue.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -67,6 +68,8 @@ void main() {
     selfEncryptionKey = AESKey.generate(32).key;
     atClient = await AtClientImpl.create(currentAtSign, 'wavi',
         AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: enrollmentId,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
@@ -134,6 +137,8 @@ void main() {
           atSign: '@enrolledbuild',
           namespace: 'wavi',
           preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: noKeysFor('@enrolledbuild'),
           enrollmentId: enrollmentId,
           storage: hiveStoreFor('@enrolledbuild', pref));
@@ -167,6 +172,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
@@ -211,6 +218,8 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(currentAtsign, 'test/hive'));
@@ -249,6 +258,8 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(currentAtsign, 'test/hive'));
@@ -303,6 +314,8 @@ void main() {
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: secondary,
           storage: hiveStoreAt(atSign, 'test/hive'));
@@ -387,6 +400,8 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
@@ -435,6 +450,8 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));

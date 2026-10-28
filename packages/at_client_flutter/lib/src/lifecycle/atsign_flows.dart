@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -42,6 +42,9 @@ class AtsignSelection {
 /// The lifecycle verbs the dialogs run, as one object a test can stand in
 /// for: the verbs themselves are extension methods on `Atsign`, which no
 /// mock can intercept.
+///
+/// Each connection goes over TLS on TCP unless the app passes `lookUps`, to
+/// the atServer the atDirectory the preference names gives for the atSign.
 class AtsignFlows {
   const AtsignFlows();
 
@@ -58,7 +61,8 @@ class AtsignFlows {
     keys: keys,
     preference: preference,
     storage: await storageOrDefault(atSign, preference, storage),
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
     onProgress: onProgress,
   );
 
@@ -72,7 +76,8 @@ class AtsignFlows {
     keys: keys,
     preference: preference,
     storage: await storageOrDefault(atSign, preference, storage),
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
   );
 
   Future<PendingEnrollment?> resumeEnrollment(
@@ -87,7 +92,8 @@ class AtsignFlows {
     device: device,
     keys: keys,
     preference: preference,
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
   );
 
   Future<PendingEnrollment> enroll(
@@ -110,8 +116,15 @@ class AtsignFlows {
     preference: preference,
     signingAlgo: signingAlgo,
     keyExchangeMode: keyExchangeMode,
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
   );
+
+  SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
+      CacheableSecondaryAddressFinder(
+        preference.rootDomain,
+        preference.rootPort,
+      );
 }
 
 /// [preference] with [rootDomain] stamped on it, so a client opened under it

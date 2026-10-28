@@ -14,6 +14,7 @@ import 'utils/at_client_cache.dart';
 import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
+import 'package:at_client/at_client_io.dart';
 
 /// Proves that an app enrolling through `at_onboarding_cli` can be
 /// post-quantum from birth, against a real atServer rather than against the
@@ -71,6 +72,9 @@ void main() {
         namespaces: {'e2etest': 'rw'},
         keys: keyfileOf(preference),
         preference: preference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            preference.rootDomain, preference.rootPort),
         signingAlgo: signingAlgo);
     final enrollmentId = pending.enrollmentId;
     logger.info('$label: submitted $enrollmentId as ${signingAlgo.name}');

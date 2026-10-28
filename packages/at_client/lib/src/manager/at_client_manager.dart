@@ -14,7 +14,7 @@ import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -156,7 +156,8 @@ abstract class AtServiceFactory {
     AtClientManager atClientManager, {
     required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     String? enrollmentId,
     required AtClientStorage storage,
   });
@@ -184,7 +185,8 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     AtClientManager atClientManager, {
     required AtKeysIo atKeysIo,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     String? enrollmentId,
     required AtClientStorage storage,
   }) async {
@@ -196,21 +198,30 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
       lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder,
       enrollmentId: enrollmentId,
       storage: storage,
     );
   }
 
+  /// The notification service over [atClient]'s own transport, finding
+  /// atServers with [secondaryAddressFinder] or, with none, the client's.
+  ///
+  /// Throws an [ArgumentError] for a client that is not an [AtClientImpl],
+  /// which holds no transport to build the service with.
   @override
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager,
       {SecondaryAddressFinder? secondaryAddressFinder}) async {
+    if (atClient is! AtClientImpl) {
+      throw ArgumentError.value(atClient, 'atClient',
+          'holds no transport to build the notification service with');
+    }
     return await NotificationServiceImpl.create(atClient,
-        secondaryAddressFinder: secondaryAddressFinder,
-        // NOTE: the concrete client's, and only when the client is one: a
-        // test double implementing the interface has no state to report into.
-        connection: atClient is AtClientImpl ? atClient.connection : null,
-        lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
+        secondaryAddressFinder:
+            secondaryAddressFinder ?? atClient.secondaryAddressFinder,
+        connection: atClient.connection,
+        lookUps: atClient.lookUps);
   }
 
   @override

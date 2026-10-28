@@ -5,7 +5,7 @@
 /// `buildCommand()`, as a raw literal, with and without the flag.
 library;
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -17,6 +17,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   AtSignLogger.root_level = 'shout';
@@ -73,6 +74,8 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:
@@ -108,6 +111,8 @@ void main() {
       when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:-1');
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
@@ -80,7 +80,10 @@ void main() {
               device: 'iphone',
               namespaces: namespaces,
               keys: keyfileOf(enrollPreference_2),
-              preference: enrollPreference_2),
+              preference: enrollPreference_2,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: CacheableSecondaryAddressFinder(
+                  enrollPreference_2.rootDomain, enrollPreference_2.rootPort)),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
@@ -123,6 +126,9 @@ void main() {
           namespaces: namespaces,
           keys: keyfileOf(enrollPreference_2),
           preference: enrollPreference_2,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              enrollPreference_2.rootDomain, enrollPreference_2.rootPort),
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       logger.info('enroll response ${pending.enrollmentId}');
       expect(pending.enrollmentId, isNotEmpty);
@@ -253,6 +259,9 @@ void main() {
           namespaces: namespaces,
           keys: keyfileOf(enrollPreference),
           preference: enrollPreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              enrollPreference.rootDomain, enrollPreference.rootPort),
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final decided = expectLater(
           pending.awaitApproval(retryInterval: Duration(seconds: 5)),
@@ -327,6 +336,9 @@ void main() {
           namespaces: namespaces,
           keys: keyfileOf(preference),
           preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              preference.rootDomain, preference.rootPort),
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');
@@ -425,6 +437,9 @@ void main() {
           namespaces: namespaces,
           keys: keyfileOf(preference),
           preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: CacheableSecondaryAddressFinder(
+              preference.rootDomain, preference.rootPort),
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');

@@ -7,7 +7,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/at_server_features.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
@@ -37,6 +37,8 @@ void main() {
         preference: TestUtils.getPreference(atSign,
             posture: PqPosture.pqActive)
           ..namespace = namespace,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(client, atSign);

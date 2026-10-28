@@ -7,7 +7,7 @@ library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -40,6 +40,8 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approver, atSign);

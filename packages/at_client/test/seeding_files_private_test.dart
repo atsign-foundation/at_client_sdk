@@ -12,7 +12,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
@@ -23,6 +23,7 @@ import 'package:test/test.dart';
 import 'test_utils/recording_remote.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -68,6 +69,8 @@ void main() {
       AtClientPreference(posture: PqPosture.pqReady)
         ..hiveStoragePath = storageDir
         ..seedNamespaceKeys = true,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
       atKeysIo: inner, storage: hiveStoreAt(atSign, storageDir),

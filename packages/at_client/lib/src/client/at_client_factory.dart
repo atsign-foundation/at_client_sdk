@@ -23,7 +23,9 @@ import 'package:at_lookup/at_lookup.dart';
 /// closing it and the caller closes it when done; a bundle built with
 /// `closedByClient: true` is closed by the client instead.
 /// [lookUps] builds every connection the client opens (its own, its sync's,
-/// its monitor's); with none, TLS on TCP from the preference.
+/// its monitor's), and [secondaryAddressFinder] finds the atServer each one
+/// reaches, the client remembering its answer in [storage] for a start with
+/// the atDirectory unreachable. The platform package supplies both.
 ///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -44,8 +46,8 @@ Future<AtClient> buildAtClient({
   required AtKeysIo atKeysIo,
   String? enrollmentId,
   AtLookUp? atLookUp,
-  AtLookUpFactory? lookUps,
-  SecondaryAddressFinder? secondaryAddressFinder,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
   FutureOr<NotificationService> Function(AtClient)? notificationServiceBuilder,
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
   FutureOr<EnrollmentService> Function(AtClient)? enrollmentServiceBuilder,
@@ -74,17 +76,17 @@ Future<AtClient> buildAtClient({
     atKeysIo: atKeysIo,
     atLookUp: atLookUp,
     lookUps: lookUps,
+    secondaryAddressFinder: secondaryAddressFinder,
     enrollmentId: enrollmentId,
     storage: storage,
     exactEnrollment: true,
-  );
+  ) as AtClientImpl;
   try {
     client.notificationService = notificationServiceBuilder == null
         ? await NotificationServiceImpl.create(client,
-            secondaryAddressFinder: secondaryAddressFinder ??
-                (client is AtClientImpl ? client.secondaryAddressFinder : null),
+            secondaryAddressFinder: client.secondaryAddressFinder,
             connection: client.connection,
-            lookUps: client is AtClientImpl ? client.lookUps : null)
+            lookUps: client.lookUps)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
         ? await SyncServiceImpl.create(client)

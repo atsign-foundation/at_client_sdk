@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 /// `AtClientImpl.create` runs a client as the enrollment its keys authenticate
 /// as, and a caller's disagreeing id loses.
@@ -52,6 +53,8 @@ void main() {
   test('a legacy keyfile runs the client as its flat stored enrollment',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
         storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'stored-1');
@@ -59,6 +62,8 @@ void main() {
 
   test('a disagreeing id is ignored and the keys win', () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
         enrollmentId: 'somebody-else',
         storage: hiveStoreFor(atSign, pref()));
@@ -75,6 +80,8 @@ void main() {
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: io,
         enrollmentId: 'apkam-1',
         storage: hiveStoreFor(atSign, pref()));
@@ -86,7 +93,10 @@ void main() {
   test('a keyfile that predates enrollments runs the client as primary',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        atKeysIo: await keyfile(), storage: hiveStoreFor(atSign, pref()));
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: await keyfile(),
+        storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'primary');
   });
 }

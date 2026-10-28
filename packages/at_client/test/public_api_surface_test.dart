@@ -118,6 +118,13 @@ void main() {
               'intentional, update _atClientBarrelExports in the same commit.');
     });
 
+    test('at_client_io.dart exports exactly the reviewed set', () {
+      expect(exportsOf('at_client_io.dart'), _atClientIoBarrelExports,
+          reason: 'The public export surface of at_client_io.dart changed. If '
+              'intentional, update _atClientIoBarrelExports in the same '
+              'commit.');
+    });
+
     test('at_client_mixins.dart exports exactly the reviewed set', () {
       expect(exportsOf('at_client_mixins.dart'), _atClientMixinsBarrelExports,
           reason: 'The public export surface of at_client_mixins.dart changed. '
@@ -189,18 +196,16 @@ const Set<String> _atClientBarrelExports = {
   // an app opens, activates and enrols through this package and must not
   // have to import at_auth for what those verbs take and answer.
   'package:at_auth/at_auth.dart',
-  // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
-  'package:at_auth/at_auth_io.dart',
-  // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
-  // communications leg of the platform bundle, which the verbs take as
-  // lookUps:, for the same reason again. From the io-free barrel, so the type
-  // an app implements never reads as io-bound. Also checkAtSignServer and
-  // what it answers (AtSignServerCheck, AtSignServerState), which an app asks
-  // before onboarding: is the atSign in the atDirectory, does its atServer
-  // answer, is it activated.
+  // show-narrowed to AtLookUpFactory and AtCommandExecutor, and to
+  // SecondaryAddressFinder with what it answers (SecondaryAddress) and
+  // FixedSecondaryAddressFinder: the communications leg of the platform
+  // bundle, which the verbs take as lookUps: and secondaryAddressFinder:, for
+  // the same reason again. From the io-free barrel, so the types an app
+  // implements never read as io-bound. Also checkAtSignServer and what it
+  // answers (AtSignServerCheck, AtSignServerState), which an app asks before
+  // onboarding: is the atSign in the atDirectory, does its atServer answer,
+  // is it activated.
   'package:at_lookup/at_lookup.dart',
-  // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
-  'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
@@ -222,6 +227,17 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/util/enroll_list_request_param.dart',
   'package:at_commons/at_commons.dart',
   'package:at_client/src/collections/collections.dart',
+};
+
+/// The exports of `lib/at_client_io.dart`, as reviewed: at_client.dart and
+/// the pieces a native program needs `dart:io` for.
+const Set<String> _atClientIoBarrelExports = {
+  'package:at_client/at_client.dart',
+  // show-narrowed to FileAtKeysIo, the keyfile store.
+  'package:at_auth/at_auth_io.dart',
+  // show-narrowed to secureSocketLookUps, TLS on TCP, and
+  // CacheableSecondaryAddressFinder, the atDirectory asked over TLS.
+  'package:at_lookup/at_lookup_io.dart',
 };
 
 /// The exports of `lib/at_client_mixins.dart`, as reviewed. A refactor that

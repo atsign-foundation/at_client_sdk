@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -64,6 +65,8 @@ void main() {
         atSign: '@unattempted',
         namespace: 'lifecycle',
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'),
         storage: hiveStoreFor('@unattempted', await preference()));
     final state = client.connection.current;
@@ -77,6 +80,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     final state = client.connection.current;
@@ -95,6 +100,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
 
@@ -115,6 +122,8 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: revoked,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtOpenRefusedException>()
@@ -137,6 +146,8 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: missing,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtOpenRefusedException>().having(
@@ -153,6 +164,8 @@ void main() {
     final first = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), pref));
     expect(first.connection.current.isOnline, isTrue);
@@ -163,6 +176,8 @@ void main() {
     final second = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: revoked,
         storage: hiveStoreFor(Atsign(atSign), pref));
 
@@ -184,6 +199,8 @@ void main() {
           atSign: atSign,
           namespace: 'lifecycle',
           preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
           storage: hiveStoreFor(atSign, pref));
       final local = client.getLocalSecondary()!;
@@ -213,6 +230,8 @@ void main() {
       final client = await Atsign(atSign).open(
           keys: keys,
           preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
           atLookUp: revoked(atSign),
           storage: hiveStoreFor(Atsign(atSign), pref));
 
@@ -236,6 +255,8 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
           throwsA(isA<AtOpenRefusedException>()),
@@ -255,6 +276,8 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
           throwsA(isA<AtOpenRefusedException>()),
@@ -273,6 +296,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.isOffline, isTrue);
@@ -300,6 +325,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.cause, AtConnectionCause.unreachable);
@@ -324,6 +351,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
     expect(client.connection.current.cause, AtConnectionCause.unreachable);
@@ -351,6 +380,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
     final started = DateTime.now();
@@ -382,6 +413,8 @@ void main() {
         atSign: atSign,
         namespace: 'lifecycle',
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
         atLookUp: lookUp,
         storage: hiveStoreFor(atSign, await preference())) as AtClientImpl;
@@ -400,6 +433,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         serviceFactory: _NoSyncFactory(),
         storage: hiveStoreFor(Atsign(atSign), await preference()));

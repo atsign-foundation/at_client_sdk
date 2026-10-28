@@ -1,10 +1,11 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 // ignore: import_of_legacy_library_into_null_safe
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 void main() async {
   try {
@@ -14,6 +15,8 @@ void main() async {
           atSign: atSign,
           namespace: 'wavi',
           preference: TestUtil.getAlicePreference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
     final atClient = atClientManager.atClient;

@@ -3,7 +3,7 @@
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:uuid/uuid.dart';
@@ -141,7 +141,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
       preference: preference
         ..rootDomain = rootDomain
         ..rootPort = rootPort,
-      storage: storage);
+      storage: storage,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder:
+          CacheableSecondaryAddressFinder(rootDomain, rootPort));
 
   final payload =
       SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;

@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -52,6 +52,8 @@ void main() {
       atSign: atSign,
       cramSecret: cramSecret,
       preference: preference,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestUtils.atDirectory,
       atKeysIo: keysIo,
       appName: 'wavi',
       deviceName: 'pq-onboard',
@@ -78,8 +80,10 @@ void main() {
         1952);
 
     expect(
-        await Atsign(atSign)
-            .authenticatesAs(keys: keysIo, rootDomain: rootDomain),
+        await Atsign(atSign).authenticatesAs(
+            keys: keysIo,
+            rootDomain: rootDomain,
+            lookUps: secureSocketLookUps()),
         enrollmentId,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
             'succeeded by ML-DSA; and the keyfile alone names the enrollment, '

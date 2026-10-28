@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_crypto_provider.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 class MockPutRequestTransformer extends Mock implements PutRequestTransformer {}
 
@@ -183,6 +184,8 @@ void main() {
 
       AtClientImpl atClientImpl = await AtClientImpl.create(
               '@bob', 'wavi', AtClientPreference()..maxDataSize = 1,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
               atKeysIo: noKeysFor('@bob'),
               remoteSecondary: mockRemoteSecondary,
               storage:

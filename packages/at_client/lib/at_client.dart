@@ -29,15 +29,16 @@ export 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         NamespacePermission,
         WrittenAtKeysIo;
-export 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 export 'package:at_lookup/at_lookup.dart'
     show
         AtLookUpFactory,
         AtCommandExecutor,
         AtSignServerCheck,
         AtSignServerState,
-        checkAtSignServer;
-export 'package:at_lookup/at_lookup_io.dart' show secureSocketLookUps;
+        checkAtSignServer,
+        FixedSecondaryAddressFinder,
+        SecondaryAddress,
+        SecondaryAddressFinder;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
 export 'package:at_utils/at_logger.dart' show AtSignLogger;
 export 'package:at_client/src/response/at_notification.dart';

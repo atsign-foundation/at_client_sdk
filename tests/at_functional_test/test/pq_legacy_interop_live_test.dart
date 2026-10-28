@@ -10,7 +10,7 @@ library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -63,6 +63,8 @@ void main() {
         cramSecret: cramKeyMap[atSign]!,
         keys: FileAtKeysIo(filePath: keysFilePath),
         preference: preferenceFor(atSign),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         app: 'wavi',
         device: 'legacy',
@@ -120,6 +122,8 @@ void main() {
       atSign: pqNative,
       cramSecret: cramKeyMap[pqNative]!,
       preference: preferenceFor(pqNative),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestUtils.atDirectory,
       atKeysIo: FileAtKeysIo(filePath: keysFilePath),
       appName: 'wavi',
       deviceName: 'pq-native',
@@ -295,6 +299,8 @@ void main() {
       atSign: pqOptOut,
       cramSecret: cramKeyMap[pqOptOut]!,
       preference: preferenceFor(pqOptOut),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestUtils.atDirectory,
       atKeysIo: FileAtKeysIo(filePath: keysFilePath),
       appName: 'wavi',
       deviceName: 'pq-opt-out',

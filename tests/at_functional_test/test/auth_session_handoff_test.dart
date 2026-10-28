@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -34,6 +34,8 @@ void main() {
     final atClient = await Atsign(atSign).open(
         keys: atKeysIo,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     AtClientManager.getInstance().use(atClient);

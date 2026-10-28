@@ -24,9 +24,9 @@ The default config is `.github/wasm_gates.yaml`, resolved against the pub worksp
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,
 so the workflow names the file rather than leaning on that default.
 
-at_chops, at_auth, at_utils and at_lookup are gated today — each already web-safe
-behind its own `_io`/`_ffi` barrel, so a gate holds a line rather than recording a
-backlog. at_client owns 7 offenders and joins as it is ported.
+at_chops, at_auth, at_utils, at_lookup and at_client are gated today — each
+web-safe behind its own `_io`/`_ffi` barrel, so a gate holds a line rather than
+recording a backlog.
 
 ## Why this exists
 
@@ -115,8 +115,7 @@ live walk. There is deliberately no way to write a baseline back from a run — 
 generator existed once and was removed, because the failure output already carries
 what it would have printed.
 
-Every gated package has an empty allow list. at_chops', at_utils' and at_lookup's
-ceilings are 0; at_auth's 1 is `chalkdart`, reached through `at_progress.dart`.
+Every gated package has an empty allow list and a ceiling of 0.
 
 Every run prints its figures whether or not it fails:
 

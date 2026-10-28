@@ -1,5 +1,5 @@
 import 'package:args/args.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import '../util/custom_arg_parser.dart';
@@ -23,14 +23,21 @@ Future<void> main(List<String> args) async {
 
   // run otp:get from an enrolled client and pass the passcode
   final pending = await Atsign(atSign).resumeEnrollment(
-          app: 'buzz', device: 'iphone', keys: keys, preference: preference) ??
+          app: 'buzz',
+          device: 'iphone',
+          keys: keys,
+          preference: preference,
+          lookUps: preference.lookUps,
+          secondaryAddressFinder: preference.secondaryAddressFinder) ??
       await Atsign(atSign).enroll(
           otp: argResults['otp'],
           app: 'buzz',
           device: 'iphone',
           namespaces: {'buzz': 'rw'},
           keys: keys,
-          preference: preference);
+          preference: preference,
+          lookUps: preference.lookUps,
+          secondaryAddressFinder: preference.secondaryAddressFinder);
   print('enrollment ${pending.enrollmentId} awaits approval');
   pending.progress.listen((event) => print('${event.group}: ${event.msg}'));
 

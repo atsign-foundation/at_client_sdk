@@ -1,8 +1,9 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:test/test.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   group('A group of test related to validation of atKey', () {
@@ -39,6 +40,8 @@ void main() {
             atSign: atSign,
             namespace: namespace,
             preference: preference,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(preference),
             atKeysIo: noKeysFor(atSign),
             storage:
                 HiveAtClientStorage(atSign: atSign, storagePath: 'test/hive')),

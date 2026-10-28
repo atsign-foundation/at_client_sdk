@@ -7,6 +7,9 @@
   signing root.
 - fix: a dialog gives every client a store, so `ApkamActivationDialog` no
   longer refuses a preference that sets `isLocalStoreRequired` false.
+- feat: `at_client_flutter.dart` re-exports `at_client_io.dart`, so an app
+  importing it has `FileAtKeysIo`, `secureSocketLookUps` and
+  `CacheableSecondaryAddressFinder`.
 - build: requires `at_client` ^3.15.0-rc9.
 - chore(deps): at_utils ^4.0.0-rc1
 

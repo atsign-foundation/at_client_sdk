@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
 import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Two AtClients for one atSign, side by side in one process, each given its
 /// own `hiveStoragePath`.
@@ -49,6 +50,8 @@ void main() {
         ..isLocalStoreRequired = true
         ..syncRegex = ''
         ..hiveStoragePath = path,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage: hiveStoreAt(atSign, path),
     );

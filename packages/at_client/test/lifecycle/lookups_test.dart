@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
@@ -15,6 +15,7 @@ import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -96,6 +97,7 @@ void main() {
         atSign: '@lookups',
         namespace: 'wavi',
         preference: preference(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
         atKeysIo: noKeysFor('@lookups'),
         lookUps: recording,
         storage: hiveStoreFor('@lookups', preference())) as AtClientImpl;
@@ -120,6 +122,8 @@ void main() {
         atSign: '@nofactory',
         namespace: 'wavi',
         preference: preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
         atKeysIo: noKeysFor('@nofactory'),
         storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;
 
@@ -139,6 +143,7 @@ void main() {
     final client = await Atsign('@opened').open(
         keys: await typedKeyfile('@opened', enrollmentId: 'primary'),
         preference: preference(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
         lookUps: recording,
         storage: hiveStoreFor(Atsign('@opened'), preference()));
 
@@ -156,6 +161,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: InMemoryAtKeysIo(),
         preference: preference(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
         lookUps: recording);
 
     expect(pending.enrollmentId, 'e1');

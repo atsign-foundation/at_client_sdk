@@ -104,6 +104,11 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
         keys: FileAtKeysIo(filePath: (_) => keysPath),
         preference: acp,
         storage: storage,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          acp.rootDomain,
+          acp.rootPort,
+        ),
       );
       // The smoke test reads live data, so an offline client is no use to it.
       final connection = await client.connection.awaitOnline(

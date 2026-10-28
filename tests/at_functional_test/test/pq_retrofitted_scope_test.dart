@@ -7,7 +7,7 @@ library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupMuxable;
@@ -307,6 +307,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: FileAtKeysIo(filePath: (_) => keysFilePath),
         preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
 

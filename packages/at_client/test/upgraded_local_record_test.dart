@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -15,6 +15,7 @@ import 'test_utils/mocks.dart';
 import 'test_utils/no_op_services.dart';
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 class _FakeMonitor extends Fake implements Monitor {
   @override
@@ -100,6 +101,8 @@ void main() {
         AtClientPreference()
           ..namespace = namespace
           ..hiveStoragePath = dir.path,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: MockRemoteSecondary(),
         atKeysIo:
             await keyfileHolding(atSign, selfEncryptionKey: selfEncryptionKey),
@@ -252,7 +255,8 @@ void main() {
     setUp(() async {
       atClient.notificationService = await NotificationServiceImpl.create(
           atClient,
-          monitor: _FakeMonitor());
+          monitor: _FakeMonitor(),
+          secondaryAddressFinder: defaultAtDirectory);
       syncService = await SyncServiceImpl.create(atClient,
           remoteSecondary: MockRemoteSecondary(),
           warmStartSync: false) as SyncServiceImpl;
@@ -304,7 +308,9 @@ void main() {
 
     setUp(() async {
       service = await NotificationServiceImpl.create(atClient,
-          monitor: _FakeMonitor()) as NotificationServiceImpl;
+              monitor: _FakeMonitor(),
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       atClient.notificationService = service;
     });
 

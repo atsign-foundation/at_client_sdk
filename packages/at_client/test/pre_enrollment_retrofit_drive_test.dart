@@ -3,13 +3,14 @@
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 /// A client that holds NO enrollment gives itself one — driven through
 /// `AtClientImpl.create`, not through the pieces.
@@ -96,6 +97,8 @@ void main() {
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
     await AtClientImpl.create(atSign, 'buzz', preferenceAt(posture, atSign),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         remoteSecondary: mockRemote,
         atKeysIo: keysIo,
         storage: hiveStoreFor(atSign, preferenceAt(posture, atSign)));

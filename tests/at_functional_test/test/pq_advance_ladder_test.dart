@@ -7,7 +7,7 @@ library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -63,6 +63,8 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approver, atSign);
@@ -108,7 +110,8 @@ void main() {
         await Atsign(atSign).authenticatesAs(
             keys: keysIo,
             rootDomain:
-                AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+                AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+            lookUps: secureSocketLookUps()),
         enrollmentId,
         reason: 'the ladder keyfile must authenticate, and resolve to the '
             'rung being asked for');
@@ -125,6 +128,8 @@ void main() {
     ladderClient = await Atsign(atSign).open(
         keys: keysIo,
         preference: TestUtils.getPreference(atSign, posture: posture),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: ladderStorage);
     return ladderClient;

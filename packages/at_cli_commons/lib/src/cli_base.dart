@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_cli_commons/src/service_factories.dart';
 import 'package:at_cli_commons/src/utils.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
@@ -357,6 +357,7 @@ class CLIBase {
           namespace: nameSpace,
           storage: atOnboardingConfig.storageFor(atSign),
           lookUps: lookUps ?? atOnboardingConfig.lookUps,
+          secondaryAddressFinder: atOnboardingConfig.secondaryAddressFinder,
           serviceFactory: atServiceFactory);
     } on AtOpenRefusedException catch (e) {
       stderr.writeln();

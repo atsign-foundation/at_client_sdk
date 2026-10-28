@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 /// Activates an atSign from its CRAM secret and reads back what the new
@@ -14,7 +14,9 @@ Future<void> main() async {
       cramSecret: '<your cram secret>',
       keys: FileAtKeysIo(),
       preference: preference,
-      storage: preference.storageFor(atSign));
+      storage: preference.storageFor(atSign),
+      lookUps: preference.lookUps,
+      secondaryAddressFinder: preference.secondaryAddressFinder);
   print(await client.getKeys());
   await client.stop();
 }

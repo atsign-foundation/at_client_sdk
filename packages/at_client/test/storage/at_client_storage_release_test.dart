@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 import 'storage_contract.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
@@ -71,6 +72,8 @@ void main() {
       'a second storage for one atSign at the same location is refused; '
       'stop() releases it', () async {
     final first = await AtClientImpl.create('@releaseguard', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@releaseguard'),
         storage: hiveStoreFor('@releaseguard', pref())) as AtClientImpl;
     final sameStore =
@@ -189,11 +192,15 @@ void main() {
       'a fresh create() after stop() gets a new client on freshly opened '
       'storage', () async {
     final first = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@releasefresh'),
         storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     final firstStorage = first.storage;
     await first.stop();
     final again = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@releasefresh'),
         storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     expect(identical(again, first), isFalse,
@@ -209,12 +216,16 @@ void main() {
       ..crypto = const CryptoConfig(defaultProviderId: 'no-such-provider');
     await expectLater(
         AtClientImpl.create('@releasefail', 'wavi', bad,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(bad),
             atKeysIo: noKeysFor('@releasefail'),
             storage: hiveStoreFor('@releasefail', bad)),
         throwsA(isA<Exception>()),
         reason: 'the default provider is not registered, so create() throws '
             'after the storage was attached');
     final ok = await AtClientImpl.create('@releasefail', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@releasefail'),
         storage: hiveStoreFor('@releasefail', pref())) as AtClientImpl;
     expect(ok.storage, isNotNull,
@@ -230,7 +241,10 @@ void main() {
     // location, so the preference no longer has to name one.
     final client = await AtClientImpl.create(
         '@injected', 'wavi', AtClientPreference(),
-        atKeysIo: noKeysFor('@injected'), storage: injected) as AtClientImpl;
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@injected'),
+        storage: injected) as AtClientImpl;
 
     expect(identical(client.storage, injected), isTrue,
         reason: 'the client used the storage it was handed rather than '
@@ -252,12 +266,18 @@ void main() {
     final held = InMemoryAtClientStorage(atSign: '@cachedstore');
     final first = await AtClientImpl.create(
         '@cachedstore', 'wavi', AtClientPreference(),
-        atKeysIo: noKeysFor('@cachedstore'), storage: held) as AtClientImpl;
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@cachedstore'),
+        storage: held) as AtClientImpl;
 
     final other = InMemoryAtClientStorage(atSign: '@cachedstore');
     await expectLater(
         () => AtClientImpl.create('@cachedstore', 'wavi', AtClientPreference(),
-            atKeysIo: noKeysFor('@cachedstore'), storage: other),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+            atKeysIo: noKeysFor('@cachedstore'),
+            storage: other),
         throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'storage')),
         reason: 'the cached client keeps its own storage, so accepting '
             'another would leave it unattached while the caller believes it '
@@ -266,7 +286,10 @@ void main() {
 
     final again = await AtClientImpl.create(
         '@cachedstore', 'wavi', AtClientPreference(),
-        atKeysIo: noKeysFor('@cachedstore'), storage: held);
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@cachedstore'),
+        storage: held);
     expect(identical(again, first), isTrue,
         reason: 'offering the storage the cached client already holds is not '
             'a change, so the cached client is still returned');
@@ -278,6 +301,8 @@ void main() {
   test('a client with no injected storage still owns and closes its own',
       () async {
     final client = await AtClientImpl.create('@ownsits', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@ownsits'),
         storage: hiveStoreFor('@ownsits', pref())) as AtClientImpl;
     final own = client.storage!;
@@ -295,6 +320,8 @@ void main() {
         atSign: '@closedbyclient',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@closedbyclient'),
         storage: storage);
 
@@ -324,6 +351,8 @@ void main() {
         atSign: '@borrowedopen',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@borrowedopen'),
         storage: storage);
 

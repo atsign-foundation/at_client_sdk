@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
@@ -20,6 +20,7 @@ import '../test_utils/mocks.dart';
 import '../test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 import '../test_utils/remote_backed_client.dart';
 import '../test_utils/test_keypairs.dart' show pkamKeyPairFor;
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -161,6 +162,8 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
     expect(pending.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
     expect(submitted?['encryptedAPKAMSymmetricKey'], isNull,

@@ -3,7 +3,7 @@
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_functional_test/src/enrollment_approval.dart';
@@ -214,7 +214,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
         ..rootDomain = rootDomain
         ..rootPort = rootPort,
       storage: storage.forPrincipal(atSign, resolvedDeviceName),
-      atLookUp: atLookUp);
+      atLookUp: atLookUp,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder:
+          CacheableSecondaryAddressFinder(rootDomain, rootPort));
 
   // Null in legacy mode: only the pq metadataBuilder populates `built`, and
   // there is no key package to read a kid out of.

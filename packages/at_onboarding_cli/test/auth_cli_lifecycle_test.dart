@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -282,7 +282,9 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: FileAtKeysIo(filePath: (_) => keysPath),
           preference: pref,
-          atLookUp: first.lookUp);
+          atLookUp: first.lookUp,
+          lookUps: pref.lookUps,
+          secondaryAddressFinder: pref.secondaryAddressFinder);
       expect(
           (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
               .pendingEnrollmentIds,
