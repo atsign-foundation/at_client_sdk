@@ -39,13 +39,20 @@ history kept, and neither old package is the natural survivor.
 
 ## 3. The design is built in full, in the GA
 
-`LIVE`. [Design sections 2 and 4](design.md#2-the-shape) are built in
-at_client 4.0.0's release, not merged as is and trimmed later.
+`AMENDED` 2026-10-28. [Design sections 2 and 4](design.md#2-the-shape) are
+built in at_client 4.0.0's release, not merged as is and trimmed later. The
+one exception is internal: at_activate's commands become one class per
+command behind `AtActivate.main` in an at_client_cli minor after 1.0.0,
+with `AuthCliArgs` and `AuthCliCommand` kept as they are.
 
 Why: trimming later is a second breaking release for the same programs,
-which ruling 1 exists to avoid. Rejected: merging both packages unchanged
-(programs change code twice), and building the design while keeping the
-`AtOnboardingService` adapter (its users change code twice).
+which ruling 1 exists to avoid. The per-command classes change nothing a
+program reaches: programs embed at_activate through `AtActivate.main`, and
+noports-tools reads `AuthCliArgs`' flag names and `AuthCliCommand`, which
+stay. Rejected: merging both packages unchanged (programs change code
+twice); building the design while keeping the `AtOnboardingService` adapter
+(its users change code twice); and restructuring at_activate's 1,475 lines
+in the GA, which risks the commands for no change a program sees.
 
 ## 4. `CLIBase` keeps its name
 

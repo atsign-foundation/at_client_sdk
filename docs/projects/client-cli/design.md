@@ -87,7 +87,7 @@ One package, `packages/at_client_cli`, `package:at_client_cli/at_client_cli.dart
 lib/at_client_cli.dart          re-exports at_client and RegistrarService; exports everything below
 lib/src/keys/                   the file keys store conventions: default keyfile path, passphrase, the local-store path
 lib/src/cli_base.dart           CLIBase (unchanged API): the standard flags → an open AtClient
-lib/src/commands/               the at_activate commands as a library: activate(args) → exit code, one class per command
+lib/src/commands/               the at_activate commands, run by AtActivate.main(args) → exit code; one class per command follows in a minor (ruling 3)
 lib/src/register/               at_register
 lib/src/util/                   getHomeDirectory, getUserName, standardAtClientStoragePath, …; ServiceFactoryWithNoOpSyncService, once
 bin/at_activate.dart            calls the library
@@ -107,10 +107,14 @@ final client = (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).at
 exit(await AtActivate.main(args));
 
 // A program that opens on the conventional keyfile without arg parsing.
+final preference = AtClientPreference()..namespace = 'my_app';
 final client = await Atsign('@alice').open(
     keys: CliKeys.fileFor('@alice'),          // ~/.atsign/keys/@alice_key.atKeys
-    preference: AtClientPreference()..namespace = 'my_app',
-    storage: CliKeys.storageFor('@alice'));   // ~/.atsign/storage/...
+    preference: preference,
+    storage: CliKeys.storageFor('@alice', program: 'my_app'),   // CLIBase's store
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        preference.rootDomain, preference.rootPort));
 ```
 
 What goes, because at_client has it or nobody uses it: the
@@ -170,7 +174,7 @@ branch. That is a decision for gkc ([section 6](#6-decisions-to-make), D1).
 | `at_cli_commons/lib/src/utils.dart`                               | `lib/src/util/`                                | unchanged                                                                                      |
 | `at_cli_commons/lib/src/service_factories.dart`                   | `lib/src/util/`                                | the one copy; at_onboarding_cli's unexported twin goes                                          |
 | `at_cli_commons/lib/src/sync_listener.dart`                       | removed                                        | six files, three of them this repo's examples; a `SyncProgressListener` is four lines          |
-| `at_onboarding_cli/lib/src/cli/auth_cli*.dart`                    | `lib/src/commands/`                            | `main` becomes `AtActivate.main(args)`, public; one class per command behind it                |
+| `at_onboarding_cli/lib/src/cli/auth_cli*.dart`                    | `lib/src/commands/`                            | `main` becomes `AtActivate.main(args)`, public; one class per command behind it follows in a minor, keeping `AuthCliArgs` and `AuthCliCommand` as they are (ruling 3) |
 | `at_onboarding_cli/lib/src/register_cli/`, `util/register_api_*` | `lib/src/register/`                            | `at_register`                                                                                  |
 | `at_onboarding_cli/lib/src/util/at_onboarding_preference.dart`   | `lib/src/keys/`                                | the keys-and-store conventions (`atKeysFilePath`, `passPhrase`, `storagePath`, `storageFor`) as a small type; the rest is `AtClientPreference`, and `lookUps` becomes a parameter of `CLIBase` and the commands |
 | `at_onboarding_cli/lib/src/util/proxy_lookups.dart`              | `lib/src/util/`                                | `proxyLookUps()`, unchanged                                                                    |
@@ -197,13 +201,16 @@ Future<void> main(List<String> args) async => exit(await AtActivate.main(args));
 final svc = AtOnboardingServiceImpl('@alice', pref)..authenticate();   // before
 final client = await Atsign('@alice').open(                          // after
     keys: CliKeys.fileFor('@alice', passPhrase: pass),
-    preference: AtClientPreference()..namespace = 'my_app',
-    storage: CliKeys.storageFor('@alice'));
+    preference: preference,
+    storage: CliKeys.storageFor('@alice', program: 'my_app'),
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        preference.rootDomain, preference.rootPort));
 
 // AtOnboardingPreference: the conventions, not a preference
 final pref = AtOnboardingPreference()..atKeysFilePath = p..storagePath = s;   // before
-final keys = FileAtKeysIo(filePath: (_) => p);                              // after
-final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByClient: true);
+final keys = CliKeys.fileFor('@alice', path: p);                            // after
+final storage = CliKeys.storageFor('@alice', program: 'my_app', path: s);
 // pref.lookUps: pass lookUps: proxyLookUps() (or a factory of your own) to CLIBase or the verb
 ```
 
