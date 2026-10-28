@@ -44,6 +44,8 @@ void main() {
     final plain = _PlainLookUp();
     when(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:ok');
+    when(() => plain.executeVerb(any())).thenAnswer((_) async => 'data:ok');
+    when(() => plain.cramAuthenticate(any())).thenAnswer((_) async => true);
     when(plain.close).thenAnswer((_) async {});
     final client = await AtClientImpl.create(
             '@plain', 'wavi', AtClientPreference()..monitorAutoStart = false,
