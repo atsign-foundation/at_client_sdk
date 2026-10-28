@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -11,6 +12,8 @@ class _PlainLookUp extends Mock implements AtLookUp {}
 
 /// Catalogue: features/at_lookup/close_and_stop.feature
 void main() {
+  setUpAll(() => registerFallbackValue(StatsVerbBuilder()));
+
   test('A stopped client opens no connection', () async {
     final server = FakeAtServer(atSign: '@stopped');
     final client = await AtClientImpl.create(
@@ -41,6 +44,8 @@ void main() {
     final plain = _PlainLookUp();
     when(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:ok');
+    when(() => plain.executeVerb(any())).thenAnswer((_) async => 'data:ok');
+    when(() => plain.cramAuthenticate(any())).thenAnswer((_) async => true);
     when(plain.close).thenAnswer((_) async {});
     final client = await AtClientImpl.create(
             '@plain', 'wavi', AtClientPreference()..monitorAutoStart = false,
@@ -58,8 +63,14 @@ void main() {
     await expectLater(
         remote.executeCommand('scan\n'), throwsA(isA<StoppedException>()));
     await expectLater(remote.sync(0), throwsA(isA<StoppedException>()));
+    await expectLater(remote.executeVerb(StatsVerbBuilder()),
+        throwsA(isA<StoppedException>()));
+    await expectLater(
+        remote.authenticateCram('secret'), throwsA(isA<StoppedException>()));
     verify(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .called(1);
+    verifyNever(() => plain.executeVerb(any()));
+    verifyNever(() => plain.cramAuthenticate(any()));
     verify(plain.close).called(1);
   });
 }
