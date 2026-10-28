@@ -5,9 +5,10 @@ Feature: Keyfiles are written owner-only
   had before. Written as root, the keyfile and its .bak and .pre-v1 copies
   take the owner and group of the keyfile as it was read; a keyfile that did
   not exist stays owned by root, and root does not rewrite a keyfile that is
-  a symbolic link. Each write goes to a temporary file that is created with
-  mode 0600 before any key material is written to it, and is then renamed
-  into place. On Windows the file takes its directory's permissions, as before.
+  a symbolic link or anything other than a regular file. Each write goes to a
+  temporary file that is created with mode 0600 before any key material is
+  written to it, and is then renamed into place. On Windows the file takes its
+  directory's permissions, as before.
 
   Races: every write already holds the keyfile's lock; the temporary file is
   0600 from the moment it exists, and a temporary file left by an interrupted
