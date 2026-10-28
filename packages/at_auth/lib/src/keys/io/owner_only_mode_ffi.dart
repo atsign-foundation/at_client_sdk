@@ -157,8 +157,8 @@ bool touchNoFollow(String path) {
 /// The error the libc call made just before this one failed with, or null
 /// when this libc cannot report one.
 ///
-/// NOTE: called straight after that call, before anything else here can set
-/// errno again.
+/// NOTE: best effort, since errno can change between the two calls; use it
+/// only in messages, never in a decision.
 OSError? _lastError(_Libc libc) {
   final errors = libc.errors;
   if (errors == null) return null;
