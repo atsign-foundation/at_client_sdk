@@ -196,6 +196,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         .toString();
   }
 
+  @Deprecated('Use executeVerb with a DeleteVerbBuilder; removed in 4.0.0')
   @override
   Future<bool> delete(String key,
       {String? sharedWith, bool isPublic = false}) async {
@@ -209,6 +210,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return deleteResult.isNotEmpty; //replace with call back
   }
 
+  @Deprecated('Use executeVerb with an LLookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> llookup(String key,
       {String? sharedBy, String? sharedWith, bool isPublic = false}) async {
@@ -236,6 +238,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return llookupResult;
   }
 
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true,
@@ -305,6 +308,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     }
   }
 
+  @Deprecated('Use executeVerb with a PLookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> plookup(String key, String sharedBy) async {
     var builder = PLookupVerbBuilder()
@@ -316,6 +320,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return plookupResult;
   }
 
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   @override
   Future<List<String>> scan(
       {String? regex,
@@ -334,6 +339,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return (scanResult.isNotEmpty) ? List.from(jsonDecode(scanResult)) : [];
   }
 
+  @Deprecated('Use executeVerb with an UpdateVerbBuilder; removed in 4.0.0')
   @override
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata}) async {
@@ -784,6 +790,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   final Mutex _cramAuthenticationMutex = Mutex();
 
+  @Deprecated('Authenticate with an AtAuthenticator: at_auth 4 builds one with '
+      'authenticatorForCramSecret(). Removed in 4.0.0')
   @override
   Future<bool> cramAuthenticate(String secret) =>
       _unlessStopped(() => _cramAuthenticate(secret));

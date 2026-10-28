@@ -46,6 +46,8 @@ abstract class BaseConnection extends AtConnection {
     }
   }
 
+  @Deprecated('Removed in 4.0.0, where a connection is read through its '
+      'inbound stream and written through write()')
   @override
   Socket getSocket() {
     return _socket;
@@ -58,8 +60,8 @@ abstract class BaseConnection extends AtConnection {
       throw ConnectionInvalidException('write(): Connection is invalid');
     }
     try {
-      getSocket().write(data);
-      await getSocket().flush();
+      _socket.write(data);
+      await _socket.flush();
       getMetaData()!.lastAccessed = DateTime.now().toUtc();
     } on Exception {
       getMetaData()!.isStale = true;

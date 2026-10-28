@@ -7,6 +7,8 @@ abstract class AtConnection {
   void write(String data);
 
   /// Retrieves the socket of underlying connection
+  @Deprecated('Removed in 4.0.0, where a connection is read through its '
+      'inbound stream and written through write()')
   Socket getSocket();
 
   /// closes the underlying connection

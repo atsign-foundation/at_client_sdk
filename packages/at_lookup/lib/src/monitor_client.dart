@@ -39,6 +39,7 @@ class MonitorClient {
     var monitorConnection =
         await _createNewConnection(atSign, rootDomain, rootPort);
     //2. Listener on _monitorConnection.
+    // ignore: deprecated_member_use_from_same_package
     monitorConnection.getSocket().listen((event) {
       response = utf8.decode(event);
       // If response contains data to be notified, invoke callback function.

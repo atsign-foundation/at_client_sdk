@@ -63,6 +63,7 @@ class OutboundMessageListener {
 
     runZonedGuarded(() {
       _socketSubscription = _connection
+          // ignore: deprecated_member_use_from_same_package
           .getSocket()
           .listen(messageHandler, onDone: onSocketDone, onError: onSocketError);
     }, (Object error, StackTrace st) {

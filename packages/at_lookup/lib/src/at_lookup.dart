@@ -124,23 +124,29 @@ abstract interface class AtLookUp {
   }
 
   /// update
+  @Deprecated('Use executeVerb with an UpdateVerbBuilder; removed in 4.0.0')
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata});
 
   /// lookup
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true, bool verifyData = false});
 
   /// plookup
+  @Deprecated('Use executeVerb with a PLookupVerbBuilder; removed in 4.0.0')
   Future<String> plookup(String key, String sharedBy);
 
+  @Deprecated('Use executeVerb with an LLookupVerbBuilder; removed in 4.0.0')
   Future<String> llookup(String key,
       {String? sharedBy, String? sharedWith, bool isPublic = false});
 
   /// delete
+  @Deprecated('Use executeVerb with a DeleteVerbBuilder; removed in 4.0.0')
   Future<bool> delete(String key, {String? sharedWith, bool isPublic = false});
 
   /// scan
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   Future<List<String>> scan({String? regex, String? sharedBy});
 
   Future<String?> executeVerb(VerbBuilder builder,
@@ -162,6 +168,8 @@ abstract interface class AtLookUp {
 
   /// Generates digest using from verb response and [secret] and performs a
   /// CRAM authentication to secondary server
+  @Deprecated('Authenticate with an AtAuthenticator: at_auth 4 builds one with '
+      'authenticatorForCramSecret(). Removed in 4.0.0')
   Future<bool> cramAuthenticate(String secret);
 
   /// Closes this lookup's connection: the next call opens a new one and
@@ -359,6 +367,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
   /// authenticated atSign (`at_server_status` scans unauthenticated) - and
   /// [showHiddenKeys], which asks the atServer to include `public:__` keys.
+  @Deprecated('Use executeVerb with a ScanVerbBuilder; removed in 4.0.0')
   @override
   Future<List<String>> scan(
       {String? regex,
@@ -367,6 +376,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
       bool showHiddenKeys = false});
 
   /// As [AtLookUp.lookup], and additionally [metadata].
+  @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true, bool verifyData = false, bool metadata = false});

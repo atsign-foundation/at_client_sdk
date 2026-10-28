@@ -47,6 +47,11 @@
   `AtLookupImpl`'s `privateKey` and `cramSecret`, in favour of an
   `AtAuthenticator`; `executeVerb`'s `sync` parameter, which was never read;
   and `AtLookupMuxable.readResponse`, whose only use was the stream verb.
+- deprecated, for removal in 4.0: `update`, `lookup`, `plookup`, `llookup`,
+  `delete` and `scan`, in favour of `executeVerb` with the matching verb
+  builder; `cramAuthenticate`, in favour of an `AtAuthenticator`;
+  `MonitorClient`, in favour of `AtLookupMuxable`'s notifications; and
+  `AtConnection.getSocket()`.
 - build: requires `at_chops` ^3.6.0 and `at_commons` ^5.18.0.
 
 ## 3.6.1
