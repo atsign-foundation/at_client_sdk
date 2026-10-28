@@ -89,17 +89,23 @@ one caller.
 
 ## 7. The keys-and-store conventions are a small type, `CliKeys`
 
-`LIVE`. `CliKeys.fileFor(atSign, {path, passPhrase})` is the `FileAtKeysIo`
-at `~/.atsign/keys/<atSign>_key.atKeys`; `CliKeys.storageFor(atSign,
-{required program, id = 'singleton', path})` is a Hive store the client
-closes, at `CLIBase`'s `~/.atsign/storage/<atSign>/<program>/<id>`. The free
-path helpers stay for the programs that call them. at_activate's own store
-moves there from `~/.atsign/at_onboarding_cli/storage/<atSign>/hive`, so a
-device that ran an at_onboarding_cli prerelease starts that store afresh;
-its keys, in the keyfile, are untouched.
+`AMENDED` 2026-10-28. `CliKeys.fileFor(atSign, {path, passPhrase})` is the
+`FileAtKeysIo` at `~/.atsign/keys/<atSign>_key.atKeys`;
+`CliKeys.storageFor(atSign, {required program, id = 'single', path})` is a
+Hive store the client closes, at `CLIBase`'s
+`~/.atsign/storage/<atSign>/<program>/<id>`, and with no `id` it is the
+store `CLIBase` opens for that namespace. The free path helpers stay for the
+programs that call them. at_activate's own store moves there from
+`~/.atsign/at_onboarding_cli/storage/<atSign>/hive`, so a device that ran an
+at_onboarding_cli prerelease starts that store afresh; its keys, in the
+keyfile, are untouched.
 
-Rejected: keeping at_activate's old path (two conventions live on), and
-free functions in place of a type.
+Rejected: keeping at_activate's old path (two conventions live on); free
+functions in place of a type; and `'singleton'`, the free path helpers'
+default, as the default `id`, since it is not the folder `CLIBase` keeps a
+program's store in, so a program moving from `CLIBase` to `Atsign.open`
+with `CliKeys` would open an empty store and leave its `local:` records
+behind.
 
 ## 8. The tools keep their names, and both install paths work
 

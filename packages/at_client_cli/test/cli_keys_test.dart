@@ -19,13 +19,26 @@ void main() {
 
     test(
         'when its store is asked for, then it is under storage/<atSign>/'
-        '<program>/singleton, and the client closes it', () {
+        '<program>/single, and the client closes it', () {
       final store =
           CliKeys.storageFor(atSign, program: 'my_app') as HiveAtClientStorage;
 
-      expect(
-          store.storagePath, '$home/.atsign/storage/@alice/my_app/singleton');
+      expect(store.storagePath, '$home/.atsign/storage/@alice/my_app/single');
       expect(store.closedByClient, isTrue);
+    });
+
+    test(
+        'when CLIBase names no storage dir, then its store is the one CliKeys '
+        'names for its namespace', () {
+      final cli = CLIBase(
+          atSign: atSign,
+          nameSpace: 'my_app',
+          rootDomain: 'root.atsign.org',
+          homeDir: home);
+      final store =
+          CliKeys.storageFor(atSign, program: 'my_app') as HiveAtClientStorage;
+
+      expect(cli.localStoragePathToUse, store.storagePath);
     });
   });
 

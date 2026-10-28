@@ -146,8 +146,9 @@ final atDirectory =
 ```
 
 `CliKeys.fileFor` takes a `path` and a `passPhrase`; `CliKeys.storageFor`
-puts the store under `~/.atsign/storage/<atSign>/<program>/`, or at `path`,
-and the client closes it when it stops. `lookUps` builds every connection the
+puts the store under `~/.atsign/storage/<atSign>/<program>/`, where `CLIBase`
+keeps it for that namespace, or at `path`, and the client closes it when it
+stops. `lookUps` builds every connection the
 client opens: `proxyLookUps()` when the root domain names a proxy
 (`proxy:host:port`), which sends `from:<atSign>` first on every connection so
 the proxy can route it, and TLS on TCP otherwise.

@@ -294,7 +294,7 @@ class CLIBase {
               baseDir: homeDir!,
               atSign: this.atSign,
               progName: nameSpace,
-              uniqueID: 'single',
+              uniqueID: CliKeys.defaultStoreId,
             ))
         .replaceAll('/', Platform.pathSeparator);
     downloadPathToUse =
