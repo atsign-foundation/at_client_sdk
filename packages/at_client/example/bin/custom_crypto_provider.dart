@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client_cli/at_client_cli.dart';
-import 'package:at_client/at_client.dart';
 
 import 'package:at_client_examples/init_example_context.dart';
 

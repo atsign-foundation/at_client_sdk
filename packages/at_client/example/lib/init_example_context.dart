@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client_cli/at_client_cli.dart';
-import 'package:at_client/at_client.dart';
 
 const String applicationNamespace = 'examples.demos';
 const Duration exampleDefaultExpiration = Duration(minutes: 1);

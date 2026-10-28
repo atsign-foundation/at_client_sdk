@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client_cli/at_client_cli.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/domain_objects.dart';
 import 'package:at_client_examples/todos_tui/presets.dart';
 import 'package:at_client_examples/todos_tui/theme.dart';
