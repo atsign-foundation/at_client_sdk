@@ -60,12 +60,17 @@ class ControlSpec {
   /// control walks the platform side of a seam; `web` pins the other branch.
   final Map<String, bool> environment;
 
+  /// The dependency whose sources the control looks at, for a package with no
+  /// platform code of its own; null means the gated package.
+  final String? throughPackage;
+
   const ControlSpec({
     required this.barrel,
     required this.because,
     required this.environment,
     this.reachesFile,
     this.reachesLibrary,
+    this.throughPackage,
   });
 }
 
@@ -244,6 +249,7 @@ class GateConfig {
           'reaches_library',
           'because',
           'environment',
+          'through_package',
         },
         name);
 
@@ -259,6 +265,7 @@ class GateConfig {
           'which is the failure it exists to catch'));
     }
 
+    final through = map.nodes['through_package'];
     final env = map.nodes['environment'];
     final envName =
         env == null ? 'io' : _scalar<String>(path, env, 'io or web');
@@ -278,6 +285,9 @@ class GateConfig {
       because: _scalar<String>(
           path, _required(path, map, 'because', name), 'because'),
       environment: envName == 'io' ? ioEnvironment : webEnvironment,
+      throughPackage: through == null
+          ? null
+          : _scalar<String>(path, through, 'through_package'),
     );
   }
 

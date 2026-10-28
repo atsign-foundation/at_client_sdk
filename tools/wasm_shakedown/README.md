@@ -91,6 +91,10 @@ pins that a forbidden library is still reached but not where, `reaches_file` pin
 package source directly imports a forbidden library. Controls resolve with io semantics;
 `environment: web` pins the other branch of a conditional export.
 
+A control looks at the gated package's own sources. A package with no native code of its own
+names `through_package:` instead: the control then asserts the walk still reaches that
+dependency's known native source, which a walk that stalled in the gated package cannot.
+
 The walk crosses package boundaries via `.dart_tool/package_config.json` and resolves
 configurable URIs the way the target platform would. Run `dart pub get` first.
 

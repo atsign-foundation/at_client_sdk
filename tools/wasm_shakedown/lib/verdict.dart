@@ -143,8 +143,8 @@ class RatchetVerdict {
 /// one, an island could be emptied and the gate would still read green.
 ///
 /// Two axes, each weak alone: [reachesLibrary] pins that a forbidden library is
-/// still reached from somewhere in [package] but not where; [reachesFile] pins
-/// one source but not what it imports.
+/// still reached from somewhere in [sourcesOf] but not where; [reachesFile]
+/// pins one source but not what it imports.
 ///
 /// No minimum file count, unlike [RatchetVerdict.deepEnough]: these checks are
 /// positive, so a stalled walk fails them on its own.
@@ -153,13 +153,18 @@ class ControlVerdict {
   final String barrel;
   final String package;
 
-  /// A [package]-relative path that must be among the offenders found.
+  /// The package whose sources this control looks at, for a [package] with
+  /// no platform code of its own: the walk has to reach that dependency's
+  /// known native source, which a stalled walk cannot. Null means [package].
+  final String? throughPackage;
+
+  /// A [sourcesOf]-relative path that must be among the offenders found.
   ///
   /// The walk records offenders, not every file it visited, so this names a
   /// source that itself imports a forbidden library — not one on the way to one.
   final String? reachesFile;
 
-  /// A forbidden library that some [package] source must reach.
+  /// A forbidden library that some [sourcesOf] source must reach.
   final String? reachesLibrary;
 
   /// What this control keeps reachable, in prose, for the message.
@@ -172,6 +177,7 @@ class ControlVerdict {
     required this.because,
     this.reachesFile,
     this.reachesLibrary,
+    this.throughPackage,
   }) {
     if (reachesFile == null && reachesLibrary == null) {
       throw ArgumentError('a control asserting nothing passes on a walk that '
@@ -180,10 +186,13 @@ class ControlVerdict {
     }
   }
 
-  /// [package]-owned offenders, by package-relative path.
-  late final Map<String, List<String>> owned = walk.offendersIn(package);
+  /// The package whose offenders this control inspects.
+  String get sourcesOf => throughPackage ?? package;
 
-  /// Every forbidden library any [package] source reaches.
+  /// [sourcesOf]-owned offenders, by package-relative path.
+  late final Map<String, List<String>> owned = walk.offendersIn(sourcesOf);
+
+  /// Every forbidden library any [sourcesOf] source reaches.
   late final Set<String> libraries =
       owned.values.expand((libs) => libs).toSet();
 
@@ -199,7 +208,8 @@ class ControlVerdict {
 
   /// What this control asserts, for a one-line report.
   String get target => [
-        if (reachesFile != null) reachesFile,
+        if (reachesFile != null)
+          throughPackage == null ? reachesFile : "$throughPackage's $reachesFile",
         if (reachesLibrary != null) reachesLibrary,
       ].join(' and ');
 
@@ -215,7 +225,7 @@ class ControlVerdict {
               'now proves nothing.\n\n'
               '${_missed()}\n\n'
               'The walk visited ${walk.filesWalked} files and found these '
-              '$package offenders:\n${_ownedListing()}\n\n'
+              '$sourcesOf offenders:\n${_ownedListing()}\n\n'
               'The full walk:\n${walk.report()}',
         ];
 

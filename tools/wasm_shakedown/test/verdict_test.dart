@@ -45,13 +45,15 @@ ControlVerdict _control(
   Shakedown walk, {
   String? reachesFile,
   String? reachesLibrary,
+  String? throughPackage,
 }) =>
     ControlVerdict(walk,
         barrel: 'package:at_auth/at_auth_io.dart',
         package: 'at_auth',
         because: 'the filesystem code it exists to quarantine',
         reachesFile: reachesFile,
-        reachesLibrary: reachesLibrary);
+        reachesLibrary: reachesLibrary,
+        throughPackage: throughPackage);
 
 void main() {
   group('RatchetVerdict — the allow list', () {
@@ -384,6 +386,37 @@ void main() {
       expect(verdict.holds, isFalse);
       expect(verdict.failures.single, contains('1 files'));
       expect(verdict.failures.single, contains('(none'));
+    });
+
+    group('through a dependency', () {
+      final throughUtils = _walk(offenders: {
+        '/w/packages/at_utils/lib/src/logging/io_handlers.dart': ['dart:io']
+      });
+
+      test('a library the dependency reaches passes', () {
+        expect(
+            _control(throughUtils,
+                    reachesLibrary: 'dart:io', throughPackage: 'at_utils')
+                .holds,
+            isTrue);
+      });
+
+      test('a file is the dependency\'s, by its own relative path', () {
+        final verdict = _control(throughUtils,
+            reachesFile: 'lib/src/logging/io_handlers.dart',
+            throughPackage: 'at_utils');
+        expect(verdict.holds, isTrue);
+        expect(verdict.target, "at_utils's lib/src/logging/io_handlers.dart");
+      });
+
+      test('a walk that never reached the dependency fails, naming it', () {
+        final verdict = _control(_walk(),
+            reachesLibrary: 'dart:io', throughPackage: 'at_utils');
+        expect(verdict.holds, isFalse);
+        expect(verdict.failures.single, contains('found these at_utils'));
+        expect(verdict.failures.single,
+            contains('positive control for at_auth\'s baseline'));
+      });
     });
 
     test('the message names the target, the reason and what was found', () {

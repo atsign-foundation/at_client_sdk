@@ -246,6 +246,17 @@ void main() {
       expect(control.environment, webEnvironment);
     });
 
+    test('a control through a dependency, and none by default', () {
+      expect(_parse(_valid())['at_auth']!.controls.single.throughPackage,
+          isNull);
+      final config = _parse(_valid('''    - barrel: package:at_auth/at_auth.dart
+      reaches_library: dart:io
+      through_package: at_utils
+      because: the native logging branch
+'''));
+      expect(config['at_auth']!.controls.single.throughPackage, 'at_utils');
+    });
+
     test('allowed_offenders omitted, meaning none', () {
       expect(_parse(_valid())['at_auth']!.ratchets.single.allowedOffenders,
           isEmpty);
