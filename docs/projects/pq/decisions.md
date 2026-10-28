@@ -195,7 +195,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [135] | `legacy` is the control arm: no wire write, no keyfile change                               | 2026-09-08 | LIVE               |
 | [136] | at_auth stays posture-blind, and both doors demand the algorithm                            | 2026-09-08 | LIVE               |
 | [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
-| [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | LIVE               |
+| [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | AMENDED 2026-10-28 |
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |

@@ -146,11 +146,11 @@ re-enrolls itself at its first start, filing the new enrollment in the
 same keys store beside the legacy fields. ML-DSA authentication needs an
 atServer that verifies it; a `legacy` client makes no such demand.
 
-The default posture moves one stage per major of `at_client` — 3.x
-`legacy`, 4.x `pqReady`, 5.x `pqActive` — because a record may only be
+The default posture moves one stage at a time — `legacy` through 4.0,
+`pqReady` from a later 4.x release, `pqActive` at 5.0 — because a record may only be
 written in a scheme every reader of it supports, so the stage that reads
 post-quantum data rolls out before the stage that writes it by default. An
-app on 3.x names `pqReady` or `pqActive` to move first.
+app names `pqReady` or `pqActive` to move first.
 
 The developer's view, the goals and the ladder are in the
 [at_client README](./packages/at_client/README.md#post-quantum-cryptography);

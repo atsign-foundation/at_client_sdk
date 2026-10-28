@@ -257,7 +257,7 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.
-1. **The app's capability release (4.x, or `PqPosture.pqReady` named today —
+1. **The app's capability release (a 4.x release after 4.0.0, or `PqPosture.pqReady` named today —
    the soak).** A rebuild plus the posture: adds
    the PQ providers + provider routing on *read*, upgrades the app's enrollment,
    mints the namespace `nskey` (publishing its public half immediately at
@@ -276,8 +276,9 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    both directions; a mixed pair stays on the legacy provider *in that direction only*, by the
    app's own choice of fallback.
 4. **Retire legacy, then the two default flips** — lazy re-encrypt on touch,
-   then `at_client 4.0` flips its default posture from `PqPosture.legacy` to
-   `PqPosture.pqReady` and `at_client 5.0` from `pqReady` to `pqActive`: two
+   then a 4.x release after `at_client 4.0` flips its default posture from
+   `PqPosture.legacy` to `PqPosture.pqReady` and `at_client 5.0` from `pqReady`
+   to `pqActive`: two
    edits moving the rollout axes in two steps (era config,
    `disallowLegacyEncryption`, the in-use signing set, enrolment key
    exchange, retrofit signing algorithm), which is why the flag and the era
@@ -285,7 +286,8 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    ([`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)).
    ⚠️ This read as one 4.0 flip until
    [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08) moved the ladder
-   back a stage on 2026-09-08: reading post-quantum data goes out at 4.0, and
+   back a stage on 2026-09-08: reading post-quantum data goes out in 4.x, after
+   4.0.0 by its 2026-10-28 amendment, and
    what 5.0 turns on is writing post-quantum by default and refusing legacy
    encryption. The 3.x default stayed `legacy`; an app names `pqReady` or
    `pqActive` itself to move earlier.
@@ -293,7 +295,7 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    material stops only in a later, **ecosystem-gated** release
    ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
-In short: **3.x defaults to legacy; 4.x defaults to "reads PQ, writes legacy";
+In short: **3.x and 4.0 default to legacy; a later 4.x release defaults to "reads PQ, writes legacy";
 5.x defaults to "PQ — refuse rather than write with the legacy provider" —
 nameable earlier at any time, but never silently.**
 
@@ -397,7 +399,7 @@ for the whole cutover — **from the PQ project's view, the majors after 3.x are
 final-3.x code with only flag *defaults* changed.** Every rollout stage (the
 crypto era default, `disallowLegacyEncryption`, the signed-envelope version,
 `EnrollmentKeyExchangeMode`, the retrofit signing algorithm) is an independent
-flag whose default moves at 4.0 or at 5.0, plus a convenience posture that
+flag whose default moves in a 4.x release or at 5.0, plus a convenience posture that
 sets them as a group; all the code ships in 3.x, and the acceptance suite
 drives the entire rollout by flag manipulation.
 

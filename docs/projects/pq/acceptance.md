@@ -2964,8 +2964,9 @@ the number its own dartdoc enumerates under "The axes", and the number that
 differs between `legacy` and `pqActive` are three different figures.
 
 ⚠️ **A bare preference runs the `legacy` posture**, byte-identical to the
-pre-posture SDK, and runs no post-quantum startup at all. The ladder is 3.x
-`legacy`, 4.x `pqReady`, 5.x `pqActive`: an app that wants a later stage names
+pre-posture SDK, and runs no post-quantum startup at all. The ladder is `legacy`
+through 4.0, `pqReady` from a later 4.x release, `pqActive` at 5.x: an app that
+wants a later stage names
 one; an app that must stay put names nothing.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds

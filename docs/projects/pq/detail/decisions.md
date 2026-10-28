@@ -14314,13 +14314,22 @@ can parse a version 1 document at all, which is the mirror of issue #2154.
 
 ## 138. The posture ladder moves back a stage (2026-09-08)
 
-**In brief:** *3.x defaults to `legacy`, 4.x to `pqReady`, 5.x to `pqActive`*
+**In brief:** *3.x and 4.0 default to `legacy`, a later 4.x release to `pqReady`, 5.x to `pqActive`*
 
 **Ruled by gkc, 2026-09-08.** The shipped default moves back to `PqPosture.legacy`
-for at_client 3.x, `pqReady` becomes the 4.x default, and `pqActive` the 5.x one.
+for at_client 3.x, `pqReady` becomes the default in a 4.x release, and `pqActive` the 5.x one.
 Reverses `06c2b8b22` ("the default posture is pqReady", 2026-08-26) and re-scopes
 the R-2 release step, which had become a single `pqReady` → `pqActive` flip at
 4.0.0 and is now two flips across two majors.
+
+**Amended by gkc, 2026-10-28: 4.0.0 keeps `legacy`.** The flip to `pqReady`
+moves to a later 4.x release, once the machinery it turns on leaves
+`@experimental`. The 4.0.0 GA's goal is his "ideally no breaks should be
+encountered at all unless apps are still using deprecated methods / parameters
+/ etc", and at `pqReady` a client holding a legacy keyfile publishes an `_apsk`,
+mints and publishes a namespace key and, fully privileged, the atSign's signing
+root, and retrofits into an ML-DSA enrollment, all at startup, on an upgrade
+that changes no line of the app.
 
 **The rationale is gkc's:** from 3.x a developer can choose a different posture,
 and the default stays `legacy` faithfully, so that anything the project breaks can
@@ -14342,7 +14351,7 @@ control, and the fixture's job is the one that cannot be done any other way.
 
 **The price, stated rather than discovered later.** A 5.x sender cannot reach a
 3.x recipient that never seeded a namespace key. It is refused, not silently lost.
-The intervening stage is what stops this being worse: 4.x at `pqReady` seeds and
+The intervening stage is what stops this being worse: the 4.x release at `pqReady` seeds and
 reads while still **writing legacy**, so by the time 5.x switches writes on the
 keys are already out there, and the dark 3.x period strands nobody in the
 meantime.

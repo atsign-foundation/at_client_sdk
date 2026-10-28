@@ -709,7 +709,7 @@ migration is the app, and an app is an enrollment**: its own AtKeys, its own APK
 keypair, its own namespaces. Apps migrate independently and never have to agree.
 
 **The two releases.**
-1. **Capability (4.x, or `PqPosture.pqReady` named today).** A rebuild plus
+1. **Capability (a 4.x release after 4.0.0, or `PqPosture.pqReady` named today).** A rebuild plus
    the posture → a **universal reader** + back-compat
    writer: reads anything ever written (legacy or nskey), upgrades its enrollment
    ([§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment)),
@@ -721,7 +721,7 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    of an app developer, and it replaces every piece of removed machinery.
 2. **Active use (5.x, or an explicit opt-in today).** The app now writes the
    nskey data path. **The SDK never decides to write PQ — the app tells it
-   to**, implicitly by riding the 5.x default (4.x defaults to `pqReady`, the
+   to**, implicitly by riding the 5.x default (a 4.x release after 4.0.0 defaults to `pqReady`, the
    reading stage, per
    [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)),
    or explicitly by naming a

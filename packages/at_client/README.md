@@ -526,14 +526,15 @@ final preference = AtClientPreference(posture: PqPosture.pqReady)
 
 ### The rollout ladder, and why it is a ladder
 
-The default posture moves one stage per major version of `at_client`. An
-app that names no posture rides the default; an app can name a later stage
-at any time, or name `legacy` to stay put.
+The default posture moves one stage at a time: to `pqReady` in a 4.x
+release after 4.0.0, and to `pqActive` at 5.0.0. An app that names no
+posture rides the default; an app can name a later stage at any time, or
+name `legacy` to stay put.
 
 | `at_client` | Default posture      | A client that names no posture                                                                                  |
 | ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 3.x         | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
-| 4.x         | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
+| 3.x, 4.0    | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
+| later 4.x   | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
 | 5.x         | `PqPosture.pqActive` | Writes post-quantum by default and refuses a legacy write                                                       |
 
 The order follows from the one invariant above: a record may only be
@@ -541,14 +542,15 @@ written in a scheme every reader of it supports. So the whole population of
 clients has to be *able to read* post-quantum data (`pqReady`) before any
 client *writes* it by default (`pqActive`), and the stage that adds the
 reading has to be rolled out before the stage that changes the writing. Two
-majors give every app one release to become a reader and another to become
+stages give every app one release to become a reader and another to become
 a writer, with the SDK's default carrying apps that never think about it.
 Legacy key material is still minted at every stage, because when an atSign
 can stop holding it is a question about every client of that atSign, not
 about one build.
 
-**You do not have to wait for 4.x or 5.x.** The stages are postures, and a
-posture is a construction-time choice, so a 3.x app names the stage it wants:
+**You do not have to wait for the default to move.** The stages are
+postures, and a posture is a construction-time choice, so an app names the
+stage it wants:
 
 ```dart
 // Reads post-quantum data, authenticates with ML-DSA-65, writes legacy
