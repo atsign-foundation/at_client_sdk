@@ -29,6 +29,17 @@ bool get runningAsRoot =>
 @visibleForTesting
 bool? runningAsRootForTesting;
 
+/// Whether [writeNewOwnerOnly] could run here, and whether a failed call
+/// would carry its OS error, were errno and its description looked up as
+/// [errnoSymbol] and [strerrorSymbol] in place of this libc's own names.
+@visibleForTesting
+({bool ownerOnlyWrites, bool osErrors}) lookUpLibcForTesting(
+    {String? errnoSymbol, String? strerrorSymbol}) {
+  final libc =
+      _Libc._lookUp(errnoSymbol: errnoSymbol, strerrorSymbol: strerrorSymbol);
+  return (ownerOnlyWrites: libc != null, osErrors: libc?.errors != null);
+}
+
 /// Reads the file at [path] through one descriptor opened without following
 /// a symbolic link, taking its owner and group from that descriptor.
 ///
@@ -45,7 +56,7 @@ KeyfileRead readNoFollow(String path) {
         'Cannot open a file without following a link on this platform', path);
   }
   final (:fd, :error) = _open(libc, path, flags, 0);
-  if (error != null) {
+  if (fd < 0) {
     throw FileSystemException(
         'Cannot open the file without following a link', path, error);
   }
@@ -70,7 +81,7 @@ KeyfileRead readNoFollow(String path) {
   final libc = _Libc.instance!;
   final (:fd, :error) =
       _open(libc, path, libc.createNewForWriting, ownerOnlyMode);
-  if (error != null) {
+  if (fd < 0) {
     throw FileSystemException('Cannot create the file', path, error);
   }
   try {
@@ -90,14 +101,15 @@ KeyfileRead readNoFollow(String path) {
 ///
 /// Returns null once the file is created and written. Returns the error the
 /// create failed with, having written nothing, when anything already exists
-/// at [path], a symbolic link included, or the file cannot be created.
+/// at [path], a symbolic link included, or the file cannot be created; that
+/// error has no message or code when this libc cannot report one.
 /// Throws [FileSystemException] when the file was created but [bytes] could
 /// not be written, after removing it.
 OSError? createNewWith(String path, List<int> bytes) {
   final libc = _Libc.instance!;
   // NOTE: 0666, narrowed by the umask, as dart:io creates a file.
   final (:fd, :error) = _open(libc, path, libc.createNewForWriting, 0x1b6);
-  if (error != null) return error;
+  if (fd < 0) return error ?? const OSError();
   try {
     _writeAll(libc, fd, bytes, path);
   } on FileSystemException {
@@ -128,7 +140,8 @@ bool touchNoFollow(String path) {
 }
 
 /// Opens [path] with [flags], creating it with [mode] when [flags] say to;
-/// returns the descriptor, or the error the open failed with.
+/// returns the descriptor, negative when the open failed, with the error it
+/// failed with when this libc can report one.
 ({int fd, OSError? error}) _open(
     _Libc libc, String path, int flags, int mode) {
   final nativePath = path.toNativeUtf8();
@@ -141,13 +154,16 @@ bool touchNoFollow(String path) {
   }
 }
 
-/// The error the libc call made just before this one failed with.
+/// The error the libc call made just before this one failed with, or null
+/// when this libc cannot report one.
 ///
 /// NOTE: called straight after that call, before anything else here can set
 /// errno again.
-OSError _lastError(_Libc libc) {
-  final code = libc.errno().value;
-  return OSError(libc.strerror(code).toDartString(), code);
+OSError? _lastError(_Libc libc) {
+  final errors = libc.errors;
+  if (errors == null) return null;
+  final code = errors.errno().value;
+  return OSError(errors.strerror(code).toDartString(), code);
 }
 
 void _writeAll(_Libc libc, int fd, List<int> bytes, String path) {
@@ -197,6 +213,7 @@ typedef _UtimensatFunction = int Function(
     int, Pointer<Utf8>, Pointer<Void>, int);
 typedef _ErrnoFunction = Pointer<Int32> Function();
 typedef _StrerrorFunction = Pointer<Utf8> Function(int);
+typedef _ErrorReporting = ({_ErrnoFunction errno, _StrerrorFunction strerror});
 
 final class _Libc {
   _Libc._(
@@ -210,8 +227,7 @@ final class _Libc {
       required this.close,
       required this.geteuid,
       required this.utimensat,
-      required this.errno,
-      required this.strerror,
+      required this.errors,
       required this.currentDirectory,
       required this.noFollow});
 
@@ -230,9 +246,9 @@ final class _Libc {
   final _UidFunction geteuid;
   final _UtimensatFunction utimensat;
 
-  /// Where this thread's errno is.
-  final _ErrnoFunction errno;
-  final _StrerrorFunction strerror;
+  /// Where this thread's errno is and how to describe it, or null when this
+  /// libc does not export both.
+  final _ErrorReporting? errors;
 
   /// `AT_FDCWD`.
   final int currentDirectory;
@@ -242,9 +258,15 @@ final class _Libc {
 
   static final _Libc? instance = _lookUp();
 
-  static _Libc? _lookUp() {
+  static _Libc? _lookUp({String? errnoSymbol, String? strerrorSymbol}) {
     if (!Platform.isLinux && !Platform.isMacOS) return null;
     final libc = DynamicLibrary.process();
+    // NOTE: looked up apart from the calls below, so a libc whose errno
+    // cannot be found still writes owner-only.
+    final errors = _lookUpErrorReporting(
+        libc,
+        errnoSymbol ?? (Platform.isMacOS ? '__error' : '__errno_location'),
+        strerrorSymbol ?? 'strerror');
     try {
       final read = libc.lookupFunction<
           IntPtr Function(Int32, Pointer<Uint8>, Size),
@@ -261,10 +283,6 @@ final class _Libc {
       final utimensat = libc.lookupFunction<
           Int32 Function(Int32, Pointer<Utf8>, Pointer<Void>, Int32),
           _UtimensatFunction>('utimensat');
-      final errno = libc.lookupFunction<Pointer<Int32> Function(),
-          _ErrnoFunction>(Platform.isMacOS ? '__error' : '__errno_location');
-      final strerror = libc.lookupFunction<Pointer<Utf8> Function(Int32),
-          _StrerrorFunction>('strerror');
       // NOTE: open's mode is variadic, and mode_t is 16 bits on macOS and
       // 32 bits on Linux.
       final open = libc.lookupFunction<
@@ -283,8 +301,7 @@ final class _Libc {
             close: close,
             geteuid: geteuid,
             utimensat: utimensat,
-            errno: errno,
-            strerror: strerror,
+            errors: errors,
             currentDirectory: -2,
             noFollow: 0x20);
       }
@@ -300,13 +317,29 @@ final class _Libc {
           close: close,
           geteuid: geteuid,
           utimensat: utimensat,
-          errno: errno,
-          strerror: strerror,
+          errors: errors,
           currentDirectory: -100,
           noFollow: 0x100);
     } on ArgumentError {
       return null;
     }
+  }
+}
+
+/// errno and strerror, looked up as [errnoSymbol] and [strerrorSymbol], or
+/// null when either is not found.
+_ErrorReporting? _lookUpErrorReporting(
+    DynamicLibrary libc, String errnoSymbol, String strerrorSymbol) {
+  try {
+    return (
+      errno: libc.lookupFunction<Pointer<Int32> Function(), _ErrnoFunction>(
+          errnoSymbol),
+      strerror:
+          libc.lookupFunction<Pointer<Utf8> Function(Int32), _StrerrorFunction>(
+              strerrorSymbol),
+    );
+  } on ArgumentError {
+    return null;
   }
 }
 

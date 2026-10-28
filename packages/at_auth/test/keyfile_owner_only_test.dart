@@ -523,6 +523,19 @@ void main() {
       expect(target.readAsStringSync(), 'theirs');
     });
   });
+
+  test('Owner-only writes stay on when errno cannot be looked up', () {
+    expect(lookUpLibcForTesting(), (ownerOnlyWrites: true, osErrors: true),
+        reason: "this libc's own names find errno and its description");
+    expect(lookUpLibcForTesting(errnoSymbol: 'no_such_errno'),
+        (ownerOnlyWrites: true, osErrors: false),
+        reason: 'a libc without errno still writes owner-only, and its '
+            'failures carry no OS error');
+    expect(lookUpLibcForTesting(strerrorSymbol: 'no_such_strerror'),
+        (ownerOnlyWrites: true, osErrors: false),
+        reason: 'a libc without strerror still writes owner-only, and its '
+            'failures carry no OS error');
+  });
 }
 
 Future<String> _readNoFollowInIsolate(String path) =>
