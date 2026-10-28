@@ -132,6 +132,15 @@ abstract interface class AtLookUp {
       {String? sharedWith, Metadata? metadata});
 
   /// lookup
+  ///
+  /// {@template at_lookup.lookup.verifyData}
+  /// `verifyData: true` never worked before at_lookup 3.7.0: earlier releases
+  /// returned the value even when its signature did not verify. From 3.7.0 it
+  /// returns the value only when its signature verifies against the sharer's
+  /// public key. That key is fetched through the same atServer as the value,
+  /// so the check rests on that atServer and on the sharer's. Proper data
+  /// verification will come in a future minor version of at_client.
+  /// {@endtemplate}
   @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   Future<String> lookup(String key, String sharedBy,
       {bool auth = true, bool verifyData = false});
@@ -376,6 +385,8 @@ abstract interface class AtLookupMuxable implements AtLookUp {
       bool showHiddenKeys = false});
 
   /// As [AtLookUp.lookup], and additionally [metadata].
+  ///
+  /// {@macro at_lookup.lookup.verifyData}
   @Deprecated('Use executeVerb with a LookupVerbBuilder; removed in 4.0.0')
   @override
   Future<String> lookup(String key, String sharedBy,
