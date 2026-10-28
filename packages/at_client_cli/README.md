@@ -108,7 +108,6 @@ Full step-by-step walkthrough:
 `CLIBase` turns the standard command-line flags into an online client:
 
 ```dart
-import 'package:at_client/at_client.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 
 Future<void> main(List<String> args) async {
@@ -130,11 +129,12 @@ online, and throws if it does not. Pass `preference:` an
 ### The lifecycle verbs, with `CliKeys`
 
 A program that does not take `CLIBase`'s flags calls at_client's verbs
-itself. `CliKeys` gives them the keyfile and store a command-line program
-keeps:
+itself. The one import carries them, since at_client_cli re-exports
+at_client's native API, the Hive store, the registrar and the logging
+handlers. `CliKeys` gives the verbs the keyfile and store a command-line
+program keeps:
 
 ```dart
-import 'package:at_client/at_client_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 
 final preference = AtClientPreference()..namespace = 'my_app';

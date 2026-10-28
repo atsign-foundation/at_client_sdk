@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_client/at_client_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 
 import '../util/custom_arg_parser.dart';

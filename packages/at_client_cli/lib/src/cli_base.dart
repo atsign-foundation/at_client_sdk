@@ -1,10 +1,8 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_client/at_client_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
 

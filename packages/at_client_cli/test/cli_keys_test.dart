@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_client/hive.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:test/test.dart';
 
