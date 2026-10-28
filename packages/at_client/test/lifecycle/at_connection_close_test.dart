@@ -87,15 +87,18 @@ void main() {
           atLookUp: lookUp,
           syncServiceBuilder: (_) => NoOpSyncService());
       final before = client.connection.current;
+      // Ends when the stop closes the connection state.
+      final emitted = client.connection.changes.toList();
 
       await client.stop();
 
       verify(() => lookUp.stop()).called(greaterThan(0));
       expect(before.cause, isNot(AtConnectionCause.stopped));
-      expect(client.connection.current.cause, AtConnectionCause.stopped,
+      expect((await emitted).map((s) => s.cause), [AtConnectionCause.stopped],
           reason: 'the connection state is closed before the services and '
-              'the remote are, so a failure the stop caused is not filed '
-              'as the atServer being unreachable');
+              'the remote are, so a failure the stop caused is never filed '
+              'as the atServer being unreachable, not even for a moment');
+      expect(client.connection.current.cause, AtConnectionCause.stopped);
     });
   });
 }

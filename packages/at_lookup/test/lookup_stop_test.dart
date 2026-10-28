@@ -164,6 +164,21 @@ void main() {
       connectGate!.complete();
     });
 
+    test('called again, waits for the first stop', () async {
+      final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+
+      final first = atLookup.stop();
+      final second = atLookup.stop();
+
+      expect(identical(second, first), isTrue,
+          reason: 'a second stop is the first one, not another teardown');
+      await Future.wait([first, second]);
+      expect(atLookup.isNotifying, isFalse);
+      expect(identical(atLookup.stop(), first), isTrue,
+          reason: 'a stop after the first has finished is the same stop');
+    });
+
     test('ends a reconnect loop sleeping on its backoff', () async {
       final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();
