@@ -75,8 +75,7 @@ void main() {
     when(() => mockAtLookUp.executeVerb(any()))
         .thenAnswer((_) async => 'data:2');
     when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-    when(() => mockPkam.authenticate(any(), any(),
-            enrollmentId: any(named: 'enrollmentId')))
+    when(() => mockPkam.authenticate(any(), any()))
         .thenAnswer((_) async => true);
     when(() => mockAtEnrollment.submit(any(), any())).thenAnswer((_) async =>
         AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved));

@@ -139,9 +139,7 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${(builder as VerbBuilder).buildCommand()}');
     });
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async {
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
       if (approved) return true;
       throw AtLookUpException('AT0026', 'enrollment $enrollmentId is pending');
     });

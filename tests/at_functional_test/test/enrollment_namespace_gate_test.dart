@@ -146,8 +146,7 @@ void main() {
 
     try {
       expect(
-          await enrolleeLookup.pkamAuthenticate(
-              enrollmentId: scoped.enrollmentId),
+          await enrolleeLookup.pkamAuthenticate(),
           true,
           reason: 'the enrollment is approved, so it must authenticate — an '
               'enrollment that cannot connect would fail both arms below and '
@@ -229,8 +228,7 @@ void main() {
 
     try {
       expect(
-          await enrolleeLookup.pkamAuthenticate(
-              enrollmentId: scoped.enrollmentId),
+          await enrolleeLookup.pkamAuthenticate(),
           true,
           reason: 'an enrollment that cannot connect fails every arm below '
               'and says nothing about namespaces');

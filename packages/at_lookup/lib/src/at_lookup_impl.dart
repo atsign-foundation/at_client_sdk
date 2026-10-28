@@ -393,12 +393,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Runs [authenticate] against this connection, under the PKAM mutex, and
   /// returns true once it has authenticated.
   ///
-  /// [enrollmentId] is what gets recorded on the connection. Only a caller
-  /// that names one - [pkamAuthenticate] - gets it recorded; a verb going
-  /// through [_process] names none, since the authenticator it runs is opaque
-  /// and does not report which enrollment it signed as.
-  Future<bool> _authenticateWith(AtAuthenticator authenticate,
-      {String? enrollmentId}) async {
+  /// The enrollment recorded on the connection is the one named by the
+  /// `pkam:` the atServer accepted, none for a CRAM or a legacy PKAM.
+  Future<bool> _authenticateWith(AtAuthenticator authenticate) async {
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -409,11 +406,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (connection.getMetaData()!.isAuthenticated) {
         return true;
       }
-      if (!await authenticate(this)) {
+      final sent = _SentCommands(this);
+      if (!await authenticate(sent)) {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
-      _recordAuthentication(connection, enrollmentId: enrollmentId);
+      _recordAuthentication(connection, enrollmentId: sent.pkamEnrollmentId);
       return true;
     } finally {
       _pkamAuthenticationMutex.release();
@@ -421,16 +419,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   @override
-  Future<bool> pkamAuthenticate({String? enrollmentId}) =>
-      _unlessStopped(() => _pkamAuthenticate(enrollmentId: enrollmentId));
+  Future<bool> pkamAuthenticate() => _unlessStopped(_pkamAuthenticate);
 
-  Future<bool> _pkamAuthenticate({String? enrollmentId}) async {
+  Future<bool> _pkamAuthenticate() async {
     final authenticate = authenticator;
     if (authenticate == null) {
       throw UnAuthenticatedException('pkamAuthenticate requires an '
           'AtAuthenticator - pass one to AtLookUp.withSecureSocket.');
     }
-    return _authenticateWith(authenticate, enrollmentId: enrollmentId);
+    return _authenticateWith(authenticate);
   }
 
   Future<String> _plookup(PLookupVerbBuilder builder) async {
@@ -1089,5 +1086,32 @@ class _ConnectionPreamble implements AtCommandExecutor {
     return _lookUp.messageListener.read(
         maxWaitMilliSeconds: maxWaitMilliSeconds,
         transientWaitTimeMillis: transientWaitTimeMillis);
+  }
+}
+
+/// Hands an authenticator's commands to the lookup, and keeps the enrollment
+/// named by the last `pkam:` among them that the atServer accepted.
+class _SentCommands implements AtCommandExecutor {
+  static final _pkam = RegExp(VerbSyntax.pkam);
+
+  final AtCommandExecutor _lookup;
+
+  /// The enrollment the last accepted `pkam:` named; null when none was
+  /// accepted or it named none.
+  String? pkamEnrollmentId;
+
+  _SentCommands(this._lookup);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    final response = await _lookup.sendSync(command,
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
+    final pkam = _pkam.firstMatch(command.trim());
+    if (pkam != null && response == 'data:success') {
+      pkamEnrollmentId = pkam.namedGroup('enrollmentId');
+    }
+    return response;
   }
 }

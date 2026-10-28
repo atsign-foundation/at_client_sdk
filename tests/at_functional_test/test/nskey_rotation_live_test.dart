@@ -364,8 +364,7 @@ void main() {
           TestUtils.lookUpAs(atSign, enrolled.keys,
         enrollmentId: enrolled.enrollmentId);
       try {
-        final accepted =
-            await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);
+        final accepted = await lookup.pkamAuthenticate();
         return accepted ? 'accepted' : 'refused without a reason';
       } catch (e) {
         return '$e';

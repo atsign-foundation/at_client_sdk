@@ -157,9 +157,9 @@ abstract interface class AtLookUp {
   /// Authenticates this lookup's connection with its authenticator, opening
   /// the connection when there is none, and returns true once it has.
   ///
-  /// [enrollmentId] is recorded on the connection as the enrollment it
-  /// authenticated as.
-  Future<bool> pkamAuthenticate({String? enrollmentId});
+  /// The connection records the enrollment named by the `pkam:` the atServer
+  /// accepted, as [AtConnectionMetaData.authenticatedAsEnrollmentId].
+  Future<bool> pkamAuthenticate();
 
   /// Closes this lookup's connection: the next call opens a new one and
   /// authenticates again as the same atSign, with the credentials the lookup

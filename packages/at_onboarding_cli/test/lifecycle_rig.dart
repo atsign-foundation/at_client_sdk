@@ -40,7 +40,7 @@ Future<int> refusedPort() async {
 /// A lookup whose PKAM attempt does what [onPkam] says.
 MockAtLookupImpl lookUpAnswering(Future<bool> Function() onPkam) {
   final lookUp = MockAtLookupImpl();
-  when(() => lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+  when(() => lookUp.pkamAuthenticate())
       .thenAnswer((_) => onPkam());
   when(() => lookUp.close()).thenAnswer((_) async {});
   when(lookUp.stop).thenAnswer((_) async {});

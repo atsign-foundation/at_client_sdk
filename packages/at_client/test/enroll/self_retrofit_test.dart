@@ -6,6 +6,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show selfRetrofit;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -26,6 +27,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
+    registerFallbackValue((AtCommandExecutor _) async => true);
   });
 
   setUp(() {
@@ -66,11 +68,16 @@ void main() {
   /// An atServer that auto-approves the self-enrollment as [newId], shows an
   /// empty roster, answers `enroll:fetch` with [record] when given one, and
   /// records every command it was sent, each completed PKAM as
-  /// `pkam:<enrollmentId>`, and each `close()`.
+  /// `pkam:<the enrollment its pkam: command named>`, and each `close()`.
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
       {Map<String, dynamic>? record}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
+    AtAuthenticator? installed;
+    when(() => lookUp.authenticator = any()).thenAnswer((invocation) {
+      installed = invocation.positionalArguments.first as AtAuthenticator?;
+      return null;
+    });
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
@@ -96,14 +103,14 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${builder.buildCommand()}');
     });
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((invocation) async {
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
       // NOTE: a round trip, as an atServer's challenge is, recorded once it
       // completes, so an attempt that gives up before then is seen not to
       // have authenticated.
       await Future<void>.delayed(const Duration(milliseconds: 1));
-      sent.add('pkam:${invocation.namedArguments[#enrollmentId]}');
+      final wire = _PkamAtServer();
+      if (installed != null) await installed!(wire);
+      sent.add('pkam:${wire.enrollmentId}');
       return true;
     });
     when(() => lookUp.close()).thenAnswer((_) async => sent.add('close()'));
@@ -231,4 +238,22 @@ void main() {
 
     await client.stop();
   });
+}
+
+/// Answers an authenticator's `from:` with a challenge for `@alice🛠` and its
+/// `pkam:` with success, keeping the enrollment that `pkam:` named.
+class _PkamAtServer implements AtCommandExecutor {
+  String? enrollmentId;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    if (command.startsWith('from:')) {
+      return 'data:_70ce5d4e-1b8e-4a7c-9d1e-7e6c2a9b8f10@alice🛠'
+          ':4f3c2b1a-9e8d-4c7b-a6f5-e4d3c2b1a098';
+    }
+    enrollmentId =
+        RegExp(r'^pkam:.*:enrollmentId:([^:]+):').firstMatch(command)?[1];
+    return 'data:success';
+  }
 }

@@ -955,9 +955,8 @@ class AtClientImpl implements AtClient {
       return AtConnectionState.offline(AtConnectionCause.unattempted);
     }
     try {
-      final authenticated = await remote.atLookUp
-          .pkamAuthenticate(enrollmentId: enrollmentId)
-          .timeout(budget);
+      final authenticated =
+          await remote.atLookUp.pkamAuthenticate().timeout(budget);
       if (authenticated) return AtConnectionState.online();
       return AtConnectionState.offline(AtConnectionCause.unreachable,
           error: 'the atServer gave no challenge to sign');

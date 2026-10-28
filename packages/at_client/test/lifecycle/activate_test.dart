@@ -94,9 +94,8 @@ void main() {
     // The first authenticator installed is the CRAM leg's, and it runs
     // against this atServer, which accepts the digest of cramSecret over its
     // challenge and nothing else; the PKAM legs after it are accepted.
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => installed.length == 1
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async =>
+        installed.length == 1
             ? installed.single!(_CramAtServer(cramSecret))
             : true);
     when(() => lookUp.close()).thenAnswer((_) async {});

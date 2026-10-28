@@ -72,22 +72,32 @@ void main() {
       ':c3d345fc-5691-4f90-bc34-17cba31f060f';
 
   group('A connection records the identity it authenticated as', () {
-    /// An authenticator that sends the from: challenge over the wire, then
-    /// reports [succeeds] — standing in for whatever real signing at_auth
-    /// would do.
-    AtAuthenticator authenticatorAnswering(bool succeeds) {
+    const enrollmentId = '5a21feb4-dc04-4603-829c-15f523789170';
+    const pkamAsEnrollment = 'pkam:signingAlgo:ecc_secp256r1:hashingAlgo:'
+        'sha256:enrollmentId:$enrollmentId:c2lnbmF0dXJl\n';
+    const legacyPkam = 'pkam:c2lnbmF0dXJl\n';
+
+    /// An authenticator that sends the from: challenge, then each of
+    /// [commands], and reports [succeeds], standing in for at_auth's signing.
+    AtAuthenticator authenticatorSending(List<String> commands,
+        {bool succeeds = true}) {
       return (executor) async {
         await executor.sendSync('from:@alice\n');
+        for (final command in commands) {
+          await executor.sendSync(command);
+        }
         return succeeds;
       };
     }
 
-    /// Wires the mocks for one from: exchange and hands back the metadata
-    /// object the connection will carry, so a test can read what the
-    /// authentication wrote onto it.
-    OutboundConnectionMetadata primeConnection() {
+    /// Wires the mocks so the atServer answers with [responses] in turn, and
+    /// hands back the metadata object the connection will carry.
+    OutboundConnectionMetadata primeConnection(List<String> responses) {
+      final answers = [...responses];
+      when(() => mockOutBoundConnection.write(any()))
+          .thenAnswer((_) => Future.value());
       when(() => mockOutboundListener.read())
-          .thenAnswer((_) => Future.value(fromChallenge));
+          .thenAnswer((_) => Future.value(answers.removeAt(0)));
       final metaData = OutboundConnectionMetadata()..isAuthenticated = false;
       when(() => mockOutBoundConnection.getMetaData()).thenReturn(metaData);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
@@ -100,19 +110,16 @@ void main() {
         socketListenerFactory: mockSecureSocketListenerFactory,
         outboundConnectionFactory: mockOutboundConnectionFactory);
 
-    test('pkam auth records the enrollment id it authenticated with', () async {
-      const enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      final metaData = primeConnection();
+    test('pkam auth records the enrollment its accepted pkam: named', () async {
+      final metaData = primeConnection([fromChallenge, 'data:success']);
       final atLookup = newAtLookup()
-        ..authenticator = authenticatorAnswering(true);
+        ..authenticator = authenticatorSending([pkamAsEnrollment]);
       final before = DateTime.now().toUtc();
 
-      expect(
-          await atLookup.pkamAuthenticate(enrollmentId: enrollmentIdFromServer),
-          true);
+      expect(await atLookup.pkamAuthenticate(), true);
 
-      expect(metaData.authenticatedAsEnrollmentId, enrollmentIdFromServer,
-          reason: 'the connection must carry the enrollment id it sent');
+      expect(metaData.authenticatedAsEnrollmentId, enrollmentId,
+          reason: 'the connection carries the enrollment its pkam: named');
       expect(metaData.authenticatedAt, isNotNull,
           reason: 'an authenticated connection must be stamped with when');
       expect(metaData.authenticatedAt!.isBefore(before), false,
@@ -120,33 +127,51 @@ void main() {
       expect(metaData.authenticatedAt!.isUtc, true);
     });
 
-    test(
-        'auth through executeCommand records no enrollment id, unlike '
-        'pkamAuthenticate', () async {
-      final metaData = primeConnection();
-      when(() => mockOutBoundConnection.write(any()))
-          .thenAnswer((_) => Future.value());
-      var readCount = 0;
-      when(() => mockOutboundListener.read()).thenAnswer(
-          (_) => Future.value(readCount++ == 0 ? fromChallenge : 'data:1234'));
+    test('a verb that authenticates the connection records the enrollment too',
+        () async {
+      final metaData =
+          primeConnection([fromChallenge, 'data:success', 'data:1234']);
       final atLookup = newAtLookup()
-        ..authenticator = authenticatorAnswering(true);
+        ..authenticator = authenticatorSending([pkamAsEnrollment]);
 
       final result =
           await atLookup.executeCommand('llookup:phone@alice\n', auth: true);
 
       expect(result, 'data:1234');
+      expect(metaData.authenticatedAsEnrollmentId, enrollmentId,
+          reason: 'a reconnect through a verb records what its pkam: named, '
+              'as pkamAuthenticate does');
+    });
+
+    test('a pkam: naming no enrollment records none', () async {
+      final metaData = primeConnection([fromChallenge, 'data:success']);
+      final atLookup = newAtLookup()
+        ..authenticator = authenticatorSending([legacyPkam]);
+
+      expect(await atLookup.pkamAuthenticate(), true);
+
+      expect(metaData.isAuthenticated, true);
       expect(metaData.authenticatedAsEnrollmentId, isNull,
-          reason: 'a verb-level authentication runs an opaque authenticator '
-              'that does not report which enrollment it signed as — the '
-              'recorded identity is what went on the wire, and nothing did');
-      expect(metaData.authenticatedAt, isNotNull);
+          reason: 'a legacy pkam: authenticates as no enrollment');
+    });
+
+    test('an enrollment the atServer refused is not recorded', () async {
+      final metaData = primeConnection(
+          [fromChallenge, 'error:AT0401-Exception: pkam refused']);
+      final atLookup = newAtLookup()
+        ..authenticator = authenticatorSending([pkamAsEnrollment]);
+
+      expect(await atLookup.pkamAuthenticate(), true);
+
+      expect(metaData.authenticatedAsEnrollmentId, isNull,
+          reason: 'only a pkam: the atServer accepted names the enrollment, '
+              'whatever the authenticator reports');
     });
 
     test('a refused pkam auth records nothing', () async {
-      final metaData = primeConnection();
+      final metaData = primeConnection([fromChallenge]);
       final atLookup = newAtLookup()
-        ..authenticator = authenticatorAnswering(false);
+        ..authenticator = authenticatorSending([], succeeds: false);
 
       await expectLater(atLookup.pkamAuthenticate(),
           throwsA(isA<UnAuthenticatedException>()));

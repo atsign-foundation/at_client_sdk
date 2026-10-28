@@ -599,8 +599,10 @@ Every one passed `secureSocketTransport(SecureSocketConfig())`, the client's
 two adding the preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath`. Three sites took an optional `AtLookUp?` and built one
 only when handed none; at_client's `open`, `activate`, `enroll`,
-`resumeEnrollment`, `authenticatesAs` and `buildAtClient` all carry that
-`atLookUp:` parameter still (C3), and 23 test files use it to inject a mock.
+`resumeEnrollment` and `buildAtClient` all carry that `atLookUp:` parameter
+still (C3), and test files use it to inject a mock. `authenticatesAs` loses
+it in 4.0.0 (Gary, 2026-10-28): on a lookup it was handed, it signed with
+that lookup's own authenticator while answering the enrollment the keys name.
 
 What that injection did not reach: when a test handed `open` a mock lookup,
 the client's own connection was the mock, but sync's `remoteSecondaryFor` and

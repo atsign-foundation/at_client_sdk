@@ -129,21 +129,17 @@ extension AtsignLifecycle on Atsign {
   /// `open` would have reported; a failure to reach the atServer is thrown
   /// as it is.
   ///
-  /// [lookUps] builds the connection; [atLookUp] is one to authenticate on
-  /// instead, for a caller that already holds one, and is left open.
+  /// [lookUps] builds the connection.
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
-    AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
     try {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
-          enrollmentId: enrollmentId,
-          on: atLookUp,
-          lookUps: lookUps ?? defaultLookUps());
+          enrollmentId: enrollmentId, lookUps: lookUps ?? defaultLookUps());
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -151,7 +147,7 @@ extension AtsignLifecycle on Atsign {
       }
       rethrow;
     }
-    if (atLookUp == null) await lookUp.close();
+    await lookUp.close();
     return enrollmentId;
   }
 

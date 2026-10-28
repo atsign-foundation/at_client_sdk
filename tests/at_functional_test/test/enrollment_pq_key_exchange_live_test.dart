@@ -128,8 +128,7 @@ void main() {
         enrollmentId: enrolled.enrollmentId);
 
     expect(
-        await enrolleeLookup.pkamAuthenticate(
-            enrollmentId: enrolled.enrollmentId),
+        await enrolleeLookup.pkamAuthenticate(),
         true,
         reason: 'the enrollment is approved, so its APKAM keypair must '
             'authenticate before it can collect anything');

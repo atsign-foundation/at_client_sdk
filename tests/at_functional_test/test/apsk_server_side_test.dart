@@ -130,8 +130,7 @@ void main() {
 
     try {
       expect(
-          await attackerLookup.pkamAuthenticate(
-              enrollmentId: attacker.enrollmentId),
+          await attackerLookup.pkamAuthenticate(),
           true,
           reason: 'the attacker enrollment is approved and must authenticate, '
               'or nothing below tests write restriction');

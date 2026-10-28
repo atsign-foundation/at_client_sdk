@@ -42,6 +42,8 @@ abstract class AtConnectionMetaData {
   DateTime? created;
   bool isClosed = false;
   bool isStale = false;
+  /// The enrollment this connection authenticated as: the one named by the
+  /// `pkam:` the atServer accepted, or null for a CRAM or a legacy PKAM.
   String? authenticatedAsEnrollmentId;
   DateTime? authenticatedAt;
 }

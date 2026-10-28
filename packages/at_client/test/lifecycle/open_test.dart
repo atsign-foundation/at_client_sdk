@@ -52,9 +52,7 @@ void main() {
   /// A lookup whose PKAM attempt does what [onPkam] says.
   MockAtLookupImpl lookUpAnswering(Future<bool> Function() onPkam) {
     final lookUp = MockAtLookupImpl();
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) => onPkam());
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) => onPkam());
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return lookUp;

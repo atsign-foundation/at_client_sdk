@@ -145,8 +145,7 @@ void main() {
         enrollCommand,
         allOf(contains('"appName":"wavi"'), contains('"deviceName":"laptop"'),
             contains('"signingAlgo":"mldsa65"')));
-    verifyNever(() => server.lookUp
-        .pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')));
+    verifyNever(() => server.lookUp.pkamAuthenticate());
   });
 
   test('the client\'s namespace fills a session that names none', () async {

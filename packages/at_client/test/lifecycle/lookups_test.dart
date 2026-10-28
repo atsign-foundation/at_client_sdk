@@ -57,9 +57,7 @@ void main() {
     final lookUp = MockAtLookupImpl();
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     when(() => lookUp.close()).thenAnswer((_) async {});
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;

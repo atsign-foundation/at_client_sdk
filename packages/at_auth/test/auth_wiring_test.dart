@@ -91,8 +91,7 @@ void main() {
       required bool activated,
       AtChops? chops}) {
     final pkam = MockPkamAuthenticator();
-    when(() => pkam.authenticate(any(), any(),
-            enrollmentId: enrollmentId ?? any(named: 'enrollmentId')))
+    when(() => pkam.authenticate(any(), any()))
         .thenAnswer((_) async => true);
     when(() => lookUp.secondaryAddressFinder)
         .thenReturn(FakeSecondaryAddressFinder());

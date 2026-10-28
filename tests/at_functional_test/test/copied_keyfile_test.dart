@@ -118,8 +118,7 @@ void main() {
 
     try {
       expect(
-          await copyLookup.pkamAuthenticate(
-              enrollmentId: response.enrollmentId),
+          await copyLookup.pkamAuthenticate(),
           true,
           reason: 'the second host authenticates as the SAME enrollment id. '
               'Two hosts, one enrollment, one revocable thing — which is the '
@@ -147,7 +146,7 @@ void main() {
       // reset, a timeout or a malformed command throws too, so only the
       // atServer's `AT0027 … is revoked` may pass this arm.
       await expectLater(
-          afterRevoke.pkamAuthenticate(enrollmentId: response.enrollmentId),
+          afterRevoke.pkamAuthenticate(),
           throwsA(predicate(
               (e) => '$e'.contains('AT0027') && '$e'.contains('is revoked'))),
           reason: 'revocation is per-enrollment, so one revoke cuts every '

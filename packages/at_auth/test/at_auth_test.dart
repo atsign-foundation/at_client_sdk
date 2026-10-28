@@ -150,8 +150,7 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
 
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
           signingAlgoType: SigningAlgoType.rsa2048);
@@ -200,8 +199,7 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
@@ -236,8 +234,7 @@ void main() {
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -288,8 +285,7 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async {});
       when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -317,8 +313,7 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))

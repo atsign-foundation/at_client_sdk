@@ -94,8 +94,7 @@ void main() {
         throw StateError('the mocked atServer has no answer for: '
             '${builder.buildCommand()}');
       });
-      when(() =>
-              lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+      when(() => lookUp.pkamAuthenticate())
           .thenAnswer((_) async => true);
       when(() => lookUp.close()).thenAnswer((_) async {});
       when(lookUp.stop).thenAnswer((_) async {});
@@ -225,8 +224,7 @@ void main() {
         throw StateError('the mocked atServer has no answer for: '
             '${(builder as VerbBuilder).buildCommand()}');
       });
-      when(() =>
-              lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+      when(() => lookUp.pkamAuthenticate())
           .thenAnswer((_) => decide(++attempts));
       when(() => lookUp.close()).thenAnswer((_) async {});
       when(lookUp.stop).thenAnswer((_) async {});

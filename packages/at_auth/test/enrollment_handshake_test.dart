@@ -95,7 +95,7 @@ void main() {
     final sealedSelfKey = await sealed(aesKeyMap[atSign]!);
 
     final polled = <Poll>[];
-    when(() => lookup.pkamAuthenticate(enrollmentId: '123'))
+    when(() => lookup.pkamAuthenticate())
         .thenAnswer((_) async {
       final outcome =
           polled.length < script.length ? script[polled.length] : Poll.approved;

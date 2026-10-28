@@ -214,7 +214,7 @@ void main() {
             auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
           'value': sealer.encrypt(selfEncryptionKey, iv: iv)
         })));
-    when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
+    when(() => mockAtLookUp.pkamAuthenticate())
         .thenAnswer((_) => Future.value(true));
 
     when(() => (mockAtLookUp as AtLookupImpl).close())
@@ -677,7 +677,7 @@ void main() {
             sealer.encrypt(value, iv: iv);
 
         AtLookupMuxable mockAtLookUp = MockAtLookUp();
-        when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
+        when(() => mockAtLookUp.pkamAuthenticate())
             .thenAnswer((_) async => true);
         when(() => mockAtLookUp.executeCommand(
                 any(

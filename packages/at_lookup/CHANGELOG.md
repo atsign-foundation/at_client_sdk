@@ -12,8 +12,8 @@
 - breaking: `AtLookupImpl` requires `secondaryAddressFinder` and
   `transportFactory`, and no longer takes `secureSocketConfig` — that now
   belongs to the transport factory. `AtLookUp.withSecureSocket` requires
-  `secondaryAddressFinder` too. Native callers can pass
-  `atLookupOverSecureSocket(...)` from `at_lookup_io.dart` instead.
+  `secondaryAddressFinder` too. Native callers can use
+  `secureSocketLookUps()` from `at_lookup_io.dart` instead.
 - breaking: `AtLookupImpl.findSecondary` is removed. Use a
   `SecondaryAddressFinder`.
 - breaking: `MonitorClient` is removed. It has no replacement.
@@ -32,7 +32,25 @@
 - breaking: `AtLookUp`'s credential-ladder members (`atChops`, `enrollmentId`,
   `signingAlgoType`, `hashingAlgoType`, `authenticate_cram`, and
   `executeVerb`'s `sync` param) are removed. A connection's authenticated
-  enrollment is `AtConnectionMetaData.authenticatedAsEnrollmentId`.
+  enrollment is `connection?.getMetaData()?.authenticatedAsEnrollmentId`.
+- breaking: `AtLookUp`'s `update`, `lookup`, `plookup`, `llookup`, `delete`
+  and `scan` are removed, with `AtLookupMuxable.readResponse`. Run a verb
+  builder through `executeVerb` instead.
+- breaking: `cramAuthenticate`, `authenticate(privateKey)` and the
+  `privateKey` and `cramSecret` fields are removed. For CRAM, set
+  `authenticator` to at_auth's `authenticatorForCramSecret(...)` and call
+  `pkamAuthenticate()`.
+- breaking: `atLookupOverSecureSocket` is removed. Use
+  `AtLookUp.withSecureSocket` or `secureSocketLookUps()` with an
+  authenticator.
+- breaking: the `secondaryAddressFinder` setter is removed; pass the finder
+  when the lookup is built.
+- breaking: `pkamAuthenticate` takes no `enrollmentId`; the authenticator
+  decides. `authenticatedAsEnrollmentId` names the enrollment the atServer
+  accepted, after a reconnect too.
+- feat: `authenticator` and `stop()` are on `AtLookUp` itself, not only on
+  `AtLookupMuxable`.
+- build: no longer depends on `at_chops`.
 
 ## 3.7.0-rc5
 
