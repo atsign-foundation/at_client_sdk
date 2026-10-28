@@ -88,10 +88,9 @@ at_utils:
       allowed_offenders: []
       max_blocked_packages: 0
       min_files_walked: 10
-    - barrel: package:at_utils/at_progress.dart
-      allowed_offenders: []
-      max_blocked_packages: 0
-      min_files_walked: 1
+    # at_progress.dart has no ratchet: its walk is two files, and no floor
+    # both sits under two and above one. at_auth.dart's ratchet walks it, and
+    # at_utils' web_safe_test.dart walks it for dart:io.
   probe:
     - package:at_utils/at_utils.dart
     - package:at_utils/at_logger.dart
