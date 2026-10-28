@@ -224,10 +224,6 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/util/enroll_list_request_param.dart',
   'package:at_commons/at_commons.dart',
   'package:at_client/src/collections/collections.dart',
-  'package:at_client/src/at_collection/collections.dart',
-  'package:at_client/src/at_collection/at_collection_model.dart',
-  'package:at_client/src/at_collection/at_json_collection_model.dart',
-  'package:at_client/src/at_collection/at_collection_model_factory.dart',
 };
 
 /// The exports of `lib/at_client_mixins.dart`, as reviewed. A refactor that

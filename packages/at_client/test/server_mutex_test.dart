@@ -37,8 +37,7 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
     when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => atClient.enrollmentId).thenReturn(enrollmentId);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => remote.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as VerbBuilder;
       sent.add(builder.buildCommand());
       if (builder is UpdateVerbBuilder) {
@@ -388,8 +387,7 @@ void main() {
     test('Taking a lock writes nothing to the local store', () async {
       const atSign = '@servermutexlocal';
       final remote = MockRemoteSecondary();
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
         if (builder is UpdateVerbBuilder) return 'data:-1';
         throw StateError('unexpected verb: ${builder.runtimeType}');

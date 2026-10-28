@@ -168,8 +168,7 @@ void main() {
       remoteCommitId = 1;
       remoteUpdateRequestCount = 0;
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<UpdateVerbBuilder>()),
-          sync: any(named: "sync"))).thenAnswer((invocation) async {
+          any(that: isA<UpdateVerbBuilder>()))).thenAnswer((invocation) async {
         remoteUpdateRequestCount++;
         var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
         print('UpdateVerbBuilder : ${builder.buildCommand()}');
@@ -277,9 +276,9 @@ void main() {
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
 
-        when(() => mockLocalSecondary.executeVerb(
-            any(that: isA<UpdateVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockLocalSecondary
+                .executeVerb(any(that: isA<UpdateVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             // print('mockLocalSecondary.executeVerb with UpdateVerbBuilder'
@@ -293,9 +292,9 @@ void main() {
           }
         });
 
-        when(() => mockRemoteSecondary.executeVerb(
-            any(that: isA<UpdateVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<UpdateVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             // print('mockRemoteSecondary.executeVerb with UpdateVerbBuilder'
@@ -404,9 +403,9 @@ void main() {
         // in for that has to answer it.
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
-        when(() => mockLocalSecondary.executeVerb(
-            any(that: isA<DeleteVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockLocalSecondary
+                .executeVerb(any(that: isA<DeleteVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           // print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {
@@ -418,9 +417,9 @@ void main() {
                 'mockLocalSecondary.executeVerb called with unexpected DeleteVerbBuilder');
           }
         });
-        when(() => mockRemoteSecondary.executeVerb(
-            any(that: isA<DeleteVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<DeleteVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {

@@ -65,9 +65,12 @@ void main() {
         contains('package:hive/hive.dart'));
     expect(importsOf['src/storage/sqlite/sqlite_at_client_storage.dart'],
         contains('package:at_persistence_secondary_server/sqlite.dart'));
-    expect(importsOf['src/at_collection/impl/collection_methods_impl.dart'],
-        contains('package:at_client/src/at_collection/collections.dart'),
-        reason: 'written there as ../collections.dart');
+    expect(
+        _resolve('../collections.dart',
+            from: 'src/collections/impl/collection_item.dart'),
+        'package:at_client/src/collections/collections.dart',
+        reason: 'no library imports relatively today, so the resolver is '
+            'checked on its own');
   });
 
   for (final MapEntry(key: name, value: backend) in _backends.entries) {

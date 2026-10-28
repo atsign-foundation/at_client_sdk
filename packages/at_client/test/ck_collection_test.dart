@@ -115,7 +115,6 @@ void main() {
     });
     final deleted = <String>[];
     when(() => client.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((inv) async {
       final key = (inv.positionalArguments[0] as AtKey).toString();

@@ -12,7 +12,6 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
-import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
 /// Set the preferences for your application and pass it to
@@ -412,11 +411,6 @@ class AtClientPreference {
 
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
-
-  /// Poorly named variable which used to control some aspects of at_client's
-  /// default data encryption. Is now fully ignored.
-  @Deprecated('Ignored. Will be removed in next major version')
-  Version atProtocolEmitted = Version(2, 0, 0);
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 

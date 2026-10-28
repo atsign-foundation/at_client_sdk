@@ -16,10 +16,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/stream/stream_verb_retired.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
@@ -27,17 +24,6 @@ abstract class AtClient {
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
-
-  /// The persistence bundle backing this client when it runs on a Hive
-  /// storage, the default or one the app passed; `null` on any other storage
-  /// or before it has opened.
-  /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
-  /// `null` on the client. Callers must not close it: the storage that holds
-  /// it closes it, when the client stops for a storage built with
-  /// `closedByClient: true`, else when its owner closes the storage.
-  @Deprecated('Read the keystore from the AtClientStorage the client was '
-      'given; removed in 4.0')
-  AtPersistenceBundle? get persistenceBundle;
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
   /// keystore mutation that passes through the update path,
@@ -174,8 +160,6 @@ abstract class AtClient {
   /// to false.
   /// Additional metadata can be set using [AtKey.metadata]
   ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
-  ///
   /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
   ///
   /// From at_client v3.0.55 lowercase will be enforced on all AtKey types
@@ -209,7 +193,6 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
-  /// Starting version 3.0.0 [isDedicated] is deprecated
   /// Throws [AtValueException] if invalid value type is found
   ///
   /// Throws [AtKeyException] if invalid key or metadata is found
@@ -222,15 +205,13 @@ abstract class AtClient {
   ///
   /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
   Future<bool> put(AtKey key, dynamic value,
-      {bool isDedicated = false, PutRequestOptions? putRequestOptions});
+      {PutRequestOptions? putRequestOptions});
 
   /// Used to store the textual data into the keystore.
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
   /// has to be shared with another atSign.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace.
-  ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   ///
   /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
   ///
@@ -293,7 +274,6 @@ abstract class AtClient {
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
   ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -355,8 +335,7 @@ abstract class AtClient {
   ///
   /// Throws [AtClientException] if the cloud secondary is invalid or not reachable
   ///
-  Future<AtValue> get(AtKey key,
-      {bool isDedicated = false, GetRequestOptions? getRequestOptions});
+  Future<AtValue> get(AtKey key, {GetRequestOptions? getRequestOptions});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
@@ -382,8 +361,6 @@ abstract class AtClient {
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
-  ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   ///
   /// [deleteRequestOptions] allows additional options to be provided. See [DeleteRequestOptions]
   /// ```
@@ -426,8 +403,7 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
-  Future<bool> delete(AtKey key,
-      {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
+  Future<bool> delete(AtKey key, {DeleteRequestOptions? deleteRequestOptions});
 
   /// Does a key exist
   Future<bool> keyExists(AtKey key, bool? useRemoteAtServer);
@@ -513,8 +489,7 @@ abstract class AtClient {
       PriorityEnum? priority,
       StrategyEnum? strategy,
       int? latestN,
-      String? notifier,
-      bool isDedicated = false});
+      String? notifier});
 
   /// Notifies the [NotificationParams.atKey] to [notificationParams.atKey.sharedWith] user
   /// of the atSign. Optionally, operation, value and metadata can be set along with key to
@@ -631,23 +606,6 @@ abstract class AtClient {
   @Deprecated("Obsolete. Use the NotificationService")
   Future<void> startMonitor(String privateKey, Function acceptStream,
       {String? regex});
-
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
-  /// so nothing is sent.
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
-      {String namespace});
-
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
-  /// so no connection is opened.
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<void> sendStreamAck(
-      String streamId,
-      String fileName,
-      int fileLength,
-      String senderAtSign,
-      Function streamCompletionCallBack,
-      Function streamReceiveCallBack);
 
   static const defaultSppExpiry = Duration(minutes: 5);
 

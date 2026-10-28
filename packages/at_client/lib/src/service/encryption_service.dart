@@ -21,30 +21,6 @@ class EncryptionService {
     logger = AtSignLogger('EncryptionService ($atSign)');
   }
 
-  /// Throws [UnsupportedError]: only the stream transfer used this.
-  @Deprecated('Only the stream transfer used this; it throws UnsupportedError '
-      'and is removed in v4. Encrypt for another atSign with AtClient.put or '
-      'notify')
-  Future<List<int>> encryptStream(List<int> value, String sharedWith,
-          {String? ivBase64}) async =>
-      throw UnsupportedError('EncryptionService.encryptStream is retired with '
-          'the stream transfer; encrypt with AtClient.put or notify');
-
-  /// Decrypts [encryptedValue] with the AES key [sharedKey].
-  @Deprecated('Use EncryptionUtil.decryptBytes; removed in v4')
-  List<int> decryptStream(List<int> encryptedValue, String sharedKey,
-          {String? ivBase64}) =>
-      EncryptionUtil.decryptBytes(encryptedValue, sharedKey,
-          ivBase64: ivBase64);
-
-  /// Throws [UnsupportedError]: only the stream transfer used this.
-  @Deprecated('Only the stream transfer used this; it throws UnsupportedError '
-      'and is removed in v4. AtClient.get decrypts what is shared with you')
-  Future<String> getSharedKeyForDecryption(String sharedBy) async =>
-      throw UnsupportedError('EncryptionService.getSharedKeyForDecryption is '
-          'retired with the stream transfer; AtClient.get decrypts what is '
-          'shared with you');
-
   /// Used in atmosphere pro
   String generateFileEncryptionKey() {
     return EncryptionUtil.generateAESKey();

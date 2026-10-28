@@ -46,8 +46,7 @@ MockRemoteSecondary buildRecordingRemote({
         })}';
   }
 
-  when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-      .thenAnswer((inv) async {
+  when(() => remote.executeVerb(any())).thenAnswer((inv) async {
     final builder = inv.positionalArguments[0];
     if (builder is UpdateVerbBuilder) {
       final key = builder.atKey.toString();

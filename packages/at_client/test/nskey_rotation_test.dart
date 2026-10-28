@@ -105,8 +105,7 @@ void main() {
       return AtValue()..value = serving;
     });
 
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0];
       if (builder is UpdateVerbBuilder) {
         final key = builder.atKey.key;

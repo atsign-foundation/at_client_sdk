@@ -112,11 +112,9 @@ void main() {
   test('a delete landing mid-push survives the push round and syncs next',
       () async {
     final key = testKey();
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = key
-          ..value = 'v1',
-        sync: true);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = key
+      ..value = 'v1');
     final queued = await local.readSyncQueueEntry(key.toString());
     expect(queued!.op, SyncQueueOp.updateAll,
         reason: 'precondition: the update is what the round will push');
@@ -131,8 +129,7 @@ void main() {
         raced = true;
         // The race, made deterministic: the batch is "on the wire" and a
         // local delete replaces the queue entry before the response lands.
-        await local.executeVerb(DeleteVerbBuilder()..atKey = testKey(),
-            sync: true);
+        await local.executeVerb(DeleteVerbBuilder()..atKey = testKey());
       }
       // The server accepts what the batch carried. data "7" so the cached
       // server commit id does not advance past the stubbed pull cursor.
@@ -173,11 +170,9 @@ void main() {
   /// flight.
   Future<void> pushOnce(String response,
       {Future<void> Function()? duringBatch}) async {
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = testKey()
-          ..value = 'v1',
-        sync: true);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = testKey()
+      ..value = 'v1');
     var batches = 0;
     when(() =>
             remote.executeCommand(any(that: startsWith('batch:')), auth: true))
@@ -197,11 +192,9 @@ void main() {
 
   test('a write landing mid-push is not warned about', () async {
     await pushOnce('data:[{"id":1,"response":{"data":"7"}}]',
-        duringBatch: () async => local.executeVerb(
-            UpdateVerbBuilder()
-              ..atKey = testKey()
-              ..value = 'v2',
-            sync: true));
+        duringBatch: () async => local.executeVerb(UpdateVerbBuilder()
+          ..atKey = testKey()
+          ..value = 'v2'));
 
     expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
         reason: 'the premise: the newer write is still queued after the '

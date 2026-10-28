@@ -57,13 +57,3 @@ export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
 
 export 'package:at_client/src/collections/collections.dart';
-
-// The following have been deprecated and will be removed in next major version
-@Deprecated("Use AtClient.collection for collection-style operations")
-export 'package:at_client/src/at_collection/collections.dart';
-@Deprecated("Use AtClient.collection for collection-style operations")
-export 'package:at_client/src/at_collection/at_collection_model.dart';
-@Deprecated("Use AtClient.collection for collection-style operations")
-export 'package:at_client/src/at_collection/at_json_collection_model.dart';
-@Deprecated("Use AtClient.collection for collection-style operations")
-export 'package:at_client/src/at_collection/at_collection_model_factory.dart';

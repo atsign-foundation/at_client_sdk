@@ -127,16 +127,15 @@ void main() {
     setUp(() async {
       storage = await Directory.systemTemp.createTemp('conveyance_hiding');
       final remote = MockRemoteSecondary();
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer(
-              (inv) async => inv.positionalArguments[0] is ScanVerbBuilder
-                  ? 'data:${jsonEncode([
-                          'phone.$_namespace$_owner',
-                          'ck0000000000001.__ck.$_namespace$_owner',
-                          '@bob:ck0000000000001.__ck.$_namespace$_owner',
-                          'cached:$_owner:ck0000000000002.__ck.$_namespace@bob',
-                        ])}'
-                  : throw AtKeyNotFoundException('nothing else is stored'));
+      when(() => remote.executeVerb(any())).thenAnswer(
+          (inv) async => inv.positionalArguments[0] is ScanVerbBuilder
+              ? 'data:${jsonEncode([
+                      'phone.$_namespace$_owner',
+                      'ck0000000000001.__ck.$_namespace$_owner',
+                      '@bob:ck0000000000001.__ck.$_namespace$_owner',
+                      'cached:$_owner:ck0000000000002.__ck.$_namespace@bob',
+                    ])}'
+              : throw AtKeyNotFoundException('nothing else is stored'));
       client = await AtClientImpl.create(
         _owner,
         _namespace,

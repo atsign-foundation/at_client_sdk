@@ -24,7 +24,6 @@ void main() {
 
     final storage = client.storage;
     expect(storage, isA<HiveAtClientStorage>());
-    expect(client.persistenceBundle, isNotNull);
 
     await storage!.syncQueue
         .enqueue('k.wavi@storagewire', SyncQueueOp.updateAll);

@@ -88,7 +88,7 @@ void main() {
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@example.com';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       // Both the in-memory queue AND the persisted record must be
       // populated. atKey is the canonical string form.
@@ -111,7 +111,7 @@ void main() {
           ..metadata = Metadata())
         ..value = 'cipher';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final atKey = builder.buildKey();
       final pending = await localSecondary.peekSyncQueue();
@@ -130,7 +130,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = '12345',
-        sync: true,
       );
 
       final metaBuilder = UpdateVerbBuilder()
@@ -142,7 +141,7 @@ void main() {
             ..ttl = 60000))
         ..operation = AtConstants.updateMeta;
 
-      await localSecondary.executeVerb(metaBuilder, sync: true);
+      await localSecondary.executeVerb(metaBuilder);
 
       final atKey = metaBuilder.buildKey();
       final entry = await localSecondary.readSyncQueueEntry(atKey);
@@ -163,7 +162,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'will be deleted',
-        sync: true,
       );
 
       final deleteBuilder = DeleteVerbBuilder()
@@ -171,7 +169,7 @@ void main() {
           ..key = 'temp'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteBuilder, sync: true);
+      await localSecondary.executeVerb(deleteBuilder);
 
       final atKey = deleteBuilder.buildKey();
       final entry = await localSecondary.readSyncQueueEntry(atKey);
@@ -185,7 +183,7 @@ void main() {
         ..atKey = AtKey.local('marker', atSign).build()
         ..value = 'true';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       // Local keys are excluded by the syncEligibility predicate.
       expect(await localSecondary.syncQueueSize, 0);
@@ -203,7 +201,6 @@ void main() {
 
       await localSecondary.executeVerb(
         builder,
-        sync: true,
         cameFromServer: true,
       );
 
@@ -224,7 +221,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'first',
-        sync: true,
       );
       await localSecondary.executeVerb(
         UpdateVerbBuilder()
@@ -233,7 +229,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'first',
-        sync: true,
       );
       // Re-write phone — should NOT move it to the end of the
       // in-memory queue.
@@ -244,7 +239,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'second',
-        sync: true,
       );
 
       final pending = await localSecondary.peekSyncQueue();
@@ -368,7 +362,7 @@ void main() {
           await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final atKey = builder.buildKey();
       expect(matching('failed to enqueue $atKey'), hasLength(1),
@@ -388,7 +382,7 @@ void main() {
           await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final value = await localSecondary
           .executeVerb(LLookupVerbBuilder()..atKey = builder.atKey);
@@ -401,7 +395,7 @@ void main() {
       final localSecondary = await setUpLocalSecondary();
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       expect(await localSecondary.peekSyncQueue(), [builder.buildKey()],
           reason: 'the control has to actually queue, or it proves nothing '

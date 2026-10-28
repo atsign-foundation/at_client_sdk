@@ -11,6 +11,22 @@
   holds.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
+- breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
+  `EncryptionService.encryptStream`, `decryptStream` and
+  `getSharedKeyForDecryption`: atServers refuse the `stream:` command from
+  3.12.0. Encrypt for another atSign with `put` or `notify`.
+- breaking: `AtClient.persistenceBundle` is removed; read the keystore from
+  the `AtClientStorage` the client was given.
+- breaking: the legacy collection API (`AtCollectionModel`,
+  `AtJsonCollectionModel` and their factories) is removed; use
+  `AtClient.collection`.
+- breaking: the `isDedicated` parameter of `put`, `get`, `delete`, `notify`,
+  `getMeta`, `notifyList` and `notifyAll` is removed; it was ignored.
+- breaking: the `sync` parameter of `executeVerb` and
+  `RemoteSecondary.executeAndParse` is removed; it was ignored.
+- breaking: `RemoteSecondary.isAvailable` is removed; at_lookup's
+  `checkAtSignServer` says whether an atSign's atServer is reachable.
+- breaking: `AtClientPreference.atProtocolEmitted` is removed; it was ignored.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the
   client holds no key to sign with, including while its keyfile cannot be
   read.
@@ -40,16 +56,6 @@
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.
-- chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
-  3.5.0, now throw `UnsupportedError` without contacting an atServer, since
-  atServers refuse the `stream:` command these methods sent from 3.12.0. Both
-  are removed in v4.
-- chore: `EncryptionService.encryptStream` and `getSharedKeyForDecryption`,
-  reached through `AtClient.encryptionService`, now throw `UnsupportedError`,
-  since only the stream transfer used them: encrypt for another atSign with
-  `put` or `notify`. Both are removed in v4.
-- chore: `EncryptionService.decryptStream` is deprecated: use
-  `EncryptionUtil.decryptBytes`. It is removed in v4.
 - chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
   nothing reads it, and it is removed in v4.
 - `AtRpcClient` logs through `AtSignLogger.defaultLoggingHandler`; set it to

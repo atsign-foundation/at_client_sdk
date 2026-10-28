@@ -50,16 +50,14 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
       //1.1 delete self key in wavi namespace
       var deleteBuilder = DeleteVerbBuilder()..atKey = waviKey;
-      var deleteWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+      var deleteWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(deleteBuilder);
       expect(deleteWaviKeyResult, isNotNull);
       expect(deleteWaviKeyResult!.startsWith('data:'), true);
       //2. create a public key in buzz namespace
@@ -77,9 +75,8 @@ void main() {
       expect(updateBuzzKeyResult!.startsWith('data:'), true);
       //2.1 delete public key in buzz namespace
       deleteBuilder = DeleteVerbBuilder()..atKey = buzzKey;
-      var deleteBuzzKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+      var deleteBuzzKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(deleteBuilder);
       expect(deleteBuzzKeyResult, isNotNull);
       expect(deleteBuzzKeyResult!.startsWith('data:'), true);
       //3. create a key with no namespace
@@ -96,9 +93,8 @@ void main() {
       expect(noNamespaceKeyUpdateResult!.startsWith('data:'), true);
       //3.1 delete the key with no namespace
       deleteBuilder = DeleteVerbBuilder()..atKey = noNamespaceKey;
-      var deleteNoNamespaceKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+      var deleteNoNamespaceKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(deleteBuilder);
       expect(deleteNoNamespaceKeyResult, isNotNull);
       expect(deleteNoNamespaceKeyResult!.startsWith('data:'), true);
       //4. create a reserved key
@@ -109,16 +105,14 @@ void main() {
       verbBuilder = UpdateVerbBuilder()
         ..atKey = reservedKey
         ..value = 'randomsharedkey';
-      var reservedKeyUpdateResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var reservedKeyUpdateResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
       //4.1 delete the reserved key
       deleteBuilder = DeleteVerbBuilder()..atKey = reservedKey;
-      var deleteReservedKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+      var deleteReservedKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(deleteBuilder);
       expect(deleteReservedKeyResult, isNotNull);
       expect(deleteReservedKeyResult!.startsWith('data:'), true);
     });
@@ -145,9 +139,8 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
 
@@ -192,9 +185,8 @@ void main() {
       verbBuilder = UpdateVerbBuilder()
         ..atKey = reservedKey
         ..value = 'randomsharedkey';
-      var reservedKeyUpdateResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var reservedKeyUpdateResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
     });
@@ -220,9 +212,8 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
 
@@ -261,9 +252,8 @@ void main() {
       verbBuilder = UpdateVerbBuilder()
         ..atKey = reservedKey
         ..value = 'randomsharedkey';
-      var reservedKeyUpdateResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var reservedKeyUpdateResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
       // NOTE: the instance map is keyed (atSign, enrollmentId), so stopping
@@ -288,7 +278,7 @@ void main() {
       var deleteBuilder = DeleteVerbBuilder()..atKey = waviKey;
       var deleteWaviKeyResult = await enrolledAtClient
           .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+          .executeVerb(deleteBuilder);
       expect(deleteWaviKeyResult, isNotNull);
       expect(deleteWaviKeyResult!.startsWith('data:'), true);
       // delete public key in buzz namespace should fail
@@ -315,7 +305,7 @@ void main() {
       deleteBuilder = DeleteVerbBuilder()..atKey = reservedKey;
       var deleteReservedKeyResult = await enrolledAtClient
           .getLocalSecondary()!
-          .executeVerb(deleteBuilder, sync: false);
+          .executeVerb(deleteBuilder);
       expect(deleteReservedKeyResult, isNotNull);
       expect(deleteReservedKeyResult!.startsWith('data:'), true);
     });
@@ -347,9 +337,8 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
       //2. create a key in buzz namespace
@@ -436,9 +425,8 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
       //2. create a key in buzz namespace
@@ -555,9 +543,8 @@ void main() {
       var verbBuilder = UpdateVerbBuilder()
         ..atKey = waviKey
         ..value = '1234';
-      var updateWaviKeyResult = await atClient
-          .getLocalSecondary()!
-          .executeVerb(verbBuilder, sync: false);
+      var updateWaviKeyResult =
+          await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateWaviKeyResult, isNotNull);
       expect(updateWaviKeyResult!.startsWith('data:'), true);
       //2. create a key in buzz namespace

@@ -608,8 +608,7 @@ void main() {
               ]);
 
       final lockTakes = <String>[];
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0];
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key != '_nskeylock') {

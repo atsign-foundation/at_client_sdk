@@ -49,8 +49,7 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
     when(() => atClient.notificationService).thenReturn(notifications);
     when(() => atClient.isStopped).thenReturn(false);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => remote.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as VerbBuilder;
       commands.add(builder.buildCommand());
       if (builder is! UpdateVerbBuilder) {

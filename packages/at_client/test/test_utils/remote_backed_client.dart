@@ -103,7 +103,6 @@ MockAtClient buildRemoteBackedMockClient({
   });
 
   when(() => atClient.delete(any(),
-          isDedicated: any(named: 'isDedicated'),
           deleteRequestOptions: any(named: 'deleteRequestOptions')))
       .thenAnswer((inv) {
     final keyString = inv.positionalArguments[0].toString();

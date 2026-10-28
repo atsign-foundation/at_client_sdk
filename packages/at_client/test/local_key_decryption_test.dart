@@ -73,8 +73,8 @@ void main() {
           .thenReturn(mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenReturn(mockRemoteSecondary);
-      when(() => mockLocalSecondary.executeVerb(any<DeleteVerbBuilder>(),
-          sync: false)).thenAnswer((_) => Future.value('data:-1'));
+      when(() => mockLocalSecondary.executeVerb(any<DeleteVerbBuilder>()))
+          .thenAnswer((_) => Future.value('data:-1'));
       when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary.executeVerb(any<LLookupVerbBuilder>()))

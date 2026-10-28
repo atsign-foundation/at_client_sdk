@@ -112,8 +112,7 @@ void main() {
                 status: entry.status)
         ])));
     });
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       // NOTE: type-test, never cast to UpdateVerbBuilder — the lock release is
       // a DeleteVerbBuilder, and a cast throws inside the mock where MintLock's
       // catch swallows it, reporting a release that never happened.
@@ -558,8 +557,7 @@ void main() {
               pub: base64Encode(winner.publicKey))
         ])));
     });
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       verbs.add(inv.positionalArguments[0] as VerbBuilder);
       return 'data:1';
     });
@@ -597,8 +595,7 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       String? publishedValue;
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key == pqSigningRootMintLockRecordName) {
@@ -650,8 +647,7 @@ void main() {
         if (reads <= 2) throw KeyNotFoundException('not found');
         throw AtLookUpException('AT0011', 'cannot read');
       });
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key == pqSigningRootMintLockRecordName) {

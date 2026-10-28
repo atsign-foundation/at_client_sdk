@@ -183,9 +183,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         ..sharedBy = atKey.sharedBy
         ..metadata = (Metadata()..ttr = 3888000))
       ..value = encryptedSharedKeyValue;
-    await _atClient
-        .getRemoteSecondary()!
-        .executeVerb(updateSharedKeyBuilder, sync: false);
+    await _atClient.getRemoteSecondary()!.executeVerb(updateSharedKeyBuilder);
   }
 
   /// Fetch public key of recipient
@@ -270,7 +268,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       _logger.info('Updating public key locally: ${uvb.buildCommand()}');
       await _atClient
           .getLocalSecondary()!
-          .executeVerb(uvb, sync: false, cameFromServer: true);
+          .executeVerb(uvb, cameFromServer: true);
 
       // Then return it
       return fetchedPK;
@@ -292,8 +290,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
             '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@', '')}'
         ..sharedBy = atKey.sharedBy)
       ..value = encryptedSharedKey;
-    await secondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder,
-        sync: false);
+    await secondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder);
   }
 
   /// Gets the encrypted shared key from the given secondary instance - Local Secondary or Remote Secondary

@@ -62,11 +62,9 @@ void main() {
     // already expired by the time putAll runs and never enters the store.
     local.enrollment = Enrollment()..namespace = {'*': 'rw'};
     final key = lockKey(ttlMs: 200);
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = key
-          ..value = 'enroll-1',
-        sync: false);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = key
+      ..value = 'enroll-1');
     expect(await local.keyStore!.exists(key.toString().toLowerCase()), isTrue,
         reason: 'the record must actually be in the store, or the sweep below '
             'has nothing to reclaim and passes for the wrong reason');
@@ -77,8 +75,7 @@ void main() {
 
     // The control: a build that simply dropped the authorization check fails
     // here.
-    await expectLater(
-        local.executeVerb(DeleteVerbBuilder()..atKey = key, sync: false),
+    await expectLater(local.executeVerb(DeleteVerbBuilder()..atKey = key),
         throwsA(isA<UnAuthorizedException>()),
         reason: 'an enrollment-initiated delete outside its namespace must '
             'still be refused');
@@ -94,11 +91,9 @@ void main() {
     // NOTE: the expiry timer's backoff keys on this count — a non-zero count
     // from a fruitless sweep re-arms the timer at zero.
     local.enrollment = Enrollment()..namespace = {'*': 'rw'};
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = lockKey()
-          ..value = 'no ttl',
-        sync: false);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = lockKey()
+      ..value = 'no ttl');
     expect(await local.deleteExpiredKeys(), equals(0));
   });
 }

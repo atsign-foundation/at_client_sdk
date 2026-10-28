@@ -55,9 +55,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/signing/keyless_pkam_key.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
-import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/stream/stream_verb_retired.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
@@ -1556,11 +1554,6 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated('Read the keystore from the AtClientStorage the client was '
-      'given; removed in 4.0')
-  AtPersistenceBundle? get persistenceBundle => defaultStorageBundle(_storage);
-
-  @override
   RemoteSecondary? getRemoteSecondary() {
     return _remoteSecondary;
   }
@@ -1645,7 +1638,6 @@ class AtClientImpl implements AtClient {
   @override
   Future<bool> delete(
     AtKey atKey, {
-    bool isDedicated = false,
     DeleteRequestOptions? deleteRequestOptions,
   }) {
     return _delete(atKey, deleteRequestOptions: deleteRequestOptions);
@@ -1709,7 +1701,7 @@ class AtClientImpl implements AtClient {
   ) async {
     switch (prefForOp) {
       case RemoteLocalPref.localOnly:
-        return await localSecondary!.executeVerb(builder, sync: true);
+        return await localSecondary!.executeVerb(builder);
       case RemoteLocalPref.remoteOnly:
         return await _remoteSecondary!.executeVerb(builder);
     }
@@ -1718,7 +1710,6 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtValue> get(
     AtKey atKey, {
-    bool isDedicated = false,
     GetRequestOptions? getRequestOptions,
   }) async {
     Secondary? secondary;
@@ -1774,7 +1765,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<Metadata?> getMeta(AtKey atKey, {bool isDedicated = false}) async {
+  Future<Metadata?> getMeta(AtKey atKey) async {
     var atValue = await get(atKey);
     return atValue.metadata;
   }
@@ -1867,7 +1858,6 @@ class AtClientImpl implements AtClient {
   Future<bool> put(
     AtKey atKey,
     dynamic value, {
-    bool isDedicated = false,
     PutRequestOptions? putRequestOptions,
   }) async {
     // If the value is neither String nor List<int> throw exception
@@ -2076,7 +2066,6 @@ class AtClientImpl implements AtClient {
     String? fromDate,
     String? toDate,
     String? regex,
-    bool isDedicated = false,
   }) async {
     try {
       var builder = NotifyListVerbBuilder()
@@ -2437,27 +2426,6 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<AtStreamResponse> stream(
-    String sharedWith,
-    String filePath, {
-    String? namespace,
-  }) async =>
-      throw UnsupportedError(streamVerbRetired);
-
-  @override
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<void> sendStreamAck(
-    String streamId,
-    String fileName,
-    int fileLength,
-    String senderAtSign,
-    Function streamCompletionCallBack,
-    Function streamReceiveCallBack,
-  ) async =>
-      throw UnsupportedError(streamVerbRetired);
-
-  @override
   Future<Map<String, FileTransferObject>> uploadFile(
     List<File> files,
     List<String> sharedWithAtSigns,
@@ -2746,7 +2714,6 @@ class AtClientImpl implements AtClient {
     StrategyEnum? strategy,
     int? latestN,
     String? notifier = AtConstants.system,
-    bool isDedicated = false,
   }) async {
     AtKeyValidators.get().validate(
       atKey.toString(),
@@ -2768,9 +2735,8 @@ class AtClientImpl implements AtClient {
   Future<String> notifyAll(
     AtKey atKey,
     String value,
-    OperationEnum operation, {
-    bool isDedicated = false,
-  }) async {
+    OperationEnum operation,
+  ) async {
     var returnMap = {};
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:at_client/src/lifecycle/lookups.dart';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
     show
@@ -20,7 +19,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:internet_connection_checker/internet_connection_checker.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -140,12 +138,7 @@ class RemoteSecondary implements Secondary {
   /// client→server sync queue to skip enqueuing into.
   @override
   Future<String> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
-          'nothing. Whether a local write is enqueued for '
-          'client→server sync is decided by cameFromServer. '
-          'Removed in 4.0.')
-      sync = false,
-      bool cameFromServer = false}) async {
+      {bool cameFromServer = false}) async {
     _throwIfStopped();
     try {
       String verbResult;
@@ -168,12 +161,7 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  Future<String> executeAndParse(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
-          'nothing. Whether a local write is enqueued for '
-          'client→server sync is decided by cameFromServer. '
-          'Removed in 4.0.')
-      sync = false}) async {
+  Future<String> executeAndParse(VerbBuilder builder) async {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
@@ -254,31 +242,6 @@ class RemoteSecondary implements Secondary {
         await (_secondaryAddressFinder ?? processSecondaryAddressFinder()!)
             .findSecondary(_atSign);
     return secondaryAddress.toString();
-  }
-
-  @Deprecated('This method is unused and will be removed in next major release')
-  Future<bool> isAvailable() async {
-    try {
-      String? secondaryUrl = await findSecondaryUrl();
-
-      var secondaryInfo = AtClientUtil.getSecondaryInfo(secondaryUrl);
-      var host = secondaryInfo[0];
-      var port = secondaryInfo[1];
-      var internetAddress = await InternetAddress.lookup(host);
-      // TODO: getting first ip for now. explore best solution
-      var addressCheckOptions = AddressCheckOptions(
-          address: internetAddress[0], port: int.parse(port));
-      var addressCheckResult = await InternetConnectionChecker()
-          .isHostReachable(addressCheckOptions);
-      return addressCheckResult.isSuccess;
-    } on Exception catch (e) {
-      logger.severe(
-          'Secondary server unavailable due to Exception: ${e.toString()}');
-    } on Error catch (e) {
-      logger
-          .severe('Secondary server unavailable due to Error: ${e.toString()}');
-    }
-    return false;
   }
 
   Intent _getIntent(VerbBuilder builder) {

@@ -46,8 +46,7 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.enrollmentId).thenReturn(ours);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => remote.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as VerbBuilder;
       if (builder is UpdateVerbBuilder) {
         throw IllegalStateException('Immutable records may not be updated');

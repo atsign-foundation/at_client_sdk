@@ -58,7 +58,6 @@ void main() {
 
     final remoteSecondary = MockRemoteSecondary();
     when(() => remoteSecondary.executeVerb(any(),
-            sync: any(named: 'sync'),
             cameFromServer: any(named: 'cameFromServer')))
         .thenAnswer((invocation) async {
       final builder = invocation.positionalArguments[0];

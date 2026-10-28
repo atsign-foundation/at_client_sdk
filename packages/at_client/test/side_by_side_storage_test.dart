@@ -94,14 +94,12 @@ void main() {
     final a = await clientAt('a');
     final localA = a.getLocalSecondary() as LocalSecondary;
 
-    await localA.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = (AtKey()
-            ..key = 'phone'
-            ..sharedBy = atSign
-            ..metadata = (Metadata()..isPublic = true))
-          ..value = '555',
-        sync: true);
+    await localA.executeVerb(UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = 'phone'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
+      ..value = '555');
 
     expect(await localA.syncQueueSize, 1,
         reason: 'the write must reach a\'s queue, or the check on b below is '

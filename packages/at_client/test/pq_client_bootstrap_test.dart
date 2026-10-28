@@ -135,7 +135,6 @@ void main() {
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
     when(() => client.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((_) async => true);
   });
@@ -376,8 +375,7 @@ void main() {
       final written = <String>[];
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0];
         if (builder is UpdateVerbBuilder) written.add(builder.atKey.key);
         return 'data:1';
@@ -417,8 +415,7 @@ void main() {
       final lookUp = MockAtLookUp();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:1');
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
       when(() => client.getPreferences())
           .thenReturn(AtClientPreference()..namespace = 'wavi');
 
@@ -463,8 +460,7 @@ void main() {
       final lookUp = MockAtLookUp();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:1');
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
       when(() => client.getPreferences())
           .thenReturn(AtClientPreference()..namespace = 'wavi');
 

@@ -134,8 +134,7 @@ void main() {
         ..metadata = stamp == null ? null : (Metadata()..updatedAt = stamp);
     });
 
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as Object;
       builders.add(builder);
       if (builder is UpdateVerbBuilder) {
@@ -248,11 +247,9 @@ void main() {
     final filer = await filing();
     final secondary = c.client.getRemoteSecondary()!;
     var refuse = true;
-    when(() => secondary.executeVerb(
-        any(
-            that: isA<UpdateVerbBuilder>()
-                .having((b) => b.atKey.key, 'key', '__nskey')),
-        sync: any(named: 'sync'))).thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any(
+        that: isA<UpdateVerbBuilder>().having(
+            (b) => b.atKey.key, 'key', '__nskey')))).thenAnswer((inv) async {
       if (refuse) throw StoppedException('the client stopped');
       final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
       c.advertised[builder.atKey.namespace!] = builder.value as String;

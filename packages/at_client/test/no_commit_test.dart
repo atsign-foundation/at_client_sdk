@@ -65,8 +65,7 @@ void main() {
         {required bool noCommit, required String atSign}) async {
       final commands = <String>[];
       final remote = MockRemoteSecondary();
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
         commands.add(
             (inv.positionalArguments[0] as DeleteVerbBuilder).buildCommand());
         return 'data:-1';
@@ -104,8 +103,7 @@ void main() {
   group('asking for no commit without going remote is refused', () {
     Future<AtClient> clientFor(String atSign) async {
       final remote = MockRemoteSecondary();
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:-1');
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:-1');
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
           remoteSecondary: remote,
@@ -162,8 +160,7 @@ void main() {
       when(() => atClient.getRemoteSecondary()).thenReturn(remote);
       when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => atClient.enrollmentId).thenReturn('e-1');
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
         commands.add(
             (inv.positionalArguments[0] as UpdateVerbBuilder).buildCommand());
         return 'data:-1';

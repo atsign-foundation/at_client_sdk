@@ -41,8 +41,7 @@ Future<AtClient> buildPipelineBackedClient({
 }) async {
   final remoteSecondary = MockRemoteSecondary();
 
-  when(() => remoteSecondary.executeVerb(any(), sync: any(named: 'sync')))
-      .thenAnswer((invocation) async {
+  when(() => remoteSecondary.executeVerb(any())).thenAnswer((invocation) async {
     final builder = invocation.positionalArguments[0];
     // NOTE: both `lookup` and `llookup` reach this fixture; matching on the
     // built command rather than the builder's type keeps them on one path.

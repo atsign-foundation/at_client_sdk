@@ -239,8 +239,7 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      final executeResult =
-          await localSecondary.executeVerb(verbBuilder, sync: false);
+      final executeResult = await localSecondary.executeVerb(verbBuilder);
       expect(executeResult, isNotNull);
       expect(executeResult!.startsWith('data:'), true);
     });
@@ -264,8 +263,7 @@ void main() {
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
       expect(
-          () async =>
-              await localSecondary.executeVerb(verbBuilder, sync: false),
+          () async => await localSecondary.executeVerb(verbBuilder),
           throwsA(predicate((dynamic e) =>
               e is DataStoreException &&
               e.message ==
@@ -294,8 +292,7 @@ void main() {
             ..isPublic = true))
         ..value = 'alice@gmail.com';
       expect(
-          () async =>
-              await localSecondary.executeVerb(verbBuilder, sync: false),
+          () async => await localSecondary.executeVerb(verbBuilder),
           throwsA(predicate((dynamic e) =>
               e is DataStoreException &&
               e.message ==
@@ -319,14 +316,14 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder, sync: false);
+      await localSecondary.executeVerb(verbBuilder);
       final llookupVerbBuilder = LLookupVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
       final llookupResult =
-          await localSecondary.executeVerb(llookupVerbBuilder, sync: false);
+          await localSecondary.executeVerb(llookupVerbBuilder);
       expect(llookupResult, 'data:alice@gmail.com');
     });
 
@@ -347,19 +344,19 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder, sync: false);
+      await localSecondary.executeVerb(verbBuilder);
       final deleteVerbBuilder = DeleteVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteVerbBuilder, sync: false);
+      await localSecondary.executeVerb(deleteVerbBuilder);
       final llookupVerbBuilder = LLookupVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
+      expect(localSecondary.executeVerb(llookupVerbBuilder),
           throwsA(isA<KeyNotFoundException>()));
     });
 
@@ -380,16 +377,15 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder_1, sync: false);
+      await localSecondary.executeVerb(verbBuilder_1);
       final verbBuilder_2 = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'phone'
           ..sharedBy = atSign)
         ..value = '+101-202-303';
-      await localSecondary.executeVerb(verbBuilder_2, sync: false);
+      await localSecondary.executeVerb(verbBuilder_2);
       final scanVerbBuilder = ScanVerbBuilder();
-      final scanResult =
-          await localSecondary.executeVerb(scanVerbBuilder, sync: false);
+      final scanResult = await localSecondary.executeVerb(scanVerbBuilder);
       final scanJson = jsonDecode(scanResult!);
       print(scanJson);
       expect(scanJson.contains('phone$atSign'), true);
@@ -441,7 +437,7 @@ void main() {
 
     test('cleared after a successful update', () async {
       final localSecondary = await buildLocalSecondary();
-      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      await localSecondary.executeVerb(updateBuilderFor('email'));
       expect(localSecondary.writesInProgressForTest, isEmpty);
       expect(localSecondary.isWriteInProgress('public:email$atSign'), false);
     });
@@ -459,21 +455,20 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'v';
-      await expectLater(
-          () async => await localSecondary.executeVerb(builder, sync: false),
+      await expectLater(() async => await localSecondary.executeVerb(builder),
           throwsA(isA<DataStoreException>()));
       expect(localSecondary.writesInProgressForTest, isEmpty);
     });
 
     test('cleared after a delete', () async {
       final localSecondary = await buildLocalSecondary();
-      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      await localSecondary.executeVerb(updateBuilderFor('email'));
       final deleteBuilder = DeleteVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteBuilder, sync: false);
+      await localSecondary.executeVerb(deleteBuilder);
       expect(localSecondary.writesInProgressForTest, isEmpty);
     });
 
