@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_commons/at_commons.dart' show AtIOException;
+import 'package:at_lookup/at_lookup_io.dart' show SecureSocketTransport;
 import 'package:at_lookup/src/io/tls_connect.dart';
 import 'package:test/test.dart';
 
@@ -124,6 +126,36 @@ void main() {
       client.destroy();
 
       expect(await arrived, payload);
+    });
+
+    test(
+        'the transport over it reports every write to a peer that has gone as '
+        'AtIOException', () async {
+      final transport = SecureSocketTransport(await connectTls(
+          '127.0.0.1', server.port,
+          context: clientContext, timeout: const Duration(seconds: 10)));
+      addTearDown(transport.destroy);
+      final inboundEnded = Completer<void>();
+      transport.inbound
+          .listen((_) {}, onError: (_) {}, onDone: inboundEnded.complete);
+      (await accepted.stream.first).destroy();
+      await inboundEnded.future;
+
+      Object? failure;
+      for (var i = 0; i < 20 && failure == null; i++) {
+        try {
+          transport.add(List.filled(65536, 0x41));
+          await transport.flush();
+        } catch (e) {
+          failure = e;
+        }
+      }
+
+      expect(failure, isA<AtIOException>(),
+          reason: 'the write that finds the peer gone');
+      expect(() => transport.add([0x41]), throwsA(isA<AtIOException>()),
+          reason: 'and each write after it, which the closed socket refuses '
+              'with a StateError');
     });
   });
 

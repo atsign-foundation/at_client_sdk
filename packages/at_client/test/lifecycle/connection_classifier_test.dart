@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -144,10 +143,10 @@ void main() {
           AtConnectionCause.unreachable,
           'the attempt\'s own budget expiring');
       expectClassified(
-          const SocketException('Connection refused'),
+          AtIOException('WebSocket to atserver.example:443 is closed'),
           AtConnectionOutcome.offline,
           AtConnectionCause.unreachable,
-          'a raw socket failure');
+          'a transport\'s failed write, whatever its message says');
     });
 
     test(
@@ -164,6 +163,12 @@ void main() {
           AtConnectionOutcome.offline,
           AtConnectionCause.unreachable,
           'SecondaryConnectException has a code');
+      expectClassified(
+          AtLookUpException('AT0004',
+              'Exception: WebSocket to atserver.example:443 is closed'),
+          AtConnectionOutcome.offline,
+          AtConnectionCause.unreachable,
+          'a transport\'s failed write, wrapped by executeVerb');
       expectClassified(
           AtLookUpException('AT0014', 'Request timed out'),
           AtConnectionOutcome.offline,

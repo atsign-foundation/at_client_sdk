@@ -30,9 +30,18 @@ abstract interface class AtTransport {
   Stream<List<int>> get inbound;
 
   /// Queues [bytes] for delivery to the far end.
+  ///
+  /// Throws `AtIOException` when the channel can take no more. As with
+  /// [AtTransportFactory.connect], this is part of the contract: an
+  /// implementation's own failure type reaches callers that cannot tell it
+  /// is a failed connection.
   void add(List<int> bytes);
 
   /// Completes once everything passed to [add] has left this process.
+  ///
+  /// Throws `AtIOException` when the channel fails first, or
+  /// `AtTimeoutException` when an implementation that bounds the wait gives
+  /// up.
   Future<void> flush();
 
   /// Renders the channel unusable and discards whatever is still queued.

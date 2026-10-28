@@ -29,11 +29,32 @@ class SecureSocketTransport implements AtTransport {
   @override
   Stream<List<int>> get inbound => _socket;
 
+  /// Throws [AtIOException] when the socket refuses [bytes]: a failed socket
+  /// refuses with an [IOException], a `dart:io` socket that has closed with a
+  /// [StateError].
   @override
-  void add(List<int> bytes) => _socket.add(bytes);
+  void add(List<int> bytes) {
+    try {
+      _socket.add(bytes);
+    } on IOException catch (e) {
+      throw _failed(e);
+    } on StateError catch (e) {
+      throw _failed(e);
+    }
+  }
 
+  /// Throws [AtIOException] when the socket fails before the bytes leave.
   @override
-  Future<void> flush() => _socket.flush();
+  Future<void> flush() async {
+    try {
+      await _socket.flush();
+    } on IOException catch (e) {
+      throw _failed(e);
+    }
+  }
+
+  AtIOException _failed(Object cause) =>
+      AtIOException('connection to $description failed: $cause');
 
   @override
   void destroy() => _socket.destroy();

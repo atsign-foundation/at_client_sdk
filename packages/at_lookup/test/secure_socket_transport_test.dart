@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -80,6 +81,41 @@ void main() {
     });
   });
 
+  group('SecureSocketTransport over a socket that fails', () {
+    test('add reports a refused write as AtIOException', () {
+      for (final refusal in [
+        const SocketException('Broken pipe'),
+        const HandshakeException('alert'),
+        StateError('Cannot add event after closing'),
+      ]) {
+        final transport = SecureSocketTransport(_FailingSocket(refusal));
+
+        expect(
+            () => transport.add([0x41]),
+            throwsA(isA<AtIOException>().having((e) => e.message, 'message',
+                allOf(contains('127.0.0.1:64'), contains('$refusal')))),
+            reason: '${refusal.runtimeType} is the socket\'s own type; the '
+                'contract names AtIOException');
+      }
+    });
+
+    test('flush reports a failed socket as AtIOException', () async {
+      for (final failure in [
+        const SocketException('Connection reset by peer'),
+        const TlsException('bad record mac'),
+      ]) {
+        final transport = SecureSocketTransport(_FailingSocket(failure));
+
+        await expectLater(
+            transport.flush(),
+            throwsA(isA<AtIOException>().having((e) => e.message, 'message',
+                allOf(contains('127.0.0.1:64'), contains('$failure')))),
+            reason: '${failure.runtimeType} is the socket\'s own type; the '
+                'contract names AtIOException');
+      }
+    });
+  });
+
   group('SecureSocketTransportFactory', () {
     final factory =
         SecureSocketTransportFactory(secureSocketConfig: SecureSocketConfig());
@@ -110,4 +146,23 @@ void main() {
               'escaped createOutBoundConnection raw');
     });
   });
+}
+
+/// A socket whose writes fail with [failure], as a failed or closed one does.
+class _FailingSocket extends Fake implements Socket {
+  final Object failure;
+
+  _FailingSocket(this.failure);
+
+  @override
+  InternetAddress get remoteAddress => InternetAddress.loopbackIPv4;
+
+  @override
+  int get remotePort => 64;
+
+  @override
+  void add(List<int> data) => throw failure;
+
+  @override
+  Future<void> flush() => Future.error(failure);
 }

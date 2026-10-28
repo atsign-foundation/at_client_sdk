@@ -276,6 +276,31 @@ void main() {
   });
 
   group('Validate executeVerb() behaviour', () {
+    test('a write the transport refuses comes back with the socket error code',
+        () async {
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          transportFactory: mockTransportFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+      when(() => mockOutBoundConnection.write(any()))
+          .thenThrow(AtIOException('connection to 127.0.0.1:64 failed'));
+      when(() => mockOutBoundConnection.getMetaData())
+          .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
+      when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+
+      await expectLater(
+          atLookup.executeVerb(EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.request
+            ..appName = 'unit_test_1'
+            ..deviceName = 'test_device'
+            ..otp = 'ABCDEF'),
+          throwsA(isA<AtLookUpException>()
+              .having((e) => e.errorCode, 'errorCode', 'AT0004')),
+          reason: 'AT0004 is a socket error\'s code, and AtIOException is '
+              'how every transport reports a failed write');
+    });
+
     test('validate EnrollVerbHandler behaviour - request', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,

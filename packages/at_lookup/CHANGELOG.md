@@ -48,6 +48,9 @@
 - breaking: `pkamAuthenticate` takes no `enrollmentId`; the authenticator
   decides. `authenticatedAsEnrollmentId` names the enrollment the atServer
   accepted, after a reconnect too.
+- breaking: a failed write throws `AtIOException` on every transport; catch
+  it where you caught `SocketException`. `executeVerb` still reports it as
+  `AT0004`.
 - feat: `authenticator` and `stop()` are on `AtLookUp` itself, not only on
   `AtLookupMuxable`.
 - build: no longer depends on `at_chops`.

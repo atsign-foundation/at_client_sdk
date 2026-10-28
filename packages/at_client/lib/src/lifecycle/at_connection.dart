@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show SocketException, HandshakeException;
 
 import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart';
@@ -237,7 +236,7 @@ const Map<String, AtConnectionCause> _refusalCodes = {
 
 /// The codes at_lookup assigns when it wraps a failure to reach the atServer.
 const Set<String> _unreachableCodes = {
-  'AT0004', // SocketException
+  'AT0004', // a socket error, AtIOException among them
   'AT0021', // SecondaryConnectException
   'AT0023', // AtTimeoutException
 };
@@ -300,8 +299,7 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtConnectException ||
       error is SecondaryConnectException ||
       error is AtTimeoutException ||
-      error is SocketException ||
-      error is HandshakeException ||
+      error is AtIOException ||
       error is TimeoutException) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
         error: error);
