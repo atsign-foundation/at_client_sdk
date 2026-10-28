@@ -6,9 +6,15 @@ import 'test_utils/mocks.dart';
 
 void main() {
   group('A group of switch atsign tests', () {
+    tearDown(() async {
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await client.stop();
+      }
+    });
+
     test('Test that we can inject an AtLookUp instance', () async {
       final aliceAtSign = '@alice';
-      final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       final mockAtLookUp = MockAtLookUp();
@@ -16,15 +22,14 @@ void main() {
       // closes the lookup - so an unstubbed close() answers null into the
       // Future<void> the teardown awaits.
       when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-      await atClientManager.setCurrentAtSign(
-          aliceAtSign, 'wavi', alicePreference,
+      final atClient = await buildAtClient(
+          atSign: aliceAtSign,
+          namespace: 'wavi',
+          preference: alicePreference,
           atLookUp: mockAtLookUp);
-      expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      expect(atClientManager.atClient.getRemoteSecondary()!.atLookUp,
-          mockAtLookUp);
-      expect(
-          atClientManager.atClient.getRemoteSecondary()!.atLookUp.runtimeType,
-          MockAtLookUp);
+      expect(atClient.getCurrentAtSign(), aliceAtSign);
+      expect(atClient.getRemoteSecondary()!.atLookUp, mockAtLookUp);
+      expect(atClient.getRemoteSecondary()!.atLookUp.runtimeType, MockAtLookUp);
     });
 
     test('test switch atsign - check atsign name', () async {
@@ -32,12 +37,13 @@ void main() {
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
-      await atClientManager.setCurrentAtSign(
-          aliceAtSign, 'wavi', alicePreference);
+      atClientManager.use(await buildAtClient(
+          atSign: aliceAtSign, namespace: 'wavi', preference: alicePreference));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
-      await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
+      atClientManager.use(await buildAtClient(
+          atSign: bobAtSign, namespace: 'buzz', preference: bobPreference));
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
     });
 
@@ -46,14 +52,15 @@ void main() {
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
-      await atClientManager.setCurrentAtSign(
-          aliceAtSign, 'wavi', alicePreference);
+      atClientManager.use(await buildAtClient(
+          atSign: aliceAtSign, namespace: 'wavi', preference: alicePreference));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
       final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
-      await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
+      atClientManager.use(await buildAtClient(
+          atSign: bobAtSign, namespace: 'buzz', preference: bobPreference));
       atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);

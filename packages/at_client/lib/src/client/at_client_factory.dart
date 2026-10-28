@@ -19,13 +19,7 @@ import 'package:at_utils/at_utils.dart';
 /// enrollment services.
 ///
 /// The caller owns the client's lifetime and ends it with [stop].
-///
-/// ⚠️ The client is filed in `AtClientImpl.atClientInstanceMap` like any
-/// other, so a later [AtClientManager.setCurrentAtSign] for the same atSign
-/// adopts THIS client, replaces its notification, sync and enrollment
-/// services without stopping the ones it had, and stops it on the next atSign
-/// switch. Do not mix this factory and the manager for one atSign in one
-/// process.
+/// [AtClientManager.use] makes it the current client.
 ///
 /// [storage] is borrowed by default, so [stop] detaches from it without
 /// closing it and the caller closes it when done; a bundle built with

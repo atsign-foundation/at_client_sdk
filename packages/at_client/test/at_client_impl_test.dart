@@ -7,8 +7,6 @@ import 'package:at_client/memory.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -175,109 +173,67 @@ void main() {
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
+    Future<AtClient> build(String atSign) => buildAtClient(
+        atSign: atSign, namespace: namespace, preference: atClientPreference);
+
     test('A test to verify change', () async {
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      atClientManager.use(await build(atSign));
 
       expect(atClientManager.getChangeListenersSize(), 0);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@bob', namespace, atClientPreference);
+      atClientManager.use(await build('@bob'));
       expect(atClientManager.getChangeListenersSize(), 0);
-
-      // Notification Service, Sync Service and AtClientImpl do not register
-      // change listeners anymore
     });
 
     test(
         'A test to verify switch atSign event when switching between same atSign',
         () async {
-      String atSign = '@alice';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      final client = await build(atSign);
+      atClientManager.use(client);
 
       expect(atClientManager.getChangeListenersSize(), 0);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      atClientManager.use(client);
+      atClientManager.use(client);
+      atClientManager.use(client);
+      atClientManager.use(client);
       expect(atClientManager.getChangeListenersSize(), 0);
-
-      // Notification Service, Sync Service and AtClientImpl do not register
-      // change listeners anymore
     });
 
     test('A test to verify atSigns switched multiple times', () async {
-      String atSign1 = '@alice';
-      String atSign2 = '@bob';
-      String atSign3 = '@emoji';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign3, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      final alice = await build('@alice');
+      final bob = await build('@bob');
+      final emoji = await build('@emoji');
+      atClientManager.use(alice);
+      atClientManager.use(bob);
+      atClientManager.use(alice);
+      atClientManager.use(bob);
+      atClientManager.use(emoji);
+      atClientManager.use(bob);
 
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @bob.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, atSign2);
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign2);
-        }
-      }
+      expect(atClientManager.getChangeListenersSize(), 0,
+          reason: 'the clients and their services register no change '
+              'listeners, however often the current client changes');
+      expect(atClientManager.atClient, same(bob));
     });
 
     test('A test to verify atSigns switched between three different atSign',
         () async {
-      String atSign1 = '@alice';
-      String atSign2 = '@bob';
-      String atSign3 = '@emoji';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign3, namespace, atClientPreference);
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @bob.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, atSign3);
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
-        }
-      }
+      final atClientManager = AtClientManager.getInstance();
+      atClientManager.use(await build('@alice'));
+      atClientManager.use(await build('@bob'));
+      final emoji = await build('@emoji');
+      atClientManager.use(emoji);
+
+      expect(atClientManager.getChangeListenersSize(), 0,
+          reason: 'the clients and their services register no change '
+              'listeners, however often the current client changes');
+      expect(atClientManager.atClient, same(emoji));
     });
   });
 
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
-    late AtClientManager manager;
     late AtClientImpl client;
     AtClientPreference pref = AtClientPreference()
       ..hiveStoragePath = 'test/hive';
@@ -288,9 +244,8 @@ void main() {
         ..sharedBy = '@sender'
         ..sharedWith = '@receiver';
 
-      manager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@sender', null, pref);
-      client = manager.atClient as AtClientImpl;
+      client = await buildAtClient(atSign: '@sender', preference: pref)
+          as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
       //this test is only to ensure that when this method is run
@@ -336,13 +291,15 @@ void main() {
     AtClientPreference pref = AtClientPreference()
       ..hiveStoragePath = 'test/hive';
     test(
-        'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
+        'A test to verify enrollmentId is set in atClient after calling buildAtClient',
         () async {
       final testEnrollmentId = 'abc123';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', pref,
-              enrollmentId: testEnrollmentId);
-      expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
+      final atClient = await buildAtClient(
+          atSign: '@alice',
+          namespace: 'wavi',
+          preference: pref,
+          enrollmentId: testEnrollmentId);
+      expect(atClient.enrollmentId, testEnrollmentId);
     });
 
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
@@ -402,11 +359,12 @@ void main() {
         'A test to verify exception is thrown when SPP contains special characters',
         () async {
       String invalidSPP = 'abc#12';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi',
-              AtClientPreference()..hiveStoragePath = 'test/hive');
+      final atClient = await buildAtClient(
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: AtClientPreference()..hiveStoragePath = 'test/hive');
       expect(
-          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message == '$invalidSPP is not a valid SPP')));
@@ -418,10 +376,10 @@ void main() {
       String invalidSPP = 'abc1234';
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi', pref);
+      final atClient = await buildAtClient(
+          atSign: atSign, namespace: 'wavi', preference: pref);
       expect(
-          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message == '$invalidSPP should be 6 characters')));

@@ -13,8 +13,8 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 
 /// Class to hold attributes for client preferences.
-/// Set the preferences for your application and pass it to
-/// `AtClientManager.setCurrentAtSign`.
+/// Set the preferences for your application and pass it to `Atsign.open` or
+/// `buildAtClient`.
 class AtClientPreference {
   /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
   /// take a post-quantum path, or refuse the write.
@@ -234,7 +234,7 @@ class AtClientPreference {
   }
 
   /// Local device path of hive storage, used when no [AtClientStorage] is
-  /// supplied to [buildAtClient] or [AtClientManager.setCurrentAtSign].
+  /// supplied to [buildAtClient].
   ///
   /// Setting this leaves the client owning its store: it opens the store and
   /// closes it again when it stops. Supplying a bundle instead chooses the

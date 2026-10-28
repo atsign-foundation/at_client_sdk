@@ -5,8 +5,11 @@ import 'test_util.dart';
 void main() async {
   try {
     final atSign = '@alice🛠';
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: TestUtil.getAlicePreference()));
     final atClient = atClientManager.atClient;
     // Option 1. Get string keys and convert to AtKey
     var result = await atClient.getKeys();

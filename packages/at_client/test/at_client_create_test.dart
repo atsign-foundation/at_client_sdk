@@ -119,11 +119,10 @@ void main() {
     expect(client.getCurrentAtSign(), '@factorysolo');
     expect(AtClientImpl.atClientInstanceMap['@factorysolo'], same(client),
         reason: 'AtClientImpl.create files every client it builds, this one '
-            'included - so a later setCurrentAtSign for this atSign adopts '
-            'THIS client rather than building its own. Asserting only that the '
-            'manager has no current client passes before create() is ever '
-            'called, which is what made the previous version of this test '
-            'vacuous');
+            'included - so a later buildAtClient for this atSign as the same '
+            'principal is refused rather than building a second. Asserting '
+            'only that the manager has no current client passes before '
+            'create() is ever called');
     expect(() => AtClientManager.getInstance().atClient, throwsStateError,
         reason: 'the manager\'s current client is still unset: create() does '
             'not make this the process-wide current atSign');
@@ -380,8 +379,8 @@ void main() {
     expect(AtClientImpl.atClientInstanceMap.containsKey('@factoryhalfbuilt'),
         isFalse,
         reason: 'a client whose build threw is unfiled, rather than sitting in '
-            'the instance map where the next setCurrentAtSign adopts and later '
-            'stops it - while the caller that asked for it holds no reference '
+            'the instance map where it refuses the next buildAtClient for this '
+            'atSign - while the caller that asked for it holds no reference '
             'and cannot stop it itself');
 
     final second = HiveAtClientStorage(

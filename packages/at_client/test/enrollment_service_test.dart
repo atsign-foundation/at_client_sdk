@@ -121,12 +121,18 @@ void main() {
 
   group('A group of tests related to apkam/enrollments', () {
     test(
-        'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
+        'A test to verify enrollmentId is set in atClient after calling buildAtClient',
         () async {
       var pref = AtClientPreference()..hiveStoragePath = "test/hive";
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', pref, enrollmentId: enrollmentId);
-      expect(atClientManager.atClient.enrollmentId, enrollmentId);
+      // NOTE: a distinct atSign — setUpAll's client is live as @alice under
+      // this enrollment, and buildAtClient refuses a second.
+      final atClient = await buildAtClient(
+          atSign: '@enrolledbuild',
+          namespace: 'wavi',
+          preference: pref,
+          enrollmentId: enrollmentId);
+      expect(atClient.enrollmentId, enrollmentId);
+      await atClient.stop();
     });
 
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();

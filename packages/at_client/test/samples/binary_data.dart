@@ -8,8 +8,11 @@ void main() async {
   try {
     //1.1 put image for self
     var atsign = '@alice';
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', TestUtil.getAlicePreference());
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: TestUtil.getAlicePreference()));
     var atClient = atClientManager.atClient;
     var imageLocation = 'image.jpg'; //path to your image file
     var imageData = getdata(imageLocation);

@@ -9,9 +9,12 @@ void main() async {
   try {
     final atsign = '@alice🛠';
     final preference = TestUtil.getPreferenceRemote();
-    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        atsign, 'wavi', preference,
-        storage: InMemoryAtClientStorage(atSign: atsign));
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          storage: InMemoryAtClientStorage(atSign: atsign)));
     var atClient = atClientManager.atClient;
     var statsResult = await atClient
         .getRemoteSecondary()!

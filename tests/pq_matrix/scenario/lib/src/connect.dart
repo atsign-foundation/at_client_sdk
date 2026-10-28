@@ -38,10 +38,10 @@ class ClientSpec {
 /// How an arm attaches its client to the manager.
 ///
 /// A callback rather than a branch because each at_client takes a keyless
-/// client's credential differently: this tree's `setCurrentAtSign` takes no
-/// `AtChops`, and a released one authenticates a keyless client only through
-/// one — and an arm attached without a key source performs zero post-quantum
-/// writes by design.
+/// client's credential differently: this tree's client takes no `AtChops`,
+/// and a released one authenticates a keyless client only through one — and
+/// an arm attached without a key source performs zero post-quantum writes by
+/// design.
 typedef Attach = Future<AtClientManager> Function(
     ClientSpec spec, AtClientPreference preference);
 
@@ -65,8 +65,9 @@ Future<void> installDemoKeys(AtClient client, String atSign) async {
 
 /// Brings up a client for [spec] under [preference], attached by [attach].
 ///
-/// Its own [AtClientManager] rather than the singleton, whose
-/// `setCurrentAtSign` stops whichever client was current.
+/// Each attach makes its own [AtClientManager] rather than using the
+/// singleton, whose `setCurrentAtSign` in a released at_client stops
+/// whichever client was current.
 Future<AtClient> connect({
   required ClientSpec spec,
   required AtClientPreference preference,
@@ -77,13 +78,3 @@ Future<AtClient> connect({
   await installDemoKeys(client, spec.atSign);
   return client;
 }
-
-/// This tree's attach with no key source: [preference] is given the demo
-/// atSign's PKAM private key, which this tree's keyless client signs with.
-///
-/// A released arm attaches with `released.dart`'s `attachWithDemoAtChops`
-/// instead, and an arm needing an `AtKeysIo` supplies its own.
-Future<AtClientManager> attachWithoutKeySource(
-        ClientSpec spec, AtClientPreference preference) =>
-    AtClientManager(spec.atSign).setCurrentAtSign(spec.atSign, spec.namespace,
-        preference..privateKey = pkamPrivateKeyMap[spec.atSign]);

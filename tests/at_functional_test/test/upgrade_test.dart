@@ -15,6 +15,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData;
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
+import 'package:pq_matrix_scenario/current.dart' show attachWithoutKeySource;
 import 'package:test/test.dart';
 import 'package:upgrade_scenario/upgrade_scenario.dart';
 

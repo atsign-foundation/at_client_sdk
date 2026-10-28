@@ -1364,34 +1364,17 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<void> stop() => _stop(keepStorageOpen: false);
-
-  /// Stops this client and hands back its storage, left open for a successor
-  /// whatever its [AtClientStorage.closedByClient] says; the successor closes
-  /// it. Null when this client held none, was already stopped, or when
-  /// another caller had already begun the teardown this one joins.
-  Future<AtClientStorage?> stopHandingOverStorage() async {
-    final storage = _storage;
-    // NOTE: only the caller that STARTS the teardown hands the storage on. A
-    // second one joins a teardown already running - which may be an ordinary
-    // stop, releasing the storage - and handing the same store to a second
-    // successor would give two clients one store.
-    final handsItOver = _stopping == null && !_isStopped;
-    await _stop(keepStorageOpen: true);
-    return handsItOver ? storage : null;
-  }
-
-  Future<void> _stop({required bool keepStorageOpen}) {
+  Future<void> stop() {
     final inFlight = _stopping;
     if (inFlight != null) return inFlight;
     if (_isStopped) {
       _logger.finer('stop() called: but client is already stopped. Ignoring.');
       return Future.value();
     }
-    return _stopping = _tearDown(keepStorageOpen: keepStorageOpen);
+    return _stopping = _tearDown();
   }
 
-  Future<void> _tearDown({required bool keepStorageOpen}) async {
+  Future<void> _tearDown() async {
     _isStopped = true;
     _logger.info('stop() called: stopping at_client for $_atSign');
 
@@ -1399,7 +1382,7 @@ class AtClientImpl implements AtClient {
     // leave storage claimed, and neither must leave a stopped client in the
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
-    final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
+    final storageDefect = await _releaseStorage();
     await localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
@@ -1415,17 +1398,16 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  /// Drops this client's claim on its storage, closing a client-closed bundle
-  /// unless [keepOpen]. A stopped client keeps nothing open and cannot be
-  /// restarted.
-  Future<_HeldDefect?> _releaseStorage({bool keepOpen = false}) async {
+  /// Drops this client's claim on its storage, closing a client-closed bundle.
+  /// A stopped client keeps nothing open and cannot be restarted.
+  Future<_HeldDefect?> _releaseStorage() async {
     final storage = _storage;
     if (storage == null) return null;
     _storageReleased = true;
     _HeldDefect? defect;
     try {
       await storage.detach(this);
-      if (!keepOpen && storage.closedByClient) await storage.close();
+      if (storage.closedByClient) await storage.close();
     } on Exception catch (e) {
       _logger.warning('Error while releasing storage: $e');
     } on Error catch (e, stack) {

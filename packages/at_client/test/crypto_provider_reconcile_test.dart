@@ -23,41 +23,34 @@ class _StubProvider extends CryptoProvider {
 }
 
 void main() {
-  // Regression for the pluggable-crypto e2e flake:
-  // setCurrentAtSign's idempotency short-circuit (same atSign, no atKeysIo/
-  // atLookUp/enrollmentId override) returns the cached AtClient WITHOUT going
-  // through AtClientImpl.create(), which is the only place the new preference's
-  // crypto config gets adopted onto a re-used client. A same-atSign re-set
-  // carrying a NEW provider config therefore silently dropped it, surfacing
-  // intermittently in CI as `CryptoProviderNotRegistered` on the next put. The
-  // fix adopts the new crypto config in the short-circuit path too.
-  group('setCurrentAtSign crypto-config adoption', () {
+  group('crypto-config adoption by a cached client', () {
     AtClientPreference prefWith(String providerId) => AtClientPreference()
       ..hiveStoragePath = 'test/hive'
       ..crypto = CryptoConfig(
           defaultProviderId: 'legacy', providers: [_StubProvider(providerId)]);
 
     test(
-        're-setting the same atSign with a new provider config adopts it via '
-        'the short-circuit (does not drop it)', () async {
+        'creating the same atSign again with a new provider config adopts it '
+        'onto the cached client', () async {
       final atSign = '@cryptoreconcile';
-      final manager = AtClientManager(atSign);
 
-      // First set: create() configures providerA during _init.
-      await manager.setCurrentAtSign(atSign, 'wavi', prefWith('providerA'));
-      final firstClient = manager.atClient as AtClientImpl;
-      expect(CryptoConfig.forClient(firstClient).lookup('providerA'), isNotNull,
+      final first =
+          await AtClientImpl.create(atSign, 'wavi', prefWith('providerA'))
+              as AtClientImpl;
+      expect(CryptoConfig.forClient(first).lookup('providerA'), isNotNull,
           reason: 'first create() must adopt the preference provider');
 
-      // Second set: SAME atSign, no override -> idempotency short-circuit.
-      await manager.setCurrentAtSign(atSign, 'wavi', prefWith('providerB'));
+      final again =
+          await AtClientImpl.create(atSign, 'wavi', prefWith('providerB'));
 
-      // The short-circuit must reuse the same client (no stop/recreate) AND
-      // adopt the new crypto config onto it.
-      expect(identical(manager.atClient, firstClient), isTrue,
-          reason: 'short-circuit should reuse the cached client');
-      expect(CryptoConfig.forClient(firstClient).lookup('providerB'), isNotNull,
-          reason: 'short-circuit must adopt the new preference crypto config');
+      expect(identical(again, first), isTrue,
+          reason: 'the cached client is handed back, so _init does not run '
+              'again to configure the new provider');
+      expect(CryptoConfig.forClient(first).lookup('providerB'), isNotNull,
+          reason: 'the cached client must adopt the new preference crypto '
+              'config, or the next put fails CryptoProviderNotRegistered');
+
+      await first.stop();
     });
   });
 }

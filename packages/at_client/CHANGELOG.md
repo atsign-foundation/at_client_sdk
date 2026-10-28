@@ -5,10 +5,9 @@
 - breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; pass
   `lookUps` to choose how it connects.
 - breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
-  the `atChops` parameters of `AtClientImpl.create`,
-  `AtClientManager.setCurrentAtSign` and `AtServiceFactory.atClient`. Hand a
-  client its keys as an `AtKeysIo`; given none, it uses those its local store
-  holds.
+  the `atChops` parameters of `AtClientImpl.create` and
+  `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`; given
+  none, it uses those its local store holds.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
 - breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
@@ -43,6 +42,10 @@
   `local:` one needs a namespace.
 - breaking: `EncryptionUtil` is no longer exported; use at_chops'
   `AESEncryptionAlgo` and `RsaEncryptionAlgo`.
+- breaking: `AtClientManager.setCurrentAtSign` and `fromAuthSession` are
+  removed: open a client with `Atsign(atSign).open(...)` and make it current
+  with `AtClientManager.getInstance().use(client)`, which does not stop the
+  previous one.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the

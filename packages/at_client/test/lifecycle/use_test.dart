@@ -61,8 +61,8 @@ void main() {
     expect(listener.events.last.previousAtClient, same(first));
     expect(listener.events.last.newAtClient, same(second));
     expect(first.isStopped, isFalse,
-        reason: 'the caller owns the previous client; the manager only '
-            'stopped clients it had built itself');
+        reason: 'the caller owns the previous client, so the manager leaves '
+            'it running');
   });
 
   test('using the current client again is not a switch', () async {

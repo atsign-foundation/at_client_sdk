@@ -1,6 +1,5 @@
 import 'dart:io';
-import 'package:at_client/src/manager/at_client_manager.dart';
-import 'package:at_utils/at_logger.dart';
+import 'package:at_client/at_client.dart';
 
 import 'test_util.dart';
 
@@ -9,8 +8,9 @@ void main() async {
     AtSignLogger.root_level = 'finer';
     var atSign = '@alice🛠';
     var preference = TestUtil.getAlicePreference();
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'wavi', preference);
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atSign, namespace: 'wavi', preference: preference));
     atClientManager.atClient.syncService.sync();
   } on Exception catch (e, trace) {
     print(e.toString());

@@ -7,8 +7,11 @@ import '../test_util.dart';
 void main() async {
   AtSignLogger.root_level = 'finer';
   final atSign = '@alice🛠';
-  var atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+  var atClientManager = AtClientManager.getInstance()
+    ..use(await buildAtClient(
+        atSign: atSign,
+        namespace: 'wavi',
+        preference: TestUtil.getAlicePreference()));
   final atClient = atClientManager.atClient;
   // phone.me@alice🛠
   for (var i = 0; i < 2; i++) {
@@ -18,8 +21,11 @@ void main() async {
     print(result);
   }
   sleep(Duration(minutes: 1));
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign('@bob🛠', 'wavi', TestUtil.getBobPreference());
+  atClientManager = AtClientManager.getInstance()
+    ..use(await buildAtClient(
+        atSign: '@bob🛠',
+        namespace: 'wavi',
+        preference: TestUtil.getBobPreference()));
   // phone.me@alice🛠
   for (var i = 0; i < 2; i++) {
     var phoneKey = AtKey()..key = 'ph_$i';

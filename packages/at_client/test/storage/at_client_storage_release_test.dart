@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
@@ -265,50 +264,6 @@ void main() {
     await first.stop();
     await held.close();
     await other.close();
-  });
-
-  test(
-      're-offering the storage a client already holds does not rebuild the '
-      'client', () async {
-    final storage = InMemoryAtClientStorage(atSign: '@sticky');
-    final manager = AtClientManager('@sticky');
-    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
-        storage: storage);
-    final first = manager.atClient;
-
-    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
-        storage: storage);
-
-    expect(first.isStopped, isFalse,
-        reason: 'the second call offered nothing that changed, so it must '
-            'have taken the idempotency short-circuit. The rebuild path stops '
-            'the outgoing client first, so a stopped one means it rebuilt');
-    expect(identical(manager.atClient, first), isTrue,
-        reason: 'and the same client must still be current');
-
-    await first.stop();
-    await storage.close();
-  });
-
-  test('fromAuthSession hands its storage to the client it builds', () async {
-    final injected = InMemoryAtClientStorage(atSign: '@handoff');
-    final session = AtAuthSession(
-        atSign: '@handoff',
-        rootDomain: const AtRootDomain('root.atsign.org', 64),
-        namespace: 'wavi',
-        atKeysIo: InMemoryAtKeysIo.holding('@handoff', AtKeys()));
-
-    final manager = await AtClientManager('@handoff').fromAuthSession(
-        session, AtClientPreference(posture: PqPosture.legacy),
-        storage: injected);
-    final client = manager.atClient as AtClientImpl;
-
-    expect(identical(client.storage, injected), isTrue,
-        reason: 'fromAuthSession must pass storage down to '
-            'AtClientImpl.create. Without it the client builds its own from '
-            'hiveStoragePath, which this preference does not set');
-    await client.stop();
-    await injected.close();
   });
 
   test('a client with no injected storage still owns and closes its own',

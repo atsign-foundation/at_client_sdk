@@ -3,12 +3,6 @@ import 'package:test/test.dart';
 
 /// A client that already exists keeps the rollout axes it was built under, and
 /// a caller handing over different ones is refused rather than ignored.
-///
-/// Two paths hand back a client that already exists, and only one is the cache:
-/// `AtClientManager.setCurrentAtSign` short-circuits on a same-atSign call
-/// carrying no override argument and returns without calling
-/// `AtClientImpl.create` at all, so a guard on the cache alone would miss the
-/// ordinary path.
 void main() {
   const atSign = '@alice';
 
@@ -247,21 +241,6 @@ void main() {
           identical(
               await AtClientImpl.create(atSign, 'wavi', signing()), first),
           isTrue);
-    });
-
-    test('and the manager\'s same-atSign short-circuit asks it too', () async {
-      // NOTE: with no override argument setCurrentAtSign returns the client it
-      // already has without calling create, so a throw here is proof that the
-      // second guard fired — nothing else on this path can raise one.
-      final manager = AtClientManager(atSign);
-      await manager.setCurrentAtSign(atSign, 'wavi', preference());
-
-      await expectLater(
-          manager.setCurrentAtSign(atSign, 'wavi', preference(posture: strict)),
-          throwsA(isA<ArgumentError>().having(
-              (e) => '$e', 'message', contains('disallowLegacyEncryption'))));
-
-      await manager.setCurrentAtSign(atSign, 'wavi', preference());
     });
 
     test('and so does setPreferences, which names its replacement', () async {

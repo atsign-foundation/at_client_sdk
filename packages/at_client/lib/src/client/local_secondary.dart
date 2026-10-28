@@ -134,8 +134,8 @@ class LocalSecondary implements Secondary {
       final atSign = _atClient.getCurrentAtSign();
       if (atSign == null) {
         throw StateError(
-          'LocalSecondary.syncQueue accessed before currentAtSign was '
-          'set; AtClientManager.setCurrentAtSign must run first',
+          'LocalSecondary.syncQueue accessed before the client had an '
+          'atSign',
         );
       }
       final storagePath = _atClient.getPreferences()?.hiveStoragePath;

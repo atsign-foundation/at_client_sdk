@@ -2,10 +2,8 @@
     '@sitaram on a running virtualenv, a real CRAM secret, and encryption '
     'keys loaded onto the client — and this fixture supplies none of the '
     'three: TestUtil.getPreferenceLocal() carries the literal placeholder '
-    "'<cram_secret>', and setCurrentAtSign is called with no key source and "
-    'no key loading, so createGroup fails in putText with "Self encryption key '
-    'is not set" before any network call. Confirmed with no containers '
-    'running at all, so it is not a missing virtualenv.\n'
+    "'<cram_secret>', and TestUtil.openAsCurrent opens the client from a "
+    'keyfile in the default keys directory, which nothing here provisions.\n'
     '\n'
     'Skipped rather than left red because nothing was going to notice: '
     'at_contact is in at_libraries.yaml\'s `build` job, which runs pub get '

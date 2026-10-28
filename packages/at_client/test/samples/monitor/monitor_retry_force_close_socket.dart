@@ -4,8 +4,11 @@ import '../test_util.dart';
 void main() async {
   try {
     final aliceAtSign = '@alice🛠';
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(aliceAtSign, 'wavi', TestUtil.getAlicePreference());
+    final atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: aliceAtSign,
+          namespace: 'wavi',
+          preference: TestUtil.getAlicePreference()));
 
     atClientManager.atClient.notificationService
         .subscribe()

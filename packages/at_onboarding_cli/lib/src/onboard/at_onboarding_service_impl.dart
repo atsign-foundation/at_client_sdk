@@ -55,8 +55,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> authenticate() async {
     // NOTE: `open` refuses while a client for the atSign is live, and a
     // program built on this adapter authenticates the same atSign again
-    // expecting the earlier client replaced, the way the manager's
-    // `setCurrentAtSign` replaced it.
+    // expecting the earlier client replaced.
     for (final live in AtClientImpl.liveClientsFor(_atSign)) {
       await live.stop();
     }

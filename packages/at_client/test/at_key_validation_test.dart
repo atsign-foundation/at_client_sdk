@@ -32,9 +32,9 @@ void main() {
     var atSign = '';
     final namespace = 'test';
     final preference = AtClientPreference();
-    expect(
-        () async => await AtClientManager.getInstance()
-            .setCurrentAtSign(atSign, namespace, preference),
+    await expectLater(
+        () => buildAtClient(
+            atSign: atSign, namespace: namespace, preference: preference),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 

@@ -453,24 +453,6 @@ void main() {
       }
     });
 
-    test('a hand-over that joins a stop already running hands nothing over',
-        () async {
-      final stopping = await client('@handover');
-      final closing = Completer<void>();
-      when(() => built.first.stop()).thenAnswer((_) => closing.future);
-
-      final first = stopping.stop();
-      await Future.delayed(const Duration(milliseconds: 20));
-      final handedOver = stopping.stopHandingOverStorage();
-      closing.complete();
-      await first;
-
-      expect(await handedOver, isNull,
-          reason: 'the teardown already running is an ordinary stop, which '
-              'releases the storage; handing the same store to a successor '
-              'as well would give two clients one store');
-    });
-
     test('a client restarted after a stop tears down again on the next stop',
         () async {
       // A client built on a bare keystore is the one that can restart:

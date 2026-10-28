@@ -5,8 +5,9 @@ void main() async {
   try {
     final atsign = '@alice🛠';
     final preference = TestUtil.getAlicePreference();
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign, namespace: 'wavi', preference: preference));
     var atClient = atClientManager.atClient;
     //llookup:phone.me@alice🛠
     var atKey = AtKey()..key = 'phone';
