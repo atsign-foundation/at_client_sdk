@@ -67,8 +67,7 @@ void main() {
         {bool activated = false}) {
       final lookUp = MockAtLookupImpl();
       final sent = <String>[];
-      when(() => lookUp.cramAuthenticate(any()))
-          .thenAnswer((i) async => i.positionalArguments.first == cramSecret);
+      when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
       when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
           .thenAnswer((i) async {
         final command = i.positionalArguments.first as String;

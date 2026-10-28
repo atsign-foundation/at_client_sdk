@@ -140,8 +140,8 @@ void main() {
               'CRAM exchange, not this check, refuses an activated atSign');
     });
 
-    test('Test onboard - cramAuthenticate returns false', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+    test('Test onboard - CRAM authentication returns false', () async {
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(false));
       when(() => mockAtLookUp
               .executeCommand(any(that: isNot(startsWith('lookup:publickey')))))
@@ -163,7 +163,7 @@ void main() {
 
     test('an enrollment refusal surfaces the underlying reason in the message',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -190,7 +190,7 @@ void main() {
 
     test('Test onboard with appName and deviceName set in onboarding request',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -231,7 +231,7 @@ void main() {
       // however the id is passed to `pkamAuthenticate`, the atServer
       // authenticates the connection as `pkamLegacy` against the default PKAM
       // public key, and the two ends disagree about who is on the connection.
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -282,7 +282,7 @@ void main() {
 
     test('the activation PKAM goes over the same lookup, so it is not closed',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -307,7 +307,7 @@ void main() {
     });
 
     test('Test onboard with default appName and deviceName', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));

@@ -84,11 +84,6 @@ class RemoteSecondary implements Secondary {
   /// client can be handed its AtChops after construction.
   void _installAuthenticator() {
     final lookUp = atLookUp;
-    // `AtLookUp` does not declare the seam - that interface is frozen because
-    // mocks implement it - so any other implementation keeps its behaviour.
-    if (lookUp is! AtLookupMuxable) {
-      return;
-    }
     final clientConfig = _getClientConfig();
 
     // The keyfile's keypair signs when it holds one for this enrollment; the
@@ -322,8 +317,8 @@ class RemoteSecondary implements Secondary {
     if (secret == null) {
       throw UnAuthenticatedException('Cram secret cannot be null');
     }
-    var authResult = await atLookUp.cramAuthenticate(secret);
-    return authResult;
+    atLookUp.authenticator = authenticatorForCramSecret(_atSign, secret);
+    return atLookUp.pkamAuthenticate();
   }
 
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
@@ -393,13 +388,9 @@ class RemoteSecondary implements Secondary {
   /// Closes the connection and ends this remote secondary for good: every
   /// later call through it fails with [StoppedException]. A connection meant
   /// to be re-established uses [AtLookupMuxable.dropConnection] instead.
-  ///
-  /// An [AtLookupMuxable] is stopped. Any other [AtLookUp] can only be
-  /// closed, so it opens a new connection for whoever calls it directly.
   Future<void> closeConnection() async {
     _stopped = true;
-    final lookUp = atLookUp;
-    await (lookUp is AtLookupMuxable ? lookUp.stop() : lookUp.close());
+    await atLookUp.stop();
   }
 
   bool _stopped = false;

@@ -169,7 +169,7 @@ void main() {
   /// Onboards with a PQ activation key, the case where an algorithm HAS to be
   /// named because at_lookup's default would sign an ML-DSA key with RSA.
   Future<void> onboard(AtAuthImpl auth, AtLookupMuxable lookUp) {
-    when(() => lookUp.cramAuthenticate(cramSecret)).thenAnswer((_) async => true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
     when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     return auth.onboard(
@@ -182,17 +182,18 @@ void main() {
 
   group('a lookup that can take an authenticator', () {
 
-    test('onboard installs one twice, and never touches the ladder',
-        () async {
-      // Twice: once for the CRAM leg, and again once the atServer has named
-      // the enrollment, because the id is captured at install time.
+    test('onboard installs one three times', () async {
+      // The CRAM authenticator for the activation's first login, the
+      // keyfile's once its keys exist, and the keyfile's again once the
+      // atServer has named the enrollment, because the id is captured at
+      // install time.
       final lookUp = MockMuxableLookUp();
 
       await onboard(
           rig(lookUp, enrollmentId: onboardedEnrollmentId, activated: false),
           lookUp);
 
-      verify(() => lookUp.authenticator = any(that: isNotNull)).called(2);
+      verify(() => lookUp.authenticator = any(that: isNotNull)).called(3);
     });
   });
 

@@ -59,9 +59,6 @@ published on
 - [at_policy](./packages/at_policy): scaffolding for building
   policy-management services that talk to enforcement endpoints
   via the Atsign Protocol.
-- [at_server_status](./packages/at_server_status): logs the status
-  of the root server and the atServer for an atSign of your
-  choice.
 - [at_utils](./packages/at_utils): utility library: atSign,
   metadata, configuration, logger.
 - [base2e15](./packages/base2e15): fork of the upstream

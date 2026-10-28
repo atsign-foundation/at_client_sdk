@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -81,8 +82,15 @@ void main() {
           atOnboardingService.atClient?.getRemoteSecondary()?.atLookUp;
       AtKey key = AtKey();
       key.key = 'testKey1';
-      await atLookUp?.update(key.key, 'value1');
-      String? response = await atLookUp?.llookup(key.key);
+      await atLookUp?.executeVerb(UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = key.key
+          ..sharedBy = atSign)
+        ..value = 'value1');
+      String? response = await atLookUp?.executeVerb(LLookupVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = key.key
+          ..sharedBy = atSign));
       expect('data:value1', response);
     });
 

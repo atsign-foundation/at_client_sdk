@@ -91,10 +91,10 @@ void main() {
         },
       );
 
-      test('close() should close RemoteSecondary connection', () async {
+      test('closeConnection() stops the RemoteSecondary\'s lookup', () async {
         final mockAtLookup = MockAtLookUp();
         bool calledFlag = false;
-        when(() => mockAtLookup.close()).thenAnswer((_) async {
+        when(() => mockAtLookup.stop()).thenAnswer((_) async {
           calledFlag = true;
         });
 

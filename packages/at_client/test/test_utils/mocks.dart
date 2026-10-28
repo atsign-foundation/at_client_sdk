@@ -46,6 +46,7 @@ void _answerCommandsWithNothing(AtLookUp lookUp) {
 class MockAtLookUp extends Mock implements AtLookUp {
   MockAtLookUp() {
     _answerCommandsWithNothing(this);
+    when(stop).thenAnswer((_) async {});
   }
 }
 

@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
+import 'package:at_chops/at_chops.dart' show SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart'
+    show AtAuthenticator, AtCommandExecutor;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -27,6 +30,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
+    registerFallbackValue((AtCommandExecutor _) async => true);
   });
 
   setUp(() {
@@ -61,8 +65,11 @@ void main() {
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
-    when(() => lookUp.cramAuthenticate(any())).thenAnswer((invocation) async =>
-        invocation.positionalArguments.first == cramSecret);
+    final installed = <AtAuthenticator?>[];
+    when(() => lookUp.authenticator = any()).thenAnswer((invocation) {
+      installed.add(invocation.positionalArguments.first as AtAuthenticator?);
+      return null;
+    });
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
@@ -84,9 +91,14 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${builder.buildCommand()}');
     });
+    // The first authenticator installed is the CRAM leg's, and it runs
+    // against this atServer, which accepts the digest of cramSecret over its
+    // challenge and nothing else; the PKAM legs after it are accepted.
     when(() =>
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+        .thenAnswer((_) async => installed.length == 1
+            ? installed.single!(_CramAtServer(cramSecret))
+            : true);
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
@@ -201,7 +213,8 @@ void main() {
             keys: store,
             preference: await preference(),
             atLookUp: server.lookUp),
-        throwsA(isA<AtAuthenticationException>()));
+        throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+            'message', startsWith('Cram authentication failed for $atSign'))));
     await expectLater(
         () => store.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
         reason: 'nothing was minted for a secret the atServer refused');
@@ -228,6 +241,26 @@ void main() {
     expect(server.sent, isEmpty,
         reason: 'refused after the activation, the one-time secret is spent '
             'on keys no client can open; so the refusal comes first');
-    verifyNever(() => server.lookUp.cramAuthenticate(any()));
+    verifyNever(() => server.lookUp.pkamAuthenticate());
   });
+}
+
+/// Answers `from:` with a challenge, and `cram:` with success only for the
+/// digest of [secret] over that challenge.
+class _CramAtServer implements AtCommandExecutor {
+  static const _challenge = 'challenge-for-the-test';
+  final String secret;
+
+  _CramAtServer(this.secret);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    if (command.startsWith('from:')) return 'data:$_challenge';
+    final expected =
+        SHA512HashingAlgo().hash(utf8.encode('$secret$_challenge'));
+    return command.trim() == 'cram:$expected'
+        ? 'data:success'
+        : 'error:AT0401-Exception: the CRAM digest did not match';
+  }
 }

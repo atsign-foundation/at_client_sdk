@@ -1,12 +1,6 @@
-// Builds the AtChopsImpl the ladder tests hand to AtLookupImpl, in the
-// vocabulary at_chops has deprecated.
-// TODO(4.0): remove with the credential ladder.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
@@ -40,8 +34,6 @@ class MockOutboundConnectionFactory extends Mock
 
 class MockOutboundMessageListener extends Mock
     implements OutboundMessageListener {}
-
-class MockAtChops extends Mock implements AtChopsImpl {}
 
 class MockOutboundConnectionImpl extends Mock
     implements OutboundConnectionImpl {}

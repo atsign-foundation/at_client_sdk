@@ -70,7 +70,7 @@ void main() {
         mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
             auth: any(named: 'auth'))).thenAnswer(
         (_) async => throw AtLookUpException('AT0015', 'key not found'));
-    when(() => mockAtLookUp.cramAuthenticate(cramSecret))
+    when(() => mockAtLookUp.pkamAuthenticate())
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
         .thenAnswer((_) async => 'data:2');

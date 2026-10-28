@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_auth/src/auth/at_authenticator.dart';
 
 class CramAuthenticator {
   CramAuthenticator();
@@ -14,9 +15,11 @@ class CramAuthenticator {
     Duration timeout = const Duration(seconds: 30),
     int maxRetries = 10,
   }) async {
+    atLookUp.authenticator = authenticatorForCramSecret(atSign, cramSecret);
     try {
-      return await atLookUp.cramAuthenticate(cramSecret);
+      return await atLookUp.pkamAuthenticate();
     } on UnAuthenticatedException catch (e) {
+      if (e.message.startsWith('Cram authentication failed')) rethrow;
       throw UnAuthenticatedException(
           'Cram authentication failed for $atSign: ${e.message}');
     }

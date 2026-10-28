@@ -6,7 +6,8 @@ import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart';
 
-/// An [AtLookUp] that is not an [AtLookupMuxable], so it can only be closed.
+/// An [AtLookUp] that is not an [AtLookupMuxable]: it carries no
+/// notifications, and stops like any other.
 class _PlainLookUp extends Mock implements AtLookUp {}
 
 /// Catalogue: features/at_lookup/close_and_stop.feature
@@ -41,6 +42,7 @@ void main() {
     final plain = _PlainLookUp();
     when(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:ok');
+    when(plain.stop).thenAnswer((_) async {});
     when(plain.close).thenAnswer((_) async {});
     final client = await AtClientImpl.create(
             '@plain', 'wavi', AtClientPreference()..monitorAutoStart = false,
@@ -60,6 +62,6 @@ void main() {
     await expectLater(remote.sync(0), throwsA(isA<StoppedException>()));
     verify(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .called(1);
-    verify(plain.close).called(1);
+    verify(plain.stop).called(1);
   });
 }

@@ -93,13 +93,8 @@ void main() {
       final calls = <String, Future<Object?> Function()>{
         'executeCommand': () => atLookup.executeCommand('noop:0\n'),
         'executeVerb': () => atLookup.executeVerb(StatsVerbBuilder()),
-        'llookup': () => atLookup.llookup('phone'),
-        'lookup(verifyData)': () =>
-            atLookup.lookup('phone', '@bob', verifyData: true),
         'pkamAuthenticate': () => atLookup.pkamAuthenticate(),
-        'cramAuthenticate': () => atLookup.cramAuthenticate('secret'),
         'sendSync': () => (atLookup as AtCommandExecutor).sendSync('noop:0\n'),
-        'readResponse': () => atLookup.readResponse(),
         'startNotifications': () => atLookup.startNotifications(),
       };
       for (final call in calls.entries) {

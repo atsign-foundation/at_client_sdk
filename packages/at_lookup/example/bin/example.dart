@@ -1,28 +1,20 @@
-// Names AtLookupImpl directly, which is deprecated in favour of
-// AtLookUp.withSecureSocket but cannot leave the barrel before the next
-// major release.
-// TODO(4.0): rewrite against AtLookUp.withSecureSocket.
-// ignore_for_file: deprecated_member_use
-
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 
-/// The example below demonstrate on how to use at_lookup package to interact with secondary server
-/// to execute the verbs.
-/// NOTE: Running this example would result in an exception. The At_lookup package would require
-/// a secondary running.
-void main() async {
-  var atLookupImpl = AtLookupImpl(
-    '@alice',
-    'root.atsign.com',
-    64,
+/// Runs a few verbs against @alice's atServer through at_lookup.
+///
+/// It needs a running atServer for @alice and an [AtAuthenticator] that
+/// authenticates as @alice: at_auth builds one from a keyfile with
+/// `authenticatorFor`, or from a CRAM secret with `authenticatorForCramSecret`.
+Future<void> main() async {
+  final atLookupImpl = AtLookUp.withSecureSocket(
+    atSign: '@alice',
+    rootDomain: const AtRootDomain('root.atsign.org', 64),
+    authenticator: _authenticator,
+    transport: secureSocketTransport(SecureSocketConfig()),
     secondaryAddressFinder:
-        CacheableSecondaryAddressFinder('root.atsign.com', 64),
-    transportFactory:
-        SecureSocketTransportFactory(secureSocketConfig: SecureSocketConfig()),
-    privateKey: 'privateKey',
-    cramSecret: 'cramSecret',
+        CacheableSecondaryAddressFinder('root.atsign.org', 64),
   );
 
   /// To update a key into secondary server
@@ -71,4 +63,10 @@ void main() async {
   ///To retrieve the notifications received
   var notifyListVerbBuilder = NotifyListVerbBuilder();
   await atLookupImpl.executeVerb(notifyListVerbBuilder);
+
+  await atLookupImpl.stop();
 }
+
+/// Stands in for the authenticator at_auth builds.
+Future<bool> _authenticator(AtCommandExecutor executor) =>
+    throw UnimplementedError('use an AtAuthenticator from at_auth');

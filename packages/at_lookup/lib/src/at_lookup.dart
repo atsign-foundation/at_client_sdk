@@ -146,42 +146,20 @@ abstract interface class AtLookUp {
     )..authenticator = authenticator;
   }
 
-  /// update
-  Future<bool> update(String key, String value,
-      {String? sharedWith, Metadata? metadata});
-
-  /// lookup
-  Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool verifyData = false});
-
-  /// plookup
-  Future<String> plookup(String key, String sharedBy);
-
-  Future<String> llookup(String key,
-      {String? sharedBy, String? sharedWith, bool isPublic = false});
-
-  /// delete
-  Future<bool> delete(String key, {String? sharedWith, bool isPublic = false});
-
-  /// scan
-  Future<List<String>> scan({String? regex, String? sharedBy});
-
+  /// Runs [builder]'s command on the atServer, authenticating the connection
+  /// first when the verb needs it, and returns the atServer's response.
   Future<String?> executeVerb(VerbBuilder builder);
 
+  /// Sends [command] as written and returns the atServer's response; [auth]
+  /// authenticates the connection first.
   Future<String?> executeCommand(String command, {bool auth = false});
 
-  /// Performs a PKAM authentication using private key on the client side and public key on secondary server
+  /// Authenticates this lookup's connection with its authenticator, opening
+  /// the connection when there is none, and returns true once it has.
   ///
-  /// Pkam private key should be set in  [atChops.atChopsKeys]
-  ///
-  /// Default signing algorithm for pkam signature is [SigningAlgoType.rsa2048] and default hashing algorithm is [HashingAlgoType.sha256]
-  ///
-  /// Optionally pass enrollmentId if the client is enrolled using APKAM
+  /// [enrollmentId] is recorded on the connection as the enrollment it
+  /// authenticated as.
   Future<bool> pkamAuthenticate({String? enrollmentId});
-
-  /// Generates digest using from verb response and [secret] and performs a
-  /// CRAM authentication to secondary server
-  Future<bool> cramAuthenticate(String secret);
 
   /// Closes this lookup's connection: the next call opens a new one and
   /// authenticates again as the same atSign, with the credentials the lookup
@@ -189,12 +167,23 @@ abstract interface class AtLookUp {
   ///
   /// A request waiting on the connection fails at once. An [AtLookupMuxable]
   /// also stops its notifications, so nothing reconnects until a caller sends
-  /// a command. [AtLookupMuxable.stop] is what ends a lookup for good.
+  /// a command. [stop] is what ends a lookup for good.
   Future<void> close();
 
   AtConnection? get connection;
 
-  set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
+  /// Authenticates each connection this lookup opens. With none set, a
+  /// command that needs authentication fails.
+  AtAuthenticator? get authenticator;
+  set authenticator(AtAuthenticator? value);
+
+  /// Ends this lookup: closes its connection, and stops its notifications
+  /// when it has any.
+  ///
+  /// Work in flight fails with [StoppedException], and so does every later
+  /// call, without touching the network; [close] afterwards changes nothing.
+  /// Calling this again waits for the first stop.
+  Future<void> stop();
 
   SecondaryAddressFinder get secondaryAddressFinder;
 }
@@ -277,72 +266,11 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// reconnected. [stop] is what ends the lookup.
   Future<void> dropConnection();
 
-  /// Ends this lookup: closes its connection and stops its notifications.
-  ///
-  /// Work in flight fails with [StoppedException], and so does every later
-  /// call, without touching the network; [close] afterwards changes nothing.
-  /// Calling this again waits for the first stop.
-  Future<void> stop();
-
-  // Where `AtLookupImpl` accepts more than `AtLookUp` does, restated here so
-  // a caller can hold this interface without losing anything: two methods,
-  // three parameters - `scan(auth:)`, `scan(showHiddenKeys:)` and
-  // `lookup(metadata:)`.
-  //
-  // ⚠️ Dart lets an implementer ADD optional named parameters, so a gap here
-  // is invisible: the analyzer stays clean and the only symptom is a caller
-  // holding the interface unable to pass something the class accepts.
-  // `showHiddenKeys` was missed for exactly that reason, and this comment
-  // claimed the restatement was complete while it was not.
-  //
-  // Found with the analyzer, not by reading: a hand-written comparison of the
-  // two signature lists missed `scan` entirely, because nested generics in
-  // `Future<List<String>>` broke its return-type pattern. A probe that calls
-  // each method through the interface reports exactly what is missing, and
-  // carries `scan(auth:)` as a control that must be reported.
-  //
-  // They go HERE rather than on `AtLookUp` because that interface is frozen:
-  // adding a parameter to one of its methods forces every `implements
-  // AtLookUp` to redeclare it, which breaks the six mocks and any external
-  // implementer at compile time. This interface is new, and `AtLookupImpl` is
-  // its only implementer.
-
-  /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
-  /// authenticated atSign (`at_server_status` scans unauthenticated) - and
-  /// [showHiddenKeys], which asks the atServer to include `public:__` keys.
-  @override
-  Future<List<String>> scan(
-      {String? regex,
-      String? sharedBy,
-      bool auth = true,
-      bool showHiddenKeys = false});
-
-  /// As [AtLookUp.lookup], and additionally [metadata].
-  @override
-  Future<String> lookup(String key, String sharedBy,
-      {bool auth = true, bool verifyData = false, bool metadata = false});
-
-  /// Takes over authentication entirely when set.
-  ///
-  /// On the interface because installing one is the whole point of the seam,
-  /// and every installer previously had to write `if (lookUp is
-  /// AtLookupImpl)` to reach it — four such casts across at_auth, at_client
-  /// and at_onboarding_cli. A cast to a concrete type in order to configure it
-  /// is the shape this project exists to remove.
-  AtAuthenticator? get authenticator;
-  set authenticator(AtAuthenticator? value);
-
   /// Whether a usable connection is currently open.
   ///
   /// A caller closing down needs this to avoid closing what was never opened,
   /// and it too was reached only by casting.
   bool isConnectionAvailable();
-
-  /// Read one response from the connection, without sending anything first.
-  @Deprecated('atServers no longer support the stream verb, its only use; '
-      'removed in 4.0.0')
-  Future<String> readResponse(
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
 
   /// Whether the connection dropped and a reconnect is in flight.
   ///

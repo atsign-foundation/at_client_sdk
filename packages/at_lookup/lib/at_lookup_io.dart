@@ -42,33 +42,6 @@ AtLookupTransport secureSocketTransport(
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: secureSocketConfig));
 
-/// The pre-4.0.0 `AtLookupImpl(atSign, rootDomain, rootPort)` constructor.
-///
-/// Supplies the two dependencies 4.0.0 made required — a
-/// [CacheableSecondaryAddressFinder] and a [SecureSocketTransportFactory] — so
-/// that a call which relied on the deleted defaults becomes a one-line change.
-/// New code should use [AtLookUp.withSecureSocket], which names its transport
-/// explicitly and hands back an interface.
-@Deprecated('Use AtLookUp.withSecureSocket. Removed in the next major release.')
-AtLookupImpl atLookupOverSecureSocket(
-  String atSign,
-  String rootDomain,
-  int rootPort, {
-  String? privateKey,
-  String? cramSecret,
-  SecureSocketConfig? secureSocketConfig,
-  Map<String, dynamic>? clientConfig,
-}) =>
-    // ignore: deprecated_member_use_from_same_package
-    AtLookupImpl(atSign, rootDomain, rootPort,
-        privateKey: privateKey,
-        cramSecret: cramSecret,
-        clientConfig: clientConfig,
-        secondaryAddressFinder:
-            CacheableSecondaryAddressFinder(rootDomain, rootPort),
-        transportFactory: SecureSocketTransportFactory(
-            secureSocketConfig: secureSocketConfig ?? SecureSocketConfig()));
-
 /// The default [AtLookUpFactory]: every connection over TLS on TCP, under
 /// [config] (the TLS defaults with none), through `AtLookUp.withSecureSocket`.
 ///
