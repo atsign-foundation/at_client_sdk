@@ -78,8 +78,7 @@ class AtKeysFileLock {
 
   void _refresh() {
     if (ownerOnlyWritesAvailable) {
-      // NOTE: not through a symbolic link put at the lock's path, which the
-      // account owning the keys directory can do while root holds the lock.
+      // NOTE: the heartbeat does not follow a symbolic link at the lock's path.
       touchNoFollow(lockPath);
       return;
     }
@@ -105,11 +104,9 @@ class AtKeysFileLock {
       final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
       if (ownerOnlyWritesAvailable) {
         // NOTE: the token is written through the descriptor the exclusive
-        // create opened. Reopening the lock by path to write it would follow
-        // a symbolic link renamed over it in between, and truncate whatever
-        // that link points to — any file at all, when root holds the lock.
-        // A token that does not land takes the lock back down and
-        // propagates, for the reason given below.
+        // create opened, never by reopening the lock's path. A token that
+        // does not land takes the lock back down and propagates, for the
+        // reason given below.
         if (createNewWith(lockPath, utf8.encode(token))) return token;
         lastFailure = FileSystemException('Cannot create the lock', lockPath);
       } else {

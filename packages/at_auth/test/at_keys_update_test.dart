@@ -255,9 +255,7 @@ void main() {
 
       expect(file.readAsBytesSync(), restored,
           reason: 'the candidate is validated against the keyfile on disk at '
-              'the write, not as the update read it, so the restored '
-              'credential is not overwritten — nor kept only in a .bak that '
-              'holds the bytes read before the mutation');
+              'the write, and that keyfile is left as it was');
     });
 
     test('flush still creates the keyfile, which is what update must not do',
