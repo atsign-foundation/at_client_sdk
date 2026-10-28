@@ -229,6 +229,37 @@ void main() {
               'It used to be recreated here, silently');
     });
 
+    test('refuses a keyfile replaced while the update was in flight', () async {
+      final io = FileAtKeysIo(filePath: pathFor);
+      final file = File(pathFor(atSign));
+      final restoredPath = '${tempDir.path}/restored.atKeys';
+      await FileAtKeysIo(filePath: (_) => restoredPath).write(
+          atSign,
+          legacyAtKeys(atsign: atSign.toAtsign())
+            ..apkamPrivateKey = AtBytes.fromString('cmVzdG9yZWQ='));
+      final restored = File(restoredPath).readAsBytesSync();
+      expect(restored, isNot(file.readAsBytesSync()),
+          reason: 'control: the restored keyfile holds another credential');
+
+      // The owner restores another keyfile over this one between the read
+      // and the write, as the deletion above, by a path that does not take
+      // the lock.
+      await expectLater(
+        io.update(atSign.toAtsign(), (keys) {
+          file.writeAsBytesSync(restored);
+          keys.addKey(keyNamed('filed-during-the-restore'));
+          return true;
+        }),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+
+      expect(file.readAsBytesSync(), restored,
+          reason: 'the candidate is validated against the keyfile on disk at '
+              'the write, not as the update read it, so the restored '
+              'credential is not overwritten — nor kept only in a .bak that '
+              'holds the bytes read before the mutation');
+    });
+
     test('flush still creates the keyfile, which is what update must not do',
         () async {
       // The distinguishing arm. Both go through the same writer, and only

@@ -27,3 +27,15 @@ KeyfileRead readNoFollow(String path) =>
 ({bool modeSet, bool ownerSet}) writeNewOwnerOnly(String path, List<int> bytes,
         {OwnerAndGroup? owner}) =>
     throw UnsupportedError('Owner-only file writes need dart:ffi');
+
+/// Not available on a platform without `dart:ffi`; callers check
+/// [ownerOnlyWritesAvailable] first.
+bool createNewWith(String path, List<int> bytes) =>
+    throw UnsupportedError('Creating a file through one descriptor needs '
+        'dart:ffi');
+
+/// Not available on a platform without `dart:ffi`; callers check
+/// [ownerOnlyWritesAvailable] first.
+bool touchNoFollow(String path) =>
+    throw UnsupportedError('Setting the times of a file without following a '
+        'link needs dart:ffi');

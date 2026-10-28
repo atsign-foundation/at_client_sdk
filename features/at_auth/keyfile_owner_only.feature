@@ -11,7 +11,9 @@ Feature: Keyfiles are written owner-only
 
   Races: every write already holds the keyfile's lock; the temporary file is
   0600 from the moment it exists, and a temporary file left by an interrupted
-  write is replaced rather than written into. Replay: nothing is issued or
+  write is replaced rather than written into. The lock file's token is
+  written through the descriptor that created it, and its heartbeat does not
+  follow a symbolic link. Replay: nothing is issued or
   checked. Denial of service: one mode change per file written; a file system
   that cannot hold the mode gets a warning naming the file and the write
   proceeds. Forgery and impersonation: only the file's owner can read or
@@ -105,11 +107,23 @@ Feature: Keyfiles are written owner-only
     And the file the link points to is unchanged
 
   @race
-  Scenario: A keyfile replaced while root updates it is written with the owner it was read with
+  Scenario: A keyfile replaced by a symbolic link while root updates it is not rewritten
     Given @alice🛠's keyfile is owned by one account, with mode 0600
     When FileAtKeysIo, running as root, updates it, and the keyfile is replaced by a link to a second account's file before the update writes
-    Then the keyfile written is a file with the first account's owner and group
+    Then the update fails
+    And the link is left where it was put
     And the second account's file is unchanged
+
+  Scenario: A keyfile that is a FIFO is refused, not waited on
+    Given @alice🛠's keyfile is a FIFO
+    When FileAtKeysIo, running as root, updates it
+    Then the update fails without waiting for a writer
+
+  @race
+  Scenario: The lock's heartbeat does not follow a link put at its path
+    Given a process holds the keyfile's lock
+    When a symbolic link to another file is renamed over the lock file
+    Then the heartbeat leaves the file the link points to unchanged
 
   Scenario: A backup path that is a symbolic link is replaced when root rewrites the keyfile
     Given @alice🛠's keyfile is owned by one account

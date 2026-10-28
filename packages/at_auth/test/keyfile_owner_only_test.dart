@@ -7,6 +7,8 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/src/keys/io/file_lock.dart';
+import 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -260,26 +262,27 @@ void main() {
     }, skip: _rootOnly);
 
     test(
-        'A keyfile replaced while root updates it is written with the owner '
-        'it was read with', () async {
+        'A keyfile replaced by a symbolic link while root updates it is not '
+        'rewritten', () async {
       await writeKeyfile(mode: '600');
       await _chown('1234:2345', keyfile);
       final theirs = '${dir.path}/theirs.atKeys';
       File(theirs).writeAsStringSync('{}');
       await _chown('5678:5678', theirs);
 
-      await io().update(atsign.toAtsign(), (keys) {
-        File(keyfile).renameSync('${dir.path}/moved.atKeys');
-        Link(keyfile).createSync(theirs);
-        return true;
-      });
+      await expectLater(
+          io().update(atsign.toAtsign(), (keys) {
+            File(keyfile).renameSync('${dir.path}/moved.atKeys');
+            Link(keyfile).createSync(theirs);
+            return true;
+          }),
+          throwsA(isA<FileSystemException>()),
+          reason: 'the keyfile is read again before the write, and root does '
+              'not rewrite a keyfile that is a symbolic link');
 
       expect(FileSystemEntity.typeSync(keyfile, followLinks: false),
-          FileSystemEntityType.file,
-          reason: 'the keyfile written is a file');
-      expect(await _ownerOf(keyfile), '1234:2345',
-          reason: 'the keyfile written takes the owner and group it was read '
-              'with');
+          FileSystemEntityType.link,
+          reason: 'the link is left where it was put');
       expect(File(theirs).readAsStringSync(), '{}',
           reason: "the second account's file is unchanged");
       expect(await _ownerOf(theirs), '5678:5678',
@@ -327,6 +330,225 @@ void main() {
               'nothing is logged for it');
     });
   });
+
+  // NOTE: CI runs this file as an account that is not root, which skips the
+  // root-only tests above. These drive the branch root takes from any
+  // account; the one thing they cannot do is give a file to another owner,
+  // so they move the keyfile to another of this account's groups instead.
+  group("Root's branch, run by any account", () {
+    setUp(() {
+      runningAsRootForTesting = true;
+      addTearDown(() => runningAsRootForTesting = null);
+    });
+
+    test('The owner read without following a link is the file\'s', () async {
+      await writeKeyfile(mode: '600');
+      final otherGroup = await _groupOtherThanNewFilesGet(keyfile);
+      if (otherGroup != null) await _chgrp(otherGroup, keyfile);
+
+      final read = readNoFollow(keyfile);
+
+      expect('${read.owner!.uid}:${read.owner!.gid}', await _ownerOf(keyfile),
+          reason: 'the owner and group come from where the stat buffer holds '
+              'them');
+      expect(read.bytes, File(keyfile).readAsBytesSync());
+    });
+
+    test("A keyfile, and copies of it, keep the keyfile's group", () async {
+      await writeKeyfile(mode: '600');
+      final otherGroup = await _groupOtherThanNewFilesGet(keyfile);
+      if (otherGroup == null) {
+        markTestSkipped('this account has one group, which every file it '
+            'creates here gets anyway');
+        return;
+      }
+      await _chgrp(otherGroup, keyfile);
+      final owner = await _ownerOf(keyfile);
+
+      await io().update(atsign.toAtsign(), (keys) {
+        keys.addKey(symmetricKey('typed'));
+        return true;
+      });
+
+      for (final written in [
+        keyfile,
+        '$keyfile.bak',
+        '$keyfile${FileAtKeysIo.legacyShapeBackupSuffix}'
+      ]) {
+        expect(await _ownerOf(written), owner,
+            reason: 'a file root writes takes the owner and group the '
+                'keyfile was read with: $written');
+        expect(_modeOf(written), '0600',
+            reason: 'the file is readable and writable by its owner alone: '
+                '$written');
+      }
+    });
+
+    test('A keyfile that is a symbolic link is not rewritten', () async {
+      final target = '${dir.path}/elsewhere.atKeys';
+      await FileAtKeysIo(filePath: (_) => target)
+          .write(atsign, legacyAtKeys(atsign: atsign.toAtsign()));
+      final before = File(target).readAsBytesSync();
+      Directory('${dir.path}/keys').createSync();
+      Link(keyfile).createSync(target);
+
+      await expectLater(io().update(atsign.toAtsign(), (keys) => true),
+          throwsA(isA<FileSystemException>()),
+          reason: 'root does not rewrite a keyfile that is a symbolic link');
+
+      expect(File(target).readAsBytesSync(), before,
+          reason: 'the file the link points to is unchanged');
+    });
+
+    test('A keyfile that is a FIFO is refused, not waited on', () async {
+      Directory('${dir.path}/keys').createSync();
+      await _mkfifo(keyfile);
+
+      await expectLater(
+          io()
+              .update(atsign.toAtsign(), (keys) => true)
+              .timeout(const Duration(seconds: 5)),
+          throwsA(isA<FileSystemException>()),
+          reason: 'only a regular file is read as the keyfile');
+    });
+  });
+
+  group('Files root writes are created, never reused', () {
+    test('Reading a FIFO without following a link does not block', () async {
+      final fifo = '${dir.path}/fifo';
+      await _mkfifo(fifo);
+
+      final outcome = await _readNoFollowInIsolate(fifo).timeout(
+          const Duration(seconds: 5), onTimeout: () {
+        // NOTE: a writer releases the blocked open, so the isolate ends.
+        File(fifo).openSync(mode: FileMode.writeOnly).closeSync();
+        return 'blocked';
+      });
+
+      expect(outcome, 'refused',
+          reason: 'the open does not wait for a writer, and what it opened '
+              'is refused as not a regular file');
+    });
+
+    for (final existing in ['a file', 'a link to a file', 'a dangling link']) {
+      test('Writing a new owner-only file refuses $existing at its path',
+          () async {
+        final path = '${dir.path}/new';
+        final target = _plant(existing, path, dir.path);
+
+        expect(() => writeNewOwnerOnly(path, utf8.encode('written')),
+            throwsA(isA<FileSystemException>()),
+            reason: 'anything already at the path fails the write');
+
+        _expectUntouched(existing, path, target);
+      });
+
+      test('Creating the lock refuses $existing at its path', () async {
+        final path = '${dir.path}/new.lock';
+        final target = _plant(existing, path, dir.path);
+
+        expect(createNewWith(path, utf8.encode('token')), isFalse,
+            reason: 'anything already at the path fails the create');
+
+        _expectUntouched(existing, path, target);
+      });
+    }
+
+    test("The lock's heartbeat does not follow a link put at its path",
+        () async {
+      final protected = '${dir.path}/protected';
+      final lock = AtKeysFileLock(protected,
+          heartbeat: const Duration(milliseconds: 20));
+      final target = File('${dir.path}/theirs')..writeAsStringSync('theirs');
+      final old = DateTime(2020);
+      target.setLastModifiedSync(old);
+
+      await lock.synchronized(() async {
+        Link('${lock.lockPath}.planted').createSync(target.path);
+        Link('${lock.lockPath}.planted').renameSync(lock.lockPath);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+
+      expect(target.lastModifiedSync(), old,
+          reason: 'the heartbeat touches the lock, not what a link there '
+              'points to');
+      expect(target.readAsStringSync(), 'theirs');
+    });
+  });
+}
+
+Future<String> _readNoFollowInIsolate(String path) =>
+    Isolate.run(() => _readNoFollowOutcome(path));
+
+String _readNoFollowOutcome(String path) {
+  try {
+    readNoFollow(path);
+    return 'read';
+  } on FileSystemException {
+    return 'refused';
+  }
+}
+
+/// Puts [existing] at [path]; returns the file a link there points to.
+String? _plant(String existing, String path, String dir) {
+  switch (existing) {
+    case 'a file':
+      File(path).writeAsStringSync('theirs');
+      return null;
+    case 'a link to a file':
+      final target = '$dir/theirs';
+      File(target).writeAsStringSync('theirs');
+      Link(path).createSync(target);
+      return target;
+    default:
+      final target = '$dir/nothing-yet';
+      Link(path).createSync(target);
+      return target;
+  }
+}
+
+void _expectUntouched(String existing, String path, String? target) {
+  switch (existing) {
+    case 'a file':
+      expect(File(path).readAsStringSync(), 'theirs',
+          reason: 'the file at the path is unchanged');
+    case 'a link to a file':
+      expect(File(target!).readAsStringSync(), 'theirs',
+          reason: 'the file the link points to is unchanged');
+    default:
+      expect(File(target!).existsSync(), isFalse,
+          reason: 'nothing is created where the link points');
+  }
+}
+
+/// A group of this account's other than the one a file created beside
+/// [path] gets, or null when it has no other.
+Future<String?> _groupOtherThanNewFilesGet(String path) async {
+  final probe = File('$path.probe')..writeAsStringSync('');
+  try {
+    final newFilesGet = (await _ownerOf(probe.path)).split(':').last;
+    final groups = (Process.runSync('id', ['-G']).stdout as String)
+        .trim()
+        .split(RegExp(r'\s+'));
+    for (final group in groups.where((group) => group != newFilesGet)) {
+      if (Process.runSync('chgrp', [group, probe.path]).exitCode == 0) {
+        return group;
+      }
+    }
+    return null;
+  } finally {
+    probe.deleteSync();
+  }
+}
+
+Future<void> _chgrp(String group, String path) async {
+  final result = await Process.run('chgrp', [group, path]);
+  expect(result.exitCode, 0, reason: '${result.stderr}');
+}
+
+Future<void> _mkfifo(String path) async {
+  final result = await Process.run('mkfifo', [path]);
+  expect(result.exitCode, 0, reason: '${result.stderr}');
 }
 
 /// The process umask, which dart:io neither reads nor sets.
