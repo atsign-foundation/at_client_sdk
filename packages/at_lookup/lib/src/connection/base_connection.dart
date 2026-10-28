@@ -53,9 +53,13 @@ abstract class BaseConnection extends AtConnection {
     return _socket;
   }
 
-  /// The bytes arriving from the far end: the socket itself, so pausing a
+  /// The bytes arriving from the far end: the socket, so pausing a
   /// subscription to it reaches the far end.
-  Stream<List<int>> get inbound => getSocket();
+  ///
+  /// Cast, not just upcast: the socket is a `Stream<Uint8List>`, and through
+  /// the wider type `transform(utf8.decoder)` and `pipe(sink)` would pass
+  /// analysis and then fail their run-time check against `Uint8List`.
+  Stream<List<int>> get inbound => getSocket().cast<List<int>>();
 
   /// Writes raw bytes, without waiting for them to leave.
   ///

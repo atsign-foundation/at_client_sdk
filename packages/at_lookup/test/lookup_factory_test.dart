@@ -198,11 +198,15 @@ void main() {
     await first;
     expect(sockets.single.written, ['from:@alice\n'],
         reason: 'nothing goes out on a connection whose preamble failed');
+    expect(sockets.single.destroyed, isTrue,
+        reason: 'a connection whose onConnect failed is closed, not just '
+            'dropped with its socket left open');
 
     final second = lookUp.executeCommand('noop:1\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(sockets, hasLength(2),
         reason: 'the failed connection was closed, so a new one was opened');
+    expect(sockets.last.destroyed, isFalse);
     await sockets.last.settle();
     expect(sockets.last.written, ['from:@alice\n'],
         reason: 'and onConnect ran on it before the command');

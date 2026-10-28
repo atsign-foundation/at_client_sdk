@@ -106,6 +106,15 @@ class FakeAtServerSocket implements SecureSocket {
     );
   }
 
+  /// As [Stream.transform], whose parameter is checked at run time against
+  /// this socket's element type, [Uint8List], as a real socket's is.
+  @override
+  Stream<S> transform<S>(StreamTransformer<Uint8List, S> streamTransformer) =>
+      streamTransformer.bind(this);
+
+  @override
+  Stream<R> cast<R>() => Stream.castFrom<Uint8List, R>(this);
+
   @override
   void write(Object? object) {
     // The guard belongs on EVERY write entry point. It was on `add` alone at
