@@ -56,6 +56,10 @@ abstract interface class AtTransport {
   /// loop on a peer that never answers.
   void destroy();
 
+  /// Whether the channel can still carry bytes: false once [destroy] has run,
+  /// or once the transport or the far end has ended it.
+  bool get isOpen;
+
   /// Identifies the far end well enough for one log line.
   String get description;
 }

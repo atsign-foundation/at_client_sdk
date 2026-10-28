@@ -70,6 +70,9 @@ class FakeAtServerSocket implements AtTransport {
   Future<void> flush() async {}
 
   @override
+  bool get isOpen => !destroyed;
+
+  @override
   void destroy() {
     destroyed = true;
     if (!_inbound.isClosed) _inbound.close();

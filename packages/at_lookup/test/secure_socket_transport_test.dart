@@ -171,6 +171,9 @@ class _FailingSocket extends Fake implements Socket {
   int get remotePort => 64;
 
   @override
+  Future<void> get done => Completer<void>().future;
+
+  @override
   void add(List<int> data) => throw failure;
 
   @override

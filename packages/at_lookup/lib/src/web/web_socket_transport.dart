@@ -107,6 +107,9 @@ class WebSocketTransport implements AtTransport {
     }
   }
 
+  @override
+  bool get isOpen => !_closed && _port.isOpen;
+
   /// Closes the socket and [inbound]. Calling it again does nothing.
   @override
   void destroy() {

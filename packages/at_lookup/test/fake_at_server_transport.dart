@@ -88,6 +88,9 @@ class FakeAtServerTransport implements AtTransport {
   }
 
   @override
+  bool get isOpen => !destroyed;
+
+  @override
   void destroy() {
     destroyed = true;
     if (!_inbound.isClosed) _inbound.close();

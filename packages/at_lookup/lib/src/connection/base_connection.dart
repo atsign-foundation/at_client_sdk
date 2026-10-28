@@ -4,6 +4,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
 import 'package:at_lookup/src/transport/at_transport.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 /// Base class for common transport operations
 abstract class BaseConnection extends AtConnection {
@@ -22,6 +23,10 @@ abstract class BaseConnection extends AtConnection {
 
   @override
   AtConnectionMetaData? getMetaData() => metaData;
+
+  /// Whether the transport under this connection can still carry bytes.
+  @protected
+  bool get isTransportOpen => _transport.isOpen;
 
   @override
   Stream<List<int>> get inbound => _transport.inbound;

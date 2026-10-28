@@ -9,6 +9,7 @@ import 'package:at_lookup/src/util/abandonment.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
+/// Catalogue: features/at_lookup/transports.feature
 void main() {
   late StreamChannel channel;
   late HttpsSecondaryAddressFinder finder;
@@ -64,11 +65,15 @@ void main() {
             (e) => e.message, 'message', contains('not host:port'))));
   });
 
-  test('an answer longer than 512 bytes is refused', () async {
+  test('An oversized atDirectory answer is refused', () async {
     await expectLater(
         finder.findSecondary('@huge'),
-        throwsA(isA<AtException>().having((e) => e.message, 'message',
-            contains('longer than 512 bytes'))));
+        throwsA(isA<AtException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('longer than 512 bytes'),
+                isNot(contains('aaaaaaaa'))))),
+        reason: 'refused at the bound, without echoing what was read');
   });
 
   test('a close of the lookup it asks for ends the request at once', () async {

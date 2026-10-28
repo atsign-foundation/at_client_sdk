@@ -20,7 +20,10 @@ class OutboundConnectionImpl extends OutboundConnection {
 
   @override
   bool isInValid() {
-    return _isIdle() || getMetaData()!.isClosed || getMetaData()!.isStale;
+    return _isIdle() ||
+        getMetaData()!.isClosed ||
+        getMetaData()!.isStale ||
+        !isTransportOpen;
   }
 
   @override

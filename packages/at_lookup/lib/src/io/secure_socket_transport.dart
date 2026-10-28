@@ -17,9 +17,16 @@ class SecureSocketTransport implements AtTransport {
   @override
   final String description;
 
+  bool _open = true;
+
   SecureSocketTransport(Socket socket)
       : _socket = socket,
-        description = '${socket.remoteAddress.address}:${socket.remotePort}';
+        description = '${socket.remoteAddress.address}:${socket.remotePort}' {
+    socket.done.then((_) => _open = false, onError: (_) => _open = false);
+  }
+
+  @override
+  bool get isOpen => _open;
 
   /// The socket itself, never a re-broadcast of it.
   ///
@@ -57,7 +64,10 @@ class SecureSocketTransport implements AtTransport {
       AtIOException('connection to $description failed: $cause');
 
   @override
-  void destroy() => _socket.destroy();
+  void destroy() {
+    _open = false;
+    _socket.destroy();
+  }
 }
 
 /// Opens [SecureSocketTransport]s, carrying the TLS settings they are opened

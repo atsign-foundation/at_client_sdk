@@ -33,6 +33,9 @@ class FakeTransport implements AtTransport {
   Future<void> flush() async => flushes++;
 
   @override
+  bool get isOpen => !destroyed;
+
+  @override
   void destroy() {
     destroyed = true;
     written.clear();

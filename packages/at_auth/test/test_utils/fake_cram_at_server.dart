@@ -70,6 +70,9 @@ class _Transport implements AtTransport {
   Future<void> flush() async {}
 
   @override
+  bool get isOpen => !_inbound.isClosed;
+
+  @override
   void destroy() {
     if (!_inbound.isClosed) _inbound.close();
   }
