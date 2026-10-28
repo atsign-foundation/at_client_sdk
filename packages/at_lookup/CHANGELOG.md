@@ -1,5 +1,11 @@
 ## 3.7.0-rc5
 
+- fix: `AtLookUp.close()` closes the connection, as it did in 3.6, and the
+  next call reconnects. `AtLookupMuxable.stop()` ends a lookup for good, as
+  `close()` did from 3.7.0-rc2, and an `AtLookupMuxable` implemented outside
+  this package has to add it.
+- fix: a command after `close()` or `dropConnection()` authenticates its new
+  connection, even when an authentication begun before finishes late.
 - chore: `AtLookupMuxable.readResponse` is deprecated: it was added for the
   stream verb, which atServers no longer support, and is removed in 4.0.0. A
   response line starting `stream:` is refused as unexpected (AT0014).

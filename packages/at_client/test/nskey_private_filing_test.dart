@@ -164,7 +164,7 @@ void main() {
       keysIo: io,
       atSign: atSign,
       publishedGeneration: (_, __) async =>
-          throw StoppedException('the lookup for $atSign has been closed'),
+          throw StoppedException('the lookup for $atSign has been stopped'),
     );
 
     await expectLater(

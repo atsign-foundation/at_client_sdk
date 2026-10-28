@@ -128,8 +128,14 @@ class FakeAtServerSocket implements SecureSocket {
     written.add(utf8.decode(data));
   }
 
+  /// While set, a flush does not complete until it does.
+  Completer<void>? flushGate;
+
   @override
-  Future<void> flush() async => flushCount++;
+  Future<void> flush() async {
+    flushCount++;
+    await flushGate?.future;
+  }
 
   @override
   void destroy() {

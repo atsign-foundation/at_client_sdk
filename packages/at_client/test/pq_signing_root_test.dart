@@ -131,7 +131,7 @@ void main() {
           throw AtLookUpException('AT0011', 'connection closed');
         }
         if (publishStops) {
-          throw StoppedException('the lookup for $atSign has been closed');
+          throw StoppedException('the lookup for $atSign has been stopped');
         }
       }
       return 'data:1';

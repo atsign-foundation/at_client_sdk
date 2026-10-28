@@ -73,9 +73,9 @@ void main() {
       // ignore: deprecated_member_use
       when(() => lookUp.enrollmentId).thenReturn(null);
       late AtClient client;
-      // What the remote does when the stop closes its lookup underneath a
+      // What the remote does when the stop ends its lookup underneath a
       // request in flight: classifies the failure and reports it.
-      when(() => lookUp.close()).thenAnswer((_) async {
+      when(() => lookUp.stop()).thenAnswer((_) async {
         await client.connection.report(offline());
       });
       client = await buildAtClient(
@@ -87,15 +87,19 @@ void main() {
           atLookUp: lookUp,
           syncServiceBuilder: (_) => NoOpSyncService());
       final before = client.connection.current;
+      final emitted = client.connection.changes.toList();
 
       await client.stop();
 
-      verify(() => lookUp.close()).called(greaterThan(0));
+      verify(() => lookUp.stop()).called(greaterThan(0));
       expect(before.cause, isNot(AtConnectionCause.stopped));
-      expect(client.connection.current.cause, AtConnectionCause.stopped,
-          reason: 'the connection state is closed before the services and '
-              'the remote are, so a failure the stop caused is not filed '
-              'as the atServer being unreachable');
+      final changes = await emitted.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('stop() left connection.changes open'));
+      expect(changes.map((s) => s.cause), [AtConnectionCause.stopped],
+          reason: 'the connection state is closed before the remote is, so a '
+              'failure the stop caused is never filed as the atServer being '
+              'unreachable, not even for a moment');
+      expect(client.connection.current.cause, AtConnectionCause.stopped);
     });
   });
 }

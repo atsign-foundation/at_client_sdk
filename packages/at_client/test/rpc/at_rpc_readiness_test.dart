@@ -135,7 +135,7 @@ void main() {
         onError: any(named: 'onError'),
         onSentToSecondary:
             any(named: 'onSentToSecondary'))).thenThrow(
-        StoppedException('the lookup for @alice has been closed'));
+        StoppedException('the lookup for @alice has been stopped'));
     final AtRpc rpc = rpcFor(isClient: false);
     final sent = Stopwatch()..start();
 
