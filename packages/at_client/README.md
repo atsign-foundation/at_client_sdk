@@ -236,12 +236,11 @@ for it.
 enrollment a keys store authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in
 [`at_client_flutter`](../at_client_flutter); CLI apps get them behind
-[`at_onboarding_cli`](../at_onboarding_cli)'s commands and
-[`at_cli_commons`](../at_cli_commons)' `CLIBase`.
+[`at_client_cli`](../at_client_cli)'s `CLIBase` and `at_activate` commands.
 
 `AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
-current client for the caller, are deprecated and go in 4.0: build the
-client with a verb above and make it current with `use`.
+current client for the caller, are removed in 4.0: build the client with a
+verb above and make it current with `use`.
 
 ## Collections
 

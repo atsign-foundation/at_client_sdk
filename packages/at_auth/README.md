@@ -4,17 +4,18 @@
 > Everything an app needs — onboarding, login, enrollment, the connection
 > state — is on [`at_client`](../at_client)'s `Atsign` verbs (`open`,
 > `activate`, `enroll`), behind [`at_client_flutter`](../at_client_flutter)'s
-> dialogs for Flutter apps and [`at_onboarding_cli`](../at_onboarding_cli)'s
-> commands for CLI and server apps. `at_auth` is the protocol layer those
+> dialogs for Flutter apps and [`at_client_cli`](../at_client_cli)'s `CLIBase`
+> and commands for CLI and server apps. `at_auth` is the protocol layer those
 > build on: its API changes with the protocol and carries no compatibility
 > promise to applications, and a 4.0 removed every type an app once held.
-> Add `at_client` or `at_client_flutter` to your `pubspec.yaml`, not this.
+> Add your platform package, `at_client_cli` or `at_client_flutter`, to your
+> `pubspec.yaml`, not this.
 
 Platform-neutral core of **activation**, **authentication** and **APKAM
 enrollment** for the Atsign Protocol: the key material, the `.atKeys` store
 and the handshakes. Applications reach it through
 [`at_client`](../at_client)'s `Atsign` verbs — `activate`, `open`, `enroll` —
-and through [`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps)
+and through [`at_client_cli`](../at_client_cli) (CLI / server apps)
 and [`at_client_flutter`](../at_client_flutter) (Flutter apps), which build
 on those, rather than consuming `at_auth` directly.
 
@@ -156,7 +157,7 @@ Why this matters:
 
 See [`example/enrollment_request.dart`](example/enrollment_request.dart)
 for the submitting side; the approve/deny side is demonstrated in
-[`at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart`](../at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart).
+[`at_client_cli/example/bin/apkam_examples/enroll_app_listen.dart`](../at_client_cli/example/bin/apkam_examples/enroll_app_listen.dart).
 
 ## The `.atKeys` file format
 
@@ -273,7 +274,7 @@ file first preserves the previous state as `<file>.bak` alongside it.
 4.0 keeps the key material, the `.atKeys` stores and the enrollment
 handshakes, and hands everything an application used to call to
 [`at_client`](../at_client)'s `Atsign` verbs. An app on `at_client_flutter`
-or `at_onboarding_cli` follows those packages' own migration notes and never
+or `at_client_cli` follows those packages' own migration notes and never
 sees this table; it is for code that imported `package:at_auth/at_auth.dart`
 directly.
 
@@ -412,9 +413,9 @@ self-encryption key for the enrollee.
 
 | If you're building…            | Use                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------- |
-| A CLI or server app            | [`at_onboarding_cli`](../at_onboarding_cli) + [`at_cli_commons`](../at_cli_commons)   |
+| A CLI, daemon or server app    | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` tools |
 | A Flutter app                  | [`at_client_flutter`](../at_client_flutter) — includes pre-built onboarding widgets   |
-| Anything that reads/writes data after auth | [`at_client`](../at_client)                                               |
+| A platform package, or a program that passes every dependency itself | [`at_client`](../at_client) |
 
 ## Open source usage and contributions
 
