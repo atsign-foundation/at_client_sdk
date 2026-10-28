@@ -61,6 +61,11 @@ Feature: at_client 4.0.0 builds for the web, with a pure-Dart memory storage
     When an app opens an atSign without passing a storage
     Then the app does not compile until it names one
 
+  Scenario: Every client is given its keys
+    Given at_client 4.0.0
+    When an app builds a client without passing its keys
+    Then the app does not compile until it names an AtKeysIo
+
   Scenario: No deprecation promises removal in 4.0
     Given at_client 4.0.0
     When its library's deprecations are read
