@@ -641,6 +641,23 @@ void main() {
           atsign: alice.toAtsign());
     });
 
+    for (final (shape, container) in <(String, Map<String, dynamic>)>[
+      ('an empty enrollments list', {'enrollments': <Object?>[]}),
+      ('an empty atsignKeys list', {'atsignKeys': <Object?>[]}),
+    ]) {
+      test(
+          'when it carries $shape and is rewritten flat for the atSign it '
+          'names, then the rewrite is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), ...container},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'an empty typed container holds nothing');
+      });
+    }
+
     test(
         'when it is rewritten flat for another atSign, then the rewrite is '
         'refused', () {
