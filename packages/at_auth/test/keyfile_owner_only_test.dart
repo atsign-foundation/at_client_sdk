@@ -418,8 +418,8 @@ void main() {
       final fifo = '${dir.path}/fifo';
       await _mkfifo(fifo);
 
-      final outcome = await _readNoFollowInIsolate(fifo).timeout(
-          const Duration(seconds: 5), onTimeout: () {
+      final outcome = await _readNoFollowInIsolate(fifo)
+          .timeout(const Duration(seconds: 5), onTimeout: () {
         // NOTE: a writer releases the blocked open, so the isolate ends.
         File(fifo).openSync(mode: FileMode.writeOnly).closeSync();
         return 'blocked';
