@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_web.dart';
+import 'package:at_lookup/src/util/abandonment.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
@@ -44,10 +45,46 @@ void main() {
         throwsA(isA<SecondaryNotFoundException>()));
   });
 
-  test('the atSign is URL-encoded into the path', () async {
+  test('the atSign is asked for in its canonical form', () async {
+    expect((await finder.findSecondary('@Alice')).port, 1234);
+    expect(paths, ['/@alice']);
+  });
+
+  test('an atSign that is not one is refused before anything is asked',
+      () async {
+    await expectLater(finder.findSecondary('@a b/c?d'),
+        throwsA(isA<InvalidAtSignException>()));
+    expect(paths, isEmpty);
+  });
+
+  test('an answer naming a host behind an @ is refused', () async {
     await expectLater(
-        finder.findSecondary('@a b/c?d'), throwsA(isA<AtException>()));
-    expect(paths, ['/@a%20b%2Fc%3Fd']);
+        finder.findSecondary('@elsewhere'),
+        throwsA(isA<AtException>().having(
+            (e) => e.message, 'message', contains('not host:port'))));
+  });
+
+  test('an answer longer than 512 bytes is refused', () async {
+    await expectLater(
+        finder.findSecondary('@huge'),
+        throwsA(isA<AtException>().having((e) => e.message, 'message',
+            contains('longer than 512 bytes'))));
+  });
+
+  test('a close of the lookup it asks for ends the request at once', () async {
+    final abandonment = Abandonment();
+    final asked = abandonment.run(() => finder.findSecondary('@slow'));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final closedAt = DateTime.now();
+    abandonment.abandon();
+
+    await expectLater(
+        asked,
+        throwsA(isA<RootServerConnectivityException>()
+            .having((e) => e.message, 'message', contains('abandoned'))));
+    expect(DateTime.now().difference(closedAt),
+        lessThan(const Duration(seconds: 1)),
+        reason: 'the atDirectory takes 2 seconds to answer @slow');
   });
 
   for (final atSign in ['@malformed', '@badport']) {

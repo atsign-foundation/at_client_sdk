@@ -20,6 +20,10 @@ void hybridMain(StreamChannel channel) async {
         response.write('not-an-address');
       case '/@badport':
         response.write('vip.example.org:99999');
+      case '/@elsewhere':
+        response.write('vip.example.org@other.example.org:1234');
+      case '/@huge':
+        response.write('a' * 1000000);
       case '/@broken':
         response.statusCode = HttpStatus.internalServerError;
       case '/@slow':

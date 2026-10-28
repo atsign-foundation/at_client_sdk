@@ -6,6 +6,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:web/web.dart';
 
 import '../transport/at_transport.dart';
+import 'web_socket_open.dart';
 import 'web_socket_transport.dart';
 
 /// Opens [WebSocketTransport]s to `scheme://host:port` + [path].
@@ -22,43 +23,30 @@ class WebSocketTransportFactory implements AtTransportFactory {
       this.scheme = 'wss',
       this.flushTimeout = const Duration(seconds: 30)});
 
-  /// An `error` or `close` before `open`, and a [timeout] elapsing, surface
-  /// as [SecondaryConnectException]; the cause is kept in the message.
+  /// An `error` or `close` before `open`, [timeout] elapsing (the network
+  /// default with none), and a close of the lookup it opens for, surface as
+  /// [SecondaryConnectException]; the cause is kept in the message.
   @override
   Future<AtTransport> connect(String host, String port,
       {Duration? timeout}) async {
     final url = '$scheme://$host:$port$path';
-    final socket = WebSocket(url)..binaryType = 'arraybuffer';
-    final opened = Completer<void>();
-    void fail(String reason) {
-      if (!opened.isCompleted) opened.completeError(reason);
-    }
-
-    final subscriptions = [
-      socket.onOpen.listen((_) => opened.complete()),
-      socket.onError.listen((_) => fail('WebSocket error')),
-      socket.onClose.listen((_) => fail('WebSocket closed before open')),
-    ];
-    try {
-      await (timeout == null ? opened.future : opened.future.timeout(timeout));
-      return WebSocketTransport(_BrowserWebSocketPort(socket), url,
-          flushTimeout: flushTimeout);
-    } catch (e) {
-      socket.close();
-      throw SecondaryConnectException(
-          'unable to connect to atServer on $host:$port - $e');
-    } finally {
-      for (final subscription in subscriptions) {
-        await subscription.cancel();
-      }
-    }
+    final socket =
+        _BrowserWebSocketPort(WebSocket(url)..binaryType = 'arraybuffer');
+    await awaitOpen(socket, host, port, timeout: timeout);
+    return WebSocketTransport(socket, url, flushTimeout: flushTimeout);
   }
 }
 
-class _BrowserWebSocketPort implements WebSocketPort {
+class _BrowserWebSocketPort implements WebSocketPort, OpeningWebSocket {
   final WebSocket _socket;
 
   _BrowserWebSocketPort(this._socket);
+
+  @override
+  Stream<void> get onOpen => _socket.onOpen;
+
+  @override
+  Stream<void> get onError => _socket.onError;
 
   @override
   bool get isOpen => _socket.readyState == WebSocket.OPEN;

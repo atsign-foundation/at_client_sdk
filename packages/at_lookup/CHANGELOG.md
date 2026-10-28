@@ -4,6 +4,12 @@
   and connects over `wss://`; `proxyWebSocketLookUps(host:, port:)` goes
   through a proxy instead.
 - feat: `AtLookUp.withTransport` builds a lookup over any transport.
+- fix: in a browser, a connect to an atServer gives up after the network
+  timeout, and closing a lookup stops a connect or atDirectory lookup still in
+  progress.
+- fix: in a browser, the atDirectory is asked for the atSign in its canonical
+  form, and an answer longer than 512 bytes, or that is not a host name and a
+  port, is refused.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder` and `SecureSocketUtil` now come
   from `at_lookup_io.dart`, not `at_lookup.dart`.

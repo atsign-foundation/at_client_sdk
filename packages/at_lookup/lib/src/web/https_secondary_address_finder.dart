@@ -4,7 +4,9 @@ import 'dart:js_interop';
 import 'package:at_commons/at_commons.dart';
 import 'package:web/web.dart';
 
+import '../cache/atdirectory_answer.dart';
 import '../cache/secondary_address_finder.dart';
+import '../util/abandonment.dart';
 
 /// Finds an atServer through the atDirectory's HTTPS face:
 /// `GET scheme://host:port/@alice` answers `200` with `atServerHost:port`, or
@@ -19,22 +21,30 @@ class HttpsSecondaryAddressFinder implements SecondaryAddressFinder {
   const HttpsSecondaryAddressFinder(this.host,
       {this.port = 443, this.scheme = 'https'});
 
-  /// Throws [SecondaryNotFoundException] on a `404`,
+  /// Asks for [atSign] in its canonical form.
+  ///
+  /// Throws [InvalidAtSignException], asking nothing, when [atSign] is not an
+  /// atSign; [SecondaryNotFoundException] on a `404`;
   /// [RootServerConnectivityException] on any other failure to get an answer,
-  /// [AtTimeoutException] once [timeout] elapses, and [AtException] on an
-  /// answer that is not `host:port`.
+  /// a close of the lookup it asks for included; [AtTimeoutException] once
+  /// [timeout] elapses; and [AtException] on an answer longer than
+  /// [maxAtDirectoryAnswerBytes] or that is not `host:port`.
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
       {Duration? timeout}) async {
-    final name = atSign.startsWith('@') ? atSign : '@$atSign';
-    final uri =
-        Uri(scheme: scheme, host: host, port: port, pathSegments: [name]);
+    final uri = atDirectoryUri(scheme, host, port, atSign);
+    final name = uri.pathSegments.single;
     final budget =
         AtNetworkTimeouts.cap(timeout ?? AtNetworkTimeouts.defaultTimeout);
     final abort = AbortController();
     var timedOut = false;
+    var abandoned = false;
     final timer = Timer(budget, () {
       timedOut = true;
+      abort.abort();
+    });
+    final unregister = Abandonment.current?.onAbandon(() {
+      abandoned = true;
       abort.abort();
     });
     try {
@@ -48,10 +58,24 @@ class HttpsSecondaryAddressFinder implements SecondaryAddressFinder {
         throw RootServerConnectivityException(
             'atDirectory $host answered ${response.status} for $name');
       }
-      return _address(name, (await response.text().toDart).toDart);
+      final answer = AtDirectoryAnswer(name);
+      final body = response.body;
+      if (body != null) {
+        final reader = body.getReader() as ReadableStreamDefaultReader;
+        while (true) {
+          final chunk = await reader.read().toDart;
+          if (chunk.done) break;
+          answer.add((chunk.value as JSUint8Array).toDart);
+        }
+      }
+      return answer.address;
     } on AtException {
       rethrow;
     } catch (e) {
+      if (abandoned) {
+        throw RootServerConnectivityException(
+            'atDirectory lookup for $name abandoned: its owner has closed');
+      }
       if (timedOut) {
         throw AtTimeoutException(
             'atDirectory $host did not answer for $name within $budget');
@@ -60,18 +84,8 @@ class HttpsSecondaryAddressFinder implements SecondaryAddressFinder {
           'unable to reach atDirectory $host for $name - $e');
     } finally {
       timer.cancel();
+      unregister?.call();
+      abort.abort();
     }
-  }
-
-  static final _hostPort = RegExp(r'^([^\s:/]+):(\d{1,5})$');
-
-  static SecondaryAddress _address(String atSign, String body) {
-    final match = _hostPort.firstMatch(body.trim());
-    final port = match == null ? null : int.parse(match[2]!);
-    if (port == null || port < 1 || port > 65535) {
-      throw AtException(
-          'atDirectory answered "$body" for $atSign, which is not host:port');
-    }
-    return SecondaryAddress(match![1]!, port);
   }
 }

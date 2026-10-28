@@ -114,21 +114,18 @@ at_lookup:
   # implements the seam moved to at_lookup_io.dart. at_lookup_web.dart holds
   # the WebSocket transport.
   #
-  # Zero blocked packages on the first run. The neutral barrel reaches at_chops,
-  # at_commons, at_utils, meta and mutex, and the first two splits had already
-  # done the work: at_chops.dart and at_utils.dart are the neutral barrels of
-  # their own 4.0.0 majors, which is what keeps chalkdart off this graph.
-  # at_lookup stays in at_auth's blocked set above regardless -- at_auth imports
-  # at_lookup_io.dart at two sites.
+  # Zero blocked packages. The neutral barrel reaches at_commons, at_utils,
+  # meta and mutex; at_utils.dart is the neutral barrel of its own 4.0.0 major,
+  # which keeps chalkdart off this graph. at_lookup_web.dart adds package:web.
   ratchets:
     - barrel: package:at_lookup/at_lookup.dart
       allowed_offenders: []
       max_blocked_packages: 0
-      min_files_walked: 570
+      min_files_walked: 150
     - barrel: package:at_lookup/at_lookup_web.dart
       allowed_offenders: []
       max_blocked_packages: 0
-      min_files_walked: 800
+      min_files_walked: 340
   probe:
     # at_lookup_io.dart is absent on purpose. dart compile wasm accepts dart:io
     # and stubs it, so probing the io barrel would pass and prove nothing; the

@@ -65,7 +65,8 @@ abstract interface class AtTransport {
 /// `package:at_lookup/at_lookup_io.dart` rather than from the default barrel,
 /// it is also what pulls in the library that carries the native imports.
 abstract interface class AtTransportFactory {
-  /// Opens a channel to [host] on [port], giving up after [timeout].
+  /// Opens a channel to [host] on [port], giving up after [timeout], or after
+  /// the implementation's own bound when it is null.
   ///
   /// Throws `SecondaryConnectException` if the far end cannot be reached. This
   /// is part of the contract, not a description of one implementation: an
