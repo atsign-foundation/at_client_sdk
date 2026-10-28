@@ -19,8 +19,8 @@ dependencies:
   play_install_referrer: ^0.5.0
 
 # TODO(at_chops-4.0.0): restore the `at_chops: path: ../../../at_chops/` override
-# below once at_client has migrated off the at_chops 3.x facade — 4.0.0 removed
-# it, so the local path would not compile. Until then this example builds
+# below once at_client depends on at_chops 4 — 4.0.0-rc.1 removed classes
+# at_client still uses, so the local path would not compile. Until then this example builds
 # against the published at_chops 3.x and does NOT exercise local at_chops
 # changes.
 dependency_overrides:

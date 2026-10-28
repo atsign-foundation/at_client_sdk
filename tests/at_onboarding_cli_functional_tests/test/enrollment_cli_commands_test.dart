@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -173,8 +172,7 @@ void main() {
       // The pass-phrase encrypts the atKeys file the enrollment writes.
       final preference =
           getOnboardingPreference(atSign, passwordProtectedKeysFilePath)
-            ..passPhrase = passPhrase
-            ..hashingAlgoType = HashingAlgoType.argon2id;
+            ..passPhrase = passPhrase;
 
       // Submit enrollment request
       final pending = await Atsign(atSign).enroll(
@@ -212,8 +210,7 @@ void main() {
       expect(
           await authenticateWithApkamKeys(
               atSign, passwordProtectedKeysFilePath, enrollmentId,
-              passPhrase: passPhrase,
-              hashingAlgoType: HashingAlgoType.argon2id),
+              passPhrase: passPhrase),
           true);
 
       // Run list to ensure the pass-phase is indeed working as expected
@@ -252,15 +249,12 @@ void main() {
 /// answers false, the way a program calling `authenticate()` sees it.
 Future<bool> authenticateWithApkamKeys(
     String atSign, String atKeysFilePath, String enrollmentId,
-    {String? passPhrase, HashingAlgoType? hashingAlgoType}) async {
+    {String? passPhrase}) async {
   await evictCachedAtClients();
   AtOnboardingPreference preference =
       getOnboardingPreference(atSign, atKeysFilePath);
   if (passPhrase != null) {
     preference.passPhrase = passPhrase;
-  }
-  if (hashingAlgoType != null) {
-    preference.hashingAlgoType = hashingAlgoType;
   }
   AtOnboardingService onboardingService =
       AtOnboardingServiceImpl(atSign, preference);

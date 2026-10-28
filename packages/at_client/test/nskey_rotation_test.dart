@@ -1,7 +1,3 @@
-// A client with no key source signs from its AtChops, and the key source is what
-// several tests here vary, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -80,10 +76,14 @@ void main() {
     final published = <String>[];
     // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace.
     final advertised = <String, String>{};
-    final chops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    final pair = RsaKeyPair.generate();
+    final local = MockLocalSecondary();
+    when(() => atClient.getLocalSecondary()).thenReturn(local);
+    when(() => local.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => local.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
 
-    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
@@ -98,8 +98,7 @@ void main() {
       // Anything but `__nskey` is the `_apsk` an advertisement's signature is
       // checked against.
       if (key.key != '__nskey') {
-        return AtValue()
-          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+        return AtValue()..value = pair.atPublicKey.publicKey;
       }
       final serving = advertised[key.namespace];
       if (serving == null) throw AtKeyNotFoundException('$key');

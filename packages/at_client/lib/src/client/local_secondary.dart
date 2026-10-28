@@ -1,5 +1,5 @@
 // ignore: deprecated_member_use
-import 'package:at_chops/at_chops.dart' show AtChopsKeys, SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -959,75 +959,47 @@ class LocalSecondary implements Secondary {
       _keySourceApkam() async => (await _keysFromSource())
           ?.authenticationKeyPairFor(_atClient.enrollmentId);
 
-  /// [key]'s value in the keystore, else what [fromAtChops] finds in the
-  /// client's AtChops.
-  ///
-  /// NOTE: the AtChops is the last tier because a client handed one at build
-  /// may hold its keys nowhere else until its caller writes them to the
-  /// keystore. An empty value there is a placeholder for a keypair the
-  /// AtChops was built without, so it counts as absent. A miss in every tier
-  /// is still the keystore's own exception.
-  Future<String?> _fromKeystoreElseAtChops(
-      String key,
-      // ignore: deprecated_member_use
-      String? Function(AtChopsKeys keys) fromAtChops) async {
-    // ignore: deprecated_member_use
-    final AtChopsKeys? held = _atClient.atChops?.atChopsKeys;
-    final fromChops = held == null ? null : fromAtChops(held);
-    final fallback = fromChops == null || fromChops.isEmpty ? null : fromChops;
-    AtData? stored;
-    try {
-      stored = await keyStore!.get(key);
-    } on KeyNotFoundException {
-      if (fallback != null) return fallback;
-      rethrow;
-    }
-    return stored?.data ?? fallback;
-  }
+  /// [key]'s value in the keystore; a miss is the keystore's own exception.
+  Future<String?> _fromKeystore(String key) async =>
+      (await keyStore!.get(key))?.data;
 
   /// The PKAM private key: the key source's for this enrollment, else the
-  /// keystore's, else the client's AtChops's.
+  /// keystore's.
   Future<String?> getPkamPrivateKey() async =>
       (await _keySourceApkam())?.privateKey ??
-      await _fromKeystoreElseAtChops(AtConstants.atPkamPrivateKey,
-          (keys) => keys.atPkamKeyPair?.atPrivateKey.privateKey);
+      await _fromKeystore(AtConstants.atPkamPrivateKey);
 
   /// The atSign's encryption private key: the key source's, else the
-  /// keystore's, else the client's AtChops's.
+  /// keystore's.
   Future<String?> getEncryptionPrivateKey() async =>
       (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey ??
-      await _fromKeystoreElseAtChops(AtConstants.atEncryptionPrivateKey,
-          (keys) => keys.atEncryptionKeyPair?.atPrivateKey.privateKey);
+      await _fromKeystore(AtConstants.atEncryptionPrivateKey);
 
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
   /// The PKAM public key: the key source's for this enrollment, else the
-  /// keystore's, else the client's AtChops's.
+  /// keystore's.
   Future<String?> getPkamPublicKey() async =>
       (await _keySourceApkam())?.publicKey ??
-      await _fromKeystoreElseAtChops(AtConstants.atPkamPublicKey,
-          (keys) => keys.atPkamKeyPair?.atPublicKey.publicKey);
+      await _fromKeystore(AtConstants.atPkamPublicKey);
 
   /// [atSign]'s encryption public key: the key source's, else the
-  /// keystore's, else the client's AtChops's.
+  /// keystore's.
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
     return (await _keysFromSource())
             ?.encryptionKeyPair
             ?.atPublicKey
             .publicKey ??
-        await _fromKeystoreElseAtChops(
-            '${AtConstants.atEncryptionPublicKey}$atSign',
-            (keys) => keys.atEncryptionKeyPair?.atPublicKey.publicKey);
+        await _fromKeystore('${AtConstants.atEncryptionPublicKey}$atSign');
   }
 
   /// The atSign's self-encryption key: the key source's, else the
-  /// keystore's, else the client's AtChops's.
+  /// keystore's.
   Future<String?> getEncryptionSelfKey() async =>
       (await _keysFromSource())?.selfEncryptionKey?.key ??
-      await _fromKeystoreElseAtChops(AtConstants.atEncryptionSelfKey,
-          (keys) => keys.selfEncryptionKey?.key);
+      await _fromKeystore(AtConstants.atEncryptionSelfKey);
 
   /// Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {

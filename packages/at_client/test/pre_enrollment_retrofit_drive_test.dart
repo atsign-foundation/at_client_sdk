@@ -95,11 +95,8 @@ void main() {
     when(() => mockRemote.executeCommand(any(that: startsWith('enroll:listns')),
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
-    final chops = AtChopsImpl(AtChopsKeys.create(encryptionKeyPair, pkamKeyPair)
-      ..selfEncryptionKey = AESKey(selfKey));
-
     await AtClientImpl.create(atSign, 'buzz', preferenceAt(posture, atSign),
-        remoteSecondary: mockRemote, atChops: chops, atKeysIo: keysIo);
+        remoteSecondary: mockRemote, atKeysIo: keysIo);
 
     final captured = <String>[];
     try {

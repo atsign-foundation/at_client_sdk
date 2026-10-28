@@ -7,8 +7,7 @@ import 'package:test/test.dart';
 import 'at_lookup_test_utils.dart';
 import 'fake_at_server_transport.dart';
 
-/// The injected authenticator, which takes over from the
-/// atChops/privateKey/cramSecret ladder.
+/// The authenticator injected into a lookup.
 void main() {
   late OutboundConnection mockOutBoundConnection;
   late SecondaryAddressFinder mockSecondaryAddressFinder;

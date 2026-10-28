@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
@@ -24,6 +25,21 @@ class FakeVerbBuilder extends Fake implements VerbBuilder {}
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
 
 class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
@@ -160,6 +176,33 @@ void main() {
           reason: 'the key advertised to the atServer and the key kept in the '
               'keyfile must be the same one, or the atSign can never '
               'authenticate');
+    });
+
+    test('the activation PKAM signs with the ML-DSA key it advertised',
+        () async {
+      await atAuth.onboard(
+          requestFor(signingAlgo: SigningAlgoType.mldsa65), cramSecret);
+      final installed = verify(() => mockAtLookUp.authenticator = captureAny())
+          .captured
+          .cast<AtAuthenticator>();
+      const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+
+      expect(await installed.last(executor), isTrue);
+
+      final pkam = executor.sent.last;
+      expect(pkam, startsWith('pkam:signingAlgo:mldsa65:'));
+      expect(pkam, contains(':enrollmentId:$enrollmentId:'));
+      expect(
+          MlDsa65PureDartAlgo.verifyBytesSync(
+              Uint8List.fromList(utf8.encode(challenge)),
+              signature: base64Decode(
+                  pkam.substring(pkam.lastIndexOf(':') + 1).trim()),
+              publicKey: base64Decode(submittedRequest().apkamPublicKey!)),
+          isTrue,
+          reason: 'the activation PKAM must verify under the key the '
+              'enrollment request advertised');
     });
 
     test('legacy material is minted and publickey published, by DEFAULT',

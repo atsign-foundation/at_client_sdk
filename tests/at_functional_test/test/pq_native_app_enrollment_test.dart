@@ -102,8 +102,8 @@ void main() {
     // ignore: deprecated_member_use
     expect(native.keys.apkamPublicKey, isNotNull,
         reason: 'the flat fields carry this enrollment\'s own keypair too, '
-            'which is what lets the approval handshake build one AtChops '
-            'holding both it and the symmetric key');
+            'so every reader resolves to the same keypair whichever way it '
+            'looks');
 
     // The control. Without it, "did not retrofit" would pass for a build where
     // nothing retrofits at all - including one where the posture is ignored.

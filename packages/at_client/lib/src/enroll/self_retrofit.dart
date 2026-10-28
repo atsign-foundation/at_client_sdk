@@ -165,8 +165,8 @@ Future<AtClient> selfRetrofit({
 ///
 /// The returned session's `enrollmentId` is the new enrollment, and its
 /// `atKeysIo` reads a keyfile carrying the new enrollment's typed key
-/// material, which is what lets a caller re-derive its AtChops and
-/// connections from the new identity. It carries no connection: the caller's
+/// material, which is what lets a caller re-derive its connections from the
+/// new identity. It carries no connection: the caller's
 /// next connection authenticates as the new enrollment, and reports into the
 /// client's connection state if the atServer refuses it.
 ///

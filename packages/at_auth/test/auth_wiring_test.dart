@@ -14,9 +14,6 @@ library;
 // the ladder on purpose.
 // ignore_for_file: deprecated_member_use
 
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
@@ -83,13 +80,8 @@ void main() {
   ///
   /// [activated] is what the atServer reports about the atSign: `onboard`
   /// refuses an activated one, and `authenticate` needs one.
-  ///
-  /// [chops] is a signer injected through the constructor, the door a caller
-  /// with a hardware-backed key uses.
   AtAuthImpl rig(AtLookupMuxable lookUp,
-      {required String? enrollmentId,
-      required bool activated,
-      AtChops? chops}) {
+      {required String? enrollmentId, required bool activated}) {
     final pkam = MockPkamAuthenticator();
     when(() => pkam.authenticate(any(), any()))
         .thenAnswer((_) async => true);
@@ -104,7 +96,6 @@ void main() {
         AtEnrollmentResponse(onboardedEnrollmentId, EnrollmentStatus.approved));
     return AtAuthImpl(
         atLookUp: lookUp,
-        atChops: chops,
         pkamAuthenticator: pkam,
         atEnrollment: enrollment);
   }
@@ -127,38 +118,13 @@ void main() {
     return io;
   }
 
-  /// An `AtChops` holding [pkamPinAtSign]'s demo PKAM keypair: the injected
-  /// signer, which is the door for a keyfile holding no keypair.
-  AtChops pinChops() => AtChopsImpl(AtChopsKeys.create(
-      null,
-      AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
-          demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
-
-  /// A keyfile holding [pkamPinAtSign]'s encryption material and no APKAM
-  /// keypair at all, in memory.
-  Future<InMemoryAtKeysIo> encryptionOnlyKeyfile() async {
-    final io = InMemoryAtKeysIo();
-    await io.write(
-        atSign,
-        AtKeys()
-          ..defaultEncryptionPublicKey = AtBytes.fromString(
-              demo.encryptionPublicKeyMap[pkamPinAtSign]!)
-          ..defaultEncryptionPrivateKey = AtBytes.fromString(
-              demo.encryptionPrivateKeyMap[pkamPinAtSign]!)
-          ..defaultSelfEncryptionKey =
-              AtBytes.fromString(demo.aesKeyMap[pkamPinAtSign]!));
-    return io;
-  }
-
-  /// Runs the authenticator `authenticatorFor` builds over [keysIo], with
-  /// [chops] injected when given, against the pinned challenge and returns
-  /// the `pkam:` command it sent. The enrollment is the keys' own answer, as
-  /// every caller resolves it.
-  Future<String> pkamFrom(AtKeysIo keysIo, {AtChops? chops}) async {
+  /// Runs the authenticator `authenticatorFor` builds over [keysIo] against
+  /// the pinned challenge and returns the `pkam:` command it sent. The
+  /// enrollment is the keys' own answer, as every caller resolves it.
+  Future<String> pkamFrom(AtKeysIo keysIo) async {
     final installed = authenticatorFor(keysIo, atSign,
         enrollmentId:
-            (await keysIo.read(atSign)).enrollmentToAuthenticateAs(),
-        chops: chops);
+            (await keysIo.read(atSign)).enrollmentToAuthenticateAs());
     final executor =
         _RecordingExecutor(['data:$pkamPinChallenge', 'data:success']);
     expect(await installed(executor), isTrue);
@@ -202,37 +168,6 @@ void main() {
           endsWith(':$expectedPkamSignature\n'),
           reason: 'the bytes openssl produces for this challenge under the '
               'keyfile\'s PKAM key: what signs may move, the signature may not');
-    });
-
-    test('a signer the caller injected, when the keyfile holds no keypair',
-        () async {
-      // The door for a signer that is not a keyfile at all - a hardware-backed
-      // one, or a client built from an AtChops with a stand-in key source
-      // beside it. The keyfile here holds encryption material and no APKAM
-      // keypair, so only the injected signer can answer.
-      expect(
-          await pkamFrom(await encryptionOnlyKeyfile(), chops: pinChops()),
-          endsWith(':$expectedPkamSignature\n'),
-          reason: 'the injected signer\'s key: the keyfile has none');
-    });
-
-    test('the keyfile, over a signer the caller injected, when it holds one',
-        () async {
-      // One rule for a signer beside a keyfile: the keyfile's keypair signs.
-      // The keyfile holds another atSign's demo keypair, so the signature is
-      // that key's and not the pin's.
-      final pkam = await pkamFrom(await demoKeyfile('@bob🛠'), chops: pinChops());
-      final signature =
-          base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
-      expect(
-          await RsaSignatureAlgo.rsa2048().verifyBytes(
-              Uint8List.fromList(utf8.encode(pkamPinChallenge)),
-              signature: signature,
-              publicKey: base64Decode(demo.pkamPublicKeyMap['@bob🛠']!)),
-          isTrue,
-          reason: 'the keyfile\'s keypair signed');
-      expect(pkam, isNot(endsWith(':$expectedPkamSignature\n')),
-          reason: 'and not the injected signer\'s');
     });
   });
 }

@@ -21,10 +21,6 @@
 /// handle, so the test waits for the last step's wire marker.
 library;
 
-// A client built from an AtChops beside a key source holding no credential is
-// the shape under test, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -155,9 +151,6 @@ void main() {
                 'status': 'approved',
               }
             }),
-        atChops: AtChopsImpl(AtChopsKeys.create(
-            AtChopsUtil.generateAtEncryptionKeyPair(),
-            AtChopsUtil.generateAtPkamKeyPair())),
         atKeysIo: keysIo,
       );
 

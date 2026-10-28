@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -122,9 +121,6 @@ void main() {
     final shapes = <String, RemoteSecondary Function()>{
       'atKeysIo': () => RemoteSecondary(atSign, preference(),
           atKeysIo: InMemoryAtKeysIo.holding(atSign, AtKeys())),
-      'atChops': () => RemoteSecondary(atSign, preference(),
-          // ignore: deprecated_member_use
-          atChops: AtChopsImpl(AtChopsKeys.create(null, null))),
       'privateKey': () =>
           RemoteSecondary(atSign, preference()..privateKey = 'unused'),
       'cramSecret': () =>

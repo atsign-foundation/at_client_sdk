@@ -374,8 +374,6 @@ class EnrollmentSubmitter {
     // keyfile, where the flat fields are the enrollment that was left behind —
     // and this is not that: one enrollment, and `enrollmentId` above names it,
     // so every reader resolves to the same keypair whichever way it looks.
-    // Clearing them instead breaks the approval handshake, which needs the
-    // symmetric key and the keypair from one assembled `AtChops`.
     if (atEnrollmentRequest.signingAlgo != SigningAlgoType.rsa2048) {
       atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentIdFromServer,

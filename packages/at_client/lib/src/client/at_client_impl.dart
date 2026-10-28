@@ -52,6 +52,7 @@ import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/signing/keyless_pkam_key.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -109,33 +110,9 @@ class AtClientImpl implements AtClient {
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
 
-  // ignore: deprecated_member_use
-  AtChops? _atChops;
-
   AtKeysIo? _atKeysIo;
 
   EncryptionService? _encryptionService;
-
-  @override
-  @Deprecated(
-      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
-      'and it derives what it needs from that; nothing outside at_client needs '
-      'the AtChops it holds. Removed with the AtChops compatibility API in the '
-      'next major release.')
-  set atChops(AtChops? atChops) {
-    _atChops = atChops;
-    if (_remoteSecondary != null) {
-      _remoteSecondary!.atChops = atChops;
-    }
-  }
-
-  @override
-  @Deprecated(
-      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
-      'and it derives what it needs from that; nothing outside at_client needs '
-      'the AtChops it holds. Removed with the AtChops compatibility API in the '
-      'next major release.')
-  AtChops? get atChops => _atChops;
 
   @override
   AtKeysIo? get atKeysIo => _atKeysIo;
@@ -717,7 +694,7 @@ class AtClientImpl implements AtClient {
   /// after first creation take effect.
   ///
   /// Concretely, on a cache hit these do nothing: [remoteSecondary],
-  /// [encryptionService], [localSecondaryKeyStore], [atChops], [atKeysIo],
+  /// [encryptionService], [localSecondaryKeyStore], [atKeysIo],
   /// [atLookUp], and every field of [preferences] except `crypto`. A
   /// preference naming a different storage location is among them: a storage
   /// bundle refuses a second open at a location already open, but on a cache
@@ -749,8 +726,6 @@ class AtClientImpl implements AtClient {
     @Deprecated('Pass storage instead, such as InMemoryAtClientStorage from '
         'package:at_client/memory.dart; removed in 4.0')
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
-    @Deprecated('replaced by atKeysIo, will be removed in the next release')
-    AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
@@ -823,7 +798,7 @@ class AtClientImpl implements AtClient {
       // after first creation take effect; CryptoRuntime resolves against the
       // live preference.crypto, so there is nothing else to reconcile.
       atClientImpl.getPreferences()?.crypto = preferences.crypto;
-      // atKeysIo (like atChops) is only honored on first construction — the
+      // atKeysIo is only honored on first construction — the
       // extended AtKeys is meant to be born at construction and immutable
       // after, so a re-used cached client keeps its original key source.
     } else {
@@ -834,7 +809,6 @@ class AtClientImpl implements AtClient {
         remoteSecondary: remoteSecondary,
         encryptionService: encryptionService,
         localSecondaryKeyStore: localSecondaryKeyStore,
-        atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         lookUps: lookUps,
@@ -909,8 +883,6 @@ class AtClientImpl implements AtClient {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
-    // ignore: deprecated_member_use
-    AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
@@ -937,7 +909,6 @@ class AtClientImpl implements AtClient {
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
-    _atChops = atChops;
     _atKeysIo = atKeysIo;
     _connection = AtConnection(
         atSign: _atSign, attempt: _attemptConnection, onOnline: _recordOnline);
@@ -1044,9 +1015,8 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
-    // NOTE: an explicit step, never a side effect of building AtChops — a
-    // client whose AtChops was injected never builds one, and it must not
-    // sign the preference's rsa2048 default under an ML-DSA enrollment.
+    // NOTE: resolved before anything signs, so nothing signs with the
+    // preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
     AtSyncQueue? syncQueue;
     if (_localSecondaryKeyStore == null) {
@@ -1068,7 +1038,9 @@ class AtClientImpl implements AtClient {
       syncQueue: syncQueue,
       onEvent: emitDataEvent,
     );
-    _atChops ??= await _createAtChops(_atSign);
+    if (_atKeysIo == null) {
+      recordLocalPkamPrivateKey(this, await _readLocalKeyMaterial());
+    }
     _validateDefaultCryptoProvider();
 
     // Wire the event-driven expiry timer to the data-events stream.
@@ -1615,12 +1587,10 @@ class AtClientImpl implements AtClient {
   RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
         _atSign,
         _preference!,
-        atChops: atChops,
         atLookUp: atLookUp,
         lookUps: lookUps,
-        privateKey: _preference!.privateKey,
+        privateKey: pkamPrivateKeyWithoutKeyfile(this),
         enrollmentId: enrollmentId,
-        signingAlgoType: signingAlgoType,
         atKeysIo: _atKeysIo,
         connection: _connection,
         secondaryAddressFinder: secondaryAddressFinder,
@@ -2368,7 +2338,6 @@ class AtClientImpl implements AtClient {
   Future<void> _rederiveFromEnrollment(
       {required String? previousEnrollmentId}) async {
     await _resolveSigningAlgoFromKeyMaterial();
-    _atChops = await _createAtChops(_atSign);
 
     final previous = _remoteSecondary;
     _remoteSecondary = buildRemoteSecondary();
@@ -2381,77 +2350,45 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  // ignore: deprecated_member_use
-  Future<AtChops> _createAtChops(String atSign) async {
-    // When the client was handed an AtKeysIo *source* (and no live
-    // AtChops/AtLookUp was injected by auth), derive our own PKAM+encryption
-    // AtChops from that source instead of reading key material out of the local
-    // secondary. This is what lets a freshly rebuilt connection PKAM on its own
-    // socket — parity with the AtChops auth used to inject.
-    if (_atKeysIo != null) {
-      final keys = await _atKeysIo!.read(atSign);
-      // NOTE: AtKeys decides which keypair this enrollment owns. A
-      // typed-material enrollment authenticates with its own signing keypair
-      // while the flat fields still carry the original enrollment's RSA
-      // credentials, so reading those here would sign PKAM with the wrong key.
-      // Not the algorithm `_resolveSigningAlgoFromKeyMaterial` recorded: that
-      // records nothing when its own read throws.
-      return keys.authenticationFor(enrollmentId).chops;
-    }
-    // ignore: deprecated_member_use
-    AtEncryptionKeyPair? atEncryptionKeyPair;
-    // ignore: deprecated_member_use
-    AtPkamKeyPair? atPkamKeyPair;
+  /// The PKAM private key [localSecondary] holds, or null when it holds none,
+  /// which is the ordinary state before onboarding.
+  Future<String?> _readLocalKeyMaterial() async {
+    String? pkamPublicKey, pkamPrivateKey;
+    String? encryptionPublicKey, encryptionPrivateKey;
     try {
-      var encryptionPublicKey = await localSecondary!.getEncryptionPublicKey(
-        atSign,
-      );
-      var encryptionPrivateKey =
-          await localSecondary!.getEncryptionPrivateKey();
-      if (encryptionPublicKey != null && encryptionPrivateKey != null) {
-        // ignore: deprecated_member_use
-        atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          encryptionPublicKey,
-          encryptionPrivateKey,
-        );
-      }
+      encryptionPublicKey =
+          await localSecondary!.getEncryptionPublicKey(_atSign);
+      encryptionPrivateKey = await localSecondary!.getEncryptionPrivateKey();
     } on KeyNotFoundException catch (e) {
-      _logger.finer('No encryption key pair in $atSign\'s local store: $e');
+      _logger.finer('No encryption key pair in $_atSign\'s local store: $e');
     }
     try {
-      var pkamPublicKey = await localSecondary!.getPkamPublicKey();
-      var pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
-
-      if (pkamPublicKey != null && pkamPrivateKey != null) {
-        // ignore: deprecated_member_use
-        atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
-      }
+      pkamPublicKey = await localSecondary!.getPkamPublicKey();
+      pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
     } on KeyNotFoundException catch (e) {
-      _logger.finer('No PKAM key pair in $atSign\'s local store: $e');
+      _logger.finer('No PKAM key pair in $_atSign\'s local store: $e');
     }
+    final holdsEncryption =
+        encryptionPublicKey != null && encryptionPrivateKey != null;
+    final holdsPkam = pkamPublicKey != null && pkamPrivateKey != null;
 
     // NOTE: said once, after both reads, because what matters is what this
     // client ended up holding rather than which lookup missed. A store with
     // neither keypair is the ordinary state before onboarding; a store with
     // one of the two is a broken store, and only that is worth a warning.
     // Each miss keeps its own detail at `finer`.
-    if (atEncryptionKeyPair == null && atPkamKeyPair == null) {
-      _logger.info('$atSign\'s local store holds no key material, so this '
+    if (!holdsEncryption && !holdsPkam) {
+      _logger.info('$_atSign\'s local store holds no key material, so this '
           'client holds none: it authenticates and decrypts nothing until the '
           'store is populated.');
-    } else if (atEncryptionKeyPair == null || atPkamKeyPair == null) {
-      _logger.warning('$atSign\'s local store holds '
-          '${atPkamKeyPair == null ? 'an encryption' : 'a PKAM'} key pair but '
+    } else if (!holdsEncryption || !holdsPkam) {
+      _logger.warning('$_atSign\'s local store holds '
+          '${holdsPkam ? 'a PKAM' : 'an encryption'} key pair but '
           'not the other. A half-populated store is not a state onboarding '
           'produces, and this client will fail at whichever of the two it '
           'needs first.');
     }
-
-    // ignore: deprecated_member_use
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    // ignore: deprecated_member_use
-    AtChopsImpl chops = AtChopsImpl(atChopsKeys);
-    return chops;
+    return holdsPkam ? pkamPrivateKey : null;
   }
 
   /// Whether a write to a destination with no post-quantum key may go out

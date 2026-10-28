@@ -24,7 +24,7 @@ class _StubProvider extends CryptoProvider {
 
 void main() {
   // Regression for the pluggable-crypto e2e flake:
-  // setCurrentAtSign's idempotency short-circuit (same atSign, no atChops/
+  // setCurrentAtSign's idempotency short-circuit (same atSign, no atKeysIo/
   // atLookUp/enrollmentId override) returns the cached AtClient WITHOUT going
   // through AtClientImpl.create(), which is the only place the new preference's
   // crypto config gets adopted onto a re-used client. A same-atSign re-set

@@ -1,7 +1,3 @@
-// A client with no key source signs from its AtChops, which the minting
-// fixture below is built on.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert' show base64Encode;
 import 'dart:typed_data' show Uint8List;
 
@@ -130,11 +126,10 @@ void main() {
       final local = MockLocalSecondary();
       final advertised = <String, String>{};
       final pair = pkamKeyPairFor(alice, 'enroll-a');
-      final chops = AtChopsImpl(AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(
-              pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
-      when(() => atClient.atChops).thenReturn(chops);
+      when(() => local.getPkamPublicKey())
+          .thenAnswer((_) async => pair.atPublicKey.publicKey);
+      when(() => local.getPkamPrivateKey())
+          .thenAnswer((_) async => pair.atPrivateKey.privateKey);
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
       when(() => atClient.enrollmentId).thenReturn('enroll-a');
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
@@ -151,8 +146,7 @@ void main() {
           .thenAnswer((inv) async {
         final key = inv.positionalArguments[0] as AtKey;
         if (key.key != '__nskey') {
-          return AtValue()
-            ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+          return AtValue()..value = pair.atPublicKey.publicKey;
         }
         final serving = advertised[key.namespace];
         if (serving == null) throw AtKeyNotFoundException('$key');

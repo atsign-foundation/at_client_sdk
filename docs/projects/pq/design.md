@@ -1540,14 +1540,14 @@ but retained for back-compat so call sites migrate over time (ratified 2026-07-0
 [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
 working name). It stays the single in-memory holder of every key the client knows
 (per-enrollment *and* per-APKAM), which providers read keys from and mint/add/write
-through. *(NOT a wrapper over `AtChops` — `AtKeys` already produces one via
-`toAtChops()` and carries a `metadata` stash.)* The provider seam is injected an
+through. *(NOT a wrapper over `AtChops`, which at_auth and at_client no longer
+use; `AtKeys` carries a `metadata` stash.)* The provider seam is injected an
 **`AtKeysIo`** (the key source, extended with runtime persistence — one
 whole-state `flush(atsign, atKeys)`: mutate in memory, then flush; on an existing
 target the rewrite is safety-checked by `AtKeysAssurance.validateMapUpdate` and is
 atomic, write-to-temp + rename, keeping the previous state as `<file>.bak`)
-alongside `(AtClient, AtChops)`; `CryptoContext` carries the `AtKeysIo` —
-**additive** (`CryptoContext` is `{atClient}`, with no `atChops` field). Convergence
+alongside the `AtClient`; `CryptoContext` carries the `AtKeysIo` —
+**additive** (`CryptoContext` is `{atClient}`). Convergence
 (newest-wins / pull recovery) stays in the secret-sharing substrate; the stores are
 **dumb** key-value backends.
 

@@ -1,8 +1,3 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
@@ -88,11 +83,8 @@ void main() {
           mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      // NOTE: a signer object the client insists on holding; nothing here
-      // signs, and the key source carries the material that is read.
       atClient = (await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary,
-          atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
           atKeysIo: await keyfileHolding('@alice',
               encryptionKeyPair: RsaKeyPair.create(
                   alicesRSAKeyPair.publicKey.toString(),
@@ -280,8 +272,8 @@ void main() {
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
         // The self-key read reaches the local secondary now, which resolves
-        // it across the client's AtChops, its key source and the keystore. A
-        // mock standing in for that has to answer it.
+        // it across the client's key source and the keystore. A mock standing
+        // in for that has to answer it.
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
 
@@ -408,8 +400,8 @@ void main() {
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
         // The self-key read reaches the local secondary now, which resolves
-        // it across the client's AtChops, its key source and the keystore. A
-        // mock standing in for that has to answer it.
+        // it across the client's key source and the keystore. A mock standing
+        // in for that has to answer it.
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
         when(() => mockLocalSecondary.executeVerb(

@@ -2,8 +2,8 @@
     '@sitaram on a running virtualenv, a real CRAM secret, and encryption '
     'keys loaded onto the client — and this fixture supplies none of the '
     'three: TestUtil.getPreferenceLocal() carries the literal placeholder '
-    "'<cram_secret>', and setCurrentAtSign is called with no atChops and no "
-    'key loading, so createGroup fails in putText with "Self encryption key '
+    "'<cram_secret>', and setCurrentAtSign is called with no key source and "
+    'no key loading, so createGroup fails in putText with "Self encryption key '
     'is not set" before any network call. Confirmed with no containers '
     'running at all, so it is not a missing virtualenv.\n'
     '\n'

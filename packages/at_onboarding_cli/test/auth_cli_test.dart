@@ -239,9 +239,12 @@ void postureArgumentTests() {
         'argon2id',
       ]));
       expect(
-          preference.hashingAlgoType, AtOnboardingPreference().hashingAlgoType,
-          reason: 'AtClientPreference.hashingAlgoType is the PKAM hash, and an '
-              'RSA-2048 PKAM refuses argon2id at signing');
+          // ignore: deprecated_member_use
+          preference.hashingAlgoType,
+          // ignore: deprecated_member_use
+          AtOnboardingPreference().hashingAlgoType,
+          reason: 'the argument is accepted for compatibility and reaches no '
+              'preference');
     });
   });
 

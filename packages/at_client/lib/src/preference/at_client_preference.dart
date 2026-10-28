@@ -430,7 +430,8 @@ class AtClientPreference {
       'typed signing material')
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
-  /// hashing algorithm to use for pkam authentication
+  /// Hashing algorithm once used for pkam authentication.
+  @Deprecated('Has no effect: pkam signs with SHA-256. Removed in 5.0.0.')
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
   /// Set this to [RemoteLocalPref.remoteOnly]

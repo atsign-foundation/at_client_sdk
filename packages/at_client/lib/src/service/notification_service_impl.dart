@@ -28,8 +28,6 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
@@ -37,7 +35,10 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show parseCkConveyanceKey;
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_auth/at_auth.dart' show authenticatorForChops;
+import 'package:at_client/src/client/remote_secondary.dart'
+    show clientAuthenticator;
+import 'package:at_client/src/signing/keyless_pkam_key.dart'
+    show pkamPrivateKeyWithoutKeyfile;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
@@ -333,7 +334,6 @@ class NotificationServiceImpl extends NotificationService {
             atClient.getPreferences()!.rootPort);
 
     final preference = atClient.getPreferences()!;
-    final chops = atClient.atChops;
     lookUps ??= defaultLookUps(preference);
     this.monitor = monitor ??
         Monitor(
@@ -347,20 +347,11 @@ class NotificationServiceImpl extends NotificationService {
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
-            // Reproduces exactly what Monitor's own PKAM did: the same
-            // AtChops, the same signing and hashing algorithms, the same
-            // enrollment id. `null` when there is no signer, which fails the
-            // same way the old code did - it threw at connect time rather
-            // than authenticating with nothing.
-            authenticator: chops == null
-                ? null
-                : authenticatorForChops(
-                    atSign,
-                    chops,
-                    enrollmentId: atClient.enrollmentId,
-                    signingAlgo: signingAlgoOf(atClient),
-                    hashingAlgo: preference.hashingAlgoType,
-                  ),
+            authenticator: clientAuthenticator(atSign,
+                atKeysIo: atClient.atKeysIo,
+                privateKey: pkamPrivateKeyWithoutKeyfile(atClient),
+                cramSecret: preference.cramSecret,
+                enrollmentId: atClient.enrollmentId),
             secondaryAddressFinder: this.secondaryAddressFinder,
           )
             // The muxable heartbeats now, so the preference has to reach it or

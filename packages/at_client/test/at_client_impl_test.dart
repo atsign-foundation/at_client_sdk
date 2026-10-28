@@ -890,9 +890,8 @@ void main() {
     });
 
     test('has no default key source when none is injected', () async {
-      // Neither an atKeysIo nor an AtChops: the client falls back to reading
-      // key material out of the local secondary, which is the shape this test
-      // is about.
+      // No atKeysIo: the client falls back to reading key material out of the
+      // local secondary, which is the shape this test is about.
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',

@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
@@ -9,16 +13,18 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
-/// What a client says about the key material it found in its own local store.
+/// What a client built without a keyfile does with the key material it found
+/// in its own local store: says what it found, and authenticates with its PKAM
+/// key.
 ///
-/// The three arms are different situations, not three levels of the same one:
-/// an empty store is what every client looks like before onboarding, while a
-/// store holding one keypair and not the other is a state onboarding does not
-/// produce.
+/// The three logging arms are different situations, not three levels of the
+/// same one: an empty store is what every client looks like before onboarding,
+/// while a store holding one keypair and not the other is a state onboarding
+/// does not produce.
 void main() {
   final logs = RecordedLogs();
-  const atSign = '@chopslog';
-  final root = '${Directory.current.path}/test/hive_chopslog';
+  const atSign = '@storelog';
+  final root = '${Directory.current.path}/test/hive_storelog';
 
   setUpAll(() => logs.installOn());
 
@@ -29,10 +35,11 @@ void main() {
     ..commitLogPath = '$path/commit';
 
   /// Builds a client on its own store, seeds it with [seed], then builds a
-  /// SECOND client on that same store — the second is the one under test,
-  /// because `_createAtChops` runs during construction and can only read what
-  /// was already there.
-  Future<void> clientOverStore(String name, Map<String, String> seed) async {
+  /// SECOND client on that same store and returns it, running — the second is
+  /// the one under test, because the client reads its store's key material
+  /// during construction and can only read what was already there.
+  Future<AtClientImpl> runningOverStore(
+      String name, Map<String, String> seed) async {
     final path = '$root/$name';
     AtClientImpl.atClientInstanceMap.clear();
     final seeder = await AtClientImpl.create(atSign, 'wavi', pref(path));
@@ -46,8 +53,11 @@ void main() {
     logs.records.clear();
     final client = await AtClientImpl.create(atSign, 'wavi', pref(path));
     client.syncService = MockSyncService();
-    await (client as AtClientImpl).stop();
+    return client as AtClientImpl;
   }
+
+  Future<void> clientOverStore(String name, Map<String, String> seed) async =>
+      (await runningOverStore(name, seed)).stop();
 
   final pkam = RsaKeyPair.generate();
   final encryption = RsaKeyPair.generate();
@@ -107,4 +117,56 @@ void main() {
     expect(logs.at('INFO').where((m) => m.contains('holds no key material')),
         isEmpty);
   });
+
+  test(
+      'a client with no keyfile authenticates with the PKAM key its local '
+      'store holds', () async {
+    final client = await runningOverStore('authenticates', {
+      AtConstants.atPkamPublicKey: pkam.atPublicKey.publicKey,
+      AtConstants.atPkamPrivateKey: pkam.atPrivateKey.privateKey,
+      '${AtConstants.atEncryptionPublicKey}$atSign':
+          encryption.atPublicKey.publicKey,
+      AtConstants.atEncryptionPrivateKey: encryption.atPrivateKey.privateKey,
+    });
+    addTearDown(client.stop);
+    const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+        ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+
+    Future<bool> signsWithStoredKey(AtAuthenticator authenticate) async {
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+      expect(await authenticate(executor), isTrue);
+      final command = executor.sent.last;
+      return RsaSignatureAlgo.rsa2048().verifyBytes(
+          Uint8List.fromList(utf8.encode(challenge)),
+          signature: base64Decode(
+              command.substring(command.lastIndexOf(':') + 1).trim()),
+          publicKey: base64Decode(pkam.atPublicKey.publicKey));
+    }
+
+    expect(
+        await signsWithStoredKey(
+            client.buildRemoteSecondary().atLookUp.authenticator!),
+        isTrue,
+        reason: 'its own connection');
+    expect(
+        await signsWithStoredKey(
+            SyncServiceImpl.remoteSecondaryFor(client).atLookUp.authenticator!),
+        isTrue,
+        reason: 'and its sync\'s');
+  });
+}
+
+/// Answers each command with the next of [replies] and records what was sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
 }

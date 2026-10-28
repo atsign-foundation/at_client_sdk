@@ -54,8 +54,8 @@ class MockSecondaryKeyStore extends Mock
     return Stream.fromIterable(keysInKeyStore);
   }
 
-  // The scan tests only exercise getKeys; reads (used incidentally by
-  // AtChops bootstrap during AtClientImpl.create) resolve to null.
+  // The scan tests only exercise getKeys; reads (used incidentally by the
+  // key-material read during AtClientImpl.create) resolve to null.
   @override
   Future<AtData?> get(String key) async => null;
 

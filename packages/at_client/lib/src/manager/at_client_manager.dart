@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -93,7 +92,7 @@ class AtClientManager {
   /// logout or app shutdown).
   ///
   /// A call naming the atSign that is already current recreates nothing when
-  /// no [atChops], [atKeysIo], [atLookUp] or [enrollmentId] override is
+  /// no [atKeysIo], [atLookUp] or [enrollmentId] override is
   /// supplied and the current client is not stopped: it returns that client as
   /// it stands, and of [preference] only `crypto` is adopted. Every other
   /// change — `hiveStoragePath` included — is dropped silently; a changed
@@ -104,15 +103,12 @@ class AtClientManager {
   /// logged at shout level and ignored.
   ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
-  /// * [atChops] - Shared crypto context for the new services.
   @Deprecated('Build the client with Atsign(atSign).open(keys: ..., '
       'preference: ...) and make it current with '
       'AtClientManager.getInstance().use(client); removed in 4.0')
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
-      // ignore: deprecated_member_use
-      @Deprecated("use atKeysIo") AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
       String? enrollmentId,
@@ -130,7 +126,7 @@ class AtClientManager {
         preference.rootDomain, preference.rootPort);
 
     // Idempotency: if the caller is asking for the SAME atSign that's
-    // already current (with no caller-supplied override for atChops /
+    // already current (with no caller-supplied override for atKeysIo /
     // atLookUp / enrollmentId), short-circuit. The stop+recreate path
     // below is destructive: it stops the existing syncService and
     // builds a fresh one against the same Hive store, producing a
@@ -143,7 +139,7 @@ class AtClientManager {
     // with no `localToRemote` event.
     //
     // Callers needing a forced reset for a SAME-atSign change of
-    // preferences / atChops / enrollmentId still get one — we only
+    // preferences / atKeysIo / enrollmentId still get one — we only
     // skip when nothing in the request changed.
     //
     // Re-offering the storage the current client already holds is not a
@@ -154,7 +150,6 @@ class AtClientManager {
     if (currentAtSign != null &&
         currentAtSign == atSign &&
         !principalChange &&
-        atChops == null &&
         atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
@@ -214,7 +209,6 @@ class AtClientManager {
     // Spin up the new atClient
     _currentAtClient = await serviceFactory.atClient(
         _atSign, namespace, preference, this,
-        atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
@@ -284,8 +278,8 @@ class AtClientManager {
   ///
   /// Consumes an [AtAuthSession] (the key *source* + confirmed params) and lets
   /// the client rebuild its own connection: [session.atKeysIo] flows to
-  /// `AtClientImpl.create(atKeysIo:)`, which derives its own PKAM [AtChops] and
-  /// opens a fresh socket that PKAMs itself. Costs one extra PKAM handshake at
+  /// `AtClientImpl.create(atKeysIo:)`, which opens a fresh socket and PKAMs
+  /// it from those keys. Costs one extra PKAM handshake at
   /// startup — the accepted price of clean auth/client separation.
   ///
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
@@ -372,8 +366,6 @@ abstract class AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    // ignore: deprecated_member_use
-    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
@@ -402,8 +394,6 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    // ignore: deprecated_member_use
-    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     AtLookUpFactory? lookUps,
@@ -415,7 +405,6 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       namespace,
       preference,
       atClientManager: atClientManager,
-      atChops: atChops,
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
       lookUps: lookUps,

@@ -294,26 +294,22 @@ void main() {
 
   test('fromAuthSession hands its storage to the client it builds', () async {
     final injected = InMemoryAtClientStorage(atSign: '@handoff');
-    final keysIo = _AttachWatchingKeysIo(injected);
     final session = AtAuthSession(
         atSign: '@handoff',
         rootDomain: const AtRootDomain('root.atsign.org', 64),
         namespace: 'wavi',
-        atKeysIo: keysIo);
+        atKeysIo: InMemoryAtKeysIo.holding('@handoff', AtKeys()));
 
-    // The client derives its AtChops from the session's key source, and this
-    // one refuses - but only after _init has attached whatever storage it was
-    // given, which is the moment the watcher records.
-    await expectLater(
-        () => AtClientManager('@handoff')
-            .fromAuthSession(session, AtClientPreference(), storage: injected),
-        throwsA(anything));
+    final manager = await AtClientManager('@handoff').fromAuthSession(
+        session, AtClientPreference(posture: PqPosture.legacy),
+        storage: injected);
+    final client = manager.atClient as AtClientImpl;
 
-    expect(keysIo.storageWasAttached, isTrue,
+    expect(identical(client.storage, injected), isTrue,
         reason: 'fromAuthSession must pass storage down to '
             'AtClientImpl.create. Without it the client builds its own from '
-            'hiveStoragePath, which this preference does not set, so it fails '
-            'before ever reading a key');
+            'hiveStoragePath, which this preference does not set');
+    await client.stop();
     await injected.close();
   });
 
@@ -383,31 +379,4 @@ void main() {
         reason: 'and closing it is what releases the store');
     await second.close();
   });
-}
-
-/// Records whether [_storage] was already attached when the client asked this
-/// source for key material, then refuses: attachment happens in `_init`, so
-/// reading `true` here proves the storage reached the client.
-/// The first read answers the construction-time identity lookup; the AtChops
-/// read that follows is the one refused.
-class _AttachWatchingKeysIo extends WrittenAtKeysIo {
-  _AttachWatchingKeysIo(this._storage);
-
-  final AtClientStorageBase _storage;
-  bool storageWasAttached = false;
-  bool _identityRead = false;
-
-  @override
-  Future<AtKeys> read(String atSign) async {
-    if (!_identityRead) {
-      _identityRead = true;
-      return AtKeys();
-    }
-    storageWasAttached = _storage.isAttached;
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> write(String atSign, AtKeys atKeys) =>
-      throw UnimplementedError();
 }

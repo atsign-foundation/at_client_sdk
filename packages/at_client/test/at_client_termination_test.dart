@@ -228,7 +228,7 @@ void main() {
     group('setCurrentAtSign idempotency', () {
       // The same-atSign short-circuit added with the
       // bypasscache_test flake fix. Forced-reset cases (callers
-      // passing atChops / atLookUp / enrollmentId, or an explicitly
+      // passing atKeysIo / atLookUp / enrollmentId, or an explicitly
       // stopped atClient) must still recreate; bare no-arg calls
       // must reuse.
 
@@ -264,31 +264,6 @@ void main() {
           );
         },
       );
-
-      test('same-atSign with atChops override → recreates', () async {
-        final atSign = '@idempotent_with_atchops';
-
-        final atClient1 = await _initializeAtClient(atSign);
-        final syncService1 = atClient1.syncService;
-
-        // Caller passes atChops — the idempotency check must NOT
-        // short-circuit, because the override is a signal the caller
-        // wants a fresh atClient.
-        final mockAtChops = MockAtChops();
-        await AtClientManager.getInstance().setCurrentAtSign(
-          atSign,
-          'test',
-          _createPreference(atSign.replaceAll('@', '')),
-          atChops: mockAtChops,
-        );
-        final atClient2 = AtClientManager.getInstance().atClient;
-        // syncService MUST be a fresh instance.
-        expect(
-          identical(syncService1, atClient2.syncService),
-          false,
-          reason: 'atChops override forces syncService recreate',
-        );
-      });
 
       test('same-atSign with enrollmentId override → recreates', () async {
         final atSign = '@idempotent_with_enrollment';

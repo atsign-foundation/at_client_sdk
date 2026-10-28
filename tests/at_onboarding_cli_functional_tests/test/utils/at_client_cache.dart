@@ -25,8 +25,8 @@ const Duration cliCommandTimeout = Duration(seconds: 120);
 /// ⚠️ `AtClientManager.getInstance().reset()` does not do this: the static
 /// `AtClientImpl.atClientInstanceMap` survives it, so a second build for an
 /// atSign already built here hands back the first client — with the storage
-/// path, `AtChops`, `AtKeysIo` and preference it was born with — whenever the
-/// two differ in anything the key `(atSign, enrollmentId)` does not carry.
+/// path, `AtKeysIo` and preference it was born with — whenever the two differ
+/// in anything the key `(atSign, enrollmentId)` does not carry.
 ///
 /// ⛔ Never call this while another service has an operation in flight: it
 /// resets the shared `AtClientManager`, turning a legible refusal into a

@@ -1,7 +1,3 @@
-// A client with no key source signs from its AtChops, and several tests here are
-// about that shape, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -96,12 +92,11 @@ void main() {
       return 'data:1';
     });
     final pair = pkamKeyPairFor(atSign, 'enroll-a');
-    final chops = AtChopsImpl(AtChopsKeys.create(
-        null,
-        AtPkamKeyPair.create(
-            pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
+    when(() => local.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => local.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
 
-    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
@@ -127,8 +122,7 @@ void main() {
       // advertisement signed by the fixture verifies whichever enrollment it
       // claims.
       if (key.key != '__nskey') {
-        return AtValue()
-          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+        return AtValue()..value = pair.atPublicKey.publicKey;
       }
       advertisementReads
           .add(inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
@@ -286,7 +280,13 @@ void main() {
       () async {
     final c = client();
     final io = InMemoryAtKeysIo();
-    await io.write(atSign, AtKeys());
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    await io.write(
+        atSign,
+        AtKeys()
+          ..fileLegacyMaterial(
+              apkamPublicKey: pair.atPublicKey.publicKey,
+              apkamPrivateKey: pair.atPrivateKey.privateKey));
     when(() => c.client.atKeysIo).thenReturn(io);
 
     final ring = PublishedNskeyKeyRing(c.client);
@@ -636,12 +636,18 @@ void main() {
   test('UC-G2.6 c6 · the added document is re-signed by the ADDING enrollment',
       () async {
     final c = client();
-    // Same chops as the fixture, which serves one `_apsk` for every enrollment,
-    // so this signature verifies while claiming a different kid.
+    // Same keypair as the fixture, which serves one `_apsk` for every
+    // enrollment, so this signature verifies while claiming a different kid.
     final other = MockAtClient();
     final otherSecondary = MockRemoteSecondary();
     final otherLookUp = MockAtLookUp();
-    when(() => other.atChops).thenReturn(c.client.atChops);
+    final otherLocal = MockLocalSecondary();
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    when(() => other.getLocalSecondary()).thenReturn(otherLocal);
+    when(() => otherLocal.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => otherLocal.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
     when(() => other.getCurrentAtSign()).thenReturn(atSign);
     when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
     when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);

@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
@@ -60,15 +59,6 @@ MockAtClient buildRemoteBackedMockClient({
   final pair = pkamKeyPairFor(atSign, enrollmentId);
   when(() => atClient.atKeysIo)
       .thenReturn(keysHoldingApkam(atSign, enrollmentId, pair));
-  // NOTE: the same keypair twice. A test that swaps in a key source of its
-  // own, or none, leaves the client no keypair there, and the AtChops door
-  // is what still answers for it.
-  // ignore: deprecated_member_use
-  when(() => atClient.atChops).thenReturn(AtChopsImpl(AtChopsKeys.create(
-      null,
-      // ignore: deprecated_member_use
-      AtPkamKeyPair.create(
-          pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey))));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 

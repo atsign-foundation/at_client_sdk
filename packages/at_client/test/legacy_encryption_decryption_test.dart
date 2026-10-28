@@ -1,8 +1,3 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
@@ -34,9 +29,6 @@ void main() {
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
         remoteSecondary: mockRemoteSecondary,
-        // NOTE: a signer object the client insists on holding; nothing here
-        // signs, and the key source carries the material that is read.
-        atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
             selfEncryptionKey: AESKey.generate(32).key));

@@ -17,9 +17,8 @@ void main() {
   Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
   AtLookupImpl mockAtLookup = MockAtLookupImpl();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  final mockAtChops = MockAtChops();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
-  var atClientPreferenceWithAtChops = AtClientPreference();
+  var atClientPreference = AtClientPreference();
   var lookupVerbBuilder = LookupVerbBuilder()
     ..atKey = (AtKey()
       ..key = 'phone.wavi'
@@ -39,7 +38,6 @@ void main() {
         .thenAnswer((_) => Future.value('dummy_encryption_public_key'));
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((_) async => 'dummy_shared_key');
-    when(() => mockAtClientImpl.atChops).thenAnswer((_) => mockAtChops);
   });
 
   group('A group of positive test mock test to verify decryption service', () {
@@ -61,12 +59,12 @@ void main() {
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
 
       when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
+          .thenAnswer((_) => atClientPreference);
       var sharedKeyDecryption = SharedWithMeDecryption(mockAtClientImpl);
       var result = await sharedKeyDecryption.decrypt(atKey, encryptedValue);
       expect(result, 'hello');
       when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
+          .thenAnswer((_) => atClientPreference);
 
       expect(await sharedKeyDecryption.decrypt(atKey, encryptedValue), 'hello');
     });
@@ -106,7 +104,7 @@ void main() {
         ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
 
       when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => atClientPreferenceWithAtChops);
+          .thenAnswer((_) => atClientPreference);
       // The client resolves its private key through the local secondary, so
       // "not found" is that answering none. Stated here rather than left to
       // the absence of a stub, because this mock is shared across the group

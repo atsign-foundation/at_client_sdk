@@ -12,12 +12,12 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/signing/keyless_pkam_key.dart'
+    show pkamPrivateKeyWithoutKeyfile;
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -202,16 +202,14 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Sync's own connection, built from the same key material the client
+  /// Sync's own connection, built from the same credentials the client
   /// holds, so its authenticator matches the client's rather than falling to
-  /// a different credential: the keyfile's keypair when it holds one, the
-  /// client's `AtChops` when it holds none.
+  /// a different one.
   @visibleForTesting
   static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
       RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-          atChops: atClient.atChops,
+          privateKey: pkamPrivateKeyWithoutKeyfile(atClient),
           enrollmentId: atClient.enrollmentId,
-          signingAlgoType: signingAlgoOf(atClient),
           atKeysIo: atClient.atKeysIo,
           secondaryAddressFinder:
               atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,

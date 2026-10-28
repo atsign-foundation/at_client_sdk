@@ -60,7 +60,6 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => atClient.atSign).thenReturn(Atsign('@alice'));
     when(() => atClient.enrollmentId).thenReturn(null);
-    when(() => atClient.atChops).thenReturn(MockAtChops());
     when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
       ..namespace = 'wavi'
       ..monitorAutoStart = false);

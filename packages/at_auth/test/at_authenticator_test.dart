@@ -1,5 +1,5 @@
-// The injected signer is an AtChops: the door this file exercises is the
-// deprecated one, so its types are named here on purpose.
+// The atServer's check of a `pkam:` signature is modelled with the AtChops
+// call it makes, so its types are named here on purpose.
 // ignore_for_file: deprecated_member_use
 
 import 'dart:convert';
@@ -129,11 +129,8 @@ void main() {
     });
   });
 
-  group('an injected signer', () {
-    test('is used, and the keyfile is asked only for the algorithm', () async {
-      // Keys carrying NO apkam material at all. authenticationFor would throw
-      // building a signer from them, so this passing is the proof that the
-      // injected chops was used and the keyfile's own signer never built.
+  group('the keyfile\'s keypair', () {
+    test('a keyfile holding no authentication keypair cannot sign', () async {
       final io = InMemoryAtKeysIo();
       await io.write(
           atSign,
@@ -142,75 +139,45 @@ void main() {
                 AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!));
       final executor = RecordingExecutor(['data:$challenge', 'data:success']);
 
-      final injected = AtChopsImpl(AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
-              demo.pkamPrivateKeyMap[atSign]!)));
-
-      final ok = await authenticatorFor(io, atSign, chops: injected)(executor);
-
-      expect(ok, isTrue);
-      expect(executor.sent.last, startsWith('pkam:'));
-      expect(executor.sent.last, contains('signingAlgo:rsa2048'));
-    });
-
-    test('without one, the same keyfile cannot sign at all', () async {
-      // The control for the test above: same keys, no injected signer. If this
-      // also passed, the test above would prove nothing about which signer ran.
-      final io = InMemoryAtKeysIo();
-      await io.write(
-          atSign,
-          AtKeys()
-            ..defaultEncryptionPublicKey =
-                AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!));
-      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
-
-      await expectLater(
-          () => authenticatorFor(io, atSign)(executor), throwsA(anything));
+      await expectLater(() => authenticatorFor(io, atSign)(executor),
+          throwsA(isA<AtKeyNotFoundException>()));
     });
 
     test(
         'is refused when the keyfile names an algorithm this build cannot '
         'sign with', () async {
       // The keyfile holds THIS enrollment's key, under an algorithm from a
-      // newer client. The algorithm used to resolve to null and rsa2048 was
-      // the fallback, so the injected signer signed the challenge under a
-      // guess about a key nothing here can read - while a caller WITHOUT an
-      // injected signer was refused for the same keyfile.
+      // newer client, beside the flat fields of another enrollment.
       final io = InMemoryAtKeysIo();
       await io.write(
           atSign,
           AtKeys()
-            ..defaultEncryptionPublicKey =
-                AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!)
+            ..apkamPublicKey =
+                AtBytes.fromString(demo.pkamPublicKeyMap[atSign]!)
+            ..apkamPrivateKey =
+                AtBytes.fromString(demo.pkamPrivateKeyMap[atSign]!)
             ..fileApkamMaterial(
                 enrollmentId: 'future-algorithm',
                 algorithm:
                     CryptographicMaterialAlgorithm.of('sphincs-plus-256s'),
                 publicKey: 'dHlwZWQtcHVibGlj',
                 privateKey: 'dHlwZWQtcHJpdmF0ZQ=='));
-      final injected = AtChopsImpl(AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
-              demo.pkamPrivateKeyMap[atSign]!)));
 
       final refused = RecordingExecutor(['data:$challenge', 'data:success']);
       await expectLater(
-          () => authenticatorFor(io, atSign,
-              enrollmentId: 'future-algorithm', chops: injected)(refused),
+          () => authenticatorFor(io, atSign, enrollmentId: 'future-algorithm')(
+              refused),
           throwsA(isA<AtKeyNotFoundException>()));
       expect(refused.sent, isEmpty,
-          reason: 'the refusal lands before anything is sent, not after a '
-              'challenge has been signed under a guessed algorithm');
+          reason: 'the refusal lands before anything is sent, not after the '
+              'flat fields have signed for somebody else');
 
-      // The control, and the discriminator: the same keyfile and the same
-      // injected signer, for an enrollment it holds no material for. Absent
-      // material is still rsa2048, so the refusal is keyed on unreadable
-      // material rather than on the keyfile being unusual.
+      // The control: the same keyfile, for an enrollment it holds no typed
+      // material for, signs with the flat fields under rsa2048.
       final accepted = RecordingExecutor(['data:$challenge', 'data:success']);
       expect(
-          await authenticatorFor(io, atSign,
-              enrollmentId: 'never-held-here', chops: injected)(accepted),
+          await authenticatorFor(io, atSign, enrollmentId: 'never-held-here')(
+              accepted),
           isTrue);
       expect(accepted.sent.last, contains('signingAlgo:rsa2048'));
     });
@@ -252,44 +219,6 @@ void main() {
               e.message.contains('Refusing to sign a malformed from:'))));
       expect(executor.sent, hasLength(1),
           reason: 'it must refuse before sending any signature');
-    });
-  });
-
-  group('a signer and nothing else', () {
-    // The third shape the ladder supported, and the one every client in
-    // tests/at_functional_test has: an AtChops, no keyfile, no private key.
-    test('authenticates from an injected signer with no keystore', () async {
-      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
-      final chops = AtChopsImpl(AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
-              demo.pkamPrivateKeyMap[atSign]!)));
-
-      final ok = await authenticatorForChops(atSign, chops,
-          signingAlgo: SigningAlgoType.rsa2048,
-          hashingAlgo: HashingAlgoType.sha256)(executor);
-
-      expect(ok, isTrue);
-      expect(executor.sent.last, startsWith('pkam:'));
-      expect(executor.sent.last, contains('signingAlgo:rsa2048'));
-    });
-
-    test('and refuses a challenge naming another atSign', () async {
-      final executor = RecordingExecutor([
-        'data:_9e8169dc-5618-44ec-ab43-1a5b2144c581@bob\u{1F6E0}'
-            ':c3d345fc-5691-4f90-bc34-17cba31f060f'
-      ]);
-      final chops = AtChopsImpl(AtChopsKeys.create(
-          null,
-          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
-              demo.pkamPrivateKeyMap[atSign]!)));
-
-      await expectLater(
-          () => authenticatorForChops(atSign, chops,
-              signingAlgo: SigningAlgoType.rsa2048,
-              hashingAlgo: HashingAlgoType.sha256)(executor),
-          throwsA(isA<UnAuthenticatedException>()));
-      expect(executor.sent, hasLength(1));
     });
   });
 

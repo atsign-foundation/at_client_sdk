@@ -340,7 +340,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
     }
 
     // The local secondary resolves this across every tier the client has:
-    // its key source, then the keystore, then an injected AtChops.
+    // its key source, then the keystore.
     selfEncryptionKey =
         await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     if (selfEncryptionKey.isNullOrEmpty) {

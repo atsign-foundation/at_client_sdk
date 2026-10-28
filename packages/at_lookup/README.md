@@ -56,7 +56,7 @@ final AtLookupMuxable atLookUp = AtLookUp.withSecureSocket(
       CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   // How this connection authenticates, as one closure. at_lookup holds no key
   // material of its own; at_auth builds an authenticator from whatever
-  // credential you have - a keystore, an AtChops, or a bare private key.
+  // credential you have - a keystore, a bare private key, or a CRAM secret.
   // Pass null for a connection that never authenticates.
   authenticator: authenticatorFor(keysIo, '@alice'),
 );

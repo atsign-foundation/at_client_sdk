@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
@@ -74,11 +73,7 @@ void main() {
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        // A signer object the client insists on holding; the keys are empty on purpose.
-        // ignore: deprecated_member_use
-        atChops: AtChopsImpl(AtChopsKeys()),
-        atKeysIo: io,
-        enrollmentId: 'apkam-1');
+        atKeysIo: io, enrollmentId: 'apkam-1');
     expect(client.enrollmentId, 'apkam-1',
         reason: 'no material, so nothing to derive from; the caller\'s id '
             'is the credential\'s');

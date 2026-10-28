@@ -1,5 +1,10 @@
 ## 4.0.0-rc8
 
+- BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
+  longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
+  hold, under the algorithm they name.
+- BREAKING: `AtKeys.authenticationFor` is removed; use
+  `authenticationKeyPairFor`.
 - build: requires `at_utils` ^3.2.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs

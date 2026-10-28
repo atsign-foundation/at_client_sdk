@@ -187,10 +187,10 @@ void main() {
       'memory only', () {
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'falls back to the APKAM authentication keypair with no key source',
-        proves: 'the fallback is built from atChops rather than read from the '
+        proves: 'the fallback is read from the local store rather than the '
             'keyfile — this client has no key source at all, so nothing could '
             'have been filed for it to find',
-        clauses: ['built from `atChops` on the call']);
+        clauses: ['from the local store for a client without one']);
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'the keyfile\'s signing material wins over the authentication keypair',
         proves: 'the control: the fallback is a fallback, not a preference');

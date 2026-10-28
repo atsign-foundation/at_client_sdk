@@ -1,29 +1,66 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-/// The per-enrollment signing algorithm must reach every connection the
-/// client owns. A self-retrofit's ML-DSA enrollment re-authenticates on
-/// every reconnect — verb, monitor and sync alike — so a connection stamped
-/// with the preference's rsa2048 default fails against the
-/// record-authoritative atServer no matter how correct its AtChops are.
+import 'test_utils/mocks.dart';
+
+/// Every connection the client owns authenticates from its keys, which name
+/// the algorithm, as its own enrollment. A self-retrofit's ML-DSA enrollment
+/// re-authenticates on every reconnect — verb, monitor and sync alike — so a
+/// connection signing with anything else fails against the
+/// record-authoritative atServer.
 void main() {
   group('RemoteSecondary', () {
-    /// Asserted against the source, like the Monitor test below: the
-    /// resolved algorithm is captured inside the authenticator closure
-    /// `_installAuthenticator` builds, with nothing on the constructed
-    /// object to read it back from.
-    test('resolves and threads the signing algorithm through the seam', () {
-      final source =
-          File('lib/src/client/remote_secondary.dart').readAsStringSync();
+    test('signs with the algorithm its keys name, whatever it is told',
+        () async {
+      const atSign = '@threading';
+      const enrollmentId = 'pq-enrollment';
+      const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+      final pqPair = await MlDsa65KeyPair.generate();
+      final keys = AtKeys(atsign: atSign.toAtsign())
+        ..fileApkamMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: pqPair.atPublicKey.publicKey,
+            privateKey: pqPair.atPrivateKey.privateKey);
+      final lookUp = MockAtLookupImpl();
+      RemoteSecondary(
+          atSign,
+          AtClientPreference()
+            // ignore: deprecated_member_use_from_same_package
+            ..signingAlgoType = SigningAlgoType.rsa2048,
+          atLookUp: lookUp,
+          atKeysIo: InMemoryAtKeysIo.holding(atSign, keys),
+          enrollmentId: enrollmentId,
+          // ignore: deprecated_member_use_from_same_package
+          signingAlgoType: SigningAlgoType.rsa2048);
+      final authenticate = verify(() => lookUp.authenticator = captureAny())
+          .captured
+          .last as AtAuthenticator;
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
 
-      expect(source, contains('signingAlgoType ?? preference.signingAlgoType'),
-          reason: 'an explicit signingAlgoType overrides the preference '
-              'default, so one preference can still serve two enrollments '
-              'that sign differently');
-      expect(source, contains('signingAlgo: _signingAlgoType'),
-          reason: 'the resolved algorithm, not the preference default, is '
-              'what the authenticator seam actually signs with');
+      expect(await authenticate(executor), isTrue);
+
+      final pkam = executor.sent.last;
+      expect(pkam, startsWith('pkam:signingAlgo:mldsa65:'),
+          reason: 'the preference and the parameter both said rsa2048; the '
+              'keys name ML-DSA, and only the keys can sign');
+      expect(pkam, contains(':enrollmentId:$enrollmentId:'));
+      expect(
+          MlDsa65PureDartAlgo.verifyBytesSync(
+              Uint8List.fromList(utf8.encode(challenge)),
+              signature: base64Decode(
+                  pkam.substring(pkam.lastIndexOf(':') + 1).trim()),
+              publicKey: base64Decode(pqPair.atPublicKey.publicKey)),
+          isTrue);
     });
   });
 
@@ -32,8 +69,8 @@ void main() {
     /// no branch or default to exercise live, and RemoteSecondary's own
     /// resolution of what it's handed is the 'RemoteSecondary' group above.
     test(
-        'threads the client\'s enrollment id and algorithm into the '
-        'connection it builds', () {
+        'threads the client\'s enrollment id and keys into the connection it '
+        'builds', () {
       final source =
           File('lib/src/client/at_client_impl.dart').readAsStringSync();
       final wiring = source
@@ -42,9 +79,9 @@ void main() {
       expect(wiring, contains('enrollmentId: enrollmentId'),
           reason: 'so the seam authenticates as this client\'s own '
               'enrollment, not the primary one');
-      expect(wiring, contains('signingAlgoType: signingAlgoType'),
+      expect(wiring, contains('atKeysIo: _atKeysIo'),
           reason: 'so a connection opened for an ML-DSA enrollment signs '
-              'with ML-DSA rather than the preference\'s rsa2048 default');
+              'with the ML-DSA keypair its keys hold');
     });
 
     test('is the only way this class opens a connection', () {
@@ -70,25 +107,41 @@ void main() {
 
   group('Monitor', () {
     /// Monitor holds an `AtLookupMuxable` rather than a signing algorithm, and
-    /// the algorithm travels inside the authenticator `NotificationServiceImpl`
-    /// builds for it: a monitor connection stamped with the preference's
-    /// rsa2048 default fails every re-authentication for an ML-DSA enrollment.
+    /// the keys travel inside the authenticator `NotificationServiceImpl`
+    /// builds for it.
     ///
-    /// Asserted against the source because the algorithm is captured in a
-    /// closure, with nothing on the built object to read it back from.
-    test('the resolved algorithm reaches the monitor connection', () {
+    /// Asserted against the source because the keys are captured in a
+    /// closure, with nothing on the built object to read them back from.
+    test('the monitor connection authenticates from the client\'s keys', () {
       final source = File('lib/src/service/notification_service_impl.dart')
           .readAsStringSync();
       final wiring = source.substring(source.indexOf('lookUp: lookUps('));
 
-      expect(wiring, contains('signingAlgo: signingAlgoOf(atClient)'),
-          reason: 'the monitor connection must authenticate with the '
-              'RESOLVED algorithm, not the preference default - '
-              'signingAlgoOf() is what reads the enrollment key material');
+      expect(wiring, contains('authenticator: clientAuthenticator(atSign,'),
+          reason: 'the one builder every connection of the client uses');
+      expect(wiring, contains('atKeysIo: atClient.atKeysIo'),
+          reason: 'the keys name the algorithm the monitor signs with');
+      expect(wiring,
+          contains('privateKey: pkamPrivateKeyWithoutKeyfile(atClient)'),
+          reason: 'and a client with no keyfile signs with the key its local '
+              'store or preference holds');
       expect(wiring, contains('enrollmentId: atClient.enrollmentId'),
           reason: 'and as the right enrollment, or the atServer refuses it');
-      expect(wiring, contains('hashingAlgo: preference.hashingAlgoType'),
-          reason: 'hashing travels with signing - the pair is one setting');
     });
   });
+}
+
+/// Answers each command with the next of [replies] and records what was sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
 }

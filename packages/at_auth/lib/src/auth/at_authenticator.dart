@@ -33,21 +33,8 @@ const _cramTransientWaitMillis = 4000;
 ///
 /// - it throws [AtKeysSourceAbsentException] — there is no keyfile yet, so
 ///   this atSign is not onboarded and CRAM is the only credential that exists;
-/// - it returns keys — PKAM, signed with the algorithm those keys name for
-///   [enrollmentId].
-///
-/// [chops] lets a caller supply its own signer, which `AtAuth` has always
-/// allowed through `AtAuth.create(atChops:)`.
-/// When supplied, only the *algorithm* is taken from the keyfile - the keypair
-/// is the caller's. Resolving the keyfile's own signer eagerly would be worse
-/// than wasteful: it throws on a keyfile missing material that a caller with
-/// its own signer never needed.
-///
-/// [signingAlgo] overrides the algorithm the keyfile would name. Onboarding a
-/// PQ-native atSign is the case that needs it: the keypair was minted moments
-/// earlier and is in no keyfile, under an enrollment the atServer has not
-/// created yet, so nothing can be resolved and the rsa2048 default would sign
-/// an ML-DSA key with the RSA routine.
+/// - it returns keys — PKAM, signed with the keypair those keys hold for
+///   [enrollmentId], under the algorithm that keypair names.
 ///
 /// Nothing here reaches into at_lookup for key material, and at_lookup names
 /// none of these types: `AtKeys` and `AtKeysIo` live in at_auth, which depends
@@ -57,9 +44,6 @@ AtAuthenticator authenticatorFor(
   String atSign, {
   String? cramSecret,
   String? enrollmentId,
-  // ignore: deprecated_member_use
-  AtChops? chops,
-  SigningAlgoType? signingAlgo,
   Map<String, dynamic> clientConfig = const {},
 }) =>
     (executor) async {
@@ -75,65 +59,7 @@ AtAuthenticator authenticatorFor(
         _logger.finer('no keyfile for $atSign - authenticating with CRAM');
         return _cram(executor, atSign, cramSecret, clientConfig);
       }
-      return _pkam(executor, atSign, keys, enrollmentId, clientConfig, chops,
-          signingAlgo);
-    };
-
-/// Authenticates with a signer the caller already holds, and no keystore.
-///
-/// The third shape at_lookup's ladder supported, after a keyfile and a bare
-/// private key: an `AtChops` set on the lookup, with nothing behind it. A
-/// client constructed from an `AtClientPreference` and an injected AtChops is
-/// exactly this, and it cannot use [authenticatorFor] because there is no
-/// keystore to read, nor [authenticatorForPrivateKey] because it holds no
-/// private key of its own - the key material is inside the AtChops.
-///
-/// [signingAlgo] and [hashingAlgo] are required, because this is the one
-/// authenticator that cannot work them out for itself: there is no keystore
-/// behind the signer, so the caller is the only party that knows what the
-/// AtChops holds. Defaulting either made a caller that forgot indistinguishable
-/// from one that meant `rsa2048`/`sha256`, and an ML-DSA key put through the
-/// RSA routine fails inside at_chops on a key length, naming neither the
-/// caller nor the mismatch.
-AtAuthenticator authenticatorForChops(
-  String atSign,
-  // ignore: deprecated_member_use
-  AtChops chops, {
-  required SigningAlgoType signingAlgo,
-  required HashingAlgoType hashingAlgo,
-  String? enrollmentId,
-  Map<String, dynamic> clientConfig = const {},
-}) =>
-    (executor) async {
-      var fromResponse = await executor.sendSync((FromVerbBuilder()
-            ..atSign = atSign
-            ..clientConfig = Map<String, dynamic>.from(clientConfig))
-          .buildCommand());
-      if (fromResponse.isEmpty) {
-        return false;
-      }
-      fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-      fromResponse = validatedFromChallenge(fromResponse, atSign);
-
-      // ignore: deprecated_member_use
-      final signingResult = chops.sign(AtSigningInput(fromResponse)
-        ..signingAlgoType = signingAlgo
-        ..hashingAlgoType = hashingAlgo
-        // ignore: deprecated_member_use
-        ..signingMode = AtSigningMode.pkam);
-
-      final pkamResponse = await executor.sendSync((PkamVerbBuilder()
-            ..signingAlgo = signingAlgo.name
-            ..hashingAlgo = hashingAlgo.name
-            ..enrollmentlId = enrollmentId
-            ..signature = signingResult.result)
-          .buildCommand());
-      if (pkamResponse == 'data:success') {
-        _logger.info('pkam auth success for $atSign');
-        return true;
-      }
-      throw UnAuthenticatedException(
-          'Failed connecting to $atSign. $pkamResponse');
+      return _pkam(executor, atSign, keys, enrollmentId, clientConfig);
     };
 
 /// The fourth credential shape: a CRAM secret and nothing else.
@@ -211,53 +137,11 @@ Future<bool> _pkam(
   AtKeys keys,
   String? enrollmentId,
   Map<String, dynamic> clientConfig,
-  // ignore: deprecated_member_use
-  AtChops? injectedChops,
-  SigningAlgoType? injectedAlgo,
 ) async {
-  // A null algorithm means the flat fields' RSA keypair, which is what
-  // at_lookup signs with by default - so a legacy enrollment is rsa2048.
-  // Exactly one of these answers: a signer the caller brought, or the
-  // keypair this keyfile holds.
-  // ignore: deprecated_member_use
-  final AtChops? signer;
-  ({SigningAlgoType algorithm, String publicKey, String privateKey})? keyPair;
-  final SigningAlgoType signingAlgo;
-  if (injectedAlgo != null) {
-    // The caller named the algorithm because the keystore cannot answer. A
-    // PQ-native activation signs with a keypair minted moments ago, under an
-    // enrollment the atServer has not created yet, so there is nothing to
-    // resolve from - and the default would sign an ML-DSA key with the RSA
-    // routine.
-    signer = injectedChops ?? keys.authenticationFor(enrollmentId).chops;
-    keyPair = null;
-    signingAlgo = injectedAlgo;
-  } else if (injectedChops != null) {
-    // A signer beside a keyfile. The keyfile's keypair signs when it holds
-    // one for this enrollment; the injected signer is the door for a keyfile
-    // that holds none - a client built from an AtChops with a stand-in key
-    // source beside it, or a hardware-backed key with no software pair. A
-    // keyfile that holds typed material this build cannot sign with is
-    // refused here rather than fallen through: `authenticationKeyPairFor`
-    // throws for it, and signing as whoever the injected signer is would be
-    // a guess about somebody else's credentials.
-    keyPair = keys.authenticationKeyPairFor(enrollmentId);
-    if (keyPair != null) {
-      signer = null;
-      signingAlgo = keyPair.algorithm;
-    } else {
-      signer = injectedChops;
-      signingAlgo = SigningAlgoType.rsa2048;
-    }
-  } else {
-    // No injection at all: the keyfile is the whole answer, so take the
-    // keypair rather than an AtChops built around it. This is the mainstream
-    // path, and the algorithm comes from the material it signs with, so a key
-    // cannot be put through the wrong routine.
-    keyPair = keys.authenticationKeyPairFor(enrollmentId);
-    signer = null;
-    signingAlgo = keyPair?.algorithm ?? SigningAlgoType.rsa2048;
-  }
+  // NOTE: typed material this build cannot sign with is refused, never
+  // signed for from the flat fields.
+  final keyPair = keys.authenticationKeyPairFor(enrollmentId);
+  final signingAlgo = keyPair?.algorithm ?? SigningAlgoType.rsa2048;
   const hashingAlgo = HashingAlgoType.sha256;
 
   var fromResponse = await executor.sendSync((FromVerbBuilder()
@@ -271,16 +155,7 @@ Future<bool> _pkam(
   fromResponse = validatedFromChallenge(fromResponse, atSign);
 
   final String signature;
-  if (signer != null) {
-    signature = signer
-        // ignore: deprecated_member_use
-        .sign(AtSigningInput(fromResponse)
-          ..signingAlgoType = signingAlgo
-          ..hashingAlgoType = hashingAlgo
-          // ignore: deprecated_member_use
-          ..signingMode = AtSigningMode.pkam)
-        .result;
-  } else if (keyPair != null) {
+  if (keyPair != null) {
     signature = keyPair.algorithm == SigningAlgoType.rsa2048
         ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
         : signPkamChallenge(keyPair, fromResponse);

@@ -29,7 +29,8 @@ import 'test_utils.dart';
 /// ML-DSA-65 keypair, submits a no-OTP `enroll:request`, is auto-approved by
 /// the atServer, and immediately PKAM-authenticates under the new enrollment
 /// with the ML-DSA key — record-authoritative, so the pass proves the whole
-/// client chain (keyfile → AtChops → pkam dispatch) signed genuine ML-DSA.
+/// client chain (keyfile → authenticator → pkam dispatch) signed genuine
+/// ML-DSA.
 ///
 /// The pre-PQ starting point is built with an ordinary OTP enrollment on
 /// firstAtSign, approved by the demo-keys owner client, rather than a CRAM

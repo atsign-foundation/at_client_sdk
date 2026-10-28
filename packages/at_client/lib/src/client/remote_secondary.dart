@@ -6,7 +6,6 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeysIo,
         authenticatorFor,
-        authenticatorForChops,
         authenticatorForCramSecret,
         authenticatorForPrivateKey;
 
@@ -37,18 +36,6 @@ class RemoteSecondary implements Secondary {
   /// null to read the process-wide one per lookup.
   SecondaryAddressFinder? _secondaryAddressFinder;
 
-  // ignore: deprecated_member_use
-  AtChops? _atChops;
-
-  // ignore: deprecated_member_use
-  AtChops? get atChops => _atChops;
-
-  // ignore: deprecated_member_use
-  set atChops(AtChops? value) {
-    _atChops = value;
-    _installAuthenticator();
-  }
-
   /// The keystore an authenticator reads, when this client was given one.
   AtKeysIo? _atKeysIo;
 
@@ -59,10 +46,6 @@ class RemoteSecondary implements Secondary {
   /// The enrollment the next authenticator built by [_installAuthenticator]
   /// should declare.
   String? _enrollmentId;
-
-  /// The algorithm the constructor resolved, so an authenticator built from a
-  /// bare signer names the same one the lookup was told to use.
-  late final SigningAlgoType _signingAlgoType;
 
   /// Where this connection's outcomes are reported, when the client gave it
   /// one: every verb that comes back says online, every one that cannot get
@@ -76,85 +59,18 @@ class RemoteSecondary implements Secondary {
     if (state != null) _connection?.report(state);
   }
 
-  /// Hands the lookup an authenticator built from whichever of the four
-  /// credential shapes this client holds - the only way a lookup
-  /// authenticates now that at_lookup carries no credentials of its own.
-  ///
-  /// Called from the constructor as well as the [atChops] setter, since a
-  /// client can be handed its AtChops after construction.
+  /// Hands the lookup the authenticator [clientAuthenticator] builds from
+  /// this client's credentials, leaving it as it was when they hold none.
   void _installAuthenticator() {
-    final lookUp = atLookUp;
-    final clientConfig = _getClientConfig();
-
-    // The keyfile's keypair signs when it holds one for this enrollment; the
-    // AtChops beside it is the door for a keyfile that holds none - a client
-    // built from an AtChops with a stand-in key source, which the live packs
-    // build. The rule is at_auth's, in the authenticator.
-    final io = _atKeysIo;
-    if (io != null) {
-      lookUp.authenticator = authenticatorFor(
-        io,
-        _atSign,
+    final authenticator = clientAuthenticator(_atSign,
+        atKeysIo: _atKeysIo,
+        privateKey: _privateKey,
+        cramSecret: _cramSecret,
         enrollmentId: _enrollmentId,
-        chops: _atChops,
-        clientConfig: clientConfig,
-      );
-      return;
-    }
-
-    // No keystore. The order from here is the ladder's own - atChops, then
-    // privateKey - so a client holding both authenticates with the same
-    // credential the ladder chose. That precedence is stated rather than
-    // fallen into.
-    final chops = _atChops;
-    if (chops != null) {
-      lookUp.authenticator = authenticatorForChops(
-        _atSign,
-        chops,
-        enrollmentId: _enrollmentId,
-        signingAlgo: _signingAlgoType,
-        // The same preference field the constructor stamps on the lookup, so
-        // the authenticator and the ladder it replaces read it alike.
-        hashingAlgo: _preference.hashingAlgoType,
-        clientConfig: clientConfig,
-      );
-      return;
-    }
-
-    // The legacy credential, and precisely the caller the ladder existed for.
-    // Without this, deleting the ladder would make a keystore mandatory.
-    final privateKey = _privateKey;
-    if (privateKey != null) {
-      lookUp.authenticator = authenticatorForPrivateKey(
-        _atSign,
-        privateKey,
-        enrollmentId: _enrollmentId,
-        clientConfig: clientConfig,
-      );
-      return;
-    }
-
-    // Last in the ladder's own order. Nothing in this tree sets
-    // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
-    // which authenticates with the secret it is handed - but the field is
-    // public API, so a consumer that sets it must keep working through the
-    // seam.
-    final cramSecret = _cramSecret;
-    if (cramSecret != null) {
-      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret,
-          clientConfig: clientConfig);
-      return;
-    }
-
-    // None of the four: nothing to authenticate with, so nothing is
-    // installed. That is a real mode - at_status_impl holds no key material at
-    // all, and an OTP enrollment submit routes through auth: false.
+        clientConfig: _getClientConfig());
+    if (authenticator != null) atLookUp.authenticator = authenticator;
   }
 
-  /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
-  /// algorithm is a property of the enrollment record, and one preference can
-  /// serve clients on two enrollments of one atSign with different algorithms.
-  ///
   /// [connection] is the client's connection state, which every verb here
   /// then reports into; a secondary built without one reports nowhere.
   ///
@@ -162,10 +78,10 @@ class RemoteSecondary implements Secondary {
   /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
-      // ignore: deprecated_member_use
-      AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
+      @Deprecated('Has no effect: the keys name the algorithm they sign with. '
+          'Removed in 5.0.0.')
       SigningAlgoType? signingAlgoType,
       AtKeysIo? atKeysIo,
       AtConnection? connection,
@@ -177,7 +93,6 @@ class RemoteSecondary implements Secondary {
     _preference = preference;
     _connection = connection;
     privateKey ??= preference.privateKey;
-    _atChops = atChops;
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
     _cramSecret = preference.cramSecret;
@@ -194,12 +109,6 @@ class RemoteSecondary implements Secondary {
               secondaryAddressFinder ?? processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
         );
-    final resolvedSigningAlgo =
-        // ignore: deprecated_member_use_from_same_package
-        signingAlgoType ?? preference.signingAlgoType;
-    logger.finer(
-        'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
-    _signingAlgoType = resolvedSigningAlgo;
     _installAuthenticator();
   }
 
@@ -400,4 +309,31 @@ class RemoteSecondary implements Secondary {
       throw StoppedException('the connection for $_atSign has been stopped');
     }
   }
+}
+
+/// The authenticator a client's connections share, built from the first of
+/// its credentials it holds: a keystore [atKeysIo], a bare PKAM [privateKey],
+/// a CRAM [cramSecret]. Null when it holds none, which is a real mode: an
+/// OTP enrollment's submit runs unauthenticated.
+AtAuthenticator? clientAuthenticator(
+  String atSign, {
+  AtKeysIo? atKeysIo,
+  String? privateKey,
+  String? cramSecret,
+  String? enrollmentId,
+  Map<String, dynamic> clientConfig = const {},
+}) {
+  if (atKeysIo != null) {
+    return authenticatorFor(atKeysIo, atSign,
+        enrollmentId: enrollmentId, clientConfig: clientConfig);
+  }
+  if (privateKey != null) {
+    return authenticatorForPrivateKey(atSign, privateKey,
+        enrollmentId: enrollmentId, clientConfig: clientConfig);
+  }
+  if (cramSecret != null) {
+    return authenticatorForCramSecret(atSign, cramSecret,
+        clientConfig: clientConfig);
+  }
+  return null;
 }

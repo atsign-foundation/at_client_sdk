@@ -4,6 +4,19 @@
   `RemoteSecondary.findSecondaryUrl`.
 - breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; pass
   `lookUps` to choose how it connects.
+- breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
+  the `atChops` parameters of `AtClientImpl.create`,
+  `AtClientManager.setCurrentAtSign` and `AtServiceFactory.atClient`. Hand a
+  client its keys as an `AtKeysIo`; given none, it uses those its local store
+  holds.
+- breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
+  removed; sign with `signingKeys`.
+- fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the
+  client holds no key to sign with, including while its keyfile cannot be
+  read.
+- chore: `AtClientPreference.hashingAlgoType` and `RemoteSecondary`'s
+  `signingAlgoType` parameter are deprecated and have no effect, since PKAM
+  signs with SHA-256 and the algorithm the keys name. Both go in 5.0.0.
 - feat: an approval by an enrollment that holds the atSign's signing root, or
   a key anchored to it, anchors the enrollment it approves at once, and adding
   or retiring a key no longer undoes that. It needs an atServer with

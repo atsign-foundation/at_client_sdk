@@ -9,8 +9,10 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/test_keypairs.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
@@ -85,8 +87,8 @@ void main() {
     // in-memory secret store is empty, as it is for a client that restarted
     // since the mint.
     final approver = buildMockClient('approver-1');
-    final approverIo = InMemoryAtKeysIo();
-    await approverIo.write(atSign, AtKeys());
+    final approverIo = keysHoldingApkam(
+        atSign, 'approver-1', pkamKeyPairFor(atSign, 'approver-1'));
     when(() => approver.atKeysIo).thenReturn(approverIo);
     final pair = await XWingKeyPair.generate();
     final kid = nskeyKidOf(pair.publicKeyBytes);

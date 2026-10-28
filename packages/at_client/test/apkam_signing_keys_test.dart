@@ -1,7 +1,3 @@
-// The AtChops a client was handed is one of the sources this mixin resolves a
-// signing key from, so this file names it on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
@@ -64,15 +60,19 @@ void main() {
   const enrollmentId = 'enroll-a';
 
   late MockAtClient atClient;
-  late AtChops atChops;
   late TestSigner signer;
   late RsaKeyPair rsaPair;
+  late RsaKeyPair authenticationPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
   String b64(String label) => base64Encode(utf8.encode(label));
 
-  String pkamPublicKey() =>
-      atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+  String pkamPublicKey() => authenticationPair.atPublicKey.publicKey;
+
+  /// Files the client's authentication keypair into [keys], as the flat pair.
+  void withAuthentication(AtKeys keys) => keys.fileLegacyMaterial(
+      apkamPublicKey: authenticationPair.atPublicKey.publicKey,
+      apkamPrivateKey: authenticationPair.atPrivateKey.privateKey);
 
   /// A key source holding [atSign]'s keyfile with whatever [fill] files into
   /// it. Reading an atSign this has never been given throws.
@@ -87,17 +87,22 @@ void main() {
   setUpAll(() async {
     registerFallbackValue(AtKey());
     rsaPair = RsaKeyPair.generate();
+    authenticationPair = RsaKeyPair.generate();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
   setUp(() {
-    atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
-
     atClient = MockAtClient();
-    when(() => atClient.atChops).thenReturn(atChops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.atKeysIo).thenReturn(null);
+
+    // The pair a client built without a key source authenticates with.
+    final localSecondary = MockLocalSecondary();
+    when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
+    when(() => localSecondary.getPkamPublicKey())
+        .thenAnswer((_) async => authenticationPair.atPublicKey.publicKey);
+    when(() => localSecondary.getPkamPrivateKey())
+        .thenAnswer((_) async => authenticationPair.atPrivateKey.privateKey);
 
     final remoteSecondary = MockRemoteSecondary();
     final atLookUp = MockAtLookUp();
@@ -118,10 +123,7 @@ void main() {
       expect(keys.single.algorithm, SigningAlgoType.rsa2048);
     });
 
-    test('the keyfile\'s APKAM keypair answers a client holding no AtChops',
-        () async {
-      // The mainstream client: built from a keyfile, never handed an AtChops.
-      when(() => atClient.atChops).thenReturn(null);
+    test('the keyfile\'s APKAM keypair answers a keyfile client', () async {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileLegacyMaterial(
               apkamPublicKey: rsaPair.atPublicKey.publicKey,
@@ -136,7 +138,6 @@ void main() {
 
     test('typed ML-DSA authentication material names its own algorithm',
         () async {
-      when(() => atClient.atChops).thenReturn(null);
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileApkamMaterial(
               enrollmentId: enrollmentId,
@@ -151,9 +152,8 @@ void main() {
           reason: 'from the material, not from a preference or a default');
     });
 
-    test('the keyfile\'s APKAM keypair wins over an injected AtChops',
-        () async {
-      // The rig's AtChops holds one RSA keypair; the keyfile holds another.
+    test('the keyfile\'s APKAM keypair wins over the local store\'s', () async {
+      // The local store holds one RSA keypair; the keyfile holds another.
       // Which public key comes back says which source answered.
       final other = RsaKeyPair.generate();
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
@@ -163,8 +163,16 @@ void main() {
 
       expect((await signer.signingKeys).single.publicKey,
           other.atPublicKey.publicKey,
-          reason: 'the keyfile is the source; the AtChops is the door for a '
+          reason: 'the keyfile is the source; the local store answers only a '
               'client that has no keyfile');
+    });
+
+    test('a keyfile client never signs with its local store\'s keypair',
+        () async {
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) {}));
+
+      await expectLater(
+          signer.signingKeys, throwsA(isA<AtKeyNotFoundException>()));
     });
 
     test('the fallback signs under the algorithm the client resolved',
@@ -204,12 +212,14 @@ void main() {
 
     test('a held key this build cannot sign an envelope with is skipped',
         () async {
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
-          keys.fileSigningMaterial(
-              enrollmentId: enrollmentId,
-              algorithm: CryptographicMaterialAlgorithm.ed25519,
-              publicKey: b64('ed-pub'),
-              privateKey: b64('ed-priv'))));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) {
+        keys.fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.ed25519,
+            publicKey: b64('ed-pub'),
+            privateKey: b64('ed-priv'));
+        withAuthentication(keys);
+      }));
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey(),
           reason: 'skipping leaves the fallback to answer; passing it on '
@@ -217,20 +227,24 @@ void main() {
     });
 
     test('another enrollment\'s signing material is not this one\'s', () async {
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
-          keys.fileSigningMaterial(
-              enrollmentId: 'enroll-b',
-              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-              publicKey: b64('b-pub'),
-              privateKey: b64('b-priv'))));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) {
+        keys.fileSigningMaterial(
+            enrollmentId: 'enroll-b',
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: b64('b-pub'),
+            privateKey: b64('b-priv'));
+        withAuthentication(keys);
+      }));
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
     });
 
-    test('an unreadable keyfile falls back rather than throwing', () async {
+    test('an unreadable keyfile leaves nothing to sign with, and says so',
+        () async {
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
-      expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
+      await expectLater(
+          signer.signingKeys, throwsA(isA<AtKeyNotFoundException>()));
     });
   });
 
@@ -240,7 +254,9 @@ void main() {
       // startup work — startup steps sign envelopes themselves, so a signer
       // that waits deadlocks every signer in the process.
       final io = CountingKeysIo();
-      await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+      final keyfile = AtKeys(atsign: atSign.toAtsign());
+      withAuthentication(keyfile);
+      await io.write(atSign, keyfile);
       when(() => atClient.atKeysIo).thenReturn(io);
 
       final keys = await signer.signingKeys.timeout(const Duration(seconds: 5),
@@ -401,13 +417,16 @@ void main() {
 
     test('a retired signing key is advertised even with no active one',
         () async {
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
-        ..fileSigningMaterial(
-            enrollmentId: enrollmentId,
-            algorithm: CryptographicMaterialAlgorithm.rsa2048,
-            publicKey: b64('old-rsa-pub'),
-            privateKey: b64('old-rsa-priv'))
-        ..retireKey(enrollmentId, 'sign:rsa2048:1')));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) {
+        keys
+          ..fileSigningMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              publicKey: b64('old-rsa-pub'),
+              privateKey: b64('old-rsa-priv'))
+          ..retireKey(enrollmentId, 'sign:rsa2048:1');
+        withAuthentication(keys);
+      }));
 
       final entries =
           (jsonDecode(await signer.publicSigningKeyValue)['keys'] as List)

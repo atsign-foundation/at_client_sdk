@@ -25,6 +25,8 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'test_keypairs.dart';
+
 /// A lookup that answers every command with null until a test says otherwise.
 ///
 /// `executeCommand` returns `Future<String?>`, so the VALUE was always allowed
@@ -57,11 +59,6 @@ class MockAtLookupImpl extends Mock implements AtLookupImpl {
   }
 }
 
-/// The signer the deprecated `atChops` doors still take; a test of one of
-/// those doors is what hands this in.
-// ignore: deprecated_member_use
-class MockAtChops extends Mock implements AtChops {}
-
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
@@ -92,6 +89,10 @@ class MockLocalSecondary extends Mock implements LocalSecondary {}
 /// key a legacy enrollee RSA-wrapped to it, and the self-encryption key, one
 /// of the two secrets approval seals for the enrollee.
 ///
+/// It also holds the client's APKAM keypair, [pkamKeyPairFor] its atSign and
+/// enrollment, which is what the client signs with once a test gives it no key
+/// source.
+///
 /// Real demo material rather than placeholders, so a test that goes on to
 /// unwrap or open with it gets keys that work. Returns the local secondary for
 /// a test that wants to stub more on it.
@@ -103,16 +104,20 @@ MockLocalSecondary stubApproverKeys(AtClient atClient,
       .thenAnswer((_) async => demo.encryptionPrivateKeyMap[demoAtSign]!);
   when(() => local.getEncryptionSelfKey())
       .thenAnswer((_) async => demo.aesKeyMap[demoAtSign]!);
+  RsaKeyPair pair() =>
+      pkamKeyPairFor(atClient.getCurrentAtSign()!, atClient.enrollmentId);
+  when(() => local.getPkamPublicKey())
+      .thenAnswer((_) async => pair().atPublicKey.publicKey);
+  when(() => local.getPkamPrivateKey())
+      .thenAnswer((_) async => pair().atPrivateKey.privateKey);
   return local;
 }
 
 /// Stubs [localSecondary] to answer [atSign]'s encryption keypair.
 ///
 /// This is how a client resolves that keypair: `LocalSecondary` consults the
-/// client's key source, then the keystore, then an injected `AtChops`, and a
-/// mock standing in for it answers directly. Stubbing an `AtChops` on the
-/// client instead reaches the same material through the deprecated door, and
-/// leaves the paths that read it through the local secondary unexercised.
+/// client's key source, then the keystore, and a mock standing in for it
+/// answers directly.
 /// [localSecondary] is typed as the interface because that is how the test
 /// trees declare their doubles; mocktail records against the instance.
 void stubEncryptionKeyPair(

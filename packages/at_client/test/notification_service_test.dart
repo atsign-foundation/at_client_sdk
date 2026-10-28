@@ -121,15 +121,12 @@ bool _isNotify(dynamic command) => '$command'.startsWith('notify:');
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  final mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
-  setUpAll(() {
-    when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
-  });
+  setUpAll(() {});
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
     setUp(() {
@@ -1060,7 +1057,6 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
 

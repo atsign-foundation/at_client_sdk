@@ -1,12 +1,6 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -106,7 +100,6 @@ void main() {
           ..hiveStoragePath = dir.path
           ..commitLogPath = dir.path,
         remoteSecondary: MockRemoteSecondary(),
-        atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
         atKeysIo: await keyfileHolding(atSign,
             selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
     atClient.syncService = NoOpSyncService();

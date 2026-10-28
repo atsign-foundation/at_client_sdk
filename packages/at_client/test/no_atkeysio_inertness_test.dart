@@ -13,13 +13,8 @@
 /// them.
 library;
 
-// A client built from an AtChops and no key source is the shape under test, so
-// this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_utils/at_logger.dart';
@@ -111,9 +106,6 @@ void main() {
         ..commitLogPath = '$storageDir/commit',
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
-      atChops: AtChopsImpl(AtChopsKeys.create(
-          AtChopsUtil.generateAtEncryptionKeyPair(),
-          AtChopsUtil.generateAtPkamKeyPair())),
       // Deliberately NO atKeysIo — its absence is the property under test.
     );
     await untilStartupChainDone();
@@ -150,9 +142,6 @@ void main() {
         ..commitLogPath = '$storageDir/commit',
       remoteSecondary: buildRecordingRemote(
           events: events, remoteData: remoteData, remoteMeta: remoteMeta),
-      atChops: AtChopsImpl(AtChopsKeys.create(
-          AtChopsUtil.generateAtEncryptionKeyPair(),
-          AtChopsUtil.generateAtPkamKeyPair())),
     );
     await untilStartupChainDone();
     events.clear();

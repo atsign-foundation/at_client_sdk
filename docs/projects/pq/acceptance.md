@@ -4360,8 +4360,9 @@ Threats, answered for the whole set:
 #### UC-G3.6 — a legacy enrollment's authentication keypair signs data in memory only
   *Given* an enrollment holding no typed `sign:` material.
   *When* something asks `ApkamSigning.signingKeys` what may sign.
-  *Then* it answers with the APKAM **authentication** keypair, built from
-  `atChops` on the call and **never filed** as signing material — so
+  *Then* it answers with the APKAM **authentication** keypair, read on the
+  call from the keyfile, or from the local store for a client without one, and
+  **never filed** as signing material — so
   `AtKeys.signingKeysFor` still returns nothing for that enrollment, and
   `apskEntries` advertises that same key on exactly the same condition, which
   is what keeps what signs and what is advertised from drifting apart.

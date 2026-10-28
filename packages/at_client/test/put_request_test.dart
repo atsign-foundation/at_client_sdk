@@ -200,12 +200,10 @@ void main() {
 
   group('A group of tests to validate crypto provider selection', () {
     late MockAtClientImpl mockAtClient;
-    late MockAtChops mockAtChops;
     late CryptoConfig cryptoConfig;
 
     setUp(() {
       mockAtClient = MockAtClientImpl();
-      mockAtChops = MockAtChops();
       cryptoConfig = CryptoConfig(
         defaultProviderId: 'default-provider',
         providers: [
@@ -213,7 +211,6 @@ void main() {
           CipherProvider('override-provider'),
         ],
       );
-      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
     });
 
     test('uses preference default crypto provider when request has no override',

@@ -14,11 +14,9 @@ import 'test_utils/ml_dsa_keyfile.dart';
 /// source, then the keystore.
 ///
 /// The key source is what lets a client take its key material from an
-/// `AtKeysIo` — the non-deprecated way to hand a client its keys — rather
-/// than from an `AtChops` somebody built for it. The PKAM getters reach it
-/// through `authenticationKeyPairFor`, which refuses a keypair filed under an
-/// algorithm this build cannot sign with, and that refusal is not fallen
-/// through to the keystore.
+/// `AtKeysIo`. The PKAM getters reach it through `authenticationKeyPairFor`,
+/// which refuses a keypair filed under an algorithm this build cannot sign
+/// with, and that refusal is not fallen through to the keystore.
 void main() {
   const atSign = '@alice🛠';
   const enrollmentId = 'test-enrollment';
