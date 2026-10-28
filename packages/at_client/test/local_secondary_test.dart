@@ -17,6 +17,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class MockSecondaryKeyStore extends Mock
     implements AtKeyValueStore<String, AtData, AtMetaData?> {
@@ -140,6 +141,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -158,6 +160,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -176,6 +179,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
@@ -196,6 +200,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -215,6 +220,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
@@ -247,6 +253,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -269,6 +276,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -296,6 +304,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -324,6 +333,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -352,6 +362,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -385,6 +396,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -435,6 +447,7 @@ void main() {
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       return LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
     }
 
@@ -507,8 +520,8 @@ void main() {
       atClient = await AtClientImpl.create(atSign, namespace, preference,
           atClientManager: AtClientManager(atSign),
           storage: _MockKeyStoreStorage(mockSecondaryKeyStore, atSign: atSign));
-      localSecondary =
-          LocalSecondary(atClient, keyStore: mockSecondaryKeyStore);
+      localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(), keyStore: mockSecondaryKeyStore);
     });
 
     tearDown(() async {

@@ -20,6 +20,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -488,7 +489,8 @@ void main() {
       () {
     test('test llookup on cached:@bob:shared_key@alice', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -503,7 +505,8 @@ void main() {
 
     test('test llookup on cached public key', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -520,7 +523,8 @@ void main() {
         'test get on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -536,7 +540,8 @@ void main() {
     test('test get on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -552,7 +557,8 @@ void main() {
     test('test scan on shared key with read access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -573,7 +579,8 @@ void main() {
         'test update on shared key with only read access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -590,7 +597,8 @@ void main() {
         'test update on shared key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -607,7 +615,8 @@ void main() {
         'test update on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -624,7 +633,8 @@ void main() {
         'test update on public key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -641,7 +651,8 @@ void main() {
         'test update on public key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -658,7 +669,8 @@ void main() {
         'test notify on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -675,7 +687,8 @@ void main() {
     test('test notify on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -693,7 +706,8 @@ void main() {
         'test notify on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -711,7 +725,8 @@ void main() {
         'test delete on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -727,7 +742,8 @@ void main() {
     test('test delete on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -744,7 +760,8 @@ void main() {
         'test delete on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId

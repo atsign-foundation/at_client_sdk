@@ -16,13 +16,7 @@ const Map<String, _Backend> _backends = {
       'package:at_client/src/storage/hive/',
       'package:at_client/hive.dart',
     ],
-    owners: [
-      'src/storage/hive/',
-      'hive.dart',
-      // NOTE: the default seam, which opens Hive for a client given no
-      // storage.
-      'src/storage/default_storage.dart',
-    ],
+    owners: ['src/storage/hive/', 'hive.dart'],
   ),
   'SQLite': (
     engine: [

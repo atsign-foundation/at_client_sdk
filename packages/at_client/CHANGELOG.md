@@ -54,6 +54,8 @@
   path>, closedByClient: true)`.
 - breaking: `AtClientImpl.create`'s `localSecondaryKeyStore` is removed; pass
   a `storage`.
+- breaking: `LocalSecondary` takes a required `syncQueue`, the one the
+  client's storage holds.
 - chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
   read by nothing in at_client, and go in 5.0.0.
 - build: at_client no longer depends on archive, http,

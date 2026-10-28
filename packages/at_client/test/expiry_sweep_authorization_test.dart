@@ -5,6 +5,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
 
@@ -39,7 +40,9 @@ void main() {
     when(() => atClient.syncService).thenReturn(syncService);
 
     local = LocalSecondary(atClient,
-        keyStore: bundle.keyValueStore, onEvent: (_) {});
+        syncQueue: memorySyncQueue(),
+        keyStore: bundle.keyValueStore,
+        onEvent: (_) {});
   });
 
   tearDown(() async {

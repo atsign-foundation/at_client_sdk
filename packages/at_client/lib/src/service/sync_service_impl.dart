@@ -455,12 +455,8 @@ class SyncServiceImpl implements SyncService {
     final lc = _atClient.getLocalSecondary();
     if (lc != null) {
       try {
-        // syncQueueSize is async only because of the lazy-open guard;
-        // once opened it returns from the in-memory length. We don't
-        // await here to keep _informSyncProgress synchronous (its
-        // callers fire it from within sync rounds where awaits would
-        // change ordering); instead we read the cached value via the
-        // opened queue and skip if it isn't open yet.
+        // NOTE: read synchronously; awaiting here would move this progress
+        // event relative to the sync round it describes.
         final q = lc.syncQueueSyncSnapshot;
         if (q != null) syncProgress.pendingPushCount = q;
       } on Exception {

@@ -357,8 +357,7 @@ void main() {
         'a write that cannot be queued is shouted about, and does not claim '
         'to have asked for a drain', () async {
       // A real queue in a real failure state - constructed and never opened,
-      // so every enqueue throws. Injected, so the lazy open that would
-      // otherwise repair it never runs.
+      // so every enqueue throws.
       final localSecondary =
           await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();

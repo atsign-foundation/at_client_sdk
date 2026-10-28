@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 /// `LocalSecondary`'s key getters resolve across two tiers: the client's key
 /// source, then the keystore.
@@ -73,7 +74,8 @@ void main() {
     when(() => atClient.atKeysIo).thenReturn(refusing);
     final storage = InMemoryAtClientStorage(atSign: atSign);
     await storage.attach(atClient);
-    final local = LocalSecondary(atClient, keyStore: storage.keyStore);
+    final local = LocalSecondary(atClient,
+        syncQueue: memorySyncQueue(), keyStore: storage.keyStore);
     // The control: the keystore holds a keypair, so a getter that fell
     // through the refusal would answer this rather than throw.
     await local.putValue(AtConstants.atPkamPrivateKey, 'keystore-private');
@@ -96,7 +98,11 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(source);
       final storage = InMemoryAtClientStorage(atSign: atSign);
       await storage.attach(atClient);
-      return (LocalSecondary(atClient, keyStore: storage.keyStore), storage);
+      return (
+        LocalSecondary(atClient,
+            syncQueue: memorySyncQueue(), keyStore: storage.keyStore),
+        storage
+      );
     }
 
     Future<Object?> outcome(Future<String?> call) =>

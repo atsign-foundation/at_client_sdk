@@ -12,7 +12,6 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -66,16 +65,11 @@ class LocalSecondary implements Secondary {
   final Map<String, DateTime> _firedAvailableAt = {};
 
   /// Pending client→server writes: a per-key dedup'd queue of atKey
-  /// strings whose latest local write hasn't yet been pushed. Opened
-  /// lazily on first use via [_ensureSyncQueueOpen]. Populated by
-  /// [_update] / [_delete] and consumed by `SyncServiceImpl`. See
+  /// strings whose latest local write hasn't yet been pushed, handed in open
+  /// by the client's storage, which closes it. Populated by [_update] /
+  /// [_delete] and consumed by `SyncServiceImpl`. See
   /// `lib/src/sync/at_sync_queue.dart` for the queue's full contract.
-  AtSyncQueue? _syncQueue;
-  Future<AtSyncQueue>? _syncQueueOpenInflight;
-
-  /// Whether the queue is this secondary's to close: opened lazily here
-  /// rather than handed in by a storage, which closes its own.
-  final bool _ownsSyncQueue;
+  final AtSyncQueue _syncQueue;
 
   /// Tracks atKeys with a currently-executing [_update] / [_delete] —
   /// i.e. a write that has entered the keystore mutation phase but
@@ -112,42 +106,16 @@ class LocalSecondary implements Secondary {
   LocalSecondary(
     this._atClient, {
     this.keyStore,
-    AtSyncQueue? syncQueue,
+    required AtSyncQueue syncQueue,
     void Function(DataEvent)? onEvent,
   })  : _syncQueue = syncQueue,
-        _ownsSyncQueue = syncQueue == null,
         _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
   }
 
-  /// Opens the sync queue on first use, for a client built around a bare
-  /// keystore, which brings no queue of its own. Concurrent callers share one
-  /// open, so the queue is never opened twice for one atSign.
-  ///
-  /// The queue opens through the default storage under the client's
-  /// `hiveStoragePath`, whatever backend the keystore uses.
-  Future<AtSyncQueue> _ensureSyncQueueOpen() {
-    if (_released) return Future.error(_stopped());
-    final existing = _syncQueue;
-    if (existing != null) return Future.value(existing);
-    return _syncQueueOpenInflight ??= () async {
-      final atSign = _atClient.getCurrentAtSign();
-      if (atSign == null) {
-        throw StateError(
-          'LocalSecondary.syncQueue accessed before the client had an '
-          'atSign',
-        );
-      }
-      final storagePath = _atClient.getPreferences()?.hiveStoragePath;
-      if (storagePath == null) {
-        throw StateError('the client for $atSign was built on a bare keystore '
-            'with no hiveStoragePath, so its sync queue has nowhere to live');
-      }
-      final q = await openDefaultSyncQueue(atSign, storagePath: storagePath);
-      _syncQueue = q;
-      return q;
-    }();
-  }
+  /// The sync queue, or a [StoppedException] once [release] has run.
+  Future<AtSyncQueue> _liveSyncQueue() =>
+      _released ? Future.error(_stopped()) : Future.value(_syncQueue);
 
   bool _released = false;
 
@@ -156,58 +124,33 @@ class LocalSecondary implements Secondary {
 
   /// Ends this local secondary's use of its storage, when its client stops:
   /// from here every keystore and sync-queue operation throws
-  /// [StoppedException], and a sync queue opened here rather than handed in
-  /// by a storage is closed.
+  /// [StoppedException]. The storage closes its own sync queue.
   Future<void> release() async {
     _released = true;
     keyStore = _ReleasedKeyStore(_stopped);
-    if (!_ownsSyncQueue) return;
-    AtSyncQueue? q = _syncQueue;
-    final inflight = _syncQueueOpenInflight;
-    if (q == null && inflight != null) {
-      try {
-        q = await inflight;
-      } on Object {
-        return;
-      }
-    }
-    _syncQueue = null;
-    _syncQueueOpenInflight = null;
-    try {
-      await q?.close();
-    } on Exception catch (e) {
-      _logger.warning('could not close the sync queue: $e');
-    }
   }
 
   /// Number of atKeys with pending client→server writes. Reads the
-  /// in-memory queue length, without touching the store. Triggers a one-time
-  /// open of the queue on first call.
+  /// in-memory queue length, without touching the store.
   Future<int> get syncQueueSize async {
-    final q = await _ensureSyncQueueOpen();
+    final q = await _liveSyncQueue();
     return q.size;
   }
 
   /// Synchronous, side-effect-free snapshot of the current queue
-  /// size. Returns `null` when the queue hasn't been opened yet, or has
-  /// been closed
-  /// (the caller hasn't done any sync-eligible writes). Used by
+  /// size. Returns `null` when the queue has been closed. Used by
   /// `SyncServiceImpl._informSyncProgress` to attach
   /// `pendingPushCount` to events without awaiting (which would
   /// change the relative ordering of progress emission and the
-  /// sync round it describes). Production callers that don't mind
-  /// the lazy-open should use [syncQueueSize] instead.
-  int? get syncQueueSyncSnapshot {
-    final q = _syncQueue;
-    return q != null && q.isOpen ? q.size : null;
-  }
+  /// sync round it describes).
+  int? get syncQueueSyncSnapshot => _syncQueue.isOpen ? _syncQueue.size : null;
 
   /// Returns up to [limit] atKey strings from the front of the
   /// pending-write queue in FIFO order. Does NOT remove them; the
   /// caller is expected to call [removeFromSyncQueue] per atKey
   /// after a successful push.
   Future<List<String>> peekSyncQueue({int? limit}) async {
-    final q = await _ensureSyncQueueOpen();
+    final q = await _liveSyncQueue();
     return q.peek(limit: limit);
   }
 
@@ -216,7 +159,7 @@ class LocalSecondary implements Secondary {
   /// outgoing batch — the atKey itself comes from [peekSyncQueue],
   /// the op tells us whether to build update / delete / etc.
   Future<SyncQueueEntry?> readSyncQueueEntry(String atKey) async {
-    final q = await _ensureSyncQueueOpen();
+    final q = await _liveSyncQueue();
     return q.readEntry(atKey);
   }
 
@@ -225,7 +168,7 @@ class LocalSecondary implements Secondary {
   /// removal — see [AtSyncQueue.removeIfUnchanged] for why unconditional
   /// removal there loses whichever write replaced the entry mid-flight.
   Future<bool> removeFromSyncQueueIfUnchanged(String atKey, int seq) async {
-    final q = await _ensureSyncQueueOpen();
+    final q = await _liveSyncQueue();
     return q.removeIfUnchanged(atKey, seq);
   }
 
@@ -235,7 +178,7 @@ class LocalSecondary implements Secondary {
   /// (race-tolerated removal: a queue write may have committed
   /// without the keystore write landing, e.g. across a crash).
   Future<void> removeFromSyncQueue(String atKey) async {
-    final q = await _ensureSyncQueueOpen();
+    final q = await _liveSyncQueue();
     await q.remove(atKey);
   }
 
@@ -244,7 +187,7 @@ class LocalSecondary implements Secondary {
   /// state, assert on persistence-layer behaviour, or close the
   /// queue without tearing down the whole LocalSecondary.
   @visibleForTesting
-  Future<AtSyncQueue> get syncQueueForTest => _ensureSyncQueueOpen();
+  Future<AtSyncQueue> get syncQueueForTest => _liveSyncQueue();
 
   /// Predicate: should a write to [atKey] (with operation [op]) be
   /// enqueued for client→server sync? Returns true for self / shared
@@ -323,7 +266,7 @@ class LocalSecondary implements Secondary {
     // failure to enqueue, which names the wrong half: the write was already
     // safely queued.
     try {
-      final q = await _ensureSyncQueueOpen();
+      final q = await _liveSyncQueue();
       await q.enqueue(atKey, op);
     } catch (e, st) {
       if (e is StoppedException) rethrow;

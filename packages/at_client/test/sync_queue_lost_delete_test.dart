@@ -24,6 +24,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class _MockAtClient extends Mock implements AtClient {
   _MockAtClient(this._preference);
@@ -79,7 +80,9 @@ void main() {
     when(() => atClient.syncService).thenReturn(syncService);
 
     local = LocalSecondary(atClient,
-        keyStore: bundle.keyValueStore, onEvent: (_) {});
+        syncQueue: memorySyncQueue(),
+        keyStore: bundle.keyValueStore,
+        onEvent: (_) {});
     local.enrollment = Enrollment()..namespace = {'*': 'rw'};
     when(() => atClient.getLocalSecondary()).thenReturn(local);
     // lastReceivedServerCommitId; also read by _getLocalCommitId.
