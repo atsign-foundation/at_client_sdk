@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,7 +7,15 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show selfRetrofit;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
-import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
+import 'package:at_lookup/at_lookup.dart'
+    show
+        AtAuthenticator,
+        AtLookUp,
+        AtLookUpFactory,
+        AtLookupTransport,
+        AtTransport,
+        AtTransportFactory,
+        FixedSecondaryAddressFinder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -206,6 +215,70 @@ void main() {
     await client.stop();
   });
 
+  test(
+      'A command on a lookup a retrofit is taking over does not log in as '
+      'the legacy enrollment', () async {
+    final server = _RetrofitAtServer(atSign, newId);
+    final keys = InMemoryAtKeysIo.holding(atSign, legacyKeys());
+    final lookUp = AtLookUp.withTransport(
+        atSign: atSign,
+        rootDomain: const AtRootDomain('127.0.0.1', 1),
+        authenticator: authenticatorFor(keys, atSign, enrollmentId: legacyId),
+        transport: AtLookupTransport(transportFactory: server),
+        secondaryAddressFinder: FixedSecondaryAddressFinder('127.0.0.1', 6464));
+    expect(await lookUp.pkamAuthenticate(), isTrue);
+    expect(server.logins, [legacyId],
+        reason: 'the premise: the caller holds a connection logged in as the '
+            'legacy enrollment');
+    Object? otherCommand;
+    int? loginsAtClose;
+    server.onLegacyClosed = () {
+      loginsAtClose = server.logins.length;
+      lookUp
+          .executeCommand('llookup:other.user$atSign\n', auth: true)
+          .then<void>((r) => otherCommand = r,
+              onError: (Object e) => otherCommand = e)
+          .ignore();
+    };
+
+    final client = await selfRetrofit(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: keys,
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: server.lookUps,
+        secondaryAddressFinder: FixedSecondaryAddressFinder('127.0.0.1', 6464),
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65,
+        storage: hiveStoreAt(atSign, dir.path),
+        atLookUp: lookUp);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(loginsAtClose, isNotNull,
+        reason: 'the premise: the other command was sent as the legacy '
+            'connection closed');
+    expect(server.logins.skip(loginsAtClose!),
+        allOf(isNotEmpty, everyElement(newId)),
+        reason: 'once the legacy connection has closed, every login is the '
+            'client\'s, as the new enrollment: ${server.logins}');
+    expect(otherCommand, isA<UnAuthenticatedException>(),
+        reason: 'the other command fails rather than logging in');
+    expect(identical(client.getRemoteSecondary()!.atLookUp, lookUp), isTrue,
+        reason: 'the premise: the client took the lookup over');
+    expect(lookUp.connection!.getMetaData()!.authenticatedAsEnrollmentId, newId,
+        reason: 'the client runs on a connection logged in as the new '
+            'enrollment');
+
+    await client.stop();
+  });
+
   test("A superseded enrollment's lookup cannot reconnect after a retrofit",
       () async {
     final servers = <({MockAtLookupImpl lookUp, List<String> sent})>[];
@@ -265,5 +338,112 @@ class _PkamAtServer implements AtCommandExecutor {
     enrollmentId =
         RegExp(r'^pkam:.*:enrollmentId:([^:]+):').firstMatch(command)?[1];
     return 'data:success';
+  }
+}
+
+/// An atServer both the caller's lookup and the client reach. It answers
+/// `from:` with a challenge, `pkam:` with success, a self-enrollment as
+/// approved for [newId], and anything else as an atServer holding nothing
+/// would, and keeps the enrollment each completed login named.
+class _RetrofitAtServer implements AtTransportFactory {
+  _RetrofitAtServer(this.atSign, this.newId);
+
+  final String atSign;
+  final String newId;
+
+  /// The enrollment each completed `pkam:` named, oldest first.
+  final List<String> logins = [];
+
+  /// Runs once, as the first connection logged in as anything but [newId]
+  /// is closed by the client.
+  void Function()? onLegacyClosed;
+
+  AtLookUpFactory get lookUps => (
+          {required atSign,
+          required rootDomain,
+          required authenticator,
+          secondaryAddressFinder,
+          clientConfig = const {}}) =>
+      AtLookUp.withTransport(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: authenticator,
+          transport: AtLookupTransport(transportFactory: this),
+          secondaryAddressFinder:
+              FixedSecondaryAddressFinder('127.0.0.1', 6464),
+          clientConfig: clientConfig);
+
+  @override
+  Future<AtTransport> connect(String host, String port,
+          {Duration? timeout}) async =>
+      _RetrofitSocket(this);
+}
+
+class _RetrofitSocket implements AtTransport {
+  _RetrofitSocket(this._server);
+
+  final _RetrofitAtServer _server;
+  final _inbound = StreamController<List<int>>();
+  String? _loggedInAs;
+  bool _destroyed = false;
+
+  @override
+  String get description => '127.0.0.1:6464';
+
+  @override
+  Stream<List<int>> get inbound => _inbound.stream;
+
+  @override
+  void add(List<int> bytes) {
+    final command = utf8.decode(bytes).trim();
+    final String reply;
+    if (command.startsWith('from:')) {
+      reply = 'data:_70ce5d4e-1b8e-4a7c-9d1e-7e6c2a9b8f10${_server.atSign}'
+          ':4f3c2b1a-9e8d-4c7b-a6f5-e4d3c2b1a098';
+    } else if (command.startsWith('pkam:')) {
+      _loggedInAs =
+          RegExp(r'^pkam:.*:enrollmentId:([^:]+):').firstMatch(command)?[1];
+      _server.logins.add(_loggedInAs ?? '');
+      reply = 'data:success';
+    } else if (command.startsWith('enroll:request')) {
+      reply = 'data:${jsonEncode({
+            'enrollmentId': _server.newId,
+            'status': 'approved'
+          })}';
+    } else if (command.startsWith('enroll:list')) {
+      reply = 'data:{}';
+    } else if (command.startsWith('monitor')) {
+      return;
+    } else if (command.startsWith('update') || command.startsWith('delete')) {
+      reply = 'data:1';
+    } else if (command.contains('lookup:')) {
+      reply = 'error:{"errorCode":"AT0015","errorDescription":"not found"}';
+    } else if (command.startsWith('sync') || command.startsWith('scan')) {
+      reply = 'data:[]';
+    } else {
+      reply = 'data:ok';
+    }
+    Timer.run(() {
+      if (!_inbound.isClosed) _inbound.add(utf8.encode('$reply\n'));
+    });
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  bool get isOpen => !_destroyed;
+
+  @override
+  void destroy() {
+    _destroyed = true;
+    if (!_inbound.isClosed) _inbound.close();
+    final onClosed = _server.onLegacyClosed;
+    if (onClosed != null &&
+        _loggedInAs != null &&
+        _loggedInAs != _server.newId) {
+      _server.onLegacyClosed = null;
+      scheduleMicrotask(onClosed);
+    }
   }
 }

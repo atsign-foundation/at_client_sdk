@@ -51,9 +51,11 @@ final _logger = AtSignLogger('selfRetrofit');
 /// and pass the same store here.
 ///
 /// [atLookUp] serves the submission and the client, for a caller that holds
-/// a connection; it is closed between the two, so the client logs in again as
-/// the new enrollment. With none the submission authenticates a connection of
-/// its own from the session's keys and closes it. See `Atsign.open` for
+/// a connection. Between the two its authenticator is cleared and its
+/// connection closed, so the next login on it is the client's, as the new
+/// enrollment; a command needing authentication meanwhile fails rather than
+/// logging in as the legacy one. With none the submission authenticates a
+/// connection of its own from the session's keys and closes it. See `Atsign.open` for
 /// [connectBudget].
 ///
 /// **A fully privileged retrofit also runs the signing-root step in-flow.**
@@ -121,8 +123,9 @@ Future<AtClient> selfRetrofit({
     atLookUp: atLookUp,
     lookUps: lookUps,
   );
-  // NOTE: the client never runs on the connection the submission logged in as
-  // the legacy enrollment.
+  // NOTE: nothing logs in on [atLookUp] as the legacy enrollment again, and
+  // the client never runs on the connection the submission logged in as it.
+  atLookUp?.authenticator = null;
   await atLookUp?.close();
 
   preference

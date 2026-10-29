@@ -126,7 +126,8 @@
   `PqSigningChain`'s methods are replaced.
 - experimental: `selfRetrofit` closes the `atLookUp` it is given once the
   retrofit is submitted, so the client it returns logs in as the new
-  enrollment.
+  enrollment. A command needing authentication on that lookup in between
+  fails rather than logging in as the old one.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0-rc8.
 - build: requires `at_lookup` ^4.0.0-rc1.
