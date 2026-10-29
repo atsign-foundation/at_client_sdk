@@ -75,12 +75,14 @@ void main() {
     // NOTE: a real lookup rather than a mock — the client's connection stamps
     // it, and a mock would keep nothing to read back. It points at a port
     // nothing listens on, so the open comes back offline without a network.
-    final own = AtLookupImpl(
-        atSign, InternetAddress.loopbackIPv4.address, preference.rootPort,
-        secondaryAddressFinder: FixedSecondaryAddressFinder(
+    final own = AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
             InternetAddress.loopbackIPv4.address, preference.rootPort),
-        transportFactory: SecureSocketTransportFactory(
-            secureSocketConfig: SecureSocketConfig()));
+        authenticator: null,
+        transport: secureSocketTransport(SecureSocketConfig()),
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, preference.rootPort));
     final client = await Atsign(atSign).open(
         keys: CliKeys.fileFor(atSign, path: keyfile),
         preference: preference,
@@ -109,10 +111,7 @@ void main() {
     // instead of per the keyfile, at_chops would find nothing to sign with
     // and this would fail rather than complete.
     final exchange = OfflineExchange(atSign);
-    // NOTE: `AtLookUp` does not declare the authenticator — that interface is
-    // frozen for the mocks implementing it — so the seam is reached through
-    // `AtLookupMuxable`.
-    final authenticator = (own as AtLookupMuxable).authenticator!;
+    final authenticator = own.authenticator!;
     await expectLater(authenticator(exchange), completion(isTrue),
         reason: 'the keyfile holds ML-DSA material for this enrollment and '
             'the preference says rsa2048; the key material is what the '

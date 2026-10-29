@@ -12,8 +12,6 @@ import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
-import 'package:at_functional_test/src/at_demo_credentials.dart'
-    as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:test/test.dart';
@@ -466,7 +464,6 @@ AtClientPreference _getAtClientPreference(
   // NOTE: initAtClient refuses a preference whose posture differs from the one
   // it is passed, so this posture and the caller's must agree.
   var preference = AtClientPreference(posture: PqPosture.legacy);
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.rootPort = TestUtils.rootServerPort;
   preference.atClientParticulars = AtClientParticulars()
