@@ -112,6 +112,7 @@ void main() {
           atLookUp: lookUp,
           preference: preference(),
           lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: MockSecondaryAddressFinder(),
           appName: 'wavi',
           deviceName: 'laptop',
           namespaces: const {'*': 'rw', '__manage': 'rw'},

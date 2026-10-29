@@ -353,6 +353,55 @@ void main() {
 
     await client.stop();
   });
+
+  test(
+      'Given no connection to submit on, when it retrofits, then the '
+      'submission\'s connection reaches the atServer through the finder given',
+      () async {
+    final finder = FixedSecondaryAddressFinder('127.0.0.1', 6464);
+    final server = atServer();
+    final finders = <SecondaryAddressFinder?>[];
+
+    final client = await selfRetrofit(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, legacyKeys()),
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: (
+            {required atSign,
+            required rootDomain,
+            required authenticator,
+            secondaryAddressFinder,
+            clientConfig = const {}}) {
+          finders.add(secondaryAddressFinder);
+          return server.lookUp;
+        },
+        secondaryAddressFinder: finder,
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65,
+        storage: hiveStoreAt(atSign, dir.path));
+
+    expect(
+        server.sent.where(
+            (c) => c.startsWith('enroll:') && !c.startsWith('enroll:list')),
+        isNotEmpty,
+        reason: 'the premise: the submission went out');
+    expect(finders.first, same(finder),
+        reason: 'the submission\'s connection, the first built, finds the '
+            'atServer through the finder the caller gave');
+    expect(finders.skip(1), everyElement(isNotNull),
+        reason: 'the control: the client\'s own connections are given a '
+            'finder too, which it wraps in its durable cache');
+
+    await client.stop();
+  });
 }
 
 /// Answers an authenticator's `from:` with a challenge for `@alice🛠` and its

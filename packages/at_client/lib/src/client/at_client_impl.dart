@@ -2169,6 +2169,7 @@ class AtClientImpl implements AtClient {
 
       final newSession = await retrofitIdentity(
         lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder,
         session: AtAuthSession(
           atSign: _atSign,
           rootDomain:

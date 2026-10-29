@@ -140,6 +140,9 @@
   retrofit is submitted, so the client it returns logs in as the new
   enrollment. A command needing authentication on that lookup in between
   fails rather than logging in as the old one.
+- experimental: `selfRetrofit` given no `atLookUp` submits through the
+  `secondaryAddressFinder` it is given, as the client it opens does, and
+  `retrofitIdentity` requires one.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.

@@ -1,12 +1,14 @@
 import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
 import 'package:at_commons/at_commons.dart'
     show AtRootDomain, UnAuthenticatedException;
-import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpFactory;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUp, AtLookUpFactory, SecondaryAddressFinder;
 
 /// A connection to [atSign]'s atServer authenticated as [enrollmentId], or
 /// as the enrollment [keys] name when none is given; the caller closes it.
 ///
-/// [lookUps] builds the connection. A refusal throws
+/// [lookUps] builds the connection, reaching the atServer through
+/// [secondaryAddressFinder] where one is given. A refusal throws
 /// [UnAuthenticatedException], or whatever the handshake threw, and the
 /// connection is closed first.
 Future<AtLookUp> authenticatedLookUp(
@@ -14,6 +16,7 @@ Future<AtLookUp> authenticatedLookUp(
   AtKeysIo keys,
   AtRootDomain rootDomain, {
   required AtLookUpFactory lookUps,
+  SecondaryAddressFinder? secondaryAddressFinder,
   String? enrollmentId,
 }) async {
   final id =
@@ -21,7 +24,8 @@ Future<AtLookUp> authenticatedLookUp(
   final lookUp = lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
-      authenticator: authenticatorFor(keys, atSign, enrollmentId: id));
+      authenticator: authenticatorFor(keys, atSign, enrollmentId: id),
+      secondaryAddressFinder: secondaryAddressFinder);
   try {
     if (!await lookUp.pkamAuthenticate()) {
       throw UnAuthenticatedException('$atSign could not authenticate as '

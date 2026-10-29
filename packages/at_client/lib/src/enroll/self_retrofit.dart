@@ -124,6 +124,7 @@ Future<AtClient> selfRetrofit({
     signingAlgo: signingAlgo,
     atLookUp: atLookUp,
     lookUps: lookUps,
+    secondaryAddressFinder: secondaryAddressFinder,
   );
   // NOTE: nothing logs in on [atLookUp] as the legacy enrollment again, and
   // the client never runs on the connection the submission logged in as it.
@@ -184,8 +185,9 @@ Future<AtClient> selfRetrofit({
 ///
 /// The request is submitted on [atLookUp], a connection authenticated as the
 /// legacy enrollment, which a client retrofitting itself passes from its own
-/// remote secondary; with none, one is built by [lookUps], authenticated from
-/// the session's keys for the submission and closed after it.
+/// remote secondary; with none, one is built by [lookUps] over
+/// [secondaryAddressFinder], authenticated from the session's keys for the
+/// submission and closed after it.
 @experimental
 Future<AtAuthSession> retrofitIdentity({
   required AtAuthSession session,
@@ -197,12 +199,15 @@ Future<AtAuthSession> retrofitIdentity({
   SigningAlgoType? signingAlgo,
   AtLookUp? atLookUp,
   required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
 }) async {
   final given = atLookUp;
   final connection = given ??
       await authenticatedLookUp(
           session.atSign, session.atKeysIo, session.rootDomain,
-          enrollmentId: session.enrollmentId, lookUps: lookUps);
+          enrollmentId: session.enrollmentId,
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
 
   // NOTE: the preference's value, not the posture's — an app may set
   // `authenticationKeyAlgorithm` beside a posture, and reading
