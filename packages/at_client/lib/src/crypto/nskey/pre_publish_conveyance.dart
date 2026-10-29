@@ -1,4 +1,5 @@
 import 'dart:convert' show base64Encode;
+import 'dart:math' show min;
 
 import 'package:at_client/src/client/server_mutex.dart' show maxServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
@@ -45,7 +46,7 @@ class PrePublishConveyance {
   /// The generations [convey] has conveyed.
   final Set<String> conveyedKids = {};
 
-  /// How many key packages the last push reached.
+  /// How many key packages [convey] reached with every kid it carried.
   int pushedTo = 0;
 
   PrePublishConveyance._(this.sharing, this.filing, this.namespace, this.roster,
@@ -103,6 +104,7 @@ class PrePublishConveyance {
   /// listed for the namespace, then refuses the publish, retiring what it
   /// filed, if a revocation touched the namespace since [prepare].
   Future<void> convey(List<String> nskeyKids) async {
+    int? reached;
     for (final nskeyKid in nskeyKids) {
       final seed = await filing.readSeed(namespace, nskeyKid);
       if (seed == null) {
@@ -118,12 +120,14 @@ class PrePublishConveyance {
       // NOTE: into this client's own store as well, which the request-answer
       // path serves from.
       await sharing.secretStore.putIfNewer(secret);
-      pushedTo = await sharing.pushSecretToNamespaceMembers(secret,
+      final pushed = await sharing.pushSecretToNamespaceMembers(secret,
           excludeEnrollmentIds: excludeEnrollmentIds);
-      _logger.info('Conveyed the $namespace private $nskeyKid to $pushedTo '
+      _logger.info('Conveyed the $namespace private $nskeyKid to $pushed '
           'key package(s) before publishing it');
+      reached = reached == null ? pushed : min(reached, pushed);
       conveyedKids.add(nskeyKid);
     }
+    pushedTo = reached ?? 0;
     if (!revocationKnown) return;
     final DateTime? now;
     try {
