@@ -602,9 +602,14 @@ What each posture switches on:
   `keyEstablishmentAlgorithms`, and every build opens both.
 - **Writing in an atSign's own namespace.** Each value is encrypted under a
   key of its own, derived from the content key and a fresh salt. A client
-  writes in its own namespace once it holds that namespace key's private half;
-  until then the write throws `NskeyPrivateNotHeldException`, and
+  writes in its own namespace once it holds that namespace key's private half.
+  A write that finds it missing first fetches what was conveyed to this
+  client, and only then throws `NskeyPrivateNotHeldException`;
   `ensureReachable` reports `holdsPrivate`.
+- **Who mints a namespace key.** Only an enrollment carrying a key package
+  mints one, and it conveys the private to the namespace's other enrollments
+  before publishing it. A client on the atSign's own credential mints nothing,
+  and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Rotation.** A content key is replaced once it is a year old, and a
   namespace key once its generation is a year old; `CryptoConfig`'s
   `ckRotationPolicy` and `nskeyRotationPolicy` change that. A revocation
