@@ -1053,8 +1053,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   ([UC-B5.4](#124-uc-b54--two-enrollments-race-to-mint-a-namespaces-nskey)).
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
   `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
-  `nskey_filing_published_key_test.dart`,
-  `seeding_files_private_test.dart` and `pq_signing_root_test.dart`; live,
+  `nskey_filing_published_key_test.dart`, `seeding_files_private_test.dart`,
+  `nskey_seed_lock_covers_rotation_test.dart`, `pq_signing_root_test.dart` and
+  `signing_root_pushed_to_approved_only_test.dart`; live,
   `nskey_seeding_live_test.dart` for a client on the atSign's own credential and
   `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock. The root
   is pushed after its publish rather than before because a receiver files a conveyed

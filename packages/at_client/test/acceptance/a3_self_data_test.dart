@@ -815,6 +815,13 @@ void main() {
         clauses: ['the mint lock\'s ttl is a ceiling'],
       );
       provenIn(
+        'packages/at_client/test/nskey_seed_lock_covers_rotation_test.dart',
+        'when a client seeds it, then the mint lock lasts for two conveyances',
+        proves: 'a seed sizes its lock for the mint\'s conveyance and a '
+            'rotation\'s under the same lock, and an add for one',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
         'packages/at_client/test/pre_publish_conveyance_test.dart',
         'when a revocation touches the namespace during the conveyance, then '
             'the publish is refused and what it filed is retired',
@@ -943,6 +950,15 @@ void main() {
             'others still receive it',
         proves: 'a failed push is logged, the mint returns its key, and the '
             'enrollment listed after the failure still receives it',
+        clauses: ['pushes its private, once the root is published'],
+      );
+      provenIn(
+        'packages/at_client/test/signing_root_pushed_to_approved_only_test.dart',
+        'when it publishes, then only the approved enrollment receives its '
+            'private',
+        proves: 'of fully privileged enrollments listed approved, pending, '
+            'denied, revoked and expired, only the approved one is pushed '
+            'the root private',
         clauses: ['pushes its private, once the root is published'],
       );
       provenIn(
