@@ -13,6 +13,7 @@ void main() {
     expect(exports, ['package:at_client_cli/at_client_cli.dart']);
     expect(barrel,
         contains("@Deprecated('Use package:at_client_cli/at_client_cli.dart')"),
-        reason: 'an import of the shim warns, naming where to go');
+        reason: 'the library is marked deprecated, naming where to go; the '
+            'analyzer flags no import of it, so the README says so');
   });
 }

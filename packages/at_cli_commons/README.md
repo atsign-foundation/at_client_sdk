@@ -7,7 +7,9 @@ Depend on `at_client_cli` and import
 
 This last major re-exports at_client_cli, so a program using `CLIBase` and
 the storage-path helpers compiles after bumping its `at_cli_commons`
-constraint, with deprecation warnings pointing at the move. A program that
+constraint. The analyzer does not flag an import of this deprecated library,
+so nothing at compile time points at the move: change the import to
+at_client_cli's. A program that
 uses `MySyncProgressListener`, or passes `CLIBase` an
 `AtOnboardingPreference`, changes code: at_client_cli's README says to what,
 under
