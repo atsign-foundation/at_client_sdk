@@ -1598,8 +1598,10 @@ held. A content key is replaced when either generation it rests on moves on. Des
 - **@dos:** nothing here runs before authentication. Each write reads the cached
   advertisement and the filed private, or, where the sender holds no key of its
   own covering the namespace, remembers that for 15 minutes; a missing private is
-  asked for at most once per generation per cooldown, a failed ask included, and
-  a cut happens at most once per destination, namespace and generation change.
+  asked for at most once per namespace per cooldown for the generations the
+  client's own advertisement names and once for any other, the latter capped across
+  namespaces as UC-A3.6 says, a failed ask included, and a cut happens at most once
+  per destination, namespace and generation change.
 - **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
   current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
   Alice's generation G1.
