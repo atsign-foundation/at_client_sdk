@@ -2,7 +2,7 @@
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: requires `at_client` ^4.0.0, so an app takes at_client 4 with it.
-- chore(deps): at_utils ^4.0.0-rc1
+- chore(deps): at_utils ^4.0.0
 
 ## 3.1.0
 

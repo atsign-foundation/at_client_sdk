@@ -1,4 +1,4 @@
-## 4.0.0-rc8
+## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - fix: `CramAuthenticator.authenticate` throws `StateError` for a second CRAM
@@ -18,7 +18,7 @@
   hold, under the algorithm they name.
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
-- build: requires `at_utils` ^4.0.0-rc1.
+- build: requires `at_utils` ^4.0.0.
 - breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
   `ArgumentError`, before anything is sent: an enrollment that takes its keys
   post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the

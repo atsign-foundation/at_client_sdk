@@ -8,14 +8,14 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_lookup: ^4.0.0-rc1
+  at_lookup: ^4.0.0
   at_client: ^4.0.0
   at_commons: ^5.5.0
   at_demo_data: ^1.2.0
-  at_auth: ^4.0.0-rc3
+  at_auth: ^4.0.0
   at_chops: ^3.6.0
   at_client_cli: ^1.0.0
-  at_utils: ^4.0.0-rc1
+  at_utils: ^4.0.0
 
 dev_dependencies:
   elliptic: ^0.3.10 # test-only: secp256r1 keys for the secure-element mock

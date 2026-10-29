@@ -13,9 +13,9 @@ dependencies:
   crypto: ^3.0.5
   crypton: ^2.2.1
   at_client: ^4.0.0
-  at_auth: ^4.0.0-rc3
-  at_lookup: ^4.0.0-rc1
-  at_utils: ^4.0.0-rc1
+  at_auth: ^4.0.0
+  at_lookup: ^4.0.0
+  at_utils: ^4.0.0
   at_chops: ^3.0.0
   at_commons: ^5.5.0
   at_persistence_secondary_server: ^5.3.0

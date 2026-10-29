@@ -14,9 +14,9 @@ dependency_overrides:
     path: ../../at_lookup
 
 dependencies:
-  at_utils: ^4.0.0-rc1
+  at_utils: ^4.0.0
   at_commons: ^5.5.0
-  at_lookup: ^4.0.0-rc1
+  at_lookup: ^4.0.0
 
 dev_dependencies:
   lints: ^1.0.0

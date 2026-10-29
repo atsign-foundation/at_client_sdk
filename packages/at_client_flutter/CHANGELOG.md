@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 2.0.0-rc7
+## 2.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `EnrollmentStore` is removed, as `EnrollmentData` was.
@@ -17,7 +17,7 @@
   `CacheableSecondaryAddressFinder`.
 - build: requires `at_client` ^4.0.0.
 - build: requires `at_persistence_secondary_server` ^5.4.0.
-- chore(deps): at_utils ^4.0.0-rc1
+- chore(deps): at_utils ^4.0.0
 
 ## 2.0.0-rc6
 

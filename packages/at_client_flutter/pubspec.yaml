@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 2.0.0-rc7
+version: 2.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -16,15 +16,15 @@ dependencies:
   biometric_storage: ^5.0.1
   collection: ^1.18.0
   at_commons: ^5.8.0
-  at_utils: ^4.0.0-rc1
+  at_utils: ^4.0.0
   at_chops: ^3.0.0
-  at_lookup: ^4.0.0-rc1
+  at_lookup: ^4.0.0
   # WrittenAtKeysIo.update, which the keychain store's flush makes reachable
   # here, needs 4.0.0-rc1; 4.0.0-rc3 also releases a keyfile lock a stopped
   # process left behind, and 4.0.0-rc4 ends ApkamActivationDialog's wait at
   # once for an enrollment that has expired. Resolution in this workspace is by
   # path, so only a consumer resolving from pub.dev feels a floor set too low.
-  at_auth: ^4.0.0-rc4
+  at_auth: ^4.0.0
   at_client: ^4.0.0
   encrypt: ^5.0.3
   intl: ^0.20.2

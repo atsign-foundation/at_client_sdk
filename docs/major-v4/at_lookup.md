@@ -1,8 +1,8 @@
-# `at_lookup` 4.0.0-rc1
+# `at_lookup` 4.0.0
 
 Second package in the v4 publish chain, step 4 of the publish ladder
 ([`implementation-plan.md`](../projects/wasm/implementation-plan.md) §10), Phase T
-(transport). Depends on `at_utils` 4.0.0-rc1 (#2214); this branch stacks on
+(transport). Depends on `at_utils` 4.0.0 (#2214); this branch stacks on
 `st/at_utils-v4` until that lands, because `resolution: workspace` makes the floor
 non-optional.
 
@@ -46,8 +46,8 @@ connects every atSign to one atServer without asking the atDirectory.
 
 ## Dependency floors
 
-`at_utils: ^4.0.0-rc1`, `at_commons: ^5.18.0`, `at_chops: ^3.6.0`. Every workspace
-consumer is floored at `at_lookup: ^4.0.0-rc1`.
+`at_utils: ^4.0.0` and `at_commons: ^5.18.0`; at_lookup no longer depends on
+`at_chops`. Every workspace consumer is floored at `at_lookup: ^4.0.0`.
 
 ## Open items
 
@@ -70,4 +70,4 @@ consumer is floored at `at_lookup: ^4.0.0-rc1`.
 
 ## Changelog
 
-See [`packages/at_lookup/CHANGELOG.md`](../../packages/at_lookup/CHANGELOG.md) § 4.0.0-rc1.
+See [`packages/at_lookup/CHANGELOG.md`](../../packages/at_lookup/CHANGELOG.md) § 4.0.0.
