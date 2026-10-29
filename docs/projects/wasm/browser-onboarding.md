@@ -44,7 +44,7 @@ An app client running in a browser must:
 | Pointer (K-10) | `public:_<lookupHex>.atkeysv@<atSign>`, plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by an enrollment holding `atkeysv:rw` (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.atkeysv@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
 | Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
-| IndexedDB | hint only (K-13 c1): `credentialId`, `enrollmentId` — nothing secret. Caching the derived key (c2) is rejected; whether a document replica is also kept is not ruled |
+| IndexedDB | hint only (K-13 c1): `credentialId`, `enrollmentId` — nothing secret. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
 | APKAM key for PKAM | not stored anywhere (K-11, K-12). **Derived from the passkey**: `authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1\|<atSign>")` seeds an ML-DSA-65 key — the primary path (K-12). With no PRF (K-13): the PKAM key is sealed under a passphrase-derived key in a server-held, public-readable record, no TTL (§3.5) |
 
 ### Bootstrap sources (how the first @keys arrive on a device)
@@ -52,7 +52,7 @@ An app client running in a browser must:
 | Source | When |
 |---|---|
 | APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeysv:rw`. An OTP admits the request, and it must be minted covering the app namespaces + `atkeysv:rw`: a narrower OTP is spent and the request refused (`UnAuthorizedException`, EVH:341-349); it stays **pending** until an approver acts from an existing device (an OTP never approves). A request reusing the appName + deviceName of a pending or approved enrollment is refused with `AT0032` (EVH:1702-1713), the same code as the duplicate-key refusal, so tests match the message text. The APKAM key is derived from the passkey (K-12) | **primary** |
-| Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | secondary, for a user with no device to approve from (open). Distinct from K-13's passphrase record, which a browser writes per no-PRF enrollment (§3.5) |
+| Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | **not a browser bootstrap (K-15)**: dev-only, via `tool/cut_keys.dart`. Distinct from K-13's passphrase record, which a browser writes per no-PRF enrollment (§3.5) |
 
 Both converge on the same pointer + document pair — unproven for the portal source under K-11, which has no enrollment to own a document (open, [`decisions.md`](decisions.md) "Open against K").
 
@@ -155,6 +155,8 @@ Return and recovery differ only in the credential hint: the server holds everyth
 
 ### 3.5 No-PRF authenticator (K-13 a)
 
+> **Deferred (K-16, 2026-10-30).** The first release is PRF-only; this flow waits on Q-10 and bd `2fk`. A browser with no WebAuthn takes this path with no credential.
+
 ```mermaid
 sequenceDiagram
     participant B as Browser
@@ -211,7 +213,7 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 |---|---|---|
 | Q-1 | ~~`T` — record ttl~~ — **withdrawn 2026-10-27:** the K-10 pointer has no TTL | — |
 | Q-2 | ~~at-keys module grammar on the atServer~~ — **resolved 2026-10-15:** existing `update`/`lookup`/`delete` on `public:_<lookupHex>.atkeysv@<atSign>`, no server change (probe P1–P7); kept by K-10 (§2 Pointer row) | — |
-| Q-3 | ~~Bootstrap via APKAM enrollment~~ — **resolved 2026-10-13:** the browser enrolls, one enrollment per passkey; open: whether the portal envelope stays as a secondary bootstrap | me + Gary |
+| Q-3 | ~~Bootstrap via APKAM enrollment~~ — **resolved 2026-10-13:** the browser enrolls, one enrollment per passkey; the portal envelope is not a secondary bootstrap (K-15, 2026-10-30) | me + Gary |
 | Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets BO-5's current pick | me (probe) |
 | Q-5 | Which platforms return PRF results from `create()` — decides whether enrollment is one prompt or two | me (probe) |
 | Q-6 | ~~K-12 fallbacks~~ — **resolved 2026-10-28 by K-13** ([`decisions.md`](decisions.md)): (a) no PRF → passphrase-sealed server-held record; (b) lost passkey → no recovery, enroll fresh; (c) IndexedDB hint only; (d) a second passkey is its own enrollment | — |
