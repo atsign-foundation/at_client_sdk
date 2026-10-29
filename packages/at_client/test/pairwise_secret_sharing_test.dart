@@ -2028,4 +2028,33 @@ void main() {
 
     sharerA.stopListening();
   });
+
+  group('Given a listening client whose held keys are reloaded', () {
+    test(
+        'when a peer then seals to the key it now holds, then the wake-up '
+        'reaches it', () async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final reloading = buildSharer('enroll-c', kem.newSeed());
+      await reloading.register();
+      await reloading.startListening();
+      addTearDown(reloading.stopListening);
+      final before = reloading.kpid;
+      final replacement = kem.newSeed();
+      reloading.loadApkamKeys = () async =>
+          PersistedApkamKeys.single(encSeed: base64Encode(replacement));
+
+      await reloading.reloadApkamKeys();
+      expect(reloading.kpid, isNot(before),
+          reason: 'the precondition: it now holds a different key');
+
+      final arrived =
+          reloading.receivedEnvelopes.first.timeout(const Duration(seconds: 5));
+      await sharerA.sendEnvelope(reloading.myKeyPackage, 'myapp', {'x': 1});
+
+      expect((await arrived).payload, {'x': 1},
+          reason: 'this client runs no sync here, so the wake-up is its only '
+              'prompt, and it must be listening at the address it now holds '
+              'rather than the one it held when it started listening');
+    });
+  });
 }

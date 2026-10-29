@@ -1,4 +1,4 @@
-import 'dart:convert' show base64Encode;
+import 'dart:convert' show base64Decode, base64Encode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
@@ -21,6 +21,10 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
     show EnrollmentDirectory, KeyPackageStatus, VerbEnrollmentDirectory;
+import 'package:at_client/src/secret_sharing/key_package_persistence.dart'
+    show keyPackageMaterials;
+import 'package:at_client/src/secret_sharing/key_package_registration.dart'
+    show KeyPackageRegistration;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -61,10 +65,18 @@ class KeyPackageMinting with ApkamSigning {
   /// [directory] reads back the published package the way a peer does; a
   /// fresh [VerbEnrollmentDirectory] per reconcile when null, so no `_apsk` it
   /// cached earlier answers for the current one.
+  ///
+  /// [holder] is this client's own key package registration: a key it holds
+  /// for an algorithm the keyfile lacks is filed rather than a fresh one
+  /// minted, and it is made to hold what the keyfile holds before anything is
+  /// published.
   KeyPackageMinting(this.atClient,
-      {EnrollmentUpdater? updater, EnrollmentDirectory? directory})
+      {EnrollmentUpdater? updater,
+      EnrollmentDirectory? directory,
+      KeyPackageRegistration? holder})
       : _updater = updater ?? EnrollmentUpdater(),
-        _directory = directory;
+        _directory = directory,
+        _holder = holder;
 
   @override
   final AtClient atClient;
@@ -76,14 +88,19 @@ class KeyPackageMinting with ApkamSigning {
 
   final EnrollmentDirectory? _directory;
 
-  /// Mints, files and advertises an encapsulation keypair for every algorithm
-  /// the configured list names and this enrollment lacks; retires every one it
-  /// holds that the list no longer names. Returns both, each empty when there
-  /// was nothing to do.
+  final KeyPackageRegistration? _holder;
+
+  /// Files and advertises an encapsulation keypair for every algorithm the
+  /// configured list names and this enrollment lacks, the one the client
+  /// already holds under that algorithm where it holds one and a fresh one
+  /// otherwise; retires every one it holds that the list no longer names; and
+  /// makes the client hold what is filed before anything is advertised.
+  /// Returns the algorithms added and retired, each empty when there was
+  /// nothing to do.
   ///
   /// **The enrollment always ends holding at least one active key**: the
   /// configured list is never empty, and any algorithm in it is either absent
-  /// (so a key is minted for it) or already active (so that key is not among
+  /// (so a key is filed for it) or already active (so that key is not among
   /// the superseded).
   Future<({List<String> minted, List<String> retired})>
       reconcileKeyPackage() async {
@@ -129,6 +146,7 @@ class KeyPackageMinting with ApkamSigning {
         if (!wanted.contains(key.alg)) key
     ];
     if (missing.isEmpty && superseded.isEmpty) {
+      await _holdWhatIsFiled(io, atSign, enrolment);
       final stale = await _publishedPackageStale(enrolment, held);
       if (stale != null) {
         await _publish(enrolment, atLookUp!, held);
@@ -139,7 +157,9 @@ class KeyPackageMinting with ApkamSigning {
 
     // NOTE: the mint runs before the write, so a mint that throws leaves the
     // keyfile and the advertisement exactly as they were.
-    final minted = [for (final algorithm in missing) await _mint(algorithm)];
+    final minted = [
+      for (final algorithm in missing) await _heldOrMinted(algorithm, held)
+    ];
 
     // NOTE: one atomic keyfile update for the whole change, never a
     // hand-rolled read → mutate → write: a concurrent start files conveyed key
@@ -183,8 +203,10 @@ class KeyPackageMinting with ApkamSigning {
       return true;
     });
 
-    // NOTE: published only after the filing, so no advertisement ever names a
-    // key whose private half this client does not already hold.
+    // NOTE: published only after the filing, and after the holder holds what
+    // was filed, so no advertisement ever names a key whose private half this
+    // client does not already hold.
+    await _holdWhatIsFiled(io, atSign, enrolment);
     await _publish(
       enrolment,
       atLookUp!,
@@ -385,6 +407,54 @@ class KeyPackageMinting with ApkamSigning {
           },
         ),
         atLookUp);
+  }
+
+  /// The key [_holder] already holds under [algorithm] and the keyfile does
+  /// not, so the package it has been answering at is the one filed; else a
+  /// fresh one.
+  Future<_MintedEncKey> _heldOrMinted(
+      String algorithm, List<PackageKey> filed) async {
+    final filedKids = {for (final key in filed) key.kid};
+    for (final entry in _holder?.heldApkamKeys.encKeys ?? const []) {
+      if (entry.keyAlgo != algorithm || !entry.offeredForNewOperations) {
+        continue;
+      }
+      final kem = SecretSharingAlgos.kemFor(algorithm);
+      final materialAlgo = SecretSharingAlgos.materialAlgoFor(algorithm);
+      if (kem == null || materialAlgo == null) break;
+      final seed = base64Decode(entry.encSeed);
+      final publicKey = (await kem.keyPairFromSeed(seed)).publicKey;
+      final kpid = PackageKey.computeKid(base64Encode(publicKey));
+      if (filedKids.contains(kpid)) continue;
+      return _MintedEncKey(
+        alg: algorithm,
+        materialAlgo: materialAlgo,
+        seed: seed,
+        publicKey: publicKey,
+        kpid: kpid,
+        createdAt: DateTime.now().toUtc(),
+      );
+    }
+    return _mint(algorithm);
+  }
+
+  /// Makes [_holder] hold the key package the keyfile holds for [enrolment],
+  /// when it holds anything else.
+  Future<void> _holdWhatIsFiled(
+      WrittenAtKeysIo io, String atSign, String enrolment) async {
+    final holder = _holder;
+    if (holder == null || holder.heldKpids.isEmpty) return;
+    final filed = {
+      for (final material in keyPackageMaterials(await io.read(atSign),
+          enrollmentId: enrolment))
+        material.keyId
+    };
+    final held = holder.heldKpids;
+    if (filed.isEmpty ||
+        (filed.length == held.length && filed.containsAll(held))) {
+      return;
+    }
+    await holder.reloadApkamKeys();
   }
 
   Future<_MintedEncKey> _mint(String algorithm) async {

@@ -13,6 +13,8 @@
 - feat: an enrollment with a key package holds a namespace key from the
   moment it is published. Only such a client mints one; on the atSign's own
   credential, `ensureReachable` answers `AtReachability.noKeyPackage`.
+- fix: an enrollment created under the legacy key exchange can open what its
+  other enrollments convey to it, without waiting for a restart.
 - experimental: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.

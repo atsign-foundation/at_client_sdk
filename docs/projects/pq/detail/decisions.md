@@ -2314,6 +2314,7 @@ post-enrollment write path, so a locally generated one is an address no sender c
 bought nothing and cost a startup write to the user's keyfile, which the functional pack caught
 by showing a committed test keyfile as modified.
 
+
 `NskeyPrivateFiling.start`/`stop` are deleted in favour of `filePending`. The correspondence
 check the class describes is now wired for the first time, against the *current* advertised
 generation only: an older conveyed generation reads as "no opinion" rather than a rejection,
@@ -15506,3 +15507,42 @@ Amends [22.2b](#222b-publishing-a-chain-signature-the-parent-signs-the-child-pub
 [24.2](#242-the-rulings) rules 1 and 4, and supersedes
 [144.2](#1442-a-republish-clears-the-links-a-root-holder-re-anchors) and
 [152](#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08).
+
+## 158. A key package reconcile advertises the package the client holds (2026-10-29)
+
+**Decided by gkc on 2026-10-29.**
+
+The posture grid's readback found it live. An enrollment whose request carried no key package,
+as one under the legacy key exchange does, ran a posture configuring the post-quantum providers
+and ended its start advertising one key package and holding another.
+`KeyPackageRegistration.register()` on the conveyed-key collection step generated a package and
+held it in memory, which [25.2](#252-what-was-built) intends, since adoption writes nothing back.
+`reconcileKeyPackage` then read a keyfile holding none, minted a second, filed it and advertised
+it. Every conveyance went to the advertised package, which the running client could not open,
+and its asks were refused as coming from a package that was not the roster's.
+
+1. **The reconcile files the key the client holds.** For an algorithm the keyfile lacks, it files
+   the active key the client's own registration already holds under that algorithm, tagged with
+   the enrollment's own id, and mints a fresh one only when the client holds none. The kpid the
+   client has been answering at is the one advertised.
+2. **The client holds what is filed before anything is advertised.** After filing, and before
+   publishing, the client's registration reloads its keys from the keyfile whenever they differ
+   from what is filed there, and a running listener listens at the addresses they now give. So a
+   key minted because the client held none under that algorithm, and a key retired because the
+   preference stopped naming it, are both held as filed when the package goes out; a key held only
+   in memory and never advertised is dropped, and nothing was sealed to it.
+3. **The keyfile is written only when a package is about to be advertised**: registration stays
+   adoption-only, as 25.2 rules, and a client whose reconcile advertises nothing files nothing.
+4. **A client already in the mismatched state heals at its next start**: it loads the package
+   filed and advertised.
+
+Supersedes nothing.
+
+**Built** in at_client. Proven in-process by `key_package_persistence_test.dart` and
+`pairwise_secret_sharing_test.dart`, and live by `pq_posture_grid_test.dart`'s readback, where a
+receiver that configures the providers and does not seed reads.
+
+**Rejected.** Filing the package at registration, which wrote the keyfile where nothing would
+advertise it, the cost 25.2 refused, and created an enrollment's section in a keyfile holding none
+of its material. Making the reconcile mint and leaving the client on its old key until the next
+start, which advertises an address the running client does not answer at.

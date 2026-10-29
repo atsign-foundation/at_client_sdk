@@ -98,11 +98,11 @@ class PqStartupGates {
   final bool refreshOwnLinks;
 
   /// Active: brings this enrollment's advertised key package into line with
-  /// `AtClientPreference.keyEstablishmentAlgorithms` — minting, filing and
-  /// advertising an encapsulation keypair for every algorithm the list names
-  /// and the enrollment does not hold, and retiring every one it holds that
-  /// the list no longer names. Inert unless that list has changed since the
-  /// enrollment was created, which is every start after the first.
+  /// `AtClientPreference.keyEstablishmentAlgorithms` — filing and advertising
+  /// an encapsulation keypair for every algorithm the list names and the
+  /// keyfile does not hold, the client's own where it holds one, and retiring
+  /// every one it holds that the list no longer names. Inert once the keyfile
+  /// holds what the list names.
   final bool reconcileKeyPackage;
 
   /// Active: mints and publishes this atSign's namespace keys. ANDed with
@@ -246,7 +246,7 @@ class PqClientBootstrap {
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
-    keyPackageMinting = KeyPackageMinting(_atClient);
+    keyPackageMinting = KeyPackageMinting(_atClient, holder: sharing);
   }
 
   final AtClient _atClient;

@@ -472,6 +472,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
   }
 
+  /// Reloads the held keys and, when listening, listens at the addresses they
+  /// now give.
+  @override
+  Future<void> reloadApkamKeys() async {
+    await super.reloadApkamKeys();
+    if (_listeningFor == null || _stopped) return;
+    stopListening();
+    await startListening();
+  }
+
   /// Stops watching. The [receivedEnvelopes] stream stays open; a later
   /// [startListening] resumes.
   void stopListening() {

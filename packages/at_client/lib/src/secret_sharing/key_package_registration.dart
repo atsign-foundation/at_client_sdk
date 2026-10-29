@@ -205,6 +205,32 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// envelope this client never scans for is one it never opens.
   Set<String> get heldKpids => {for (final held in _encKeys) held.kid};
 
+  /// The KEM enc keys this APKAM keypair holds, in the shape [saveApkamKeys]
+  /// receives; empty until [register].
+  @experimental
+  PersistedApkamKeys get heldApkamKeys => PersistedApkamKeys(encKeys: [
+        for (final held in _encKeys)
+          PersistedEncKey(
+              encSeed: base64Encode(held.seed),
+              keyAlgo: held.keyAlgo,
+              status: held.status),
+      ]);
+
+  /// Holds what [loadApkamKeys] now answers in place of the keys held so far,
+  /// so a key package filed or changed since [register] is the one held. Does
+  /// nothing without [loadApkamKeys], or when it answers none.
+  @experimental
+  Future<void> reloadApkamKeys() async {
+    final loaded = await loadApkamKeys?.call();
+    if (loaded == null || loaded.encKeys.isEmpty) return;
+    final reloaded = [
+      for (final entry in loaded.encKeys) await _expandEncKey(entry)
+    ];
+    _encKeys
+      ..clear()
+      ..addAll(reloaded);
+  }
+
   /// Which KEM [encPublicKey] belongs to — an id from
   /// [SecretSharingAlgos.keyAlgos]. Throws [StateError] until [register]
   /// completes.

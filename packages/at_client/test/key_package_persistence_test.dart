@@ -5,7 +5,10 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/secret_sharing/key_package_minting.dart'
+    show KeyPackageMinting;
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -326,4 +329,162 @@ void main() {
     expect(registrant.heldKpids, {liveKpid});
     expect(pkg.keys.map((k) => k.kid), [liveKpid]);
   });
+
+  group('Given an enrollment holding a key package its keyfile does not', () {
+    const enrollmentId = 'enroll-1';
+
+    /// A client of the enrollment advertising [algorithms], its registration
+    /// bound to its keyfile and registered, so it holds a package in memory
+    /// that the keyfile, holding none, does not.
+    Future<({MockAtClient client, TestRegistrant holder})> holding(
+        {List<String> algorithms = const [SecretSharingAlgos.xWing]}) async {
+      final client = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          keyEstablishmentAlgorithms: algorithms);
+      final holder = TestRegistrant(client)
+        ..directory = FakeEnrollmentDirectory();
+      bindKeyPackageToAtKeys(holder,
+          keysIo: client.atKeysIo!, atSign: atSign, enrollmentId: enrollmentId);
+      await holder.register();
+      return (client: client, holder: holder);
+    }
+
+    /// Reconciles [client]'s key package against a record listing none,
+    /// recording each package published and what [holder] held as it went
+    /// out.
+    Future<List<({List<String> advertised, Set<String> held})>> reconcile(
+        AtClient client, TestRegistrant holder,
+        {FakeEnrollmentDirectory? directory}) async {
+      final published = <({List<String> advertised, Set<String> held})>[];
+      await KeyPackageMinting(client,
+              updater: _RecordingUpdater((request) => published.add((
+                    advertised: advertisedKids(request),
+                    held: {...holder.heldKpids}
+                  ))),
+              directory: directory ??
+                  (FakeEnrollmentDirectory()..authorize('wavi', enrollmentId)),
+              holder: holder)
+          .reconcileKeyPackage();
+      return published;
+    }
+
+    test(
+        'when the key package is reconciled, then the one it holds is filed '
+        'and advertised, at the kpid it already had', () async {
+      final (:client, :holder) = await holding();
+      final kpid = holder.kpid;
+
+      final published = await reconcile(client, holder);
+
+      expect(
+          published.map((p) => p.advertised),
+          [
+            [kpid]
+          ],
+          reason: 'a second package minted here would be advertised while '
+              'this client answered at the first');
+      expect(holder.kpid, kpid);
+      expect(
+          keyPackageMaterial(await client.atKeysIo!.read(atSign),
+                  enrollmentId: enrollmentId)
+              ?.keyId,
+          kpid,
+          reason: 'filed, so the next start holds it too');
+    });
+
+    test(
+        'when the preference names a second algorithm, then it holds both '
+        'before either is advertised', () async {
+      final (:client, :holder) = await holding(algorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024
+      ]);
+      expect(holder.heldKpids, hasLength(1),
+          reason: 'the precondition: registration mints the first only');
+
+      final published = await reconcile(client, holder);
+
+      expect(published, hasLength(1));
+      expect(published.single.advertised, hasLength(2));
+      expect(published.single.held, published.single.advertised.toSet(),
+          reason: 'a key advertised before this client holds it is an '
+              'address senders seal to that it cannot open');
+    });
+
+    test(
+        'when the preference names only an algorithm it holds no key for, then '
+        'a fresh key is minted, held and advertised alone', () async {
+      final held = await holding();
+      final xWingKpid = held.holder.kpid;
+      final mlKemOnly = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      when(() => mlKemOnly.atKeysIo).thenReturn(held.client.atKeysIo);
+
+      final published = await reconcile(mlKemOnly, held.holder);
+
+      expect(published, hasLength(1));
+      expect(published.single.advertised, hasLength(1));
+      expect(published.single.advertised, isNot(contains(xWingKpid)));
+      expect(published.single.held, published.single.advertised.toSet(),
+          reason: 'the X-Wing key it held was never advertised, so nothing '
+              'was sealed to it, and holding it in place of what is '
+              'advertised would open nothing sent here');
+    });
+
+    test(
+        'when it starts again, then it holds the advertised package and '
+        'nothing is published', () async {
+      final (:client, :holder) = await holding();
+      final first = await reconcile(client, holder);
+      final directory = FakeEnrollmentDirectory()
+        ..authorize('wavi', enrollmentId)
+        ..seed(
+            enrollmentId,
+            KeyPackage(
+                enrollmentId: enrollmentId,
+                createdAt: DateTime.utc(2026),
+                keys: KeyPackageMinting.advertisedKeysIn(
+                        await client.atKeysIo!.read(atSign), enrollmentId)
+                    .keys));
+
+      final restarted = TestRegistrant(client)
+        ..directory = FakeEnrollmentDirectory();
+      bindKeyPackageToAtKeys(restarted,
+          keysIo: client.atKeysIo!, atSign: atSign, enrollmentId: enrollmentId);
+      await restarted.register();
+      final again = await reconcile(client, restarted, directory: directory);
+
+      expect(restarted.kpid, first.single.advertised.single);
+      expect(again, isEmpty, reason: 'the record already names it');
+    });
+  });
+}
+
+/// The kids of the key package [request] advertises.
+List<String> advertisedKids(EnrollmentUpdateRequest request) => [
+      for (final key in ((SignedEnvelope.fromJson(
+                  request.metadata!['keyPackage'] as Map<String, dynamic>)
+              .payload as Map)['keys'] as List)
+          .cast<Map>())
+        key['kid'] as String
+    ];
+
+/// Hands each key package update to [onUpdate] instead of sending it.
+class _RecordingUpdater extends Fake implements EnrollmentUpdater {
+  _RecordingUpdater(this.onUpdate);
+
+  final void Function(EnrollmentUpdateRequest request) onUpdate;
+
+  @override
+  Future<AtEnrollmentResponse> update(
+      EnrollmentUpdateRequest request, AtLookUp atLookUp) async {
+    onUpdate(request);
+    return AtEnrollmentResponse(
+        request.enrollmentId, EnrollmentStatus.approved);
+  }
 }

@@ -1158,10 +1158,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
 
   ⚠️ **The property is not that only one KEM is on offer**, but that the offer is
-  authenticated and the order reading it is fixed. `KeyPackageMinting` mints a keypair
-  for every configured algorithm and republishes the package by `enroll:update`, and the
-  `reconcileKeyPackage` startup step adds one after a preference edit with no rotation
-  involved.
+  authenticated and the order reading it is fixed. `KeyPackageMinting` files a keypair
+  for every configured algorithm, the client's own where it holds one, and republishes
+  the package by `enroll:update`, and the `reconcileKeyPackage` startup step adds one
+  after a preference edit with no rotation involved.
 
   ⚠️ **A migration is always two rollouts** ([section 17](#17-g2--crypto-agility--add-never-replace)).
   What a key per algorithm removes is not the second rollout but the *unbounded wait
@@ -2210,15 +2210,17 @@ These invariants are testable against **every** UC above:
   `CryptoProviderNotRegistered`, exactly as a build predating those providers
   refuses it. The stage runs none of the post-quantum startup at all — it
   collects nothing, files nothing and publishes nothing, so it is not conveyed
-  nskey privates either. The advertisement step is switched off wherever the
-  posture configures no post-quantum providers, and the encapsulation keypair
-  its startup mints is held in memory for the process and never filed.
-  ⚠️ **A key package rides every key-exchange mode**, and a package is
-  registered at every client start whatever the posture: what registers one for
-  a client holding none is `KeyPackageRegistration.register()` on the
-  conveyed-key collection step, which is ungated, while `reconcileKeyPackage`
-  is gated. No post-quantum key is conveyed under RSA in any mode — every
-  conveyance is KEM-sealed, with no classical branch.
+  nskey privates either: it mints no encapsulation keypair and advertises no key
+  package.
+  ⚠️ **A key package rides every key-exchange mode.** An enrollment whose request
+  carried none, as one under the legacy exchange does, is given one at its first
+  start under a posture configuring the providers:
+  `KeyPackageRegistration.register()` on the conveyed-key collection step holds
+  one, and `reconcileKeyPackage` files that one under the enrollment's id and
+  advertises it, so the enrollment advertises the package it holds
+  ([ruling 158](detail/decisions.md#158-a-key-package-reconcile-advertises-the-package-the-client-holds-2026-10-29)).
+  No post-quantum key is conveyed under RSA in any mode — every conveyance is
+  KEM-sealed, with no classical branch.
 - **No silent scheme substitution, in either direction.** The SDK never chooses
   post-quantum behind the app's back (writing PQ is the app's release decision —
   a capability-stage client writes with the legacy provider however much it can read), and never
