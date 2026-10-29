@@ -15538,6 +15538,11 @@ and its asks were refused as coming from a package that was not the roster's.
 
 Supersedes nothing.
 
+**Known limit.** A keyfile holding an untagged key package, which only an older keyfile does,
+advertises two packages and holds one once the reconcile files a tagged key beside it, as it does
+when the preference adds an algorithm: the publish names both, and a load returns only the tagged
+set, so the client holds the new key alone. Owed for 4.0.x.
+
 **Built** in at_client. Proven in-process by `key_package_persistence_test.dart` and
 `pairwise_secret_sharing_test.dart`, and live by `pq_posture_grid_test.dart`'s readback, where a
 receiver that configures the providers and does not seed reads.
