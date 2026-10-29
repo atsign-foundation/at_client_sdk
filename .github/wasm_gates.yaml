@@ -8,21 +8,6 @@
 # honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
 
 at_chops:
-  # NOT resolvable from the workspace. at_chops 4.0.0 is detached from the root
-  # `workspace:` list until at_client migrates off the 3.x facade, so
-  # `package:at_chops/...` resolves out of the pub cache there and a plain run
-  # would walk the PUBLISHED 3.x. Run this gate against the package's own
-  # `dart pub get`, which is what the `wasm_ratchet` job does:
-  #
-  #   dart pub get -C packages/at_chops
-  #   dart run wasm_shakedown -c .github/wasm_gates.yaml \
-  #     --resolve-from at_chops=packages/at_chops
-  #
-  # Without the flag the baselines below fail rather than pass — 3.x owns 2
-  # blocked packages and puts the bindings at a different path — so forgetting
-  # it is red, not a false green. Drop this note when at_chops rejoins
-  # `workspace:`.
-
   # Web-safe first: every OpenSSL and FFI algorithm lives behind
   # at_chops_ffi.dart, so at_chops.dart is pure Dart.
   #
@@ -49,7 +34,7 @@ at_chops:
     - package:at_chops/types.dart
   controls:
     - barrel: package:at_chops/at_chops_ffi.dart
-      reaches_file: lib/src/ffi/openssl_ffi_bindings.dart
+      reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
       reaches_library: dart:ffi
       because: the FFI algorithms it exists to quarantine
 

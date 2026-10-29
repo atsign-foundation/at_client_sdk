@@ -9,16 +9,15 @@ wasm and stops them gaining browser-hostile imports. Not published; run by
 dart run wasm_shakedown                    # every gated package
 dart run wasm_shakedown --package at_auth  # just one (repeatable)
 dart run wasm_shakedown --config PATH      # a config other than the default
-dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
+dart run wasm_shakedown --resolve-from PACKAGE=DIR
 ```
 
 `--resolve-from PACKAGE=DIR` walks and compiles one gate against `DIR`'s own package
 config instead of the workspace's, leaving the others alone. It is for a package outside
-the root `workspace:` list — `at_chops`, while 4.0.0 is detached — whose name otherwise
-resolves to the published copy in the pub cache, so its gate would measure a different
-package than this tree. `DIR` needs its own `dart pub get`, and a missing one is an error
-rather than a fall back to the workspace config. The `wasm_ratchet` job passes the flag;
-drop it there and here when at_chops rejoins `workspace:`.
+the root `workspace:` list, whose name otherwise resolves to the published copy in the
+pub cache, so its gate would measure a different package than this tree. `DIR` needs its
+own `dart pub get`, and a missing one is an error rather than a fall back to the workspace
+config. Every package gated today is a workspace member, so none needs it.
 
 The default config is `.github/wasm_gates.yaml`, resolved against the pub workspace
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,

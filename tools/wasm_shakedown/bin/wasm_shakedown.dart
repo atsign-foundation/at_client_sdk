@@ -3,7 +3,7 @@
 ///     dart run wasm_shakedown
 ///     dart run wasm_shakedown --package at_auth
 ///     dart run wasm_shakedown --config path/to/gates.yaml
-///     dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
+///     dart run wasm_shakedown --resolve-from PACKAGE=DIR
 ///
 /// Named for the package, so it is the default entry point and needs no
 /// `:suffix`. The gated set comes from `.github/wasm_gates.yaml` unless
