@@ -7,6 +7,7 @@ environment:
 
 workspace:
   - packages/at_auth
+  - packages/at_chops
   - packages/at_cli_commons
   - packages/at_client
   - packages/at_client_cli
@@ -121,15 +122,7 @@ dev_dependencies:
 # the range (st/at_persistence-at_utils-4.0.0-compat), pinned to a commit.
 # Remove this override once a release with `at_utils: >=3.0.19 <5.0.0` is
 # published.
-#
-# at_chops: published 3.7.0 pins `at_utils: ^3.0.19`. This branch is 3.7.1-rc1 with
-# the range widened. Remove this override once at_chops 3.7.1 is published.
 dependency_overrides:
-  at_chops:
-    git:
-      url: https://github.com/atsign-foundation/at_client_sdk.git
-      ref: at_chops-3.x
-      path: packages/at_chops
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
