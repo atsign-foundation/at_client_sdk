@@ -8,6 +8,8 @@ import 'package:at_client/src/crypto/crypto.dart'
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/rpc/at_rpc_types.dart';
+import 'package:at_client/src/rpc/rpc_logging_handler.dart'
+    if (dart.library.io) 'package:at_client/src/rpc/rpc_logging_handler_io.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
@@ -32,7 +34,8 @@ typedef RpcRequestHandler = Future<AtRpcResp> Function(
 );
 
 class AtRpcClient implements AtRpcCallbacks {
-  static final AtSignLogger logger = AtSignLogger(' AtRpcClient ');
+  static final AtSignLogger logger =
+      AtSignLogger(' AtRpcClient ', loggingHandler: rpcLoggingHandler());
 
   late final String serverAtsign;
   late final AtRpc rpc;

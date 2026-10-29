@@ -95,18 +95,18 @@ not just at publish time.
   split, so neither needed a change. The real compensating fix was
   `AtSignLogger.stdErrLoggingHandler` — a static field on the neutral `AtSignLogger`
   class holding a concrete `StdErrLoggingHandler()`, not caught by the original
-  blast-radius citation. Left in place, it would have kept `dart:io` reachable from
-  `at_utils.dart` through `AtSignLogger` itself, silently defeating I2. Removed the
-  field; the three real call sites (`at_cli_commons/cli_base.dart`,
-  `at_onboarding_cli/auth_cli.dart`, `tests/at_functional_test`, plus
-  `at_client_flutter`'s dockerstats example — none of them the five originally named)
-  now construct `StdErrLoggingHandler()` directly against `at_utils_io.dart`.
-  `at_client/src/rpc/at_rpc.dart` had the same field wired into `AtRpcClient`'s
-  default logger, but `at_rpc.dart` is exported from `at_client.dart`'s own barrel —
-  porting the io import there would have piped `dart:io` into at_client's future
-  barrel for no reason. Dropped the override instead; `AtRpcClient` now uses
-  `AtSignLogger`'s ordinary default (`ConsoleLoggingHandler`), same as everything else
-  that doesn't ask for stderr.
+  blast-radius citation. Left in place as it was, it would have kept `dart:io`
+  reachable from `at_utils.dart` through `AtSignLogger` itself, silently defeating I2.
+  The field stays, deprecated for removal in 5.0.0, and now holds a handler chosen by a
+  conditional import: `StdErrLoggingHandler` where `dart:io` exists, and
+  `ConsoleLoggingHandler` elsewhere, so `at_utils.dart` reaches no `dart:io`. The three
+  real call sites (`at_cli_commons/cli_base.dart`, `at_onboarding_cli/auth_cli.dart`,
+  `tests/at_functional_test`, plus `at_client_flutter`'s dockerstats example — none of
+  them the five originally named) construct `StdErrLoggingHandler()` directly against
+  `at_utils_io.dart`. `at_client/src/rpc/at_rpc.dart` had the field wired into
+  `AtRpcClient`'s default logger, and `at_rpc.dart` is exported from `at_client.dart`'s
+  own barrel, so it chooses its handler through a conditional import of its own:
+  stderr where `dart:io` exists, as in 3.x, and `AtSignLogger`'s default elsewhere.
 - No open question on chalkdart's own fix — it is upstream's package, not ours; getting
   it "off the neutral path" here means changing which of *our* files import it, not
   patching chalkdart itself.
