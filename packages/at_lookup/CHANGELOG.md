@@ -17,6 +17,8 @@
 - fix: in a browser, the atDirectory is asked for the atSign in its canonical
   form, and an answer longer than 512 bytes, or that is not a host name and a
   port, is refused.
+- fix: a command holding a line feed before its end is refused with
+  `IllegalArgumentException`, and nothing is sent.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
   `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and

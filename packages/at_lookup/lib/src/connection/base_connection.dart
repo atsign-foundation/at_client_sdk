@@ -54,6 +54,11 @@ abstract class BaseConnection extends AtConnection {
 
   @override
   Future<void> write(String data) async {
+    final lineFeed = data.indexOf('\n');
+    if (lineFeed >= 0 && lineFeed != data.length - 1) {
+      throw IllegalArgumentException('a command is one line, and this one '
+          'holds a line feed at offset $lineFeed of ${data.length}');
+    }
     if (isInValid()) {
       throw ConnectionInvalidException('write(): Connection is invalid');
     }

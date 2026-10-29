@@ -11,6 +11,10 @@ abstract class AtConnection {
   /// [ConnectionInvalidException] the implementation throws.
   ///
   /// @throws [AtIOException] for any exception during the operation
+  ///
+  /// Throws `IllegalArgumentException`, writing nothing, when [data] holds a
+  /// line feed anywhere but its last character, since the atServer ends a
+  /// command at a line feed.
   Future<void> write(String data);
 
   /// Write raw bytes, without waiting for them to leave.
