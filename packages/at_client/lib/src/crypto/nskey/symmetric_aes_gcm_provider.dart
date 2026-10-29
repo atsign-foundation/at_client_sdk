@@ -10,7 +10,11 @@ import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey, ckSiblingCopyKey;
+    show
+        ckConveyanceKey,
+        ckSiblingCopyKey,
+        requireRecordKid,
+        requireRecordNamespace;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -369,8 +373,13 @@ class SymmetricAesGcmProvider
 
   /// The record [me] opens the CK for [value] from: the sibling copy when [me]
   /// shared the value, else the record the CK was conveyed under.
+  ///
+  /// Throws [AtDecryptionException] when [ckKid] or [ckNs], as [value] names
+  /// them, cannot form an atKey.
   static AtKey openableConveyanceKeyFor(
       AtKey value, String ckKid, String ckNs, String? me) {
+    requireRecordKid(ckKid, 'ckKid');
+    requireRecordNamespace(ckNs, 'ckNs');
     final sharedWith = value.sharedWith;
     final sharedOut = me != null &&
         value.sharedBy == me &&

@@ -17,6 +17,8 @@
   other enrollments convey to it, without waiting for a restart.
 - fix: when no namespace key is published, a client retires any it holds and
   mints and publishes a fresh one.
+- fix: a read refuses a record whose metadata names a namespace or key id
+  that no atKey can carry.
 - experimental: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.

@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/backends/crypto_backends.dart'
     show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -267,7 +269,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // NOTE: the record states its own namespace, because a conveyance key
     // re-parsed from the wire mis-splits a multi-segment one — both the private
     // lookup and the HPKE binding would then be wrong.
-    final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
+    final namespace = requireRecordNamespace(
+        additional?['ns'] as String? ?? _namespaceOf(atKey), 'namespace');
     final filedUnder = _filingScopeOf(atKey, additional, nskeyOwner, namespace);
 
     final nskeyKid = additional?['nskeyKid'];
@@ -276,6 +279,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'an $nskeyCryptoProviderId record must name the nskey generation it '
           'was sealed to in appMetadata.nskeyKid');
     }
+    requireRecordKid(nskeyKid, 'nskeyKid');
 
     final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
     if (private == null) {
@@ -348,7 +352,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       throw AtDecryptionException('a sibling copy must name the recipient and '
           'the namespace its key is filed under, as destination and ckNs');
     }
-    return (owner: destination, namespace: ckNs);
+    return (
+      owner: requireRecordAtSign(destination, 'destination'),
+      namespace: requireRecordNamespace(ckNs, 'ckNs'),
+    );
   }
 
   static bool _hasRecipient(AtKey atKey) {

@@ -135,8 +135,15 @@ extension ReceivedSchemes on AtClient {
         value.namespace;
     if (ckKid == null || ckNs == null) return null;
 
-    final conveyance = SymmetricAesGcmProvider.openableConveyanceKeyFor(
-        value, ckKid, ckNs, getCurrentAtSign());
+    final AtKey conveyance;
+    try {
+      conveyance = SymmetricAesGcmProvider.openableConveyanceKeyFor(
+          value, ckKid, ckNs, getCurrentAtSign());
+    } on AtDecryptionException catch (e) {
+      _logger.info('$value names a content key record no atKey can carry, so '
+          'the algorithm its content key was sealed under is unknown: $e');
+      return null;
+    }
     final cachedCopy = AtKey()
       ..key = conveyance.key
       ..namespace = conveyance.namespace
