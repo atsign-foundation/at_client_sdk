@@ -1,7 +1,11 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/client/server_mutex.dart' show maxServerMutexTtl;
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show NskeyAdvertisement;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
+    show NskeyRotateHoldingLease;
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
@@ -80,9 +84,18 @@ class PrePublishConveyance {
   }
 
   /// The mint lock's ttl: [margin], the ring's own, plus [perMember] for each
-  /// listed enrollment, and never more than an atServer mutex allows.
-  Duration lockTtlFor({required Duration margin, required Duration perMember}) {
-    final sized = margin + perMember * roster.length;
+  /// listed enrollment, for each of the [kids] a conveyance carries, for each
+  /// of the [conveyances] the lock may need, and never more than an atServer
+  /// mutex allows.
+  ///
+  /// A mint or a rotation needs two: its own, and the one [afterPublish] makes
+  /// when it rotates. An add needs one.
+  Duration lockTtlFor(
+      {required Duration margin,
+      required Duration perMember,
+      required int kids,
+      required int conveyances}) {
+    final sized = margin + perMember * (roster.length * kids * conveyances);
     return sized > maxServerMutexTtl ? maxServerMutexTtl : sized;
   }
 
@@ -129,5 +142,61 @@ class PrePublishConveyance {
           'enrollment revoked meanwhile may hold it. The next mint is a fresh '
           'one');
     }
+  }
+
+  /// What a mint hands its ring to run once [published] is out: when a
+  /// revocation has touched the namespace since [convey] read it, records in
+  /// the keyfile that [published] owes a rotation, then rotates through
+  /// [rotate] onto a generation conveyed afresh to the roster as it is now.
+  ///
+  /// Answers the generation published by that rotation, or null when no
+  /// revocation landed. A rotation that fails throws, and the record makes
+  /// the next start rotate.
+  Future<NskeyAdvertisement?> afterPublish(
+      NskeyAdvertisement published, NskeyRotateHoldingLease rotate) async {
+    if (!await markIfRevoked(published)) return null;
+    final fresh = await PrePublishConveyance.prepare(sharing, filing, namespace,
+        excludeEnrollmentIds: excludeEnrollmentIds);
+    if (fresh == null) {
+      throw StateError('a revocation touched $namespace after this mint read '
+          'it, and this enrollment no longer carries a key package to convey '
+          'a successor with, so the rotation it owes is left to the next '
+          'start');
+    }
+    final rotated = await rotate(
+        conveyFirst: fresh.convey, afterPublish: fresh.markIfRevoked);
+    conveyedKids.addAll(fresh.conveyedKids);
+    pushedTo = fresh.pushedTo;
+    _logger.info('Rotated $namespace onto ${rotated.nskeyKid} under the same '
+        'lock: a revocation touched it after ${published.nskeyKid} was '
+        'conveyed');
+    return rotated;
+  }
+
+  /// The record [afterPublish] makes, without its rotation: whether a
+  /// revocation has touched the namespace since [convey] read it, recorded
+  /// in the keyfile against [published] when one has.
+  Future<bool> markIfRevoked(NskeyAdvertisement published) async {
+    if (!revocationKnown) return false;
+    final DateTime? now;
+    try {
+      now = await sharing.directory.lastRevokedAt(namespace);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.info('Could not re-read when $namespace was last revoked after '
+          'publishing ${published.nskeyKid}: $e');
+      return false;
+    }
+    if (now == null || now == revokedAt) return false;
+    final kids = [
+      for (final key in published.keys)
+        if (conveyedKids.contains(key.kid)) key.kid
+    ];
+    if (!await filing.markRotationOwed(namespace, kids, now)) {
+      _logger.warning('A revocation touched $namespace at $now, after '
+          '${published.nskeyKid} was conveyed, and this keyfile could not '
+          'record that it owes a rotation');
+    }
+    return true;
   }
 }

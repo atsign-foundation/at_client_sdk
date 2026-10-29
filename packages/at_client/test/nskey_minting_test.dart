@@ -33,6 +33,19 @@ class _SpentLeaseLock extends MintLock {
           lockKey, DateTime.now().subtract(const Duration(seconds: 1))));
 }
 
+/// A lock that is taken successfully and hands out a lease of [length].
+class _ShortLeaseLock extends MintLock {
+  _ShortLeaseLock(super.atClient, this.length);
+
+  final Duration length;
+
+  @override
+  Future<T?> withLock<T>(
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
+          {bool ownLockIsNotContention = false}) =>
+      mint(ServerMutexLease(lockKey, DateTime.now().add(length)));
+}
+
 /// Minting a namespace key: the interlock between an atSign's own
 /// enrollments, and the ordering that stops a key being published before
 /// anyone can open it.
@@ -555,6 +568,61 @@ void main() {
         throwsA(isA<StateError>().having((e) => e.message, 'message',
             contains('a revocation touched the namespace'))));
     expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  group('Given a mint whose afterPublish rotates', () {
+    test(
+        'when the mint publishes, then the rotation publishes under the same '
+        'lock, conveyed through what it is handed', () async {
+      final c = client();
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      final conveyed = <({List<String> kids, String? advertisedThen})>[];
+      NskeyAdvertisement? handed;
+      String? firstPayload;
+
+      final result = await ring.mintAndPublish(namespace,
+          afterPublish: (published, rotate) async {
+        handed = published;
+        firstPayload = c.advertised[namespace];
+        return rotate(
+            conveyFirst: (kids) async => conveyed
+                .add((kids: kids, advertisedThen: c.advertised[namespace])));
+      });
+
+      expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1),
+          reason: 'the rotation runs under the lock the mint took, never a '
+              'second take');
+      expect(c.verbs.where((k) => k.key == '__nskey'), hasLength(2));
+      expect(result.nskeyKid, isNot(handed!.nskeyKid));
+      expect(conveyed.single.kids, [result.nskeyKid]);
+      expect(conveyed.single.advertisedThen, firstPayload,
+          reason: 'conveyed after the mint published and before the rotation '
+              'did');
+      expect(c.advertised[namespace], isNot(firstPayload));
+    });
+
+    test(
+        'when the lease runs out before the rotation publishes, then the '
+        'rotation publishes nothing', () async {
+      final c = client();
+      final ring = PublishedNskeyKeyRing(c.client,
+          mintLock:
+              _ShortLeaseLock(c.client, const Duration(milliseconds: 300)),
+          privateFiling: await filing());
+
+      await expectLater(
+          ring.mintAndPublish(namespace,
+              afterPublish: (published, rotate) async {
+            await Future<void>.delayed(const Duration(milliseconds: 400));
+            return rotate();
+          }),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('expired while this client was minting'))));
+      expect(c.verbs.where((k) => k.key == '__nskey'), hasLength(1),
+          reason: 'the mint published inside its lease; the rotation, past '
+              'it, did not');
+    });
   });
 
   test('a mint, a rotation and an add take the lock with the ttl handed them',

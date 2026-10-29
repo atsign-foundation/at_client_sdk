@@ -220,8 +220,12 @@ class NskeySeeding {
     if (conveyance == null) return NskeySeedOutcome.noKeyPackage;
     final minted = await ring.mintAndPublish(namespace,
         conveyFirst: conveyance.convey,
+        afterPublish: conveyance.afterPublish,
         lockTtl: conveyance.lockTtlFor(
-            margin: ring.lockTtl, perMember: ring.lockBudgetPerMember));
+            margin: ring.lockTtl,
+            perMember: ring.lockBudgetPerMember,
+            kids: ring.wantedKeyAlgorithms().length,
+            conveyances: 2));
     // NOTE: a lost election adopts the winner's generation, which this call
     // neither minted nor conveyed.
     return minted.keys.every((key) => conveyance.conveyedKids.contains(key.kid))
@@ -251,7 +255,8 @@ class NskeySeeding {
   /// under it.
   Future<void> _addMissing(
       String owner, String namespace, NskeyAdvertisement published) async {
-    if (ring.missingKeyAlgorithms(published).isEmpty) return;
+    final missing = ring.missingKeyAlgorithms(published);
+    if (missing.isEmpty) return;
     final conveyance = await _conveyanceFor(namespace);
     if (conveyance == null) return;
     try {
@@ -260,7 +265,10 @@ class NskeySeeding {
       await ring.add(namespace,
           conveyFirst: conveyance.convey,
           lockTtl: conveyance.lockTtlFor(
-              margin: ring.lockTtl, perMember: ring.lockBudgetPerMember));
+              margin: ring.lockTtl,
+              perMember: ring.lockBudgetPerMember,
+              kids: missing.length,
+              conveyances: 1));
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.warning('Could not add this client\'s missing key material to '
@@ -332,8 +340,9 @@ class NskeySeeding {
   }
 
   /// Rotates [namespace] when a revocation has touched an enrollment granted it
-  /// since that namespace's advertisement was last rotated, and returns whether
-  /// it did.
+  /// since that namespace's advertisement was last rotated, or when this
+  /// client's keyfile records that the published generation owes a rotation,
+  /// and returns whether it did.
   ///
   /// Unconditional rather than [rotationPolicy]'s question, because only a fresh
   /// generation cuts a revoked enrollment off from what is sealed next; both
@@ -378,12 +387,19 @@ class NskeySeeding {
     }
     if (record == null) return false;
 
+    final owed = await _rotationOwed(owner, namespace, record.advertisement);
     final rotatedAt = record.updatedAt;
-    if (rotatedAt != null && !revokedAt.isAfter(rotatedAt)) return false;
+    if (!owed && rotatedAt != null && !revokedAt.isAfter(rotatedAt)) {
+      return false;
+    }
 
-    _logger.info('Rotating $owner:$namespace: a revocation touched it at '
-        '$revokedAt, and what is published there was stamped '
-        '${rotatedAt ?? 'at a moment the atServer did not report'}');
+    _logger.info(owed
+        ? 'Rotating $owner:$namespace: this keyfile records that '
+            '${record.advertisement.nskeyKid} owes a rotation for a '
+            'revocation that touched it after it was conveyed'
+        : 'Rotating $owner:$namespace: a revocation touched it at '
+            '$revokedAt, and what is published there was stamped '
+            '${rotatedAt ?? 'at a moment the atServer did not report'}');
     try {
       await NskeyRotation(
         atClient: atClient,
@@ -397,6 +413,23 @@ class NskeySeeding {
       _logger.warning('A revocation touched $owner:$namespace at $revokedAt '
           'and the rotation it owes did not happen; the published generation '
           'is unchanged and the next start asks again: $e');
+      return false;
+    }
+  }
+
+  /// Whether this client's keyfile records that [published] owes a rotation;
+  /// false, logged, when the keyfile cannot be read.
+  Future<bool> _rotationOwed(
+      String owner, String namespace, NskeyAdvertisement published) async {
+    final filing = privateFiling;
+    if (filing == null) return false;
+    try {
+      return await filing
+          .rotationOwed(namespace, [for (final key in published.keys) key.kid]);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read whether this keyfile records a rotation '
+          '$owner:$namespace owes, so the stamps alone decide this start: $e');
       return false;
     }
   }

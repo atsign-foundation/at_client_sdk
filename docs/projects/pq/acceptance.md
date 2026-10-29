@@ -995,11 +995,16 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a listed enrollment whose key package fails verification is conveyed nothing
   and named in a warning.
 - **Then:** the mint lock's ttl is a ceiling: the ring's own ttl plus a per-member budget
-  for each enrollment listed before the lock is taken, never past the atServer's
-  15-minute limit, and a minter that has spent it does not publish.
-- **Then:** a revocation touching the namespace between the roster read and the publish
-  stops the publish, and the generation E1 filed is retired, so the next mint is a fresh
-  one.
+  for each enrollment listed before the lock is taken and each key conveyed, twice over
+  for a mint or a rotation, which may rotate again under the same lock, never past the
+  atServer's 15-minute limit, and a minter that has spent it does not publish.
+- **Then:** a revocation touching the namespace between the roster read and the
+  conveyance's last read of it stops the publish, and the generation E1 filed is retired,
+  so the next mint is a fresh one.
+- **Then:** a revocation landing after that read and before the publish is recorded in
+  E1's keyfile against the published generation, and E1 rotates at once, under the same
+  lock, onto a generation conveyed to the roster as it is then; if that rotation fails,
+  E1's next start makes it.
 - **Then:** a mint that finds nothing published always mints a fresh generation, and
   first retires every private filed for the namespace, whichever enrollment minted it;
   a retired private still opens what was sealed to it.

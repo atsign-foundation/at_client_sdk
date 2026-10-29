@@ -382,6 +382,7 @@ void main() {
       DateTime? revokedAt,
       DateTime? stamp,
       bool published = true,
+      NskeyAdvertisement? current,
       bool unreadable = false,
       String? enrollmentId = 'enroll-a',
     }) {
@@ -410,7 +411,9 @@ void main() {
       final asked = <NskeyRotationContext>[];
       final ring = _RingRotating(
           base.atClient,
-          published ? (advertisement: generation, updatedAt: stamp) : null,
+          published
+              ? (advertisement: current ?? generation, updatedAt: stamp)
+              : null,
           successor);
       return (
         seeding: NskeySeeding(
@@ -466,6 +469,51 @@ void main() {
       expect(w.directory.lastRevokedAtQueries, [ns],
           reason: 'and it really did ask, so the zero above is a short circuit '
               'rather than a fixture that asked nothing');
+    });
+
+    group('and a generation this keyfile records as owing a rotation', () {
+      Future<void> owe(NskeySeeding seeding, NskeyAdvertisement owing) async {
+        final filing = seeding.privateFiling!;
+        await (filing.keysIo as InMemoryAtKeysIo).write(atSign, AtKeys());
+        await filing.store(
+            namespace: ns,
+            nskeyKid: owing.nskeyKid,
+            seed: NskeySeed(Uint8List.fromList(List<int>.filled(32, 3))));
+        expect(
+            await filing.markRotationOwed(
+                ns, [owing.nskeyKid], DateTime.utc(2026, 3, 1)),
+            isTrue);
+      }
+
+      test(
+          'when its record stamp is later than the revocation, then it is '
+          'rotated, unasked', () async {
+        final w = revocable(
+            stamp: DateTime.utc(2026, 4, 1),
+            revokedAt: DateTime.utc(2026, 3, 1));
+        await owe(w.seeding, generation);
+
+        expect(await w.seeding.rotateIfRevoked(atSign, ns), isTrue);
+        expect(w.ring.rotations, [ns],
+            reason: 'the stamps alone say nothing is owed, which is the '
+                'control below; the record is what rotates it');
+        expect(w.asked, isEmpty);
+      });
+
+      test(
+          'when its successor is what is published, then nothing more '
+          'rotates', () async {
+        final w = revocable(
+            current: successor,
+            stamp: DateTime.utc(2026, 4, 1),
+            revokedAt: DateTime.utc(2026, 3, 1));
+        await owe(w.seeding, generation);
+
+        expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+        expect(w.ring.rotations, isEmpty,
+            reason: 'the record belongs to the generation it was made for, '
+                'and that one is no longer published');
+      });
     });
 
     test('an unreadable namespace answer rotates nothing', () async {
@@ -959,6 +1007,7 @@ class _RingRotating extends PublishedNskeyKeyRing {
   Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
       String namespace,
       {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
       Duration? lockTtl}) async {
     rotations.add(namespace);
     await conveyFirst?.call([for (final key in _successor.keys) key.kid]);

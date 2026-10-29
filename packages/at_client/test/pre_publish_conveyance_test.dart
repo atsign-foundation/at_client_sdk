@@ -94,8 +94,8 @@ void main() {
 
     test(
         'when the lock is sized, then it is the margin plus the budget for '
-        'each listed enrollment, and never past the atServer\'s limit',
-        () async {
+        'each listed enrollment, kid and conveyance, and never past the '
+        'atServer\'s limit', () async {
       final s = substrate(directory, 'e1');
       final conveyance = (await PrePublishConveyance.prepare(
           s.sharing, await filingHolding([]), namespace))!;
@@ -103,13 +103,28 @@ void main() {
       expect(
           conveyance.lockTtlFor(
               margin: const Duration(minutes: 2),
-              perMember: const Duration(seconds: 2)),
+              perMember: const Duration(seconds: 2),
+              kids: 2,
+              conveyances: 2),
+          const Duration(minutes: 2, seconds: 24),
+          reason: 'three enrollments are listed (e1, e2 and primary), each '
+              'pushed two kids, by the mint and by the rotation its '
+              'afterPublish may make');
+      expect(
+          conveyance.lockTtlFor(
+              margin: const Duration(minutes: 2),
+              perMember: const Duration(seconds: 2),
+              kids: 1,
+              conveyances: 1),
           const Duration(minutes: 2, seconds: 6),
-          reason: 'three enrollments are listed: e1, e2 and primary');
+          reason: 'the control: one kid in one conveyance is the budget per '
+              'listed enrollment');
       expect(
           conveyance.lockTtlFor(
               margin: const Duration(minutes: 14),
-              perMember: const Duration(minutes: 1)),
+              perMember: const Duration(minutes: 1),
+              kids: 1,
+              conveyances: 1),
           const Duration(minutes: 15));
     });
 
@@ -127,8 +142,8 @@ void main() {
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('is not published and is retired'))));
       expect(await filing.filedFor(namespace), isEmpty,
-          reason: 'a later mint must not resume a generation the revoked '
-              'enrollment may hold');
+          reason: 'what it filed is retired, so the next mint is a fresh '
+              'one');
     });
 
     test(
@@ -141,6 +156,91 @@ void main() {
 
       await conveyance.convey(['k1']);
       expect(await filing.filedFor(namespace), hasLength(1));
+    });
+
+    group('and a generation it conveyed and published', () {
+      late NskeyPrivateFiling filing;
+      late ({MockSharing sharing, List<String> pushed}) s;
+      late PrePublishConveyance conveyance;
+      late NskeyAdvertisement published;
+      late NskeyAdvertisement successor;
+      late List<String> rotations;
+
+      /// A rotation under the held lock, as the ring hands it: it files the
+      /// successor, conveys it through what it is given, and then runs the
+      /// after-publish it is given.
+      NskeyRotateHoldingLease rotateTo(NskeyAdvertisement next,
+              {Object? failWith}) =>
+          ({conveyFirst, afterPublish}) async {
+            rotations.add(next.nskeyKid);
+            if (failWith != null) throw failWith;
+            await conveyFirst?.call([next.nskeyKid]);
+            await afterPublish?.call(next);
+            return next;
+          };
+
+      setUp(() async {
+        s = substrate(directory, 'e1');
+        final first = await _generation();
+        final second = await _generation();
+        published = first.advertisement;
+        successor = second.advertisement;
+        filing = await filingHolding([]);
+        await filing.store(
+            namespace: namespace, nskeyKid: first.kid, seed: first.seed);
+        await filing.store(
+            namespace: namespace, nskeyKid: second.kid, seed: second.seed);
+        conveyance =
+            (await PrePublishConveyance.prepare(s.sharing, filing, namespace))!;
+        await conveyance.convey([first.kid]);
+        rotations = [];
+      });
+
+      test(
+          'when a revocation touches the namespace after the conveyance read '
+          'it, then the keyfile records that the generation owes a rotation, '
+          'and it is rotated onto a successor conveyed afresh', () async {
+        directory.revoke('e2', at: DateTime.utc(2026, 10, 29));
+
+        final next =
+            await conveyance.afterPublish(published, rotateTo(successor));
+
+        expect(next, successor);
+        expect(rotations, [successor.nskeyKid]);
+        expect(
+            await filing.rotationOwed(namespace, [published.nskeyKid]), isTrue,
+            reason: 'recorded before the rotation, so a rotation that fails '
+                'is owed at the next start');
+        expect(s.pushed.last, '__nskey.${successor.nskeyKid}');
+        expect(conveyance.conveyedKids, contains(successor.nskeyKid));
+        expect(
+            await filing.rotationOwed(namespace, [successor.nskeyKid]), isFalse,
+            reason: 'the successor was conveyed to the roster as it is now');
+      });
+
+      test(
+          'when the rotation fails, then the record stays and the failure is '
+          'thrown', () async {
+        directory.revoke('e2', at: DateTime.utc(2026, 10, 29));
+
+        await expectLater(
+            conveyance.afterPublish(published,
+                rotateTo(successor, failWith: StateError('lease spent'))),
+            throwsA(isA<StateError>()
+                .having((e) => e.message, 'message', 'lease spent')));
+        expect(
+            await filing.rotationOwed(namespace, [published.nskeyKid]), isTrue);
+      });
+
+      test(
+          'when no revocation touches it, then nothing is recorded and nothing '
+          'rotates — the control', () async {
+        expect(await conveyance.afterPublish(published, rotateTo(successor)),
+            isNull);
+        expect(rotations, isEmpty);
+        expect(await filing.rotationOwed(namespace, [published.nskeyKid]),
+            isFalse);
+      });
     });
   });
 
@@ -198,6 +298,22 @@ void main() {
   });
 }
 
+/// A fresh X-Wing generation: its kid, the seed filed for it, and the
+/// advertisement naming it.
+Future<({String kid, NskeySeed seed, NskeyAdvertisement advertisement})>
+    _generation() async {
+  final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+  final seed = kem.newSeed();
+  final pair = await kem.keyPairFromSeed(seed);
+  final advertisement = NskeyAdvertisement.single(
+      publicKey: pair.publicKey, alg: SecretSharingAlgos.xWing);
+  return (
+    kid: advertisement.nskeyKid,
+    seed: NskeySeed(seed),
+    advertisement: advertisement
+  );
+}
+
 /// A ring with nothing published that counts the mints asked of it.
 class _RingPublishingNothing extends PublishedNskeyKeyRing {
   _RingPublishingNothing(super.atClient);
@@ -212,6 +328,7 @@ class _RingPublishingNothing extends PublishedNskeyKeyRing {
   @override
   Future<NskeyAdvertisement> mintAndPublish(String namespace,
       {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
       Duration? lockTtl}) async {
     mints++;
     throw StateError('a mint was asked of a client that may mint nothing');

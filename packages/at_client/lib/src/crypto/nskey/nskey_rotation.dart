@@ -129,8 +129,12 @@ class NskeyRotation {
     // that roster.
     final outcome = await ring.rotate(namespace,
         conveyFirst: conveyance.convey,
+        afterPublish: conveyance.afterPublish,
         lockTtl: conveyance.lockTtlFor(
-            margin: ring.lockTtl, perMember: ring.lockBudgetPerMember));
+            margin: ring.lockTtl,
+            perMember: ring.lockBudgetPerMember,
+            kids: ring.wantedKeyAlgorithms().length,
+            conveyances: 2));
     final advertisement = outcome.rotated;
     final conveyedTo = conveyance.pushedTo;
 

@@ -188,6 +188,21 @@ typedef _PreparedMint = ({
   String signedPayload,
 });
 
+/// Rotates onto a fresh generation under the mint lock the caller's mint still
+/// holds, conveying through [conveyFirst] and then running [afterPublish] as a
+/// mint does.
+@experimental
+typedef NskeyRotateHoldingLease = Future<NskeyAdvertisement> Function(
+    {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+    Future<void> Function(NskeyAdvertisement published)? afterPublish});
+
+/// What a mint or a rotation runs once its advertisement is published, handed
+/// that advertisement and a rotation under the lock it still holds; answers
+/// the generation published after it, or null when it published nothing more.
+@experimental
+typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
+    NskeyAdvertisement published, NskeyRotateHoldingLease rotate);
+
 /// An [NskeyKeyRing] that publishes the owner's nskey and discovers other
 /// atSigns' by `plookup`.
 ///
@@ -420,17 +435,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// [conveyFirst] is handed the kids of what is about to be published, after
   /// their privates are filed and before the advertisement goes out; if it
-  /// throws, nothing is published. [lockTtl] overrides the ring's for this
-  /// call.
+  /// throws, nothing is published. [afterPublish] runs once it is out, still
+  /// under the lock, and what it answers is returned in its place. [lockTtl]
+  /// overrides the ring's for this call.
   Future<NskeyAdvertisement> mintAndPublish(String namespace,
       {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
       Duration? lockTtl}) async {
     final owner = _atClient.getCurrentAtSign()!;
     final prepared = await _prepareMint(owner, namespace);
     final minted = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
         (lease) => _mintUnlessPublished(
-            owner, namespace, lease, prepared, conveyFirst),
+            owner, namespace, lease, prepared, conveyFirst, afterPublish),
         // NOTE: safe only because this critical section re-reads what is
         // published and adopts it; `rotate` takes the same lock without this,
         // so that the cooldown binds it.
@@ -485,11 +502,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       String namespace,
       ServerMutexLease lease,
       _PreparedMint prepared,
-      Future<void> Function(List<String> nskeyKids)? conveyFirst) async {
+      Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish) async {
     final published = await publishedAdvertisement(owner, namespace);
     if (published == null) {
       await _retireUnpublished(owner, namespace);
-      return _mint(owner, namespace, lease, prepared, conveyFirst: conveyFirst);
+      return _mint(owner, namespace, lease, prepared,
+          conveyFirst: conveyFirst, afterPublish: afterPublish);
     }
     _logger.info(
         'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
@@ -505,11 +524,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// earlier generation still open.
   ///
   /// Throws where [mintAndPublish] adopts — on losing the mint lock, and on
-  /// finding nothing published to supersede. [conveyFirst] and [lockTtl] are
-  /// as for [mintAndPublish].
+  /// finding nothing published to supersede. [conveyFirst], [afterPublish] and
+  /// [lockTtl] are as for [mintAndPublish].
   Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
       String namespace,
       {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
       Duration? lockTtl}) async {
     final owner = _atClient.getCurrentAtSign()!;
     final superseded = await publishedAdvertisement(owner, namespace);
@@ -522,8 +542,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final prepared = await _prepareMint(owner, namespace);
     final rotated = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
-        (lease) =>
-            _mint(owner, namespace, lease, prepared, conveyFirst: conveyFirst));
+        (lease) => _mint(owner, namespace, lease, prepared,
+            conveyFirst: conveyFirst, afterPublish: afterPublish));
     if (rotated == null) {
       throw StateError(
           'another enrollment holds the mint lock for $owner:$namespace, so '
@@ -715,7 +735,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// implements one can mint material for it and a generation holds a key per
   /// algorithm the fleet needs. A duplicate is dropped, because the second key
   /// under one algorithm is minted, filed and conveyed for nobody.
-  @visibleForTesting
   List<String> wantedKeyAlgorithms() {
     final configured = _atClient.getPreferences()?.keyEstablishmentAlgorithms ??
         const [SecretSharingAlgos.xWing];
@@ -734,6 +753,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// rotation and a cold-start mint pass nothing and take a fresh stamp, which
   /// is what makes `updatedAt` mean *when this generation was minted*; never a
   /// locally computed time.
+  ///
+  /// [afterPublish] runs once the advertisement is out, handed a rotation under
+  /// [lease], and what it answers is returned in place of this generation.
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
@@ -741,6 +763,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     _PreparedMint prepared, {
     DateTime? assertUpdatedAt,
     Future<void> Function(List<String> nskeyKids)? conveyFirst,
+    NskeyAfterPublish? afterPublish,
   }) async {
     final advertisement = prepared.advertisement;
     final payload = prepared.signedPayload;
@@ -815,7 +838,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _mintedPublics[generation] = PackageKey.fromBytes(
           use: SecretSharingAlgos.useEnc, alg: key.keyAlgo, pub: key.publicKey);
     }
-    return advertisement;
+    if (afterPublish == null) return advertisement;
+    final next = await afterPublish(
+        advertisement,
+        ({conveyFirst, afterPublish}) async =>
+            _mint(owner, namespace, lease, await _prepareMint(owner, namespace),
+                conveyFirst: conveyFirst,
+                afterPublish: afterPublish == null
+                    ? null
+                    : (published, _) async {
+                        await afterPublish(published);
+                        return null;
+                      }));
+    return next ?? advertisement;
   }
 
   @override

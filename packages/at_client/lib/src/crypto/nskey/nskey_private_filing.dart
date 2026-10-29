@@ -1,5 +1,5 @@
 import 'dart:async' show StreamController;
-import 'dart:convert' show base64Decode;
+import 'dart:convert' show base64Decode, utf8;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
@@ -478,6 +478,57 @@ class NskeyPrivateFiling {
       }
       return retired;
     });
+  }
+
+  /// The keyfile role of the record [markRotationOwed] files beside a
+  /// generation's private.
+  static const CryptographicMaterialRole rotationOwedRole =
+      CryptographicMaterialRole.of('nskeyRotationOwed');
+
+  /// Records in the keyfile, in one update, that the generation of each of
+  /// [nskeyKids] owes a rotation for the revocation at [revokedAt]. Returns
+  /// whether the keyfile now says so for at least one of them.
+  ///
+  /// A kid whose private this keyfile does not hold is skipped.
+  Future<bool> markRotationOwed(
+      String namespace, Iterable<String> nskeyKids, DateTime revokedAt) async {
+    final io = keysIo;
+    if (io is! WrittenAtKeysIo) return false;
+    var owed = false;
+    await io.update(atSign.toAtsign(), (keys) {
+      var added = false;
+      for (final nskeyKid in nskeyKids) {
+        final keyId = keyIdFor(namespace, nskeyKid);
+        final private = keys.getAtSignKey(
+            keyId, CryptographicMaterialRole.privateDecapsulation);
+        if (private == null) continue;
+        owed = true;
+        if (keys.getAtSignKey(keyId, rotationOwedRole) != null) continue;
+        keys.addKey(CryptographicMaterial(
+          keyId: keyId,
+          role: rotationOwedRole,
+          algorithm: private.algorithm,
+          // NOTE: never empty; a keyfile holding a material with no bytes is
+          // refused whole when it is next read.
+          bytes: AtBytes(utf8.encode(revokedAt.toUtc().toIso8601String())),
+          createdAt: DateTime.now().toUtc(),
+        ));
+        added = true;
+      }
+      return added;
+    });
+    return owed;
+  }
+
+  /// Whether the keyfile records, for any of [nskeyKids], that its
+  /// generation owes a rotation; see [markRotationOwed].
+  Future<bool> rotationOwed(
+      String namespace, Iterable<String> nskeyKids) async {
+    final keys = await _readSourceOrNull('the rotations owed in $namespace');
+    if (keys == null) return false;
+    return nskeyKids.any((nskeyKid) =>
+        keys.getAtSignKey(keyIdFor(namespace, nskeyKid), rotationOwedRole) !=
+        null);
   }
 
   /// Stores an nskey **seed** this client either minted or was conveyed.
