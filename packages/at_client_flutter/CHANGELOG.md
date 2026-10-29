@@ -16,6 +16,7 @@
   importing it has `FileAtKeysIo`, `secureSocketLookUps` and
   `CacheableSecondaryAddressFinder`.
 - build: requires `at_client` ^4.0.0.
+- build: requires `at_persistence_secondary_server` ^5.4.0.
 - chore(deps): at_utils ^4.0.0-rc1
 
 ## 2.0.0-rc6

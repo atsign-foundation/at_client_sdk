@@ -135,6 +135,7 @@
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0-rc8.
 - build: requires `at_lookup` ^4.0.0-rc1.
+- build: requires `at_persistence_secondary_server` ^5.4.0.
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.

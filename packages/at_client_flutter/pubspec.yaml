@@ -38,7 +38,7 @@ dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
   mocktail: ^1.0.4
-  at_persistence_secondary_server: ^5.3.0
+  at_persistence_secondary_server: ^5.4.0
   path_provider_platform_interface: ^2.1.2
   plugin_platform_interface: ^2.1.8
   flutter_test:

@@ -38,7 +38,7 @@ dependencies:
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
-  at_persistence_secondary_server: ^5.3.0
+  at_persistence_secondary_server: ^5.4.0
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1
@@ -116,15 +116,3 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
-
-# Temporary override: the published at_persistence_secondary_server (5.3.0)
-# caps at_utils below 4.0.0. Resolve it from the at_server branch that widens
-# the range (st/at_persistence-at_utils-4.0.0-compat), pinned to a commit.
-# Remove this override once a release with `at_utils: >=3.0.19 <5.0.0` is
-# published.
-dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      ref: 166658a362a6c92fd611d1be7540aabffbaaa333
-      path: packages/at_persistence_secondary_server
