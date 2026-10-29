@@ -112,7 +112,7 @@ final client = await Atsign('@alice').open(
     keys: CliKeys.fileFor('@alice'),          // ~/.atsign/keys/@alice_key.atKeys
     preference: preference,
     storage: CliKeys.storageFor('@alice', program: 'my_app'),   // CLIBase's store
-    lookUps: secureSocketLookUps(),
+    lookUps: lookUpsFor(preference.rootDomain),                   // CLIBase's transport
     secondaryAddressFinder: CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort));
 ```
@@ -131,8 +131,9 @@ and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `SyncProgressListener` that prints; six files use it, three of them this repo's own examples).
 `AtOnboardingPreference` goes with the adapter: its fields are either
 `AtClientPreference`'s, the keys-and-store conventions above, or `lookUps`,
-which stays a parameter of `CLIBase` and the commands, with `proxyLookUps()`
-beside `secureSocketLookUps()` as the two factories a program picks from.
+which stays a parameter of `CLIBase` and the commands, with
+`lookUpsFor(rootDomain)` choosing between `proxyLookUps()` and
+`secureSocketLookUps()` by the root domain, as `CLIBase` does.
 
 ## 3. Getting there
 
@@ -207,7 +208,7 @@ final client = await Atsign('@alice').open(                          // after
     keys: CliKeys.fileFor('@alice', passPhrase: pass),
     preference: preference,
     storage: CliKeys.storageFor('@alice', program: 'my_app'),
-    lookUps: secureSocketLookUps(),
+    lookUps: lookUpsFor(preference.rootDomain),
     secondaryAddressFinder: CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort));
 
@@ -215,7 +216,7 @@ final client = await Atsign('@alice').open(                          // after
 final pref = AtOnboardingPreference()..atKeysFilePath = p..storagePath = s;   // before
 final keys = CliKeys.fileFor('@alice', path: p);                            // after
 final storage = CliKeys.storageFor('@alice', program: 'my_app', path: s);
-// pref.lookUps: pass lookUps: proxyLookUps() (or a factory of your own) to CLIBase or the verb
+// pref.lookUps: pass lookUps: lookUpsFor(rootDomain) (or a factory of your own) to CLIBase or the verb
 ```
 
 ## 6. Decisions to make

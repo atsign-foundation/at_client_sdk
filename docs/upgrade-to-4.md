@@ -131,8 +131,10 @@ flows still read it when an app passes no storage, until 5.0.
 Every client, enrollment and lookup is handed its transport and the atDirectory
 it asks: `secureSocketLookUps()` and
 `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
-as above. For a root domain of the form `proxy:host:port`, at_client_cli's
-`proxyLookUps()` is the transport.
+as above. A command-line program takes its transport from at_client_cli's
+`lookUpsFor(preference.rootDomain)`, as `CLIBase` does: `proxyLookUps()` for a
+root domain of the form `proxy:host:port`, and `secureSocketLookUps()`
+otherwise.
 
 ### `Undefined name 'FileAtKeysIo'`, `'CacheableSecondaryAddressFinder'`, `'HiveAtClientStorage'`
 
@@ -281,6 +283,25 @@ Future<void> approveWhatIsPending(AtClient client) async {
 }
 ```
 
+### A keyfile that is not valid JSON throws `AtKeysFormatException`
+
+`FileAtKeysIo` reads a keyfile that is not valid JSON as
+`AtKeysFormatException`, a `FormatException`, so a `catch` for one still
+catches it. Its `reason` is the JSON parser's own wording and its `position`
+the 1-based character where the parser stopped; its `source` is always null.
+A keyfile holding JSON that is not an object throws it too, with a null
+`position`, where it used to fail as a `TypeError`. A passphrase-protected
+keyfile whose decrypted content does not parse still fails as
+`AtDecryptionException`. An app that built its message from the old
+exception's `source` or `offset` reads `reason` and `position` instead:
+
+```dart after
+String unreadableKeyfile(AtKeysFormatException e) => e.position == null
+    ? 'The atKeys file is not a JSON object'
+    : 'The atKeys file is not valid JSON: ${e.reason} '
+        'at character ${e.position}';
+```
+
 ### Mocks and implementations that no longer compile
 
 `AtClient` gained `atKeysIo`, `connection` and `ensureReachable`, and
@@ -321,7 +342,7 @@ Future<AtClient> openFromKeyfile() {
       preference: preference,
       storage: CliKeys.storageFor('@alice',
           program: 'my_app', path: 'storage/hive'),
-      lookUps: secureSocketLookUps(),
+      lookUps: lookUpsFor(preference.rootDomain),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
 }
