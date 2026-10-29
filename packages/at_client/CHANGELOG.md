@@ -13,6 +13,9 @@
 - fix: a read that lacks a namespace key's private goes to the atServer only
   for a key this atSign has published, with one request for it at a time,
   and not at all under `PqStartupGates.inert()` or with `askOnReadMiss` off.
+- feat: namespace-key rotation follows the atServer's `lastKeyHolderRevokedAt`
+  where it answers one, so a revocation of an enrollment that never held a key
+  package no longer triggers a rotation.
 - feat: an enrollment with a key package holds a namespace key from the
   moment it is published. Only such a client mints one; on the atSign's own
   credential, `ensureReachable` answers `AtReachability.noKeyPackage`.

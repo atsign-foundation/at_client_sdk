@@ -3799,6 +3799,14 @@ is where its missing lever lives.
     at the two points
     [UC-A5.5](#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)
     names;
+  - **where the `enroll:infons` answer also carries `lastKeyHolderRevokedAt`,
+    that is the revocation moment the client compares**: the latest revocation
+    of an enrollment granted the namespace whose record has ever carried a key
+    package, since only those are conveyed its private. A null there means no
+    such revocation, not a missing answer; an answer without the key, from an
+    atServer that does not serve it, is read from `lastRevokedAt`; and a value
+    that is not a timestamp is refused, as `lastRevokedAt`'s is. So revoking an
+    enrollment that never held a key package owes no rotation;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
     start or at the next content key it conveys to a namespace key **this

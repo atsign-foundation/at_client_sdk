@@ -98,8 +98,14 @@ abstract class EnrollmentDirectory {
     Set<String> excludeEnrollmentIds = const {},
   });
 
-  /// The latest moment a revocation touched an enrollment granted [namespace],
-  /// null when none ever has.
+  /// The latest moment a revocation touched an enrollment granted [namespace]
+  /// that could hold its namespace key, null when none ever has.
+  ///
+  /// Read from the atServer's `lastKeyHolderRevokedAt` where it answers one,
+  /// which counts only enrollments whose record has ever carried a key
+  /// package, since only those are conveyed a namespace key's private; null
+  /// there means none. An atServer that does not answer it is read from
+  /// `lastRevokedAt`, which counts every revocation.
   ///
   /// Stamped by the atServer, so it is comparable with the atServer's stamp on
   /// a record and with nothing a client computed. It can move **backwards** —
@@ -200,14 +206,19 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       throw AtValueException('enroll:infons for $namespace returned a '
           '${decoded.runtimeType} where a map of namespace facts was expected');
     }
-    final lastRevokedAt = decoded['lastRevokedAt'];
-    if (lastRevokedAt == null) return null;
-    if (lastRevokedAt is! String) {
+    // NOTE: a present key with a null value is an answer, so only an absent
+    // key falls back.
+    final field = decoded.containsKey('lastKeyHolderRevokedAt')
+        ? 'lastKeyHolderRevokedAt'
+        : 'lastRevokedAt';
+    final moment = decoded[field];
+    if (moment == null) return null;
+    if (moment is! String) {
       throw AtValueException('enroll:infons for $namespace answered with a '
-          '${lastRevokedAt.runtimeType} lastRevokedAt where an ISO-8601 '
-          'timestamp was expected');
+          '${moment.runtimeType} $field where an ISO-8601 timestamp was '
+          'expected');
     }
-    return DateTime.parse(lastRevokedAt).toUtc();
+    return DateTime.parse(moment).toUtc();
   }
 
   /// The key package inside [advertised], if its APKAM signature checks out as
