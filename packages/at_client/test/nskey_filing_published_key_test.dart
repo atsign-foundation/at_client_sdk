@@ -14,6 +14,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
 import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
+import 'test_utils/nskey_generation.dart';
 
 /// A bare mock, shadowing the shared one whose concrete `getPreferences()`
 /// cannot be stubbed.
@@ -111,6 +112,12 @@ void main() {
     return (kid: kid, seed: base64Encode(seed!.bytes));
   }
 
+  /// [seed] as it arrives, conveyed under [kid].
+  Secret conveyedAs(String kid, Uint8List seed) => Secret(
+      namespace: namespace,
+      name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+      value: base64Encode(seed));
+
   /// The filings a client builds that an arriving private reaches, each over
   /// [keys] as the client's key source.
   final builders =
@@ -160,17 +167,16 @@ void main() {
         await published(c);
         final keys = await emptyKeys();
         final filing = build(c, keys);
-        final earlier = Uint8List.fromList(
-            List<int>.generate(64, (_) => Random.secure().nextInt(256)));
+        final earlier = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
 
         final stored = await filing.file(Secret(
             namespace: namespace,
-            name: '${NskeyPrivateFiling.secretNamePrefix}kid-earlier',
-            value: base64Encode(earlier)));
+            name: '${NskeyPrivateFiling.secretNamePrefix}${earlier.kid}',
+            value: base64Encode(earlier.seed)));
 
         expect(stored, isTrue);
         final material = (await keys.read(atSign)).getAtSignKey(
-            NskeyPrivateFiling.keyIdFor(namespace, 'kid-earlier'),
+            NskeyPrivateFiling.keyIdFor(namespace, earlier.kid),
             CryptographicMaterialRole.privateDecapsulation);
         expect(SecretSharingAlgos.keyAlgoForMaterial(material!.algorithm),
             SecretSharingAlgos.mlKem1024);
@@ -195,6 +201,65 @@ void main() {
                 'this client believing it can read the namespace');
         expect(await filing.readSeed(namespace, conveyed.kid), isNull);
       });
+
+      test(
+          'with nothing published under its kid, refuses a private whose seed '
+          'derives another kid, and files the real one after it', () async {
+        final c = client();
+        final keys = await emptyKeys();
+        final filing = build(c, keys);
+        final generation = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
+        final wrong = Uint8List.fromList(
+            List<int>.generate(64, (_) => Random.secure().nextInt(256)));
+
+        expect(await filing.file(conveyedAs(generation.kid, wrong)), isFalse,
+            reason: 'nothing is published yet, and the seed is not the '
+                'generation its kid names');
+        expect(await filing.file(conveyedAs(generation.kid, generation.seed)),
+            isTrue,
+            reason: 'the refusal kept nothing, so the real private files');
+        expect((await filing.readSeed(namespace, generation.kid))!.bytes,
+            generation.seed);
+      });
+
+      test(
+          'with nothing published under its kid, refuses a seed of one KEM '
+          'filed under the kid of another', () async {
+        final c = client();
+        final filing = build(c, await emptyKeys());
+        final mlKem = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
+        final xWing = await nskeyGeneration(SecretSharingAlgos.xWing);
+
+        expect(await filing.file(conveyedAs(mlKem.kid, xWing.seed)), isFalse);
+        expect(await filing.file(conveyedAs(xWing.kid, xWing.seed)), isTrue,
+            reason: 'the control: the same seed files under its own kid');
+      });
     });
   }
+
+  test(
+      'after a refused seed and the real one filed before the publish, an own '
+      'write seals to the real public half', () async {
+    final c = client();
+    final keys = await emptyKeys();
+    when(() => c.atKeysIo).thenReturn(keys);
+    final ring = PublishedNskeyKeyRing(c);
+    final generation = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
+    final wrong = Uint8List.fromList(
+        List<int>.generate(64, (_) => Random.secure().nextInt(256)));
+
+    expect(await ring.privateFiling!.file(conveyedAs(generation.kid, wrong)),
+        isFalse);
+    expect(
+        await ring.privateFiling!
+            .file(conveyedAs(generation.kid, generation.seed)),
+        isTrue);
+
+    final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+    final real = (await kem.keyPairFromSeed(generation.seed)).publicKey;
+    final held = await ring.heldPublic(atSign, namespace, generation.kid);
+    expect(held?.pubBytes, real,
+        reason: 'an own write seals to the public half the held private '
+            'derives, which is the real generation\'s');
+  });
 }

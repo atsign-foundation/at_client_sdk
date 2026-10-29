@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/nskey_generation.dart';
 import 'test_utils/recorded_logs.dart';
 
 /// What a ring does when it needs an own namespace-key private it does not
@@ -36,11 +37,10 @@ void main() {
     return NskeyPrivateFiling(keysIo: io, atSign: alice);
   }
 
-  Secret conveyed(String kid) => Secret(
+  Secret conveyed(({String kid, Uint8List seed}) generation) => Secret(
       namespace: namespace,
-      name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-      value: base64Encode(
-          SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!.newSeed()));
+      name: '${NskeyPrivateFiling.secretNamePrefix}${generation.kid}',
+      value: base64Encode(generation.seed));
 
   group('Given an own generation whose private this enrollment does not hold',
       () {
@@ -48,17 +48,19 @@ void main() {
         'when a conveyance record for it is waiting, then the fetch files it '
         'and nothing is asked', () async {
       final privates = await filing();
+      final generation = await nskeyGeneration();
       var fetched = 0;
       final asked = <String>[];
       final ring = PublishedNskeyKeyRing(client(),
           privateFiling: privates,
           fetchConveyance: () async {
             fetched++;
-            await privates.file(conveyed('kid1'));
+            await privates.file(conveyed(generation));
           },
           requestConveyance: (ns, name) async => asked.add(name));
 
-      expect(await ring.privateHalf(alice, namespace, 'kid1'), isNotNull,
+      expect(
+          await ring.privateHalf(alice, namespace, generation.kid), isNotNull,
           reason: 'the record was on the atServer, so a write needs no other '
               'enrollment to be online');
       await pumpEventQueue();
@@ -83,17 +85,18 @@ void main() {
 
     test('when two misses come at once, then one fetch serves both', () async {
       final privates = await filing();
+      final generation = await nskeyGeneration();
       final arrived = Completer<void>();
       var fetched = 0;
       final ring = PublishedNskeyKeyRing(client(), privateFiling: privates,
           fetchConveyance: () async {
         fetched++;
         await arrived.future;
-        await privates.file(conveyed('kid1'));
+        await privates.file(conveyed(generation));
       }, requestConveyance: (ns, name) async {});
 
-      final first = ring.privateHalf(alice, namespace, 'kid1');
-      final second = ring.privateHalf(alice, namespace, 'kid1');
+      final first = ring.privateHalf(alice, namespace, generation.kid);
+      final second = ring.privateHalf(alice, namespace, generation.kid);
       await pumpEventQueue();
       arrived.complete();
 

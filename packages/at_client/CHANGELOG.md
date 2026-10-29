@@ -19,6 +19,8 @@
   mints and publishes a fresh one.
 - fix: a read refuses a record whose metadata names a namespace or key id
   that no atKey can carry.
+- fix: a namespace key's private that arrives before its generation is
+  published is kept only if it is that generation's.
 - fix: `getApkamPublicKey`, and so verifying a signature, refuses a signer
   that is not an enrollment id with `AtSigningVerificationException`, and an
   envelope sent through a namespace no atKey can carry is not delivered.

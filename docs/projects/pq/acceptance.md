@@ -1018,6 +1018,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   a retired private still opens what was sealed to it.
 - **Then:** a minter whose own entry carries no verified key package mints nothing and
   says why, and `ensureReachable` answers `AtReachability.noKeyPackage`.
+- **Then:** a receiver files a conveyed private whose generation is not yet published only
+  when its seed derives the kid it was conveyed under; any other seed is refused, so the
+  real one, conveyed later, is filed.
 - **Then, for the signing root:** a fully privileged enrollment that mints the root
   pushes its private, once the root is published, to every other approved, fully
   privileged enrollment carrying a verified key package; it skips one with none, names
@@ -1032,6 +1035,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   ([UC-B5.4](#124-uc-b54--two-enrollments-race-to-mint-a-namespaces-nskey)).
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
   `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
+  `nskey_filing_published_key_test.dart`,
   `seeding_files_private_test.dart` and `pq_signing_root_test.dart`; live,
   `nskey_seeding_live_test.dart` for a client on the atSign's own credential and
   `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock. The root

@@ -90,7 +90,7 @@ const unprovableClauses = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 303;
+const provenClauseCount = 304;
 
 /// See [provenClauseCount].
 const serverProvenClauseCount = 127;

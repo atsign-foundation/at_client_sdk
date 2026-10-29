@@ -9,8 +9,7 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart'
-    show MlDsa65PureDartAlgo, RsaKeyPair, XWingKeyPair;
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo, RsaKeyPair;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -36,6 +35,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/nskey_generation.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -503,14 +503,14 @@ void main() {
         privilege: _FakePrivilege(true),
         sweepUnanchoredEnrollments: () async => 0,
       );
-      final pair = await XWingKeyPair.generate();
+      final generation = await nskeyGeneration();
 
       await bootstrap.sharing.fileReceivedSecret!(Secret(
           namespace: 'wavi',
-          name: '${NskeyPrivateFiling.secretNamePrefix}kid-1',
-          value: base64Encode(pair.privateKeyBytes)));
+          name: '${NskeyPrivateFiling.secretNamePrefix}${generation.kid}',
+          value: base64Encode(generation.seed)));
 
-      expect(await bootstrap.filing!.read('wavi', 'kid-1'), isNotNull,
+      expect(await bootstrap.filing!.read('wavi', generation.kid), isNotNull,
           reason: 'a sweep deletes the envelope once handled, so what it '
               'carried has to be on disk by then');
     });

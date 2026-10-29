@@ -814,6 +814,27 @@ void main() {
             'enrollment listed after the failure still receives it',
         clauses: ['pushes its private, once the root is published'],
       );
+      provenIn(
+        'packages/at_client/test/nskey_filing_published_key_test.dart',
+        'with nothing published under its kid, refuses a private whose seed '
+            'derives another kid, and files the real one after it',
+        proves: 'for the start-up bootstrap\'s, a key ring\'s and a '
+            'rotation\'s filing, with nothing published, a seed that does not '
+            'derive its kid is refused and the real one conveyed after it is '
+            'filed, and a seed of one KEM under the other\'s kid is refused. '
+            'Mutation-proven: accepting any seed with nothing published '
+            'reddens every arm',
+        clauses: ['derives the kid it was conveyed under'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_filing_published_key_test.dart',
+        'after a refused seed and the real one filed before the publish, an '
+            'own write seals to the real public half',
+        proves: 'heldPublic, which an own write seals to, answers the real '
+            'generation\'s public half after a refused seed; with the refusal '
+            'removed it answers nothing',
+        clauses: ['derives the kid it was conveyed under'],
+      );
     });
   });
 }

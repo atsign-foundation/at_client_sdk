@@ -178,7 +178,8 @@ class NskeyPrivateFiling {
   }
 
   /// Files one arriving [secret] as this atSign's nskey private for its
-  /// namespace. Returns whether it was stored.
+  /// namespace. Returns whether it was stored, which it is only when its seed
+  /// derives the generation its kid names.
   Future<bool> file(Secret secret) async {
     final nskeyKid = secret.name.substring(secretNamePrefix.length);
     if (nskeyKid.isEmpty) {
@@ -237,18 +238,15 @@ class NskeyPrivateFiling {
     }
   }
 
-  /// Whether [seed] derives the public half published for
-  /// `(namespace, nskeyKid)`. True when nothing was published to compare
-  /// against — the check is secondary, and refusing everything for want of it
-  /// would be worse than not making it.
+  /// Whether [seed] derives the generation `(namespace, nskeyKid)`: the public
+  /// half published under that kid or, with nothing published there, a public
+  /// half whose kid is [nskeyKid].
   Future<bool> _corresponds(String namespace, String nskeyKid, NskeySeed seed,
       String keyAlgo, PackageKey? advertised) async {
-    if (advertised == null) return true;
-
     final kem = SecretSharingAlgos.kemFor(keyAlgo);
     if (kem == null) {
       _logger.severe('Refusing the nskey seed for $namespace:$nskeyKid — it '
-          'is advertised as "$keyAlgo", which this build cannot expand');
+          'is a "$keyAlgo" seed, which this build cannot expand');
       return false;
     }
 
@@ -258,6 +256,16 @@ class NskeyPrivateFiling {
     } on ArgumentError catch (e) {
       _logger.severe('Refusing the nskey seed for $namespace:$nskeyKid — it is '
           'not a valid $keyAlgo seed: $e');
+      return false;
+    }
+    if (advertised == null) {
+      final derivedKid = PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc, alg: keyAlgo, pub: derived)
+          .kid;
+      if (derivedKid == nskeyKid) return true;
+      _logger.severe('Refusing the nskey private for $namespace:$nskeyKid — '
+          'nothing is published under that kid, and the seed derives the kid '
+          '$derivedKid, so it is not that generation\'s');
       return false;
     }
     if (_sameBytes(derived, advertised.pubBytes)) return true;
