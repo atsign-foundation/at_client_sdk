@@ -141,7 +141,12 @@ Future<bool> _pkam(
   // NOTE: typed material this build cannot sign with is refused, never
   // signed for from the flat fields.
   final keyPair = keys.authenticationKeyPairFor(enrollmentId);
-  final signingAlgo = keyPair?.algorithm ?? SigningAlgoType.rsa2048;
+  if (keyPair == null) {
+    throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
+        '${enrollmentId ?? "this atSign's own credential"}, so there is '
+        'nothing to sign the PKAM challenge with');
+  }
+  final signingAlgo = keyPair.algorithm;
   const hashingAlgo = HashingAlgoType.sha256;
 
   var fromResponse = await executor.sendSync((FromVerbBuilder()
@@ -154,17 +159,9 @@ Future<bool> _pkam(
   fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
   fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-  final String signature;
-  if (keyPair != null) {
-    signature = keyPair.algorithm == SigningAlgoType.rsa2048
-        ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
-        : signPkamChallenge(keyPair, fromResponse);
-  } else {
-    throw AtKeyNotFoundException(
-        'AtKeys holds no authentication keypair for '
-        '${enrollmentId ?? "this atSign's own credential"}, so there is '
-        'nothing to sign the PKAM challenge with');
-  }
+  final signature = keyPair.algorithm == SigningAlgoType.rsa2048
+      ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
+      : signPkamChallenge(keyPair, fromResponse);
 
   final pkamResponse = await executor.sendSync((PkamVerbBuilder()
         ..signingAlgo = signingAlgo.name

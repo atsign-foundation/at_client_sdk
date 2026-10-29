@@ -141,6 +141,9 @@ void main() {
 
       await expectLater(() => authenticatorFor(io, atSign)(executor),
           throwsA(isA<AtKeyNotFoundException>()));
+      expect(executor.sent, isEmpty,
+          reason: 'with nothing to sign, no from: goes out to ask for a '
+              'challenge');
     });
 
     test(

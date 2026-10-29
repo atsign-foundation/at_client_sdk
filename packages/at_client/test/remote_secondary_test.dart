@@ -6,6 +6,8 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// Records every command an authenticator sends, answering each with an empty
 /// response so the authenticator stops after `from:`.
@@ -126,7 +128,8 @@ void main() {
     final shapes = <String, RemoteSecondary Function()>{
       'atKeysIo': () => RemoteSecondary(atSign, preference(),
           lookUps: secureSocketLookUps(),
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, AtKeys())),
+          atKeysIo:
+              keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null))),
       'privateKey': () => RemoteSecondary(
           atSign, preference()..privateKey = 'unused',
           lookUps: secureSocketLookUps()),
