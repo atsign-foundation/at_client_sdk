@@ -7,6 +7,8 @@ import 'dart:math';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/connection/base_connection.dart'
+    show requireOneLine;
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_utils/at_logger.dart';
@@ -494,6 +496,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       _unlessStopped(() => _processCommand(command, auth: auth));
 
   Future<String> _processCommand(String command, {bool auth = false}) async {
+    // NOTE: outside the try, whose finally releases a mutex this has not
+    // acquired yet.
+    requireOneLine(command);
     try {
       await requestResponseMutex.acquire();
 

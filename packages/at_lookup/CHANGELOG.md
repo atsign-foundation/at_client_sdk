@@ -20,8 +20,11 @@
 - fix: in a browser, the atDirectory is asked for the atSign in its canonical
   form, and an answer longer than 512 bytes, or that is not a host name and a
   port, is refused.
-- fix: a command holding a line feed before its end is refused with
-  `IllegalArgumentException`, and nothing is sent.
+- fix: a command holding a line feed before its end is refused, and none of
+  it is sent. `executeCommand` throws `IllegalArgumentException`, and
+  `executeVerb` an `AtLookUpException` with code AT0022, before the lookup
+  finds, connects to or logs in to the atServer; `AtCommandExecutor.sendSync`
+  and `AtConnection.write` throw `IllegalArgumentException`.
 - fix: a connection lost while authenticating no longer reads as refused
   credentials. The lookup authenticates once more on a fresh connection, and
   a second loss fails with `ConnectionInvalidException`.
@@ -129,6 +132,11 @@
   (AT0014).
 - fix: `lookup(..., verifyData: true)` returns the value only when its
   signature verifies against the sharer's public key.
+- fix: a command holding a line feed before its end is refused, and none of
+  it is sent. `executeCommand` throws `IllegalArgumentException`, and
+  `executeVerb` an `AtLookUpException` with code AT0022, before connecting or
+  authenticating; `sendSync` and a connection's `write` throw
+  `IllegalArgumentException`.
 - perf: a response is read as soon as it arrives, rather than up to 10ms
   later.
 - chore: opening and closing a connection log at finer rather than info.
