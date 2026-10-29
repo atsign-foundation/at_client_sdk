@@ -5,9 +5,11 @@ Feature: A keyfile that is not a JSON object says why and where, and none of its
   release candidates threw still catches it. It carries the JSON parser's
   reason and the 1-based character where the parser stopped, and nothing of
   the file's text. A passphrase-protected keyfile whose decrypted content
-  does not parse is reported as a decryption failure, as before, since an
-  incorrect passphrase usually leaves exactly that. at_client re-exports
-  the exception, so an app built on either platform package names it.
+  does not parse is reported as a decryption failure, as before: the cipher
+  carries no authentication, so an incorrect passphrase can decrypt past the
+  padding check to text that does not parse, and that is not a damaged
+  keyfile. at_client re-exports the exception, so an app built on either
+  platform package names it.
 
   Races: none arise; a read parses one snapshot of the file.
   Replay: none arise; nothing is sent or checked.

@@ -122,8 +122,8 @@ void main() {
     expect('$error', holdsNoneOf(plaintext),
         reason: 'the error holds none of the decrypted text');
     expect(error, isA<AtDecryptionException>(),
-        reason: 'an incorrect passphrase usually leaves text that does not '
-            'parse, so this stays a decryption failure');
+        reason: 'an incorrect passphrase can decrypt past the padding check '
+            'to text that does not parse, so this stays a decryption failure');
     expect('$error', contains('is not valid JSON'));
     expect('$error', contains('(at character ${plaintext.length + 1})'));
   });
