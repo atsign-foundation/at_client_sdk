@@ -14348,6 +14348,10 @@ mints and publishes a namespace key and, fully privileged, the atSign's signing
 root, and retrofits into an ML-DSA enrollment, all at startup, on an upgrade
 that changes no line of the app.
 
+**Note, 2026-10-29:** that machinery left `@experimental` in 4.0.0 itself
+(gkc: "the post-quantum cryptography is going GA"), and 4.0.0 still ships
+`legacy`.
+
 **The rationale is gkc's:** from 3.x a developer can choose a different posture,
 and the default stays `legacy` faithfully, so that anything the project breaks can
 be debugged with no post-quantum machinery in the picture. It is why

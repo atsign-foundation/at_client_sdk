@@ -1496,7 +1496,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 The two levers UC-A5.1 names are fired by *someone*, and that someone is the
 application: `CryptoConfig` carries a `CkRotationPolicy` and an
-`NskeyRotationPolicy`, both `@experimental` but public. The SDK asks rather than
+`NskeyRotationPolicy`, both public. The SDK asks rather than
 carrying a schedule, because a namespace holding a chat history and one holding
 a device's last-seen timestamp want different answers and only the application
 knows which is which. Design in
