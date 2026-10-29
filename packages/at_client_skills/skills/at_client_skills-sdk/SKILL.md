@@ -429,7 +429,8 @@ await client.connection.attempt();                  // try again now
 - **offline** (`unreachable`, `noAtServer`): the client serves its local store;
   writes queue and sync when the atServer is reached.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
-  `enrollmentNotApproved`): the atServer rejected the keys — the app decides.
+  `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
+  — the app decides.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
   serve. Keys holding only a pending enrollment throw

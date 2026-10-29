@@ -129,7 +129,7 @@
     {
       "id": 26,
       "prompt": "How do I know whether my AtClient is online, and what happens if the device has no network when the app starts?",
-      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login."
+      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved, enrollmentDenied) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login."
     }
   ]
 }

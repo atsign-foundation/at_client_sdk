@@ -173,7 +173,7 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30),
 | `offline` | `unreachable`                                                     | No network, or the atDirectory / atServer did not answer; local store served           |
 | `offline` | `noAtServer`                                                      | The atDirectory answered: this atSign has no atServer (not activated, or reset)        |
 | `offline` | `stopped`                                                         | `stop()` ran; the last change emitted                                                  |
-| `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
+| `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `enrollmentDenied`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
 
 Every verb the client runs on its own connection keeps the state current, so
 an app rarely needs `attempt()`; it subscribes to `changes` and renders.

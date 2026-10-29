@@ -252,7 +252,8 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   is reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
   usually shows an indicator rather than blocking.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
-  `enrollmentNotApproved`) — the atServer rejected the keys. Ask the user.
+  `enrollmentNotApproved`, `enrollmentDenied`) — the atServer rejected the
+  keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
 

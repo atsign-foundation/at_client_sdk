@@ -5,6 +5,7 @@
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.
+- A `refused` connection lists `enrollmentDenied` among its causes.
 - Multiple instances of one agent take their lock with
   `tryAcquireServerMutex`.
 - Storage: each backend comes from its own import, `HiveAtClientStorage` from
