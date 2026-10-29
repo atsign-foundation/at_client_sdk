@@ -22,6 +22,8 @@
 - fix: a connection lost while authenticating no longer reads as refused
   credentials. The lookup authenticates once more on a fresh connection, and
   a second loss fails with `ConnectionInvalidException`.
+- fix: a lost connection fails a verb with `AT0004`, as other socket failures
+  do.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
   `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and

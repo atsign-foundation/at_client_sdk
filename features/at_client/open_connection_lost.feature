@@ -27,4 +27,4 @@ Feature: Opening a client on a connection lost during authentication
   Scenario: A connection lost during authentication classifies as one lost during a read
     Given an atServer that closes each connection during authentication, and one that closes the connection instead of answering a command
     When a command fails on each, through executeVerb and through executeCommand
-    Then the two failures through each route classify alike, and none as a refusal
+    Then every failure, through either route, classifies offline and unreachable, and none as a refusal

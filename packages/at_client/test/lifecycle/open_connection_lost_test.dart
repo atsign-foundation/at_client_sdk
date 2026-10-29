@@ -150,8 +150,11 @@ void main() {
       expect(states.any((s) => s?.isRefused ?? false), isFalse,
           reason: '$pair -> $states');
     }
-    expect(classifyConnectionFailure(throughCommand.first)?.isOffline, isTrue,
-        reason: '${throughCommand.first}');
+    for (final failure in [...throughVerb, ...throughCommand]) {
+      final state = classifyConnectionFailure(failure);
+      expect(state?.isOffline, isTrue, reason: '$failure -> $state');
+      expect(state?.cause, AtConnectionCause.unreachable);
+    }
   });
 }
 

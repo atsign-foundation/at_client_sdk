@@ -175,6 +175,25 @@ void main() {
           AtConnectionCause.unreachable,
           'an empty response is nothing answering');
     });
+
+    test('a connection lost during a read or an authentication', () {
+      const lostRead = 'The connection went away before a response arrived';
+      const lostAuthentication = 'The connection this authentication began '
+          'on closed before it finished, so the rest of it is sent on no '
+          'other connection';
+      for (final text in [lostRead, lostAuthentication]) {
+        expectClassified(
+            ConnectionInvalidException(text),
+            AtConnectionOutcome.offline,
+            AtConnectionCause.unreachable,
+            'as pkamAuthenticate and executeCommand raise it');
+        expectClassified(
+            AtLookUpException('AT0004', 'Exception: $text'),
+            AtConnectionOutcome.offline,
+            AtConnectionCause.unreachable,
+            'as executeVerb wraps it, with a socket error\'s code');
+      }
+    });
   });
 
   group('the atServer answering is online, whatever it said', () {

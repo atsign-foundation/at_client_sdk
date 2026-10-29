@@ -30,7 +30,7 @@ Feature: An authentication whose connection is lost starts again on a fresh one
   Scenario: A second lost connection fails as a lost connection, not a refusal
     Given a lookup whose atServer closes every connection before the authenticator sends anything
     When the lookup authenticates, alone or for a verb
-    Then after one fresh connection it fails with ConnectionInvalidException, or for a verb with an AtLookUpException whose code is not AT0401
+    Then after one fresh connection it fails with ConnectionInvalidException, or for a verb with an AtLookUpException whose code is AT0004, a socket error's, not AT0401
 
   Scenario: A refused authentication is not run again
     Given a lookup whose atServer refuses the answer

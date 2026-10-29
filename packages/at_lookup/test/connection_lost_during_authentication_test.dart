@@ -108,7 +108,7 @@ void main() {
     await expectLater(
         atLookup.executeVerb(ScanVerbBuilder()..auth = true),
         throwsA(isA<AtLookUpException>()
-            .having((e) => e.errorCode, 'errorCode', isNot('AT0401'))));
+            .having((e) => e.errorCode, 'errorCode', 'AT0004')));
     expect(server.connections, hasLength(4));
     expect(server.connections.every((c) => c.written.isEmpty), isTrue);
     await atLookup.stop();

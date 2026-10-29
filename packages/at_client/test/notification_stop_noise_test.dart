@@ -80,7 +80,7 @@ void main() {
   group('the status poll nobody awaits', () {
     test('a failure reaches onError and the log, not the zone', () async {
       when(() => atClient.notifyStatus(any())).thenThrow(AtLookUpException(
-          'AT0014',
+          'AT0004',
           'The connection was closed by this client before a response '
               'arrived'));
       NotificationResult? errored;
