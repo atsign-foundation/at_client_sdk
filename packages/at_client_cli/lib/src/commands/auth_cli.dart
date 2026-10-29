@@ -260,7 +260,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await setSpp(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -278,7 +278,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await outputOtp(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -292,7 +292,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // - setting spp, generating otp, etc
         await interactive(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -302,7 +302,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.list:
         await list(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -312,7 +312,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.fetch:
         await fetch(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -323,7 +323,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.approve:
         await approve(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -333,7 +333,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.auto:
         await autoApprove(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -343,7 +343,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.deny:
         await deny(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -354,7 +354,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.revoke:
         await revoke(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -373,7 +373,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.unrevoke:
         await unrevoke(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -384,7 +384,7 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.delete:
         await deleteEnrollment(
             commandArgResults,
-            await _commandClient(
+            await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -1359,21 +1359,30 @@ const String commandNamespace = 'at_activate';
 SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
     CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort);
 
-/// A client for the commands that only read or administer an atSign — `otp`,
-/// `list`, `spp`, `approve` and the rest — opened from its keyfile, syncing
-/// nothing, on a store of this run's own that [deleteStorage] removes, and
-/// made the manager's current client.
+/// A client for a command that reads or administers an atSign, as
+/// at_activate's `otp`, `list` and `approve` do: opened from the keyfile at
+/// [atKeysFilePath] (by default `~/.atsign/keys/<atSign>_key.atKeys`, opened
+/// with [passPhrase] when it is encrypted), syncing nothing, and made the
+/// manager's current client.
 ///
-/// The connection is given [maxConnectAttempts] tries, three seconds apart,
-/// to come online; a client the atServer refuses, or that is still offline
-/// after that, is stopped and an [UnAuthenticatedException] says so.
+/// [rootDomain] is the atDirectory as `host:port`, `root.atsign.org` when
+/// null; one of the form `proxy:host:port` sends every connection through
+/// that proxy, as [lookUpsFor] does. The connection is given
+/// [maxConnectAttempts] tries, three seconds apart, to come online; a client
+/// the atServer refuses, or that is still offline after that, is stopped and
+/// an [UnAuthenticatedException] says so.
 ///
-/// [waitForPqStartup] holds the command until the client's post-quantum
-/// startup has finished, bounded by [startupTailBound]; a command that reads
-/// what that startup leaves behind needs it, one that sends a single verb and
-/// exits does not. [posture] is how far into the post-quantum rollout this
-/// invocation runs; null means at_client's default.
-Future<AtClient> _commandClient(
+/// [waitForPqStartup] holds the call until the client's post-quantum startup
+/// has finished, for at most 30 seconds; a command that reads what that
+/// startup leaves behind needs it, one that sends a single verb and exits
+/// does not. [posture] is how far into the post-quantum rollout the client
+/// runs; null means at_client's default.
+///
+/// Each call opens a new store, at
+/// `~/.atsign/storage/<atSign>/at_activate/<milliseconds>` (under `TEMP` on
+/// Windows), which at_activate deletes when its command ends, except on
+/// Windows, and nothing else deletes.
+Future<AtClient> createAtClient(
     {required String atSign,
     String? atKeysFilePath,
     String? rootDomain,

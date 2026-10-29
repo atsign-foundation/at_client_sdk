@@ -75,24 +75,30 @@ at_client_sdk, more than the draft's count, which walked fewer
 repositories. This replaces the client lifecycle's
 [ruling 6](../client-lifecycle/decisions.md#6-at_onboarding_cli-keeps-a-three-member-atonboardingservice).
 
-## 6. Four helpers go with no shim
+## 6. Three helpers go with no shim, and `createAtClient` stays
 
-`AMENDED` 2026-10-28. `MySyncProgressListener`, `AuthKeyType`,
-`OnboardingUtil` and `createAtClient` leave at_client_cli's API in 1.0.0.
-`OnboardingUtil`'s registrar calls stay as at_client_cli's private code behind
+`AMENDED` 2026-10-29. `MySyncProgressListener`, `AuthKeyType` and
+`OnboardingUtil` leave at_client_cli's API in 1.0.0. `createAtClient` stays,
+with at_onboarding_cli 2.0.0-rc8's parameters: it opens the client
+at_activate's commands use, from a keyfile, syncing nothing, on a store of its
+own. `OnboardingUtil`'s registrar calls stay as at_client_cli's private code behind
 `at_register` and `onboard`'s email path, their only users: they are the
 free-atSign v3 API (`get-free-atsign`, `register-person`, `validate-person`
 and the activation OTP pair), and at_auth's `RegistrarService` makes none of
 the first three, being the v4 API with a required API key. They move to
 at_auth if the free-atSign flow is wanted outside the CLI.
 
-Why: outside this repository the four have 2, 0, 0 and 1 callers, and only
+Why: outside this repository the three have 2, 0 and 0 callers, and only
 one of those programs (atGettingStarted, one four-line
 `SyncProgressListener`) would not be changing code at the bump anyway.
-Rejected: keeping them deprecated in 1.0.0, which needs a 2.0.0 to remove
-them; porting the tools to `RegistrarService`, which needs an API key and has
-no free-atSign flow; and moving the v3 calls into at_auth now, public API for
-one caller.
+`createAtClient`'s one caller, NoPorts' `issue_keys`, wants exactly
+at_activate's client, which neither `CLIBase` (built from command-line flags)
+nor `Atsign.open` (every argument wired by hand) gives in one call.
+Rejected: keeping the three deprecated in 1.0.0, which needs a 2.0.0 to
+remove them; porting the tools to `RegistrarService`, which needs an API key
+and has no free-atSign flow; moving the v3 calls into at_auth now, public API
+for one caller; and dropping `createAtClient` too, which left `issue_keys`
+copying at_activate's private client.
 
 ## 7. The keys-and-store conventions are a small type, `CliKeys`
 

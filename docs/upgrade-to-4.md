@@ -43,9 +43,10 @@ tools with `dart pub global activate at_client_cli`.
 
 at_onboarding_cli 2.0.0 and at_cli_commons 4.0.0 re-export at_client_cli, so
 bumping either alone compiles in the meantime for a program that uses only
-what at_client_cli keeps (`CLIBase` and the path helpers). The analyzer does
-not flag an import of either deprecated library, so change the import too. A program on `AtOnboardingService`, `AtOnboardingPreference`,
-`createAtClient` or `OnboardingUtil` changes code either way:
+what at_client_cli keeps (`CLIBase`, `createAtClient` and the path helpers).
+The analyzer does not flag an import of either deprecated library, so change
+the import too. A program on `AtOnboardingService`, `AtOnboardingPreference`
+or `OnboardingUtil` changes code either way:
 [section 3](#3-a-command-line-program-at_client_cli) says to what.
 
 ### A Flutter app
@@ -351,6 +352,18 @@ Future<AtClient> openWhenReachable(List<String> args) async {
 }
 ```
 
+**`createAtClient` is unchanged.** It takes at_onboarding_cli 2.0.0-rc8's
+parameters and opens the client at_activate's commands use: from the keyfile,
+syncing nothing, on a store of its own.
+
+```dart after-cli
+Future<AtClient> commandClient() => createAtClient(
+    atSign: '@alice',
+    atKeysFilePath: 'keys/@alice_key.atKeys',
+    waitForPqStartup: false,
+    maxConnectAttempts: 3);
+```
+
 **Embedding at_activate** no longer needs a `src/` import:
 
 ```dart after-cli
@@ -366,8 +379,8 @@ Future<void> main(List<String> args) async {
 - [ ] `at_client_cli: ^1.0.0` replaces at_client, at_onboarding_cli,
       at_cli_commons and at_utils in `pubspec.yaml`.
 - [ ] Every SDK import is `package:at_client_cli/at_client_cli.dart`.
-- [ ] `AtOnboardingService` and `createAtClient` calls are `CLIBase` or
-      `Atsign.open` with `CliKeys`.
+- [ ] `AtOnboardingService` calls are `CLIBase` or `Atsign.open` with
+      `CliKeys`; `createAtClient` calls stay as they are.
 - [ ] `CLIBase`'s `preference:`, if passed, is an `AtClientPreference`.
 - [ ] A retry loop around `CLIBase` catches
       `SecondaryServerConnectivityException`, not every exception.

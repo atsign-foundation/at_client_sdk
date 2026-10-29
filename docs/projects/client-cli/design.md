@@ -117,11 +117,15 @@ final client = await Atsign('@alice').open(
         preference.rootDomain, preference.rootPort));
 ```
 
+`createAtClient` stays, with at_onboarding_cli 2.0.0-rc8's parameters: it is
+the client at_activate's commands open, which NoPorts opens too
+([ruling 6](decisions.md#6-three-helpers-go-with-no-shim-and-createatclient-stays)).
+
 What goes, because at_client has it or nobody uses it: the
 `AtOnboardingService` adapter (its three members are `CLIBase` and
-`Atsign.open`), `createAtClient` (a second `CLIBase`), `OnboardingUtil` as
+`Atsign.open`), `OnboardingUtil` as
 API (its free-atSign v3 calls stay private behind `at_register` and `onboard`;
-see [ruling 6](decisions.md#6-four-helpers-go-with-no-shim)), `AuthKeyType`
+see [ruling 6](decisions.md#6-three-helpers-go-with-no-shim-and-createatclient-stays)), `AuthKeyType`
 (the legacy keyfile field names, which at_auth owns), `AtOnboardingException`
 and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `SyncProgressListener` that prints; six files use it, three of them this repo's own examples).
@@ -227,7 +231,7 @@ D3 as 4, D4 as 8, D5 as 5, D6 as 7, D7 as 6 and D8 as 11.
 | D4 | The binaries: keep `at_activate` and `at_register`, or one `at_client_cli` binary with subcommands? | Keep both names; scripts and READMEs across the ecosystem invoke them. The library entry points are what change.                                                            |
 | D5 | Does `AtOnboardingService` survive as a shim member, or end with ruling 6's callers moving?       | End it in the shim generation: the shim re-exports `at_client_cli`, and the adapter's 5 call sites move to `open` or `CLIBase` at the bump; ruling 6 is amended to say so. |
 | D6 | The keys-and-store conventions: a small type (`CliKeys`), or free functions beside `getHomeDirectory`? | A small type with the two builders and the passphrase, so a program has one place to look; the existing free path helpers stay for the 10 files that use them.           |
-| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop them all from the API, and none has a caller a dependency bump cannot fix. `OnboardingUtil`'s v3 calls stay private: `RegistrarService` is v4 and makes none of them. |
+| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop the first three from the API, since none has a caller a dependency bump cannot fix; `createAtClient` stays, with at_onboarding_cli 2.0.0-rc8's parameters (amended 2026-10-29). `OnboardingUtil`'s v3 calls stay private: `RegistrarService` is v4 and makes none of them. |
 | D8 | Where the design and rulings live once ruled                                                       | `docs/projects/client-cli/` with a `decisions.md` in the lifecycle ledger's shape, and a pointer row in the PQ plan's P1 band while it is in flight.                       |
 
 ## 7. Relationship to the other plans

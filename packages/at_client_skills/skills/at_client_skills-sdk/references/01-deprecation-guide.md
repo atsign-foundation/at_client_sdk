@@ -205,7 +205,7 @@ Both packages' code lives in `at_client_cli`. A program depends on
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, `.atClient` | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`        |
 | `AtOnboardingPreference`                                           | `AtClientPreference`; the keyfile is `CliKeys.fileFor(atSign, path:, passPhrase:)` and the store `CliKeys.storageFor(atSign, program:, path:)` |
-| `createAtClient(...)`                                              | `CLIBase`                                                                                |
+| `createAtClient(...)`                                              | Unchanged, from `at_client_cli`: the client at_activate's commands open                  |
 | `OnboardingUtil`                                                   | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign             |
 | `AuthKeyType`                                                      | None: read a keyfile with `CliKeys.fileFor(atSign).read(atSign)`                         |
 | `MySyncProgressListener`                                           | A `SyncProgressListener` of the program's own                                            |

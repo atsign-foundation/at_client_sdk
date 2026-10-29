@@ -8,6 +8,8 @@
 - A CLI program takes its `lookUps:` from at_client_cli's
   `lookUpsFor(rootDomain)`, which routes through a proxy when the root domain
   names one (`SKILL.md`; `references/06`, `15`).
+- `createAtClient` is at_client_cli's, unchanged, not a removed API
+  (`SKILL.md`; `references/01`, `06`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).

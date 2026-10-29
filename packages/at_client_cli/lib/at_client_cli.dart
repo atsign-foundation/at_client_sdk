@@ -1,5 +1,6 @@
 /// The Atsign Protocol for a Dart command-line program, daemon or server:
-/// [CLIBase], which turns the standard flags into an open client, [CliKeys],
+/// [CLIBase], which turns the standard flags into an open client,
+/// [createAtClient], which opens a command's client from a keyfile, [CliKeys],
 /// and the at_activate and at_register tools as [AtActivate] and
 /// [AtRegister]. It re-exports at_client's native API, its storage backends
 /// and mixins, the registrar and the logging handlers, so a program needs no
@@ -24,6 +25,7 @@ export 'package:at_utils/at_utils_io.dart'
 
 export 'src/cli_base.dart';
 export 'src/commands/at_activate.dart';
+export 'src/commands/auth_cli.dart' show createAtClient;
 export 'src/commands/auth_cli_args.dart';
 export 'src/keys/cli_keys.dart';
 export 'src/register/at_register.dart';

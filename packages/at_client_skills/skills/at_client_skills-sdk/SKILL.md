@@ -680,7 +680,7 @@ longer compiles:
 | `AtClientPreference.decryptPackets`, `pathToCerts`, `tlsKeysSavePath`                                                                                        | A `SecureSocketConfig` given to `secureSocketLookUps(config:)` |
 | `atClient.stream(...)`, `sendStreamAck`; `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                                         | `put` or `notify` the value; file transfer belongs in the app |
 | `ConnectivityListener`; `RemoteSecondary.isAvailable()`; `atClient.persistenceBundle`                                                                        | The app's own connectivity package; `checkAtSignServer(lookUp, atSign)`; the `AtClientStorage` the client was given |
-| `AtOnboardingService`, `AtOnboardingPreference`, `createAtClient`, `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener` (at_onboarding_cli, at_cli_commons) | `CLIBase`, or `Atsign(a).open(...)` with `CliKeys` (§16)  |
+| `AtOnboardingService`, `AtOnboardingPreference`, `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener` (at_onboarding_cli, at_cli_commons)                   | `CLIBase`, or `Atsign(a).open(...)` with `CliKeys` (§16)  |
 | `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
 
 **Deprecated, or being retired** — avoid in new code:

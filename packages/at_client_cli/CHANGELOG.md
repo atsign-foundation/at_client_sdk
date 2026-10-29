@@ -15,7 +15,11 @@
 - feat: `lookUpsFor(rootDomain)` gives a program that opens its own client
   the connections `CLIBase` makes, through a proxy when the root domain names
   one (`proxy:host:port`).
-- breaking: `AtOnboardingService`, `AtOnboardingPreference`, `createAtClient`,
+- feat: `createAtClient` opens a command's client from its keyfile, syncing
+  nothing, as at_activate's commands do. It takes at_onboarding_cli
+  2.0.0-rc8's parameters, so a program that called it there compiles
+  unchanged.
+- breaking: `AtOnboardingService`, `AtOnboardingPreference`,
   `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener`,
   `EnrollmentDetails`, `PrintAllArgParserUsage` and the
   `AtOnboardingException` family are not carried over. A program opens its

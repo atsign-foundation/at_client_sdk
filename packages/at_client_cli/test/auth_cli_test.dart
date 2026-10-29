@@ -323,7 +323,7 @@ void postureArgumentTests() {
       // per row.
       final source = File('lib/src/commands/auth_cli.dart').readAsStringSync();
       final calls =
-          RegExp(r'await _commandClient\(').allMatches(source).toList();
+          RegExp(r'await createAtClient\(').allMatches(source).toList();
       expect(calls, isNotEmpty,
           reason: 'if this finds nothing the rest of the row proves nothing');
 
@@ -336,7 +336,7 @@ void postureArgumentTests() {
         }
       }
       expect(without, isEmpty,
-          reason: 'auth_cli.dart lines $without call _commandClient without a '
+          reason: 'auth_cli.dart lines $without call createAtClient without a '
               'posture, so those commands ignore --posture');
     });
 

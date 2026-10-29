@@ -5,10 +5,11 @@
   which now carries its code and its at_activate and at_register tools.
   Depend on at_client_cli; `dart pub global activate at_client_cli` installs
   the tools, and activating this package still does.
-- breaking: `AtOnboardingService`, `AtOnboardingPreference`, `createAtClient`,
+- breaking: `AtOnboardingService`, `AtOnboardingPreference`,
   `OnboardingUtil`, `AuthKeyType`, `EnrollmentDetails` and
   `PrintAllArgParserUsage` are gone; at_client_cli's README names what
-  replaces each.
+  replaces each. `createAtClient` comes through from at_client_cli with the
+  same parameters.
 ## 2.0.0-rc8
 
 - feat: `at_activate list` shows the key expiry each enrollment asked for and

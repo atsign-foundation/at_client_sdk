@@ -97,6 +97,8 @@ it provides:
   `~/.atsign/keys/<atSign>_key.atKeys`) and `CliKeys.storageFor(atSign,
   program:, id:, path:)` (default: the store `CLIBase` opens for that
   namespace), for a program that calls the `Atsign` verbs itself
+- `createAtClient(atSign:, atKeysFilePath:, ...)` — the client at_activate's
+  commands open: from the keyfile, syncing nothing, on a store of its own
 - `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
   for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
   otherwise
@@ -174,8 +176,8 @@ re-export, shown in
 
 **Deprecated.** Their last majors, at_cli_commons 4.0.0 and at_onboarding_cli
 2.0.0, only re-export `at_client_cli`. Add `at_client_cli` instead. Their
-`AtOnboardingService`, `AtOnboardingPreference`, `createAtClient` and
-`OnboardingUtil` are gone; see
+`AtOnboardingService`, `AtOnboardingPreference` and `OnboardingUtil` are
+gone, and `createAtClient` comes from `at_client_cli` unchanged; see
 [01-deprecation-guide.md](01-deprecation-guide.md) for what replaces each.
 
 ---
