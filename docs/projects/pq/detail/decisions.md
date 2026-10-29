@@ -15541,7 +15541,11 @@ Supersedes nothing.
 **Known limit.** A keyfile holding an untagged key package, which only an older keyfile does,
 advertises two packages and holds one once the reconcile files a tagged key beside it, as it does
 when the preference adds an algorithm: the publish names both, and a load returns only the tagged
-set, so the client holds the new key alone. Owed for 4.0.x.
+set, so the client holds the new key alone. Left as it is, since only internal users run the
+post-quantum postures (gkc, 2026-10-29); every submit path files a first key package under its
+enrollment id, and
+[the upgrade guide](../../../upgrade-to-4.md#5-a-keyfile-written-by-a-release-candidate) says
+what a release-candidate keyfile sees.
 
 **Built** in at_client. Proven in-process by `key_package_persistence_test.dart` and
 `pairwise_secret_sharing_test.dart`, and live by `pq_posture_grid_test.dart`'s readback, where a

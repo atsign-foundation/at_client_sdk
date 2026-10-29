@@ -21,6 +21,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/key_package_filing.dart';
 import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -168,6 +169,37 @@ void main() {
     expect(AtClientImpl.holdsLiveClientAs(atSign, legacyId), isFalse,
         reason: 'no legacy client was live, and none is built for it');
 
+    await client.stop();
+  });
+
+  test('a retrofit files its first key package under the new enrollment id',
+      () async {
+    final store = InMemoryAtKeysIo.holding(atSign, legacyKeys());
+    final server = atServer();
+
+    final client = await selfRetrofit(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: store,
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65,
+        storage: hiveStoreAt(atSign, dir.path),
+        atLookUp: server.lookUp);
+
+    final request =
+        server.sent.where((c) => c.startsWith('enroll:request')).single;
+    expectKeyPackageFiledUnder(await store.read(atSign), newId,
+        kid: advertisedKid(request));
     await client.stop();
   });
 

@@ -322,11 +322,10 @@ class KeyPackageMinting with ApkamSigning {
   /// [CryptographicMaterialStatus.dead] material is left out entirely.
   ///
   /// ⚠️ **Tagged material wins and untagged material is the FALLBACK.** An
-  /// enrollment's first key package is filed with no enrollment id, before the
-  /// atServer has assigned one, so the ordinary state of a freshly created
-  /// enrollment is one *untagged* pair; a reader that took only tagged
-  /// material would see an enrollment holding nothing and mint a duplicate key
-  /// under the same algorithm.
+  /// older keyfile can hold an enrollment's first key package with no
+  /// enrollment id; a reader that took only tagged material would see that
+  /// enrollment holding nothing and mint a duplicate key under the same
+  /// algorithm.
   ///
   /// The two sets never mix: merging them would let this enrollment advertise
   /// a key another enrollment's record was built on.

@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/key_package_filing.dart';
 import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -191,6 +192,29 @@ void main() {
     expect(enrollCommand, contains('"signingAlgo":"mldsa65"'));
     expect(enrollCommand, contains('keyPackage'),
         reason: 'the request that creates the record carries the key package');
+  });
+
+  test('an activation files its first key package under its enrollment id',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer();
+
+    await pqNativeOnboard(
+        atSign: atSign,
+        cramSecret: cramSecret,
+        preference: await preference(),
+        atKeysIo: store,
+        appName: 'wavi',
+        deviceName: 'pq-native',
+        manager: AtClientManager(atSign),
+        storage: hiveStoreAt(atSign, dir.path),
+        atLookUp: server.lookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory);
+
+    final request = server.sent.where((c) => c.startsWith('enroll:')).single;
+    expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
+        kid: advertisedKid(request));
   });
 
   test('the provisioning wait ends when its budget is spent', () async {

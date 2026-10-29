@@ -58,7 +58,8 @@ void main() {
   }
 
   /// A keyfile holding both halves of one X-Wing keypair, filed under the kpid
-  /// they address, as a freshly created enrollment carries it.
+  /// they address and without an enrollment id, as an older keyfile carries
+  /// it.
   Future<(InMemoryAtKeysIo, String)> keyfileWithPackage() async {
     final pair = await XWingPureDartAlgo.instance.generateKeyPair();
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));

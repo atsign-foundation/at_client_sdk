@@ -16,6 +16,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/key_package_filing.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 import '../test_utils/remote_backed_client.dart';
@@ -115,6 +116,53 @@ void main() {
         throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
             allOf(contains('rsa2048'), contains('pq key exchange')))));
     verifyZeroInteractions(lookUp);
+  });
+
+  test('an enrollment files its first key package under its enrollment id',
+      () async {
+    final lookUp = MockAtLookupImpl();
+    final requests = <String>[];
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((invocation) async {
+      final command = invocation.positionalArguments.first as String;
+      if (command.startsWith('enroll:request:')) {
+        requests.add(command);
+        return 'data:${jsonEncode({
+              'enrollmentId': enrollmentId,
+              'status': 'pending'
+            })}';
+      }
+      throw StateError('the mocked atServer has no answer for: $command');
+    });
+    when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
+      final builder = invocation.positionalArguments.first;
+      if (builder is LookupVerbBuilder && builder.atKey.key == 'publicKey') {
+        return 'data:$encryptionPublicKey';
+      }
+      throw StateError('the mocked atServer has no answer for: '
+          '${(builder as VerbBuilder).buildCommand()}');
+    });
+    when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.isConnectionAvailable()).thenReturn(false);
+    final store = InMemoryAtKeysIo();
+
+    await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: AtClientPreference(posture: PqPosture.pqReady)
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = await refusedPort()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: lookUp);
+
+    expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
+        kid: advertisedKid(requests.single));
   });
 
   test(

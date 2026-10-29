@@ -415,3 +415,15 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
 - [ ] Each dialog's result is read as the `AtClient` it returns.
 - [ ] Generated mocks of `AtClient` are regenerated.
 - [ ] `flutter analyze` is clean.
+
+## 5. A keyfile written by a release candidate
+
+This concerns only an atSign that ran an at_client release candidate under
+`PqPosture.pqReady` or `PqPosture.pqActive`.
+
+A keyfile such a release candidate wrote can hold the enrollment's first key
+package without its enrollment id. If `keyEstablishmentAlgorithms` later names
+a second algorithm, the client files a key for it beside the first, and the
+key package it publishes names both keys, but the client then holds only the
+new one: the first key stays advertised and is not held. No posture's default
+names a second algorithm.
