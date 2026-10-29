@@ -214,18 +214,14 @@ final client = await Atsign('@alice').open(
         onConnect: (connection) => connection.sendSync('from:@alice\n')));
 ```
 
-With no `lookUps`, connections are TLS on TCP with the defaults;
-`secureSocketLookUps` is that default, taking a `SecureSocketConfig` and an
-`onConnect` run on each new connection before anything else (a proxy that
-routes on `from:` is what that is for). A factory of your own can hand back
-any `AtLookUp`.
+`lookUps` builds every connection the client opens. `secureSocketLookUps`
+connects with TLS on TCP, taking a `SecureSocketConfig` and an `onConnect`
+run on each new connection before anything else (a proxy that routes on
+`from:` is what that is for). A factory of your own can hand back any
+`AtLookUp`.
 
-Every client keeps local storage, even if only in memory. A client given none
-opens Hive under `preference.hiveStoragePath` until 4.0. One given none and
-no path, or none with `isLocalStoreRequired` false, is refused with an
-`ArgumentError` before anything irreversible, such as spending a CRAM secret
-or waiting for an approval; `InMemoryAtClientStorage` keeps nothing on
-disk.
+Every client keeps local storage, even if only in memory: `storage` is
+required, and `InMemoryAtClientStorage` keeps nothing on disk.
 End-to-end-encrypted values are stored in local storage as their ciphertext,
 never in the clear. A backend of your own
 needs types at_client doesn't export, so raise a
