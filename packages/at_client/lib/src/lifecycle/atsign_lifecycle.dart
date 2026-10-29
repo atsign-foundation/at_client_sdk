@@ -291,9 +291,9 @@ extension AtsignLifecycle on Atsign {
   /// The request itself travels unauthenticated, since this device holds no
   /// credential yet.
   ///
-  /// It takes no storage, so the request goes out before any storage is
-  /// checked; the [PendingEnrollment]'s `client` refuses a client it could not
-  /// build before it waits for the decision.
+  /// It takes no storage: the request goes out first, and the
+  /// [PendingEnrollment]'s `client` waits for the decision and then opens on
+  /// the storage it is given.
   Future<PendingEnrollment> enroll({
     required String otp,
     required String app,

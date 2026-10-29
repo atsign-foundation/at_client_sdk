@@ -159,10 +159,10 @@ mixin ApkamSigning {
   /// material, and signing with a key the keyfile has retired produces a
   /// signature that verifies against nothing.
   ///
-  /// Falls back to that authentication keypair when the enrollment holds no
-  /// signing material this build can sign with, or when the client has no key
-  /// source at all. [apskEntries] advertises that key on exactly the same
-  /// condition, so what signs and what is advertised cannot drift apart.
+  /// Falls back to the authentication keypair when the enrollment holds no
+  /// signing material this build can sign with. [apskEntries] advertises that
+  /// key on exactly the same condition, so what signs and what is advertised
+  /// cannot drift apart.
   ///
   /// ⚠️ A mint files its new key before it publishes it, so between those two
   /// writes this answers a key the advertisement does not name yet. An

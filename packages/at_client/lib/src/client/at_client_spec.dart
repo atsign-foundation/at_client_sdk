@@ -86,10 +86,9 @@ abstract class AtClient {
   Future<AtReachabilityResult> ensureReachable(String namespace,
       {Duration timeout = const Duration(seconds: 30)});
 
-  /// The client's key source (`package:at_auth`), injected at construction
-  /// via `AtClientImpl.create(atKeysIo:)`. `CryptoRuntime` threads it to
-  /// providers as `CryptoContext.io`. Null until injected — there is no
-  /// default source.
+  /// The client's key source (`package:at_auth`), given at construction
+  /// through `AtClientImpl.create(atKeysIo:)`, which requires one.
+  /// `CryptoRuntime` threads it to providers as `CryptoContext.io`.
   AtKeysIo? get atKeysIo;
 
   /// Enrollment id for apkam enrolled clients

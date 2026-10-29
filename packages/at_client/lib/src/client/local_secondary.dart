@@ -302,10 +302,9 @@ class LocalSecondary implements Secondary {
   /// Updates and deletes of one record name run one at a time, in the order
   /// they were started.
   ///
-  /// The [sync] parameter is retained for back-compat with the
-  /// `Secondary` interface and is ignored: `_update` / `_delete`
-  /// enqueue into the client→server sync queue themselves whenever
-  /// the key is sync-eligible and [cameFromServer] is false.
+  /// `_update` / `_delete` enqueue into the client→server sync queue
+  /// themselves whenever the key is sync-eligible and [cameFromServer] is
+  /// false.
   ///
   /// When [cameFromServer] is true the caller is replaying a
   /// server-originated change into local storage, or filing a value
