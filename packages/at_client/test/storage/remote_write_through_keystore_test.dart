@@ -235,6 +235,18 @@ void main() {
     });
   });
 
+  group('expiry and availability sweeps', () {
+    test('find nothing, since no record is held locally', () async {
+      expect(
+          await (await store.peekNewlyAvailable(since: DateTime(0))).toList(),
+          isEmpty);
+      expect(await (await store.peekExpired()).toList(), isEmpty);
+      expect(await (await store.getExpiredKeys()).toList(), isEmpty);
+      expect(await store.deleteExpiredKeys(), isFalse);
+      verifyZeroInteractions(remoteSecondary);
+    });
+  });
+
   group('unsupported members', () {
     test('throw UnsupportedError', () async {
       expect(() => store.create('k', AtData()), throwsUnsupportedError);
@@ -251,11 +263,6 @@ void main() {
       expect(
           () => store.transaction((txn) async => null), throwsUnsupportedError);
       expect(() => store.stats(), throwsUnsupportedError);
-      expect(() => store.getExpiredKeys(), throwsUnsupportedError);
-      expect(() => store.deleteExpiredKeys(), throwsUnsupportedError);
-      expect(() => store.peekExpired(), throwsUnsupportedError);
-      expect(() => store.peekNewlyAvailable(since: DateTime(0)),
-          throwsUnsupportedError);
       expect(() => store.compact(true), throwsUnsupportedError);
     });
   });

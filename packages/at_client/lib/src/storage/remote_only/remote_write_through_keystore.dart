@@ -129,6 +129,21 @@ class RemoteWriteThroughKeyStore
   @override
   Future<DateTime?> nextAvailableAt({DateTime? asOf}) async => null;
 
+  @override
+  Future<Stream<String>> peekNewlyAvailable(
+          {required DateTime since, DateTime? asOf, int? limit}) async =>
+      const Stream.empty();
+
+  @override
+  Future<Stream<String>> peekExpired({DateTime? asOf, int? limit}) async =>
+      const Stream.empty();
+
+  @override
+  Future<Stream<String>> getExpiredKeys() async => const Stream.empty();
+
+  @override
+  Future<bool> deleteExpiredKeys() async => false;
+
   // Safe defaults
   @override
   Stream<KeyStoreChange> get changes => const Stream.empty();
@@ -198,31 +213,6 @@ class RemoteWriteThroughKeyStore
   Future<void> restore(String key, AtData value) {
     throw UnsupportedError(
         'RemoteWriteThroughKeyStore does not support restore');
-  }
-
-  @override
-  Future<Stream<String>> peekNewlyAvailable(
-      {required DateTime since, DateTime? asOf, int? limit}) {
-    throw UnsupportedError(
-        'RemoteWriteThroughKeyStore does not support peekNewlyAvailable');
-  }
-
-  @override
-  Future<Stream<String>> getExpiredKeys() {
-    throw UnsupportedError(
-        'RemoteWriteThroughKeyStore does not support getExpiredKeys');
-  }
-
-  @override
-  Future<bool> deleteExpiredKeys() {
-    throw UnsupportedError(
-        'RemoteWriteThroughKeyStore does not support deleteExpiredKeys');
-  }
-
-  @override
-  Future<Stream<String>> peekExpired({DateTime? asOf, int? limit}) {
-    throw UnsupportedError(
-        'RemoteWriteThroughKeyStore does not support peekExpired');
   }
 
   @override
