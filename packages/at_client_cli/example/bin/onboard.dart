@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
       keys: CliKeys.fileFor(atSign, path: argResults['atKeysPath']),
       preference: preference,
       storage: CliKeys.storageFor(atSign, program: 'wavi'),
-      lookUps: secureSocketLookUps(),
+      lookUps: lookUpsFor(preference.rootDomain),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort),
       onProgress: (event) => print('${event.group}: ${event.msg}'));

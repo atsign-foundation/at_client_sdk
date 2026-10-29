@@ -17,7 +17,7 @@ Future<void> main(List<String> args) async {
     ..namespace = 'buzz'
     ..rootDomain = 'vip.ve.atsign.zone';
   final keys = CliKeys.fileFor(atSign, path: argResults['atKeysPath']);
-  final lookUps = secureSocketLookUps();
+  final lookUps = lookUpsFor(preference.rootDomain);
   final secondaryAddressFinder = CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort);
 

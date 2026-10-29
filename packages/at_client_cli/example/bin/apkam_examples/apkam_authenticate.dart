@@ -20,7 +20,7 @@ Future<void> main(List<String> args) async {
       keys: keys,
       preference: preference,
       storage: CliKeys.storageFor(atSign, program: 'wavi', id: enrollmentId),
-      lookUps: secureSocketLookUps(),
+      lookUps: lookUpsFor(preference.rootDomain),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
   print('running as enrollment ${client.enrollmentId}; the connection is '

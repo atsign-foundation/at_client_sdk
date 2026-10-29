@@ -11,7 +11,7 @@ Future<void> main() async {
       keys: CliKeys.fileFor(atSign),
       preference: preference,
       storage: CliKeys.storageFor(atSign, program: 'your_namespace'),
-      lookUps: secureSocketLookUps(),
+      lookUps: lookUpsFor(preference.rootDomain),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
   print(await client.getKeys());
