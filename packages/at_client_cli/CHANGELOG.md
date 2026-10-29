@@ -12,6 +12,9 @@
 - feat: `CliKeys.fileFor` and `CliKeys.storageFor` are the keyfile and local
   store a command-line program keeps for an atSign, ready for at_client's
   `Atsign.activate`, `open` and `enroll`.
+- feat: `lookUpsFor(rootDomain)` gives a program that opens its own client
+  the connections `CLIBase` makes, through a proxy when the root domain names
+  one (`proxy:host:port`).
 - breaking: `AtOnboardingService`, `AtOnboardingPreference`, `createAtClient`,
   `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener`,
   `EnrollmentDetails`, `PrintAllArgParserUsage` and the

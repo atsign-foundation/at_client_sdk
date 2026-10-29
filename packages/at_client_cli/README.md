@@ -151,7 +151,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 final preference = AtClientPreference()..namespace = 'my_app';
 final keys = CliKeys.fileFor('@alice');       // ~/.atsign/keys/@alice_key.atKeys
 final storage = CliKeys.storageFor('@alice', program: 'my_app');
-final lookUps = secureSocketLookUps();
+final lookUps = lookUpsFor(preference.rootDomain);
 final atDirectory =
     CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort);
 ```
@@ -159,10 +159,11 @@ final atDirectory =
 `CliKeys.fileFor` takes a `path` and a `passPhrase`; `CliKeys.storageFor`
 puts the store under `~/.atsign/storage/<atSign>/<program>/`, where `CLIBase`
 keeps it for that namespace, or at `path`, and the client closes it when it
-stops. `lookUps` builds every connection the
-client opens: `proxyLookUps()` when the root domain names a proxy
-(`proxy:host:port`), which sends `from:<atSign>` first on every connection so
-the proxy can route it, and TLS on TCP otherwise.
+stops. `lookUps` builds every connection the client opens, and
+`lookUpsFor(rootDomain)` is the one `CLIBase` uses: `proxyLookUps()` when the
+root domain names a proxy (`proxy:host:port`), which sends `from:<atSign>`
+first on every connection so the proxy can route it, and
+`secureSocketLookUps()`, TLS on TCP, otherwise.
 
 Activate a new atSign with its CRAM secret (or run `at_activate onboard`,
 which fetches one from the registrar against an emailed verification code):

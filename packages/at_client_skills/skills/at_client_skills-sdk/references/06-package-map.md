@@ -97,8 +97,9 @@ it provides:
   `~/.atsign/keys/<atSign>_key.atKeys`) and `CliKeys.storageFor(atSign,
   program:, id:, path:)` (default: the store `CLIBase` opens for that
   namespace), for a program that calls the `Atsign` verbs itself
-- `proxyLookUps()` — the `lookUps:` for a root domain of the form
-  `proxy:host:port`
+- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
+  for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
+  otherwise
 - `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
 - the `at_activate` and `at_register` executables
   (`dart pub global activate at_client_cli`)

@@ -5,6 +5,9 @@
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.
+- A CLI program takes its `lookUps:` from at_client_cli's
+  `lookUpsFor(rootDomain)`, which routes through a proxy when the root domain
+  names one (`SKILL.md`; `references/06`, `15`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).

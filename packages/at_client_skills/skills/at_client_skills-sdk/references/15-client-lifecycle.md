@@ -133,8 +133,8 @@ AtLookupMuxable mine({required atSign, required rootDomain, required authenticat
 - The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
   and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
   none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
-  at_client_cli's `proxyLookUps()` when the root domain names a proxy
-  (`proxy:host:port`), TLS otherwise.
+  at_client_cli's `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root
+  domain names a proxy (`proxy:host:port`), TLS otherwise.
 - at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
   `tlsKeysSavePath`: the transport is the factory's to configure, through the
   `SecureSocketConfig` given to `secureSocketLookUps(config:)`.

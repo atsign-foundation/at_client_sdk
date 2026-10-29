@@ -408,8 +408,9 @@ connection the client opens: its own, its sync's, its monitor's) and
 `secondaryAddressFinder:` (how the atDirectory is asked where the atServer is).
 `secureSocketLookUps()` is TLS on TCP with the defaults; pass
 `secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = ...)` for TLS
-settings, at_client_cli's `proxyLookUps()` for a root domain of the form
-`proxy:host:port`, or a factory of your own for another transport. A CLI
+settings, at_client_cli's `lookUpsFor(preference.rootDomain)`, which is
+`proxyLookUps()` for a root domain of the form `proxy:host:port`, or a factory
+of your own for another transport. A CLI
 program takes its keys and store from `CliKeys.fileFor(atSign)` and
 `CliKeys.storageFor(atSign, program: ...)`. The Flutter dialogs and `CLIBase`
 supply the whole bundle themselves and take `lookUps:` (and the dialogs

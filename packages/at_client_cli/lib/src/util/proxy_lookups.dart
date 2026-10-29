@@ -21,3 +21,9 @@ AtLookUpFactory proxyLookUps() {
         secondaryAddressFinder: secondaryAddressFinder,
       );
 }
+
+/// The `lookUps` for a client whose atDirectory is [rootDomain]:
+/// [proxyLookUps] when it names a proxy (`proxy:<host>`), and
+/// [secureSocketLookUps] otherwise.
+AtLookUpFactory lookUpsFor(String rootDomain) =>
+    rootDomain.startsWith('proxy:') ? proxyLookUps() : secureSocketLookUps();

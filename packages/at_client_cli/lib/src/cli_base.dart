@@ -349,10 +349,7 @@ class CLIBase {
           namespace: nameSpace,
           storage: CliKeys.storageFor(atSign,
               program: nameSpace, path: localStoragePathToUse),
-          lookUps: lookUps ??
-              (atRootDomain.rootDomain.startsWith('proxy:')
-                  ? proxyLookUps()
-                  : secureSocketLookUps()),
+          lookUps: lookUps ?? lookUpsFor(atRootDomain.rootDomain),
           secondaryAddressFinder: CacheableSecondaryAddressFinder(
               atRootDomain.rootDomain, atRootDomain.rootPort),
           serviceFactory: atServiceFactory);

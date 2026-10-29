@@ -1346,7 +1346,7 @@ class EnrollerSettings {
   AtClientStorage storageFor(String atSign) =>
       CliKeys.storageFor(atSign, program: commandNamespace, path: storagePath);
 
-  AtLookUpFactory get lookUps => _lookUpsFor(preference);
+  AtLookUpFactory get lookUps => lookUpsFor(preference.rootDomain);
 
   SecondaryAddressFinder get secondaryAddressFinder => _atDirectoryOf(preference);
 }
@@ -1354,13 +1354,6 @@ class EnrollerSettings {
 /// The namespace at_activate's clients run under, and the program its stores
 /// are kept for.
 const String commandNamespace = 'at_activate';
-
-/// TLS on TCP, or the proxy convention when [preference]'s root domain names
-/// one.
-AtLookUpFactory _lookUpsFor(AtClientPreference preference) =>
-    preference.rootDomain.startsWith('proxy:')
-        ? proxyLookUps()
-        : secureSocketLookUps();
 
 /// The atDirectory [preference] names, asked over TLS.
 SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
@@ -1411,7 +1404,7 @@ Future<AtClient> _commandClient(
         preference: preference,
         storage: CliKeys.storageFor(atSign,
             program: commandNamespace, path: storageDir!.path),
-        lookUps: _lookUpsFor(preference),
+        lookUps: lookUpsFor(preference.rootDomain),
         secondaryAddressFinder: _atDirectoryOf(preference),
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {
