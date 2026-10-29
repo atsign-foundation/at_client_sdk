@@ -5,9 +5,11 @@
   and connects over `wss://`; `fixedAddressWebSocketLookUps(host:, port:)`
   connects every atSign to one atServer, for development.
 - feat: `AtLookUp.withTransport` builds a lookup over any transport.
-- fix: a connection that closed while nothing was reading it, such as one
-  whose notifications were paused, is replaced on the next command rather
-  than written to.
+- fix: a closed connection is replaced on the next command rather than
+  written to. Over TLS, a close the atServer makes while notifications are
+  paused is seen once they resume.
+- fix: every command an authenticator sends goes on the connection its
+  authentication began on.
 - fix: stopping notifications while they are starting no longer closes a
   connection the lookup has since logged in on, so the next command needs no
   second login.

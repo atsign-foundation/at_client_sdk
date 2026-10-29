@@ -1,9 +1,13 @@
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
-- fix: `CramAuthenticator.authenticate` throws `StateError` for a second CRAM
-  authentication on a lookup already running one, and keeps an authenticator
-  installed meanwhile.
+- fix: after `CramAuthenticator.authenticate` the lookup's own authenticator
+  is back in place, and a second CRAM authentication on a lookup already
+  running one throws `StateError`.
+- breaking: `AtAuth.create` takes no `atChops`, and its `atLookUp` is a
+  required `AtLookupMuxable`.
+- breaking: `PkamAuthenticator.authenticate` takes no `enrollmentId`; the
+  lookup's authenticator decides which enrollment logs in.
 - breaking: `ServerEnrollmentRequest` and `EnrollmentServerResponse` are
   removed; at_client's `client.enrollments.list()` returns each `Enrollment`.
 - breaking: `KeyAlgorithmType`, `CryptographicKeyType`, `KeyPartStatus` and
@@ -18,7 +22,7 @@
   hold, under the algorithm they name.
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
-- build: requires `at_utils` ^4.0.0.
+- build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
 - breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
   `ArgumentError`, before anything is sent: an enrollment that takes its keys
   post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
