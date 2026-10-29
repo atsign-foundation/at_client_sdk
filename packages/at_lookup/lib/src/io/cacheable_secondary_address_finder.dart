@@ -10,6 +10,8 @@ import '../util/lookup_util.dart';
 import '../util/abandonment.dart' show Abandonment;
 import 'secure_socket_util.dart';
 
+/// Finds an atSign's atServer by asking the atDirectory at a root domain and
+/// port, and keeps each answer for an hour, or the duration it is given.
 class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   static const Duration defaultCacheDuration = Duration(hours: 1);
 
@@ -127,6 +129,8 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 }
 
+/// An atServer address [CacheableSecondaryAddressFinder] keeps, and when it
+/// stops being used.
 class SecondaryAddressCacheEntry {
   final SecondaryAddress secondaryAddress;
 

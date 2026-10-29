@@ -3,6 +3,8 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/src/io/tls_connect.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
+/// Opens the TLS sockets at_lookup connects to an atServer or atDirectory
+/// over.
 class SecureSocketUtil {
   static final AtSignLogger _logger = AtSignLogger('SecureSocketUtil');
 

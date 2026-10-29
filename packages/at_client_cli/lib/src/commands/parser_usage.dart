@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
+/// Prints a parser's usage followed by each of its commands', indented
+/// beneath it.
 extension PrintAllArgParserUsage on ArgParser {
   static final String singleIndentation = '    ';
 

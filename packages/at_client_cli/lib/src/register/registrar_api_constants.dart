@@ -1,3 +1,4 @@
+/// The atSign registrar's hosts, API paths and request headers.
 class RegistrarApiConstants {
   /// Authorities
   static const String apiHostProd = 'my.atsign.com';

@@ -6,6 +6,9 @@ import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
 
+/// A command-line program's [AtClient], opened by [init] from the program's
+/// arguments, with the keyfile and the local store defaulting to locations
+/// under [homeDir].
 class CLIBase {
   static const defaultMaxConnectAttempts = 20;
 

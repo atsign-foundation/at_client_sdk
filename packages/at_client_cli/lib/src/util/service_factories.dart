@@ -1,5 +1,7 @@
 import 'package:at_client/at_client.dart';
 
+/// The client's services as [DefaultAtServiceFactory] builds them, with a
+/// [NoOpSyncService] in place of sync.
 class ServiceFactoryWithNoOpSyncService extends DefaultAtServiceFactory {
   @override
   Future<SyncService> syncService(
@@ -10,6 +12,8 @@ class ServiceFactoryWithNoOpSyncService extends DefaultAtServiceFactory {
   }
 }
 
+/// A [SyncService] that never syncs: [sync] returns at once and [isInSync]
+/// answers false.
 class NoOpSyncService implements SyncService {
   @override
   void addProgressListener(SyncProgressListener listener) {}

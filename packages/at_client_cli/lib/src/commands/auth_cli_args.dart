@@ -6,6 +6,7 @@ import 'package:at_client/at_client.dart'
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
+/// A command the at_activate tool runs, with the usage its help prints.
 enum AuthCliCommand {
   help(usage: 'Show help'),
   status(
@@ -80,6 +81,8 @@ enum AuthCliCommand {
   final String usage;
 }
 
+/// The arguments the at_activate tool accepts: the options every command
+/// shares, and a parser for each [AuthCliCommand].
 class AuthCliArgs {
   static const defaultAtDirectoryFqdn = 'root.atsign.org';
   static const defaultAtRegistrarFqdn = 'my.atsign.com';
