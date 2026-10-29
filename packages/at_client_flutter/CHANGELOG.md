@@ -11,6 +11,8 @@
   UI activates, opens and enrolls with the dialogs' store, transport and
   atDirectory in one call, and a widget test can give a dialog its own
   `flows`.
+- feat: an app catches a keyfile that is not valid JSON as
+  `AtKeysFormatException` and shows its `reason` and `position`.
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.

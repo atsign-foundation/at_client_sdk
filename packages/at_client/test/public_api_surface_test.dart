@@ -191,8 +191,10 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/preference/at_client_preference.dart',
   'package:at_client/src/preference/pq_posture.dart',
   // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
-  // WrittenAtKeysIo, InMemoryAtKeysIo), the grant type an enrollment's
-  // namespaces read as (NamespacePermission), and EnrollmentKeyExchangeMode:
+  // WrittenAtKeysIo, InMemoryAtKeysIo), what reading a keyfile that is not a
+  // JSON object throws (AtKeysFormatException), the grant type an
+  // enrollment's namespaces read as (NamespacePermission), and
+  // EnrollmentKeyExchangeMode:
   // an app opens, activates and enrols through this package and must not
   // have to import at_auth for what those verbs take and answer.
   'package:at_auth/at_auth.dart',

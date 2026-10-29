@@ -10,6 +10,9 @@
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
   it, then asks the others.
+- feat: `AtKeysFormatException` comes through at_client, so an app tells a
+  keyfile that is not a JSON object by its `reason` and `position` without
+  importing at_auth.
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
   keys it is given.

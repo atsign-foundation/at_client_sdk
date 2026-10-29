@@ -24,6 +24,7 @@ export 'package:at_client/src/preference/pq_posture.dart';
 export 'package:at_auth/at_auth.dart'
     show
         AtKeys,
+        AtKeysFormatException,
         AtKeysIo,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,

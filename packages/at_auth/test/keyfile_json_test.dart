@@ -9,6 +9,9 @@ import 'package:test/test.dart';
 
 import 'test_utils/holds_none_of.dart';
 
+/// Reading an atKeys file that is not a JSON object.
+///
+/// Catalogue: features/at_auth/keyfile_not_json.feature
 void main() {
   final random = Random.secure();
   late Directory dir;
@@ -56,42 +59,72 @@ void main() {
     fail('the read succeeded');
   }
 
-  group('Given an atKeys file that isn\'t complete JSON', () {
-    test(
-        'when at_auth reads it, then the error says the file isn\'t valid '
-        'JSON, with the position where it stops, and holds none of the '
-        'file\'s text', () async {
-      final text = await cutShortKeyfile();
+  /// What the JSON parser itself reports for [text].
+  FormatException parserErrorOf(String text) {
+    try {
+      jsonDecode(text);
+    } on FormatException catch (e) {
+      return e;
+    }
+    fail('the text parsed');
+  }
 
-      final error = await errorReading(text);
+  test('A keyfile cut short names the parser\'s reason and the character',
+      () async {
+    final text = await cutShortKeyfile();
+    final parserError = parserErrorOf(text);
 
-      expect('$error', holdsNoneOf(text),
+    final error = await errorReading(text);
+
+    expect(
+        error,
+        isA<AtKeysFormatException>()
+            .having((e) => e.reason, 'reason', parserError.message)
+            .having((e) => e.position, 'position', text.length + 1)
+            .having((e) => e.offset, 'offset', text.length)
+            .having((e) => e.source, 'source', isNull));
+    expect(error, isA<FormatException>(),
+        reason: 'a catch written for a FormatException still catches it');
+    final format = error as AtKeysFormatException;
+    for (final held in ['$error', format.message, format.reason]) {
+      expect(held, holdsNoneOf(text),
           reason: 'the error holds none of the file\'s text');
-      expect(error, isA<FormatException>());
-      expect('$error', contains('is not valid JSON'));
-      expect('$error', contains('(at character ${text.length + 1})'));
-    });
+    }
+    expect('$error', contains('is not valid JSON'));
+    expect('$error', contains('(at character ${text.length + 1})'));
   });
 
-  group(
-      'Given a passphrase-protected atKeys file whose decrypted content '
-      'isn\'t valid JSON', () {
-    test(
-        'when at_auth reads it with the right passphrase, then the error '
-        'says so, with the position, and holds none of the decrypted text',
-        () async {
-      final plaintext = await cutShortKeyfile();
-      final passPhrase = randomBase64(12);
-      final envelope = await const AtKeysPassphraseEnvelopeCodec()
-          .encode(plaintext, passPhrase);
+  test('A keyfile that is valid JSON but not an object says so', () async {
+    final text = jsonEncode([randomBase64(32)]);
 
-      final error = await errorReading(envelope, passPhrase: passPhrase);
+    final error = await errorReading(text);
 
-      expect('$error', holdsNoneOf(plaintext),
-          reason: 'the error holds none of the decrypted text');
-      expect(error, isA<AtDecryptionException>());
-      expect('$error', contains('is not valid JSON'));
-      expect('$error', contains('(at character ${plaintext.length + 1})'));
-    });
+    expect(
+        error,
+        isA<AtKeysFormatException>()
+            .having((e) => e.reason, 'reason', 'not a JSON object')
+            .having((e) => e.position, 'position', isNull)
+            .having((e) => e.source, 'source', isNull));
+    expect('$error', contains('is not a JSON object'));
+    expect('$error', holdsNoneOf(text),
+        reason: 'the error holds none of the file\'s text');
+  });
+
+  test('A decrypted keyfile that does not parse is a decryption failure',
+      () async {
+    final plaintext = await cutShortKeyfile();
+    final passPhrase = randomBase64(12);
+    final envelope = await const AtKeysPassphraseEnvelopeCodec()
+        .encode(plaintext, passPhrase);
+
+    final error = await errorReading(envelope, passPhrase: passPhrase);
+
+    expect('$error', holdsNoneOf(plaintext),
+        reason: 'the error holds none of the decrypted text');
+    expect(error, isA<AtDecryptionException>(),
+        reason: 'an incorrect passphrase usually leaves text that does not '
+            'parse, so this stays a decryption failure');
+    expect('$error', contains('is not valid JSON'));
+    expect('$error', contains('(at character ${plaintext.length + 1})'));
   });
 }
