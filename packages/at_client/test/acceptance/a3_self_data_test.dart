@@ -862,7 +862,26 @@ void main() {
             'as owed, though its stamp answers the revocation, and not once '
             'its successor is published. Mutation-proven: ignoring the '
             'record, or reading any record in the namespace, reddens it',
-        clauses: ['E1\'s next start makes it'],
+        clauses: ['E1\'s next start makes the rotation'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when the rotation fails, then the generation published stands',
+        proves: 'a rotation that throws after the publish answers no '
+            'successor, keeps the record and logs the namespace at severe. '
+            'Mutation-proven: rethrowing reddens it with the failure, and '
+            'logging below severe reddens it',
+        clauses: ['the mint still answers the generation it published'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when this enrollment no longer carries a key package to convey a '
+            'successor with',
+        proves: 'with the minter\'s own package gone at the fresh prepare, '
+            'nothing rotates, the record stays and the failure is logged at '
+            'severe. Mutation-proven: throwing when the prepare finds no '
+            'package reddens it',
+        clauses: ['the mint still answers the generation it published'],
       );
       provenIn(
         'packages/at_client/test/pre_publish_conveyance_test.dart',

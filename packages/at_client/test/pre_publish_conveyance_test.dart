@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'fake_enrollment_directory.dart';
+import 'test_utils/recorded_logs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -21,8 +22,12 @@ class FakeSecret extends Fake implements Secret {}
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
+  final logs = RecordedLogs();
 
-  setUpAll(() => registerFallbackValue(FakeSecret()));
+  setUpAll(() {
+    logs.installOn();
+    registerFallbackValue(FakeSecret());
+  });
 
   Future<KeyPackage> keyPackage(String enrollmentId) async {
     final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
@@ -237,18 +242,43 @@ void main() {
             reason: 'the successor was conveyed to the roster as it is now');
       });
 
-      test(
-          'when the rotation fails, then the record stays and the failure is '
-          'thrown', () async {
-        directory.revoke('e2', at: DateTime.utc(2026, 10, 29));
+      Iterable<String> severe() =>
+          logs.at('SEVERE').where((m) => m.contains('left to the next start'));
 
-        await expectLater(
-            conveyance.afterPublish(published,
+      test(
+          'when the rotation fails, then the generation published stands, the '
+          'record stays, and the failure is logged at severe', () async {
+        directory.revoke('e2', at: DateTime.utc(2026, 10, 29));
+        logs.records.clear();
+
+        expect(
+            await conveyance.afterPublish(published,
                 rotateTo(successor, failWith: StateError('lease spent'))),
-            throwsA(isA<StateError>()
-                .having((e) => e.message, 'message', 'lease spent')));
+            isNull,
+            reason: 'the publish has happened, so a failure after it must not '
+                'read as the mint failing');
         expect(
             await filing.rotationOwed(namespace, [published.nskeyKid]), isTrue);
+        expect(severe().single,
+            allOf(contains(namespace), contains('lease spent')));
+      });
+
+      test(
+          'when this enrollment no longer carries a key package to convey a '
+          'successor with, then the generation published stands and the '
+          'failure is logged at severe', () async {
+        directory
+          ..revoke('e2', at: DateTime.utc(2026, 10, 29))
+          ..rejected.add('e1');
+        logs.records.clear();
+
+        expect(await conveyance.afterPublish(published, rotateTo(successor)),
+            isNull);
+        expect(rotations, isEmpty);
+        expect(
+            await filing.rotationOwed(namespace, [published.nskeyKid]), isTrue);
+        expect(severe().single,
+            allOf(contains(namespace), contains('no longer carries a key')));
       });
 
       test(

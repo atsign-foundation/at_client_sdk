@@ -1025,7 +1025,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a revocation landing after that read and before the publish is recorded in
   E1's keyfile against the published generation, and E1 rotates at once, under the same
   lock, onto a generation conveyed to the roster as it is then; if that rotation fails,
-  E1's next start makes it.
+  the mint still answers the generation it published, the failure is logged at
+  `severe`, and E1's next start makes the rotation.
 - **Then:** a mint that finds nothing published always mints a fresh generation, and
   first retires every private filed for the namespace, whichever enrollment minted it;
   a retired private still opens what was sealed to it.

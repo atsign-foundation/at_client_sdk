@@ -154,28 +154,43 @@ class PrePublishConveyance {
   /// [rotate] onto a generation conveyed afresh to the roster as it is now.
   ///
   /// Answers the generation published by that rotation, or null when no
-  /// revocation landed. A rotation that fails throws, and the record makes
-  /// the next start rotate.
+  /// revocation landed or the rotation failed. A failure is logged at
+  /// `severe` rather than thrown, because [published] is out and stays the
+  /// current generation, and the record makes the next start rotate.
   Future<NskeyAdvertisement?> afterPublish(
       NskeyAdvertisement published, NskeyRotateHoldingLease rotate) async {
     if (!await markIfRevoked(published)) return null;
-    final fresh = await PrePublishConveyance.prepare(sharing, filing, namespace,
-        excludeEnrollmentIds: excludeEnrollmentIds);
-    if (fresh == null) {
-      throw StateError('a revocation touched $namespace after this mint read '
-          'it, and this enrollment no longer carries a key package to convey '
-          'a successor with, so the rotation it owes is left to the next '
-          'start');
+    try {
+      final fresh = await PrePublishConveyance.prepare(
+          sharing, filing, namespace,
+          excludeEnrollmentIds: excludeEnrollmentIds);
+      if (fresh == null) {
+        _owedRotationFailed(
+            published,
+            'this enrollment no longer carries a key package to convey a '
+            'successor with');
+        return null;
+      }
+      final rotated = await rotate(
+          conveyFirst: fresh.convey, afterPublish: fresh.markIfRevoked);
+      conveyedKids.addAll(fresh.conveyedKids);
+      pushedTo = fresh.pushedTo;
+      _logger.info('Rotated $namespace onto ${rotated.nskeyKid} under the '
+          'same lock: a revocation touched it after ${published.nskeyKid} was '
+          'conveyed');
+      return rotated;
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _owedRotationFailed(published, '$e');
+      return null;
     }
-    final rotated = await rotate(
-        conveyFirst: fresh.convey, afterPublish: fresh.markIfRevoked);
-    conveyedKids.addAll(fresh.conveyedKids);
-    pushedTo = fresh.pushedTo;
-    _logger.info('Rotated $namespace onto ${rotated.nskeyKid} under the same '
-        'lock: a revocation touched it after ${published.nskeyKid} was '
-        'conveyed');
-    return rotated;
   }
+
+  void _owedRotationFailed(NskeyAdvertisement published, String why) =>
+      _logger.severe('A revocation touched $namespace after '
+          '${published.nskeyKid} was conveyed, and rotating it under the same '
+          'lock failed ($why). ${published.nskeyKid} stays published, and the '
+          'rotation it owes is left to the next start');
 
   /// The record [afterPublish] makes, without its rotation: whether a
   /// revocation has touched the namespace since [convey] read it, recorded
