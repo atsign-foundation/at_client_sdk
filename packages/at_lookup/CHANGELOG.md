@@ -8,6 +8,9 @@
 - fix: a connection that closed while nothing was reading it, such as one
   whose notifications were paused, is replaced on the next command rather
   than written to.
+- fix: stopping notifications while they are starting no longer closes a
+  connection the lookup has since logged in on, so the next command needs no
+  second login.
 - fix: nothing else goes out on a connection until its `onConnect` has
   finished, and a connection whose `onConnect` fails is closed, so the next
   call opens one and runs `onConnect` again.

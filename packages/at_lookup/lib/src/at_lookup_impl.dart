@@ -1004,6 +1004,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
               'monitor requires authentication and no authenticator is set');
         }
       }
+      final loggedIn = _connection;
       // Asked here rather than held from the start, so a reconnect resumes
       // from the caller's current watermark.
       //
@@ -1031,10 +1032,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
       // verb syntax and read by no atServer, so setting it would advertise a
       // safety property that does not exist. See [AtLookupMuxable].
-      // NOTE: under the mutex, so no later start can be using the connection
-      // this closes.
+      // NOTE: only the connection this start logged in. Connecting and logging
+      // in take no request mutex, so another caller of this lookup may have
+      // opened and logged in a newer one while the watermark was read.
       if (generation != _notifyGeneration) {
-        await _closeConnection();
+        if (identical(_connection, loggedIn)) await _closeConnection();
         _throwIfStopped();
         return false;
       }

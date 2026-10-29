@@ -110,6 +110,28 @@ void main() {
     });
 
     test(
+        'when the caller stops notifications and the lookup logs in again '
+        'before the watermark arrives, then the new connection stays open',
+        () async {
+      final atLookup = build();
+      final start = startAwaitingWatermark(atLookup);
+      await asked.future;
+
+      await atLookup.stopNotifications();
+      await logInAgain(atLookup);
+      final loggedInAgain = server.connections.last;
+      pendingWatermark.complete(watermark);
+      await start;
+
+      expect(loggedInAgain.isOpen, isTrue,
+          reason: 'the ended start closes only the connection it logged in');
+      expect(await atLookup.executeCommand('scan\n', auth: true), 'data:ok');
+      expect(server.connections.last, same(loggedInAgain),
+          reason: 'the next command runs on that connection, with no '
+              'reconnect and no second login');
+    });
+
+    test(
         'when the caller closes the lookup and it logs in again before the '
         'watermark arrives, then no monitor: is sent', () async {
       final atLookup = build();
