@@ -54,6 +54,9 @@ class PrePublishConveyance {
       NskeyPrivateFiling filing, String namespace,
       {Set<String> excludeEnrollmentIds = const {}}) async {
     final roster = await sharing.directory.listForNamespace(namespace);
+    _logger.info('The roster for $namespace before minting: '
+        '${roster.map((m) => '${m.enrollmentId} ${m.keyPackageStatus.name} '
+            'kpid ${m.keyPackage?.kpid}').join('; ')}');
     final selfId = sharing.enrollmentId;
     final self = roster.where((m) => m.enrollmentId == selfId).firstOrNull;
     if (self == null || self.keyPackageStatus != KeyPackageStatus.present) {
@@ -104,6 +107,8 @@ class PrePublishConveyance {
       await sharing.secretStore.putIfNewer(secret);
       pushedTo = await sharing.pushSecretToNamespaceMembers(secret,
           excludeEnrollmentIds: excludeEnrollmentIds);
+      _logger.info('Conveyed the $namespace private $nskeyKid to $pushedTo '
+          'key package(s) before publishing it');
       conveyedKids.add(nskeyKid);
     }
     if (!revocationKnown) return;
