@@ -28,8 +28,12 @@ abstract class BaseConnection extends AtConnection {
   @protected
   bool get isTransportOpen => _transport.isOpen;
 
+  /// The transport's inbound stream, cast rather than upcast: a socket's is a
+  /// `Stream<Uint8List>`, and through the wider type `transform(utf8.decoder)`
+  /// and `pipe(sink)` would pass analysis and then fail their run-time check
+  /// against `Uint8List`. A pause still reaches the transport.
   @override
-  Stream<List<int>> get inbound => _transport.inbound;
+  Stream<List<int>> get inbound => _transport.inbound.cast<List<int>>();
 
   @override
   Future<void> close() async {

@@ -153,8 +153,8 @@ void main() {
     expect(transport.written.first, 'from:@alice\n');
 
     await lookUp.close();
-    await Future.wait([command, authentication].map((f) => f.then((_) {},
-        onError: (_) {})));
+    await Future.wait(
+        [command, authentication].map((f) => f.then((_) {}, onError: (_) {})));
   });
 
   test(
@@ -177,8 +177,8 @@ void main() {
 
     final first = expectLater(
         lookUp.executeCommand('noop:0\n'),
-        throwsA(isA<AtException>().having((e) => e.message, 'message',
-            'the proxy refused the preamble')));
+        throwsA(isA<AtException>().having(
+            (e) => e.message, 'message', 'the proxy refused the preamble')));
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await transportFactory.created.single.settle();
     await transportFactory.created.single.serverSends('data:no\n@alice@');
@@ -218,6 +218,42 @@ void main() {
     expect(transportFactory.created.single.written, ['noop:0\n']);
     await transportFactory.created.single.serverSends('data:ok\n@alice@');
     expect(await pending, 'data:ok');
+    await lookUp.close();
+  });
+
+  test(
+      'after an unexpected line the next command opens a fresh connection '
+      'and reads its own reply', () async {
+    final lookUp = AtLookUp.withSecureSocket(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain(host, 64),
+      authenticator: null,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transportFactory),
+    );
+
+    final first = lookUp.executeCommand('noop:0\n');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await transportFactory.created.single
+        .serverSends('data:value_contains_\nin_the_value\n@alice@');
+    expect(await first, 'data:value_contains_',
+        reason: 'the premise: a reply ends at its newline');
+
+    await expectLater(
+        lookUp.executeCommand('noop:1\n'),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0014')),
+        reason: 'the rest of that line is not a reply to anything');
+
+    final third = lookUp.executeCommand('noop:2\n');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(transportFactory.created, hasLength(2),
+        reason: 'the connection that carried the stray line was closed, so '
+            'the reply the atServer sends the second command cannot reach '
+            'the third');
+    await transportFactory.created.last.serverSends('data:ok\n@alice@');
+    expect(await third, 'data:ok');
+
     await lookUp.close();
   });
 }

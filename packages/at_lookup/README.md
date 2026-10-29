@@ -43,7 +43,7 @@ and address finder.
 
 ### Clone it from github
 
-Feel free to fork a copy of the source from the [GitHub Repo](https://github.com/atsign-foundation/at_libraries)
+Feel free to fork a copy of the source from the [GitHub Repo](https://github.com/atsign-foundation/at_client_sdk)
 
 ## Usage
 
@@ -93,7 +93,7 @@ A factory of your own returns any `AtLookupMuxable`. Each call names what the
 connection is for: the atSign, the root domain, the authenticator (null for a
 connection that never authenticates), an optional address finder and the
 client config. The factory captures how bytes travel.
-Please refer to [examples](https://github.com/atsign-foundation/at_libraries/blob/doc_at_lookup/at_lookup/example/bin/example.dart) for more details.
+Please refer to [examples](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_lookup/example/bin/example.dart) for more details.
 
 ## Open source usage and contributions
 
