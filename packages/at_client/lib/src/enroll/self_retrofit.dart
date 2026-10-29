@@ -48,7 +48,9 @@ final _logger = AtSignLogger('selfRetrofit');
 /// nothing after it does. The new client opens on [storage]. To retrofit
 /// over the legacy client's own store, stop that client first, which releases
 /// its claim on a store the caller supplied without `closedByClient: true`,
-/// and pass the same store here.
+/// then call `forgetPrincipal()` on the store, and pass it here: a store
+/// refuses a client acting for another principal than the one that held it
+/// last, and the retrofit's enrollment is one.
 ///
 /// [atLookUp] serves the submission and the client, for a caller that holds
 /// a connection. Between the two its authenticator is cleared and its
