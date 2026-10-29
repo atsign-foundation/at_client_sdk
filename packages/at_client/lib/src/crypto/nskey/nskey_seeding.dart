@@ -26,13 +26,6 @@ import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeySeeding');
 
-/// Mints and publishes this atSign's namespace keys at client start, and
-/// conveys each private to the atSign's other enrollments.
-///
-/// At start rather than on first write, so a recipient that has ever run a
-/// PQ-capable client for a namespace is already reachable for it, and
-/// best-effort throughout: nothing here throws into a client's startup, and a
-/// namespace that cannot be minted now is minted at the next start.
 /// What [NskeySeeding.seedNamespace] did for one namespace.
 @experimental
 enum NskeySeedOutcome {
@@ -51,6 +44,13 @@ enum NskeySeedOutcome {
   cannotConvey,
 }
 
+/// Mints and publishes this atSign's namespace keys at client start, and
+/// conveys each private to the atSign's other enrollments.
+///
+/// At start rather than on first write, so a recipient that has ever run a
+/// PQ-capable client for a namespace is already reachable for it, and
+/// best-effort throughout: nothing here throws into a client's startup, and a
+/// namespace that cannot be minted now is minted at the next start.
 @experimental
 class NskeySeeding {
   final AtClient atClient;
