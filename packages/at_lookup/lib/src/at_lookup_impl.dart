@@ -408,14 +408,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
-      // NOTE: the authenticator can return after a close() and a reconnect,
-      // so its success is recorded on this connection, never on whichever
-      // one [_connection] holds by then.
+      // NOTE: the authenticator's commands all go on this connection, so its
+      // success is recorded on it, never on whichever one [_connection] holds
+      // by then.
       final connection = _connection!;
       if (connection.getMetaData()!.isAuthenticated) {
         return true;
       }
-      final sent = _SentCommands(this);
+      final sent = _SentCommands(this, connection, messageListener);
       if (!await authenticate(sent)) {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
@@ -1098,29 +1098,42 @@ class _ConnectionPreamble implements AtCommandExecutor {
   }
 }
 
-/// Hands an authenticator's commands to the lookup, and keeps the enrollment
-/// named by the last `pkam:` among them that the atServer accepted.
+/// Hands an authenticator's commands to the one connection its authentication
+/// began on, and keeps the enrollment named by the last `pkam:` among them
+/// that the atServer accepted.
 class _SentCommands implements AtCommandExecutor {
   static final _pkam = RegExp(VerbSyntax.pkam);
 
-  final AtCommandExecutor _lookup;
+  final AtLookupImpl _lookUp;
+  final OutboundConnection _connection;
+  final OutboundMessageListener _listener;
 
   /// The enrollment the last accepted `pkam:` named; null when none was
   /// accepted or it named none.
   String? pkamEnrollmentId;
 
-  _SentCommands(this._lookup);
+  _SentCommands(this._lookUp, this._connection, this._listener);
 
   @override
   Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    final response = await _lookup.sendSync(command,
-        maxWaitMilliSeconds: maxWaitMilliSeconds,
-        transientWaitTimeMillis: transientWaitTimeMillis);
-    final pkam = _pkam.firstMatch(command.trim());
-    if (pkam != null && response == 'data:success') {
-      pkamEnrollmentId = pkam.namedGroup('enrollmentId');
-    }
-    return response;
-  }
+          {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
+      _lookUp._unlessStopped(() async {
+        // NOTE: every command of one handshake goes on one connection.
+        if (!identical(_lookUp._connection, _connection) ||
+            _connection.isInValid()) {
+          throw UnAuthenticatedException('The connection this authentication '
+              'began on closed before it finished, so the rest of it is sent '
+              'on no other connection');
+        }
+        _lookUp.logger.finer('SENDING: $command');
+        await _connection.write(command);
+        final response = await _listener.read(
+            maxWaitMilliSeconds: maxWaitMilliSeconds,
+            transientWaitTimeMillis: transientWaitTimeMillis);
+        final pkam = _pkam.firstMatch(command.trim());
+        if (pkam != null && response == 'data:success') {
+          pkamEnrollmentId = pkam.namedGroup('enrollmentId');
+        }
+        return response;
+      });
 }
