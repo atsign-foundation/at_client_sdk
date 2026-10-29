@@ -967,9 +967,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
   read fails with `NskeyPrivateUnavailableException`, the type a parked notification is
   re-driven on.
-- **Then:** Concurrent misses share one fetch.
-- **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch that found nothing does
-  not fetch again, and the startup collection does not start that cooldown.
+- **Then:** concurrent misses share one fetch, whichever generations they name.
+- **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
+  whichever generation it names, and the startup collection does not start that
+  cooldown.
+- **Then:** the client asks about a namespace at most once per `askCooldown`, whichever
+  generation missed, and forgets a namespace once its cooldown has passed.
 - **Then:** a fetch that meets a record the startup collection is still filing waits, up to
   `fetchOnMissTimeout` (10 s), for a sweep already filing it, rather than skipping it.
   Past that the miss asks and fails while the fetch goes on, and a private it then files

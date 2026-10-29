@@ -294,20 +294,24 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// an own generation; derived like [_requestConveyance] when null.
   final Future<void> Function()? _fetchConveyance;
 
-  /// The on-miss fetch in flight for each generation, which concurrent misses
-  /// share.
-  final Map<String, Future<void>> _fetching = {};
+  /// The on-miss fetch in flight, which every concurrent miss shares.
+  Future<void>? _fetching;
 
-  /// When each generation last had an on-miss fetch; the startup collection
-  /// does not count.
-  final Map<String, DateTime> _fetchedOnMiss = {};
+  /// When the last on-miss fetch started; the startup collection does not
+  /// count.
+  DateTime? _fetchedOnMiss;
 
-  /// When each generation was last asked for, so a burst of failed reads
-  /// collapses to one broadcast without a generation ever falling permanently
-  /// silent.
+  /// When each own namespace was last asked about, so a burst of failed reads
+  /// collapses to one broadcast per namespace without one ever falling
+  /// permanently silent. Stamps older than [askCooldown] are dropped.
   final Map<String, DateTime> _askedConveyance = {};
 
-  /// How long after asking for a generation this ring stays quiet about it.
+  /// How many namespaces this ring asked about within the last [askCooldown].
+  @visibleForTesting
+  int get namespacesAskedRecently => _askedConveyance.length;
+
+  /// How long after an on-miss fetch, or after asking about a namespace, this
+  /// ring stays quiet about it.
   ///
   /// Long enough to collapse the burst a synced backlog produces, short
   /// enough that a request nobody answered is asked again while the reader
@@ -1094,26 +1098,24 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     };
   }
 
-  /// Fetches this enrollment's conveyance records once per [askCooldown] for
-  /// the generation, sharing a fetch already in flight.
+  /// Fetches this enrollment's conveyance records at most once per
+  /// [askCooldown], whichever generation missed, sharing a fetch already in
+  /// flight: one fetch files every record waiting, not only the one missed.
   Future<void> _fetchOnMiss(String namespace, String nskeyKid) {
     final fetch = _fetch;
     if (fetch == null) return Future.value();
-    final generation = _generation('own', namespace, nskeyKid);
-    final inFlight = _fetching[generation];
+    final inFlight = _fetching;
     if (inFlight != null) return inFlight;
-    final fetchedAt = _fetchedOnMiss[generation];
+    final fetchedAt = _fetchedOnMiss;
     if (fetchedAt != null &&
         DateTime.now().difference(fetchedAt) < askCooldown) {
       return Future.value();
     }
-    _fetchedOnMiss[generation] = DateTime.now();
+    _fetchedOnMiss = DateTime.now();
     final fetching = _fetchLogged(fetch, namespace, nskeyKid).whenComplete(() {
-      // NOTE: a block body: the removed value is this future, and returning it
-      // would make it wait for itself.
-      _fetching.remove(generation)?.ignore();
+      _fetching = null;
     });
-    _fetching[generation] = fetching;
+    _fetching = fetching;
     return fetching;
   }
 
@@ -1196,15 +1198,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @visibleForTesting
   bool get asksOnReadMiss => _ask != null;
 
+  /// Asks the other enrollments for one missing own private, at most once per
+  /// [askCooldown] for its namespace, whichever generation missed.
   void _askForMissingPrivate(String namespace, String nskeyKid) {
     final ask = _ask;
     if (ask == null) return;
-    final generation = _generation('own', namespace, nskeyKid);
-    final asked = _askedConveyance[generation];
-    if (asked != null && DateTime.now().difference(asked) < askCooldown) {
-      return;
-    }
-    _askedConveyance[generation] = DateTime.now();
+    final now = DateTime.now();
+    _askedConveyance
+        .removeWhere((_, askedAt) => now.difference(askedAt) >= askCooldown);
+    if (_askedConveyance.containsKey(namespace)) return;
+    _askedConveyance[namespace] = now;
 
     final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
     unawaited(ask(namespace, secretName).then((_) {

@@ -148,6 +148,88 @@ void main() {
     });
   });
 
+  group('Given misses on many own generations no record carries', () {
+    final kids = [for (var i = 0; i < 50; i++) 'kid$i'];
+    const namespaces = ['ns1.app', 'ns2.app', 'ns3.app'];
+
+    test(
+        'when they come at once, then one fetch serves them all and each '
+        'namespace is asked once', () async {
+      final release = Completer<void>();
+      var fetched = 0;
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(client(),
+          privateFiling: await filing(),
+          fetchConveyance: () async {
+            fetched++;
+            await release.future;
+          },
+          requestConveyance: (ns, name) async => asked.add((ns, name)))
+        ..askCooldown = const Duration(minutes: 10);
+
+      final misses = [
+        for (final (i, kid) in kids.indexed)
+          ring.privateHalf(alice, namespaces[i % namespaces.length], kid)
+      ];
+      await pumpEventQueue();
+      release.complete();
+      await Future.wait(misses);
+      await pumpEventQueue();
+
+      expect(fetched, 1,
+          reason: 'every miss shares the one fetch in flight, whatever kid it '
+              'names');
+      expect(asked.map((a) => a.$1).toSet(), namespaces.toSet());
+      expect(asked, hasLength(namespaces.length));
+    });
+
+    test(
+        'when they come one after another, then the cooldown holds the fetch '
+        'and the asks to one each per namespace', () async {
+      var fetched = 0;
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(client(),
+          privateFiling: await filing(),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async => asked.add((ns, name)))
+        ..askCooldown = const Duration(minutes: 10);
+
+      for (final kid in kids) {
+        expect(await ring.privateHalf(alice, namespaces.first, kid), isNull);
+      }
+      await pumpEventQueue();
+
+      expect(fetched, 1);
+      expect(asked,
+          [(namespaces.first, '${NskeyPrivateFiling.secretNamePrefix}kid0')]);
+    });
+
+    test(
+        'when the cooldown has passed, then the next miss asks again and the '
+        'quiet namespaces are forgotten', () async {
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(client(),
+          privateFiling: await filing(),
+          fetchConveyance: () async {},
+          requestConveyance: (ns, name) async => asked.add((ns, name)))
+        ..askCooldown = const Duration(milliseconds: 50);
+
+      for (final ns in namespaces) {
+        await ring.privateHalf(alice, ns, 'kid1');
+      }
+      expect(ring.namespacesAskedRecently, namespaces.length,
+          reason: 'the control: each namespace was stamped');
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await ring.privateHalf(alice, namespaces.first, 'kid2');
+      await pumpEventQueue();
+
+      expect(asked, hasLength(namespaces.length + 1));
+      expect(ring.namespacesAskedRecently, 1,
+          reason: 'stamps past the cooldown are dropped, so what is held is '
+              'bounded by the asks one cooldown allows');
+    });
+  });
+
   group('Given a fetch that is still filing when the miss stops waiting', () {
     test(
         'when a write seals to its own key, then it is refused once '

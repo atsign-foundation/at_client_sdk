@@ -540,7 +540,28 @@ void main() {
         'when two misses come at once, then one fetch serves both',
         proves: 'two misses in flight share one fetch, and the second reads '
             'only after it lands',
-        clauses: ['Concurrent misses share one fetch'],
+        clauses: ['concurrent misses share one fetch'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when they come at once, then one fetch serves them all and each '
+            'namespace is asked once',
+        proves: 'fifty misses over three namespaces make one fetch and three '
+            'asks. Mutation-proven: stamping asks per generation reddens it '
+            'with fifty',
+        clauses: [
+          'whichever generations they name',
+          'asks about a namespace at most once per',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the cooldown has passed, then the next miss asks again and the '
+            'quiet namespaces are forgotten',
+        proves: 'past the cooldown a namespace is asked again, and only the '
+            'stamps inside it are held. Mutation-proven: dropping the prune '
+            'reddens it with three',
+        clauses: ['forgets a namespace once its cooldown has passed'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
@@ -635,7 +656,9 @@ void main() {
         'when the lock is sized, then it is the margin plus the budget for '
             'each listed enrollment',
         proves: 'the ttl is the margin plus the per-member budget for each '
-            'listed enrollment, and is capped at the atServer\'s limit',
+            'listed enrollment, each kid and each conveyance, and is capped '
+            'at the atServer\'s limit. Mutation-proven: sizing for one '
+            'conveyance reddens it',
         clauses: ['the mint lock\'s ttl is a ceiling'],
       );
       provenIn(
@@ -671,6 +694,55 @@ void main() {
         clauses: [
           'stops the publish, and the generation E1 filed is retired',
         ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when this client filed a generation it then failed to publish',
+        proves: 'the next mint publishes a fresh kid, conveys only that kid, '
+            'and retires the filed one, which still reads. Mutation-proven: '
+            'restoring a resume, or dropping the retire, reddens it',
+        clauses: ['a mint that finds nothing published always mints'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when another enrollment conveyed this client a generation and never '
+            'published it',
+        proves: 'a private conveyed through file() and never published is '
+            'retired, and the mint publishes a kid of its own',
+        clauses: ['whichever enrollment minted it'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when a revocation touches the namespace after the conveyance read '
+            'it',
+        proves: 'the keyfile records the owed rotation before the rotation, '
+            'which conveys a successor afresh, with the no-revocation control '
+            'beside it. Mutation-proven: missing the revocation, or skipping '
+            'the record, reddens it',
+        clauses: [
+          'a revocation landing after that read and before the publish'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when the mint publishes, then the rotation publishes under the same '
+            'lock',
+        proves: 'one lock take, two publishes, and the successor conveyed '
+            'between them. Mutation-proven: skipping afterPublish, or '
+            'conveying nothing, reddens it',
+        clauses: [
+          'a revocation landing after that read and before the publish'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'when its record stamp is later than the revocation, then it is '
+            'rotated',
+        proves: 'a start rotates a published generation the keyfile records '
+            'as owed, though its stamp answers the revocation, and not once '
+            'its successor is published. Mutation-proven: ignoring the '
+            'record, or reading any record in the namespace, reddens it',
+        clauses: ['E1\'s next start makes it'],
       );
       provenIn(
         'packages/at_client/test/pre_publish_conveyance_test.dart',
