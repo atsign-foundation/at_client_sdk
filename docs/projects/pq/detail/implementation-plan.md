@@ -3614,7 +3614,9 @@ its own. None blocks anything.
     than a rival. The two callers share one body,
     `requestAndFileNskeyPrivate`, so the bootstrap's heal and the derived one
     cannot diverge. What the bootstrap still supplies and nothing derives is
-    the **gate** — only it knows `PqStartupGates.askOnReadMiss`. Pinned by
+    the **gate** — only it knows `PqStartupGates.askOnReadMiss`, which it
+    hands to the ring. (Until 2026-10-29 it withheld only the hook, so the
+    derived ask went out with the gate off.) Pinned by
     `asksOnReadMiss` in `nskey_self_heal_test.dart`, with the control that a
     client holding no key source still asks nothing, because an answer with
     nowhere to land repairs the client at its next start and reads meanwhile

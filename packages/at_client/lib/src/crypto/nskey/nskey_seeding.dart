@@ -1,4 +1,3 @@
-import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/enroll/at_sign_credential.dart';
@@ -509,18 +508,22 @@ class NskeySeeding {
         // sender would pick: a key added under a second algorithm, or a
         // generation a rotation retired, opens values this enrollment is owed
         // too, and nothing else asks for its private.
-        final names = <String>[];
+        final missing = <String>[];
         for (final entry in advertised.keys) {
           if (entry.use != SecretSharingAlgos.useEnc ||
               !SecretSharingAlgos.keyAlgos.contains(entry.alg)) {
             continue;
           }
-          if (await ring.privateHalf(owner, namespace, entry.kid) != null) {
+          if (await ring.heldPrivateHalf(owner, namespace, entry.kid) != null) {
             continue;
           }
-          names.add('${NskeyPrivateFiling.secretNamePrefix}${entry.kid}');
+          missing.add(entry.kid);
         }
-        if (names.isEmpty) continue;
+        if (missing.isEmpty) continue;
+        final names = [
+          for (final kid in missing)
+            '${NskeyPrivateFiling.secretNamePrefix}$kid'
+        ];
 
         final sent =
             await sharing.requestSecretsFromNamespace(namespace, names: names);
@@ -531,29 +534,33 @@ class NskeySeeding {
         }
         asked.add(namespace);
 
-        // NOTE: unawaited on purpose — a holder may be offline for days, and
-        // neither this sweep nor the client's start may wait on one.
-        for (final name in names) {
-          unawaited(sharing
-              .waitForSecret(namespace, name,
-                  timeout: NskeyPrivateFiling.conveyanceWait)
-              .then((secret) => filing.file(secret))
-              .then((filed) {
-            if (filed) {
-              _logger.info('Healed the nskey private $name for '
-                  '$owner:$namespace from another enrollment');
-            }
-          }).catchError((Object e) {
-            if (e is StoppedException) {
-              _logger.warning('Stopped waiting for the nskey private $name for '
-                  '$owner:$namespace: the client stopped, and the next start '
-                  'asks again');
-              return;
-            }
-            _logger.info('No holder answered for $name in $owner:$namespace '
-                'within the wait; a later answer is filed as it arrives '
-                '($e)');
-          }));
+        // NOTE: never awaited — a holder may be offline for days, and neither
+        // this sweep nor the client's start may wait on one.
+        for (final kid in missing) {
+          final name = '${NskeyPrivateFiling.secretNamePrefix}$kid';
+          ring.noteOutstandingAsk(
+              namespace,
+              kid,
+              sharing
+                  .waitForSecret(namespace, name,
+                      timeout: NskeyPrivateFiling.conveyanceWait)
+                  .then((secret) => filing.file(secret))
+                  .then((filed) {
+                if (filed) {
+                  _logger.info('Healed the nskey private $name for '
+                      '$owner:$namespace from another enrollment');
+                }
+              }).catchError((Object e) {
+                if (e is StoppedException) {
+                  _logger.warning('Stopped waiting for the nskey private $name '
+                      'for $owner:$namespace: the client stopped, and the next '
+                      'start asks again');
+                  return;
+                }
+                _logger.info('No holder answered for $name in '
+                    '$owner:$namespace within the wait; a later answer is '
+                    'filed as it arrives ($e)');
+              }));
         }
       } catch (e) {
         if (e is StoppedException) rethrow;

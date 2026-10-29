@@ -61,6 +61,9 @@ void main() {
     late FakeAtServer server;
     late AtClientImpl client;
 
+    /// The generation this client's own advertisement for `app` names.
+    late String kid;
+
     List<String> sentSince(int before) =>
         server.sockets.expand((s) => s.written).skip(before).toList();
 
@@ -74,11 +77,11 @@ void main() {
           ..metadata.appMetadata =
               AppMetadata(providerId: providerId, additional: additional);
 
-    AtKey nskeyRecord({String ns = 'app', String nskeyKid = 'kid1'}) =>
+    AtKey nskeyRecord({String ns = 'app', String? nskeyKid}) =>
         shared(nskeyCryptoProviderId, {
           'recipientKind': NskeyRecipientKind.nskey,
           'ckKid': 'ck1',
-          'nskeyKid': nskeyKid,
+          'nskeyKid': nskeyKid ?? kid,
           'ns': ns,
         });
 
@@ -88,7 +91,7 @@ void main() {
               AppMetadata(providerId: nskeyCryptoProviderId, additional: {
             'recipientKind': NskeyRecipientKind.nskey,
             'ckKid': 'ck1',
-            'nskeyKid': 'kid1',
+            'nskeyKid': kid,
             'ns': 'app',
             'destination': destination,
             'ckNs': ckNs,
@@ -116,6 +119,16 @@ void main() {
       // NOTE: the fake accepts the client's credential, as an atServer accepts
       // the enrollment's own PKAM, so an authenticated command reaches it.
       client.getRemoteSecondary()!.atLookUp.authenticator = (_) async => true;
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final advertised = NskeyAdvertisement.single(
+          publicKey: (await kem.keyPairFromSeed(kem.newSeed())).publicKey,
+          alg: SecretSharingAlgos.xWing);
+      kid = advertised.nskeyKid;
+      // NOTE: under the refused spelling too, so only the refusal keeps a
+      // refused record from the ask.
+      for (final ns in ['app', 'app\n']) {
+        client.pqBootstrap!.ring.rememberOwn('@alice', ns, advertised);
+      }
     });
 
     tearDown(() => client.stop());
@@ -147,7 +160,7 @@ void main() {
         'when a shared nskey record names a generation holding a newline, '
         'then the read is refused before anything is asked', () async {
       await expectLater(
-          read(nskeyRecord(nskeyKid: 'kid1\n')), refusedNaming('nskeyKid'));
+          read(nskeyRecord(nskeyKid: '$kid\n')), refusedNaming('nskeyKid'));
       expect(asked(), 0);
     });
 

@@ -127,9 +127,9 @@ class PqStartupGates {
   /// Writes the atServer's view of this enrollment's grants onto the keyfile.
   final bool reconcileEnrollmentSnapshot;
 
-  /// Active: the read path's self-heal — a miss on an own generation
-  /// broadcasts a pull. Off means the key ring is built without the
-  /// conveyance-request hook.
+  /// Active: the read path's self-heal — a miss on an own generation reads
+  /// the own advertisement, fetches this enrollment's conveyance records and
+  /// broadcasts a pull. Off, a miss makes no call to the atServer.
   final bool askOnReadMiss;
 
   /// The gates that are off, in declaration order, or `every step` when none
@@ -221,11 +221,12 @@ class PqClientBootstrap {
       // An answer left in the in-memory secret store is not filed again until
       // the next start, so a hook that only broadcast would heal the client
       // one start late.
-      requestConveyance: (keysIo == null || !gates.askOnReadMiss)
+      requestConveyance: keysIo == null
           ? null
           : (namespace, secretName) => requestAndFileNskeyPrivate(
               sharing, filing, namespace, secretName,
               logger: _logger),
+      askOnReadMiss: gates.askOnReadMiss,
     );
     seeding = NskeySeeding(
       atClient: _atClient,

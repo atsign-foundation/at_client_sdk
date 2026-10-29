@@ -10,6 +10,9 @@
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.
+- fix: a read that lacks a namespace key's private goes to the atServer only
+  for a key this atSign has published, with one request for it at a time,
+  and not at all under `PqStartupGates.inert()` or with `askOnReadMiss` off.
 - feat: an enrollment with a key package holds a namespace key from the
   moment it is published. Only such a client mints one; on the atSign's own
   credential, `ensureReachable` answers `AtReachability.noKeyPackage`.

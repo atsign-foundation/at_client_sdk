@@ -960,8 +960,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   conveyance record for G1 sealed to E2's key package may be waiting on the atServer, and
   E2's client has not filed G1's private.
 - **When:** E2's client puts or gets a value in `app_1.my_apps`.
-- **Then:** it fetches the conveyance records addressed to it from the atServer, files the
-  private one carries, and the write is sealed to G1, or the read opens.
+- **Then:** when an own advertisement the client holds names G1, it fetches the conveyance
+  records addressed to it from the atServer, files the private one carries, and the write
+  is sealed to G1, or the read opens.
+- **Then:** when none it holds names G1, it first reads
+  `public:__nskey.app_1.my_apps@alice` from the atServer, at most once per `askCooldown`
+  (5 s) per namespace, and only in a namespace whose own advertisement it holds or whose
+  nskey private its keyfile holds; a read that cannot reach the atServer is tried again by
+  the first miss after the cooldown, and with G1 still unnamed the client neither fetches
+  nor asks, and the miss fails as below.
 - **Then:** with no record waiting, it asks the other enrollments for G1's private.
 - **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
   for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
@@ -971,20 +978,24 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
   whichever generation it names, and the startup collection does not start that
   cooldown.
-- **Then:** the client asks about a namespace at most once per `askCooldown` for the
-  generations its last-read copy of its own advertisement names, and once for any other,
-  and forgets a namespace once its cooldown has passed.
-- **Then:** asks for generations that copy does not name, in a namespace it holds no copy
-  for as well, are capped at 8 per `askCooldown` across every namespace; a miss past the
-  cap asks nothing and fails as above, and the first one held back in each cooldown is
-  named in a warning.
+- **Then:** the client asks about each generation at most once per `askCooldown`, and not
+  again while an earlier ask for it, from a miss or from the client's start, is still
+  waiting for its answer, for up to `conveyanceWait` (5 minutes); a miss on a second
+  generation in the namespace asks for that one too, and the client forgets a generation
+  once its cooldown has passed.
+- **Then:** with `askOnReadMiss` off, `PqStartupGates.inert()` among them, a miss sends
+  nothing to the atServer: no read, no fetch and no ask.
 - **Then:** a fetch that meets a record the startup collection is still filing waits, up to
   `fetchOnMissTimeout` (10 s), for a sweep already filing it, rather than skipping it.
   Past that the miss asks and fails while the fetch goes on, and a private it then files
   releases whatever parked waiting for it.
 - **Why:** a record already on the atServer needs no other enrollment to be online, so
   only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
-  startup collection, so the fetch is what lets a write straight after it go through.
+  startup collection, so the fetch is what lets a write straight after it go through. A
+  shared record names its own namespace and generation, so what a miss costs the atServer
+  is bounded by what this atSign holds and advertises: nothing for a namespace the client
+  holds nothing for, one read per cooldown for a generation not advertised, and one fetch
+  per cooldown and one ask per wait for one that is.
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
   `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live,
   `tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart`.
@@ -1602,10 +1613,10 @@ held. A content key is replaced when either generation it rests on moves on. Des
 - **@dos:** nothing here runs before authentication. Each write reads the cached
   advertisement and the filed private, or, where the sender holds no key of its
   own covering the namespace, remembers that for 15 minutes; a missing private is
-  asked for at most once per namespace per cooldown for the generations the
-  client's own advertisement names and once for any other, the latter capped across
-  namespaces as UC-A3.6 says, a failed ask included, and a cut happens at most once
-  per destination, namespace and generation change.
+  asked for only when the client's own advertisement names its generation, at most
+  once per generation per cooldown and not while an earlier ask for it is waiting,
+  as UC-A3.6 says, a failed ask included, and a cut happens at most once per
+  destination, namespace and generation change.
 - **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
   current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
   Alice's generation G1.

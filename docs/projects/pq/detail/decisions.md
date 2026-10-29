@@ -6038,8 +6038,10 @@ keyfile), 3. `seedNamespaceKeys` (active, keeps its own
 not a re-survey. The two read-preconditions have no gate field at all:
 ungateable by construction. 14.13's remaining active sites live outside
 the startup and outside this object: `register()`'s
-`publishPublicSigningKey`, and the read-path conveyance hook, which IS
-gated here (`askOnReadMiss` controls whether the ring gets the hook).
+`publishPublicSigningKey`, and the read-path self-heal, which IS gated
+here: the ring takes `askOnReadMiss`, and with it off a miss reads, fetches
+and asks nothing. (Until 2026-10-29 the gate only withheld the hook, and a
+ring holding a filing derived its own ask anyway.)
 
 Deliberate structural change, not just motion: the two racing tasks are
 now one serial sequence (seed placed between collect and the asks), which
@@ -11010,7 +11012,9 @@ reads. `AtClientSecretSharing.forClient` is Expando-cached per client, so the
 derived ask uses the same instance the bootstrap holds rather than a rival one,
 and both callers share one body (`requestAndFileNskeyPrivate`) so the two heals
 cannot diverge. What the bootstrap still supplies and nothing derives is the
-**gate**: only it knows `PqStartupGates.askOnReadMiss`.
+**gate**: only it knows `PqStartupGates.askOnReadMiss`, which it hands to
+the ring. (Until 2026-10-29 it withheld only the hook, so the derived ask
+went out with the gate off.)
 
 The ask is gated on the *filing*, not on the client: asking with nowhere to file
 leaves the reply in the in-memory secret store, which repairs the client at its

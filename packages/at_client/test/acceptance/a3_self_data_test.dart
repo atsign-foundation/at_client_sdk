@@ -499,11 +499,16 @@ void main() {
       // GIVEN an own nskey generation published, whose private this
       //       enrollment's client has not filed.
       // WHEN  it writes or reads in that namespace.
-      // THEN  it fetches the conveyance records addressed to it, files a
-      //       private one carries, and goes on; with none, it asks the other
-      //       enrollments and the put fails saying the private key has not
-      //       yet been conveyed. Concurrent misses share one fetch, and a miss
-      //       within askCooldown of an on-miss fetch does not fetch again.
+      // THEN  for a generation an own advertisement it holds names, it fetches
+      //       the conveyance records addressed to it, files a private one
+      //       carries, and goes on; with none, it asks the other enrollments
+      //       and the put fails saying the private key has not yet been
+      //       conveyed. For a generation none it holds names, it first reads
+      //       the published advertisement, once per askCooldown per namespace
+      //       and only in a namespace it holds an advertisement or a private
+      //       for. It asks about each generation once per askCooldown and not
+      //       while an earlier ask for it waits, and with askOnReadMiss off a
+      //       miss sends nothing.
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
         'when a conveyance record for it is waiting, then the fetch files it',
@@ -544,51 +549,106 @@ void main() {
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
-        'when they come at once, then one fetch serves them all and each '
-            'namespace is asked once',
-        proves: 'fifty misses over three namespaces make one fetch and three '
-            'asks. Mutation-proven: stamping asks per generation reddens it '
-            'with fifty',
+        'when fifty come at once over three namespaces, then one fetch serves '
+            'them all and each generation is asked once',
+        proves: 'fifty misses over six advertised generations in three '
+            'namespaces make one fetch and six asks. Mutation-proven: stamping '
+            'asks per namespace reddens it with three',
         clauses: [
           'whichever generations they name',
-          'asks about a namespace at most once per',
+          'asks about each generation at most once per',
         ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when kid A misses and then kid B in one namespace, then both are '
+            'asked',
+        proves: 'a second generation in a namespace gets its own ask, with A '
+            'missed twice and asked once as the control. Mutation-proven: '
+            'stamping asks per namespace reddens it with B unasked',
+        clauses: ['a miss on a second generation in the namespace asks'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a generation misses again while its ask is outstanding',
+        proves: 'with no cooldown, a miss while the ask is outstanding asks '
+            'nothing, and once its wait ends the next miss asks. '
+            'Mutation-proven: dropping the outstanding check reddens it with '
+            'two asks',
+        clauses: ['not again while an earlier ask for it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_self_heal_test.dart',
+        'a start with a missing kid sends exactly one ask, and a read miss '
+            'inside the wait adds none',
+        proves: 'the start sends one request and its wait holds back a read '
+            'miss with no cooldown, until the wait ends. Mutation-proven: the '
+            'start reading through privateHalf, and the start not recording '
+            'its ask, each redden it',
+        clauses: ['from a miss or from the client\'s start'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
         'when the cooldown has passed, then the next miss asks again and the '
             'quiet namespaces are forgotten',
-        proves: 'past the cooldown a namespace is asked again, and only the '
+        proves: 'past the cooldown a generation is asked again, and only the '
             'stamps inside it are held. Mutation-proven: dropping the prune '
             'reddens it with three',
-        clauses: ['forgets a namespace once its cooldown has passed'],
+        clauses: ['forgets a generation once its cooldown has passed'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
-        'when one has gone out in a namespace, then a miss of the kid its '
-            'advertisement names still asks',
-        proves: 'an ask for an unnamed kid leaves the advertised kid its own '
-            'ask, with a second unnamed kid as the control. Mutation-proven: '
-            'one stamp for both reddens it',
-        clauses: ['and once for any other'],
+        'when the ring knows nothing of its namespace, then nothing is read',
+        proves: 'twenty misses in namespaces the ring holds nothing for read, '
+            'fetch and ask nothing. Mutation-proven: treating every namespace '
+            'as known reddens it with twenty reads',
+        clauses: ['only in a namespace whose own advertisement it holds'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
-        'when the ring holds no copy of its own advertisement',
-        proves: 'with no cached copy the advertised kid shares the unnamed '
-            'kids\' stamp. Mutation-proven: telling it apart without the copy '
-            'reddens it',
-        clauses: ['in a namespace it holds no copy'],
+        'when the ring holds its own advertisement for the namespace, then it '
+            'reads the published one once per cooldown',
+        proves: 'forty misses on unnamed kids make one read, no fetch and no '
+            'ask, and a miss past the cooldown reads again. Mutation-proven: '
+            'dropping the read cooldown, and fetching for an unnamed kid, each '
+            'redden it',
+        clauses: ['it first reads'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
-        'when more than the cap come within a cooldown',
-        proves: 'eight asks go out, the ninth namespace is named in one '
-            'warning, the tenth asks nothing, an advertised kid still asks, '
-            'and a held-back namespace asks after the cooldown. '
-            'Mutation-proven: no cap, a cap counting advertised asks, and a '
-            'warning per held-back ask each redden it',
-        clauses: ['are capped at 8 per'],
+        'when the keyfile holds a private for the namespace and the published '
+            'advertisement names a newer generation',
+        proves: 'a miss on a newer generation in a namespace only the keyfile '
+            'holds reads once, then fetches and asks, with a namespace the '
+            'keyfile does not hold as the control. Mutation-proven: dropping '
+            'the keyfile from what the ring knows reddens it with no read',
+        clauses: ['or whose nskey private its keyfile holds'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the atServer cannot be reached at the first miss',
+        proves: 'a read that fails is not retried inside the cooldown, and the '
+            'first miss after it reads, fetches and opens. Mutation-proven: a '
+            'read stamp that never expires reddens it',
+        clauses: ['tried again by the first miss after the cooldown'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the ring is built with askOnReadMiss false',
+        proves: 'neither an unnamed kid in a keyfile namespace nor an '
+            'advertised one reaches the atServer, with the same ring built '
+            'with the gate on as the control. Mutation-proven: ignoring the '
+            'gate reddens it',
+        clauses: ['a miss sends nothing to the atServer'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_client_bootstrap_test.dart',
+        'when the gates are inert, then a miss on it makes no call',
+        proves: 'through the bootstrap over a keyfile, an inert start and then '
+            'a miss on an advertised generation make no remote read, write or '
+            'scan, with the gate on as the control beside it. '
+            'Mutation-proven: ignoring the gate reddens it',
+        clauses: ['a miss sends nothing to the atServer'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
