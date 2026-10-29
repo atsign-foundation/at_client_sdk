@@ -34,9 +34,12 @@ void main() {
 
   late MockAtLookupImpl lookUp;
   late List<AtAuthenticator?> handed;
+  late List<SecondaryAddressFinder?> finders;
+  final finder = FixedSecondaryAddressFinder('127.0.0.1', 6464);
   setUp(() {
     lookUp = MockAtLookupImpl();
     handed = [];
+    finders = [];
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
   });
@@ -49,6 +52,7 @@ void main() {
       SecondaryAddressFinder? secondaryAddressFinder,
       Map<String, dynamic> clientConfig = const {}}) {
     handed.add(authenticator);
+    finders.add(secondaryAddressFinder);
     return lookUp;
   }
 
@@ -62,8 +66,11 @@ void main() {
   }
 
   Future<String?> idReachingPkam(AtKeysIo keys) async {
-    await Atsign(atSign)
-        .authenticatesAs(keys: keys, rootDomain: rootDomain, lookUps: lookUps);
+    await Atsign(atSign).authenticatesAs(
+        keys: keys,
+        rootDomain: rootDomain,
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
     return idOnTheWire();
   }
 
@@ -109,7 +116,8 @@ void main() {
     final id = await Atsign(atSign).authenticatesAs(
         keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
         rootDomain: rootDomain,
-        lookUps: lookUps);
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
 
     expect(id, 'e-7');
     verify(() => lookUp.pkamAuthenticate()).called(1);
@@ -118,6 +126,14 @@ void main() {
     verify(() => lookUp.close()).called(1);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
         reason: 'a check, not a client');
+  });
+
+  test(
+      'when it authenticates, then its connection finds the atServer through '
+      'the finder given', () async {
+    await idReachingPkam(InMemoryAtKeysIo.holding(atSign, keysAs('e-1')));
+
+    expect(finders.single, same(finder));
   });
 
   test('a legacy keyfile authenticates as its flat stored enrollment',
@@ -147,7 +163,8 @@ void main() {
     final id = await Atsign(atSign).authenticatesAs(
         keys: InMemoryAtKeysIo.holding(atSign, keysAs()),
         rootDomain: rootDomain,
-        lookUps: lookUps);
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
 
     expect(id, 'primary');
     expect(await idOnTheWire(), isNull,
@@ -164,7 +181,8 @@ void main() {
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            lookUps: lookUps),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause',
                 AtConnectionCause.unauthenticated)
@@ -181,7 +199,8 @@ void main() {
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            lookUps: lookUps),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)));
   });
@@ -194,7 +213,8 @@ void main() {
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            lookUps: lookUps),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtConnectException>()),
         reason: 'the control: only a refusal is retyped');
   });

@@ -499,7 +499,8 @@ void main() {
               keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
               rootDomain:
                   AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
-                      lookUps: secureSocketLookUps()),
+                      lookUps: secureSocketLookUps(),
+                      secondaryAddressFinder: TestUtils.atDirectory),
           throwsA(predicate((e) =>
               '$e'.contains('AT0025') &&
               '$e'.contains('${atEnrollmentResponse.enrollmentId} is denied'))));

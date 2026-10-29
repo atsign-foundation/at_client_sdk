@@ -138,17 +138,21 @@ extension AtsignLifecycle on Atsign {
   /// `open` would have reported; a failure to reach the atServer is thrown
   /// as it is.
   ///
-  /// [lookUps] builds the connection.
+  /// [lookUps] builds the connection, which finds the atServer through
+  /// [secondaryAddressFinder].
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
     required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
     try {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
-          enrollmentId: enrollmentId, lookUps: lookUps);
+          enrollmentId: enrollmentId,
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {

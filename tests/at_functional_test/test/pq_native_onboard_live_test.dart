@@ -83,7 +83,8 @@ void main() {
         await Atsign(atSign).authenticatesAs(
             keys: keysIo,
             rootDomain: rootDomain,
-            lookUps: secureSocketLookUps()),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         enrollmentId,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
             'succeeded by ML-DSA; and the keyfile alone names the enrollment, '

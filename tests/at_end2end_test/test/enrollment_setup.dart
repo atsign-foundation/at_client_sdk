@@ -17,6 +17,7 @@ import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/run_marker.dart';
 import 'package:at_end2end_test/src/setup_outcome.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/test.dart';
@@ -180,7 +181,8 @@ void main() {
             await Atsign(currentAtSign).authenticatesAs(
                 keys: session.atKeysIo,
                 rootDomain: rootDomain,
-                lookUps: secureSocketLookUps()),
+                lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: TestPreferences.atDirectory),
             atEnrollmentResponse.enrollmentId);
         print(
             'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');

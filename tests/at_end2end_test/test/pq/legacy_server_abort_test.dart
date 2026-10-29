@@ -104,7 +104,8 @@ void main() {
         ConfigUtil.getYaml()['root_server']['port'] ?? 64);
     final enrollmentId = await Atsign(atSign)
         .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
-            lookUps: secureSocketLookUps());
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,

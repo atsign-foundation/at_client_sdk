@@ -232,8 +232,9 @@ needs types at_client doesn't export, so raise a
 [feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
 for it.
 
-`Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
-enrollment a keys store authenticates as without building a client.
+`Atsign.authenticatesAs(keys: ..., rootDomain: ..., lookUps: ...,
+secondaryAddressFinder: ...)` answers which enrollment a keys store
+authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in
 [`at_client_flutter`](../at_client_flutter); CLI apps get them behind
 [`at_client_cli`](../at_client_cli)'s `CLIBase` and `at_activate` commands.

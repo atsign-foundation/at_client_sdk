@@ -112,7 +112,8 @@ void main() {
             keys: keysIo,
             rootDomain:
                 AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
-            lookUps: secureSocketLookUps()),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         enrollmentId,
         reason: 'the ladder keyfile must authenticate, and resolve to the '
             'rung being asked for');

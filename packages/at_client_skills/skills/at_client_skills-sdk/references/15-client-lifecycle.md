@@ -49,13 +49,13 @@ final resumed = await Atsign('@alice').resumeEnrollment(
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
     rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-    lookUps: lookUps);
+    lookUps: lookUps, secondaryAddressFinder: finder);
 ```
 
 In at_client 4.0 every verb is handed what it builds a client from, and the
 compiler insists: `storage:` on `open`, `activate` and `pending.client`, and
 `lookUps:` ([section 3](#3-connections)) with `secondaryAddressFinder:` on
-`open`, `activate`, `enroll` and `resumeEnrollment`. A CLI program takes its
+`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`. A CLI program takes its
 keys and store from `CliKeys.fileFor(atSign)` and
 `CliKeys.storageFor(atSign, program: ...)`. `open` also takes
 `serviceFactory:` (a process that must not sync hands in

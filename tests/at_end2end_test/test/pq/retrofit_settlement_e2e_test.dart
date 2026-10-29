@@ -118,7 +118,8 @@ void main() {
     return Atsign(atSign).authenticatesAs(
         keys: FileAtKeysIo(filePath: (_) => path),
         rootDomain: rootDomain(),
-        lookUps: secureSocketLookUps());
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestPreferences.atDirectory);
   }
 
   /// Retrofits [label] and gives the successor one authentication of its own,
@@ -137,7 +138,8 @@ void main() {
         enrollmentId: await Atsign(atSign).authenticatesAs(
             keys: keysIo,
             rootDomain: rootDomain(),
-            lookUps: secureSocketLookUps()));
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory));
     final client = await selfRetrofit(
       // Explicit because the parameter default is the RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,

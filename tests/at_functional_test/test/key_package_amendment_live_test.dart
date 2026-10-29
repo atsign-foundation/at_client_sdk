@@ -307,7 +307,8 @@ void main() {
         await Atsign(atSign).authenticatesAs(
             keys: keysIo,
             rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
-            lookUps: secureSocketLookUps()),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         enrollmentId,
         reason: 'the device keyfile must resolve to $enrollmentId and '
             're-authenticate as it, or the amendment below would be '
@@ -454,7 +455,8 @@ void main() {
           await Atsign(atSign).authenticatesAs(
               keys: keyfiles[device]!,
               rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
-              lookUps: secureSocketLookUps()),
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: TestUtils.atDirectory),
           client.enrollmentId);
       final sender = await Atsign(atSign).open(
           keys: keyfiles[device]!,

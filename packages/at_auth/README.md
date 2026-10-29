@@ -348,7 +348,9 @@ final keys = await client.atKeysIo!.read(atSign); // the material, from the stor
 // Which enrollment the keyfile authenticates as, with no client built:
 final principal = await Atsign(atSign).authenticatesAs(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
-    rootDomain: AtRootDomain.atsignDomain);
+    rootDomain: AtRootDomain.atsignDomain,
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64));
 ```
 
 **Onboard with a CRAM secret**

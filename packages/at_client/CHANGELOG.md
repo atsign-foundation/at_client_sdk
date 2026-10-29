@@ -37,8 +37,9 @@
   `SyncTelemetryEvent`.
 - breaking: `AtClientUtil.findSecondary` is removed. Use
   `RemoteSecondary.findSecondaryUrl`.
-- breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; pass
-  `lookUps` to choose how it connects.
+- breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; it takes
+  a required `lookUps` and `secondaryAddressFinder`, which choose how it
+  connects.
 - breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
   the `atChops` parameters of `AtClientImpl.create` and
   `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`.
@@ -102,8 +103,8 @@
   `at_client.dart` no longer exports them, and builds for the web.
 - breaking: every call that builds a client, `enroll`, `resumeEnrollment` and
   `AtServiceFactory.atClient` take a required `lookUps` and
-  `secondaryAddressFinder`, and `authenticatesAs`, `retrofitIdentity` and
-  `RemoteSecondary` a required `lookUps`. `secureSocketLookUps()` and
+  `secondaryAddressFinder`, as do `authenticatesAs` and `retrofitIdentity`,
+  and `RemoteSecondary` a required `lookUps`. `secureSocketLookUps()` and
   `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`
   connect as at_client 3 did.
 - feat: `InMemoryAtClientStorage` is pure Dart and needs no native library. A
@@ -141,8 +142,7 @@
   enrollment. A command needing authentication on that lookup in between
   fails rather than logging in as the old one.
 - experimental: `selfRetrofit` given no `atLookUp` submits through the
-  `secondaryAddressFinder` it is given, as the client it opens does, and
-  `retrofitIdentity` requires one.
+  `secondaryAddressFinder` it is given, as the client it opens does.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.

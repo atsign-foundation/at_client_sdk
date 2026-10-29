@@ -90,7 +90,8 @@ void main() {
   Future<AtAuthSession> authenticateLegacy(String label) async {
     final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
     final enrollmentId = await Atsign(atSign).authenticatesAs(
-        keys: keysIo, rootDomain: rootDomain(), lookUps: secureSocketLookUps());
+        keys: keysIo, rootDomain: rootDomain(), lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain(),

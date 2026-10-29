@@ -7,8 +7,8 @@ import 'package:at_lookup/at_lookup.dart'
 /// A connection to [atSign]'s atServer authenticated as [enrollmentId], or
 /// as the enrollment [keys] name when none is given; the caller closes it.
 ///
-/// [lookUps] builds the connection, reaching the atServer through
-/// [secondaryAddressFinder] where one is given. A refusal throws
+/// [lookUps] builds the connection, which finds the atServer through
+/// [secondaryAddressFinder]. A refusal throws
 /// [UnAuthenticatedException], or whatever the handshake threw, and the
 /// connection is closed first.
 Future<AtLookUp> authenticatedLookUp(
@@ -16,7 +16,7 @@ Future<AtLookUp> authenticatedLookUp(
   AtKeysIo keys,
   AtRootDomain rootDomain, {
   required AtLookUpFactory lookUps,
-  SecondaryAddressFinder? secondaryAddressFinder,
+  required SecondaryAddressFinder secondaryAddressFinder,
   String? enrollmentId,
 }) async {
   final id =

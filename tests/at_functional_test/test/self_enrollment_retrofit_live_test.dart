@@ -103,7 +103,8 @@ void main() {
     final keysIo = FileAtKeysIo(filePath: pathFor ?? keysFilePath);
     final enrollmentId = await Atsign(atSign)
         .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
-            lookUps: secureSocketLookUps());
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -117,7 +118,8 @@ void main() {
   /// authentication revokes it.
   Future<AtLookUp> legacyLookUp(AtAuthSession session) =>
       authenticatedLookUp(atSign, session.atKeysIo, rootDomain,
-          enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps());
+          enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: TestUtils.atDirectory);
 
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '
@@ -153,7 +155,8 @@ void main() {
     expect(
         await Atsign(atSign).authenticatesAs(
             keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain,
-            lookUps: secureSocketLookUps()),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         newId,
         reason: 'the retrofit that carries the rollout window must be usable '
             'immediately, exactly as the PQ one is, and the keyfile alone '
@@ -220,7 +223,8 @@ void main() {
     expect(
         await Atsign(atSign).authenticatesAs(
             keys: FileAtKeysIo(filePath: keysFilePath),
-            rootDomain: rootDomain, lookUps: secureSocketLookUps()),
+            rootDomain: rootDomain, lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: TestUtils.atDirectory),
         newId,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → signer → pkam dispatch, all genuinely ML-DSA, and the '
