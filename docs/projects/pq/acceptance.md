@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**118 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 120 use cases and 129 scenarios —
+**119 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 121 use cases and 130 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -86,6 +86,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A3.4  | Self notification (encrypted value)                                                 | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.5  | The published nskey advertisement names its KEM and what it can open                | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.6  | A client that needs a private it does not hold fetches it, else asks, else fails    | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.7  | A namespace key's private reaches every listed enrollment before anyone can seal to it | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A4.1  | alice → bob, both PQ-native, bob has the namespace key                              | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.2  | alice → bob where bob has no namespace key → the share fails                        | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.3  | Multi-enrollment both ends                                                          | PROVEN    | `a4_shared_data_test.dart`   |
@@ -813,29 +814,32 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice1` starts and seeds its authorised namespaces
   (`AtClientImpl._init` → `NskeySeeding.seed()`, opt-in via
   `AtClientPreference.seedNamespaceKeys`). An APKAM client learns its namespaces from its own
-  enrollment record; a legacy PKAM client has exactly one, its `preference.namespace`.
+  enrollment record, and mints only when that record carries a verified key package; a
+  client on the atSign's own credential carries none and mints nothing
+  ([UC-A3.7](#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
 - **Steps:**
-  1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
-     create — so a concurrent enrollment loses and re-reads), **re-reads the
-     advertisement under the lock** in case a sibling published while it was
-     racing, mints the **one** `app_1.my_apps` nskey keypair — under the first
-     algorithm `AtClientPreference.keyEstablishmentAlgorithms` names — publishes its
-     public half **immediately** as the APKAM-signed
-     `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…],
-     suites}`, and holds the private. It does **not** release the lock: the ttl
-     does, which is what makes it an election token with a cooldown rather than a
-     mutex.
-  2. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
+  1. `alice1` reads the `app_1.my_apps` roster (`enroll:listns:app_1.my_apps`), verifying
+     each member's advertised key package's APKAM signature against its `_apsk`
+     ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), and sizes the
+     mint lock's ttl from it
+     ([UC-A3.7](#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
+  2. It takes the `_nskeylock.app_1.my_apps@alice` lock (immutable create — so a
+     concurrent enrollment loses and re-reads), **re-reads the advertisement under the
+     lock** in case a sibling published while it was racing, mints the **one**
+     `app_1.my_apps` nskey keypair — under the first algorithm
+     `AtClientPreference.keyEstablishmentAlgorithms` names — and files the private.
+  3. **Push** the nskey private per-enrollment to every ≥`r` member on the roster:
+     `pqSeal` it to each member's key package (addressed by `kpid`), put on
+     `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the
+     envelope signature, then correspondence against
+     `public:__nskey.app_1.my_apps@alice` once it is published, and `putIfNewer`s.
+  4. Only then publish the public half as the APKAM-signed
+     `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…], suites}`.
+     It does **not** release the lock: the ttl does, which is what makes it an
+     election token with a cooldown rather than a mutex.
+  5. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
-  3. **Push** the nskey private per-enrollment to every ≥`r` member: call
-     `enroll:listns:app_1.my_apps`, verify each member's advertised key package's
-     APKAM signature against its `_apsk` ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), `pqSeal` the private to each member's
-     key package (addressed by `kpid`), put on
-     `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies
-     the envelope
-     signature, then correspondence against the published
-     `public:__nskey.app_1.my_apps@alice`, and `putIfNewer`s.
 - **Then:**
   - `public:__nskey.app_1.my_apps@alice` exists and resolves on a `plookup`, and
     `alice2` obtains the nskey private and reads.
@@ -974,6 +978,47 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
   `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live, the posture
   grid's self write once the grid enrols every cell before the first mint.
+
+### 4.7 UC-A3.7 — A namespace key's private reaches every listed enrollment before anyone can seal to it
+
+- **Given:** E1, E2 and E3 of `@alice` hold `rw` on `app_1.my_apps` and carry verified key
+  packages in their enrollment records, `primary` is listed with none, and no nskey is
+  published for the namespace.
+- **When:** E1 mints the nskey for `app_1.my_apps`, rotates it, or adds a key to it.
+- **Then:** a conveyance record for each new private, sealed to E2's and E3's key
+  packages, is on the atServer before `public:__nskey.app_1.my_apps@alice` names it, so
+  publishing is the commit point.
+- **Then:** a listed enrollment with no key package, `primary` among them, is skipped
+  silently.
+- **Then:** a listed enrollment whose key package fails verification is conveyed nothing
+  and named in a warning.
+- **Then:** the mint lock's ttl is a ceiling: the ring's own ttl plus a per-member budget
+  for each enrollment listed before the lock is taken, never past the atServer's
+  15-minute limit, and a minter that has spent it does not publish.
+- **Then:** a revocation touching the namespace between the roster read and the publish
+  stops the publish, and the generation E1 filed is retired, so the next mint is a fresh
+  one.
+- **Then:** a minter whose own entry carries no verified key package mints nothing and
+  says why, and `ensureReachable` answers `AtReachability.noKeyPackage`.
+- **Then, for the signing root:** a fully privileged enrollment that mints the root
+  pushes its private, once the root is published, to every other approved, fully
+  privileged enrollment carrying a verified key package; it skips one with none, names
+  one whose package fails verification, and logs a failed push without failing the mint.
+- **Why:** a minter that dies after publishing must not leave a generation whose private
+  nobody else holds, and a client that carries no key package can be conveyed nothing,
+  so it must not publish a key others seal to.
+- **Cross-ref:** an enrollment approved between the roster read and the publish is not
+  on the roster, and its approval conveys it the private
+  ([UC-A2.1](#31-uc-a21--new-enrollment-approved-by-an-online-enrollment-pq-safe-enrollapprove));
+  two minters are serialised by the lock
+  ([UC-B5.4](#124-uc-b54--two-enrollments-race-to-mint-a-namespaces-nskey)).
+- **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
+  `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
+  `seeding_files_private_test.dart` and `pq_signing_root_test.dart`; live,
+  `nskey_seeding_live_test.dart` for a client on the atSign's own credential. The root
+  is pushed after its publish rather than before because a receiver files a conveyed
+  root private only against a published root; filing one pending until the record
+  confirms it is owed in 4.1.
 
 ## 5. A4 · E2EE across atSigns (shared data) + cross-atSign notification
 

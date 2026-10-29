@@ -305,9 +305,13 @@ never a confidentiality control; substitution is prevented by the APKAM signatur
 the envelope, verified against `_apsk`. What immutability *was* doing is stopping two
 of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
-since no one else can write the owner's records. Take the lock, **re-read**, mint,
-write the advertisement, convey the private; nothing deletes the lock, and its ttl
-releases it. The loser of the race backs off and re-reads.
+since no one else can write the owner's records. Read the namespace's roster, take
+the lock, **re-read**, mint, file the private, convey it to every enrollment on the
+roster, and only then write the advertisement, so publishing is the commit point
+([UC-A3.7](acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
+A client whose own roster entry carries no verified key package could be conveyed
+nothing, so it mints nothing. Nothing deletes the lock, and its ttl releases it. The
+loser of the race backs off and re-reads.
 
 Both re-reads go to the **atServer**, never to local storage or a cache: a sibling
 enrollment's publication is not in local storage until sync catches up, and reading
@@ -318,8 +322,11 @@ peers already hold. A cold-start mint that finds one adopts it; a **rotation** t
 found one would have rotated nothing while reporting success, so it does not adopt.
 
 **The ttl is the only release, so it is a cooldown — and it binds rotation as well
-as minting.** A rotation of a namespace minted or rotated within `mintLockTtl` is
-refused rather than queued. That is the protocol rather than a defect: the only case
+as minting.** A mint sizes it from the roster it read: `mintLockTtl` plus a
+per-member budget for each listed enrollment, never more than the atServer's
+15-minute mutex limit, and a winner that spends it abandons rather than publishing. A
+rotation of a namespace minted or rotated within that ttl is refused rather than
+queued. That is the protocol rather than a defect: the only case
 where a second election is wanted inside the window is the winner having failed,
 which is what the ttl bounds. It has one operational consequence worth stating,
 because `revokeEnrollmentAndRotate` **revokes first**: a rotation the cooldown
@@ -1290,7 +1297,12 @@ the client does not check), and minting is
 restricted to a fully privileged enrollment (`rw` on `*` **and** `__manage`). The
 winner of the lock re-reads the record under it, generates the ML-DSA-65 keypair,
 stores the private half in its own `.atKeys`, seeds it as the conveyable root secret,
-and serves it on request **to the other fully privileged enrollments only**. A loser
+and serves it on request **to the other fully privileged enrollments only**. Once the
+record is published it also pushes the private to every other approved, fully
+privileged enrollment carrying a verified key package, and a failed push never fails
+the mint. The push follows the publish because a receiver files a root private only
+against a published root
+([UC-A3.7](acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)). A loser
 of the lock mints nothing and files nothing → it **pulls** the private half
 ([§2.2](#22-secretstore-push--pull-primitives)), verifies public/private
 correspondence, and stores. A lock is a protocol rather than the atServer's absolute

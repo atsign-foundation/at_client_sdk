@@ -27,6 +27,10 @@ enum AtReachability {
   /// [failed], carrying the atServer's refusal of the write.
   notAuthorised,
 
+  /// This enrollment carries no key package, so it can't be conveyed a private
+  /// and mints none.
+  noKeyPackage,
+
   /// The work did not finish inside the timeout. Nothing is known about
   /// whether it eventually will: a mint that was in flight may still land.
   timedOut,

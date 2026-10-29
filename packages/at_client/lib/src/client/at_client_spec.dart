@@ -65,18 +65,20 @@ abstract class AtClient {
   /// peer that fetched in between holds a generation the owner may no longer
   /// be able to open.
   ///
-  /// Answers rather than throws for the two cases that are configuration and
-  /// not failure — a posture that does not seed, and a namespace this
-  /// enrollment cannot hold a key for. Read [AtReachabilityResult.isReachable]
-  /// rather than comparing the outcome, and [AtReachabilityResult.holdsPrivate]
-  /// for whether this client can also open what peers seal there.
+  /// Answers rather than throws for the three cases that are configuration and
+  /// not failure — a posture that does not seed, a namespace this enrollment
+  /// cannot hold a key for, and an enrollment carrying no key package. Read
+  /// [AtReachabilityResult.isReachable] rather than comparing the outcome, and
+  /// [AtReachabilityResult.holdsPrivate] for whether this client can also open
+  /// what peers seal there.
   ///
   /// Nothing is left in flight when this returns [AtReachability.published]:
-  /// the advertisement is an awaited remote write rather than a local-first
-  /// put, so a peer's `plookup` finds it on return. Conveying the private half
-  /// to this atSign's other enrollments is awaited too, and a failure there is
-  /// logged rather than fatal — an enrollment that seeds the namespace asks for
-  /// it at its next start, and any other at the first read that misses it.
+  /// the private half is conveyed to this atSign's other enrollments before the
+  /// advertisement is written, and the advertisement is an awaited remote write
+  /// rather than a local-first put, so a peer's `plookup` finds it on return.
+  /// An enrollment the conveyance cannot reach is logged rather than fatal; it
+  /// asks for the private at its next start, or at the first read that misses
+  /// it.
   ///
   /// [timeout] bounds the whole operation, which may take several round
   /// trips. On [AtReachability.timedOut] nothing is known about whether the

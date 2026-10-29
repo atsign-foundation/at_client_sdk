@@ -1418,6 +1418,36 @@ void main() {
     });
   });
 
+  group('Given a member whose key package did not verify', () {
+    setUp(() {
+      directory.authorize('myapp', 'enroll-a');
+      directory.authorize('myapp', 'enroll-b');
+      directory.authorize('myapp', 'enroll-c');
+      directory.authorize('myapp', 'primary');
+      directory.rejected.add('enroll-c');
+    });
+
+    test(
+        'when a secret is pushed to the namespace, then it is named and the '
+        'rest are still reached', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v'));
+
+      final pushed = await sharerA.pushSecretToNamespaceMembers(
+          sharerA.secretStore.getSecret('myapp', 'token')!);
+
+      expect(pushed, 1);
+      expect(await sharerB.sweepOnce(), 1);
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('enrollment enroll-c') &&
+              m.contains('did not verify')),
+          hasLength(1));
+      expect(logs.at('WARNING').where((m) => m.contains('primary')), isEmpty,
+          reason: 'one with no key package is skipped silently');
+    });
+  });
+
   group('a member whose SUITES do not overlap is skipped, not fatal', () {
     setUp(() {
       directory.authorize('myapp', 'enroll-a');

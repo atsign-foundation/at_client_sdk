@@ -7,7 +7,13 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
-import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
+import 'package:at_client/at_client_mixins.dart'
+    show
+        AtClientEnvelopeSigner,
+        EnrollmentDirectory,
+        KeyPackage,
+        NamespaceMember,
+        PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
@@ -22,6 +28,25 @@ class MockAtClient extends Mock implements AtClient {}
 
 class MockSharing extends Mock implements PairwiseSecretSharing {}
 
+/// A roster listing only the rotating enrollment, with a key package, in every
+/// namespace, which is what lets a rotation mint at all.
+class _RotatorListed implements EnrollmentDirectory {
+  _RotatorListed(this.keyPackage);
+
+  final KeyPackage keyPackage;
+
+  @override
+  Future<List<NamespaceMember>> listForNamespace(String namespace,
+          {Set<String> excludeEnrollmentIds = const {}}) async =>
+      [
+        NamespaceMember(
+            enrollmentId: 'enroll-a', access: 'rw', keyPackage: keyPackage)
+      ];
+
+  @override
+  Future<DateTime?> lastRevokedAt(String namespace) async => null;
+}
+
 class FakeSecret extends Fake implements Secret {}
 
 class FakeEnrollmentRequestDecision extends Fake
@@ -33,6 +58,20 @@ void main() {
   const namespace = 'app_1.my_apps';
 
   final logs = RecordedLogs();
+  late KeyPackage rotatorPackage;
+
+  setUpAll(() async {
+    final pair = await XWingKeyPair.generate();
+    rotatorPackage = KeyPackage(
+        enrollmentId: 'enroll-a',
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: pair.publicKeyBytes)
+        ]);
+  });
 
   setUpAll(() {
     registerFallbackValue(AtKey());
@@ -164,6 +203,8 @@ void main() {
     // through noSuchMethod into a non-nullable type and the push below would
     // never happen, with `dart analyze` clean.
     when(() => mock.secretStore).thenReturn(SecretStore());
+    when(() => mock.directory).thenReturn(_RotatorListed(rotatorPackage));
+    when(() => mock.enrollmentId).thenReturn('enroll-a');
     when(() => mock.pushSecretToNamespaceMembers(any(),
             excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
         .thenAnswer((inv) async {

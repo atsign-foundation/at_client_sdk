@@ -18,6 +18,11 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
 
   final Map<String, Map<String, String>> _nsAccess = {};
 
+  /// Enrollments listed with a key package that did not verify, so with
+  /// [KeyPackageStatus.rejected] and no package, as the atServer-backed
+  /// directory lists them.
+  final Set<String> rejected = {};
+
   /// Records [keyPackage] as [enrollmentId]'s single key package (1:1:1),
   /// modelling the package the enrollment carried on `enroll:request`.
   void seed(String enrollmentId, KeyPackage keyPackage) {
@@ -33,6 +38,13 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
     final members = <NamespaceMember>[];
     access.forEach((enrollmentId, acc) {
       if (excludeEnrollmentIds.contains(enrollmentId)) return;
+      if (rejected.contains(enrollmentId)) {
+        members.add(NamespaceMember(
+            enrollmentId: enrollmentId,
+            access: acc,
+            keyPackageStatus: KeyPackageStatus.rejected));
+        return;
+      }
       final kp = registered[enrollmentId];
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,

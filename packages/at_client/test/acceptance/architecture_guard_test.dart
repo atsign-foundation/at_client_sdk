@@ -109,16 +109,15 @@ void main() {
     // `pushSecretToNamespaceMembers` is the mint/rotation fan-out: it
     // enumerates a namespace's members and seals the secret to each of their
     // key packages. The signing root is atSign-level and carries no namespace,
-    // so there is no roster for it to enumerate — an enrollment that missed
-    // the approval-time conveyance asks a holder for the private instead. That
-    // absence is the invariant, and no runtime assertion can see it: a path
-    // that is never taken and a path that does not exist look identical from
-    // outside.
+    // so a namespace's roster is the wrong one for it: the root goes only to
+    // fully privileged enrollments, by its own push after publishing or by an
+    // enrollment asking. That absence is the invariant, and no runtime
+    // assertion can see it: a path that is never taken and a path that does
+    // not exist look identical from outside.
     const capability = 'pushSecretToNamespaceMembers';
     const declaredIn = 'secret_sharing/pairwise_secret_sharing.dart';
     const callers = <String>[
-      'crypto/nskey/nskey_seeding.dart',
-      'crypto/nskey/nskey_rotation.dart',
+      'crypto/nskey/pre_publish_conveyance.dart',
     ];
     const signingRoot = 'crypto/nskey/pq_signing_root.dart';
     final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');
@@ -133,19 +132,19 @@ void main() {
     for (final path in callers) {
       expect(File('${lib.path}/$path').readAsStringSync(),
           contains('$capability('),
-          reason: '$path must still call $capability. The two call sites are '
-              'this guard\'s positive control: an absence asserted with no '
-              'live use of the name left in the tree measures nothing');
+          reason: '$path must still call $capability. The call site is this '
+              'guard\'s positive control: an absence asserted with no live use '
+              'of the name left in the tree measures nothing');
     }
 
     expect(File('${lib.path}/$signingRoot').readAsStringSync(),
         isNot(contains(capability)),
         reason: 'the signing root must not push its private to namespace '
-            'members. It carries no namespace, so the fan-out has no roster to '
-            'enumerate, and pushing anyway would send the key that vouches for '
-            'every enrollment on the atSign to whatever roster some namespace '
-            'happened to return. The route for an enrollment that does not '
-            'hold it is to ask for it');
+            'members. It carries no namespace, and pushing through the fan-out '
+            'would send the key that vouches for every enrollment on the '
+            'atSign to whatever roster some namespace happened to return, '
+            'scoped enrollments included. Its own push goes to fully '
+            'privileged enrollments only');
 
     // Nor may anything wrap the fan-out: a delegating method elsewhere would
     // let the signing root push while naming nothing the check above greps for.

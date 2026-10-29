@@ -9,6 +9,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         CryptographicMaterial,
         CryptographicMaterialRole,
+        CryptographicMaterialStatus,
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/crypto.dart' show FiledNskeyPrivate;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
@@ -378,7 +379,7 @@ class NskeyPrivateFiling {
 
   /// Every private filed for [namespace], with the algorithm it expands under
   /// and when it was filed; an entry under an algorithm this build cannot
-  /// expand is left out.
+  /// expand is left out, and so is one [retire] retired.
   Future<List<FiledNskeySeed>> filedFor(String namespace) async {
     final keys = await _readSourceOrNull('every private for $namespace');
     if (keys == null) return const [];
@@ -386,6 +387,7 @@ class NskeyPrivateFiling {
     return [
       for (final material in keys.atSignKeys)
         if (material.role == CryptographicMaterialRole.privateDecapsulation &&
+            material.status == CryptographicMaterialStatus.active &&
             material.keyId.startsWith(prefix) &&
             !material.keyId.substring(prefix.length).contains('.'))
           if (_keyAlgoOf(material) case final keyAlgo?)
@@ -454,6 +456,28 @@ class NskeyPrivateFiling {
           NskeySeed(Uint8List.fromList(material.bytes.bytes));
     }
     return held;
+  }
+
+  /// Retires the privates filed for [nskeyKids] in [namespace], so that
+  /// [filedFor] no longer offers them and a later mint does not resume a
+  /// generation whose publish was refused.
+  Future<void> retire(String namespace, Iterable<String> nskeyKids) async {
+    final io = keysIo;
+    if (io is! WrittenAtKeysIo) return;
+    await io.update(atSign.toAtsign(), (keys) {
+      var retired = false;
+      for (final nskeyKid in nskeyKids) {
+        final keyId = keyIdFor(namespace, nskeyKid);
+        if (keys.getAtSignKey(
+                keyId, CryptographicMaterialRole.privateDecapsulation) ==
+            null) {
+          continue;
+        }
+        keys.retireAtSignKey(keyId);
+        retired = true;
+      }
+      return retired;
+    });
   }
 
   /// Stores an nskey **seed** this client either minted or was conveyed.

@@ -548,6 +548,141 @@ void main() {
         clauses: ['waits for a sweep already filing'],
       );
     });
+
+    test(
+        'UC-A3.7 · a namespace key\'s private reaches every listed enrollment '
+        'before anyone can seal to it', () {
+      // GIVEN E1, E2 and E3 hold rw on app_1.my_apps with verified key
+      //       packages, primary is listed with none, nothing is published.
+      // WHEN  E1 mints, rotates or adds a key.
+      // THEN  every new private is conveyed before the advertisement names it,
+      //       primary is skipped silently and a refused package is named, the
+      //       lock's ttl is a roster-sized ceiling, a revocation in the window
+      //       stops the publish and retires the generation, and a minter with
+      //       no key package mints nothing; a minted root is pushed once
+      //       published.
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint, a rotation and an add convey their new privates before the '
+            'advertisement naming them is published',
+        proves: 'each conveyance runs while the atServer still serves the '
+            'previous advertisement, for a mint, a rotation and an add. '
+            'Mutation-proven: moving the conveyance after the publish reddens '
+            'it',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when it conveys, then every kid is pushed before anything returns',
+        proves: 'the conveyance a mint is handed pushes every new private to '
+            'the roster before it returns',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when a secret is pushed to the namespace, then it is named and the '
+            'rest are still reached',
+        proves: 'a member whose package was refused is named in a warning and '
+            'conveyed nothing, while primary, listed with no package, is '
+            'skipped without one. Mutation-proven: removing the refused arm '
+            'reddens it',
+        clauses: [
+          '`primary` among them, is skipped silently',
+          'is conveyed nothing and named in a warning',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when the lock is sized, then it is the margin plus the budget for '
+            'each listed enrollment',
+        proves: 'the ttl is the margin plus the per-member budget for each '
+            'listed enrollment, and is capped at the atServer\'s limit',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint, a rotation and an add take the lock with the ttl handed them',
+        proves: 'each operation takes its lock with the ttl it is handed. '
+            'Mutation-proven for all three: falling back to the ring\'s own '
+            'ttl reddens it',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint that overruns its lease publishes nothing',
+        proves: 'a minter whose lease has run out does not publish',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when a revocation touches the namespace during the conveyance, then '
+            'the publish is refused and what it filed is retired',
+        proves: 'a revocation read after the conveyance refuses the publish '
+            'and retires the filed generation, with the no-revocation control '
+            'beside it',
+        clauses: [
+          'stops the publish, and the generation E1 filed is retired',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a conveyance that throws publishes nothing',
+        proves: 'the refusal the conveyance throws reaches the mint before '
+            'its publish, so nothing is advertised',
+        clauses: [
+          'stops the publish, and the generation E1 filed is retired',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when it seeds, then it answers noKeyPackage and mints nothing',
+        proves: 'a minter whose own entry carries no key package asks the '
+            'ring for no mint',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'packages/at_client/test/seeding_files_private_test.dart',
+        'when its roster entry carries none, then it answers noKeyPackage and '
+            'publishes nothing',
+        proves: 'ensureReachable answers noKeyPackage and nothing is '
+            'published, with the same fixture carrying a key package as the '
+            'control. Mutation-proven: dropping the mapping reddens it',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_seeding_live_test.dart',
+        'a client on the atSign\'s own credential mints nothing',
+        proves: 'a real atServer lists primary with no key package, and a '
+            'client on the demo keys reads that as noKeyPackage and publishes '
+            'nothing',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'when it publishes, then its private reaches every other fully '
+            'privileged enrollment carrying a verified key package',
+        proves: 'the roster is read only once the root is published, the '
+            'private reaches the fully privileged enrollment with a verified '
+            'package, the refused one is named, the one with none is skipped '
+            'silently, and one without `*` gets nothing. Mutation-proven for '
+            'the privilege filter, the refused arm and the order',
+        clauses: ['pushes its private, once the root is published'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'when the push to one enrollment fails, then the mint succeeds and the '
+            'others still receive it',
+        proves: 'a failed push is logged, the mint returns its key, and the '
+            'enrollment listed after the failure still receives it',
+        clauses: ['pushes its private, once the root is published'],
+      );
+    });
   });
 }
 

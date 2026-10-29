@@ -18,7 +18,7 @@ import 'package:at_commons/at_commons.dart'
     show AtKey, AtValue, StoppedException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
-    show NamespaceMember;
+    show KeyPackageStatus, NamespaceMember;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
@@ -1248,6 +1248,14 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final String selfId = enrollmentId;
     int pushed = 0;
     for (final member in members) {
+      // NOTE: an enrollment with no key package, `primary` or a legacy one, is
+      // skipped silently; one whose package was refused is named.
+      if (member.keyPackageStatus == KeyPackageStatus.rejected) {
+        logger.warning('Not pushing "${secret.name}" to enrollment '
+            '${member.enrollmentId} in ${secret.namespace}: its key package '
+            'did not verify, so nothing can be sealed to it');
+        continue;
+      }
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
         // Per member: one peer this client cannot seal to must not stop the

@@ -171,10 +171,11 @@ void main() {
     });
 
     final oldRing =
-        PublishedNskeyKeyRing(old.client, lockTtl: liveMintLockTtl);
+        PublishedNskeyKeyRing(old.client, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
     final oldSeeding = NskeySeeding(
         atClient: old.client,
         ring: oldRing,
+        sharing: AtClientSecretSharing.forClient(old.client),
         privateFiling: oldRing.privateFiling);
     await oldSeeding.seedNamespace(atSign, namespace);
     final before = await oldRing.publishedAdvertisement(atSign, namespace);
@@ -192,7 +193,9 @@ void main() {
 
     await NskeySeeding(
             atClient: rolled.client,
-            ring: PublishedNskeyKeyRing(rolled.client, lockTtl: liveMintLockTtl))
+            ring: PublishedNskeyKeyRing(rolled.client,
+                lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+            sharing: AtClientSecretSharing.forClient(rolled.client))
         .seedNamespace(atSign, namespace);
 
     final after = await PublishedNskeyKeyRing(approver)

@@ -27,7 +27,7 @@ import 'package:at_client/src/crypto/nskey/ck_manager.dart'
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show parseCkConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
-    show NskeySeeding;
+    show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -180,8 +180,11 @@ class AtClientImpl implements AtClient {
       // the ring this client uses. The lock itself excludes a different
       // enrolment only: two racers of the SAME one both read the lock back,
       // both see their own id, and both mint.
-      await bootstrap.seeding
+      final seeded = await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
+      if (seeded == NskeySeedOutcome.noKeyPackage) {
+        return const AtReachabilityResult(AtReachability.noKeyPackage);
+      }
       // NOTE: checked rather than assumed — the mint adopts, rather than
       // replaces, a key a sibling enrollment published after the read above.
       return AtReachabilityResult(AtReachability.published,

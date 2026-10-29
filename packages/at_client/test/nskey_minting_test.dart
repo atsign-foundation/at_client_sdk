@@ -453,6 +453,82 @@ void main() {
             'to prevent');
   });
 
+  test(
+      'a mint, a rotation and an add convey their new privates before the '
+      'advertisement naming them is published', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    final conveyed = <({List<String> kids, String? advertisedThen})>[];
+    Future<void> record(List<String> kids) async =>
+        conveyed.add((kids: kids, advertisedThen: c.advertised[namespace]));
+
+    final minted = await ring.mintAndPublish(namespace, conveyFirst: record);
+    final afterMint = c.advertised[namespace];
+    final rotated = await ring.rotate(namespace, conveyFirst: record);
+    final afterRotate = c.advertised[namespace];
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    final added = await ring.add(namespace, conveyFirst: record);
+
+    expect(conveyed.map((c) => c.kids), [
+      [minted.nskeyKid],
+      [rotated.rotated.nskeyKid],
+      [
+        for (final key in added!.keys)
+          if (key.alg == SecretSharingAlgos.mlKem1024) key.kid
+      ],
+    ]);
+    expect(
+        conveyed.map((c) => c.advertisedThen), [null, afterMint, afterRotate],
+        reason: 'publishing is the commit point: each conveyance ran while '
+            'the atServer still served the previous advertisement, so every '
+            'listed enrollment holds a private before any sender can seal to '
+            'it');
+    expect(c.advertised[namespace], isNot(afterRotate));
+  });
+
+  test('a conveyance that throws publishes nothing', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await expectLater(
+        ring.mintAndPublish(namespace,
+            conveyFirst: (_) async =>
+                throw StateError('a revocation touched the namespace')),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('a revocation touched the namespace'))));
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  test('a mint, a rotation and an add take the lock with the ttl handed them',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace,
+        lockTtl: const Duration(minutes: 3, seconds: 7));
+    await ring.rotate(namespace, lockTtl: const Duration(minutes: 4));
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    expect(await ring.add(namespace, lockTtl: const Duration(minutes: 5)),
+        isNotNull,
+        reason: 'the add had work to do, so it took the lock');
+
+    expect(
+        c.verbs.where((k) => k.key == '_nskeylock').map((k) => k.metadata.ttl),
+        [187000, 240000, 300000],
+        reason: 'the ceiling sized from the roster is the lock\'s ttl, so a '
+            'minter that has spent it does not publish');
+  });
+
   test('the lock is taken remotely, before anything is published', () async {
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());

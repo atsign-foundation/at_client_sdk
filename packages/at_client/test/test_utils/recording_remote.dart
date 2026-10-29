@@ -15,7 +15,8 @@ import 'mocks.dart';
 ///
 /// An `enroll:link` is answered by [answerEnrollLink] for [atSign], with no key
 /// treated as an authentication key. `enroll:list` answers [enrollments],
-/// keyed as the atServer keys its records.
+/// keyed as the atServer keys its records, and `enroll:listns:<ns>` answers
+/// what [listns] returns for the namespace, or an empty roster.
 ///
 /// The mock lookup carries no enrollment restriction, so a client built on
 /// this is fully privileged by construction.
@@ -27,6 +28,7 @@ MockRemoteSecondary buildRecordingRemote({
   required Map<String, Metadata> remoteMeta,
   Map<String, Object?> enrollments = const {},
   String? atSign,
+  Future<List<Object?>> Function(String namespace)? listns,
 }) {
   final remote = MockRemoteSecondary();
   final lookUp = MockAtLookupImpl();
@@ -113,7 +115,10 @@ MockRemoteSecondary buildRecordingRemote({
     // `listForNamespace` refused it at severe rather than reading it as an
     // empty roster - correctly, since treating it as empty would withhold key
     // material from every member of the namespace.
-    if (command.startsWith('enroll:listns')) return 'data:[]';
+    if (command.startsWith('enroll:listns')) {
+      final namespace = command.substring('enroll:listns:'.length).trim();
+      return 'data:${jsonEncode(await listns?.call(namespace) ?? const [])}';
+    }
     if (command.startsWith('enroll:list')) {
       return 'data:${jsonEncode(enrollments)}';
     }

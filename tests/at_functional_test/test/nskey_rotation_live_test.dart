@@ -98,7 +98,7 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl),
+          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
     );
   }
 
@@ -591,7 +591,7 @@ void main() {
     addTearDown(peerClient.stop);
     await PublishedNskeyKeyRing(peerClient,
             privateFiling: NskeyPrivateFiling(keysIo: peerKeys, atSign: peer),
-            lockTtl: liveMintLockTtl)
+            lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero)
         .mintAndPublish(ns);
 
     final g1 = await writer.ring.mintAndPublish(ns);

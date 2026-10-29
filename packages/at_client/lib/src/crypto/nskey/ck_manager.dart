@@ -649,6 +649,8 @@ class CkManager {
       switch (reached.outcome) {
         AtReachability.postureDoesNotSeed => 'seedNamespaceKeys is off',
         AtReachability.notAuthorised => '$ckNs can never hold a key',
+        AtReachability.noKeyPackage =>
+          'this enrollment carries no key package, so it mints none',
         AtReachability.timedOut => 'minting one timed out',
         AtReachability.failed => 'minting one failed: ${reached.error}',
         AtReachability.alreadyReachable ||
