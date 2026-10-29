@@ -1,4 +1,7 @@
+import 'package:at_auth/at_auth.dart' show RetryOptions;
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_client/hive.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -56,37 +59,66 @@ class AtsignFlows {
 
   /// `Atsign.activate`: activates [atSign] with its [cramSecret], filing its
   /// first keys in [keys], and hands back the client opened on them.
+  ///
+  /// [namespace], [app], [device], [mintLegacyMaterial], [signingAlgo],
+  /// [provisioningBudget], [provisioningPollInterval], [onProgress] and
+  /// [connectBudget] are as `Atsign.activate`, with its defaults.
   Future<AtClient> activate(
     String atSign, {
     required String cramSecret,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
+    String? namespace,
     AtClientStorage? storage,
-    AtLookUpFactory? lookUps,
+    String app = firstEnrollmentAppName,
+    String device = firstEnrollmentDeviceName,
+    bool? mintLegacyMaterial,
+    SigningAlgoType? signingAlgo,
+    Duration? provisioningBudget,
+    Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
+    AtLookUpFactory? lookUps,
+    Duration connectBudget = AtConnection.defaultBudget,
   }) async => Atsign(atSign).activate(
     cramSecret: cramSecret,
     keys: keys,
     preference: preference,
+    namespace: namespace,
     storage: await storageOrDefault(atSign, preference, storage),
+    app: app,
+    device: device,
+    mintLegacyMaterial: mintLegacyMaterial,
+    signingAlgo: signingAlgo,
+    provisioningBudget: provisioningBudget,
+    provisioningPollInterval: provisioningPollInterval,
+    onProgress: onProgress,
     lookUps: lookUps ?? secureSocketLookUps(),
     secondaryAddressFinder: _atDirectoryOf(preference),
-    onProgress: onProgress,
+    connectBudget: connectBudget,
   );
 
   /// `Atsign.open`: opens a client for [atSign] on the keys in [keys].
+  ///
+  /// [namespace], [serviceFactory] and [connectBudget] are as `Atsign.open`,
+  /// with its defaults.
   Future<AtClient> open(
     String atSign, {
     required AtKeysIo keys,
     required AtClientPreference preference,
+    String? namespace,
     AtClientStorage? storage,
     AtLookUpFactory? lookUps,
+    AtServiceFactory? serviceFactory,
+    Duration connectBudget = AtConnection.defaultBudget,
   }) async => Atsign(atSign).open(
     keys: keys,
     preference: preference,
+    namespace: namespace,
     storage: await storageOrDefault(atSign, preference, storage),
     lookUps: lookUps ?? secureSocketLookUps(),
     secondaryAddressFinder: _atDirectoryOf(preference),
+    serviceFactory: serviceFactory,
+    connectBudget: connectBudget,
   );
 
   /// `Atsign.resumeEnrollment`: the request for [app] and [device] already
@@ -110,6 +142,9 @@ class AtsignFlows {
   /// `Atsign.enroll`: asks [atSign]'s atServer, with [otp], to enroll this
   /// device for [namespaces], filing the request's keys in [keys]; the
   /// returned enrollment's `client` opens once it is approved.
+  ///
+  /// [signingAlgo], [keyExchangeMode] and [apkamKeysExpiry] are as
+  /// `Atsign.enroll`.
   Future<PendingEnrollment> enroll(
     String atSign, {
     required String otp,
@@ -120,6 +155,7 @@ class AtsignFlows {
     required AtClientPreference preference,
     SigningAlgoType? signingAlgo,
     EnrollmentKeyExchangeMode? keyExchangeMode,
+    Duration? apkamKeysExpiry,
     AtLookUpFactory? lookUps,
   }) => Atsign(atSign).enroll(
     otp: otp,
@@ -130,6 +166,7 @@ class AtsignFlows {
     preference: preference,
     signingAlgo: signingAlgo,
     keyExchangeMode: keyExchangeMode,
+    apkamKeysExpiry: apkamKeysExpiry,
     lookUps: lookUps ?? secureSocketLookUps(),
     secondaryAddressFinder: _atDirectoryOf(preference),
   );

@@ -9,8 +9,9 @@
   `EnrollmentUpdater`), so an app needs no second SDK import.
 - feat: `AtsignFlows` and `storageOrDefault` are exported: an app with its own
   UI activates, opens and enrolls with the dialogs' store, transport and
-  atDirectory in one call, and a widget test can give a dialog its own
-  `flows`.
+  atDirectory in one call, still passing any other option its `Atsign` verb
+  takes, such as `provisioningBudget`, and a widget test can give a dialog
+  its own `flows`.
 - feat: an app catches a keyfile that is not valid JSON as
   `AtKeysFormatException` and shows its `reason` and `position`.
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
