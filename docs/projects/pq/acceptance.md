@@ -965,10 +965,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   is sealed to G1, or the read opens.
 - **Then:** when none it holds names G1, it first reads
   `public:__nskey.app_1.my_apps@alice` from the atServer, at most once per `askCooldown`
-  (5 s) per namespace, and only in a namespace whose own advertisement it holds or whose
-  nskey private its keyfile holds; a read that cannot reach the atServer is tried again by
-  the first miss after the cooldown, and with G1 still unnamed the client neither fetches
-  nor asks, and the miss fails as below.
+  (5 s) per namespace, and only in a namespace whose own advertisement it holds, whose
+  nskey private its keyfile holds, or which this enrollment's own grants name as its
+  keyfile records them (never `*`, and never for the atSign's own credential); a read
+  that cannot reach the atServer is tried again by the first miss after the cooldown,
+  and with G1 still unnamed the client neither fetches nor asks, and the miss fails as
+  below.
 - **Then:** with no record waiting, it asks the other enrollments for G1's private.
 - **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
   for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
@@ -993,9 +995,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
   startup collection, so the fetch is what lets a write straight after it go through. A
   shared record names its own namespace and generation, so what a miss costs the atServer
-  is bounded by what this atSign holds and advertises: nothing for a namespace the client
-  holds nothing for, one read per cooldown for a generation not advertised, and one fetch
-  per cooldown and one ask per wait for one that is.
+  is bounded by what this atSign holds, grants and advertises: nothing for a namespace the
+  client holds nothing for and is not granted, one read per cooldown for a generation not
+  advertised, and one fetch per cooldown and one ask per wait for one that is.
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
   `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live,
   `tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart`.

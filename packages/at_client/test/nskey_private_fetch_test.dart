@@ -509,6 +509,112 @@ void main() {
     });
   });
 
+  group(
+      'Given an enrollment whose keyfile records its grants and holds no '
+      'namespace key yet', () {
+    /// A filing over a keyfile whose snapshot of [enrollmentId]'s record
+    /// grants [grants], and nothing else.
+    Future<NskeyPrivateFiling> granting(
+        String enrollmentId, Map<String, String> grants) async {
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          alice,
+          AtKeys()
+            ..recordEnrollmentSnapshot(enrollmentId,
+                namespaces: grants, appName: 'app', deviceName: 'device'));
+      return NskeyPrivateFiling(keysIo: io, atSign: alice);
+    }
+
+    test(
+        'when its first read in a granted namespace comes before its startup '
+        'collection, then the on-miss fetch files its approval conveyance',
+        () async {
+      final g1 = await generation();
+      final served = serving({
+        namespace: naming([g1.key])
+      });
+      when(() => served.client.enrollmentId).thenReturn('e-1');
+      final privates = await granting('e-1', {namespace: 'rw'});
+      var fetched = 0;
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: privates, fetchConveyance: () async {
+        fetched++;
+        await privates.file(conveyed(g1));
+      }, requestConveyance: (ns, name) async {});
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid), isNotNull,
+          reason: 'the approval conveyance was waiting on the atServer');
+      expect(served.reads, [namespace]);
+      expect(fetched, 1);
+    });
+
+    test(
+        'when it reads in a namespace outside its grants, then nothing is '
+        'read, fetched or asked', () async {
+      final g1 = await generation();
+      final served = serving({
+        'other.app': naming([g1.key])
+      });
+      when(() => served.client.enrollmentId).thenReturn('e-1');
+      var fetched = 0;
+      final asked = <String>[];
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: await granting('e-1', {namespace: 'rw'}),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async => asked.add(name));
+
+      expect(await ring.privateHalf(alice, 'other.app', g1.kid), isNull);
+      await pumpEventQueue();
+      expect(served.reads, isEmpty);
+      expect(fetched, 0);
+      expect(asked, isEmpty);
+    });
+
+    test(
+        'when its grant is `*`, then a namespace no grant names is no better '
+        'known than before', () async {
+      final g1 = await generation();
+      final served = serving({
+        namespace: naming([g1.key])
+      });
+      when(() => served.client.enrollmentId).thenReturn('e-1');
+      var fetched = 0;
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: await granting('e-1', {'*': 'rw'}),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async {});
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid), isNull);
+      expect(served.reads, isEmpty);
+      expect(fetched, 0);
+    });
+
+    test(
+        'when the client is the atSign\'s own credential, then no recorded '
+        'grant makes a namespace known', () async {
+      final g1 = await generation();
+      final served = serving({
+        namespace: naming([g1.key])
+      });
+      when(() => served.client.enrollmentId)
+          .thenReturn(EnrollmentConstants.primaryEnrollmentId);
+      var fetched = 0;
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: await granting(
+              EnrollmentConstants.primaryEnrollmentId, {namespace: 'rw'}),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async {});
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid), isNull);
+      expect(served.reads, isEmpty);
+      expect(fetched, 0);
+    });
+  });
+
   group('Given a fetch that is still filing when the miss stops waiting', () {
     test(
         'when a write seals to its own key, then it is refused once '

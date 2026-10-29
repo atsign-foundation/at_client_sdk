@@ -622,7 +622,40 @@ void main() {
             'holds reads once, then fetches and asks, with a namespace the '
             'keyfile does not hold as the control. Mutation-proven: dropping '
             'the keyfile from what the ring knows reddens it with no read',
-        clauses: ['or whose nskey private its keyfile holds'],
+        clauses: ['whose nskey private its keyfile holds'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when its first read in a granted namespace comes before its startup '
+            'collection',
+        proves: 'a fresh enrollment whose keyfile records only its grants '
+            'reads the published advertisement on its first miss and files '
+            'the conveyance waiting for it. Mutation-proven: dropping the '
+            'grants from what the ring knows reddens it with a null private',
+        clauses: ['or which this enrollment\'s own grants name'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when it reads in a namespace outside its grants',
+        proves: 'a namespace the grants do not name is read, fetched and '
+            'asked nothing. Mutation-proven: counting any grant as naming '
+            'every namespace reddens it',
+        clauses: ['or which this enrollment\'s own grants name'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when its grant is `*`, then a namespace no grant names',
+        proves: 'a `*` grant makes no namespace known. Mutation-proven: '
+            'letting `*` name every namespace reddens it',
+        clauses: ['never `*`'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the client is the atSign\'s own credential',
+        proves: 'grants recorded under `primary` make no namespace known. '
+            'Mutation-proven: letting the credential\'s grants count '
+            'reddens it',
+        clauses: ['never for the atSign\'s own credential'],
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',

@@ -2,8 +2,14 @@ import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:convert' show jsonDecode;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysIo, AtKeysSourceAbsentException;
 import 'package:at_client/src/crypto/crypto.dart'
     show FiledNskeyPrivate, SignalsPrivateFiling;
+import 'package:at_client/src/enroll/at_sign_credential.dart'
+    show isAtSignCredential;
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show isSeedableNamespace;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
@@ -1259,13 +1265,45 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   }
 
   /// Whether this ring holds an own advertisement for [namespace], or the
-  /// keyfile holds an nskey private for it.
+  /// keyfile holds an nskey private for it or names it among this
+  /// enrollment's grants.
   Future<bool> _knowsOwn(String namespace) async {
     final owner = _atClient.getCurrentAtSign();
     if (owner == null) return false;
     if (_remote.containsKey(_scope(owner, namespace))) return true;
-    final held = await privateFiling?.readAllWhere((ns) => ns == namespace);
-    return held?.isNotEmpty ?? false;
+    final filing = privateFiling;
+    if (filing == null) return false;
+    if ((await filing.readAllWhere((ns) => ns == namespace)).isNotEmpty) {
+      return true;
+    }
+    return _grantedOwn(filing.keysIo, owner, namespace);
+  }
+
+  /// Whether the keyfile's snapshot of this enrollment's record names
+  /// [namespace] in its grants: as the enrollment request named them, and
+  /// as each start reconciles them with the atServer's record.
+  ///
+  /// `*` and the atSign's own credential name no namespace here, since
+  /// neither bounds the namespaces a record could name.
+  Future<bool> _grantedOwn(
+      AtKeysIo keysIo, String owner, String namespace) async {
+    final enrollmentId = _atClient.enrollmentId;
+    if (isAtSignCredential(enrollmentId) || !isSeedableNamespace(namespace)) {
+      return false;
+    }
+    final AtKeys keys;
+    try {
+      keys = await keysIo.read(owner);
+    } on AtKeysSourceAbsentException {
+      return false;
+    }
+    final folded = namespace.toLowerCase();
+    return keys
+            .enrollmentInfo(enrollmentId!)
+            ?.namespaces
+            ?.keys
+            .any((granted) => granted.toLowerCase() == folded) ??
+        false;
   }
 
   /// Reads [namespace]'s own advertisement from the atServer at most once per
