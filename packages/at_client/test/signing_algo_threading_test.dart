@@ -89,11 +89,9 @@ void main() {
     });
 
     test('is the only way this class opens a connection', () {
-      // NOTE: `stream()` opens a connection of its own and cannot be driven
-      // from a unit test — it needs a file on disk and a real socket — so what
-      // is pinned instead is that no site in the class builds one by hand. A
-      // hand-rolled site fails here rather than at an ML-DSA atSign's first
-      // file transfer.
+      // NOTE: pinned in the source, since a site that built a
+      // RemoteSecondary by hand would skip the wiring buildRemoteSecondary
+      // gives every connection, and only an ML-DSA atSign would notice.
       final source =
           File('lib/src/client/at_client_impl.dart').readAsStringSync();
       final constructions =
