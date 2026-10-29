@@ -204,23 +204,6 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  /// Authenticates the lookup's current connection with the CRAM [secret];
-  /// the lookup keeps its own authenticator for every later connection.
-  Future<bool> authenticateCram(String? secret) async {
-    _throwIfStopped();
-    if (secret == null) {
-      throw UnAuthenticatedException('Cram secret cannot be null');
-    }
-    final previous = atLookUp.authenticator;
-    atLookUp.authenticator = authenticatorForCramSecret(_atSign, secret);
-    try {
-      return await atLookUp.pkamAuthenticate();
-    } finally {
-      // NOTE: the CRAM secret authenticates this connection only.
-      atLookUp.authenticator = previous;
-    }
-  }
-
   /// Executes sync verb on the remote server. Return commit entries greater than [lastSyncedId].
   Future<String?> sync(int lastSyncedId, {String? regex}) async {
     _throwIfStopped();

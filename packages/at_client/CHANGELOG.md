@@ -49,6 +49,8 @@
   `RemoteSecondary.executeAndParse` is removed; it was ignored.
 - breaking: `RemoteSecondary.isAvailable` is removed; at_lookup's
   `checkAtSignServer` says whether an atSign's atServer is reachable.
+- breaking: `RemoteSecondary.authenticateCram` is removed; `Atsign.activate`
+  takes the CRAM secret.
 - breaking: `AtClientPreference.atProtocolEmitted` is removed; it was ignored.
 - breaking: the file-transfer API is removed: `uploadFile`, `downloadFile`,
   `reuploadFiles`, `shareFiles`, `FileTransferObject`, `FileStatus`,

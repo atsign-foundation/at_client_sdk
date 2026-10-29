@@ -212,6 +212,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |
+| `RemoteSecondary.authenticateCram(secret)` | `Atsign.activate`, which takes the CRAM secret |
 | `AtClientUtil.findSecondary(...)` | `RemoteSecondary.findSecondaryUrl()` |
 | `ApkamSigning.publicSigningKey`, `privateSigningKey` | `signingKeys` |
 | `atClient.persistenceBundle` | the `AtClientStorage` the client was given |

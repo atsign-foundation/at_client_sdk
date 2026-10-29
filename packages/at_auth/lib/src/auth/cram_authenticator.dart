@@ -4,9 +4,16 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
 
+/// Logs a lookup's connection in with an atSign's CRAM secret.
 class CramAuthenticator {
   CramAuthenticator();
 
+  /// Logs [atLookUp]'s connection in with [cramSecret] and returns true once
+  /// the atServer accepts it, then puts back the authenticator [atLookUp] had.
+  ///
+  /// The CRAM login serves the commands that need no authentication, such as
+  /// a first enrollment request; the next command that needs authentication
+  /// logs in afresh with the authenticator then installed.
   Future<bool> authenticate(
     String atSign,
     String cramSecret,
@@ -24,7 +31,6 @@ class CramAuthenticator {
       throw UnAuthenticatedException(
           'Cram authentication failed for $atSign: ${e.message}');
     } finally {
-      // NOTE: the CRAM secret authenticates this connection only.
       atLookUp.authenticator = previous;
     }
   }

@@ -86,7 +86,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   late int _rootPort;
 
   /// Authenticates each connection this lookup opens; with none set, a
-  /// command that needs authentication fails. See [AtAuthenticator].
+  /// command that needs authentication fails. A login serves only the
+  /// authenticator that made it. See [AtAuthenticator].
   @override
   AtAuthenticator? authenticator;
 
@@ -389,6 +390,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   final Mutex _pkamAuthenticationMutex = Mutex();
 
+  /// The authenticator whose login each connection carries. A login serves
+  /// only the authenticator that made it.
+  final Expando<AtAuthenticator> _loggedInBy = Expando();
+
   @override
   Future<String> sendSync(String command,
           {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
@@ -402,9 +407,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Runs [authenticate] against this connection, under the PKAM mutex, and
   /// returns true once it has authenticated.
   ///
-  /// A connection lost before the authentication finishes is replaced and
-  /// [authenticate] runs again from its first command, once; a second loss
-  /// throws [ConnectionInvalidException].
+  /// A connection logged in by another authenticator is closed, and
+  /// [authenticate] logs in on a new one. A connection lost before the
+  /// authentication finishes is replaced and [authenticate] runs again from
+  /// its first command, once; a second loss throws
+  /// [ConnectionInvalidException].
   ///
   /// The enrollment recorded on the connection is the one named by the
   /// `pkam:` the atServer accepted, none for a CRAM or a legacy PKAM.
@@ -427,9 +434,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // NOTE: the authenticator's commands all go on this connection, so its
     // success is recorded on it, never on whichever one [_connection] holds
     // by then.
-    final connection = _connection!;
+    var connection = _connection!;
     if (connection.getMetaData()!.isAuthenticated) {
-      return true;
+      if (identical(_loggedInBy[connection], authenticate)) return true;
+      await _closeConnection();
+      await createConnection();
+      connection = _connection!;
     }
     final sent = _SentCommands(this, connection, messageListener);
     if (!await authenticate(sent)) {
@@ -437,6 +447,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           ' The authenticator reported failure');
     }
     _recordAuthentication(connection, enrollmentId: sent.pkamEnrollmentId);
+    _loggedInBy[connection] = authenticate;
     return true;
   }
 
@@ -514,7 +525,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   bool _isAuthRequired() {
     return !isConnectionAvailable() ||
-        !(_connection!.getMetaData()!.isAuthenticated);
+        !(_connection!.getMetaData()!.isAuthenticated) ||
+        !identical(_loggedInBy[_connection!], authenticator);
   }
 
   Future<bool> createOutBoundConnection(

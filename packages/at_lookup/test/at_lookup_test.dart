@@ -361,12 +361,16 @@ void main() {
     });
 
     test('validate behaviour with EnrollVerbHandler - approve', () async {
+      var logins = 0;
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory)
-        ..authenticator = (executor) async => true;
+        ..authenticator = (executor) async {
+          logins++;
+          return true;
+        };
 
       String appName = 'unit_test_2';
       String deviceName = 'test_device';
@@ -393,17 +397,29 @@ void main() {
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(atConnectionMetaData);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+      when(() => mockOutBoundConnection.close()).thenAnswer((_) async {});
 
       expect(await atLookup.executeVerb(enrollVerbBuilder), enrollResponse);
+      expect(logins, 1,
+          reason: 'a connection marked authenticated by no authenticator of '
+              'this lookup is logged in again before the command runs');
+      verifyInOrder([
+        () => mockOutBoundConnection.close(),
+        () => mockOutBoundConnection.write(enrollCommand),
+      ]);
     });
 
     test('validate behaviour with EnrollVerbHandler - revoke', () async {
+      var logins = 0;
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory)
-        ..authenticator = (executor) async => true;
+        ..authenticator = (executor) async {
+          logins++;
+          return true;
+        };
       String enrollmentId = '89213647826348';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
@@ -424,17 +440,29 @@ void main() {
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(atConnectionMetaData);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+      when(() => mockOutBoundConnection.close()).thenAnswer((_) async {});
 
       expect(await atLookup.executeVerb(enrollVerbBuilder), enrollResponse);
+      expect(logins, 1,
+          reason: 'a connection marked authenticated by no authenticator of '
+              'this lookup is logged in again before the command runs');
+      verifyInOrder([
+        () => mockOutBoundConnection.close(),
+        () => mockOutBoundConnection.write(enrollCommand),
+      ]);
     });
 
     test('validate behaviour with EnrollVerbHandler - deny', () async {
+      var logins = 0;
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory)
-        ..authenticator = (executor) async => true;
+        ..authenticator = (executor) async {
+          logins++;
+          return true;
+        };
       String enrollmentId = '5754765754';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
@@ -455,8 +483,16 @@ void main() {
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(atConnectionMetaData);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+      when(() => mockOutBoundConnection.close()).thenAnswer((_) async {});
 
       expect(await atLookup.executeVerb(enrollVerbBuilder), enrollResponse);
+      expect(logins, 1,
+          reason: 'a connection marked authenticated by no authenticator of '
+              'this lookup is logged in again before the command runs');
+      verifyInOrder([
+        () => mockOutBoundConnection.close(),
+        () => mockOutBoundConnection.write(enrollCommand),
+      ]);
     });
   });
 }

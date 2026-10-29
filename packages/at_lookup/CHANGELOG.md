@@ -24,6 +24,9 @@
   a second loss fails with `ConnectionInvalidException`.
 - fix: a lost connection fails a verb with `AT0004`, as other socket failures
   do.
+- fix: setting `authenticator` takes effect on the next command that needs
+  authentication, which logs in again with it rather than running on the
+  previous authenticator's login.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
   `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and

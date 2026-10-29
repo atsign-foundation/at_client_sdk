@@ -158,7 +158,9 @@ abstract interface class AtLookUp {
   Future<String?> executeCommand(String command, {bool auth = false});
 
   /// Authenticates this lookup's connection with its authenticator, opening
-  /// the connection when there is none, and returns true once it has.
+  /// the connection when there is none, and returns true once it has. A
+  /// connection logged in by another authenticator is closed, and the
+  /// authenticator logs in on a new one.
   ///
   /// A connection lost before the authentication finishes is replaced, and
   /// the authenticator runs again on the new one, once; a second loss throws
@@ -181,6 +183,10 @@ abstract interface class AtLookUp {
 
   /// Authenticates each connection this lookup opens. With none set, a
   /// command that needs authentication fails.
+  ///
+  /// A login serves only the authenticator that made it: once this changes,
+  /// the next command that needs authentication closes the connection and
+  /// logs in on a new one with the authenticator set then.
   AtAuthenticator? get authenticator;
   set authenticator(AtAuthenticator? value);
 
