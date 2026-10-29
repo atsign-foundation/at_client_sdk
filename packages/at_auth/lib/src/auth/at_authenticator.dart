@@ -15,8 +15,7 @@ final _logger = AtSignLogger('AtAuthenticator');
 
 /// CRAM waits far less than a verb response does: a secret is either accepted
 /// promptly or not at all, and this leg runs during onboarding where a slow
-/// failure is worse than a fast one. The values are at_lookup's own, kept so
-/// that moving this code changes no timing.
+/// failure is worse than a fast one.
 const _cramMaxWaitMillis = 10000;
 const _cramTransientWaitMillis = 4000;
 
@@ -115,9 +114,9 @@ AtAuthenticator authenticatorForPrivateKey(
           'Failed connecting to $atSign. $pkamResponse');
     };
 
-/// Ported from at_lookup's own `pkamAuthenticate`, which keeps the challenge
-/// validation: [validatedFromChallenge] refuses a challenge that does not name
-/// [atSign], so a server cannot get this client to sign for somebody else.
+/// Answers the atServer's `from:` challenge with a PKAM signature from [keys].
+/// [validatedFromChallenge] refuses a challenge that does not name [atSign],
+/// so a server cannot get this client to sign for somebody else.
 Future<bool> _pkam(
   AtCommandExecutor executor,
   String atSign,

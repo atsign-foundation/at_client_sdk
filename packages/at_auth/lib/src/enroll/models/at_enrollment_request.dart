@@ -154,18 +154,14 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// The algorithm this enrollment's APKAM **authentication** keypair is
   /// minted under, and the value that rides `EnrollParams.signingAlgo`.
   ///
-  /// **Required, with no default, on purpose.** It used to be absent
-  /// entirely: an app enrolling over OTP always got RSA-2048 and had no way to
-  /// ask otherwise, so on an atSign whose deployment had moved to
-  /// post-quantum, every install still created an RSA-authenticating
-  /// enrollment which the client then retrofitted away — leaving a discarded
-  /// enrollment behind, and an RSA credential valid for the atServer's grace
-  /// window. Giving it a default would have let a caller inherit an algorithm
-  /// it never chose, which is the state that produced the defect.
+  /// **Required, with no default, on purpose:** a default would let a caller
+  /// inherit an algorithm it never chose. On an atSign whose deployment
+  /// authenticates post-quantum, an RSA-authenticating enrollment is one the
+  /// client then retrofits away, leaving a discarded enrollment behind and an
+  /// RSA credential valid for the atServer's grace window.
   ///
   /// ⚠️ **The name says "signing" and means *authentication*.** The wire field
-  /// has been called `signingAlgo` since before an enrollment had signing keys
-  /// of its own, and renaming it is a multi-repo seam against a released
+  /// is `signingAlgo`, and renaming it is a multi-repo seam against a released
   /// atServer that reads an absent field as `rsa2048`. The name stays out
   /// there; nothing on this side repeats the mistake.
   ///
@@ -382,11 +378,9 @@ class FirstEnrollmentRequest extends EnrollmentRequest {
   /// signingAlgo: SigningAlgoType.mldsa65,
   /// keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first)`.
   ///
-  /// ⚠️ **This used to add that `metadata.keyPackage` is "written by the
-  /// request that creates the record and never afterwards".** Not since
-  /// 2026-08-19: at_client's `KeyPackageMinting` amends it by the enrollment's
-  /// own self-only `enroll:update`, so the record's metadata is no longer
-  /// write-once.
+  /// ⚠️ **The record's `metadata.keyPackage` is not write-once:** at_client's
+  /// `KeyPackageMinting` amends it later through the enrollment's own
+  /// self-only `enroll:update`.
   ///
   /// Requires [atKeys], because a builder both reads the APKAM keypair it
   /// signs with and **writes back** the material it minted.

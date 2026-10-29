@@ -149,11 +149,11 @@ class AtKeysAssurance {
   /// one live enrollment per install is the model, so a second active
   /// authentication key is a corrupt keyfile whatever algorithm it names.
   ///
-  /// ⚠️ It no longer answers "which enrollment does this keyfile authenticate
-  /// as" — that is the caller's to state, with
-  /// `AtKeys.resolveAuthenticatingEnrollment()` there for a cold start that
-  /// has nothing to state it from. This rule is a write-side invariant now,
-  /// and a reader meeting a document with two live enrollments gets a refusal
+  /// ⚠️ It does not answer "which enrollment does this keyfile authenticate
+  /// as": that is the caller's to state, with
+  /// `AtKeys.resolveAuthenticatingEnrollment()` for a cold start that has
+  /// nothing to state it from. This rule is a write-side invariant, and a
+  /// reader meeting a document with two live enrollments gets a refusal
   /// from here rather than a silently chosen one.
   void validateKeyMaterials(List<CryptographicMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
@@ -187,11 +187,10 @@ class AtKeysAssurance {
   ///
   /// ⚠️ **The duplicate check is per owner, not per keyId.** Identity is
   /// `(enrollment, keyId)`: two enrollments may each hold `auth:mldsa65:1`,
-  /// and they land in separate containers. What used to be a second rule
-  /// here — that every material sharing a keyId must agree on its
-  /// enrollmentId — is what that change removes, not something it relaxes:
-  /// the container states the owner once, so there is no longer a
-  /// document-wide keyId group for them to disagree about.
+  /// and they land in separate containers. Nothing requires materials sharing
+  /// a keyId to agree on their enrollmentId: the container states the owner
+  /// once, so there is no document-wide keyId group for them to disagree
+  /// about.
   ///
   /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
   /// addKey misuse is a caller programming error, not a malformed file.

@@ -401,9 +401,9 @@ class AtKeys {
   ///
   /// Selected by the keyId shape [fileSigningMaterial] writes, **not** by the
   /// `privateSigning` role, which an enrollment can hold for more than one
-  /// reason. The atSign-wide signing root shares that role and is no longer a
-  /// hazard here — it lives in the atSign's own container and this method
-  /// never looks there — but the shape filter is what keeps any future
+  /// reason. The atSign-wide signing root shares that role, but lives in the
+  /// atSign's own container, where this method never looks; the shape filter
+  /// is what keeps any future
   /// `privateSigning` material of an enrollment's from being advertised as a
   /// signing key it can be asked to produce signatures with.
   ///
@@ -743,9 +743,7 @@ class AtKeys {
   /// key retired first; add-then-retire is rejected by [addKey] before the
   /// retire ever runs.
   ///
-  /// ⚠️ **The algorithm is part of the rule, and this sentence used to omit
-  /// it** — which reads as "an enrollment holds one active key per role", and
-  /// would say that agility is impossible. It is not: an enrollment holds one
+  /// ⚠️ **The algorithm is part of the rule:** an enrollment holds one
   /// active signing key *per algorithm it signs with*, and one active
   /// encapsulation key *per KEM it advertises*. Adding a key under an
   /// algorithm the enrollment does not yet hold needs no rotation and does not

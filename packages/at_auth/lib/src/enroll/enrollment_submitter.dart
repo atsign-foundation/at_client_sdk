@@ -122,9 +122,7 @@ class EnrollmentSubmitter {
   /// itself. Every deployed `_apsk` consumer base64-decodes the value as an
   /// RSA key, so a JSON one fails their parse — fail-closed, but
   /// service-breaking for anything already running. Sending the bare key here
-  /// reproduces exactly what the atServer used to compose for such an
-  /// enrollment, so the published record is unchanged from the day this moved
-  /// client-side.
+  /// keeps the published record in the form those consumers parse.
   ///
   /// Everything else sends the array: an enrollment whose advertised key's
   /// algorithm is not the rsa2048 a bare value implies, since nothing could
@@ -145,11 +143,10 @@ class EnrollmentSubmitter {
   /// link the approver conveyed against the old value, leaving the enrollment
   /// silently unsigned.
   ///
-  /// A key package used to force the array here, on the grounds that a bare
-  /// value cannot state the algorithm of whatever signed the package. Where
-  /// that signer is rsa2048 the bare value states exactly it; where it is
-  /// anything else the algorithm test has already sent the array. So the
-  /// condition only ever fired on the case it was wrong about: an
+  /// A key package does not force the array. Where the package's signer is
+  /// rsa2048 the bare value states exactly it; where it is anything else the
+  /// algorithm test has already sent the array. Forcing it for a package
+  /// would fire only where it makes the two composers disagree: an
   /// APKAM-advertising rsa2048 enrollment in pq key-exchange mode, which is
   /// reachable — a legacy posture names an empty signing set, so nothing is
   /// advertised, while `--key-exchange pq` still carries a package.

@@ -162,11 +162,10 @@ extension type const CryptographicMaterialRole._(String value)
 /// written by a newer client stays readable and losslessly flushable by an
 /// older one.
 ///
-/// This was an `enum` until 2026-08-14, which made that promise false for this
-/// one field. The parse ran through a throwing `expectEnum`, so a keyfile
-/// carrying any status a build did not know was refused **in its entirety** —
-/// not the entry, the whole document, and the document is the user's key
-/// material. Adding a value was therefore a breaking at-rest change forever.
+/// An `enum` would break that promise: parsing one throws on a value the
+/// build does not know, which refuses the keyfile **in its entirety**, not the
+/// entry, and the keyfile is the user's key material. Every new status would
+/// then be a breaking change to files at rest.
 ///
 /// **Do not change any existing value below.** They are persisted in `.atKeys`
 /// files already on disk.
@@ -213,12 +212,9 @@ extension type const CryptographicMaterialStatus._(String value)
   /// never heard of it.
   ///
   /// Status only moves forward, `pending` → `active` → `retired` → `dead`.
-  /// As an enum that order was declaration index, which is to say it was
-  /// implicit and free; an open String has no such order, so it is stated
-  /// here instead. Stating it is the better position anyway — reordering the
-  /// declarations used to silently redefine every transition check in the
-  /// package. [pending] sits before [active] at -1, so the three positions
-  /// every earlier build pinned are unchanged.
+  /// An open String has no order of its own, so it is stated here. [pending]
+  /// sits before [active] at -1, so `active`, `retired` and `dead` keep the
+  /// positions 0, 1 and 2.
   ///
   /// **An unrecognised status has no rank, and that is not a gap to fill.**
   /// A build cannot know whether a token it has never seen sits before or
