@@ -513,6 +513,16 @@ void main() {
         clauses: ['it fetches the conveyance records addressed to it'],
       );
       provenIn(
+        'tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart',
+        'a client that started before the key was minted fetches the record '
+            'waiting for it at its first write',
+        proves: 'against a live atServer: a client whose listener is stopped '
+            'and whose keyfile holds nothing for the generation writes, '
+            'reads the value back, and has filed the private the waiting '
+            'record carried',
+        clauses: ['it fetches the conveyance records addressed to it'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
         'when no record is waiting, then it asks and holds nothing',
         proves: 'with nothing waiting the ring asks, after the fetch',
@@ -580,6 +590,18 @@ void main() {
             'previous advertisement, for a mint, a rotation and an add. '
             'Mutation-proven: moving the conveyance after the publish reddens '
             'it',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart',
+        'a client that started before the key was minted fetches the record '
+            'waiting for it at its first write',
+        proves: 'the atServer stored each conveyance record addressed to the '
+            'other enrollment before it stored the advertisement, by the '
+            'createdAt it stamps on both',
         clauses: [
           'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
               'names it'

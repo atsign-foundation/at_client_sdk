@@ -93,15 +93,13 @@ const unprovableClauses = <String, String>{
 const provenClauseCount = 299;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 125;
+const serverProvenClauseCount = 127;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
 /// Separate from [liveProofExempt] because the two decay in opposite
 /// directions: an exemption is meant to last, an entry here to be deleted.
 const liveProofOwed = <String, String>{
-  'UC-A3.6':
-      'the posture grid\'s self write proves it live once the grid enrols every cell before the first mint, which lands with the convey-before-publish change; until then the fetch is proven in-process only',
   'UC-G2.1':
       'feasible AND it would add something these citations cannot: they parse hand-built payloads, so nothing establishes that an atServer STORES and SERVES a key-package entry it has no code for, verbatim. That is the other half of reader-ships-first, and it is reachable by publishing such a package with enroll:update and reading it back',
   'UC-G2.2':

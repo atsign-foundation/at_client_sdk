@@ -978,8 +978,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
   startup collection, so the fetch is what lets a write straight after it go through.
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
-  `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live, the posture
-  grid's self write once the grid enrols every cell before the first mint.
+  `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live,
+  `tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart`.
 
 ### 4.7 UC-A3.7 — A namespace key's private reaches every listed enrollment before anyone can seal to it
 
@@ -1017,7 +1017,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
   `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
   `seeding_files_private_test.dart` and `pq_signing_root_test.dart`; live,
-  `nskey_seeding_live_test.dart` for a client on the atSign's own credential. The root
+  `nskey_seeding_live_test.dart` for a client on the atSign's own credential and
+  `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock. The root
   is pushed after its publish rather than before because a receiver files a conveyed
   root private only against a published root; filing one pending until the record
   confirms it is owed in 4.1.
@@ -2505,8 +2506,9 @@ encryption time so the guarantee does not rest on which call path a write took.
 has never executed.
 
 **Arm 2, the posture grid.**
-`tests/at_functional_test/test/pq_posture_grid_test.dart`, 7 `test()` calls over
-9 enrollments on 2 atSigns. Sender posture × receiver **readiness**, in **one
+`tests/at_functional_test/test/pq_posture_grid_test.dart`, one enrollment per cell
+on 2 atSigns, every cell approved before any client opens and the seeding cells
+opened last. Sender posture × receiver **readiness**, in **one
 process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
 gets, and notification send and receive. The data-path axis is receiver
 *readiness* rather than receiver posture, because a posture axis cannot express
@@ -2587,8 +2589,10 @@ namespace the write targets.
 configures no post-quantum provider. That leaves the write claim untouched — a
 sender is refused for a missing advertised key, never for the recipient's
 stage — and the read side is exercised separately by the grid's readback row, where
-`r-legacy` is refused on the crypto path and `r-pqReading` on the
-key-acquisition path.
+`r-legacy` is refused on the crypto path and every receiver that configures the
+providers reads, `r-pqReading` included: it was on the roster when the namespace key
+was minted, so it was conveyed the private before the key was published
+([UC-B3.2](#102-uc-b32--the-apps-active-release-flips-self-data-to-the-nskey-path)).
 
 So the data path grid is **sender posture × receiver readiness**, and the
 envelope grid stays **sender posture × receiver posture** — because there the
