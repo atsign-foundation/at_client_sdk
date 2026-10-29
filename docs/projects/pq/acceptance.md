@@ -970,8 +970,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** Concurrent misses share one fetch.
 - **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch that found nothing does
   not fetch again, and the startup collection does not start that cooldown.
-- **Then:** a fetch that meets a record the startup collection is still filing waits for a
-  sweep already filing it, rather than skipping it.
+- **Then:** a fetch that meets a record the startup collection is still filing waits, up to
+  `fetchOnMissTimeout` (10 s), for a sweep already filing it, rather than skipping it.
+  Past that the miss asks and fails while the fetch goes on, and a private it then files
+  releases whatever parked waiting for it.
 - **Why:** a record already on the atServer needs no other enrollment to be online, so
   only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
   startup collection, so the fetch is what lets a write straight after it go through.

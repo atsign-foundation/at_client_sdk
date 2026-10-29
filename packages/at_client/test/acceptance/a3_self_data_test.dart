@@ -545,7 +545,18 @@ void main() {
         proves: 'a fetch that meets an envelope the startup collection is '
             'still filing waits for it, so the write after it finds the '
             'private. Mutation-proven: skipping the wait reddens it',
-        clauses: ['waits for a sweep already filing'],
+        clauses: ['for a sweep already filing it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a write seals to its own key, then it is refused once '
+            'fetchOnMissTimeout passes',
+        proves: 'a write whose fetch is still filing is refused when the '
+            'bound passes, observed by the fetch being unfinished and the '
+            'timeout path logging, and the same write seals once the filing '
+            'lands. Mutation-proven: without the bound the write never '
+            'returns',
+        clauses: ['for a sweep already filing it'],
       );
     });
 

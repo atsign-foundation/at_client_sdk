@@ -300,6 +300,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @visibleForTesting
   Duration askCooldown = const Duration(seconds: 5);
 
+  /// How long a miss on an own private waits for the fetch of this
+  /// enrollment's conveyance records before it asks the other enrollments.
+  ///
+  /// The fetch goes on past it, and a private it files then releases whatever
+  /// parked waiting for one.
+  @visibleForTesting
+  Duration fetchOnMissTimeout = const Duration(seconds: 10);
+
   /// Serialises minting between this atSign's own enrollments.
   final MintLock mintLock;
 
@@ -1056,7 +1064,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (held != null || owner != _atClient.getCurrentAtSign()) return held;
 
-    await _fetchOnMiss(namespace, nskeyKid);
+    await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
+        onTimeout: () => _logger.info('The fetch of the conveyance records '
+            'for $namespace:$nskeyKid has run past ${fetchOnMissTimeout.inMilliseconds}ms, '
+            'so this miss asks the other enrollments while it goes on'));
     final fetched = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (fetched != null) return fetched;
 
