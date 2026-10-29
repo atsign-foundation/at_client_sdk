@@ -1,6 +1,5 @@
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
-import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:flutter/material.dart';
 
 import 'services/todos_service.dart';

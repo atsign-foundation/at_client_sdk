@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:example/apkam_example.dart';
 import 'package:example/walkthrough.dart';
 import 'package:flutter/material.dart';
