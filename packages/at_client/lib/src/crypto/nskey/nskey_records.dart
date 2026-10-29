@@ -87,9 +87,12 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// overrunning mint abandons rather than writing over the enrollment that won
 /// the next election.
 ///
-/// ⚠️ It is also how long a client that dies between taking the lock and
-/// publishing is refused on its next start, since its own lock refuses it as
-/// another client's would. A mint that conveys before publishing holds the
+/// ⚠️ It is also how long this enrollment is refused a mint whenever its own
+/// lock is still held and no valid advertisement is published, since its own
+/// lock refuses it as another client's would: a client that died between
+/// taking the lock and publishing, on its next start, and a process that
+/// finds its advertisement missing or failing verification within the ttl of
+/// its own mint or rotation. A mint that conveys before publishing holds the
 /// lock for longer, this plus a budget for each enrollment listed, never past
 /// the atServer's 15-minute limit, and the refusal lasts as long.
 /// [signingRootMintLockTtl] is sized against that cost instead.
