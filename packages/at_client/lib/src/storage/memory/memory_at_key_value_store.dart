@@ -22,7 +22,20 @@ class MemoryAtKeyValueStore
   /// `createdBy` and `updatedBy`.
   final String atSign;
 
-  final SplayTreeMap<String, _Record> _records = SplayTreeMap();
+  final SplayTreeMap<String, _Record> _held = SplayTreeMap();
+
+  bool _closed = false;
+
+  // NOTE: every read and write of a record goes through here, so a closed
+  // store refuses them all, as a closed SQLite keystore does.
+  SplayTreeMap<String, _Record> get _records {
+    _requireOpen();
+    return _held;
+  }
+
+  void _requireOpen() {
+    if (_closed) throw StateError('the keystore for $atSign is closed');
+  }
 
   final StreamController<KeyStoreChange> _changes =
       StreamController<KeyStoreChange>.broadcast();
@@ -146,6 +159,7 @@ class MemoryAtKeyValueStore
   @override
   Future<int?> remove(String key,
       {bool skipCommit = false, DateTime? deletedAt}) async {
+    _requireOpen();
     final lowered = key.toLowerCase();
     for (final hook in preRemoveHooks) {
       await hook(lowered, skipCommit: skipCommit);
@@ -346,8 +360,11 @@ class MemoryAtKeyValueStore
   /// Drops every record.
   Future<void> clear() async => _records.clear();
 
-  /// Ends the change stream.
-  Future<void> close() async => _changes.close();
+  /// Ends the change stream; every operation after it throws `StateError`.
+  Future<void> close() async {
+    _closed = true;
+    await _changes.close();
+  }
 
   String _validated(String key) {
     final k = canonicalAtKey(key);
