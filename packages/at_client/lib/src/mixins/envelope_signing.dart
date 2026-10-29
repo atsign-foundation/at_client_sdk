@@ -9,6 +9,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show
         apskRecordName,
         apskUri,
+        requireApskEnrollmentId,
         EnvelopeType,
         SignedEnvelope,
         signEnvelope,
@@ -203,6 +204,7 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [ApkamSigning.publicSigningKeyUri].
   Future<String> getApkamPublicKey(String atSign, String enrollmentId) async {
     atSign = atSign.toAtsign();
+    requireApskEnrollmentId(enrollmentId);
 
     String? cached = lookupPubKey(atSign, enrollmentId);
     if (cached != null) return cached;

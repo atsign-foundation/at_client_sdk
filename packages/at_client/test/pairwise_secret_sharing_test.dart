@@ -572,6 +572,24 @@ void main() {
       expect(remoteData.keys.where((k) => k.contains('__ssenv')), isEmpty);
     });
 
+    test(
+        'sent through a namespace no atKey can carry, it is skipped and '
+        'retained', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'my-app', {'n': 1});
+      final sent = sentKey();
+
+      expect(await sharerB.sweepOnce(), 0,
+          reason: 'a namespace whose last part holds a hyphen is not one an '
+              'atKey can carry');
+      expect(remoteData.containsKey(sent), isTrue);
+
+      // NOTE: positive control — the same send through a namespace an atKey
+      // can carry is delivered, so the refusal above is about the namespace.
+      remoteData.remove(sent);
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'my_app', {'n': 1});
+      expect(await sharerB.sweepOnce(), 1);
+    });
+
     test('a version 1 envelope is refused at parse', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
       final json = Map<String, Object?>.from(

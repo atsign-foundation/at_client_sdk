@@ -26,6 +26,7 @@ import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
+import 'package:at_client/src/util/at_key_grammar.dart' show isAtKeyNamespace;
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -719,6 +720,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     if (envelope.appNamespace != addressedThrough) {
       logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
           'sender signed it for ${envelope.appNamespace}; skipping');
+      return null;
+    }
+    if (!isAtKeyNamespace(envelope.appNamespace)) {
+      logger.warning('Envelope $envelopeKey names '
+          '${jsonEncode(envelope.appNamespace)}, which is not a namespace an '
+          'atKey can carry; skipping');
       return null;
     }
     // Resolving the KEM doubles as the support check: a suite with no KEM

@@ -251,6 +251,33 @@ void main() {
   }
 
   group('a genuinely sealed and signed envelope', () {
+    test(
+        'is skipped before its _apsk is looked up when its signer is not an '
+        'enrollment id', () async {
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+
+      for (final signer in ['approver\n', 'appro.ver', 'appro:ver']) {
+        final lookUp = serving(key, await approverEnvelope(signer: signer),
+            signer: signer);
+        await expectLater(resolve(withKeyPackage(), lookUp).toList(),
+            throwsA(isA<StateError>()),
+            reason: 'a signer of ${signer.length} characters');
+        verifyNever(() => lookUp.executeCommand(any(that: contains('_apsk')),
+            auth: any(named: 'auth')));
+      }
+
+      // NOTE: positive control — the same envelope from an enrollment id is
+      // looked up and collected.
+      final control = serving(key, await approverEnvelope());
+      expect(await resolve(withKeyPackage(), control).first, conveyed);
+      verify(() => control.executeCommand(
+          any(that: contains('_apsk.$approver.')),
+          auth: any(named: 'auth'))).called(greaterThan(0));
+    });
+
     test('is collected where its approver addressed it', () async {
       // NOTE: the positive control for every skip in this file, none of which
       // otherwise shows that anything is ever collected.

@@ -32,8 +32,10 @@ library;
 
 import 'dart:convert' show jsonEncode;
 
+import 'package:at_client/src/util/at_key_grammar.dart'
+    show isAtKeyAtSign, isAtKeyNamespace, isIdShaped;
 import 'package:at_commons/at_commons.dart'
-    show AtDecryptionException, AtKey, EnrollmentConstants, Metadata, Regexes;
+    show AtDecryptionException, AtKey, EnrollmentConstants, Metadata;
 
 /// The record name an nskey advertisement is published under, in the
 /// namespace the key serves: `public:__nskey.<ns>@<owner>`.
@@ -287,35 +289,24 @@ const String nskeyKeyfileIdPrefix = 'nskey.';
 String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
     '$nskeyKeyfileIdPrefix$namespace.$nskeyKid';
 
-/// A namespace an atKey can carry: word characters after the last dot, and
-/// before it only the characters an atKey's name may hold.
-final RegExp _recordNamespace = RegExp('^(?:(?:${Regexes.charsInEntity}'
-    '|${Regexes.allowedEmoji})+\\.)?${Regexes.charsInNamespace}\$');
-
-/// A key id: word characters and hyphens. Every id this client mints is hex.
-final RegExp _recordKid = RegExp(r'^[\w-]+$');
-
-final RegExp _recordAtSign =
-    RegExp('^${Regexes.ownershipFragmentWithoutNamedGroup}\$');
-
 /// [value], the namespace a record names as its [field], when an atKey can
 /// carry it; throws [AtDecryptionException] otherwise.
 String requireRecordNamespace(String value, String field) =>
-    _requireRecordField(_recordNamespace, value, field, 'a namespace');
+    _requireRecordField(isAtKeyNamespace, value, field, 'a namespace');
 
 /// [value], the key id a record names as its [field], when it has a key id's
 /// shape; throws [AtDecryptionException] otherwise.
 String requireRecordKid(String value, String field) =>
-    _requireRecordField(_recordKid, value, field, 'a key id');
+    _requireRecordField(isIdShaped, value, field, 'a key id');
 
 /// [value], the atSign a record names as its [field], when it is one; throws
 /// [AtDecryptionException] otherwise.
 String requireRecordAtSign(String value, String field) =>
-    _requireRecordField(_recordAtSign, value, field, 'an atSign');
+    _requireRecordField(isAtKeyAtSign, value, field, 'an atSign');
 
 String _requireRecordField(
-    RegExp shape, String value, String field, String what) {
-  if (shape.hasMatch(value)) return value;
+    bool Function(String) shaped, String value, String field, String what) {
+  if (shaped(value)) return value;
   throw AtDecryptionException('a record names ${jsonEncode(value)} as its '
       '$field, which is not $what an atKey can carry');
 }

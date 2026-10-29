@@ -314,6 +314,24 @@ void main() {
           getRequestOptions: any(named: 'getRequestOptions'))).called(1);
     });
 
+    test(
+        'an enrollment id that cannot name an _apsk record is refused before '
+        'anything is fetched', () async {
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+
+      for (final id in ['enroll-a\n', 'enroll.a', 'enroll:a', '']) {
+        await expectLater(verifierB.getApkamPublicKey(atSign, id),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an id of ${id.length} characters');
+      }
+      verifyNever(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions')));
+
+      expect(await verifierB.getApkamPublicKey(atSign, 'enroll-a'),
+          pkamPublicKey(keyA),
+          reason: 'the premise: an enrollment id has its _apsk fetched');
+    });
+
     test('signers on different AtClients do not — the control', () async {
       stubApskGet(atClientA, pkamPublicKey(keyA));
       stubApskGet(atClientB, pkamPublicKey(keyA));
