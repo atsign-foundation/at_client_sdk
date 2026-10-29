@@ -45,10 +45,10 @@ final _logger = AtSignLogger('selfRetrofit');
 /// until the new enrollment first does, which is when the atServer revokes
 /// it as superseded (a fully privileged predecessor keeps its life). So a
 /// failure before that point leaves the legacy client fully usable, and
-/// nothing after it does. The new client opens on [storage], or on a Hive
-/// store under the preference's path with none; a retrofit over the legacy
-/// client's own store is that client's to arrange, by stopping with the
-/// store handed over and its principal forgotten before this is called.
+/// nothing after it does. The new client opens on [storage]. To retrofit
+/// over the legacy client's own store, stop that client first, which releases
+/// its claim on a store the caller supplied without `closedByClient: true`,
+/// and pass the same store here.
 ///
 /// [atLookUp] serves the submission and the client, for a caller that holds
 /// a connection; it is closed between the two, so the client logs in again as

@@ -80,8 +80,7 @@ extension AtsignLifecycle on Atsign {
   /// [atLookUp] is a connection to use instead of one built, for a caller
   /// that already holds one; the client takes it over and installs its own
   /// credentials on it, so a caller that goes on using it acts as the client;
-  /// stopping the client stops it, or closes it when it is not an
-  /// [AtLookupMuxable].
+  /// stopping the client stops it.
   /// [serviceFactory] supplies the client's
   /// notification, sync and enrollment services in place of the defaults; a
   /// process that must not sync hands in a factory whose sync service does
