@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -5,10 +6,12 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
-import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/fake_at_server.dart' show FakeAtServerSocket;
 import 'test_utils/mocks.dart';
 
 /// Every connection the client owns authenticates from its keys, which name
@@ -107,25 +110,141 @@ void main() {
   });
 
   group('Monitor', () {
-    /// Monitor holds an `AtLookupMuxable` rather than a signing algorithm, and
-    /// the keys travel inside the authenticator `NotificationServiceImpl`
-    /// builds for it.
-    ///
-    /// Asserted against the source because the keys are captured in a
-    /// closure, with nothing on the built object to read them back from.
-    test('the monitor connection authenticates from the client\'s keys', () {
-      final source = File('lib/src/service/notification_service_impl.dart')
-          .readAsStringSync();
-      final wiring = source.substring(source.indexOf('lookUp: lookUps!('));
+    /// The monitor's connection is built by `NotificationServiceImpl` through
+    /// the client's `lookUps`, and authenticates on the wire of the atServer
+    /// below when the service starts listening.
+    test(
+        'the monitor connection authenticates as the client\'s enrollment, '
+        'signing with the keys it holds', () async {
+      const atSign = '@threading';
+      const enrollmentId = 'pq-enrollment';
+      const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+      final pqPair = await MlDsa65KeyPair.generate();
+      final keys = AtKeys(atsign: atSign.toAtsign())
+        ..fileApkamMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: pqPair.atPublicKey.publicKey,
+            privateKey: pqPair.atPrivateKey.privateKey);
+      final client = MockAtClient();
+      client.getPreferences()
+        ..namespace = 'wavi'
+        ..monitorAutoStart = false
+        ..fetchOfflineNotifications = false
+        ..monitorHeartbeatInterval = const Duration(hours: 1);
+      when(() => client.getCurrentAtSign()).thenReturn(atSign);
+      when(() => client.atSign).thenReturn(atSign.toAtsign());
+      when(() => client.enrollmentId).thenReturn(enrollmentId);
+      when(() => client.atKeysIo)
+          .thenReturn(InMemoryAtKeysIo.holding(atSign, keys));
+      final server = _MonitorAtServer(atSign: atSign, challenge: challenge);
+      final service = await NotificationServiceImpl.create(client,
+              lookUps: server.lookUps,
+              secondaryAddressFinder: server.addressFinder)
+          as NotificationServiceImpl;
+      addTearDown(service.stop);
 
-      expect(wiring, contains('authenticator: clientAuthenticator(atSign,'),
-          reason: 'the one builder every connection of the client uses');
-      expect(wiring, contains('atKeysIo: atClient.atKeysIo'),
-          reason: 'the keys name the algorithm the monitor signs with');
-      expect(wiring, contains('enrollmentId: atClient.enrollmentId'),
-          reason: 'and as the right enrollment, or the atServer refuses it');
+      service.startListening();
+      await server.authenticated.future;
+
+      expect(server.froms, [startsWith('from:$atSign')],
+          reason: 'the control: the monitor connection reached this atServer '
+              'and began its handshake, so what its pkam: says is about the '
+              'monitor');
+      expect(server.pkams, [contains(':enrollmentId:$enrollmentId:')],
+          reason: 'the monitor connection authenticates as the client\'s own '
+              'enrollment');
+      expect(server.pkams, [startsWith('pkam:signingAlgo:mldsa65:')],
+          reason: 'with the algorithm the client\'s keys name');
+      final pkam = server.pkams.single;
+      expect(
+          MlDsa65PureDartAlgo.verifyBytesSync(
+              Uint8List.fromList(utf8.encode(challenge)),
+              signature: base64Decode(
+                  pkam.substring(pkam.lastIndexOf(':') + 1).trim()),
+              publicKey: base64Decode(pqPair.atPublicKey.publicKey)),
+          isTrue,
+          reason:
+              'signed with the enrollment\'s private in the client\'s keys');
+      expect(
+          service.monitor.lookUp.connection
+              ?.getMetaData()
+              ?.authenticatedAsEnrollmentId,
+          enrollmentId,
+          reason: 'and the monitor\'s connection records that enrollment');
     });
   });
+}
+
+/// An atServer that answers `from:` with [challenge] and `pkam:` with
+/// success, and keeps every `from:` and `pkam:` sent to it.
+///
+/// [lookUps] builds a real lookup over it, running the authenticator the
+/// caller hands in; [authenticated] completes when that first finishes,
+/// whether it succeeded or threw, or at once when the caller hands none.
+class _MonitorAtServer implements AtTransportFactory {
+  _MonitorAtServer({required this.atSign, required this.challenge});
+
+  final String atSign;
+  final String challenge;
+
+  final List<String> froms = [];
+  final List<String> pkams = [];
+  final Completer<void> authenticated = Completer<void>();
+  final SecondaryAddressFinder addressFinder = _FixedAddress();
+
+  AtLookUpFactory get lookUps => ({
+        required String atSign,
+        required AtRootDomain rootDomain,
+        required AtAuthenticator? authenticator,
+        SecondaryAddressFinder? secondaryAddressFinder,
+        Map<String, dynamic> clientConfig = const {},
+      }) {
+        if (authenticator == null && !authenticated.isCompleted) {
+          authenticated.complete();
+        }
+        return AtLookUp.withSecureSocket(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: authenticator == null
+              ? null
+              : (executor) async {
+                  try {
+                    return await authenticator(executor);
+                  } finally {
+                    if (!authenticated.isCompleted) authenticated.complete();
+                  }
+                },
+          secondaryAddressFinder: addressFinder,
+          clientConfig: clientConfig,
+          transport: AtLookupTransport(transportFactory: this),
+        );
+      };
+
+  @override
+  Future<AtTransport> connect(String host, String port,
+          {Duration? timeout}) async =>
+      FakeAtServerSocket(_answer);
+
+  void _answer(FakeAtServerSocket socket, String command) {
+    if (command.startsWith('monitor:')) return;
+    if (command.startsWith('from:')) froms.add(command.trim());
+    if (command.startsWith('pkam:')) pkams.add(command.trim());
+    final reply = command.startsWith('from:')
+        ? 'data:$challenge\n@'
+        : command.startsWith('pkam:')
+            ? 'data:success\n$atSign@'
+            : 'data:ok\n$atSign@';
+    unawaited(socket.serverSends(reply));
+  }
+}
+
+class _FixedAddress extends SecondaryAddressFinder {
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+          {Duration? timeout}) async =>
+      SecondaryAddress('127.0.0.1', 6464);
 }
 
 /// Answers each command with the next of [replies] and records what was sent.
