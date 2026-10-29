@@ -4,6 +4,19 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
 import 'package:at_utils/at_logger.dart';
 
+/// Throws `IllegalArgumentException` when [command] holds a line feed anywhere
+/// but its last character, since the atServer ends a command at a line feed.
+///
+/// The message gives the line feed's offset and the command's length, and no
+/// part of the command.
+void requireOneLine(String command) {
+  final lineFeed = command.indexOf('\n');
+  if (lineFeed >= 0 && lineFeed != command.length - 1) {
+    throw IllegalArgumentException('a command is one line, and this one '
+        'holds a line feed at offset $lineFeed of ${command.length}');
+  }
+}
+
 /// Base class for common socket operations
 abstract class BaseConnection extends AtConnection {
   late final AtSignLogger logger;
@@ -66,13 +79,13 @@ abstract class BaseConnection extends AtConnection {
   /// Unlike [write], does not update [AtConnectionMetaData.lastAccessed].
   void add(List<int> bytes) => getSocket().add(bytes);
 
+  /// Writes [data] and flushes it.
+  ///
+  /// Fails as [requireOneLine] does, writing nothing, when [data] is not one
+  /// line.
   @override
   Future<void> write(String data) async {
-    final lineFeed = data.indexOf('\n');
-    if (lineFeed >= 0 && lineFeed != data.length - 1) {
-      throw IllegalArgumentException('a command is one line, and this one '
-          'holds a line feed at offset $lineFeed of ${data.length}');
-    }
+    requireOneLine(data);
     if (isInValid()) {
       //# Replace with specific exception
       throw ConnectionInvalidException('write(): Connection is invalid');
