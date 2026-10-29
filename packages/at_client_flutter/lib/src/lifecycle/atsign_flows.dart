@@ -9,11 +9,14 @@ import 'package:path_provider/path_provider.dart';
 /// under the preference's `hiveStoragePath` while the app sets it, or under
 /// the app's support directory, the one at_client_mobile's examples gave
 /// `hiveStoragePath`, so an app that followed them finds its store.
+///
+/// A verb that takes `storage:` and is not on [AtsignFlows], such as
+/// `PendingEnrollment.client`, takes it from here.
 Future<AtClientStorage> storageOrDefault(
   String atSign,
-  AtClientPreference preference,
+  AtClientPreference preference, [
   AtClientStorage? storage,
-) async {
+]) async {
   if (storage != null) return storage;
   final path =
       // ignore: deprecated_member_use
@@ -39,15 +42,20 @@ class AtsignSelection {
       '${rootDomain.rootPort}';
 }
 
-/// The lifecycle verbs the dialogs run, as one object a test can stand in
-/// for: the verbs themselves are extension methods on `Atsign`, which no
-/// mock can intercept.
+/// The `Atsign` lifecycle verbs with this package's platform defaults, for an
+/// app with its own UI: the store is [storageOrDefault]'s unless the app
+/// passes `storage`, each connection goes over TLS on TCP unless it passes
+/// `lookUps`, and the atServer is the one the atDirectory the preference
+/// names gives for the atSign.
 ///
-/// Each connection goes over TLS on TCP unless the app passes `lookUps`, to
-/// the atServer the atDirectory the preference names gives for the atSign.
+/// The dialogs run their verbs through one, given as their `flows`, so a
+/// widget test can stand in for the verbs, which as extension methods on
+/// `Atsign` no mock can intercept.
 class AtsignFlows {
   const AtsignFlows();
 
+  /// `Atsign.activate`: activates [atSign] with its [cramSecret], filing its
+  /// first keys in [keys], and hands back the client opened on them.
   Future<AtClient> activate(
     String atSign, {
     required String cramSecret,
@@ -66,6 +74,7 @@ class AtsignFlows {
     onProgress: onProgress,
   );
 
+  /// `Atsign.open`: opens a client for [atSign] on the keys in [keys].
   Future<AtClient> open(
     String atSign, {
     required AtKeysIo keys,
@@ -80,6 +89,8 @@ class AtsignFlows {
     secondaryAddressFinder: _atDirectoryOf(preference),
   );
 
+  /// `Atsign.resumeEnrollment`: the request for [app] and [device] already
+  /// filed in [keys] and awaiting approval, or null when there is none.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
     required String app,
@@ -96,6 +107,9 @@ class AtsignFlows {
     secondaryAddressFinder: _atDirectoryOf(preference),
   );
 
+  /// `Atsign.enroll`: asks [atSign]'s atServer, with [otp], to enroll this
+  /// device for [namespaces], filing the request's keys in [keys]; the
+  /// returned enrollment's `client` opens once it is approved.
   Future<PendingEnrollment> enroll(
     String atSign, {
     required String otp,

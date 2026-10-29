@@ -409,6 +409,31 @@ Future<AtClient?> signIn(BuildContext context, AtClientPreference preference) =>
         atSign: '@alice', keys: KeychainAtKeysIo(), preference: preference);
 ```
 
+An app with its own UI calls the verbs through `AtsignFlows`, which supplies
+the store, the transport and the atDirectory as the dialogs do, and a pending
+enrollment's client takes its store from `storageOrDefault`:
+
+```dart after-flutter
+Future<AtClient> activateWith(String cramSecret, AtClientPreference preference) =>
+    const AtsignFlows().activate('@alice',
+        cramSecret: cramSecret, keys: KeychainAtKeysIo(), preference: preference);
+
+Future<AtClient> openWith(AtClientPreference preference) => const AtsignFlows()
+    .open('@alice', keys: KeychainAtKeysIo(), preference: preference);
+
+Future<AtClient> enrollWith(String otp, AtClientPreference preference) async {
+  final pending = await const AtsignFlows().enroll('@alice',
+      otp: otp,
+      app: 'my_app',
+      device: 'my_phone',
+      namespaces: {'my_app': 'rw'},
+      keys: KeychainAtKeysIo(),
+      preference: preference);
+  return pending.client(preference,
+      storage: await storageOrDefault('@alice', preference));
+}
+```
+
 When an app passes no `storage:`, the dialogs and flows use
 `hiveStoragePath` while the app still sets it, and otherwise the app support
 directory, where at_client_mobile's examples kept the store. Pass `storage:`
@@ -425,7 +450,7 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
       `pubspec.yaml`.
 - [ ] Every SDK import is `package:at_client_flutter/at_client_flutter.dart`.
 - [ ] `AuthService` and `FlutterEnrollmentService` calls are the dialogs, or
-      `Atsign.open`, `activate` and `enroll`.
+      `AtsignFlows`' `open`, `activate` and `enroll`.
 - [ ] Each dialog's result is read as the `AtClient` it returns.
 - [ ] Generated mocks of `AtClient` are regenerated.
 - [ ] `flutter analyze` is clean.

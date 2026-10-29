@@ -10,6 +10,9 @@
   names one (`SKILL.md`; `references/06`, `15`).
 - `createAtClient` is at_client_cli's, unchanged, not a removed API
   (`SKILL.md`; `references/01`, `06`).
+- A Flutter app with its own UI calls the verbs through at_client_flutter's
+  `AtsignFlows`, and a pending enrollment's client takes its store from
+  `storageOrDefault` (`SKILL.md`; `references/01`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).

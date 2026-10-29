@@ -414,7 +414,11 @@ of your own for another transport. A CLI
 program takes its keys and store from `CliKeys.fileFor(atSign)` and
 `CliKeys.storageFor(atSign, program: ...)`. The Flutter dialogs and `CLIBase`
 supply the whole bundle themselves and take `lookUps:` (and the dialogs
-`storage:`) only to override it. at_client 4.0 removed the preference's
+`storage:`) only to override it. A Flutter app with its own UI gets the same
+bundle from at_client_flutter's `AtsignFlows`
+(`const AtsignFlows().open(atSign, keys:, preference:)`, and `activate`,
+`enroll` and `resumeEnrollment` likewise), and a pending enrollment's client
+takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 removed the preference's
 `decryptPackets`, `pathToCerts` and `tlsKeysSavePath`: a `SecureSocketConfig`
 carries them.
 

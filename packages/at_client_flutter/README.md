@@ -165,7 +165,7 @@ store anywhere else passes it as `storage:` before at_client 4.0 removes
 atServers through a proxy: every connection the client they hand back opens
 comes from it. With none, TLS on TCP with the defaults. Together with
 `keys:` these are the three platform-supplied things a client is built from;
-[at_client's README](../at_client/README.md#in-code-one-import-four-verbs)
+[at_client's README](../at_client/README.md#in-code-four-verbs)
 shows the factory.
 
 ## Keychain storage
@@ -238,16 +238,17 @@ atKeysIo.write(atSign, atKeys);
 2.0 removes the two services that orchestrated at_auth for an app, and an app
 no longer imports at_auth. The dialogs take the atSign, the keys store and the
 `AtClientPreference`, and hand back the `AtClient` they opened; an app with
-its own UI calls the `Atsign` verbs directly. Nothing an app reads after
-login changes.
+its own UI calls the `Atsign` verbs through `AtsignFlows`, which supplies the
+store (`storageOrDefault`), the transport and the atDirectory, as the dialogs
+do. Nothing an app reads after login changes.
 
 | 1.x                                                                                              | 2.0                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).activate(cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
-| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `Atsign(atSign).open(keys: ..., preference: ...)`                           |
+| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `const AtsignFlows().activate(atSign, cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
+| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `const AtsignFlows().open(atSign, keys: ..., preference: ...)`                           |
 | `AtClientManager.getInstance().setCurrentAtSign(..., atChops: response.atChops, ...)` afterwards | `AtClientManager.getInstance().use(client)`; `setCurrentAtSign` is removed                                                                                                         |
 | `response.isSuccessful`, `response.atAuthKeys`, `response.atLookUp`                              | a null client means the dialog failed or was cancelled; the keys are in the store the client opened on; the connection is the client's (`client.connection.current`)               |
-| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).enroll(...)` then `pending.client(preference)` |
+| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `const AtsignFlows().enroll(atSign, ...)` then `pending.client(preference, storage: await storageOrDefault(atSign, preference))` |
 | `FlutterEnrollmentService().approve(...)` / `.deny(...)` / `.revoke(...)`                        | `client.enrollments.approve(id)` / `.deny(id)` / `.revoke(id)`; `EnrollmentRequestList(atClient: client)` renders the roster and decides                                          |
 | `.getEnrollments(...)` / `.list(statuses, atLookUp)`                                             | `client.enrollments.requests` (a stream of new requests) / `.list(statuses: ...)` / `.pending()`                                                                                   |
 | `.generateOtp()` / `.setSpp(spp: ...)`, answering an `Otp`                                       | `client.enrollments.otp()` / `.spp(value, expiry: ...)`, answering a `Passcode`; `KeychainStorage().saveSpp(atSign, passcode)` keeps it                                             |

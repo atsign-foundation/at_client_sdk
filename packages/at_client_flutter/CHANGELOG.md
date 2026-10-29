@@ -7,6 +7,10 @@
 - feat: `package:at_client_flutter/at_client_flutter.dart` also re-exports the
   SQLite and in-memory stores and at_client's mixins (`AtClientInvitations`,
   `EnrollmentUpdater`), so an app needs no second SDK import.
+- feat: `AtsignFlows` and `storageOrDefault` are exported: an app with its own
+  UI activates, opens and enrolls with the dialogs' store, transport and
+  atDirectory in one call, and a widget test can give a dialog its own
+  `flows`.
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.

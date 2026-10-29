@@ -11,7 +11,8 @@ export 'src/keychain/keychain_data.dart';
 export 'src/keychain/keychain_storage.dart';
 export 'src/keychain/keychain_io_impl.dart';
 
-export 'src/lifecycle/atsign_flows.dart' show AtsignSelection;
+export 'src/lifecycle/atsign_flows.dart'
+    show AtsignFlows, AtsignSelection, storageOrDefault;
 
 export 'src/models/models.dart';
 

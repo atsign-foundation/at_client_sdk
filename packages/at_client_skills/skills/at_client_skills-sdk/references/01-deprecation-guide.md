@@ -117,9 +117,9 @@ await collection.delete(item);
 
 | Was                                                                     | Now                                                                                           |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `AuthService().authenticate(AtAuthRequest(...))` → `AuthResponse`       | `PkamDialog.show(context, atSign:, keys:, preference:)` → `AtClient`, or `Atsign(a).open(...)` |
-| `AuthService().onboard(AtOnboardingRequest(...), cramKey)`              | `CramDialog.show(...)` → `AtClient`, or `Atsign(a).activate(...)`                             |
-| `FlutterEnrollmentService().enroll(...)` then a `PkamDialog`            | `ApkamActivationDialog.show(...)` → `AtClient`, or `Atsign(a).enroll(...)` then `pending.client(...)` |
+| `AuthService().authenticate(AtAuthRequest(...))` → `AuthResponse`       | `PkamDialog.show(context, atSign:, keys:, preference:)` → `AtClient`, or `const AtsignFlows().open(a, ...)` |
+| `AuthService().onboard(AtOnboardingRequest(...), cramKey)`              | `CramDialog.show(...)` → `AtClient`, or `const AtsignFlows().activate(a, ...)`                           |
+| `FlutterEnrollmentService().enroll(...)` then a `PkamDialog`            | `ApkamActivationDialog.show(...)` → `AtClient`, or `const AtsignFlows().enroll(a, ...)` then `pending.client(...)` |
 | `AtClientManager.getInstance().setCurrentAtSign(...)` after auth        | `AtClientManager.getInstance().use(client)`                                                   |
 | `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing; `RegistrarService` comes through the platform package                                |
 
