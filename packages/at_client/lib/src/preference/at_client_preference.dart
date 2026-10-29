@@ -257,10 +257,13 @@ class AtClientPreference {
       'Removed in 5.0.0.')
   set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
-  /// Shared secret of the atSign
+  /// The atSign's CRAM secret, read by a `RemoteSecondary` built without an
+  /// `AtKeysIo`; a client authenticates from its `AtKeysIo` and ignores it.
   String? cramSecret;
 
-  /// Private key of the atSign
+  /// Private key of the atSign.
+  @Deprecated('A client authenticates from its AtKeysIo; only a '
+      'RemoteSecondary built without one reads this. Removed in 5.0.0.')
   String? privateKey;
 
   /// Specifies the namespace of an app.

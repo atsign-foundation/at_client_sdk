@@ -83,6 +83,7 @@
   removed: open a client with `Atsign(atSign).open(...)` and make it current
   with `AtClientManager.getInstance().use(client)`, which does not stop the
   previous one.
+- breaking: `AtClientImpl.holdsClientFor` is removed.
 - breaking: every call that builds a client (`Atsign.open` and `activate`,
   `PendingEnrollment.client`, `buildAtClient`, `selfRetrofit`,
   `pqNativeOnboard`, `AtClientImpl.create`) takes a required `storage`.
@@ -112,6 +113,8 @@
   `SqliteAtClientStorage(..., dbPath: SqliteAtClientStorage.inMemoryPath)`.
 - chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
   read by nothing in at_client, and go in 5.0.0.
+- chore: `AtClientPreference.privateKey` is deprecated, and goes in 5.0.0: a
+  client authenticates from its `AtKeysIo`.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the

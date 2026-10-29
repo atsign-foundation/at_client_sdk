@@ -496,16 +496,6 @@ class AtClientImpl implements AtClient {
   static String instanceKey(String atSign, String? enrollmentId) =>
       enrollmentId == null ? atSign : '$atSign|$enrollmentId';
 
-  /// Whether a client of [atSign] other than [except] is filed here, under
-  /// its own credential or an enrollment, so that [create] may hand one back
-  /// rather than build one.
-  static bool holdsClientFor(String atSign, {AtClient? except}) {
-    final fixed = AtUtils.fixAtSign(atSign);
-    return atClientInstanceMap.entries.any((entry) =>
-        !identical(entry.value, except) &&
-        (entry.key == fixed || '${entry.key}'.startsWith('$fixed|')));
-  }
-
   /// The key [create] should look under, given what the caller named.
   ///
   /// A caller that names no enrollment usually means *this atSign's client*
