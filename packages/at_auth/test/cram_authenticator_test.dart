@@ -44,6 +44,34 @@ void main() {
     });
   });
 
+  group('Given a lookup holding an authenticator of its own', () {
+    for (final (outcome, reply) in [
+      ('accepts', 'data:success'),
+      ('refuses', 'error:AT0401-Exception: refused'),
+    ]) {
+      test(
+          'when the atServer $outcome CRAM authentication, then the lookup '
+          'holds its own authenticator again', () async {
+        final atServer = FakeCramAtServer('@alice', cramReply: reply);
+        final atLookUp = atServer.lookUp();
+        addTearDown(atLookUp.close);
+        Future<bool> held(AtCommandExecutor executor) async => true;
+        atLookUp.authenticator = held;
+
+        await CramAuthenticator()
+            .authenticate('@alice', 'secret', atLookUp)
+            .then<Object?>((result) => result, onError: (Object e) => e);
+
+        expect(
+            atServer.written.where((c) => c.startsWith('cram:')), hasLength(1),
+            reason: 'the control: the CRAM handshake ran');
+        expect(atLookUp.authenticator, same(held),
+            reason: 'a CRAM secret authenticates the one connection it was '
+                'given for, not every connection the lookup opens later');
+      });
+    }
+  });
+
   group('Given an atSign and its CRAM secret', () {
     test(
         'when the atServer refuses CRAM authentication, then the exception '

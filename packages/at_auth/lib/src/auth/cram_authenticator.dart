@@ -15,6 +15,7 @@ class CramAuthenticator {
     Duration timeout = const Duration(seconds: 30),
     int maxRetries = 10,
   }) async {
+    final previous = atLookUp.authenticator;
     atLookUp.authenticator = authenticatorForCramSecret(atSign, cramSecret);
     try {
       return await atLookUp.pkamAuthenticate();
@@ -22,6 +23,9 @@ class CramAuthenticator {
       if (e.message.startsWith('Cram authentication failed')) rethrow;
       throw UnAuthenticatedException(
           'Cram authentication failed for $atSign: ${e.message}');
+    } finally {
+      // NOTE: the CRAM secret authenticates this connection only.
+      atLookUp.authenticator = previous;
     }
   }
 }

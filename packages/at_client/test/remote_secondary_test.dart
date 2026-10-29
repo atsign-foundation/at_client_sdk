@@ -20,6 +20,26 @@ class _RecordingExecutor implements AtCommandExecutor {
   }
 }
 
+/// A lookup that keeps the authenticator it is given and records which one
+/// [pkamAuthenticate] ran with.
+class _HoldingLookUp extends Fake implements AtLookUp {
+  _HoldingLookUp({required this.refuse});
+
+  final bool refuse;
+
+  @override
+  AtAuthenticator? authenticator;
+
+  AtAuthenticator? usedForAuthentication;
+
+  @override
+  Future<bool> pkamAuthenticate() async {
+    usedForAuthentication = authenticator;
+    if (refuse) throw UnAuthenticatedException('refused');
+    return true;
+  }
+}
+
 void main() {
   AtLookupImpl mockAtLookUp = MockAtLookupImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
@@ -55,6 +75,29 @@ void main() {
               'null puts authentication back on the deprecated ladder, which '
               'still works and so hides the regression from every live pack');
     });
+
+    for (final refused in [false, true]) {
+      test(
+          'when it authenticates with a CRAM secret '
+          '${refused ? 'the atServer refuses' : 'the atServer accepts'}, then '
+          'its lookup holds its own authenticator again', () async {
+        final lookUp = _HoldingLookUp(refuse: refused);
+        Future<bool> held(AtCommandExecutor executor) async => true;
+        lookUp.authenticator = held;
+        final remoteSecondary = RemoteSecondary(atsign, atClientPreference,
+            lookUps: secureSocketLookUps(), atLookUp: lookUp);
+
+        await remoteSecondary
+            .authenticateCram('secret')
+            .then<Object?>((result) => result, onError: (Object e) => e);
+
+        expect(lookUp.usedForAuthentication, isNot(same(held)),
+            reason: 'the control: the CRAM authenticator was the one used');
+        expect(lookUp.authenticator, same(held),
+            reason: 'a CRAM secret authenticates the one connection it was '
+                'given for, not every connection the lookup opens later');
+      });
+    }
 
     test('an injected lookup is used as given', () async {
       final remoteSecondary = RemoteSecondary(atsign, atClientPreference,
