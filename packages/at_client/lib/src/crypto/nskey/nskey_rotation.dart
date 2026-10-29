@@ -124,9 +124,9 @@ class NskeyRotation {
       throw StateError('cannot rotate $owner:$namespace: this enrollment '
           'carries no key package, so it mints no namespace key');
     }
-    // NOTE: the successor's privates reach every listed enrollment but the
-    // excluded ones before the successor is published, under a lock sized to
-    // that roster.
+    // NOTE: the successor's privates are pushed to every listed enrollment
+    // but the excluded ones before the successor is published, under a lock
+    // sized to that roster.
     final outcome = await ring.rotate(namespace,
         conveyFirst: conveyance.convey,
         afterPublish: conveyance.afterPublish,

@@ -1015,6 +1015,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   silently.
 - **Then:** a listed enrollment whose key package fails verification is conveyed nothing
   and named in a warning.
+- **Then:** a listed enrollment the push cannot reach, because its key package shares no
+  suite with E1's or because the push to it fails, is named in a warning with the
+  generation and the reason, and the mint publishes anyway: the conveyance is best
+  effort, and that enrollment gets the private as UC-A3.6 says.
 - **Then:** the mint lock's ttl is a ceiling: the ring's own ttl plus a per-member budget
   for each enrollment listed before the lock is taken and each key conveyed, twice over
   for a mint or a rotation, which may rotate again under the same lock, never past the

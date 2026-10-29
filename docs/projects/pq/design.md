@@ -309,6 +309,10 @@ since no one else can write the owner's records. Read the namespace's roster, ta
 the lock, **re-read**, mint, file the private, convey it to every enrollment on the
 roster, and only then write the advertisement, so publishing is the commit point
 ([UC-A3.7](acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
+The conveyance is best effort per member: one the push cannot reach is named in a
+warning and the mint publishes anyway, and that enrollment gets the private on its
+first miss, by fetching and then asking
+([UC-A3.6](acceptance.md#46-uc-a36--a-client-that-needs-a-private-it-does-not-hold-fetches-it-else-asks-else-fails)).
 A client whose own roster entry carries no verified key package could be conveyed
 nothing, so it mints nothing. Nothing deletes the lock, and its ttl releases it. The
 loser of the race backs off and re-reads.

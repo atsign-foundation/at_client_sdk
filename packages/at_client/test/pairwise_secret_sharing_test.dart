@@ -7,6 +7,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart'
+    show PrePublishConveyance;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
@@ -1498,6 +1500,92 @@ void main() {
       expect(pushed, 1);
       expect(await sharerB.sweepOnce(), 1,
           reason: 'the reachable member got a real, openable envelope');
+    });
+  });
+
+  group(
+      'Given a mint conveying a new private to a roster it cannot wholly '
+      'reach', () {
+    late String kid;
+    late PrePublishConveyance conveyance;
+
+    setUp(() async {
+      directory.authorize('myapp', 'enroll-a');
+      directory.authorize('myapp', 'enroll-b');
+    });
+
+    /// Files a fresh generation for `myapp` and prepares its conveyance over
+    /// the roster as it stands.
+    Future<void> minting() async {
+      final io = InMemoryAtKeysIo();
+      await io.write('@alice', AtKeys());
+      final filing = NskeyPrivateFiling(keysIo: io, atSign: '@alice');
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final seed = kem.newSeed();
+      kid = nskeyKidOf((await kem.keyPairFromSeed(seed)).publicKey);
+      await filing.store(
+          namespace: 'myapp', nskeyKid: kid, seed: NskeySeed(seed));
+      conveyance =
+          (await PrePublishConveyance.prepare(sharerA, filing, 'myapp'))!;
+      logs.records.clear();
+    }
+
+    /// Conveys, then asserts the conveyance returned so the mint publishes,
+    /// that enroll-b holds the private, and that one warning names
+    /// [unreached] and the generation.
+    Future<void> conveysAndNames(String unreached) async {
+      await conveyance.convey([kid]);
+
+      expect(conveyance.conveyedKids, {kid},
+          reason: 'convey returned, which is what lets the ring publish');
+      await sharerB.sweepOnce();
+      expect(sharerB.secretStore.getSecret('myapp', '__nskey.$kid'), isNotNull,
+          reason: 'the reachable member holds the private');
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('Could not push "__nskey.$kid"') &&
+              m.contains('enrollment $unreached') &&
+              m.contains('myapp')),
+          hasLength(1));
+    }
+
+    test(
+        'when a listed member shares no suite with the minter, then the '
+        'conveyance completes and a warning names the member it missed',
+        () async {
+      directory
+        ..seed(
+            'enroll-future-suites',
+            KeyPackage(
+              enrollmentId: 'enroll-future-suites',
+              createdAt: DateTime.utc(2026, 6, 11),
+              keys: sharerB.myKeyPackage.keys,
+              suites: const ['x-wing-hpke-v99'],
+            ))
+        ..authorize('myapp', 'enroll-future-suites');
+      await minting();
+
+      await conveysAndNames('enroll-future-suites');
+    });
+
+    test(
+        'when the push to a listed member fails, then the conveyance completes '
+        'and a warning names the member it missed', () async {
+      final seedC = Uint8List.fromList(List<int>.generate(32, (i) => 200 - i));
+      final sharerC = buildSharer('enroll-c', seedC);
+      addTearDown(sharerC.stopListening);
+      directory
+        ..seed('enroll-c', await sharerC.register())
+        ..authorize('myapp', 'enroll-c');
+      final toC = '.${sharerC.kpid}.__ssenv.';
+      when(() => sharerA.atClient.put(
+              any(that: predicate((Object? k) => '$k'.contains(toC))), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(SecondaryConnectException('the atServer cannot be '
+              'reached'));
+      await minting();
+
+      await conveysAndNames('enroll-c');
     });
   });
 

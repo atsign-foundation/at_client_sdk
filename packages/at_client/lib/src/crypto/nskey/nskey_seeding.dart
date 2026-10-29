@@ -190,11 +190,12 @@ class NskeySeeding {
   /// Mints, conveys and publishes the key for **one** namespace unless one is
   /// already published, throwing rather than logging, and says what it did.
   ///
-  /// The private reaches every enrollment listed for the namespace before the
-  /// key is published. A client whose own enrollment carries no verified key
-  /// package mints nothing and answers [NskeySeedOutcome.noKeyPackage]; one
-  /// with nothing to convey over or file in answers
-  /// [NskeySeedOutcome.cannotConvey].
+  /// The private is pushed to every enrollment listed for the namespace before
+  /// the key is published; one the push cannot reach is named in a warning,
+  /// and the key is published anyway. A client whose own enrollment carries no
+  /// verified key package mints nothing and answers
+  /// [NskeySeedOutcome.noKeyPackage]; one with nothing to convey over or file
+  /// in answers [NskeySeedOutcome.cannotConvey].
   ///
   /// ⚠️ Concurrent callers of the SAME enrolment are safe only where they share a
   /// mint-lock instance — the wire lock's value is the enrolment id, so two

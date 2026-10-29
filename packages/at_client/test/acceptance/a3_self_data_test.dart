@@ -772,6 +772,25 @@ void main() {
         ],
       );
       provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when a listed member shares no suite with the minter, then the '
+            'conveyance completes',
+        proves: 'convey returns with the generation conveyed, the reachable '
+            'member holds the private, and one warning names the member it '
+            'missed, the generation and the namespace. Mutation-proven: '
+            'dropping the warning, and letting one member\'s failure stop the '
+            'push, each redden it',
+        clauses: ['the push cannot reach'],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when the push to a listed member fails, then the conveyance '
+            'completes',
+        proves: 'the same, for a member whose envelope the atServer refuses. '
+            'Mutation-proven as above',
+        clauses: ['the push cannot reach'],
+      );
+      provenIn(
         'packages/at_client/test/pre_publish_conveyance_test.dart',
         'when the lock is sized, then it is the margin plus the budget for '
             'each listed enrollment',
