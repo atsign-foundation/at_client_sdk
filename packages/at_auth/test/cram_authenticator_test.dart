@@ -72,6 +72,47 @@ void main() {
     }
   });
 
+  group('Given a CRAM authentication running on a lookup', () {
+    test(
+        'when a second starts on the same lookup, then it fails and the '
+        'lookup gets back the authenticator it held', () async {
+      final atServer = FakeCramAtServer('@alice', cramReply: 'data:success');
+      final atLookUp = atServer.lookUp();
+      addTearDown(atLookUp.close);
+      Future<bool> held(AtCommandExecutor executor) async => true;
+      atLookUp.authenticator = held;
+
+      final first =
+          CramAuthenticator().authenticate('@alice', 'secret', atLookUp);
+      await expectLater(
+          CramAuthenticator().authenticate('@alice', 'secret', atLookUp),
+          throwsA(isA<StateError>()));
+      expect(await first, isTrue);
+
+      expect(atServer.written.where((c) => c.startsWith('cram:')), hasLength(1),
+          reason: 'only the first CRAM handshake ran');
+      expect(atLookUp.authenticator, same(held));
+    });
+
+    test(
+        'when the caller installs another authenticator meanwhile, then that '
+        'one is kept', () async {
+      final atServer = FakeCramAtServer('@alice', cramReply: 'data:success');
+      final atLookUp = atServer.lookUp();
+      addTearDown(atLookUp.close);
+      Future<bool> held(AtCommandExecutor executor) async => true;
+      Future<bool> installed(AtCommandExecutor executor) async => true;
+      atLookUp.authenticator = held;
+
+      final running =
+          CramAuthenticator().authenticate('@alice', 'secret', atLookUp);
+      atLookUp.authenticator = installed;
+      expect(await running, isTrue);
+
+      expect(atLookUp.authenticator, same(installed));
+    });
+  });
+
   group('Given an atSign and its CRAM secret', () {
     test(
         'when the atServer refuses CRAM authentication, then the exception '

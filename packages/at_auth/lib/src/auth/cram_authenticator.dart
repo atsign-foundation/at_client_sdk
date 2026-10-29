@@ -8,8 +8,16 @@ import 'package:at_auth/src/auth/at_authenticator.dart';
 class CramAuthenticator {
   CramAuthenticator();
 
+  /// The lookups a CRAM authentication is running on.
+  static final Expando<bool> _running = Expando();
+
   /// Logs [atLookUp]'s connection in with [cramSecret] and returns true once
-  /// the atServer accepts it, then puts back the authenticator [atLookUp] had.
+  /// the atServer accepts it, then puts back the authenticator [atLookUp] had,
+  /// unless another was installed meanwhile.
+  ///
+  /// Nothing else may use [atLookUp] until this returns: a command sent
+  /// meanwhile authenticates with the CRAM secret. A second call on the same
+  /// lookup meanwhile throws [StateError] and installs nothing.
   ///
   /// The CRAM login serves the commands that need no authentication, such as
   /// a first enrollment request; the next command that needs authentication
@@ -22,8 +30,14 @@ class CramAuthenticator {
     Duration timeout = const Duration(seconds: 30),
     int maxRetries = 10,
   }) async {
+    if (_running[atLookUp] ?? false) {
+      throw StateError('A CRAM authentication is already running on this '
+          'lookup for $atSign');
+    }
+    _running[atLookUp] = true;
     final previous = atLookUp.authenticator;
-    atLookUp.authenticator = authenticatorForCramSecret(atSign, cramSecret);
+    final cram = authenticatorForCramSecret(atSign, cramSecret);
+    atLookUp.authenticator = cram;
     try {
       return await atLookUp.pkamAuthenticate();
     } on UnAuthenticatedException catch (e) {
@@ -31,7 +45,10 @@ class CramAuthenticator {
       throw UnAuthenticatedException(
           'Cram authentication failed for $atSign: ${e.message}');
     } finally {
-      atLookUp.authenticator = previous;
+      if (identical(atLookUp.authenticator, cram)) {
+        atLookUp.authenticator = previous;
+      }
+      _running[atLookUp] = null;
     }
   }
 }

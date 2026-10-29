@@ -1,6 +1,9 @@
 ## 4.0.0-rc8
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- fix: `CramAuthenticator.authenticate` throws `StateError` for a second CRAM
+  authentication on a lookup already running one, and keeps an authenticator
+  installed meanwhile.
 - breaking: `ServerEnrollmentRequest` and `EnrollmentServerResponse` are
   removed; at_client's `client.enrollments.list()` returns each `Enrollment`.
 - breaking: `KeyAlgorithmType`, `CryptographicKeyType`, `KeyPartStatus` and
