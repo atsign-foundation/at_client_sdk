@@ -29,9 +29,8 @@
   `executeVerb` an `AtLookUpException` with code AT0022, before the lookup
   finds, connects to or logs in to the atServer; `AtCommandExecutor.sendSync`
   and `AtConnection.write` throw `IllegalArgumentException`.
-- fix: a connection lost while authenticating no longer reads as refused
-  credentials. The lookup authenticates once more on a fresh connection, and
-  a second loss fails with `ConnectionInvalidException`.
+- fix: a connection lost while authenticating is retried once on a fresh
+  connection; a second loss fails with `ConnectionInvalidException`.
 - fix: a lost connection fails a verb with `AT0004`, as other socket failures
   do.
 - fix: setting `authenticator` takes effect on the next command that needs
