@@ -56,7 +56,6 @@ void main() {
         required AtRootDomain rootDomain,
         required AtAuthenticator? authenticator,
         SecondaryAddressFinder? secondaryAddressFinder,
-        Map<String, dynamic> clientConfig = const {},
       }) {
         lookUpsBuilt++;
         final lookUp = lookUpAnswering(onPkam);

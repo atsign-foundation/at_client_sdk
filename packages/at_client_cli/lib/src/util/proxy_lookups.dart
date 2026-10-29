@@ -11,7 +11,6 @@ AtLookUpFactory proxyLookUps() {
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) =>
       secureSocketLookUps(onConnect: (connection) async {
         await connection.sendSync('from:$atSign\n');
@@ -20,6 +19,5 @@ AtLookUpFactory proxyLookUps() {
         rootDomain: rootDomain,
         authenticator: authenticator,
         secondaryAddressFinder: secondaryAddressFinder,
-        clientConfig: clientConfig,
       );
 }

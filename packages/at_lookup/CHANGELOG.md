@@ -51,6 +51,10 @@
   `secureSocketLookUps()` from `at_lookup_io.dart` instead.
 - breaking: `AtLookupImpl.findSecondary` is removed. Use a
   `SecondaryAddressFinder`.
+- breaking: `AtLookUp.withSecureSocket`, `withTransport`, `AtLookupImpl`,
+  `secureSocketLookUps`, `webSocketLookUps` and `AtLookUpFactory` take no
+  `clientConfig`; give it to at_auth's `authenticatorFor`, which sends it in
+  `from:`.
 - breaking: `MonitorClient` is removed. It has no replacement.
 - breaking: `AtLookupTransport` takes a `transportFactory` (an
   `AtTransportFactory`) in place of `socketFactory` and `secureSocketConfig`;

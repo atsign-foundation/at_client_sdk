@@ -49,8 +49,7 @@ void main() {
       {required String atSign,
       required AtRootDomain rootDomain,
       required AtAuthenticator? authenticator,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      Map<String, dynamic> clientConfig = const {}}) {
+      SecondaryAddressFinder? secondaryAddressFinder}) {
     handed.add(authenticator);
     finders.add(secondaryAddressFinder);
     return lookUp;

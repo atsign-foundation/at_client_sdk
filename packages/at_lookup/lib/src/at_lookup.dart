@@ -49,16 +49,15 @@ abstract interface class AtCommandExecutor {
 /// **what the connection is for**: [atSign] is whose atServer, [rootDomain]
 /// is where the atDirectory that finds it is, [authenticator] is how the
 /// connection authenticates (null for one that never does),
-/// [secondaryAddressFinder] replaces the atDirectory lookup when the caller
-/// holds one, and [clientConfig] is what the connection announces about the
-/// client. The default is `secureSocketLookUps` in
+/// and [secondaryAddressFinder] replaces the atDirectory lookup when the
+/// caller holds one. What a connection announces about the client travels in
+/// its authenticator's `from:`. The default is `secureSocketLookUps` in
 /// `package:at_lookup/at_lookup_io.dart`.
 typedef AtLookUpFactory = AtLookupMuxable Function({
   required String atSign,
   required AtRootDomain rootDomain,
   required AtAuthenticator? authenticator,
   SecondaryAddressFinder? secondaryAddressFinder,
-  Map<String, dynamic> clientConfig,
 });
 
 abstract interface class AtLookUp {
@@ -112,7 +111,6 @@ abstract interface class AtLookUp {
     required AtAuthenticator? authenticator,
     required AtLookupTransport transport,
     required SecondaryAddressFinder secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
     Future<void> Function(AtCommandExecutor connection)? onConnect,
   }) =>
       withTransport(
@@ -121,7 +119,6 @@ abstract interface class AtLookUp {
         authenticator: authenticator,
         transport: transport,
         secondaryAddressFinder: secondaryAddressFinder,
-        clientConfig: clientConfig,
         onConnect: onConnect,
       );
 
@@ -133,14 +130,12 @@ abstract interface class AtLookUp {
     required AtAuthenticator? authenticator,
     required AtLookupTransport transport,
     required SecondaryAddressFinder secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
     Future<void> Function(AtCommandExecutor connection)? onConnect,
   }) {
     return AtLookupImpl(
       atSign,
       rootDomain.rootDomain,
       rootDomain.rootPort,
-      clientConfig: clientConfig,
       secondaryAddressFinder: secondaryAddressFinder,
       transportFactory: transport.transportFactory,
       socketListenerFactory: transport.listenerFactory,

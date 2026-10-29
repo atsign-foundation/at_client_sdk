@@ -197,7 +197,6 @@ class _MonitorAtServer implements AtTransportFactory {
         required AtRootDomain rootDomain,
         required AtAuthenticator? authenticator,
         SecondaryAddressFinder? secondaryAddressFinder,
-        Map<String, dynamic> clientConfig = const {},
       }) {
         if (authenticator == null && !authenticated.isCompleted) {
           authenticated.complete();
@@ -215,7 +214,6 @@ class _MonitorAtServer implements AtTransportFactory {
                   }
                 },
           secondaryAddressFinder: addressFinder,
-          clientConfig: clientConfig,
           transport: AtLookupTransport(transportFactory: this),
         );
       };

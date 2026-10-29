@@ -103,7 +103,6 @@ class RemoteSecondary implements Secondary {
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           authenticator: null,
           secondaryAddressFinder: secondaryAddressFinder,
-          clientConfig: _getClientConfig(),
         );
     _installAuthenticator();
   }

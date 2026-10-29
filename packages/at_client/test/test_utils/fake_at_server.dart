@@ -134,7 +134,6 @@ class FakeAtServer {
         required AtRootDomain rootDomain,
         required AtAuthenticator? authenticator,
         SecondaryAddressFinder? secondaryAddressFinder,
-        Map<String, dynamic> clientConfig = const {},
       }) =>
           AtLookUp.withSecureSocket(
             atSign: atSign,
@@ -146,7 +145,6 @@ class FakeAtServer {
             // NOTE: this server's own, whatever the caller passed: the
             // caller's would ask the real atDirectory.
             secondaryAddressFinder: addressFinder,
-            clientConfig: clientConfig,
             transport: AtLookupTransport(
                 transportFactory: _FakeTransportFactory(this)),
           );

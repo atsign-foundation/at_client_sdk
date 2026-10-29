@@ -327,8 +327,7 @@ void main() {
             {required atSign,
             required rootDomain,
             required authenticator,
-            secondaryAddressFinder,
-            clientConfig = const {}}) {
+            secondaryAddressFinder}) {
           final server = atServer(record: {
             'appName': 'wavi',
             'deviceName': 'laptop',
@@ -376,8 +375,7 @@ void main() {
             {required atSign,
             required rootDomain,
             required authenticator,
-            secondaryAddressFinder,
-            clientConfig = const {}}) {
+            secondaryAddressFinder}) {
           finders.add(secondaryAddressFinder);
           return server.lookUp;
         },
@@ -443,16 +441,14 @@ class _RetrofitAtServer implements AtTransportFactory {
           {required atSign,
           required rootDomain,
           required authenticator,
-          secondaryAddressFinder,
-          clientConfig = const {}}) =>
+          secondaryAddressFinder}) =>
       AtLookUp.withTransport(
           atSign: atSign,
           rootDomain: rootDomain,
           authenticator: authenticator,
           transport: AtLookupTransport(transportFactory: this),
           secondaryAddressFinder:
-              FixedSecondaryAddressFinder('127.0.0.1', 6464),
-          clientConfig: clientConfig);
+              FixedSecondaryAddressFinder('127.0.0.1', 6464));
 
   @override
   Future<AtTransport> connect(String host, String port,

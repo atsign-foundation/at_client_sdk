@@ -6,6 +6,8 @@
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.
 - A `refused` connection lists `enrollmentDenied` among its causes.
+- An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
+  that parameter (`references/15`).
 - Multiple instances of one agent take their lock with
   `tryAcquireServerMutex`.
 - Storage: each backend comes from its own import, `HiveAtClientStorage` from

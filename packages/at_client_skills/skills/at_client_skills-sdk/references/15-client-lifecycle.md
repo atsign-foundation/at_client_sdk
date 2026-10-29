@@ -122,13 +122,14 @@ lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
 
 // A factory of your own: any AtLookUp implementation, another transport.
 AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
-    secondaryAddressFinder, clientConfig = const {}}) => ...;
+    secondaryAddressFinder}) => ...;
 ```
 
 - Each call names what the connection is for: the atSign, the root domain,
-  the authenticator (null for a connection that never authenticates), an
-  optional address finder and the client config. The factory captures how
-  bytes travel.
+  the authenticator (null for a connection that never authenticates) and an
+  optional address finder. The factory captures how bytes travel; what a
+  connection announces about the client travels in its authenticator's
+  `from:`.
 - The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
   and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
   none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses

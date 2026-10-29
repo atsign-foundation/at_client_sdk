@@ -585,7 +585,7 @@ which requires the connection):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
+| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator (carrying `clientConfig`), `secondaryAddressFinder`, the preference's TLS fields |
 | at_client `notification_service_impl.dart`             | the monitor's connection                                                             | authenticator from `AtChops`, the preference's TLS fields                   |
 | at_client `atsign_lifecycle.dart` (`enroll`)           | the unauthenticated submission                                                       | none: `authenticator: null`                                                 |
 | at_client `authenticated_lookup.dart`                  | `open`'s probe and `authenticatesAs`                                                 | authenticator from the keys                                                 |
@@ -627,7 +627,6 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
   required AtRootDomain rootDomain,
   required AtAuthenticator? authenticator,
   SecondaryAddressFinder? secondaryAddressFinder,
-  Map<String, dynamic> clientConfig,
 });
 
 // at_lookup_io.dart: the default, and the only place that names the TLS
@@ -639,18 +638,19 @@ AtLookUpFactory secureSocketLookUps({
 }) {
   final transport = secureSocketTransport(config ?? SecureSocketConfig());
   return ({required atSign, required rootDomain, required authenticator,
-      secondaryAddressFinder, clientConfig = const {}}) =>
+      secondaryAddressFinder}) =>
         AtLookUp.withSecureSocket(
             atSign: atSign, rootDomain: rootDomain, authenticator: authenticator,
             transport: transport, secondaryAddressFinder: secondaryAddressFinder,
-            clientConfig: clientConfig, onConnect: onConnect);
+            onConnect: onConnect);
 }
 ```
 
 The factory captures **how bytes travel** (the transport and its settings, or
 a wholly different `AtLookUp` implementation); each call names **what the
-connection is for** (which atSign, how it authenticates, which address finder,
-what it announces about itself). The root domain stays a per-call argument,
+connection is for** (which atSign, how it authenticates, which address
+finder); what it announces about itself travels in its authenticator's
+`from:`. The root domain stays a per-call argument,
 from the preference or the verb, so where the atDirectory is does not move.
 
 The application supplies it where it supplies the other two legs:

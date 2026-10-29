@@ -58,7 +58,6 @@ AtLookUpFactory secureSocketLookUps({
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) =>
       AtLookUp.withSecureSocket(
         atSign: atSign,
@@ -68,7 +67,6 @@ AtLookUpFactory secureSocketLookUps({
         secondaryAddressFinder: secondaryAddressFinder ??
             CacheableSecondaryAddressFinder(
                 rootDomain.rootDomain, rootDomain.rootPort),
-        clientConfig: clientConfig,
         onConnect: onConnect,
       );
 }

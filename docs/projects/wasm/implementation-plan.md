@@ -590,10 +590,10 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection advertises nothing.** `RemoteSecondary` passes
-    `clientConfig: _getClientConfig()` — version, clientId, appName, appVersion, platform —
-    and `NotificationServiceImpl` passes none, so that parameter takes its `const {}`
-    default. `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
+  - **The monitor connection advertises nothing.** `RemoteSecondary`'s authenticator
+    sends `_getClientConfig()` — version, clientId, appName, appVersion, platform — in its
+    `from:`, and the one `NotificationServiceImpl` builds for the monitor carries none.
+    `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
     connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
     its own connection, so there was nothing to inherit. Worth settling if the atServer logs
     or branches on client version per connection.

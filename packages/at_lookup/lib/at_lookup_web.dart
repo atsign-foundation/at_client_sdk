@@ -82,7 +82,6 @@ AtLookUpFactory _webSocketLookUps({
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) =>
       AtLookUp.withTransport(
         atSign: atSign,
@@ -90,7 +89,6 @@ AtLookUpFactory _webSocketLookUps({
         authenticator: authenticator,
         transport: transport,
         secondaryAddressFinder: secondaryAddressFinder ?? finderFor(rootDomain),
-        clientConfig: clientConfig,
         onConnect: onConnect,
       );
 }

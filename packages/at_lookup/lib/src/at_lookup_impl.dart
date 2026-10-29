@@ -108,9 +108,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late AtLookupOutboundConnectionFactory outboundConnectionFactory;
 
-  /// Represents the client configurations.
-  late Map<String, dynamic> _clientConfig;
-
   /// Prefer [AtLookUp.withTransport] or `AtLookUp.withSecureSocket`, which
   /// take an [AtRootDomain] and return the [AtLookupMuxable] interface.
   @Deprecated('Use AtLookUp.withTransport or AtLookUp.withSecureSocket, '
@@ -118,16 +115,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {required this.secondaryAddressFinder,
       required this.transportFactory,
-      Map<String, dynamic>? clientConfig,
       AtLookupMessageListenerFactory? socketListenerFactory,
       AtLookupOutboundConnectionFactory? outboundConnectionFactory,
       this.onConnect}) {
     _currentAtSign = atSign;
     _rootDomain = rootDomain;
     _rootPort = rootPort;
-    // Stores the client configurations.
-    // If client configurations are not available, defaults to empty map
-    _clientConfig = clientConfig ?? {};
     this.socketListenerFactory =
         socketListenerFactory ?? AtLookupMessageListenerFactory();
     this.outboundConnectionFactory =

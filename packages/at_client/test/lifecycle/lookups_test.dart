@@ -55,7 +55,6 @@ void main() {
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) {
     final lookUp = MockAtLookupImpl();
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
