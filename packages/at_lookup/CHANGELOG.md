@@ -19,6 +19,9 @@
   port, is refused.
 - fix: a command holding a line feed before its end is refused with
   `IllegalArgumentException`, and nothing is sent.
+- fix: a connection lost while authenticating no longer reads as refused
+  credentials. The lookup authenticates once more on a fresh connection, and
+  a second loss fails with `ConnectionInvalidException`.
 - breaking: `AtLookUp.connection` is an `AtConnection?`.
 - breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
   `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and

@@ -160,6 +160,10 @@ abstract interface class AtLookUp {
   /// Authenticates this lookup's connection with its authenticator, opening
   /// the connection when there is none, and returns true once it has.
   ///
+  /// A connection lost before the authentication finishes is replaced, and
+  /// the authenticator runs again on the new one, once; a second loss throws
+  /// [ConnectionInvalidException].
+  ///
   /// The connection records the enrollment named by the `pkam:` the atServer
   /// accepted, as [AtConnectionMetaData.authenticatedAsEnrollmentId].
   Future<bool> pkamAuthenticate();

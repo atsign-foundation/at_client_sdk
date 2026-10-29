@@ -402,29 +402,42 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Runs [authenticate] against this connection, under the PKAM mutex, and
   /// returns true once it has authenticated.
   ///
+  /// A connection lost before the authentication finishes is replaced and
+  /// [authenticate] runs again from its first command, once; a second loss
+  /// throws [ConnectionInvalidException].
+  ///
   /// The enrollment recorded on the connection is the one named by the
   /// `pkam:` the atServer accepted, none for a CRAM or a legacy PKAM.
   Future<bool> _authenticateWith(AtAuthenticator authenticate) async {
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
-      // NOTE: the authenticator's commands all go on this connection, so its
-      // success is recorded on it, never on whichever one [_connection] holds
-      // by then.
-      final connection = _connection!;
-      if (connection.getMetaData()!.isAuthenticated) {
-        return true;
+      try {
+        return await _authenticateOnce(authenticate);
+      } on ConnectionInvalidException {
+        await createConnection();
+        return await _authenticateOnce(authenticate);
       }
-      final sent = _SentCommands(this, connection, messageListener);
-      if (!await authenticate(sent)) {
-        throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
-            ' The authenticator reported failure');
-      }
-      _recordAuthentication(connection, enrollmentId: sent.pkamEnrollmentId);
-      return true;
     } finally {
       _pkamAuthenticationMutex.release();
     }
+  }
+
+  Future<bool> _authenticateOnce(AtAuthenticator authenticate) async {
+    // NOTE: the authenticator's commands all go on this connection, so its
+    // success is recorded on it, never on whichever one [_connection] holds
+    // by then.
+    final connection = _connection!;
+    if (connection.getMetaData()!.isAuthenticated) {
+      return true;
+    }
+    final sent = _SentCommands(this, connection, messageListener);
+    if (!await authenticate(sent)) {
+      throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
+          ' The authenticator reported failure');
+    }
+    _recordAuthentication(connection, enrollmentId: sent.pkamEnrollmentId);
+    return true;
   }
 
   @override
@@ -1121,9 +1134,9 @@ class _SentCommands implements AtCommandExecutor {
         // NOTE: every command of one handshake goes on one connection.
         if (!identical(_lookUp._connection, _connection) ||
             _connection.isInValid()) {
-          throw UnAuthenticatedException('The connection this authentication '
-              'began on closed before it finished, so the rest of it is sent '
-              'on no other connection');
+          throw ConnectionInvalidException('The connection this '
+              'authentication began on closed before it finished, so the rest '
+              'of it is sent on no other connection');
         }
         _lookUp.logger.finer('SENDING: $command');
         await _connection.write(command);

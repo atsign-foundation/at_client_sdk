@@ -83,44 +83,6 @@ void main() {
             'connection');
   });
 
-  test(
-      'when the connection closes between two of an authenticator\'s '
-      'commands, then the second is sent on no other connection and nothing '
-      'is recorded', () async {
-    final second = MockOutboundConnectionImpl();
-    final secondListener = MockOutboundMessageListener();
-    final connections = [mockOutBoundConnection, second];
-    when(() =>
-            mockOutboundConnectionFactory.createOutboundConnection(transport))
-        .thenAnswer((_) => connections.removeAt(0));
-    when(() => mockSecureSocketListenerFactory.createListener(second))
-        .thenAnswer((_) => secondListener);
-    when(() => second.getMetaData())
-        .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
-    when(() => second.isInValid()).thenReturn(false);
-    when(() => second.write(any())).thenAnswer((_) => Future.value());
-    when(() => secondListener.read()).thenAnswer((_) async => 'data:success');
-    var closed = false;
-    when(() => mockOutBoundConnection.isInValid()).thenAnswer((_) => closed);
-    when(() => mockOutBoundConnection.close()).thenAnswer((_) async {});
-    replies = [fromChallenge];
-    final atLookup = build();
-    atLookup.authenticator = (executor) async {
-      await executor.sendSync('from:@alice\n');
-      closed = true;
-      await executor.sendSync('pkam:signature\n');
-      return true;
-    };
-
-    await expectLater(
-        atLookup.pkamAuthenticate(),
-        throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
-            'message', contains('closed before it finished'))));
-    verifyNever(() => second.write(any()));
-    expect(mockOutBoundConnection.getMetaData()!.isAuthenticated, isFalse);
-    verify(() => mockOutBoundConnection.write('from:@alice\n')).called(1);
-  });
-
   test('an authenticator reporting failure raises UnAuthenticatedException',
       () async {
     replies = [fromChallenge];
