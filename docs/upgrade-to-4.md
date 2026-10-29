@@ -425,5 +425,7 @@ A keyfile such a release candidate wrote can hold the enrollment's first key
 package without its enrollment id. If `keyEstablishmentAlgorithms` later names
 a second algorithm, the client files a key for it beside the first, and the
 key package it publishes names both keys, but the client then holds only the
-new one: the first key stays advertised and is not held. No posture's default
-names a second algorithm.
+new one: the first key stays advertised and is not held. Until the client
+next starts, what other enrollments seal to that first key is not opened; that
+start files a fresh key for the first algorithm and stops advertising the old
+one. No posture's default names a second algorithm.
