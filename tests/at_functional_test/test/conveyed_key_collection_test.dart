@@ -31,16 +31,34 @@ void main() {
   late String atSign;
   const namespace = 'wavi';
 
-  // NOTE: a real 32-byte X-Wing seed — what is filed is a seed, which
+  // NOTE: real 32-byte X-Wing seeds — what is filed is a seed, which
   // NskeyPrivateFiling.read expands into a decapsulation key, so arbitrary
-  // bytes read back as null.
+  // bytes read back as null. One per conveyance, so no test's sweep can file
+  // what another conveyed.
   final privateBytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
+  final minePrivate = Uint8List.fromList(List<int>.generate(32, (i) => i + 32));
+  final elsewherePrivate =
+      Uint8List.fromList(List<int>.generate(32, (i) => i + 64));
+  late String liveKid;
+  late String mineKid;
+  late String elsewhereKid;
+
+  /// The kid [seed]'s generation is published under. A private conveyed for a
+  /// generation not yet published is filed only under the kid its seed
+  /// derives.
+  Future<String> kidOf(Uint8List seed) async =>
+      nskeyKidOf((await SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!
+              .keyPairFromSeed(seed))
+          .publicKey);
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final manager = await TestUtils.initAtClient(atSign, namespace,
         posture: PqPosture.legacy);
     atClient = manager.atClient;
+    liveKid = await kidOf(privateBytes);
+    mineKid = await kidOf(minePrivate);
+    elsewhereKid = await kidOf(elsewherePrivate);
   });
 
   /// A keyfile shaped like one an enrollment made with
@@ -80,10 +98,10 @@ void main() {
     return party;
   }
 
-  Secret nskeySecret(String kid) => Secret(
+  Secret nskeySecret(String kid, Uint8List seed) => Secret(
         namespace: namespace,
         name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-        value: base64Encode(privateBytes),
+        value: base64Encode(seed),
       );
 
   test(
@@ -104,12 +122,13 @@ void main() {
             'party and sweeping for another');
     expect(
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
-            .read(namespace, 'kid-live'),
+            .read(namespace, liveKid),
         isNull,
         reason: 'nothing has been conveyed yet, so a pass here would mean the '
             'assertion below is measuring leftover state');
 
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'),
+    await from.shareSecretWith(
+        receiver.myKeyPackage, nskeySecret(liveKid, privateBytes),
         inReplyTo: EnvelopeAddressing.unsolicited);
 
     expect(await collectConveyedKeyMaterial(atClient, io), 1);
@@ -117,7 +136,7 @@ void main() {
     // A fresh filer over the same keyfile: what a restarted process sees.
     expect(
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
-            .read(namespace, 'kid-live'),
+            .read(namespace, liveKid),
         privateBytes,
         reason: 'the private has to be in AtKeys, not in the transit buffer — '
             'the buffer is in memory and does not survive the process');
@@ -131,19 +150,20 @@ void main() {
 
     // NOTE: both arms go through one collection, so a sweep that ran not at
     // all fails the positive arm rather than passing the negative one.
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'),
+    await from.shareSecretWith(
+        receiver.myKeyPackage, nskeySecret(mineKid, minePrivate),
         inReplyTo: EnvelopeAddressing.unsolicited);
     await from.shareSecretWith(
-        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'),
+        elsewhere.myKeyPackage, nskeySecret(elsewhereKid, elsewherePrivate),
         inReplyTo: EnvelopeAddressing.unsolicited);
 
     await collectConveyedKeyMaterial(atClient, io);
 
     final filed = NskeyPrivateFiling(keysIo: io, atSign: atSign);
-    expect(await filed.read(namespace, 'kid-mine'), privateBytes,
+    expect(await filed.read(namespace, mineKid), minePrivate,
         reason: 'the sweep has to have run for the absence below to mean '
             'anything about addressing');
-    expect(await filed.read(namespace, 'kid-elsewhere'), isNull,
+    expect(await filed.read(namespace, elsewhereKid), isNull,
         reason: 'an envelope is sealed to one key package; a client that filed '
             'what it could merely see would be claiming key material it '
             'cannot open');
