@@ -23,15 +23,22 @@ class WebSocketTransportFactory implements AtTransportFactory {
       this.scheme = 'wss',
       this.flushTimeout = const Duration(seconds: 30)});
 
-  /// An `error` or `close` before `open`, [timeout] elapsing (the network
-  /// default with none), and a close of the lookup it opens for, surface as
-  /// [SecondaryConnectException]; the cause is kept in the message.
+  /// A URL the WebSocket constructor refuses, an `error` or `close` before
+  /// `open`, [timeout] elapsing (the network default with none), and a close
+  /// of the lookup it opens for, surface as [SecondaryConnectException]; the
+  /// cause is kept in the message.
   @override
   Future<AtTransport> connect(String host, String port,
       {Duration? timeout}) async {
     final url = '$scheme://$host:$port$path';
-    final socket =
-        _BrowserWebSocketPort(WebSocket(url)..binaryType = 'arraybuffer');
+    final WebSocket webSocket;
+    try {
+      webSocket = WebSocket(url);
+    } catch (e) {
+      throw SecondaryConnectException(
+          'unable to connect to atServer on $host:$port - $e');
+    }
+    final socket = _BrowserWebSocketPort(webSocket..binaryType = 'arraybuffer');
     await awaitOpen(socket, host, port, timeout: timeout);
     return WebSocketTransport(socket, url, flushTimeout: flushTimeout);
   }

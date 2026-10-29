@@ -20,6 +20,8 @@
 - fix: in a browser, the atDirectory is asked for the atSign in its canonical
   form, and an answer longer than 512 bytes, or that is not a host name and a
   port, is refused.
+- fix: in a browser, an atServer address the WebSocket constructor refuses
+  fails with `SecondaryConnectException`, as any other failure to connect does.
 - fix: a command holding a line feed before its end is refused, and none of
   it is sent. `executeCommand` throws `IllegalArgumentException`, and
   `executeVerb` an `AtLookUpException` with code AT0022, before the lookup
