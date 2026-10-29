@@ -89,8 +89,10 @@ class NskeyPrivateUnavailableException extends AtDecryptionException {
 ///
 /// A content key is sealed to this atSign's own key only for a generation whose
 /// private this client holds, and only to the public half that private derives.
-/// Never answered by falling back to the legacy path. Writes in [namespace] go
-/// through once this client holds the private, which
+/// Thrown once the client has fetched the conveyance records addressed to it
+/// and asked the other enrollments, so the private has not been conveyed to
+/// this enrollment yet. Never answered by falling back to the legacy path.
+/// Writes in [namespace] go through once this client holds the private, which
 /// `AtReachabilityResult.holdsPrivate` reports.
 class NskeyPrivateNotHeldException extends AtEncryptionException {
   final String atSign;
@@ -98,9 +100,8 @@ class NskeyPrivateNotHeldException extends AtEncryptionException {
   final String nskeyKid;
 
   NskeyPrivateNotHeldException(this.atSign, this.namespace, this.nskeyKid)
-      : super('refusing to seal to $atSign:$namespace generation $nskeyKid: '
-            'a client seals to its own atSign\'s namespace key only once it '
-            'holds the private half');
+      : super('the private key for $atSign:$namespace generation $nskeyKid '
+            'has not yet been conveyed to this enrollment');
 }
 
 /// A record identifying one filed nskey private, as [SignalsPrivateFiling]

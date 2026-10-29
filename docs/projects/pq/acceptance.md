@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**117 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 119 use cases and 128 scenarios —
+**118 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 120 use cases and 129 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -85,6 +85,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A3.3  | Self write with no namespace key has no PQ fallback                                 | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.4  | Self notification (encrypted value)                                                 | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.5  | The published nskey advertisement names its KEM and what it can open                | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.6  | A client that needs a private it does not hold fetches it, else asks, else fails    | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A4.1  | alice → bob, both PQ-native, bob has the namespace key                              | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.2  | alice → bob where bob has no namespace key → the share fails                        | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.3  | Multi-enrollment both ends                                                          | PROVEN    | `a4_shared_data_test.dart`   |
@@ -948,6 +949,31 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `tests/at_functional_test` runLocal.sh for UC-A3.2's per-enrollment nskey push and
   its server-gated `__ssenv` refusal ("an `app_2.my_apps`-only client is refused the
   `app_1.my_apps` nskey private" is a live-atServer assertion, not a client-only one).
+
+### 4.6 UC-A3.6 — A client that needs a private it does not hold fetches it, else asks, else fails
+
+- **Given:** `@alice` publishes generation G1 of the nskey for `app_1.my_apps`, a
+  conveyance record for G1 sealed to E2's key package may be waiting on the atServer, and
+  E2's client has not filed G1's private.
+- **When:** E2's client puts or gets a value in `app_1.my_apps`.
+- **Then:** it fetches the conveyance records addressed to it from the atServer, files the
+  private one carries, and the write is sealed to G1, or the read opens.
+- **Then:** with no record waiting, it asks the other enrollments for G1's private.
+- **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
+  for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
+  read fails with `NskeyPrivateUnavailableException`, the type a parked notification is
+  re-driven on.
+- **Then:** Concurrent misses share one fetch.
+- **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch that found nothing does
+  not fetch again, and the startup collection does not start that cooldown.
+- **Then:** a fetch that meets a record the startup collection is still filing waits for a
+  sweep already filing it, rather than skipping it.
+- **Why:** a record already on the atServer needs no other enrollment to be online, so
+  only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
+  startup collection, so the fetch is what lets a write straight after it go through.
+- **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
+  `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live, the posture
+  grid's self write once the grid enrols every cell before the first mint.
 
 ## 5. A4 · E2EE across atSigns (shared data) + cross-atSign notification
 

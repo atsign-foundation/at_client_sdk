@@ -285,8 +285,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           nskeyOwner,
           namespace,
           nskeyKid,
-          'this client is not authorised for the namespace, or has not yet '
-          'received that generation');
+          'its private key has not yet been conveyed to this enrollment, or '
+          'this enrollment is not authorised for the namespace');
     }
 
     final Uint8List ckBytes;

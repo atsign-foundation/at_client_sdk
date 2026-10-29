@@ -9,6 +9,8 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart'
+    show collectConveyedKeyMaterial;
 import 'package:at_client/src/client/server_mutex.dart'
     show ServerMutexLease, checkedServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
@@ -230,11 +232,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
+    Future<void> Function()? fetchConveyance,
     Stream<DataEvent> Function()? ownChanges,
   })  : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
         verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
         _requestConveyance = requestConveyance,
+        _fetchConveyance = fetchConveyance,
         _ownChanges = ownChanges,
         _signer = AtClientEnvelopeSigner(_atClient) {
     _privateFiling = privateFiling ?? _filingFor(_atClient, this);
@@ -268,6 +272,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// from is what turns asking off.
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
+
+  /// Fetches the conveyance records addressed to this enrollment from the
+  /// atServer and files what they carry, when [privateHalf] comes up empty for
+  /// an own generation; derived like [_requestConveyance] when null.
+  final Future<void> Function()? _fetchConveyance;
+
+  /// The on-miss fetch in flight for each generation, which concurrent misses
+  /// share.
+  final Map<String, Future<void>> _fetching = {};
+
+  /// When each generation last had an on-miss fetch; the startup collection
+  /// does not count.
+  final Map<String, DateTime> _fetchedOnMiss = {};
 
   /// When each generation was last asked for, so a burst of failed reads
   /// collapses to one broadcast without a generation ever falling permanently
@@ -999,11 +1016,67 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (held != null || owner != _atClient.getCurrentAtSign()) return held;
 
+    await _fetchOnMiss(namespace, nskeyKid);
+    final fetched = await heldPrivateHalf(owner, namespace, nskeyKid);
+    if (fetched != null) return fetched;
+
     // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
     // owns waiting for the answer and filing it; nothing else does, so an ask
     // wired without that repairs the client only at its next start.
     _askForMissingPrivate(namespace, nskeyKid);
     return null;
+  }
+
+  /// How this ring fetches its own conveyance records, supplied or derived;
+  /// null when there is no key source to file into.
+  Future<void> Function()? get _fetch {
+    final supplied = _fetchConveyance;
+    if (supplied != null) return supplied;
+    final keysIo = _atClient.atKeysIo;
+    if (keysIo == null || privateFiling == null) return null;
+    return () async {
+      await collectConveyedKeyMaterial(_atClient, keysIo, ring: this);
+    };
+  }
+
+  /// Fetches this enrollment's conveyance records once per [askCooldown] for
+  /// the generation, sharing a fetch already in flight.
+  Future<void> _fetchOnMiss(String namespace, String nskeyKid) {
+    final fetch = _fetch;
+    if (fetch == null) return Future.value();
+    final generation = _generation('own', namespace, nskeyKid);
+    final inFlight = _fetching[generation];
+    if (inFlight != null) return inFlight;
+    final fetchedAt = _fetchedOnMiss[generation];
+    if (fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < askCooldown) {
+      return Future.value();
+    }
+    _fetchedOnMiss[generation] = DateTime.now();
+    final fetching = _fetchLogged(fetch, namespace, nskeyKid).whenComplete(() {
+      // NOTE: a block body: the removed value is this future, and returning it
+      // would make it wait for itself.
+      _fetching.remove(generation)?.ignore();
+    });
+    _fetching[generation] = fetching;
+    return fetching;
+  }
+
+  /// [fetch], with a failure logged rather than thrown, since the ask that
+  /// follows is the fallback.
+  Future<void> _fetchLogged(
+      Future<void> Function() fetch, String namespace, String nskeyKid) async {
+    try {
+      await fetch();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      logSwallowed(
+          _logger,
+          e,
+          'Could not fetch this enrollment\'s conveyance records for '
+          '$namespace:$nskeyKid; asking the other enrollments instead: $e',
+          routine: true);
+    }
   }
 
   @override

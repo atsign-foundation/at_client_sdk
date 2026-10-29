@@ -585,6 +585,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// wake-up sweep — each envelope key is claimed synchronously before any
   /// await, so the same payload is never emitted twice.
   ///
+  /// An envelope another sweep is still handling is waited for rather than
+  /// skipped, so whatever it files is filed by the time this returns.
+  ///
   /// [fromRemote] reads (and deletes) against the atServer rather than the
   /// local store; the wake-up path uses it so a sync-less client — which has
   /// no synced local copy — can still receive envelopes.
@@ -607,54 +610,71 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       // claim is released again (below) if the envelope turns out not to be
       // processable, so a later sweep can retry it.
       if (!_consumedEnvelopeKeys.add(keyString)) {
+        await _handling[keyString];
         continue;
       }
-      final ReceivedEnvelope? received;
+      final handled = _sweepOne(envelopeKey, keyString, fromRemote);
+      _handling[keyString] = handled.then((_) {}, onError: (_) {});
       try {
-        received = await _consume(envelopeKey, fromRemote: fromRemote);
-      } catch (e) {
-        // Includes transient failures (e.g. fetching the signer's _apsk key)
-        // — never delete on failure; release the claim so the next sweep
-        // retries. Nothing has been emitted yet, so a retry repeats nothing.
-        _consumedEnvelopeKeys.remove(keyString);
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logger.warning('Failed to process envelope $envelopeKey: $e');
-        continue;
-      }
-      if (received == null) {
-        // Not (or not yet) processable by this client; leave it for a
-        // sibling/upgraded client or for ttl expiry.
-        _consumedEnvelopeKeys.remove(keyString);
-        continue;
-      }
-      _receivedController.add(received);
-      try {
-        await _handleSecretPayload(received); // no-op unless kind=='secret'
-        await _handleRequestPayload(received); // no-op unless kind=='request'
-      } catch (e) {
-        // NOTE: the envelope has been EMITTED — releasing the claim here would
-        // hand it to the next sweep for a second emission. The claim and the
-        // envelope are both kept; a fresh process retries the whole thing.
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logger.warning('Envelope $envelopeKey was received but its payload '
-            'handler failed; it is kept for a retry at the next start: $e');
-        continue;
-      }
-      consumed++;
-      try {
-        await atClient.delete(envelopeKey,
-            deleteRequestOptions: DeleteRequestOptions()
-              ..useRemoteAtServer = fromRemote);
-      } catch (e) {
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logSwallowed(
-            logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
+        if (await handled) consumed++;
+      } finally {
+        _handling.remove(keyString)?.ignore();
       }
     }
     return consumed;
+  }
+
+  /// The envelopes a sweep has claimed and is still handling, by key.
+  final Map<String, Future<void>> _handling = {};
+
+  /// Handles one claimed envelope for [sweepOnce]; returns whether it was
+  /// consumed.
+  Future<bool> _sweepOne(
+      AtKey envelopeKey, String keyString, bool fromRemote) async {
+    final ReceivedEnvelope? received;
+    try {
+      received = await _consume(envelopeKey, fromRemote: fromRemote);
+    } catch (e) {
+      // Includes transient failures (e.g. fetching the signer's _apsk key)
+      // — never delete on failure; release the claim so the next sweep
+      // retries. Nothing has been emitted yet, so a retry repeats nothing.
+      _consumedEnvelopeKeys.remove(keyString);
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logger.warning('Failed to process envelope $envelopeKey: $e');
+      return false;
+    }
+    if (received == null) {
+      // Not (or not yet) processable by this client; leave it for a
+      // sibling/upgraded client or for ttl expiry.
+      _consumedEnvelopeKeys.remove(keyString);
+      return false;
+    }
+    _receivedController.add(received);
+    try {
+      await _handleSecretPayload(received); // no-op unless kind=='secret'
+      await _handleRequestPayload(received); // no-op unless kind=='request'
+    } catch (e) {
+      // NOTE: the envelope has been EMITTED — releasing the claim here would
+      // hand it to the next sweep for a second emission. The claim and the
+      // envelope are both kept; a fresh process retries the whole thing.
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logger.warning('Envelope $envelopeKey was received but its payload '
+          'handler failed; it is kept for a retry at the next start: $e');
+      return false;
+    }
+    try {
+      await atClient.delete(envelopeKey,
+          deleteRequestOptions: DeleteRequestOptions()
+            ..useRemoteAtServer = fromRemote);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logSwallowed(
+          logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
+    }
+    return true;
   }
 
   /// Verifies and decrypts one envelope. Returns null (after logging) for

@@ -224,6 +224,8 @@ void main() {
           provider.encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64()),
           throwsA(isA<NskeyPrivateNotHeldException>()
               .having((e) => e.nskeyKid, 'nskeyKid', kid)
+              .having((e) => e.message, 'message',
+                  contains('has not yet been conveyed to this enrollment'))
               .having((e) => e, 'type',
                   isNot(isA<NamespaceKeyUnavailableException>()))),
           reason: 'the legacy fallback catches NamespaceKeyUnavailable, so '

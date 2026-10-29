@@ -1,4 +1,5 @@
-import 'dart:async' show StreamController, TimeoutException, runZonedGuarded;
+import 'dart:async'
+    show Completer, StreamController, TimeoutException, runZonedGuarded;
 import 'dart:convert';
 import 'dart:math' show Random;
 import 'dart:typed_data';
@@ -755,6 +756,38 @@ void main() {
           reason: 'filed while the envelope still exists, so it is never the '
               'only copy of the secret that is lost');
       expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+
+    test(
+        'a sweep that meets an envelope another sweep is filing returns only '
+        'once it is filed', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final filing = Completer<void>();
+      final filed = <String>[];
+      sharerB.fileReceivedSecret = (secret) async {
+        await filing.future;
+        filed.add(secret.value);
+      };
+
+      final first = sharerB.sweepOnce();
+      await pumpEventQueue();
+      var secondReturned = false;
+      final second = sharerB.sweepOnce().then((n) {
+        secondReturned = true;
+        return n;
+      });
+      await pumpEventQueue();
+      expect(secondReturned, isFalse,
+          reason: 'the first sweep holds the envelope and has not filed it, '
+              'so a caller reading what the second filed would find nothing');
+
+      filing.complete();
+      expect(await first, 1);
+      expect(await second, 0,
+          reason: 'the second waited rather than handling it again');
+      expect(filed, ['v1']);
     });
 
     test('a secret that cannot be filed keeps its envelope', () async {

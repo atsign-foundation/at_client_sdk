@@ -492,6 +492,62 @@ void main() {
         ],
       );
     });
+
+    test(
+        'UC-A3.6 · a client that needs a private it does not hold fetches it, '
+        'else asks, else fails', () {
+      // GIVEN an own nskey generation published, whose private this
+      //       enrollment's client has not filed.
+      // WHEN  it writes or reads in that namespace.
+      // THEN  it fetches the conveyance records addressed to it, files a
+      //       private one carries, and goes on; with none, it asks the other
+      //       enrollments and the put fails saying the private key has not
+      //       yet been conveyed. Concurrent misses share one fetch, and a miss
+      //       within askCooldown of an on-miss fetch does not fetch again.
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a conveyance record for it is waiting, then the fetch files it',
+        proves: 'the fetch comes first and a record it finds is filed and '
+            'used, with nothing asked. Mutation-proven: removing the fetch '
+            'from privateHalf reddens it with a null private',
+        clauses: ['it fetches the conveyance records addressed to it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when no record is waiting, then it asks and holds nothing',
+        proves: 'with nothing waiting the ring asks, after the fetch',
+        clauses: ['asks the other enrollments'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_data_path_test.dart',
+        'a served public half alone is refused, by name',
+        proves: 'the refusal names the generation and says the private key '
+            'has not yet been conveyed to this enrollment',
+        clauses: ['has not yet been conveyed to this enrollment'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when two misses come at once, then one fetch serves both',
+        proves: 'two misses in flight share one fetch, and the second reads '
+            'only after it lands',
+        clauses: ['Concurrent misses share one fetch'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when it misses again within askCooldown of an on-miss fetch',
+        proves: 'the cooldown bounds the fetch, with a zero-cooldown control '
+            'beside it that fetches twice',
+        clauses: ['does not fetch again'],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'a sweep that meets an envelope another sweep is filing returns only',
+        proves: 'a fetch that meets an envelope the startup collection is '
+            'still filing waits for it, so the write after it finds the '
+            'private. Mutation-proven: skipping the wait reddens it',
+        clauses: ['waits for a sweep already filing'],
+      );
+    });
   });
 }
 
