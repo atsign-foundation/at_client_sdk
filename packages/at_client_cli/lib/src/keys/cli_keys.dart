@@ -28,9 +28,11 @@ abstract final class CliKeys {
     return HiveAtClientStorage(
         atSign: fixed,
         storagePath: path ??
-            standardAtClientStorageDir(
-                    atSign: fixed, progName: program, uniqueID: id)
-                .path,
+            standardAtClientStoragePath(
+                baseDir: getHomeDirectory(throwIfNull: true)!,
+                atSign: fixed,
+                progName: program,
+                uniqueID: id),
         closedByClient: true);
   }
 }
