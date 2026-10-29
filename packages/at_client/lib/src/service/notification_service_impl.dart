@@ -300,12 +300,15 @@ class NotificationServiceImpl extends NotificationService {
   ///   notification goes to, and the monitor's own.
   /// - [lookUps] builds the monitor's connection; the caller passes the
   ///   client's own factory for the same reason. Required unless [monitor]
-  ///   is given.
+  ///   is given; an [ArgumentError] otherwise.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
       required SecondaryAddressFinder secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps}) async {
+    if (monitor == null && lookUps == null) {
+      throw ArgumentError.notNull('lookUps');
+    }
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
