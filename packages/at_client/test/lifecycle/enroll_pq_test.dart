@@ -201,14 +201,6 @@ void main() {
     final approver = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
     stubApproverKeys(approver);
-    when(() => approver.getAtKeys(
-        regex: any(named: 'regex'),
-        showHiddenKeys: any(named: 'showHiddenKeys'),
-        useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
-      final regex = RegExp(inv.namedArguments[#regex] as String);
-      return Future.value(
-          remoteData.keys.where(regex.hasMatch).map(AtKey.fromString).toList());
-    });
     when(() => approver.atKeysIo).thenReturn(keysHoldingApkam(
         atSign, 'approver-1', pkamKeyPairFor(atSign, 'approver-1')));
     await AtClientSecretSharing.forClient(approver).register();

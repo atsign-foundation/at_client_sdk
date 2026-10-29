@@ -1573,24 +1573,9 @@ void main() {
       logs.records.clear();
     });
 
-    /// A client of the atSign over [remoteData] that can sweep what is
-    /// addressed to it.
-    AtClient member(String enrollmentId) {
-      final atClient = buildRemoteBackedMockClient(
-          atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
-      when(() => atClient.getAtKeys(
-              regex: any(named: 'regex'),
-              showHiddenKeys: any(named: 'showHiddenKeys'),
-              useRemoteAtServer: any(named: 'useRemoteAtServer')))
-          .thenAnswer((inv) {
-        final regex = RegExp(inv.namedArguments[#regex] as String);
-        return Future.value(remoteData.keys
-            .where(regex.hasMatch)
-            .map(AtKey.fromString)
-            .toList());
-      });
-      return atClient;
-    }
+    /// A client of the atSign over [remoteData].
+    AtClient member(String enrollmentId) => buildRemoteBackedMockClient(
+        atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
 
     Enrollment approved(String id, Map<String, dynamic> namespaces) =>
         Enrollment()

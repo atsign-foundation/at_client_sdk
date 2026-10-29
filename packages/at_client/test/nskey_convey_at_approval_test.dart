@@ -42,18 +42,6 @@ void main() {
     final atClient = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
     stubApproverKeys(atClient);
-    // The sweep enumerates envelope keys by scan, which the shared fixture
-    // does not stub.
-    when(() => atClient.getAtKeys(
-        regex: any(named: 'regex'),
-        showHiddenKeys: any(named: 'showHiddenKeys'),
-        useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
-      final regex = RegExp(inv.namedArguments[#regex] as String);
-      return Future.value(remoteData.keys
-          .where((k) => regex.hasMatch(k))
-          .map(AtKey.fromString)
-          .toList());
-    });
     when(() => atClient.delete(any())).thenAnswer((inv) {
       remoteData.remove('${inv.positionalArguments[0]}');
       return Future.value(true);

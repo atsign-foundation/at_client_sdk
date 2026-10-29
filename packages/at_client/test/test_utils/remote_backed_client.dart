@@ -8,8 +8,8 @@ import 'mocks.dart';
 import 'test_keypairs.dart';
 import 'ml_dsa_keyfile.dart';
 
-/// A mock [AtClient] whose puts and gets go through [remoteData], so several
-/// clients of the same atSign share one view of the atServer.
+/// A mock [AtClient] whose puts, gets and key scans go through [remoteData], so
+/// several clients of the same atSign share one view of the atServer.
 ///
 /// That sharing is the point rather than a convenience: the substrate's
 /// verification path has one client publish its `_apsk` and another read it
@@ -152,6 +152,20 @@ MockAtClient buildRemoteBackedMockClient({
   when(() => atClient.get(any(),
       getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(getFrom);
   when(() => atClient.get(any())).thenAnswer(getFrom);
+
+  when(() => atClient.getAtKeys(
+      regex: any(named: 'regex'),
+      showHiddenKeys: any(named: 'showHiddenKeys'),
+      useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
+    final pattern = inv.namedArguments[#regex] as String?;
+    final remote = inv.namedArguments[#useRemoteAtServer] as bool? ?? false;
+    final regex = pattern == null ? null : RegExp(pattern);
+    return Future.value((remote ? remoteData : localValues)
+        .keys
+        .where((k) => regex?.hasMatch(k) ?? true)
+        .map(AtKey.fromString)
+        .toList());
+  });
   return atClient;
 }
 

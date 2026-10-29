@@ -113,6 +113,13 @@ void main() {
     // member of the namespace.
     when(() => secondary.executeCommand(any(that: startsWith('enroll:listns')),
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
+    // NOTE: no conveyance record is waiting, and said rather than left
+    // unstubbed: a miss on a private fetches them before it asks.
+    when(() => atClient.getAtKeys(
+            regex: any(named: 'regex'),
+            showHiddenKeys: any(named: 'showHiddenKeys'),
+            useRemoteAtServer: any(named: 'useRemoteAtServer')))
+        .thenAnswer((_) async => []);
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
