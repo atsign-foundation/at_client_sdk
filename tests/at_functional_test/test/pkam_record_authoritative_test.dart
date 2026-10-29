@@ -58,6 +58,9 @@ void main() {
       // Unique per run: the atServer refuses a second enrollment carrying an
       // (appName, deviceName) pair that already has one approved.
       deviceName: 'pkamalgo-${DateTime.now().microsecondsSinceEpoch}',
+      // NOTE: the legacy exchange, because at_auth pairs the pq exchange with
+      // mldsa65 and this enrollment must authenticate under rsa2048.
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       storage: TestUtils.storage,
     );
 

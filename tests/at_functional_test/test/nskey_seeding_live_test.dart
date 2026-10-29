@@ -49,9 +49,10 @@ void main() {
         ring: ring,
         sharing: AtClientSecretSharing.forClient(owner),
         privateFiling: ring.privateFiling);
-    expect(owner.enrollmentId, isNull,
-        reason: 'the precondition: this client runs on the demo keys, which '
-            'name no enrollment, so it authenticates as primary');
+    expect(owner.enrollmentId,
+        anyOf(isNull, EnrollmentConstants.primaryEnrollmentId),
+        reason: 'the precondition: this client runs on the demo keys, the '
+            'atSign\'s own credential, so it authenticates as primary');
     expect(await seeding.authorisedNamespaces(), contains(namespace),
         reason: 'it is authorised for the namespace, so a refusal below is '
             'about the key package and nothing else');

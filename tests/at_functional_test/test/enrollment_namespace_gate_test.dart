@@ -57,7 +57,6 @@ void main() {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
-    AtKeys? enrolleeKeys;
     final build = enrollmentKeyPackageBuilder(atSign,
         signingAlgo: SigningAlgoType.mldsa65);
 
@@ -68,11 +67,7 @@ void main() {
         deviceName: 'scoped-${Uuid().v4().hashCode}',
         namespaces: namespaces,
         otp: otp,
-        metadataBuilder: (keysIo) async {
-          built = await build(keysIo);
-          enrolleeKeys = await keysIo.read(atSign);
-          return built;
-        },
+        metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
         // NOTE: at_auth refuses rsa2048 with the pq exchange.
         signingAlgo: SigningAlgoType.mldsa65,
@@ -92,7 +87,11 @@ void main() {
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
-      keys: enrolleeKeys!,
+      // NOTE: the keyfile as the submission left it, holding the APKAM keypair
+      // under the enrollment id the atServer assigned. A read inside the
+      // metadataBuilder predates that id and would sign as rsa2048.
+      // ignore: deprecated_member_use
+      keys: response.atAuthKeys!,
       grantedNamespaces:
           (await atClient.enrollmentService!.fetchEnrollmentRequests())
               .where((e) => e.enrollmentId == response.enrollmentId)

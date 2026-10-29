@@ -42,7 +42,6 @@ void main() {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
-    AtKeys? originalKeys;
     final build = enrollmentKeyPackageBuilder(atSign,
         signingAlgo: SigningAlgoType.mldsa65);
 
@@ -53,11 +52,7 @@ void main() {
         deviceName: 'copied-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
         otp: otp,
-        metadataBuilder: (keysIo) async {
-          built = await build(keysIo);
-          originalKeys = await keysIo.read(atSign);
-          return built;
-        },
+        metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
         // NOTE: at_auth refuses rsa2048 with the pq exchange.
         signingAlgo: SigningAlgoType.mldsa65,
@@ -77,14 +72,21 @@ void main() {
                 as Map)['keys'] as List)
             .single as Map)['kid'] as String;
 
-    // The copy: serialize and re-read, exactly as copying the file does. The
-    // atsign is set first because the in-flight AtKeys handed to
-    // metadataBuilder carries none, while a .atKeys file on disk always does.
-    originalKeys!.atsign ??= atSign.toAtsign();
-    final copiedKeys = AtKeys.fromJson(originalKeys!.toJson());
+    // NOTE: the keyfile as the submission left it, holding the APKAM keypair
+    // under the enrollment id the atServer assigned. A read inside the
+    // metadataBuilder predates that id and would sign as rsa2048.
+    // ignore: deprecated_member_use
+    final originalKeys = response.atAuthKeys!;
 
-    final originalMaterial = keyPackageMaterial(originalKeys!);
-    final copiedMaterial = keyPackageMaterial(copiedKeys);
+    // The copy: serialize and re-read, exactly as copying the file does. The
+    // atsign is set first because a .atKeys file on disk always carries one.
+    originalKeys.atsign ??= atSign.toAtsign();
+    final copiedKeys = AtKeys.fromJson(originalKeys.toJson());
+
+    final originalMaterial =
+        keyPackageMaterial(originalKeys, enrollmentId: response.enrollmentId);
+    final copiedMaterial =
+        keyPackageMaterial(copiedKeys, enrollmentId: response.enrollmentId);
 
     expect(originalMaterial, isNotNull,
         reason: 'the enrollment advertised a key package, so its private half '
@@ -106,7 +108,7 @@ void main() {
     // Same APKAM keypair, so the same enrollment — one enrollment id is all an
     // operator has to revoke.
     final copiedApkam = copiedKeys.authenticationKeyPairFor(null)!;
-    final originalApkam = originalKeys!.authenticationKeyPairFor(null)!;
+    final originalApkam = originalKeys.authenticationKeyPairFor(null)!;
     expect(copiedApkam.publicKey, originalApkam.publicKey);
     expect(copiedApkam.privateKey, originalApkam.privateKey);
 
