@@ -279,8 +279,9 @@ void main() {
       expect(ring.mints, 0);
     });
 
-    test('when it seeds with no substrate at all, then it mints nothing',
-        () async {
+    test(
+        'when it seeds with no substrate at all, then it answers cannotConvey '
+        'and mints nothing', () async {
       final atClient = MockAtClient();
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference());
@@ -292,7 +293,9 @@ void main() {
                   ring: ring,
                   privateFiling: await filingHolding([]))
               .seedNamespace(atSign, namespace),
-          NskeySeedOutcome.noKeyPackage);
+          NskeySeedOutcome.cannotConvey,
+          reason: 'a missing substrate is not a missing key package, and '
+              'reporting it as one sends the caller to the wrong fix');
       expect(ring.mints, 0);
     });
   });

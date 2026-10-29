@@ -185,6 +185,12 @@ class AtClientImpl implements AtClient {
       if (seeded == NskeySeedOutcome.noKeyPackage) {
         return const AtReachabilityResult(AtReachability.noKeyPackage);
       }
+      if (seeded == NskeySeedOutcome.cannotConvey) {
+        return AtReachabilityResult(AtReachability.failed,
+            error: StateError('this client has no secret-sharing substrate or '
+                'no key source to file a namespace key in, so it mints none '
+                'for $namespace'));
+      }
       // NOTE: checked rather than assumed — the mint adopts, rather than
       // replaces, a key a sibling enrollment published after the read above.
       return AtReachabilityResult(AtReachability.published,

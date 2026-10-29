@@ -46,6 +46,10 @@ enum NskeySeedOutcome {
   /// This client's enrollment carries no key package, so it can be conveyed no
   /// private and minted none.
   noKeyPackage,
+
+  /// This client has no secret-sharing substrate to convey a private over, or
+  /// no key source to file one in, so it minted none.
+  cannotConvey,
 }
 
 @experimental
@@ -189,7 +193,9 @@ class NskeySeeding {
   ///
   /// The private reaches every enrollment listed for the namespace before the
   /// key is published. A client whose own enrollment carries no verified key
-  /// package mints nothing and answers [NskeySeedOutcome.noKeyPackage].
+  /// package mints nothing and answers [NskeySeedOutcome.noKeyPackage]; one
+  /// with nothing to convey over or file in answers
+  /// [NskeySeedOutcome.cannotConvey].
   ///
   /// ⚠️ Concurrent callers of the SAME enrolment are safe only where they share a
   /// mint-lock instance — the wire lock's value is the enrolment id, so two
@@ -217,7 +223,11 @@ class NskeySeeding {
       return NskeySeedOutcome.alreadyPublished;
     }
     final conveyance = await _conveyanceFor(namespace);
-    if (conveyance == null) return NskeySeedOutcome.noKeyPackage;
+    if (conveyance == null) {
+      return _canConvey
+          ? NskeySeedOutcome.noKeyPackage
+          : NskeySeedOutcome.cannotConvey;
+    }
     final minted = await ring.mintAndPublish(namespace,
         conveyFirst: conveyance.convey,
         afterPublish: conveyance.afterPublish,
@@ -232,6 +242,11 @@ class NskeySeeding {
         ? NskeySeedOutcome.minted
         : NskeySeedOutcome.alreadyPublished;
   }
+
+  /// Whether this client has a substrate to convey a private over and a key
+  /// source to file one in.
+  bool get _canConvey =>
+      sharing != null && (privateFiling ?? ring.privateFiling) != null;
 
   /// The conveyance a mint in [namespace] hands its ring, or null when this
   /// client may mint nothing there, logged.
