@@ -1,5 +1,15 @@
 ## 4.0.0
 
+- feat: the first release with post-quantum cryptography, chosen by
+  `AtClientPreference.posture` (`PqPosture.pqReady` or `pqActive`):
+  ML-DSA-65 signing, X-Wing and ML-KEM-1024 key establishment,
+  per-namespace keys, a signing root, secret conveyance between an atSign's
+  enrollments, and key rotation. The default posture is still
+  `PqPosture.legacy`, which runs none of it.
+- feat: a namespace key's private is conveyed, before the key is published,
+  to every enrollment listed for its namespace that has a key package. An
+  enrollment the conveyance misses first looks for an envelope addressed to
+  it, then asks the others.
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
   keys it is given.
@@ -39,7 +49,7 @@
 - fix: `getApkamPublicKey`, and so verifying a signature, refuses a signer
   that is not an enrollment id with `AtSigningVerificationException`, and an
   envelope sent through a namespace no atKey can carry is not delivered.
-- experimental: `AtClient.telemetry` is removed, with
+- breaking: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.
 - breaking: `AtClientUtil.findSecondary` is removed. Use
@@ -144,14 +154,14 @@
 - feat: a denied enrollment is refused with the new cause
   `AtConnectionCause.enrollmentDenied`, and `enrollmentNotApproved` means one
   not yet approved. `AtCredentialRefusedException` says which.
-- experimental: `PqStartupGates.publishChainLink` is removed,
+- breaking: `PqStartupGates.publishChainLink` is removed,
   `PqStartupGates.publishRootLink` is renamed `anchorOwnKeys`, and
   `PqSigningChain`'s methods are replaced.
-- experimental: `selfRetrofit` closes the `atLookUp` it is given once the
+- fix: `selfRetrofit` closes the `atLookUp` it is given once the
   retrofit is submitted, so the client it returns logs in as the new
   enrollment. A command needing authentication on that lookup in between
   fails rather than logging in as the old one.
-- experimental: `selfRetrofit` given no `atLookUp` submits through the
+- fix: `selfRetrofit` given no `atLookUp` submits through the
   `secondaryAddressFinder` it is given, as the client it opens does.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
