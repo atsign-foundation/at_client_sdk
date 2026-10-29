@@ -459,8 +459,8 @@ class NskeyPrivateFiling {
   }
 
   /// Retires the privates filed for [nskeyKids] in [namespace], so that
-  /// [filedFor] no longer offers them and a later mint does not resume a
-  /// generation whose publish was refused.
+  /// [filedFor] no longer offers them; [read] and [readSeed] still return
+  /// them, so what was sealed to them still opens.
   Future<void> retire(String namespace, Iterable<String> nskeyKids) async {
     final io = keysIo;
     if (io is! WrittenAtKeysIo) return;

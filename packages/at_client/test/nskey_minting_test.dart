@@ -2,7 +2,8 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
+import 'package:at_client/at_client_mixins.dart'
+    show AtClientEnvelopeSigner, Secret;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
@@ -251,36 +252,81 @@ void main() {
     expect(published, hasLength(1));
   });
 
-  test('a generation filed but never published is published, not minted again',
-      () async {
-    final c = client();
-    final filer = await filing();
-    final secondary = c.client.getRemoteSecondary()!;
-    var refuse = true;
-    when(() => secondary.executeVerb(any(
-        that: isA<UpdateVerbBuilder>().having(
-            (b) => b.atKey.key, 'key', '__nskey')))).thenAnswer((inv) async {
-      if (refuse) throw StoppedException('the client stopped');
-      final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
-      c.advertised[builder.atKey.namespace!] = builder.value as String;
-      return 'data:1';
+  group('UC-A3.7 · Given nothing published for the namespace', () {
+    test(
+        'when this client filed a generation it then failed to publish, then '
+        'its next mint publishes a fresh one and retires the filed one',
+        () async {
+      final c = client();
+      final filer = await filing();
+      final secondary = c.client.getRemoteSecondary()!;
+      var refuse = true;
+      when(() => secondary.executeVerb(any(
+          that: isA<UpdateVerbBuilder>().having(
+              (b) => b.atKey.key, 'key', '__nskey')))).thenAnswer((inv) async {
+        if (refuse) throw StoppedException('the client stopped');
+        final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
+        c.advertised[builder.atKey.namespace!] = builder.value as String;
+        return 'data:1';
+      });
+      await expectLater(
+          PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace),
+          throwsA(isA<StoppedException>()));
+      final filed = await filer.filedFor(namespace);
+      expect(filed, hasLength(1), reason: 'the stop landed after the filing');
+
+      refuse = false;
+      final conveyed = <List<String>>[];
+      final advertisement =
+          await PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace,
+                  conveyFirst: (kids) async => conveyed.add(kids));
+
+      expect(advertisement.nskeyKid, isNot(filed.single.nskeyKid),
+          reason: 'a cold-start mint publishes only what it minted itself');
+      expect(conveyed, [
+        [advertisement.nskeyKid]
+      ]);
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [advertisement.nskeyKid],
+          reason: 'the filed generation is retired before the mint');
+      expect(await filer.readSeed(namespace, filed.single.nskeyKid), isNotNull,
+          reason: 'retired, not removed: anything sealed to it still opens');
     });
-    await expectLater(
-        PublishedNskeyKeyRing(c.client, privateFiling: filer)
-            .mintAndPublish(namespace),
-        throwsA(isA<StoppedException>()));
-    final filed = await filer.filedFor(namespace);
-    expect(filed, hasLength(1), reason: 'the stop landed after the filing');
 
-    refuse = false;
-    final advertisement =
-        await PublishedNskeyKeyRing(c.client, privateFiling: filer)
-            .mintAndPublish(namespace);
+    test(
+        'when another enrollment conveyed this client a generation and never '
+        'published it, then this client\'s mint publishes a fresh one and '
+        'retires the conveyed one', () async {
+      final c = client();
+      final filer = await filing();
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final seed = kem.newSeed();
+      final conveyedKid =
+          nskeyKidOf((await kem.keyPairFromSeed(seed)).publicKey);
+      expect(
+          await filer.file(Secret(
+              namespace: namespace,
+              name: '${NskeyPrivateFiling.secretNamePrefix}$conveyedKid',
+              value: base64Encode(seed))),
+          isTrue);
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [conveyedKid],
+          reason: 'the control: the conveyed private is filed active, under '
+              'the kid its seed derives, before the mint runs');
 
-    expect(advertisement.nskeyKid, filed.single.nskeyKid,
-        reason: 'minting again would publish a generation beside a filed '
-            'private that nothing will ever advertise');
-    expect(await filer.filedFor(namespace), hasLength(1));
+      final advertisement =
+          await PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace);
+
+      expect(advertisement.keys.map((k) => k.kid), isNot(contains(conveyedKid)),
+          reason: 'a cold-start mint publishes only what it minted itself, '
+              'whoever minted what is filed');
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [advertisement.nskeyKid]);
+      expect(await filer.readSeed(namespace, conveyedKid), isNotNull);
+    });
   });
 
   test('a ring built from the client alone files into the client\'s keyfile',

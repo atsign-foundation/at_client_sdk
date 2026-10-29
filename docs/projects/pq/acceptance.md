@@ -1000,6 +1000,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a revocation touching the namespace between the roster read and the publish
   stops the publish, and the generation E1 filed is retired, so the next mint is a fresh
   one.
+- **Then:** a mint that finds nothing published always mints a fresh generation, and
+  first retires every private filed for the namespace, whichever enrollment minted it;
+  a retired private still opens what was sealed to it.
 - **Then:** a minter whose own entry carries no verified key package mints nothing and
   says why, and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Then, for the signing root:** a fully privileged enrollment that mints the root

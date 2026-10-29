@@ -15,6 +15,8 @@
   credential, `ensureReachable` answers `AtReachability.noKeyPackage`.
 - fix: an enrollment created under the legacy key exchange can open what its
   other enrollments convey to it, without waiting for a restart.
+- fix: when no namespace key is published, a client retires any it holds and
+  mints and publishes a fresh one.
 - experimental: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.

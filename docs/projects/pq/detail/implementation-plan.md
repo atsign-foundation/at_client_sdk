@@ -2726,7 +2726,12 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    private. Still worth deciding whether resume is required there rather than
    assuming it: the mint lock and the election
    ([decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16))
-   have both landed since, and may make re-generation safe (#2087).
+   have both landed since, and may make re-generation safe (#2087). As of
+   2026-10-29, per
+   [UC-A3.7](../acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)
+   (agreed 2026-10-28), a mint that finds nothing published retires every
+   private filed for the namespace, whichever enrollment minted it, and mints a
+   fresh generation.
 4. **IS-1's record name drifted from its issue.** Deliverables 1 and 3 name
    `pq_signing_publickey@<atSign>`; that string appears nowhere in the
    implementation. The issue needs correcting against the code before anyone
