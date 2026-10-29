@@ -5,8 +5,7 @@ import 'package:at_commons/at_commons.dart';
 import '../transport/at_transport.dart';
 import 'secure_socket_util.dart';
 
-/// TLS over TCP — the [AtTransport] `at_lookup` has always used, now behind the
-/// interface.
+/// TLS over TCP: the [AtTransport] a native program connects with.
 ///
 /// The constructor takes [Socket] rather than [SecureSocket] because every
 /// member below is plain socket delegation; the TLS lives entirely in

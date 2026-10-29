@@ -62,18 +62,11 @@ AtAuthenticator authenticatorFor(
       return _pkam(executor, atSign, keys, enrollmentId, clientConfig);
     };
 
-/// The fourth credential shape: a CRAM secret and nothing else.
+/// Authenticates with a CRAM secret alone, for a caller holding no keystore.
 ///
-/// [authenticatorFor] already falls back to CRAM, but only for a caller that
-/// has an [AtKeysIo] to read - it decides by that read throwing
-/// [AtKeysSourceAbsentException]. A caller holding a bare CRAM secret and no
-/// keystore at all has nothing to hand it, and at_lookup's ladder served
-/// exactly that caller from its `cramSecret` field.
-///
-/// Nothing in this tree sets `AtClientPreference.cramSecret` - every in-tree
-/// CRAM goes through onboarding, which authenticates with the secret it is
-/// handed - but the field is public and an external consumer can, so
-/// removing the ladder without this would take CRAM away from them silently.
+/// [authenticatorFor] also falls back to CRAM, but only for a caller that has
+/// an [AtKeysIo] to read: it decides by that read throwing
+/// [AtKeysSourceAbsentException].
 AtAuthenticator authenticatorForCramSecret(
   String atSign,
   String cramSecret, {
@@ -83,14 +76,8 @@ AtAuthenticator authenticatorForCramSecret(
 
 /// The legacy credential: a PKAM private key and nothing else.
 ///
-/// Reads no keystore, because a caller on this path has none - it holds a
-/// private key on an `AtClientPreference` and that is all. That is the shape
-/// at_lookup's own ladder supported, and the reason the ladder cannot simply
-/// be deleted: without this, authentication would require an `AtKeysIo` and
-/// every such caller would break.
-///
-/// Signs with the private key alone, which is all RSA signing reads. The
-/// ladder passed an empty public half to the same effect.
+/// Reads no keystore, for a caller holding a PKAM private key and nothing
+/// else. Signs with the private key alone, which is all RSA signing reads.
 ///
 /// Always rsa2048: a keyless caller names no enrollment, so there is no
 /// record to read an algorithm from, and rsa2048 is at_lookup's default.

@@ -2,9 +2,8 @@
 /// [AtTransportFactory].
 ///
 /// This is everything `at_lookup` needs from a connection, and deliberately no
-/// more: it is what remains after `dart:io`'s `Socket` comes off the
-/// `AtConnection` interface. A `SecureSocket` satisfies it as it stands; a
-/// `WebSocket` can be wrapped to.
+/// more: a TLS socket and a browser WebSocket each satisfy it through a thin
+/// wrapper.
 ///
 /// There is no `connect()` here. A transport only exists once
 /// [AtTransportFactory.connect] has returned one, so no member has to guard an

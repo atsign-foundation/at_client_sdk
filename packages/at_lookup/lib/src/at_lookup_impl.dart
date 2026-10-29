@@ -1090,11 +1090,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 }
 
-/// Builds the listener that reads an open connection.
-///
-/// Was `AtLookupSecureSocketListenerFactory`, which named a socket that
-/// appears nowhere in its signature - it takes a connection and returns a
-/// listener, both of which are transport-agnostic.
+/// Builds the listener that reads an open connection, over any transport.
 class AtLookupMessageListenerFactory {
   const AtLookupMessageListenerFactory();
 
