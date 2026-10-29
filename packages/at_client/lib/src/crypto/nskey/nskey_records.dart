@@ -87,22 +87,20 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// overrunning mint abandons rather than writing over the enrollment that won
 /// the next election.
 ///
-/// ⚠️ Sizing a lock purely against "how long a mint can legitimately take"
-/// ignores the other thing the ttl decides: how long a client that took the
-/// lock and exited before publishing is refused on its next start. This value
-/// governs the **nskey** lock, where that cost is bounded — `mintAndPublish`
-/// passes `ownLockIsNotContention`, so a client meeting its own token proceeds
-/// rather than waiting the ttl out. [signingRootMintLockTtl] is sized against
-/// the other risk.
+/// ⚠️ It is also how long a client that dies between taking the lock and
+/// publishing is refused on its next start, since its own lock refuses it as
+/// another client's would. A mint that conveys before publishing holds the
+/// lock for longer, this plus a budget for each enrollment listed, never past
+/// the atServer's 15-minute limit, and the refusal lasts as long.
+/// [signingRootMintLockTtl] is sized against that cost instead.
 const Duration mintLockTtl = Duration(minutes: 2);
 
 /// How long the **signing root's** mint lock is held.
 ///
-/// Much shorter than [mintLockTtl], and sized against a different risk. The
-/// root mint does not pass `ownLockIsNotContention`, so a client that takes
-/// this lock and exits before publishing loses to its own token for the whole
-/// ttl — and a client whose lifetime is shorter than the ttl never mints a
-/// root at all. Two of an atSign's enrollments racing to mint the root, which
+/// Much shorter than [mintLockTtl], and sized against a different risk. A
+/// client that takes this lock and exits before publishing is refused for the
+/// whole ttl, and a client whose lifetime is shorter than the ttl never mints
+/// a root at all. Two of an atSign's clients racing to mint the root, which
 /// is what the cooldown guards, is not a situation normal operation produces;
 /// a short-lived client relaunching is.
 ///

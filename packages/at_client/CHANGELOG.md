@@ -25,6 +25,10 @@
   other enrollments convey to it, without waiting for a restart.
 - fix: when no namespace key is published, a client retires any it holds and
   mints and publishes a fresh one.
+- fix: two processes of one enrollment no longer both mint a namespace key. A
+  process restarted after stopping mid-mint waits until the mint lock expires.
+- fix: the record `tryAcquireServerMutex` writes holds the enrollment id
+  followed by a nonce drawn once per isolate.
 - fix: a read refuses a record whose metadata names a namespace or key id
   that no atKey can carry.
 - fix: a namespace key's private that arrives before its generation is

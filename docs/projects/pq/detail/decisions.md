@@ -12008,7 +12008,9 @@ from plan item 14.19.1 earlier the same day.
 
 15. `ApkamSigning.enrollmentId` substituting the sentinel `'primary'` when
    there is none (`packages/at_client/lib/src/mixins/apkam_signing.dart:68`;
-   also `mint_lock.dart:134`) is deliberate, not a placeholder. A legacy
+   also `server_mutex.dart`'s `_holderOf`, which this cited as
+   `mint_lock.dart:134` until 2026-10-29 and which now writes a per-isolate
+   nonce after it) is deliberate, not a placeholder. A legacy
    PKAM client holding an `AtKeysIo` therefore publishes
    `public:_apsk.primary.a.__e@<atSign>` and signs approval-chain links as
    `"primary"` — because `publishPublicSigningKey` is the only writer for an
@@ -12996,6 +12998,12 @@ not-resurrected assertion fails; make the writer refuse always and only the
 minutes, because the root path pays the cooldown without the protection that
 makes it cheap*
 
+⚠️ **Amended 2026-10-29:** `ownLockIsNotContention` is removed under Gary's
+ruling ("B: nonce in the lock"), so the nskey lock now pays the same cost: a
+client that took it and stopped before publishing is refused for its ttl, two
+minutes plus the roster budget. The 15 seconds here stands. What follows is
+what this ruling said before.
+
 **The ttl decides two things and was sized against only one.** `MintLock`'s
 winner never releases — expiry does — so the ttl is both how long a winner may
 take and how long the *next* attempt is refused. Where a caller passes
@@ -13035,7 +13043,8 @@ process leaves the lock held and nothing published.
 
 **Not taken:** opting the root path into `ownLockIsNotContention`, which would
 need `_mintUnderLock` to re-read inside the lock the way `_mintUnlessPublished`
-does. It remains the way to make the window zero rather than short.
+does. It remained the way to make the window zero rather than short until the
+flag was removed on 2026-10-29.
 
 ## 125. A Hive store's identity is its storage path, not its atSign (2026-08-28)
 

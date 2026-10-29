@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -27,8 +29,7 @@ class _SpentLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
-          {bool ownLockIsNotContention = false}) =>
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
       mint(ServerMutexLease(
           lockKey, DateTime.now().subtract(const Duration(seconds: 1))));
 }
@@ -41,8 +42,7 @@ class _ShortLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
-          {bool ownLockIsNotContention = false}) =>
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
       mint(ServerMutexLease(lockKey, DateTime.now().add(length)));
 }
 
@@ -61,7 +61,7 @@ void main() {
   /// A client whose remote verbs succeed, recording what was sent, and serving
   /// back whatever has been published to the one record these tests turn on.
   /// [lockAlreadyHeld] makes the lock's immutable create fail, which is how the
-  /// atServer reports that another enrollment already holds it.
+  /// atServer reports that another client already holds it.
   ({
     MockAtClient client,
     List<AtKey> verbs,
@@ -175,19 +175,6 @@ void main() {
         if (builder.atKey.key == '__nskey') {
           advertised[builder.atKey.namespace!] = builder.value as String;
         }
-      }
-      if (builder is LLookupVerbBuilder && builder.operation == 'all') {
-        // A lock another enrollment holds, as llookup:all serves it.
-        return 'data:${jsonEncode({
-              'key': '${builder.atKey}',
-              'data': 'another-enrollment',
-              'metaData': {
-                'expiresAt': DateTime.now()
-                    .toUtc()
-                    .add(const Duration(minutes: 2))
-                    .toIso8601String()
-              }
-            })}';
       }
       return 'data:1';
     });
@@ -339,6 +326,88 @@ void main() {
       expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
           [advertisement.nskeyKid]);
       expect(await filer.readSeed(namespace, conveyedKid), isNotNull);
+    });
+
+    test(
+        'when a second process of this enrollment mints while the first is '
+        'conveying, then it mints and retires nothing, and a fresh process '
+        'seals to what the first published', () async {
+      final c = client();
+      // NOTE: the lock as the atServer keeps it: the first create wins, every
+      // later one is refused until the ttl, which outlasts this test, and a
+      // read serves the value the winner wrote, as llookup:all does.
+      final secondary = c.client.getRemoteSecondary()!;
+      String? lockValue;
+      when(() => secondary.executeVerb(any(
+              that: isA<UpdateVerbBuilder>()
+                  .having((b) => b.atKey.key, 'key', '_nskeylock'))))
+          .thenAnswer((inv) async {
+        if (lockValue != null) {
+          throw IllegalStateException('Immutable records may not be updated');
+        }
+        lockValue =
+            (inv.positionalArguments[0] as UpdateVerbBuilder).value as String;
+        return 'data:1';
+      });
+      when(() => secondary.executeVerb(any(
+              that: isA<LLookupVerbBuilder>()
+                  .having((b) => b.atKey.key, 'key', '_nskeylock'))))
+          .thenAnswer((inv) async => 'data:${jsonEncode({
+                    'key':
+                        '${(inv.positionalArguments[0] as LLookupVerbBuilder).atKey}',
+                    'data': lockValue,
+                    'metaData': {
+                      'expiresAt': DateTime.now()
+                          .toUtc()
+                          .add(const Duration(minutes: 2))
+                          .toIso8601String()
+                    },
+                  })}');
+      // NOTE: one keyfile, as two processes of one enrollment share it.
+      final filer = await filing();
+      PublishedNskeyKeyRing process() => PublishedNskeyKeyRing(c.client,
+          privateFiling: filer,
+          requestConveyance: (ns, name) async {},
+          fetchConveyance: () async {});
+      final conveying = Completer<List<String>>();
+      final release = Completer<void>();
+      final firstMint =
+          process().mintAndPublish(namespace, conveyFirst: (kids) async {
+        conveying.complete(kids);
+        await release.future;
+      });
+      final first = (await conveying.future).single;
+
+      await expectLater(
+          process().mintAndPublish(namespace),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('has published no advertisement yet'))),
+          reason: 'the first process holds the mint lock, and every refusal '
+              'is contention, whichever client took the lock');
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid), [first],
+          reason: 'the first process\'s generation, filed and not yet '
+              'published, is still active in the shared keyfile');
+
+      release.complete();
+      expect((await firstMint).nskeyKid, first);
+      expect(c.advertised[namespace], isNotNull);
+
+      final fresh = process();
+      expect(await fresh.heldPublic(atSign, namespace, first), isNotNull,
+          reason: 'a fresh process holds the published generation as one it '
+              'can seal to');
+      final ck =
+          ContentKey(Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
+      final conveyance = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = namespace
+        ..sharedBy = atSign
+        ..metadata = Metadata();
+      await NskeyProvider(keyRing: fresh, cache: ContentKeyCache()).encrypt(
+          CryptoContext(atClient: c.client), conveyance, ck.toBase64());
+      expect(conveyance.metadata.appMetadata?.additional?['nskeyKid'], first,
+          reason: 'its write seals to the generation the first process '
+              'published');
     });
   });
 

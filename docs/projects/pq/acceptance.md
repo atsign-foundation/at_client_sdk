@@ -1034,6 +1034,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a mint that finds nothing published always mints a fresh generation, and
   first retires every private filed for the namespace, whichever enrollment minted it;
   a retired private still opens what was sealed to it.
+- **Then:** a client that meets the mint lock, another process of E1's own enrollment
+  among them, mints nothing and retires nothing while the lock is held, so E1's next
+  process seals to the generation the holder publishes; a client that stopped between
+  taking the lock and publishing is refused until the lock's ttl runs out.
 - **Then:** a minter whose own entry carries no verified key package mints nothing and
   says why, and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Then:** a receiver files a conveyed private whose generation is not yet published only
@@ -1054,10 +1058,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
   `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
   `nskey_filing_published_key_test.dart`, `seeding_files_private_test.dart`,
-  `nskey_seed_lock_covers_rotation_test.dart`, `pq_signing_root_test.dart` and
+  `nskey_seed_lock_covers_rotation_test.dart`, `pq_signing_root_test.dart`,
+  `mint_lock_self_contention_test.dart` and
   `signing_root_pushed_to_approved_only_test.dart`; live,
-  `nskey_seeding_live_test.dart` for a client on the atSign's own credential and
-  `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock. The root
+  `nskey_seeding_live_test.dart` for a client on the atSign's own credential,
+  `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock, and
+  `nskey_mint_lock_live_test.dart` for a lock that names E1's own enrollment. The root
   is pushed after its publish rather than before because a receiver files a conveyed
   root private only against a published root; filing one pending until the record
   confirms it is owed in 4.1.

@@ -181,7 +181,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [121] | A revocation publishes what it obliges                                                      | 2026-08-28 | SUPERSEDED by [129], [130] |
 | [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | PARTLY SUPERSEDED by [155]|
 | [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
-| [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
+| [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | AMENDED 2026-10-29        |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |

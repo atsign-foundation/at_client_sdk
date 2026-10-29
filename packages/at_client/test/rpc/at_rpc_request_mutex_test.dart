@@ -89,8 +89,8 @@ void main() {
     await responder().handleRequestNotification(requestFromBob(42));
 
     expect(commands, [
-      'update:nc:ttl:30000:isEncrypted:false:immutable:true:'
-          '42.session_mutexes.mutex.__rpcs.testing@alice e-1\n'
+      matches(RegExp(r'^update:nc:ttl:30000:isEncrypted:false:immutable:true:'
+          r'42\.session_mutexes\.mutex\.__rpcs\.testing@alice e-1:[0-9a-f]{32}\n$'))
     ]);
     expect(callbacks.handled, 1);
   });

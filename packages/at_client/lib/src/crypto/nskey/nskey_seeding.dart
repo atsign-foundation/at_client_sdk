@@ -197,11 +197,11 @@ class NskeySeeding {
   /// [NskeySeedOutcome.noKeyPackage]; one with nothing to convey over or file
   /// in answers [NskeySeedOutcome.cannotConvey].
   ///
-  /// ⚠️ Concurrent callers of the SAME enrolment are safe only where they share a
-  /// mint-lock instance — the wire lock's value is the enrolment id, so two
-  /// racers of one enrolment each read back their own and each mint — while
-  /// [askRotationPolicy] false suppresses putting an already-published generation
-  /// to [rotationPolicy], for a caller that only wants this atSign reachable.
+  /// A concurrent caller on the same ring waits for the mint in flight; one on
+  /// another ring, in this process or another, meets the mint lock and mints
+  /// nothing while it is held. [askRotationPolicy] false suppresses putting an
+  /// already-published generation to [rotationPolicy], for a caller that only
+  /// wants this atSign reachable.
   Future<NskeySeedOutcome> seedNamespace(String owner, String namespace,
       {bool askRotationPolicy = true}) async {
     if (!isSeedable(namespace)) {

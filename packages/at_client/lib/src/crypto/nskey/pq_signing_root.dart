@@ -228,7 +228,7 @@ class PqSigningRoot {
   ///
   /// Returns the public half, or null when this client did not mint: it is not
   /// fully privileged, its key source cannot file a private, a root is already
-  /// published, or another of this atSign's enrollments holds the mint lock.
+  /// published, or another client of this atSign holds the mint lock.
   /// Without a key source that can file the private, neither is the published
   /// root read nor the mint lock taken.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {

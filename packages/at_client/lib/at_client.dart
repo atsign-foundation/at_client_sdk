@@ -7,7 +7,7 @@ export 'package:at_client/src/client/local_secondary.dart';
 export 'package:at_client/src/client/remote_secondary.dart';
 export 'package:at_client/src/client/request_options.dart';
 export 'package:at_client/src/client/server_mutex.dart'
-    hide ServerMutexHolder, checkedServerMutexTtl;
+    hide checkedServerMutexTtl;
 export 'package:at_client/src/storage/at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';

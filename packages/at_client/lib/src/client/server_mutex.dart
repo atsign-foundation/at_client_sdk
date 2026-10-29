@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:math' show Random;
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_builders.dart';
@@ -17,11 +17,8 @@ class ServerMutexLease {
   /// when the lease was made.
   ///
   /// A lease from [ServerMutex.tryAcquireServerMutex] ends no later than the
-  /// lock in elapsed time. One read back from the record ends at the atServer's
-  /// expiry, judged on this client's clock, so a client clock behind the
-  /// atServer's extends it, but never beyond a fresh lease's length from the
-  /// read. Neither is a fence: a write sent just before [isSpent] turns can land
-  /// after the lock expired.
+  /// lock in elapsed time. It is not a fence: a write sent just before
+  /// [isSpent] turns can land after the lock expired.
   final DateTime expiresAt;
 
   final Stopwatch _held;
@@ -75,6 +72,10 @@ extension ServerMutex on AtClient {
   /// decides whether to go ahead without the lock. A failure such as a timeout
   /// can come after the atServer stored the record, and the lock then stays
   /// held until its ttl runs out.
+  ///
+  /// The record's value is this client's enrollment id, or `primary` for a
+  /// client with none, then a colon and a nonce drawn once per isolate, so no
+  /// two processes write the same value.
   Future<ServerMutexLease?> tryAcquireServerMutex(AtKey key,
       {required Duration ttl}) async {
     checkedServerMutexTtl(ttl, 'ttl');
@@ -97,47 +98,6 @@ extension ServerMutex on AtClient {
   }
 }
 
-/// Reading a server mutex back, for at_client's own use.
-///
-/// A lock records the enrollment that took it, and every client with no
-/// enrollment records the primary sentinel. So two clients under one
-/// enrollment, and any two clients with no enrollment, cannot be told apart:
-/// each sees the other's lock as its own.
-extension ServerMutexHolder on AtClient {
-  /// Whether the lock [key] names is held under this client's enrollment.
-  ///
-  /// [key] must be a self key of this client's atSign. A lock that does not
-  /// exist is not held; any other failure to read it is thrown.
-  Future<bool> holdsServerMutex(AtKey key) async {
-    final lock = await _readLock(this, key);
-    return lock != null && lock.holder == _holderOf(this);
-  }
-
-  /// A lease on the lock [key] names when this client's enrollment already
-  /// holds it; otherwise null.
-  ///
-  /// It ends at the record's own expiry, or [ttl] after the read began if that
-  /// is sooner, so it is never longer than a fresh lease. It can still outlast
-  /// the lock: the expiry is the atServer's, read on this client's clock, and
-  /// a client clock behind the atServer's extends the lease by the difference,
-  /// up to [ttl]. The atServer's own time is not available to correct for
-  /// that, so a caller re-reads what it guards before writing rather than
-  /// relying on the lease to exclude. Null too when the record carries no
-  /// expiry, since a lease must end no later than its lock.
-  /// [ttl] is checked as [ServerMutex.tryAcquireServerMutex] checks it.
-  Future<ServerMutexLease?> ownServerMutexLease(AtKey key,
-      {required Duration ttl}) async {
-    checkedServerMutexTtl(ttl, 'ttl');
-    final cap = DateTime.now().toUtc().add(ttl);
-    final lock = await _readLock(this, key);
-    if (lock == null || lock.holder != _holderOf(this)) return null;
-    final expiresAt = lock.expiresAt;
-    if (expiresAt == null) return null;
-    return ServerMutexLease(
-        lock.record, expiresAt.isBefore(cap) ? expiresAt : cap);
-  }
-}
-
 /// [ttl], checked as a server mutex's ttl: at least a millisecond and no
 /// longer than [maxServerMutexTtl], or an [ArgumentError] naming [name].
 Duration checkedServerMutexTtl(Duration ttl, String name) {
@@ -152,39 +112,20 @@ Duration checkedServerMutexTtl(Duration ttl, String name) {
   return ttl;
 }
 
-/// This client's identity in a lock record: its enrollment, or the primary
-/// sentinel for a client with none.
+/// This client's value in a lock record: its enrollment, or the primary
+/// sentinel for a client with none, then [_isolateNonce].
 String _holderOf(AtClient client) =>
-    client.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId;
+    '${client.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId}'
+    ':$_isolateNonce';
 
-/// The lock record [key] names, its holder and its expiry, read in one lookup;
-/// null when it does not exist.
-Future<({AtKey record, String holder, DateTime? expiresAt})?> _readLock(
-    AtClient client, AtKey key) async {
-  final record = _lockRecord(client, key);
-  final String response;
-  try {
-    response =
-        await client.getRemoteSecondary()!.executeVerb(LLookupVerbBuilder()
-          ..atKey = record
-          ..operation = 'all');
-  } on KeyNotFoundException {
-    return null;
-  }
-  final stored = jsonDecode(response.replaceFirst('data:', ''));
-  if (stored is! Map<String, dynamic>) {
-    throw FormatException(
-        'not a record from llookup:all for $record', response);
-  }
-  final metadata = stored['metaData'];
-  final expiresAt = metadata is Map ? metadata['expiresAt'] : null;
-  return (
-    record: record,
-    holder: '${stored['data']}'.trim(),
-    expiresAt:
-        expiresAt == null ? null : DateTime.tryParse('$expiresAt')?.toUtc(),
-  );
-}
+/// Sixteen random bytes as hex, drawn once per isolate.
+final String _isolateNonce = () {
+  final random = Random.secure();
+  return [
+    for (var i = 0; i < 16; i++)
+      random.nextInt(256).toRadixString(16).padLeft(2, '0')
+  ].join();
+}();
 
 /// The self record [key] names, owned by [client]'s atSign.
 AtKey _lockRecord(AtClient client, AtKey key) {

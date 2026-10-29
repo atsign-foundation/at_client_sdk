@@ -58,12 +58,11 @@ abstract class AtClient {
   /// you, and it is idempotent and cheap when there is nothing to do.
   ///
   /// A concurrent call in this process, or this client's own PQ startup,
-  /// waits for a mint already in flight and adopts what it published.
-  /// ⚠️ **Two processes of one enrollment are not excluded**: the mint lock's
-  /// holder token is the enrollment id, so each reads the lock back as its own
-  /// and mints; the two advertisements carry different key material, and a
-  /// peer that fetched in between holds a generation the owner may no longer
-  /// be able to open.
+  /// waits for a mint already in flight and adopts what it published. Another
+  /// process that is minting, of this enrollment or another, holds the mint
+  /// lock: a call that meets it mints nothing and answers
+  /// [AtReachability.failed] while nothing is published, and a process that
+  /// stopped before publishing leaves the lock held until its ttl runs out.
   ///
   /// Answers rather than throws for the three cases that are configuration and
   /// not failure — a posture that does not seed, a namespace this enrollment

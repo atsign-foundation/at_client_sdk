@@ -720,9 +720,9 @@ void main() {
       // THEN  every new private is conveyed before the advertisement names it,
       //       primary is skipped silently and a refused package is named, the
       //       lock's ttl is a roster-sized ceiling, a revocation in the window
-      //       stops the publish and retires the generation, and a minter with
-      //       no key package mints nothing; a minted root is pushed once
-      //       published.
+      //       stops the publish and retires the generation, a client meeting
+      //       the lock mints and retires nothing, and a minter with no key
+      //       package mints nothing; a minted root is pushed once published.
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'a mint, a rotation and an add convey their new privates before the '
@@ -856,6 +856,31 @@ void main() {
         proves: 'a private conveyed through file() and never published is '
             'retired, and the mint publishes a kid of its own',
         clauses: ['whichever enrollment minted it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when a second process of this enrollment mints while the first is '
+            'conveying',
+        proves: 'a second ring on the same keyfile meets the first\'s lock, '
+            'throws without minting, and leaves the first\'s filed generation '
+            'active; once the first publishes, a fresh ring holds it and seals '
+            'to it. Mutation-proven: adopting a refused lock, or one whose '
+            'value names this enrollment, reddens it',
+        clauses: ['mints nothing and retires nothing while the lock is held'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_mint_lock_live_test.dart',
+        'a client that meets a lock naming its own enrollment refuses to mint',
+        proves: 'a lock on the atServer whose value is this client\'s own '
+            'enrollment id refuses its mint, and nothing is published',
+        clauses: ['mints nothing and retires nothing while the lock is held'],
+      );
+      provenIn(
+        'packages/at_client/test/mint_lock_self_contention_test.dart',
+        'when a new instance of the same enrollment asks for it',
+        proves: 'a fresh MintLock of the enrollment that took the lock is '
+            'refused without reading it. Mutation-proven as above',
+        clauses: ['refused until the lock\'s ttl runs out'],
       );
       provenIn(
         'packages/at_client/test/pre_publish_conveyance_test.dart',

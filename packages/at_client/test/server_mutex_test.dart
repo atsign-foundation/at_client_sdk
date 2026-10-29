@@ -7,11 +7,10 @@
 /// builder produced, as a raw literal.
 library;
 
-import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
-import 'package:at_client/src/client/server_mutex.dart' show ServerMutexHolder;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_commons/at_builders.dart';
@@ -68,12 +67,12 @@ void main() {
   group('the create', () {
     test(
         'is one update carrying :nc, the ttl and immutable, valued with the '
-        'enrollment id', () async {
+        'enrollment id and this isolate\'s nonce', () async {
       final sent = <String>[];
       await clientOf(sent).tryAcquireServerMutex(lockKey, ttl: ttl);
       expect(sent, [
-        'update:nc:ttl:30000:isEncrypted:false:immutable:true:'
-            's1.session_mutexes.sshnp@alice e-1\n'
+        matches(RegExp(r'^update:nc:ttl:30000:isEncrypted:false:immutable:true:'
+            r's1\.session_mutexes\.sshnp@alice e-1:[0-9a-f]{32}\n$'))
       ]);
     });
 
@@ -81,7 +80,27 @@ void main() {
       final sent = <String>[];
       await clientOf(sent, enrollmentId: null)
           .tryAcquireServerMutex(lockKey, ttl: ttl);
-      expect(sent.single, endsWith(' primary\n'));
+      expect(sent.single, matches(RegExp(r' primary:[0-9a-f]{32}\n$')));
+    });
+
+    test('Two processes of one enrollment write different lock values',
+        () async {
+      final sent = <String>[];
+      await clientOf(sent).tryAcquireServerMutex(lockKey, ttl: ttl);
+      await clientOf(sent).tryAcquireServerMutex(lockKey, ttl: ttl);
+      final elsewhere = await Isolate.run(_lockValueInThisIsolate);
+
+      final here = sent.map(_valueOf).toList();
+      expect(here[0], here[1],
+          reason: 'the control: one isolate writes one value, so the '
+              'difference below is the isolate and nothing else');
+      expect(elsewhere.split(':').first, 'e-1',
+          reason: 'the control: the other isolate wrote under the same '
+              'enrollment');
+      expect(elsewhere, isNot(here[0]));
+      expect(here[0], isNot('e-1'),
+          reason: 'a release candidate reads a lock holding exactly its own '
+              'enrollment id as its own, and mints under it');
     });
 
     test('writes the record every existing lock is held on, unchanged',
@@ -99,7 +118,7 @@ void main() {
       for (final entry in keys.entries) {
         final sent = <String>[];
         await clientOf(sent).tryAcquireServerMutex(entry.key, ttl: ttl);
-        expect(sent.single, endsWith(':${entry.value} e-1\n'),
+        expect(sent.single, contains(':${entry.value} e-1:'),
             reason: 'the record ${entry.value} must be written as named');
       }
     });
@@ -111,7 +130,7 @@ void main() {
             ..key = 's1'
             ..namespace = 'session_mutexes.sshnp',
           ttl: ttl);
-      expect(sent.single, endsWith(':s1.session_mutexes.sshnp@alice e-1\n'));
+      expect(sent.single, contains(':s1.session_mutexes.sshnp@alice e-1:'));
     });
 
     test(
@@ -208,11 +227,6 @@ void main() {
           clientOf(sent).tryAcquireServerMutex(AtKey.fromString(key), ttl: ttl),
           throwsA(refusedNaming('key')));
       expect(sent, isEmpty, reason: 'nothing is sent to the atServer');
-      final looked = <String>[];
-      await expectLater(
-          clientOf(looked).holdsServerMutex(AtKey.fromString(key)),
-          throwsA(refusedNaming('key')));
-      expect(looked, isEmpty, reason: 'nor is it read');
     }
 
     test('A key owned by another atSign is refused', () async {
@@ -254,134 +268,6 @@ void main() {
               ttl: ttl),
           throwsA(isA<ArgumentError>().having((e) => e.invalidValue,
               'invalidValue', 'public:s1.session_mutexes.sshnp@alice')));
-    });
-  });
-
-  group('reading a lock back, for at_client\'s own use', () {
-    final expiry = DateTime.utc(2026, 10, 13, 12, 30);
-
-    /// A lock record as llookup:all serves it, held by [holder].
-    String record(String holder, {DateTime? expiresAt}) => 'data:${jsonEncode({
-              'key': 's1.session_mutexes.sshnp@alice',
-              'data': holder,
-              'metaData': {'expiresAt': expiresAt?.toIso8601String()},
-            })}';
-
-    test('reads the record with llookup:all and compares its enrollment',
-        () async {
-      final sent = <String>[];
-      expect(
-          await clientOf(sent, onLookup: () async => record('e-1'))
-              .holdsServerMutex(lockKey),
-          isTrue);
-      expect(sent, ['llookup:all:s1.session_mutexes.sshnp@alice\n']);
-      expect(
-          await clientOf([], onLookup: () async => record('e-2'))
-              .holdsServerMutex(lockKey),
-          isFalse);
-    });
-
-    test('is no when the record does not exist', () async {
-      expect(
-          await clientOf([],
-                  onLookup: () async =>
-                      throw KeyNotFoundException('no such key'))
-              .holdsServerMutex(lockKey),
-          isFalse);
-    });
-
-    test('throws any other failure to read it', () async {
-      final failure = AtTimeoutException('no answer');
-      await expectLater(
-          clientOf([], onLookup: () async => throw failure)
-              .holdsServerMutex(lockKey),
-          throwsA(same(failure)));
-    });
-
-    test(
-        'gives a lease on this enrollment\'s own lock ending at the '
-        'record\'s own expiry', () async {
-      final soon = DateTime.now().toUtc().add(const Duration(seconds: 10));
-      final lease = await clientOf([],
-              onLookup: () async => record('e-1', expiresAt: soon))
-          .ownServerMutexLease(lockKey, ttl: ttl);
-      expect(lease, isNotNull);
-      expect(lease!.expiresAt, soon);
-    });
-
-    test(
-        'caps a lease on a record expiring later than a fresh lease would, '
-        'at the ttl from the read', () async {
-      final began = DateTime.now();
-      final lease = await clientOf([],
-              onLookup: () async => record('e-1',
-                  expiresAt:
-                      DateTime.now().toUtc().add(const Duration(days: 1))))
-          .ownServerMutexLease(lockKey, ttl: ttl);
-      final ended = DateTime.now();
-      expect(lease!.expiresAt.isAfter(ended.add(ttl)), isFalse,
-          reason: 'never longer than a fresh lease taken at the read');
-      expect(lease.expiresAt.isBefore(began.add(ttl)), isFalse);
-    });
-
-    test('refuses a ttl a fresh lease would refuse, before reading', () async {
-      final looked = <String>[];
-      await expectLater(
-          clientOf(looked, onLookup: () async => record('e-1'))
-              .ownServerMutexLease(lockKey,
-                  ttl: const Duration(minutes: 15, milliseconds: 1)),
-          throwsA(refusedNaming('ttl')));
-      expect(looked, isEmpty);
-    });
-
-    test(
-        'gives no lease on another enrollment\'s lock, or on one with no '
-        'expiry', () async {
-      expect(
-          await clientOf([],
-                  onLookup: () async => record('e-2', expiresAt: expiry))
-              .ownServerMutexLease(lockKey, ttl: ttl),
-          isNull);
-      expect(
-          await clientOf([], onLookup: () async => record('e-1'))
-              .ownServerMutexLease(lockKey, ttl: ttl),
-          isNull,
-          reason: 'a lease must end no later than its lock');
-    });
-
-    test('throws a FormatException for a reply that is not a record', () async {
-      await expectLater(
-          clientOf([], onLookup: () async => 'data:1')
-              .holdsServerMutex(lockKey),
-          throwsA(isA<FormatException>()));
-    });
-
-    test(
-        'spends a lease on this enrollment\'s own lock once the record has '
-        'expired', () async {
-      // The false check runs well inside the 500 ms window, so a slow runner
-      // cannot spend the lease before it is asserted to be live.
-      final lease = await clientOf([],
-              onLookup: () async => record('e-1',
-                  expiresAt: DateTime.now()
-                      .toUtc()
-                      .add(const Duration(milliseconds: 500))))
-          .ownServerMutexLease(lockKey, ttl: ttl);
-      expect(lease!.isSpent, isFalse);
-      await Future.delayed(const Duration(milliseconds: 600));
-      expect(lease.isSpent, isTrue,
-          reason: 'a lease must end no later than its lock');
-    });
-
-    test('spends a capped lease once the ttl from the read has passed',
-        () async {
-      final lease = await clientOf([],
-              onLookup: () async => record('e-1',
-                  expiresAt:
-                      DateTime.now().toUtc().add(const Duration(days: 1))))
-          .ownServerMutexLease(lockKey, ttl: const Duration(milliseconds: 50));
-      await Future.delayed(const Duration(milliseconds: 100));
-      expect(lease!.isSpent, isTrue);
     });
   });
 
@@ -437,4 +323,28 @@ void main() {
           reason: 'a wall clock short of expiresAt does not extend it');
     });
   });
+}
+
+/// The value of the lock in the update [command] sends.
+String _valueOf(String command) =>
+    command.substring(command.lastIndexOf(' ') + 1).trim();
+
+/// The value a client of enrollment `e-1` writes to a lock in the isolate this
+/// runs in.
+Future<String> _lockValueInThisIsolate() async {
+  registerFallbackValue(FakeUpdateVerbBuilder());
+  final atClient = MockAtClient();
+  final remote = MockRemoteSecondary();
+  String? value;
+  when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+  when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
+  when(() => atClient.enrollmentId).thenReturn('e-1');
+  when(() => remote.executeVerb(any())).thenAnswer((inv) async {
+    value = (inv.positionalArguments[0] as UpdateVerbBuilder).value as String;
+    return 'data:-1';
+  });
+  await atClient.tryAcquireServerMutex(
+      AtKey.fromString('s1.session_mutexes.sshnp@alice'),
+      ttl: const Duration(seconds: 30));
+  return value!;
 }

@@ -90,10 +90,10 @@ const unprovableClauses = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 307;
+const provenClauseCount = 308;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 127;
+const serverProvenClauseCount = 128;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///

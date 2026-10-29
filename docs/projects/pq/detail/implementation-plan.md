@@ -9765,9 +9765,12 @@ published whose every later client was short-lived.
    as of 2026-08-27** — see `nskey_mint_lock_live_test.dart`. ✅ **And the LOOP
    is measured as of 2026-08-28** — `mint_lock_self_contention_test.dart`,
    three arms in which the only thing that varies is
-   `ownLockIsNotContention`. ⛔ **The answer splits by path, and this
-   paragraph's "could never get through" is FALSE for the nskey lock it
-   names.** `mintAndPublish` passes the flag and `MintLock._holder` is the
+   `ownLockIsNotContention`. ⚠️ **Superseded 2026-10-29 by Gary's ruling ("B:
+   nonce in the lock"):** the flag is removed, so the two paths no longer
+   split and a relaunched client meets its own lock and is refused for its
+   ttl on both; the rest of this paragraph is what it said before. ⛔ **The
+   answer splits by path, and this paragraph's "could never get through" is
+   FALSE for the nskey lock it names.** `mintAndPublish` passes the flag and `MintLock._holder` is the
    enrollment id — an identity, not an instance — so a relaunched client meets
    its own token and proceeds. It is the **signing root** that has no such
    escape, because its mint does not pass the flag; that is
@@ -9880,7 +9883,10 @@ control and each mutation-proven:
   succeeds once the lock is gone. Mutation: give the lock **this** client's own
   holder id and it mints instead of refusing — which is `ownLockIsNotContention`
   working as documented, and is what makes the sibling case the thing under
-  test rather than "a lock exists".
+  test rather than "a lock exists". ⚠️ **Since 2026-10-29** (Gary's ruling
+  "B: nonce in the lock") that mutation no longer flips it: a lock carrying
+  this client's own enrollment id refuses the mint too, which
+  `nskey_mint_lock_live_test.dart` now asserts.
 
 ⚠️ **What is still reasoned rather than measured is the LOOP**, and only that:
 whether a short-lived client relaunched repeatedly could in principle never get
@@ -9971,7 +9977,7 @@ the fix. Out of `## TODO` deliberately: a row leaves that table when it is
 done rather than gaining a ✅, and this one sat there with **Blocked on:
 Nothing**, which is the exact signature of a pickable item.
 
-✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⛔ **Deliberately NOT fixed with a per-instance wire token** — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one).
+✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⚠️ **Superseded 2026-10-29 by Gary's ruling ("B: nonce in the lock").** This entry said the race was *"deliberately NOT fixed with a per-instance wire token — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window."* Two processes of one enrollment sharing a keyfile showed the cost of adopting: the second retired the first's filed, unpublished generation, the first then published it, and every fresh process of the enrollment held its private retired and could not write in the namespace. `ownLockIsNotContention` is now removed, so every refusal is contention whoever took the lock, and a client that stopped between taking the lock and publishing waits out the ttl; the lock's value carries a nonce drawn once per isolate after the enrollment id, so a 3.15 release candidate of the same enrollment, which adopts a lock holding exactly its enrollment id, does not adopt one a 4.0 client took. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one).
 
 **The app author's verdict on the API itself, 2026-08-27: "good enough, and
 I'd ship it."** Recorded because the request came from them and a verdict is

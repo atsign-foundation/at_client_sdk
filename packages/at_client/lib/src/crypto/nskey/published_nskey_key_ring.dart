@@ -490,11 +490,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final minted = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
         (lease) => _mintUnlessPublished(
-            owner, namespace, lease, prepared, conveyFirst, afterPublish),
-        // NOTE: safe only because this critical section re-reads what is
-        // published and adopts it; `rotate` takes the same lock without this,
-        // so that the cooldown binds it.
-        ownLockIsNotContention: true);
+            owner, namespace, lease, prepared, conveyFirst, afterPublish));
     if (minted != null) return minted;
 
     final published = await publishedAdvertisement(owner, namespace);
@@ -508,9 +504,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return published;
     }
 
-    throw StateError(
-        'another enrollment holds the mint lock for $owner:$namespace and has '
-        'published no advertisement yet, so this client has no namespace key '
+    throw StateError('another client of this atSign holds the mint lock for '
+        '$owner:$namespace and has published no advertisement yet, so this client has no namespace key '
         'to seal to and must not mint a second one; retry after the lock\'s '
         'ttl elapses');
   }
@@ -588,11 +583,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         (lease) => _mint(owner, namespace, lease, prepared,
             conveyFirst: conveyFirst, afterPublish: afterPublish));
     if (rotated == null) {
-      throw StateError(
-          'another enrollment holds the mint lock for $owner:$namespace, so '
-          'this rotation did not happen; retry once its ttl elapses. Reporting '
-          'success here would leave the excluded enrollment holding the live '
-          'generation');
+      throw StateError('another client of this atSign holds the mint lock for '
+          '$owner:$namespace, so this rotation did not happen; retry once its '
+          'ttl elapses. Reporting success here would leave the excluded '
+          'enrollment holding the live generation');
     }
     _logger.info('Rotated $owner:$namespace from ${superseded.nskeyKid} to '
         '${rotated.nskeyKid}; the superseded private is retained so records '

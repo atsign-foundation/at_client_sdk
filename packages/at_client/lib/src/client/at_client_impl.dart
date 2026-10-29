@@ -176,10 +176,6 @@ class AtClientImpl implements AtClient {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
       }
 
-      // NOTE: safe here only because `MintLock` holds an in-flight guard for
-      // the ring this client uses. The lock itself excludes a different
-      // enrolment only: two racers of the SAME one both read the lock back,
-      // both see their own id, and both mint.
       final seeded = await bootstrap.seeding
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
       if (seeded == NskeySeedOutcome.noKeyPackage) {
