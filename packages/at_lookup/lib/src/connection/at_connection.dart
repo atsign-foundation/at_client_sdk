@@ -4,6 +4,10 @@ abstract class AtConnection {
   /// Write a data to the underlying socket of the connection
   /// @param - data - Data to write to the socket
   /// @throws [AtIOException] for any exception during the operation
+  ///
+  /// Throws `IllegalArgumentException`, writing nothing, when [data] holds a
+  /// line feed anywhere but its last character, since the atServer ends a
+  /// command at a line feed.
   void write(String data);
 
   /// Retrieves the socket of underlying connection
