@@ -230,6 +230,99 @@ void main() {
     });
   });
 
+  group('Given asks for kids no own advertisement names', () {
+    late NskeyAdvertisement advertised;
+
+    setUp(() async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      advertised = NskeyAdvertisement.single(
+          publicKey: (await kem.keyPairFromSeed(kem.newSeed())).publicKey,
+          alg: SecretSharingAlgos.xWing);
+    });
+
+    ({PublishedNskeyKeyRing ring, List<(String, String)> asked}) asking(
+        {Duration cooldown = const Duration(minutes: 10)}) {
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(client(),
+          fetchConveyance: () async {},
+          requestConveyance: (ns, name) async => asked.add((ns, name)))
+        ..askCooldown = cooldown;
+      return (ring: ring, asked: asked);
+    }
+
+    String secretOf(String kid) => '${NskeyPrivateFiling.secretNamePrefix}$kid';
+
+    test(
+        'when one has gone out in a namespace, then a miss of the kid its '
+        'advertisement names still asks', () async {
+      final a = asking();
+      a.ring.rememberOwn(alice, namespace, advertised);
+
+      await a.ring.privateHalf(alice, namespace, 'unnamed1');
+      await a.ring.privateHalf(alice, namespace, 'unnamed2');
+      await a.ring.privateHalf(alice, namespace, advertised.nskeyKid);
+      await pumpEventQueue();
+
+      expect(
+          a.asked,
+          [
+            (namespace, secretOf('unnamed1')),
+            (namespace, secretOf(advertised.nskeyKid)),
+          ],
+          reason: 'the second unnamed kid shares the first one\'s stamp, the '
+              'control; the advertised kid has a stamp of its own');
+    });
+
+    test(
+        'when the ring holds no copy of its own advertisement, then the kid it '
+        'would name shares the other kids\' stamp', () async {
+      final a = asking();
+
+      await a.ring.privateHalf(alice, namespace, 'unnamed1');
+      await a.ring.privateHalf(alice, namespace, advertised.nskeyKid);
+      await pumpEventQueue();
+
+      expect(a.asked, [(namespace, secretOf('unnamed1'))],
+          reason: 'the copy is never fetched on a miss, so without one the '
+              'kid cannot be told apart from any other');
+    });
+
+    test(
+        'when more than the cap come within a cooldown, then the rest ask '
+        'nothing and the first held back is named in a warning', () async {
+      final a = asking(cooldown: const Duration(milliseconds: 200));
+      const cap = PublishedNskeyKeyRing.maxUnadvertisedAsksPerCooldown;
+      final crowded = [for (var i = 0; i < cap + 2; i++) 'ns$i.app'];
+      logs.records.clear();
+
+      for (final ns in crowded) {
+        await a.ring.privateHalf(alice, ns, 'unnamed');
+      }
+      a.ring.rememberOwn(alice, 'own.app', advertised);
+      await a.ring.privateHalf(alice, 'own.app', advertised.nskeyKid);
+      await pumpEventQueue();
+
+      expect(
+          a.asked.map((a) => a.$1).toList(),
+          [
+            ...crowded.take(cap),
+            'own.app',
+          ],
+          reason: 'an ask for an advertised kid is bounded by this atSign\'s '
+              'own namespaces, so the cap does not hold it back');
+      final warnings =
+          logs.at('WARNING').where((m) => m.contains('Not asking')).toList();
+      expect(warnings, hasLength(1));
+      expect(warnings.single, contains('${crowded[cap]}:unnamed'));
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await a.ring.privateHalf(alice, crowded.last, 'unnamed');
+      await pumpEventQueue();
+      expect(a.asked.last, (crowded.last, secretOf('unnamed')),
+          reason: 'past the cooldown a held-back namespace is asked');
+    });
+  });
+
   group('Given a fetch that is still filing when the miss stops waiting', () {
     test(
         'when a write seals to its own key, then it is refused once '

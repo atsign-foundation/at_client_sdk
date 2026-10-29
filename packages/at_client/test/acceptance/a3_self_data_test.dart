@@ -565,6 +565,33 @@ void main() {
       );
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when one has gone out in a namespace, then a miss of the kid its '
+            'advertisement names still asks',
+        proves: 'an ask for an unnamed kid leaves the advertised kid its own '
+            'ask, with a second unnamed kid as the control. Mutation-proven: '
+            'one stamp for both reddens it',
+        clauses: ['and once for any other'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the ring holds no copy of its own advertisement',
+        proves: 'with no cached copy the advertised kid shares the unnamed '
+            'kids\' stamp. Mutation-proven: telling it apart without the copy '
+            'reddens it',
+        clauses: ['in a namespace it holds no copy'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when more than the cap come within a cooldown',
+        proves: 'eight asks go out, the ninth namespace is named in one '
+            'warning, the tenth asks nothing, an advertised kid still asks, '
+            'and a held-back namespace asks after the cooldown. '
+            'Mutation-proven: no cap, a cap counting advertised asks, and a '
+            'warning per held-back ask each redden it',
+        clauses: ['are capped at 8 per'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
         'when it misses again within askCooldown of an on-miss fetch',
         proves: 'the cooldown bounds the fetch, with a zero-cooldown control '
             'beside it that fetches twice',

@@ -301,14 +301,25 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// count.
   DateTime? _fetchedOnMiss;
 
-  /// When each own namespace was last asked about, so a burst of failed reads
-  /// collapses to one broadcast per namespace without one ever falling
-  /// permanently silent. Stamps older than [askCooldown] are dropped.
-  final Map<String, DateTime> _askedConveyance = {};
+  /// When each own namespace was last asked about, apart for kids its current
+  /// own advertisement names and for any other kid, so a burst of failed
+  /// reads collapses to one broadcast without one ever falling permanently
+  /// silent. Stamps older than [askCooldown] are dropped.
+  final Map<({String namespace, bool advertised}), DateTime> _askedConveyance =
+      {};
+
+  /// How many asks for kids no cached own advertisement names may go out per
+  /// [askCooldown], across every namespace.
+  static const int maxUnadvertisedAsksPerCooldown = 8;
+
+  /// When this ring last warned that [maxUnadvertisedAsksPerCooldown] held an
+  /// ask back.
+  DateTime? _capWarnedAt;
 
   /// How many namespaces this ring asked about within the last [askCooldown].
   @visibleForTesting
-  int get namespacesAskedRecently => _askedConveyance.length;
+  int get namespacesAskedRecently =>
+      _askedConveyance.keys.map((stamp) => stamp.namespace).toSet().length;
 
   /// How long after an on-miss fetch, or after asking about a namespace, this
   /// ring stays quiet about it.
@@ -1193,21 +1204,55 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         logger: _logger);
   }
 
+  /// Whether the copy of this client's own advertisement for [namespace] that
+  /// this ring last read names [nskeyKid]; never fetched, so a miss costs no
+  /// lookup.
+  bool _cachedOwnNames(String namespace, String nskeyKid) {
+    final owner = _atClient.getCurrentAtSign();
+    if (owner == null) return false;
+    return _remote[_scope(owner, namespace)]
+            ?.advertisement
+            .keys
+            .any((key) => key.kid == nskeyKid) ??
+        false;
+  }
+
   /// Whether a read miss on an own generation will broadcast a pull: a ring
   /// that answers false cannot heal, however the rest of it is wired.
   @visibleForTesting
   bool get asksOnReadMiss => _ask != null;
 
-  /// Asks the other enrollments for one missing own private, at most once per
-  /// [askCooldown] for its namespace, whichever generation missed.
+  /// Asks the other enrollments for one missing own private: at most once per
+  /// [askCooldown] for its namespace among the kids its cached own
+  /// advertisement names, and once among the rest, which also count against
+  /// [maxUnadvertisedAsksPerCooldown].
   void _askForMissingPrivate(String namespace, String nskeyKid) {
     final ask = _ask;
     if (ask == null) return;
     final now = DateTime.now();
     _askedConveyance
         .removeWhere((_, askedAt) => now.difference(askedAt) >= askCooldown);
-    if (_askedConveyance.containsKey(namespace)) return;
-    _askedConveyance[namespace] = now;
+    final stamp = (
+      namespace: namespace,
+      advertised: _cachedOwnNames(namespace, nskeyKid),
+    );
+    if (_askedConveyance.containsKey(stamp)) return;
+    if (!stamp.advertised &&
+        _askedConveyance.keys.where((s) => !s.advertised).length >=
+            maxUnadvertisedAsksPerCooldown) {
+      final warnedAt = _capWarnedAt;
+      if (warnedAt == null || now.difference(warnedAt) >= askCooldown) {
+        _capWarnedAt = now;
+        _logger.warning('Not asking the other enrollments for the nskey '
+            'private $namespace:$nskeyKid: this client asked '
+            '$maxUnadvertisedAsksPerCooldown times within '
+            '${askCooldown.inMilliseconds}ms for generations no own '
+            'advertisement it holds names. A miss after that asks; others '
+            'held back meanwhile are not logged');
+      }
+      return;
+    }
+    _askedConveyance[stamp] = now;
 
     final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
     unawaited(ask(namespace, secretName).then((_) {

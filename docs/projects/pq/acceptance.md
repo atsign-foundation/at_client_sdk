@@ -971,8 +971,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
   whichever generation it names, and the startup collection does not start that
   cooldown.
-- **Then:** the client asks about a namespace at most once per `askCooldown`, whichever
-  generation missed, and forgets a namespace once its cooldown has passed.
+- **Then:** the client asks about a namespace at most once per `askCooldown` for the
+  generations its last-read copy of its own advertisement names, and once for any other,
+  and forgets a namespace once its cooldown has passed.
+- **Then:** asks for generations that copy does not name, in a namespace it holds no copy
+  for as well, are capped at 8 per `askCooldown` across every namespace; a miss past the
+  cap asks nothing and fails as above, and the first one held back in each cooldown is
+  named in a warning.
 - **Then:** a fetch that meets a record the startup collection is still filing waits, up to
   `fetchOnMissTimeout` (10 s), for a sweep already filing it, rather than skipping it.
   Past that the miss asks and fails while the fetch goes on, and a private it then files
