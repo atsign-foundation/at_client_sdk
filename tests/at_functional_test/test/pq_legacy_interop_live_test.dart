@@ -4,10 +4,6 @@
 @Tags(['pq'])
 library;
 
-// The substrate is @experimental; exercising it from another package is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';

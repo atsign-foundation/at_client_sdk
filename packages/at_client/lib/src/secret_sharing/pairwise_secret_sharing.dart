@@ -29,11 +29,10 @@ import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/util/at_key_grammar.dart' show isAtKeyNamespace;
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:uuid/uuid.dart' show Uuid;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// A decrypted, signature-verified payload received from another APKAM
 /// keypair of the same atSign.
-@experimental
 class ReceivedEnvelope {
   /// The key-package id the sender named. Only the handling of a secret
   /// request checks it against the directory; [fromEnrollmentId] is what the
@@ -58,7 +57,6 @@ class ReceivedEnvelope {
 }
 
 /// A [Secret] another APKAM keypair of this atSign shared with this client.
-@experimental
 class ReceivedSecret {
   final Secret secret;
 
@@ -83,7 +81,6 @@ class ReceivedSecret {
 /// `false` to ignore. Set [PairwiseSecretSharing.answerSecretRequests] to
 /// override the default (answer any authorized same-atSign requester — the
 /// atServer already gates deliverability by namespace).
-@experimental
 typedef SecretRequestPolicy = FutureOr<bool> Function(
     ReceivedEnvelope request, KeyPackage requester);
 
@@ -103,7 +100,6 @@ typedef SecretRequestPolicy = FutureOr<bool> Function(
 /// clients like any self key, but only the addressed APKAM keypair can decrypt
 /// it. The recipient deletes the envelope after consuming it; unconsumed
 /// envelopes expire via [envelopeTtl].
-@experimental
 mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// Marker segment in envelope key names — see [EnvelopeAddressing], which
   /// owns the address format.

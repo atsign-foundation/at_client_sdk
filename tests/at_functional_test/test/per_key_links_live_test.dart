@@ -1,6 +1,3 @@
-// The chain and the enrollment substrate are deliberately marked @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

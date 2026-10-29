@@ -1,6 +1,3 @@
-// The substrate and the chain are deliberately marked @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

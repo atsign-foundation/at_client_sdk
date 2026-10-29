@@ -1,7 +1,3 @@
-// The retrofit, signing-root and substrate surfaces are @experimental;
-// driving them end-to-end is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

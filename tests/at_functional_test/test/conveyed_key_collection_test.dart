@@ -1,7 +1,3 @@
-// The substrate and the nskey filing surface are both @experimental. Driving
-// them from another package is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

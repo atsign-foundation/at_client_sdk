@@ -1,6 +1,3 @@
-// The enrollment key-package surface is @experimental; enrolling drives it.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 15))
 @Tags(['pq'])
 library;

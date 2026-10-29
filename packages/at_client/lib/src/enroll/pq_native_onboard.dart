@@ -10,7 +10,6 @@ import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
-import 'package:meta/meta.dart' show experimental;
 
 export 'package:at_client/src/enroll/first_enrollment.dart';
 
@@ -47,7 +46,6 @@ export 'package:at_client/src/enroll/first_enrollment.dart';
 /// case [lookUps] builds one to the atServer [secondaryAddressFinder] finds,
 /// and waits for it. Both serve the activated client too, as `Atsign.open`
 /// describes.
-@experimental
 Future<AtClientManager> pqNativeOnboard({
   required String atSign,
   required String cramSecret,

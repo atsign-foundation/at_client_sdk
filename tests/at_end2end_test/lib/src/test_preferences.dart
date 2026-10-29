@@ -1,7 +1,3 @@
-// PqStartupGates is @experimental; this pack's post-quantum files drive that
-// substrate deliberately.
-// ignore_for_file: experimental_member_use
-
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 // ignore: implementation_imports

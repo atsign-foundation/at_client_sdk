@@ -36,7 +36,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
-import 'package:meta/meta.dart' show experimental, internal, visibleForTesting;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
 
@@ -207,7 +207,6 @@ typedef _PreparedMint = ({
 /// Rotates onto a fresh generation under the mint lock the caller's mint still
 /// holds, conveying through [conveyFirst] and then running [afterPublish] as a
 /// mint does.
-@experimental
 typedef NskeyRotateHoldingLease = Future<NskeyAdvertisement> Function(
     {Future<void> Function(List<String> nskeyKids)? conveyFirst,
     Future<void> Function(NskeyAdvertisement published)? afterPublish});
@@ -215,7 +214,6 @@ typedef NskeyRotateHoldingLease = Future<NskeyAdvertisement> Function(
 /// What a mint or a rotation runs once its advertisement is published, handed
 /// that advertisement and a rotation under the lock it still holds; answers
 /// the generation published after it, or null when it published nothing more.
-@experimental
 typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
     NskeyAdvertisement published, NskeyRotateHoldingLease rotate);
 
@@ -607,7 +605,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// [conveyFirst] is handed only the kids this add mints; [lockTtl] is as for
   /// [mintAndPublish].
-  @experimental
   Future<NskeyAdvertisement?> add(String namespace,
       {Future<void> Function(List<String> nskeyKids)? conveyFirst,
       Duration? lockTtl}) async {

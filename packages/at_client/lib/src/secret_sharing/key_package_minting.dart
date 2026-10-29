@@ -33,7 +33,7 @@ import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Brings an enrollment's advertised key package into line with
 /// [AtClientPreference.keyEstablishmentAlgorithms] — minting an encapsulation
@@ -60,7 +60,6 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// unless the package it publishes no longer matches: refused against the
 /// `_apsk` it advertises now, missing, or naming other keys than the keyfile
 /// holds. The same keys are then signed and published again.
-@experimental
 class KeyPackageMinting with ApkamSigning {
   /// [directory] reads back the published package the way a peer does; a
   /// fresh [VerbEnrollmentDirectory] per reconcile when null, so no `_apsk` it

@@ -13,7 +13,6 @@ import 'package:at_client/src/secret_sharing/secret_store.dart'
     show SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeyRotation');
 
@@ -21,7 +20,6 @@ final _logger = AtSignLogger('NskeyRotation');
 ///
 /// [conveyedTo] may legitimately be zero: a single-enrollment atSign has nobody
 /// to push to, and an offline holder picks the generation up by pull instead.
-@experimental
 typedef NskeyRotationOutcome = ({
   String namespace,
 
@@ -47,7 +45,6 @@ typedef NskeyRotationOutcome = ({
 /// content-key lever's O(1) job — and it is never automatic, never recovers a
 /// lost generation, and needs the `rw` on the namespace that the atServer
 /// already enforces on the advertisement write.
-@experimental
 class NskeyRotation {
   final AtClient atClient;
   final PublishedNskeyKeyRing ring;

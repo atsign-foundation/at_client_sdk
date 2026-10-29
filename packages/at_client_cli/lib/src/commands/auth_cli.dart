@@ -593,7 +593,6 @@ const Duration startupTailBound = Duration(seconds: 30);
 /// post-quantum and not receive.
 Future<void> awaitStartupTail(AtClient client) async {
   if (client is! AtClientImpl) return;
-  // ignore: experimental_member_use
   await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
       onTimeout: () => stderr.writeln(
           chalk.brightYellow('The client\'s startup did not finish within '
@@ -942,12 +941,10 @@ Future<List<Enrollment>> _list(
 /// [anchoring] answers for one enrollment, and defaults to
 /// `atClient.enrollments.anchoring`.
 Future<void> list(ArgResults ar, AtClient atClient,
-    // ignore: experimental_member_use
     {Future<ChainResult> Function(String enrollmentId)? anchoring}) async {
   String? statusFilter = ar[AuthCliArgs.argNameEnrollmentStatus];
   String? arx = ar[AuthCliArgs.argNameAppNameRegex];
   String? drx = ar[AuthCliArgs.argNameDeviceNameRegex];
-  // ignore: experimental_member_use
   anchoring ??= atClient.enrollments.anchoring;
 
   final records = await _list(statusFilter, atClient, arx: arx, drx: drx);
@@ -976,7 +973,6 @@ Future<void> list(ArgResults ar, AtClient atClient,
 /// for an enrollment that is not approved, and `?` when it could not be read.
 Future<String> _describeAnchoring(
     Enrollment e,
-    // ignore: experimental_member_use
     Future<ChainResult> Function(String enrollmentId) anchoring) async {
   final id = e.enrollmentId;
   if (id == null || e.enrollmentStatus != EnrollmentStatus.approved) {

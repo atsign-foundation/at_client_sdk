@@ -1,7 +1,3 @@
-// The retrofit surface is @experimental; driving it end-to-end is the point
-// of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

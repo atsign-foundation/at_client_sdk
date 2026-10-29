@@ -1,6 +1,3 @@
-// The retrofit surface is @experimental; driving it is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq', 'legacy-server'])
 library;
 

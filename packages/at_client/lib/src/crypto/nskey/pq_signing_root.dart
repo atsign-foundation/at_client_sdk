@@ -57,7 +57,6 @@ import 'package:at_commons/at_commons.dart'
         StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('PqSigningRoot');
 
@@ -68,7 +67,6 @@ final _logger = AtSignLogger('PqSigningRoot');
 /// One root per atSign: only a fully privileged enrollment mints one, and a
 /// short-ttl lock on `_rootlock@<atSign>` ([MintLock]) serialises them, the
 /// mutable record itself refusing nothing.
-@experimental
 class PqSigningRoot {
   static const String recordName = pqSigningRootRecordName;
 

@@ -3,7 +3,6 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
     show KeyPackageStatus;
 import 'package:at_commons/at_commons.dart' show AtEnrollmentException;
-import 'package:meta/meta.dart' show experimental;
 
 /// Conveys to an enrollment the secrets its approval entitles it to: its
 /// symmetric key when the approver minted one, before the approval, and
@@ -14,7 +13,6 @@ import 'package:meta/meta.dart' show experimental;
 /// Whether a conveyance outcome fails the approval is the *caller's* policy,
 /// so implementations report the advertised key package's [KeyPackageStatus]
 /// and never enforce a response to it.
-@experimental
 abstract interface class EnrollmentConveyance {
   /// Links [enrollment]'s keys, conveys everything its approval entitles it
   /// to, and reports the status of the key package it advertised.
@@ -72,7 +70,6 @@ abstract interface class EnrollmentConveyance {
 /// the caller the evidence that the approval itself happened: a plain throw
 /// here would report a server-side success as a failure, which is how an
 /// approver ends up retrying an approval that already went through.
-@experimental
 class EnrollmentConveyanceException extends AtEnrollmentException {
   /// The successful server-side approval this exception is *not* about.
   final AtEnrollmentResponse response;

@@ -1,7 +1,5 @@
 import 'dart:async' show FutureOr;
 
-import 'package:meta/meta.dart' show experimental;
-
 /// Whether the content key for a destination and namespace should be replaced
 /// before anything else is written under it.
 ///
@@ -9,14 +7,12 @@ import 'package:meta/meta.dart' show experimental;
 /// write wait for it. Returning true cuts a fresh content key and conveys it;
 /// the superseded conveyance record is retained, so an enrollment that joins
 /// later can still read what was written before it.
-@experimental
 typedef CkRotationPolicy = FutureOr<bool> Function(CkRotationContext ck);
 
 /// What a [CkRotationPolicy] is told about the content key it is deciding on.
 ///
 /// A content key is scoped to the destination and the namespace together: the
 /// same namespace toward two atSigns is two keys.
-@experimental
 class CkRotationContext {
   const CkRotationContext({
     required this.destination,
@@ -58,12 +54,10 @@ class CkRotationContext {
 /// a revocation replaces it on its own cause. A year is NIST SP 800-57 Part 1's
 /// suggested cryptoperiod for a key-derivation key, which is what a content
 /// key is.
-@experimental
 bool rotateCkAfterOneYear(CkRotationContext ck) =>
     ck.age >= const Duration(days: 365);
 
 /// A [CkRotationPolicy] that replaces a content key once it is a week old.
-@experimental
 bool rotateCkAfterOneWeek(CkRotationContext ck) =>
     ck.age >= const Duration(days: 7);
 
@@ -74,12 +68,10 @@ bool rotateCkAfterOneWeek(CkRotationContext ck) =>
 /// start. Returning true mints fresh material, retains the previous private so
 /// records sealed to it still open, and conveys the new private to every
 /// authorised enrollment.
-@experimental
 typedef NskeyRotationPolicy = FutureOr<bool> Function(NskeyRotationContext ns);
 
 /// What an [NskeyRotationPolicy] is told about the namespace key it is
 /// deciding on.
-@experimental
 class NskeyRotationContext {
   const NskeyRotationContext({
     required this.namespace,
@@ -113,11 +105,9 @@ class NskeyRotationContext {
 /// A revocation rotates the namespace keys the revoked enrollment held on its
 /// own cause; this is what heals a compromise nobody detected. A year sits in
 /// NIST SP 800-57 Part 1's 1-to-2-year range for a public key-transport key.
-@experimental
 bool rotateNskeyAfterOneYear(NskeyRotationContext ns) =>
     ns.age >= const Duration(days: 365);
 
 /// An [NskeyRotationPolicy] that never replaces a namespace key on its own,
 /// leaving rotation to revocation and to the application.
-@experimental
 bool neverRotateNskey(NskeyRotationContext ns) => false;

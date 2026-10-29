@@ -1,4 +1,3 @@
-// The nskey substrate is @experimental; driving it is the point.
 // ignore_for_file: implementation_imports
 import 'dart:convert';
 import 'dart:typed_data';

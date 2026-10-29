@@ -1,6 +1,3 @@
-// The signing-root surface is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

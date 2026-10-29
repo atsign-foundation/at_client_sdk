@@ -3,7 +3,6 @@ import 'package:at_chops/at_chops.dart'
     show AtKemAlgorithm, MlKem1024PureDartAlgo, XWingPureDartAlgo;
 import 'package:at_client/src/crypto/backends/crypto_backends.dart'
     show xWingKem;
-import 'package:meta/meta.dart' show experimental;
 
 /// Registry of the algorithm identifiers used in per-APKAM key packages and
 /// secret envelopes.
@@ -13,7 +12,6 @@ import 'package:meta/meta.dart' show experimental;
 /// algorithms were used to protect a payload, and readers ignore entries
 /// whose ids they do not recognise. Adding a new suite later is just a matter
 /// of appending new ids to the supported lists — no schema or protocol change.
-@experimental
 class SecretSharingAlgos {
   SecretSharingAlgos._();
 

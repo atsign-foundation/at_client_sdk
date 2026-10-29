@@ -22,12 +22,10 @@ import 'package:at_client/src/secret_sharing/secret_store.dart'
     show Secret, SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeySeeding');
 
 /// What [NskeySeeding.seedNamespace] did for one namespace.
-@experimental
 enum NskeySeedOutcome {
   /// This call minted the key, conveyed its private and published it.
   minted,
@@ -51,7 +49,6 @@ enum NskeySeedOutcome {
 /// PQ-capable client for a namespace is already reachable for it, and
 /// best-effort throughout: nothing here throws into a client's startup, and a
 /// namespace that cannot be minted now is minted at the next start.
-@experimental
 class NskeySeeding {
   final AtClient atClient;
   final PublishedNskeyKeyRing ring;
@@ -298,7 +295,6 @@ class NskeySeeding {
   /// [published] is the generation already read where the caller has it, and any
   /// failure returns false rather than throwing — the published generation stays
   /// published, and the question is put again at the next start.
-  @experimental
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
     final generation =
@@ -365,7 +361,6 @@ class NskeySeeding {
   /// record's `updatedAt`, never the generation's own `createdAt`, which would
   /// compare two clocks — and establishing no cause rotates nothing, while a
   /// published record whose stamp cannot be read does rotate.
-  @experimental
   Future<bool> rotateIfRevoked(String owner, String namespace) async {
     final substrate = sharing;
     final filing = privateFiling;

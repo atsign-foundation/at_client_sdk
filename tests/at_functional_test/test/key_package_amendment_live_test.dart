@@ -1,6 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is the point.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

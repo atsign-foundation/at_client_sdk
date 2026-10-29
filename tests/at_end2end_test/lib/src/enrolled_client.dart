@@ -1,7 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is the
-// point of this helper.
-// ignore_for_file: experimental_member_use
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';

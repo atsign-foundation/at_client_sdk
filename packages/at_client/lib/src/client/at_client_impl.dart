@@ -395,7 +395,6 @@ class AtClientImpl implements AtClient {
   /// fire-and-forget startup steps. Null only for a client whose `_init` has
   /// not run. Await its `startupComplete` to know the startup tail has
   /// finished — tests do; production code must not.
-  @experimental
   PqClientBootstrap? get pqBootstrap => _pqBootstrap;
 
   @override

@@ -18,7 +18,6 @@ import 'package:at_commons/at_commons.dart' show AtClientException, Atsign;
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUp, AtLookUpFactory, SecondaryAddressFinder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('selfRetrofit');
 
@@ -99,7 +98,6 @@ final _logger = AtSignLogger('selfRetrofit');
 /// names is minted, filed and advertised by `KeyPackageMinting` at the
 /// retrofitted client's first startup, through the `enroll:update` the new
 /// enrollment sends for itself.
-@experimental
 Future<AtClient> selfRetrofit({
   required AtAuthSession session,
   required AtClientPreference preference,
@@ -188,7 +186,6 @@ Future<AtClient> selfRetrofit({
 /// remote secondary; with none, one is built by [lookUps] over
 /// [secondaryAddressFinder], authenticated from the session's keys for the
 /// submission and closed after it.
-@experimental
 Future<AtAuthSession> retrofitIdentity({
   required AtAuthSession session,
   required AtClientPreference preference,

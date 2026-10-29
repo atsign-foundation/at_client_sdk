@@ -15,7 +15,6 @@ import 'package:at_client/src/secret_sharing/key_package_registration.dart'
     show KeyPackageRegistration, PersistedApkamKeys, PersistedEncKey;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('KeyPackagePersistence');
 
@@ -28,7 +27,6 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 /// [enrollmentId] scopes the adoption to this client's own enrollment: a
 /// retrofitted keyfile serves two principals, and each must adopt its OWN
 /// package, never its co-tenant's — see [keyPackageMaterial].
-@experimental
 void bindKeyPackageToAtKeys(
   KeyPackageRegistration registration, {
   required AtKeysIo keysIo,
@@ -88,7 +86,6 @@ Future<PersistedApkamKeys?> _load(
 
 /// The live private half of a key package in [keys], or null — the first entry
 /// of [keyPackageMaterials], which is where the selection rule lives.
-@experimental
 CryptographicMaterial? keyPackageMaterial(AtKeys keys,
         {String? enrollmentId}) =>
     keyPackageMaterials(keys, enrollmentId: enrollmentId).firstOrNull;
@@ -117,7 +114,6 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys,
 /// Merging the two sets, or newest-wins across the whole file, would hand a
 /// client restarting on a shared keyfile an address its own enrollment record
 /// never advertised.
-@experimental
 List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
     {String? enrollmentId}) {
   bool isKeyEstablishment(CryptographicMaterial m) =>

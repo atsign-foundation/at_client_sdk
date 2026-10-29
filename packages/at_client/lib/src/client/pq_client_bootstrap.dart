@@ -28,7 +28,7 @@ import 'package:at_client/src/signing/signing_key_minting.dart'
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Gates for the PQ startup's steps — **every** step, not only the ones that
 /// write to the atServer.
@@ -36,7 +36,6 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// Every default is on; [PqStartupGates.inert] turns the whole startup off, so
 /// the client makes no wire write, takes no subscription and changes no
 /// keyfile.
-@experimental
 class PqStartupGates {
   /// Every gate is on unless this call names it false.
   const PqStartupGates({
@@ -187,7 +186,6 @@ class PqStartupGates {
 ///
 /// [startupComplete] completes when the last step has run; the client's init
 /// fires [startup] unawaited and must never await it.
-@experimental
 class PqClientBootstrap {
   /// Builds the instances the startup steps share; [gates] decides which of
   /// those steps [startup] then runs.

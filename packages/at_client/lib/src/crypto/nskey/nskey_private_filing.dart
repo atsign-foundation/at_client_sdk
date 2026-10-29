@@ -25,7 +25,7 @@ import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('NskeyPrivateFiling');
 
@@ -56,7 +56,6 @@ typedef FiledNskeySeed = ({
 /// to it becomes unopenable, and with it every value those content keys
 /// protect. That is what separates it from a content key, which is only ever
 /// a cache — a reader re-fetches any CK from its conveyance record.
-@experimental
 class NskeyPrivateFiling {
   /// How long a pull for a conveyed nskey private waits for a holder to
   /// answer.

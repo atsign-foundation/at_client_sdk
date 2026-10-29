@@ -1,7 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is how each
-// stage gets an enrollment whose `_apsk` a released peer can be asked about.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 15))
 @Tags(['pq'])
 library;

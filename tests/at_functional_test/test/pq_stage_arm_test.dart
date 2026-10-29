@@ -1,6 +1,3 @@
-// The enrollment key-package surface this file drives is @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

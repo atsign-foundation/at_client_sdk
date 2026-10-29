@@ -1,6 +1,3 @@
-// The PQ bootstrap and its key ring are @experimental; this drives them.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

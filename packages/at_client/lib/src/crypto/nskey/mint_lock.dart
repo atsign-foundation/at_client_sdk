@@ -4,7 +4,6 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
 
@@ -24,7 +23,6 @@ final _logger = AtSignLogger('MintLock');
 /// A lock is a protocol, not a guarantee — it narrows a window to the ttl, so
 /// every caller still reconciles what it holds against what is published rather
 /// than trusting that holding the lock made it the only writer.
-@experimental
 class MintLock {
   final AtClient atClient;
 

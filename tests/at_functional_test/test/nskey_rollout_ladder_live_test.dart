@@ -1,7 +1,3 @@
-// The nskey substrate and the enrollment key-package surface are
-// @experimental; driving them is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

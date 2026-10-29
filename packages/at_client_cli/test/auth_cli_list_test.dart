@@ -204,15 +204,11 @@ void main() {
               record(pendingId, 'pending'),
             ]);
     final asked = <String>[];
-    // ignore: experimental_member_use
     Future<ChainResult> anchoring(String id) async {
       asked.add(id);
       return switch (id) {
-        // ignore: experimental_member_use
         anchoredId => ChainResult(ChainVerdict.anchored, [id], null),
-        // ignore: experimental_member_use
         unsignedId => ChainResult(ChainVerdict.unsigned, [id], null),
-        // ignore: experimental_member_use
         _ => ChainResult(ChainVerdict.broken, [id], 'a forged link',
             kid: 'deadbeefdeadbeef'),
       };
@@ -258,10 +254,8 @@ void main() {
     when(() => service.fetchEnrollmentRequests(
             enrollmentListParams: any(named: 'enrollmentListParams')))
         .thenAnswer((_) async => [record(unreadableId), record(anchoredId)]);
-    // ignore: experimental_member_use
     Future<ChainResult> anchoring(String id) async => id == unreadableId
         ? throw AtClientException.message('the record cannot be read')
-        // ignore: experimental_member_use
         : ChainResult(ChainVerdict.anchored, [id], null);
 
     final args =

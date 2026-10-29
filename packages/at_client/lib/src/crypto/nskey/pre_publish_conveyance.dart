@@ -13,7 +13,6 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('PrePublishConveyance');
 
@@ -23,7 +22,6 @@ final _logger = AtSignLogger('PrePublishConveyance');
 /// [prepare] reads the roster before the mint lock is taken, which sizes the
 /// lock as a ceiling ([lockTtlFor]); [convey] is what a mint hands the ring as
 /// `conveyFirst`.
-@experimental
 class PrePublishConveyance {
   final PairwiseSecretSharing sharing;
   final NskeyPrivateFiling filing;

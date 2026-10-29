@@ -29,13 +29,11 @@ import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:collection/collection.dart' show DeepCollectionEquality;
-import 'package:meta/meta.dart' show experimental;
 
 /// The clients whose atServer has shown it does not know `enroll:link`.
 final Expando<bool> _withoutEnrollLink = Expando('withoutEnrollLink');
 
 /// How far up the chain a walk from one key got.
-@experimental
 enum ChainVerdict {
   /// Reached a root link that verifies against the atSign's signing root.
   anchored,
@@ -64,7 +62,6 @@ enum ChainVerdict {
 }
 
 /// What a walk found.
-@experimental
 class ChainResult {
   final ChainVerdict verdict;
 
@@ -101,7 +98,6 @@ class ChainResult {
 
 /// One enrollment's `_apsk` record as a walk or a voucher reads it: the keys
 /// it lists and the links stored on it.
-@experimental
 class ApskRecord {
   /// The enrollment the record belongs to.
   final String enrollmentId;
@@ -162,7 +158,6 @@ typedef LinkWrite = ({Map<String, Object?> link, Map<String, Object?>? expect});
 
 /// What a client vouches for another key with: the signing root's private
 /// key, or one of its own keys that already has a link.
-@experimental
 class LinkVoucher {
   /// A voucher signing root links with the root private named by [kid].
   LinkVoucher.root({required Uint8List private, required String kid})
@@ -216,7 +211,6 @@ class LinkVoucher {
 /// signed by a key of another enrollment, and the walk goes on from that key.
 /// Links are stored in the record's `appMetadata` under [linksField], and
 /// written only through `enroll:link`.
-@experimental
 class PqSigningChain {
   /// One chain view per client; the wire vocabulary stays static because it
   /// belongs to the protocol rather than to any client.

@@ -24,7 +24,7 @@ import 'package:at_commons/at_commons.dart'
         IllegalStateException,
         KeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// The `_apsk` values each AtClient's verifiers have fetched, and when each
 /// expires: one cache per client, shared by every signer built on it.
@@ -36,7 +36,6 @@ final Expando<Map<String, (String, DateTime)>> _apskCaches =
 /// revoked or superseded, `d.__e` when it was deleted or expired.
 ///
 /// The moved record says why the key is refused; nothing is verified with it.
-@experimental
 class WithdrawnSigningKeyException extends AtSigningVerificationException {
   /// `r.__e` or `d.__e`.
   final String location;
@@ -76,7 +75,6 @@ Future<String?> withdrawnApskLocation(
 /// whose public half [ApkamSigning] publishes at
 /// `public:_apsk.<enrollmentId>.a.__e@atsign` — and carry the signer's
 /// [ApkamSigning.enrollmentId] so that verifiers can fetch that key.
-@experimental
 mixin EnvelopeSigning on ApkamSigning {
   /// How long a public key fetched for verification is used before it is
   /// fetched again: `cacheExpiry` from the fetch, however often it is used.

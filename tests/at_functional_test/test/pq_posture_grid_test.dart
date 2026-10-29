@@ -1,7 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is how each
-// cell gets an enrollment of its own.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 25))
 @Tags(['pq'])
 library;

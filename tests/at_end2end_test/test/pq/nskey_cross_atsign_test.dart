@@ -1,10 +1,6 @@
 @Tags(['pq'])
 library;
 
-// The PQ bootstrap is @experimental; reaching for it is the point here, since
-// only the client's own bootstrap builds the wiring an application gets.
-// ignore_for_file: experimental_member_use
-
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart' show XWingKeyPair;
