@@ -2,11 +2,9 @@
 
 Second package in the v4 publish chain, step 4 of the publish ladder
 ([`implementation-plan.md`](../projects/wasm/implementation-plan.md) §10), Phase T
-(transport). Depends on `at_utils` 4.0.0 (#2214); this branch stacks on
-`st/at_utils-v4` until that lands, because `resolution: workspace` makes the floor
-non-optional.
+(transport). Depends on `at_utils` 4.0.0, which ships in the same change.
 
-## Status (2026-10-23)
+## Status (2026-10-29)
 
 | Task | State | Where it landed |
 |---|---|---|
@@ -17,7 +15,7 @@ non-optional.
 | T5 — `at_lookup_io.dart` owns the native code | Done | `SecureSocketUtil` and `CacheableSecondaryAddressFinder` export from `_io` only. |
 | T6 — follow the raw socket | Closed | `MonitorClient` is removed. at_client's `stream_notification_handler.dart` was deleted on trunk (#2384). |
 | T7 — web `SecondaryAddressFinder` | Closed | `HttpsSecondaryAddressFinder` asks the atDirectory's HTTPS face, and `webSocketLookUps()` connects `wss://` straight to the atServer's `/ws`. Closes OQ-7 in code; see Residual. |
-| T8 — publish 4.0.0 | Blocked | On #2214 landing. |
+| T8 — publish 4.0.0 | Pending | After the 4.0.0 change merges, once `at_utils` 4.0.0 is out. |
 
 **Credential ladder removed:** the `atChops` / `signingAlgoType` / `hashingAlgoType` /
 `enrollmentId` accessors, `AtLookupImpl.findSecondary`, `authenticate_cram`, and

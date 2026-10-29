@@ -151,7 +151,7 @@ not just at publish time.
 
 ## Verification
 
-Ran, this release, against `st/at_utils-v4`:
+Ran, this release, on the 4.0.0 change:
 
 - `dart run wasm_shakedown --package at_utils` — red before this change (config
   named `at_utils_io.dart`, which didn't exist yet), green after: `98 files walked,
