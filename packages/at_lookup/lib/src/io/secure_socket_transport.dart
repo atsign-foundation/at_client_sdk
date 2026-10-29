@@ -11,6 +11,10 @@ import 'secure_socket_util.dart';
 /// The constructor takes [Socket] rather than [SecureSocket] because every
 /// member below is plain socket delegation; the TLS lives entirely in
 /// [SecureSocketTransportFactory], which is the only thing that constructs one.
+///
+/// A far-end close shows only as [inbound] ending. [isOpen] turns false on a
+/// local close or [destroy] alone, and [add] and [flush] can succeed after the
+/// peer has gone, so a consumer watches [inbound] to learn that it has.
 class SecureSocketTransport implements AtTransport {
   final Socket _socket;
 

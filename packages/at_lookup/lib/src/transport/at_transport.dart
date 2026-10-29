@@ -57,7 +57,13 @@ abstract interface class AtTransport {
   void destroy();
 
   /// Whether the channel can still carry bytes: false once [destroy] has run,
-  /// or once the transport or the far end has ended it.
+  /// or once this side has closed it.
+  ///
+  /// A far-end close turns it false only where the transport can see one: the
+  /// WebSocket transport reads its socket's own state, while
+  /// `SecureSocketTransport` sees only a local close. [inbound] ending is the
+  /// signal every transport gives, so a consumer that must notice the far end
+  /// going away watches [inbound].
   bool get isOpen;
 
   /// Identifies the far end well enough for one log line.
