@@ -1,5 +1,7 @@
 ## 3.7.0
 
+- fix: `SecondaryUrlFinder.findSecondaryUrl` throws `IllegalArgumentException`
+  for an atSign holding a line feed, before contacting the atDirectory.
 - feat: `AtLookUp.withSecureSocket(...)` creates a lookup from an
   `AtRootDomain`, an `authenticator` and an `AtLookupTransport`, and returns
   an `AtLookupMuxable`. `onConnect` runs on each new connection before

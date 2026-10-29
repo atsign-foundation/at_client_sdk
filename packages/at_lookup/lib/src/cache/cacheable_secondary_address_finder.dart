@@ -172,6 +172,11 @@ class SecondaryUrlFinder {
       // and the secondary port will be deemed to be the rootPort
       return '${_rootDomain.substring("proxy:".length)}:$_rootPort';
     }
+    // NOTE: outside the retry loop, which would retry a refusal and wrap it.
+    if (atSign.contains('\n')) {
+      throw IllegalArgumentException(
+          'an atSign is one line, and this one holds a line feed');
+    }
     deadline ??= DateTime.now().add(AtNetworkTimeouts.effectiveDefault);
     String? address;
     String lastExceptionMsg = '';
