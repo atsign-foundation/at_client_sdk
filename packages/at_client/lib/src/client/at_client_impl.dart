@@ -14,7 +14,6 @@ import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
-import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
@@ -879,13 +878,12 @@ class AtClientImpl implements AtClient {
   DurableSecondaryAddressFinder? _secondaryAddressFinder;
 
   /// The atDirectory lookup every connection of this client resolves its
-  /// atServer with: the process-wide finder when one is registered, else the
-  /// one the client was built with, either way remembering the answer in this
-  /// client's storage so a start with the atDirectory unreachable still
-  /// finds the atServer.
+  /// atServer with: the one the client was built with, remembering the answer
+  /// in this client's storage so a start with the atDirectory unreachable
+  /// still finds the atServer.
   SecondaryAddressFinder get secondaryAddressFinder =>
       _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
-          inner: () => processSecondaryAddressFinder() ?? _givenAddressFinder,
+          inner: () => _givenAddressFinder,
           read: () async {
             final store = localSecondary?.keyStore;
             if (store == null) return null;

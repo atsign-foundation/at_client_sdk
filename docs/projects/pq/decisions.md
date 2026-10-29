@@ -118,7 +118,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [59]  | Phase-3 at_chops surface rulings                                                            | 2026-08-09 | LIVE                      |
 | [60]  | JWS stage one lands: readers always-on, producer behind the version flag                    | 2026-08-09 | LIVE                      |
 | [61]  | The barrel cycle is cut: no src file imports a public barrel                                | 2026-08-10 | LIVE                      |
-| [62]  | PqClientBootstrap: one owner for the PQ startup                                             | 2026-08-10 | LIVE                      |
+| [62]  | PqClientBootstrap: one owner for the PQ startup                                             | 2026-08-10 | AMENDED 2026-10-29        |
 | [63]  | Phase 4e: EnrollmentConveyance out of EnrollmentServiceImpl                                 | 2026-08-10 | LIVE                      |
 | [64]  | Phase 4f: one CryptoRuntime.prepareWrite()                                                  | 2026-08-10 | LIVE                      |
 | [65]  | Phase 4g: the secret-sharing seam work                                                      | 2026-08-10 | LIVE                      |

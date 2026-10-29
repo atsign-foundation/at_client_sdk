@@ -6086,7 +6086,10 @@ reach-up, now behind `secondary_address_finder_source.dart`: the
 manager's constructors register a source reading the singleton's field,
 the read stays lazy and per-call, so the semantics — including the quirk
 that per-atSign managers' own finder fields are never consulted — are
-preserved exactly. `import_topology_test.dart` pins the cut (red-proofed
+preserved exactly. ⚠️ **Amended 2026-10-29:** under Gary's ruling on dead
+code in a major, the source file, the manager's field and
+`setSecondaryAddressFinder` are removed, and a client uses only the finder it
+is given. `import_topology_test.dart` pins the cut (red-proofed
 before the edits): the service impl's closure contains neither the client
 impl nor the manager. The impl still calls the service — one-directional,
 by design.

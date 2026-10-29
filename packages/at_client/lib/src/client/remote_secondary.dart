@@ -9,7 +9,6 @@ import 'package:at_auth/at_auth.dart'
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -72,9 +71,8 @@ class RemoteSecondary implements Secondary {
   /// then reports into; a secondary built without one reports nowhere.
   ///
   /// [lookUps] builds the connection unless [atLookUp] is one to use instead.
-  /// [secondaryAddressFinder] resolves the atServer address; with none, the
-  /// process-wide finder is read per lookup, and with neither, [lookUps]
-  /// finds it its own way.
+  /// [secondaryAddressFinder] resolves the atServer address; with none,
+  /// [lookUps] finds it its own way.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtLookUp? atLookUp,
@@ -104,8 +102,7 @@ class RemoteSecondary implements Secondary {
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           authenticator: null,
-          secondaryAddressFinder:
-              secondaryAddressFinder ?? processSecondaryAddressFinder(),
+          secondaryAddressFinder: secondaryAddressFinder,
           clientConfig: _getClientConfig(),
         );
     _installAuthenticator();
@@ -223,9 +220,11 @@ class RemoteSecondary implements Secondary {
     }
   }
 
+  /// The address of this atSign's atServer, from the finder this was given
+  /// or else the one its lookup connects through.
   Future<String?> findSecondaryUrl() async {
     var secondaryAddress =
-        await (_secondaryAddressFinder ?? processSecondaryAddressFinder()!)
+        await (_secondaryAddressFinder ?? atLookUp.secondaryAddressFinder)
             .findSecondary(_atSign);
     return secondaryAddress.toString();
   }

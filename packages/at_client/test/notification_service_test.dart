@@ -1056,8 +1056,6 @@ void main() {
 
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
 
@@ -1087,8 +1085,6 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyVerbBuilder());
@@ -1142,8 +1138,6 @@ void main() {
     test(
         'A test to verify unauthorized exception is thrown when sharedBy atSign is different from currentAtSign',
         () async {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockSecondaryAddressFinder.findSecondary('@colin'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientImpl.notifyStatus(any()))
@@ -1170,9 +1164,6 @@ void main() {
 
   group('Verify basic monitor interactions', () {
     setUp(() {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
-
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()
             ..namespace = 'wavi'
@@ -1395,8 +1386,6 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1424,8 +1413,6 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1466,8 +1453,6 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1492,8 +1477,6 @@ void main() {
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -2211,8 +2194,6 @@ void main() {
 
   group('validate stop() behaviour', () {
     test('stop() sets isStopped to true', () async {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenReturn(MockSecondaryAddressFinder());
       final notificationService = await NotificationServiceImpl.create(
           mockAtClientImpl,
           secondaryAddressFinder: defaultAtDirectory,

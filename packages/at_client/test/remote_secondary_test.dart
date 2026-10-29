@@ -37,8 +37,6 @@ void main() {
       reset(mockAtLookUp);
       when(() => mockSecondaryAddressFinder.findSecondary(atsign.toLowerCase()))
           .thenAnswer((_) async => fakeSecondaryAddress);
-      AtClientManager.getInstance().secondaryAddressFinder =
-          mockSecondaryAddressFinder;
     });
 
     test(
@@ -66,13 +64,25 @@ void main() {
           reason: 'the caller supplied it, so it is used as given');
     });
 
-    test('test findSecondaryUrl', () async {
+    test('findSecondaryUrl asks the finder it was given', () async {
       RemoteSecondary remoteSecondary = RemoteSecondary(
           atsign, atClientPreference,
-          lookUps: secureSocketLookUps());
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: mockSecondaryAddressFinder);
       String? address = await remoteSecondary.findSecondaryUrl();
-      expect(address, isNotNull);
       expect(address, fakeSecondaryAddress.toString());
+    });
+
+    test(
+        'findSecondaryUrl with no finder of its own asks the one its lookup '
+        'connects through', () async {
+      when(() => mockAtLookUp.secondaryAddressFinder)
+          .thenReturn(mockSecondaryAddressFinder);
+      final remoteSecondary = RemoteSecondary(atsign, atClientPreference,
+          lookUps: secureSocketLookUps(), atLookUp: mockAtLookUp);
+
+      expect(await remoteSecondary.findSecondaryUrl(),
+          fakeSecondaryAddress.toString());
     });
 
     test('executeVerb using scan', () async {

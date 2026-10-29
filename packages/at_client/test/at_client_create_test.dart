@@ -121,7 +121,7 @@ void main() {
     await client.stop();
   });
 
-  test('the durable finder asks the finder the client was given', () async {
+  test('the finder the client was given is the one it asks', () async {
     final client = await buildAtClient(
         atSign: '@factorygiven',
         namespace: 'wavi',
@@ -136,30 +136,6 @@ void main() {
         .secondaryAddressFinder
         .findSecondary('@factorygiven');
     expect(found.toString(), 'given.example:1234');
-
-    await client.stop();
-  });
-
-  test('a process-wide finder is asked before the one the client was given',
-      () async {
-    AtClientManager.getInstance().secondaryAddressFinder =
-        FixedSecondaryAddressFinder('process.example', 64);
-    addTearDown(
-        () => AtClientManager.getInstance().secondaryAddressFinder = null);
-    final client = await buildAtClient(
-        atSign: '@factoryprocess',
-        namespace: 'wavi',
-        preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder:
-            FixedSecondaryAddressFinder('given.example', 1234),
-        atKeysIo: noKeysFor('@factoryprocess'),
-        storage: hiveStoreFor('@factoryprocess', pref()));
-
-    final found = await (client as AtClientImpl)
-        .secondaryAddressFinder
-        .findSecondary('@factoryprocess');
-    expect(found.toString(), 'process.example:64');
 
     await client.stop();
   });

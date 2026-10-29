@@ -218,6 +218,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `atClient.persistenceBundle` | the `AtClientStorage` the client was given |
 | `AtUtils.formatAtSign` | `AtUtils.fixAtSign` |
 | `AtClient.telemetry` and the `AtClientTelemetry*` types | none |
+| `AtClientManager.setSecondaryAddressFinder(...)`, `AtClientManager.secondaryAddressFinder` | the `secondaryAddressFinder` the client is built with |
 
 ### Programs that call at_lookup directly
 

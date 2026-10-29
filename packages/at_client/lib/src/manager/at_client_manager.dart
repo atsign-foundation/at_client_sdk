@@ -4,7 +4,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -48,38 +47,18 @@ class AtClientManager {
   @Deprecated('Use atClientManager.atClient.notificationService')
   NotificationService get notificationService => atClient.notificationService;
 
-  SecondaryAddressFinder? secondaryAddressFinder;
   final _changeListeners = <AtSignChangeListener>[];
 
   static final AtClientManager _singleton = AtClientManager._internal();
 
-  AtClientManager._internal() {
-    _registerAddressFinderSource();
-  }
+  AtClientManager._internal();
 
   factory AtClientManager.getInstance() {
     return _singleton;
   }
 
   // ignore: no_leading_underscores_for_local_identifiers
-  AtClientManager(this._atSign) {
-    _registerAddressFinderSource();
-  }
-
-  /// Points `RemoteSecondary`'s process-wide finder source at the singleton
-  /// manager's field, so it need not import this class. Every constructor
-  /// registers the same closure, so registering again is harmless.
-  static void _registerAddressFinderSource() {
-    registerSecondaryAddressFinderSource(
-        () => AtClientManager.getInstance().secondaryAddressFinder);
-  }
-
-  void setSecondaryAddressFinder(
-      {SecondaryAddressFinder? secondaryAddressFinder}) {
-    if (secondaryAddressFinder != null) {
-      this.secondaryAddressFinder = secondaryAddressFinder;
-    }
-  }
+  AtClientManager(this._atSign);
 
   /// Makes [client], which the caller built and owns, the current client.
   ///
