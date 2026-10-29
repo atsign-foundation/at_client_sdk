@@ -205,7 +205,6 @@ class CLIBase {
 
   final String? atKeysFilePath;
   final String? storageDir;
-  final String? downloadDir;
   final String? passPhrase;
   final bool syncDisabled;
   final int maxConnectAttempts;
@@ -218,7 +217,6 @@ class CLIBase {
 
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;
-  late final String downloadPathToUse;
 
   final bool verbose;
 
@@ -228,8 +226,8 @@ class CLIBase {
   /// Validates parameters and constructs a CLIBase instance.
   /// <br/> <br/>
   /// Validation rules:
-  /// - homeDir must be non-null when any of the atKeysFilePath, storageDir or
-  ///   downloadDir parameters are null
+  /// - homeDir must be non-null when either of the atKeysFilePath or
+  ///   storageDir parameters is null
   /// - either `atRootDomain` or `rootDomain` parameters must be non-null. If
   ///   `atRootDomain` is non-null then it is used, otherwise we parse
   ///   `rootDomain` to create an [AtRootDomain] and we use that.
@@ -253,7 +251,6 @@ class CLIBase {
       this.verbose = false,
       this.atKeysFilePath,
       this.storageDir,
-      this.downloadDir,
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase,
@@ -268,10 +265,6 @@ class CLIBase {
       if (storageDir == null) {
         throw ArgumentError(
             'homeDir must be provided when storageDir is not provided');
-      }
-      if (downloadDir == null) {
-        throw ArgumentError(
-            'homeDir must be provided when downloadDir is not provided');
       }
     }
 
@@ -295,9 +288,6 @@ class CLIBase {
               uniqueID: CliKeys.defaultStoreId,
             ))
         .replaceAll('/', Platform.pathSeparator);
-    downloadPathToUse =
-        (downloadDir ?? '$homeDir!/.atsign/downloads/${this.atSign}/$nameSpace')
-            .replaceAll('/', Platform.pathSeparator);
 
     AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
 

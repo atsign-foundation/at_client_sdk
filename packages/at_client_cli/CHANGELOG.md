@@ -19,6 +19,7 @@
   client with `CLIBase` or `Atsign.open`; the README's migration table names
   what replaces each.
 - breaking: `CLIBase`'s `preference` is an `AtClientPreference`.
+- breaking: `CLIBase` takes no `downloadDir`, which nothing read.
 - breaking: `CLIBase` throws `AtCredentialRefusedException` for every
   refusal and `SecondaryNotFoundException` for an atSign the atDirectory does
   not know; `SecondaryServerConnectivityException` now means only an outage.
