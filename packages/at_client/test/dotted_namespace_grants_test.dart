@@ -292,4 +292,23 @@ void main() {
     // NOTE: the control. `*` still answers for a namespace no grant names.
     expect(await put(c.local, 'x.buzz@bob'), isNotNull);
   });
+
+  test('No local operation reaches a __manage key', () async {
+    for (final grants in [
+      {'*': 'rw', '__manage': 'rw'},
+      {'*': 'rw'},
+      {'x.__manage': 'rw'},
+    ]) {
+      final c = enrolled(grants);
+      for (final key in ['k.x.__manage@bob', 'x.__manage@bob']) {
+        await c.store.put(key, AtData()..data = 'held');
+        await expectLater(
+            llookup(c.local, key), throwsA(isA<UnAuthorizedException>()),
+            reason: 'a get of $key under $grants');
+        await expectLater(
+            put(c.local, key), throwsA(isA<UnAuthorizedException>()),
+            reason: 'a put of $key under $grants');
+      }
+    }
+  });
 }

@@ -5,8 +5,8 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   grant against the key's name, so cmp.rotation covers x.cmp.rotation. The
   client's local access check decides the same way, so a record the atServer
   lets the enrollment read or write is readable and writable locally too. It
-  follows the atServer in one more way: a public key is read whatever the
-  grant.
+  follows the atServer in two more ways: a public key is read whatever the
+  grant, and no local operation reaches a __manage key.
 
   Races: none arise; the check reads the enrollment's grants, which this does
   not change.
@@ -57,4 +57,9 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   Scenario: A grant naming the namespace wins over * locally, even when it gives less
     Given an enrollment granted {*: rw, wavi: r}
     When it puts x.wavi@bob locally
+    Then it is refused
+
+  Scenario: No local operation reaches a __manage key
+    Given any enrollment
+    When it puts or gets k.x.__manage@bob or x.__manage@bob locally
     Then it is refused

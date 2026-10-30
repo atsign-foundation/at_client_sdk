@@ -976,6 +976,12 @@ class LocalSecondary implements Secondary {
           'covering $key, so it is not authorized for the operation');
       return false;
     }
+    // NOTE: __manage is reached only through otp, enroll and monitor, and no
+    // local operation is one of them.
+    if (covering.namespace == EnrollmentConstants.enrollManageNamespace ||
+        covering.grant == EnrollmentConstants.enrollManageNamespace) {
+      return false;
+    }
     return _isReadAllowed(verbBuilder, covering.access) ||
         _isWriteAllowed(verbBuilder, covering.access);
   }
