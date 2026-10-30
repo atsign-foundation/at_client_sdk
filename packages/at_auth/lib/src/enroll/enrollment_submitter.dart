@@ -422,7 +422,9 @@ class EnrollmentSubmitter {
   ///
   /// Idempotent per keyfile: when the keyfile already holds an active
   /// ML-DSA-65 signing material under some enrollment id, that enrollment is
-  /// returned and nothing is minted or submitted. A crash after the request
+  /// returned and nothing is minted or submitted. Otherwise the keyfile is
+  /// written back unchanged first, and one that cannot be written is refused
+  /// before anything is sent. A crash after the request
   /// lands but before the keyfile is written leaves an orphan approved
   /// enrollment server-side whose private nobody holds — unusable and
   /// revocable, and a rerun spawns a fresh enrollment.
@@ -496,6 +498,16 @@ class EnrollmentSubmitter {
             rootDomain: request.rootDomain,
             atAuthKeys: existing,
             session: request.session);
+      }
+
+      // NOTE: the keyfile must take a write before anything is minted or sent.
+      // `update`, not `flush`: a flush recreates a keyfile deleted since the
+      // read.
+      try {
+        await keysIo.update(request.atSign.toAtsign(), (_) => true);
+      } catch (e) {
+        throw AtEnrollmentException('the keyfile for ${request.atSign} could '
+            'not be written ($e), so no self-enrollment was requested');
       }
 
       // Fresh either way: a new enrollment never reuses the legacy key

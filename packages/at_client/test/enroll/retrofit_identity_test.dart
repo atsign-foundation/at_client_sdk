@@ -19,7 +19,7 @@ class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 /// shape of a keychain or file whose write failed silently.
 class _StaleKeysIo extends WrittenAtKeysIo {
   final AtKeys _held;
-  int flushes = 0;
+  AtKeys? lastFlushed;
 
   _StaleKeysIo(this._held);
 
@@ -32,7 +32,7 @@ class _StaleKeysIo extends WrittenAtKeysIo {
 
   @override
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
-    flushes++;
+    lastFlushed = atKeys;
   }
 }
 
@@ -172,8 +172,9 @@ void main() {
                 contains('authenticates as $legacyId'),
                 contains('retrofitting to $newId'),
                 contains('legacy client is untouched')))));
-    expect(stale.flushes, 1,
-        reason: 'the write was attempted, and the read-back is what caught it');
+    expect(stale.lastFlushed?.keysForEnrollment(newId), isNotEmpty,
+        reason: 'the write of the new enrollment was attempted, and the '
+            'read-back is what caught it');
     expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1),
         reason: 'the atServer holds an approved enrollment nobody can use, '
             'which a rerun replaces rather than reuses');

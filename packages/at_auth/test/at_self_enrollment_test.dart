@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -627,4 +628,99 @@ void main() {
           reason: 'approving here would silently paper over an old atServer');
     });
   });
+
+  group('a keyfile that cannot be written', () {
+    Future<(_RefusingWritesKeysIo, AtAuthSession)> sessionRefusingWrites(
+        {required int from}) async {
+      final keysIo = _RefusingWritesKeysIo(refusingFrom: from);
+      await keysIo.write(atSign, legacyKeys());
+      return (
+        keysIo,
+        AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: keysIo,
+            enrollmentId: 'legacy-1')
+      );
+    }
+
+    /// Approves every request, answers a revoke with [revokeAnswer], and
+    /// records every command it is sent.
+    MockAtLookUp recordingLookUp(List<String> sent,
+        {String revokeAnswer =
+            'data:{"enrollmentId":"new-123","status":"revoked"}'}) {
+      final mock = MockAtLookUp();
+      when(() => mock.executeCommand(any(), auth: any(named: 'auth')))
+          .thenAnswer((invocation) async {
+        final command = invocation.positionalArguments.first as String;
+        sent.add(command);
+        return command.startsWith('enroll:revoke:')
+            ? revokeAnswer
+            : approvedResponse;
+      });
+      return mock;
+    }
+
+    test('a keyfile that refuses a write sends no enrollment request',
+        () async {
+      final (_, session) = await sessionRefusingWrites(from: 1);
+      final sent = <String>[];
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl()
+            .submit(requestFor(session), recordingLookUp(sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(sent.where((c) => c.startsWith('enroll:request:')), isEmpty,
+          reason: 'a keyfile that cannot be written stops the retrofit before '
+              'the atServer is asked for anything');
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having((e) => e.message, 'message',
+              contains('no self-enrollment was requested')));
+    });
+
+    test('a keyfile that takes writes saves and returns the new enrollment',
+        () async {
+      final (keysIo, session) = await sessionRefusingWrites(from: 1 << 30);
+      final sent = <String>[];
+
+      final response = await AtEnrollmentImpl()
+          .submit(requestFor(session), recordingLookUp(sent));
+
+      expect(response.enrollmentId, 'new-123');
+      expect(response.enrollStatus, EnrollmentStatus.approved);
+      expect(
+          (await keysIo.read(atSign)).keysForEnrollment('new-123'), isNotEmpty,
+          reason: 'the new enrollment\'s material is in the keyfile');
+      expect(sent, hasLength(1),
+          reason: 'one request and nothing else: no cleanup runs when the '
+              'keyfile takes the write');
+      expect(sent.single, startsWith('enroll:request:'));
+    });
+  });
+}
+
+/// An in-memory keyfile whose writes are refused from the [refusingFrom]th
+/// on, counting from one.
+class _RefusingWritesKeysIo extends InMemoryAtKeysIo {
+  final int refusingFrom;
+  int _writes = 0;
+
+  // ignore: invalid_use_of_visible_for_testing_member
+  _RefusingWritesKeysIo({required this.refusingFrom});
+
+  @override
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
+    if (++_writes >= refusingFrom) throw _WriteRefused();
+    return super.flush(atsign, atKeys);
+  }
+}
+
+class _WriteRefused implements Exception {
+  @override
+  String toString() => '_WriteRefused: the keyfile is read-only';
 }
