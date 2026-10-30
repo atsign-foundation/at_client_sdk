@@ -53,6 +53,12 @@ abstract class AtClientStorage {
   /// which is what an app with no teardown of its own wants — it still chooses
   /// the backend and the location, without having to close anything.
   bool get closedByClient;
+
+  /// Whether [keyStore] can hold this client's own key material. False for a
+  /// backend whose records live only on the atServer, which never holds the
+  /// private keys: such a client takes its keys from its `AtKeysIo`, never
+  /// from the store.
+  bool get holdsKeyMaterial;
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies
@@ -84,6 +90,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
       '${client.getCurrentAtSign()}|${client.enrollmentId ?? 'legacy'}';
 
   bool get isAttached => _owner != null;
+
+  @override
+  bool get holdsKeyMaterial => true;
 
   @override
   bool isHeldBy(AtClient client) => identical(_owner, client);
