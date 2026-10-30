@@ -34,8 +34,10 @@ export 'package:at_client/src/enroll/first_enrollment.dart';
 ///   to create the root at all;
 /// - the **legacy** RSA encryption keypair, `selfEncryptionKey` and
 ///   `public:publickey`, **by default**. Pass [mintLegacyMaterial] false only
-///   if you know better; it makes a legacy peer's send to this atSign
-///   unsupported.
+///   if you know better: it makes a legacy peer's send to this atSign
+///   unsupported, and `AtClient.put` of a public value throws
+///   `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+///   encryption private key.
 ///
 /// The signing-root step runs inside its own guard: the activation has already
 /// succeeded by then, and failing the whole onboard over it would leave a live
