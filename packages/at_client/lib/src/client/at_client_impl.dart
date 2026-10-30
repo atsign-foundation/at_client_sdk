@@ -2093,9 +2093,11 @@ class AtClientImpl implements AtClient {
   /// **Sequenced here rather than moved afterwards.** The monitor, the sync
   /// service's own `RemoteSecondary` and the encryption service are all built
   /// from this client's enrollment id *after* `_init` returns, so settling it
-  /// first makes every one of them correct by construction. A connection
-  /// missed by a live retrofit goes on working for the atServer's 720-hour
-  /// grace.
+  /// first makes every one of them correct by construction. A connection the
+  /// retrofit misses stays authenticated as the predecessor: once the new
+  /// enrollment first authenticates, the atServer revokes a scoped predecessor
+  /// and closes such a connection at its next command, while a fully
+  /// privileged predecessor keeps its life.
   ///
   /// Nothing is fatal, errors included: a client that cannot retrofit comes up
   /// on the credential it already had and tries again next start.
@@ -2208,8 +2210,9 @@ class AtClientImpl implements AtClient {
 
   /// Rebuilds everything `_init` derives from the enrollment id, after it has
   /// changed. The old connection is closed explicitly: left open it stays
-  /// authenticated as the superseded enrollment for the atServer's grace
-  /// period.
+  /// authenticated as the superseded enrollment, for good when that
+  /// enrollment is fully privileged, and until its next command once the
+  /// atServer has revoked a scoped one.
   Future<void> _rederiveFromEnrollment(
       {required String? previousEnrollmentId}) async {
     await _resolveSigningAlgoFromKeyMaterial();

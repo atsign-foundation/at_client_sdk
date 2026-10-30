@@ -240,8 +240,9 @@ class EnrollmentSubmitter {
     // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
     // hands an atSign whose deployment has moved to post-quantum an
     // RSA-authenticating enrollment, which the client retrofits away on its
-    // first start — leaving a discarded enrollment behind and an RSA
-    // credential live for the atServer's grace window.
+    // first start — leaving that enrollment behind, revoked when its
+    // replacement first authenticates if it is scoped, and live for good if
+    // it is fully privileged.
     final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer

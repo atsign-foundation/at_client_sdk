@@ -157,8 +157,9 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// **Required, with no default, on purpose:** a default would let a caller
   /// inherit an algorithm it never chose. On an atSign whose deployment
   /// authenticates post-quantum, an RSA-authenticating enrollment is one the
-  /// client then retrofits away, leaving a discarded enrollment behind and an
-  /// RSA credential valid for the atServer's grace window.
+  /// client then retrofits away, leaving it behind: revoked when its
+  /// replacement first authenticates if it is scoped, and valid for good if
+  /// it is fully privileged.
   ///
   /// ⚠️ **The name says "signing" and means *authentication*.** The wire field
   /// is `signingAlgo`, and renaming it is a multi-repo seam against a released
