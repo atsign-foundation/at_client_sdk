@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/memory.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
 import 'test_utils/transport.dart';
 
 /// `AtClientImpl.create` runs a client as the enrollment its keys authenticate
@@ -98,5 +100,59 @@ void main() {
         atKeysIo: await keyfile(),
         storage: hiveStoreFor(atSign, pref()));
     expect(client.enrollmentId, 'primary');
+  });
+
+  group('a caller naming no enrollment, with one enrolled client cached', () {
+    Future<AtClient> create(
+            {String? enrollmentId,
+            required AtClientStorage storage,
+            bool? exactEnrollment}) =>
+        exactEnrollment == null
+            ? AtClientImpl.create(atSign, 'wavi', pref(),
+                lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: atDirectoryOf(pref()),
+                atKeysIo: noKeysFor(atSign),
+                enrollmentId: enrollmentId,
+                storage: storage)
+            : AtClientImpl.create(atSign, 'wavi', pref(),
+                lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: atDirectoryOf(pref()),
+                atKeysIo: noKeysFor(atSign),
+                enrollmentId: enrollmentId,
+                storage: storage,
+                exactEnrollment: exactEnrollment);
+
+    InMemoryAtClientStorage store() =>
+        InMemoryAtClientStorage(atSign: atSign, closedByClient: true);
+
+    test('is not handed that enrollment\'s client', () async {
+      final enrolled = await create(enrollmentId: 'e1', storage: store());
+
+      Object? outcome;
+      try {
+        outcome = await create(storage: store());
+      } catch (e) {
+        outcome = e;
+      }
+
+      expect(
+          outcome,
+          isA<AtClientImpl>()
+              .having((c) => c.enrollmentId, 'enrollmentId', isNull),
+          reason: 'a caller naming no enrollment runs as the atSign\'s own '
+              'credential, not as the one enrollment already cached');
+      expect(identical(outcome, enrolled), isFalse);
+    });
+
+    test('is handed it when it passes exactEnrollment: false', () async {
+      final storage = store();
+      final enrolled = await create(enrollmentId: 'e1', storage: storage);
+
+      final handed = await create(storage: storage, exactEnrollment: false);
+
+      expect(identical(handed, enrolled), isTrue,
+          reason: 'the fallback stays available to a caller that asks for '
+              'it');
+    });
   });
 }

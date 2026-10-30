@@ -219,7 +219,8 @@ class OnboardingUtil {
     Uri uri = Uri.https(authority, path);
 
     String body = json.encode(data);
-    logger.finer('Sending request to url: $uri\nRequest Body: $body');
+    // NOTE: a request or response body is never logged.
+    logger.finer('Sending request to url: $uri');
     Response response = await _ioClient!.post(
       uri,
       body: body,
@@ -228,7 +229,7 @@ class OnboardingUtil {
         'Content-Type': RegistrarApiConstants.contentType,
       },
     );
-    logger.finer('Got Response: ${response.body}');
+    logger.finer('Got response ${response.statusCode} from $uri');
     return response;
   }
 

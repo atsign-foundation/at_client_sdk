@@ -11,6 +11,7 @@ import 'package:at_lookup/src/connection/base_connection.dart'
     show requireOneLine;
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
+import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -675,6 +676,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   bool _isNotifying = false;
 
+  /// The [startNotifications] in flight and the notification generation it
+  /// belongs to, which a second call in that generation joins.
+  ({int generation, Future<void> done})? _starting;
+
   // --- reconnect, reauth and heartbeat -----------------------------------
   //
   // Owned here because this object holds the socket. at_client's Monitor
@@ -947,6 +952,32 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       logger.info('startNotifications: already notifying, nothing sent');
       return;
     }
+    final inFlight = _starting;
+    if (inFlight != null && inFlight.generation == _notifyGeneration) {
+      logger.info('startNotifications: already starting, nothing sent');
+      return inFlight.done;
+    }
+    final generation = _notifyGeneration;
+    final done = _beginNotifications(generation,
+        regex: regex,
+        getLastNotificationTime: getLastNotificationTime,
+        selfNotificationsEnabled: selfNotificationsEnabled);
+    _starting = (generation: generation, done: done);
+    try {
+      await done;
+    } finally {
+      if (identical(_starting?.done, done)) _starting = null;
+    }
+  }
+
+  /// The body of [_startNotifications] for [generation]: sends `monitor:` and
+  /// marks this lookup as notifying, unless a stop retires [generation] first.
+  Future<void> _beginNotifications(
+    int generation, {
+    required String? regex,
+    required Future<int?> Function()? getLastNotificationTime,
+    required bool selfNotificationsEnabled,
+  }) async {
     // Reading this getter is what creates the controller and installs the
     // seam, so it must happen before `monitor:` goes out - otherwise the first
     // notifications arrive with nowhere to go.
@@ -965,7 +996,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
 
-    final generation = _notifyGeneration;
     if (!await _openNotificationStream(generation)) return;
     // NOTE: a stopNotifications() that landed while `monitor:` went out owns
     // the state now.
@@ -1038,7 +1068,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         _throwIfStopped();
         return false;
       }
-      logger.finer('SENDING: ${command.trim()}');
+      logger.finer('SENDING: ${commandForLog(command.trim())}');
       await _connection!.write(command);
       return true;
     } finally {
@@ -1078,7 +1108,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   Future<void> _sendCommand(String command) async {
     await createConnection();
-    logger.finer('SENDING: $command');
+    logger.finer('SENDING: ${commandForLog(command)}');
     await _connection!.write(command);
   }
 }
@@ -1111,7 +1141,7 @@ class _ConnectionPreamble implements AtCommandExecutor {
   @override
   Future<String> sendSync(String command,
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    _lookUp.logger.finer('SENDING (on connect): $command');
+    _lookUp.logger.finer('SENDING (on connect): ${commandForLog(command)}');
     await _lookUp._connection!.write(command);
     return _lookUp.messageListener.read(
         maxWaitMilliSeconds: maxWaitMilliSeconds,
@@ -1146,7 +1176,7 @@ class _SentCommands implements AtCommandExecutor {
               'authentication began on closed before it finished, so the rest '
               'of it is sent on no other connection');
         }
-        _lookUp.logger.finer('SENDING: $command');
+        _lookUp.logger.finer('SENDING: ${commandForLog(command)}');
         await _connection.write(command);
         final response = await _listener.read(
             maxWaitMilliSeconds: maxWaitMilliSeconds,

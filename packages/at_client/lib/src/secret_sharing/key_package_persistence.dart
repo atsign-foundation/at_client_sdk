@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
+        AtKeysSourceAbsentException,
         CryptographicMaterial,
         CryptographicMaterialRole,
         CryptographicMaterialStatus;
@@ -38,7 +39,8 @@ void bindKeyPackageToAtKeys(
 }
 
 /// The KEM enc seeds [atSign]'s keyfile holds for its key packages, or null
-/// if it holds none.
+/// if it holds none or there is no keyfile; a keyfile that exists and cannot
+/// be read throws.
 ///
 /// A superseded package is adopted alongside the live one, carrying whatever
 /// status the keyfile gives it, so a client restarting after a rotation can
@@ -53,9 +55,9 @@ Future<PersistedApkamKeys?> _load(
   final AtKeys keys;
   try {
     keys = await keysIo.read(atSign);
-  } catch (e) {
-    _logger.info('No readable AtKeys for $atSign, so this client generates a '
-        'key package rather than adopting one: $e');
+  } on AtKeysSourceAbsentException catch (e) {
+    _logger.info('No AtKeys for $atSign, so this client generates a key '
+        'package rather than adopting one: $e');
     return null;
   }
 

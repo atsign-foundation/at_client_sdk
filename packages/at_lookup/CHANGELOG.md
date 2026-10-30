@@ -19,9 +19,11 @@
 - fix: in a browser, a connect to an atServer gives up after the network
   timeout, and closing a lookup stops a connect or atDirectory lookup still in
   progress.
-- fix: in a browser, the atDirectory is asked for the atSign in its canonical
-  form, and an answer longer than 512 bytes, or that is not a host name and a
-  port, is refused.
+- fix: an atDirectory answer longer than 512 bytes, or that is not a host
+  name and a port, is refused, over TLS as in a browser, and over TLS the
+  answer is read whole however it arrives. In a browser the atDirectory is
+  asked for the atSign in its canonical form; over TLS an atSign holding a
+  line feed is refused before any connection is made.
 - fix: in a browser, an atServer address the WebSocket constructor refuses
   fails with `SecondaryConnectException`, as any other failure to connect does.
 - fix: a command holding a line feed before its end is refused, and none of
@@ -91,6 +93,11 @@
   `AT0004`.
 - feat: `authenticator` and `stop()` are on `AtLookUp` itself, not only on
   `AtLookupMuxable`.
+- fix: a `startNotifications` called while another is still starting joins
+  it, so one `monitor:` goes out however many callers ask; a start after
+  `stopNotifications` begins afresh.
+- fix: the commands a lookup logs carry `***` in place of the passcode in
+  `otp:put` and the `otp` an `enroll:` request carries.
 - build: no longer depends on `at_chops`.
 
 ## 3.7.0

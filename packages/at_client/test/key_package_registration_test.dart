@@ -649,6 +649,18 @@ void main() {
             throwsA(isA<AtValueException>()));
       });
 
+      test('an answer naming neither moment throws rather than reading as none',
+          () async {
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(atClient, 'data:{}');
+
+        await expectLater(
+            VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+            throwsA(isA<AtValueException>()),
+            reason: 'an answer that names neither moment says nothing about '
+                'whether anything was revoked');
+      });
+
       group('Given an atServer that answers lastKeyHolderRevokedAt', () {
         test(
             'when it differs from lastRevokedAt, then the key-holder moment '

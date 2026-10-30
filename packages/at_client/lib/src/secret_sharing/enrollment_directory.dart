@@ -201,6 +201,11 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       throw AtValueException('enroll:infons for $namespace returned a '
           '${decoded.runtimeType} where a map of namespace facts was expected');
     }
+    if (!decoded.containsKey('lastKeyHolderRevokedAt') &&
+        !decoded.containsKey('lastRevokedAt')) {
+      throw AtValueException('enroll:infons for $namespace answered with '
+          'neither lastKeyHolderRevokedAt nor lastRevokedAt');
+    }
     // NOTE: a present key with a null value is an answer, so only an absent
     // key falls back.
     final field = decoded.containsKey('lastKeyHolderRevokedAt')

@@ -677,9 +677,10 @@ class AtClientImpl implements AtClient {
   /// [secondaryAddressFinder], and every field of [preferences] except
   /// `crypto`.
   ///
-  /// Two mismatches are **refused** rather than ignored: a [storage] the cached
-  /// client does not hold, and a preference naming different rollout axes —
-  /// see [refuseChangedRolloutAxes]. A test or an app that needs a genuinely
+  /// Three things are **refused** rather than ignored: a cached client whose
+  /// [stop] is still running, a [storage] the cached client does not hold, and
+  /// a preference naming different rollout axes — see
+  /// [refuseChangedRolloutAxes]. A test or an app that needs a genuinely
   /// different client must not rely on passing different arguments here.
   ///
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
@@ -689,10 +690,9 @@ class AtClientImpl implements AtClient {
   /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
   /// logged at shout level and ignored.
   ///
-  /// Nothing in this library ever removes an entry from that cache, so a client
-  /// that has been stopped is returned from here and restarted rather than
-  /// rebuilt, and this method cannot hand back a second, genuinely separate
-  /// client for one atSign at all.
+  /// [stop] removes a client from that cache when its teardown finishes, so a
+  /// call after that builds a new client; a call while the teardown is still
+  /// running throws a [StateError] rather than restarting it.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -708,11 +708,11 @@ class AtClientImpl implements AtClient {
     String? enrollmentId,
     required AtClientStorage storage,
 
-    /// When true, [enrollmentId], or what the keys name, is the principal
-    /// exactly: a null means the atSign's own credential and never falls
-    /// back to a lone enrolled client, which a caller naming no enrollment
-    /// is otherwise handed.
-    bool exactEnrollment = false,
+    /// When true, the default, [enrollmentId], or what the keys name, is the
+    /// principal exactly: a null means the atSign's own credential. When
+    /// false, a caller naming no enrollment is handed the atSign's enrolled
+    /// client if exactly one is cached.
+    bool exactEnrollment = true,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -745,7 +745,15 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
-      if (!storage.isHeldBy(atClientImpl!)) {
+      // NOTE: before the storage check, which a client part way through its
+      // teardown has already detached from.
+      if (atClientImpl!._stopping != null) {
+        throw StateError('A client for $currentAtSign as '
+            '${atClientImpl.enrollmentId == null ? "its own credential" : "enrollment ${atClientImpl.enrollmentId}"} '
+            'is stopping. create() does not restart a client part way through '
+            'stop(); await that stop() first.');
+      }
+      if (!storage.isHeldBy(atClientImpl)) {
         throw ArgumentError.value(
             storage,
             'storage',
@@ -1491,7 +1499,7 @@ class AtClientImpl implements AtClient {
   ///
   /// Everything else is replaced, `crypto` included.
   @override
-  void setPreferences(AtClientPreference preference) async {
+  void setPreferences(AtClientPreference preference) {
     refuseChangedRolloutAxes(
         running: _preference,
         asked: preference,
@@ -2078,15 +2086,18 @@ class AtClientImpl implements AtClient {
   /// `at_pkam_publickey`, which at_lookup signs with rsa2048, so a
   /// post-quantum posture moves it exactly as it moves a legacy enrollment.
   /// What differs is only where the new enrollment's name and grants come from
-  /// — see [firstEnrollmentIdentity] — and that the atServer parks the request
-  /// `pending`, which at_auth approves over the same connection.
+  /// — see [firstEnrollmentIdentity]. The atServer answers that connection as
+  /// `primary`, the enrollment it keeps for the flat credential, and approves
+  /// the request outright as a retrofit of it.
   ///
   /// **Sequenced here rather than moved afterwards.** The monitor, the sync
   /// service's own `RemoteSecondary` and the encryption service are all built
   /// from this client's enrollment id *after* `_init` returns, so settling it
-  /// first makes every one of them correct by construction. A connection
-  /// missed by a live retrofit goes on working for the atServer's 720-hour
-  /// grace.
+  /// first makes every one of them correct by construction. A connection the
+  /// retrofit misses stays authenticated as the predecessor: once the new
+  /// enrollment first authenticates, the atServer revokes a scoped predecessor
+  /// and closes such a connection at its next command, while a fully
+  /// privileged predecessor keeps its life.
   ///
   /// Nothing is fatal, errors included: a client that cannot retrofit comes up
   /// on the credential it already had and tries again next start.
@@ -2159,8 +2170,8 @@ class AtClientImpl implements AtClient {
               AtRootDomain(_preference!.rootDomain, _preference!.rootPort),
           atKeysIo: keysIo,
           namespace: _preference!.namespace,
-          // Null for a pre-enrollment atSign, which is how at_auth decides it
-          // must approve its own request.
+          // Null for a pre-enrollment atSign, which authenticates with the
+          // flat key.
           enrollmentId: id,
         ),
         atLookUp: _remoteSecondary!.atLookUp,
@@ -2199,8 +2210,9 @@ class AtClientImpl implements AtClient {
 
   /// Rebuilds everything `_init` derives from the enrollment id, after it has
   /// changed. The old connection is closed explicitly: left open it stays
-  /// authenticated as the superseded enrollment for the atServer's grace
-  /// period.
+  /// authenticated as the superseded enrollment, for good when that
+  /// enrollment is fully privileged, and until its next command once the
+  /// atServer has revoked a scoped one.
   Future<void> _rederiveFromEnrollment(
       {required String? previousEnrollmentId}) async {
     await _resolveSigningAlgoFromKeyMaterial();

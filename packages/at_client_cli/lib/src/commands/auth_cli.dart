@@ -1143,14 +1143,15 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
   final stream = atClient.notificationService.subscribe(
       regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false);
 
-  final subscription = stream.listen((AtNotification n) async {
-    if (completer.isCompleted) {
-      return; // Don't handle any more if we're already done
-    }
-
+  Future<void> approveIfMatching(AtNotification n) async {
     String eId = n.key.substring(0, n.key.indexOf('.'));
 
-    final er = jsonDecode(n.value!);
+    final er = jsonDecode(n.value ?? '');
+    if (er is! Map || er['appName'] is! String || er['deviceName'] is! String) {
+      stderr.writeln('Ignoring notification ${n.key}, which is not an '
+          'enrollment request naming an appName and a deviceName');
+      return;
+    }
     stdout.writeln('Got enrollment request ID $eId'
         ' with appName "${er['appName']}"'
         ' and deviceName "${er['deviceName']}"');
@@ -1180,7 +1181,7 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       approved++;
 
       // check approved vs limit
-      if (approved >= limit) {
+      if (approved >= limit && !completer.isCompleted) {
         // if reached limit, complete the future
         stdout
             .writeln('Approved $approved requests - limit was $limit - done.');
@@ -1192,6 +1193,21 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
           ' (app: "$arx" and device: "$drx" respectively)');
     }
     stdout.writeln();
+  }
+
+  final subscription = stream.listen((AtNotification n) async {
+    if (completer.isCompleted) {
+      return; // Don't handle any more if we're already done
+    }
+    try {
+      await approveIfMatching(n);
+    } catch (e) {
+      stderr.writeln('Could not act on enrollment request notification '
+          '${n.key}: $e');
+    }
+  }, onError: (Object e) {
+    stderr.writeln('The enrollment request notifications reported an '
+        'error: $e');
   });
 
   // await future then cancel the subscription

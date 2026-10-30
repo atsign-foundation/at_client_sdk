@@ -14,6 +14,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/unreadable_keys_io.dart';
 
 import 'fake_enrollment_directory.dart';
 
@@ -116,6 +117,13 @@ void main() {
             'reached afterwards only by a deliberate enroll:update, so one '
             'generated here would be an address nobody can learn — not worth '
             'mutating the keyfile at startup to produce');
+  });
+
+  test('a keyfile that cannot be read stops registration', () async {
+    await expectLater(
+        boundRegistrant(UnreadableKeysIo()), throwsA(isA<KeyfileUnreadable>()),
+        reason: 'the package this enrollment advertised may be in that '
+            'keyfile, and one generated instead answers at another address');
   });
 
   test('a filed nskey private is never adopted as the key package', () async {

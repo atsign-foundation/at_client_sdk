@@ -165,6 +165,10 @@ root domain names a proxy (`proxy:host:port`), which sends `from:<atSign>`
 first on every connection so the proxy can route it, and
 `secureSocketLookUps()`, TLS on TCP, otherwise.
 
+`at_activate`'s `onboard` and `enroll` share one local store per atSign, under
+`~/.atsign/storage/<atSign>/at_activate/`, so running two of them at once for
+the same atSign is not supported: the second fails when it opens the store.
+
 Activate a new atSign with its CRAM secret (or run `at_activate onboard`,
 which fetches one from the registrar against an emailed verification code):
 

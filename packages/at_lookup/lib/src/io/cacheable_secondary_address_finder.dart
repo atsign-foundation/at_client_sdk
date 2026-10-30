@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
+import '../cache/atdirectory_answer.dart'
+    show AtDirectoryAnswer, maxAtDirectoryAnswerBytes;
 import '../cache/secondary_address_finder.dart';
+import '../connection/base_connection.dart' show requireOneLine;
 import '../util/lookup_util.dart';
 import '../util/abandonment.dart' show Abandonment;
 import 'secure_socket_util.dart';
@@ -218,16 +222,17 @@ class SecondaryUrlFinder {
   static bool get _abandoned => Abandonment.current?.isAbandoned ?? false;
 
   Future<String?> _findSecondary(String atsign, DateTime deadline) async {
+    if (atsign.startsWith('@')) atsign = atsign.replaceFirst('@', '');
+    requireOneLine('$atsign\n');
     String? response;
     SecureSocket? socket;
     try {
       _logger.finer('findAtServerUrl: received atsign: $atsign');
-      if (atsign.startsWith('@')) atsign = atsign.replaceFirst('@', '');
-      var answer = '';
+      final received = BytesBuilder(copy: false);
       String? secondary;
       var ans = false;
-      var prompt = false;
-      var once = true;
+      var prompted = false;
+      AtException? refused;
 
       // Bound the connect by whatever budget remains before the deadline.
       final remaining =
@@ -240,26 +245,44 @@ class SecondaryUrlFinder {
       );
       _logger.finer('findAtServerUrl: connection to atDirectory established');
       // listen to the received data event stream
+      // NOTE: the answer is the line after the prompt, collected across
+      // chunks, and taken only as `host:port` or `null`.
       socket.listen((List<int> event) async {
         _logger.finest('atDirectory socket listener received: $event');
-        answer = utf8.decode(event);
+        if (ans || refused != null) return;
+        received.add(event);
+        if (received.length > maxAtDirectoryAnswerBytes) {
+          refused = AtException('atDirectory answer for $atsign is longer '
+              'than $maxAtDirectoryAnswerBytes bytes');
+          return;
+        }
+        final text = utf8.decode(received.toBytes(), allowMalformed: true);
 
-        if (answer.endsWith('@') && prompt == false && once == true) {
-          prompt = true;
-          socket!.write('$atsign\n');
-          await socket.flush();
-          once = false;
+        if (!prompted) {
+          if (text.endsWith('@')) {
+            prompted = true;
+            received.clear();
+            socket!.write('$atsign\n');
+            await socket.flush();
+          }
+          return;
         }
 
-        if (answer.contains(':')) {
-          answer = answer.replaceFirst('\r\n@', '');
-          answer = answer.replaceFirst('@', '');
-          answer = answer.replaceAll('@', '');
-          secondary = answer.trim();
-          ans = true;
-        } else if (answer.startsWith('null')) {
+        final end = text.indexOf('\n');
+        if (end < 0) return;
+        final line = text.substring(0, end).replaceAll('@', '').trim();
+        if (line == 'null') {
           secondary = null;
           ans = true;
+          return;
+        }
+        try {
+          final address =
+              (AtDirectoryAnswer(atsign)..add(utf8.encode(line))).address;
+          secondary = '${address.host}:${address.port}';
+          ans = true;
+        } on AtException catch (e) {
+          refused = e;
         }
       });
       // Wait for the atDirectory to answer, bounded by the overall deadline
@@ -271,6 +294,7 @@ class SecondaryUrlFinder {
               'atDirectory lookup for $atsign abandoned: its owner has closed or '
               'stopped');
         }
+        if (refused case final refusal?) throw refusal;
         if (ans) {
           response = secondary;
           socket.write('@exit\n');

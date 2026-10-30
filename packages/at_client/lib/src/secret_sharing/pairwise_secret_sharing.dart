@@ -26,7 +26,8 @@ import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
-import 'package:at_client/src/util/at_key_grammar.dart' show isAtKeyNamespace;
+import 'package:at_client/src/util/at_key_grammar.dart'
+    show isAtKeyNamespace, isIdShaped;
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 import 'package:meta/meta.dart' show visibleForTesting;
@@ -933,13 +934,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
     // Read from the SEALED payload, never from the key name: the name is
     // written by the sender and nothing authenticates it.
-    final String? requestId = received.payload['requestId'] as String?;
+    final Object? carried = received.payload['requestId'];
+    // NOTE: only an id-shaped requestId goes into a regex or a key name.
+    final String? requestId =
+        carried is String && isIdShaped(carried) ? carried : null;
     if (requestId == null) {
       // Fail open: answering costs a duplicate the requester merges away,
       // while standing down costs it the secret with no error either side.
       logger.info('Answering kpid ${received.fromKpid} in '
           '${received.appNamespace} without checking whether another holder '
-          'already did: the request carries no requestId to correlate on');
+          'already did: the request carries no id-shaped requestId to '
+          'correlate on');
     }
     final suppressedBy = requestId == null
         ? const <String>{}

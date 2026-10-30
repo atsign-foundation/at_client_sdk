@@ -27,8 +27,13 @@ abstract interface class AtCommandExecutor {
   /// command that preceded it. Notifications are the asynchronous side and
   /// never arrive here.
   ///
-  /// Called from inside authentication, which already holds the
-  /// request/response mutex, so this must not take it again.
+  /// It takes no lock of its own. Its callers run inside a login, which holds
+  /// the authentication mutex, or inside an `onConnect` preamble, which holds
+  /// the connection mutex. Whether the request/response mutex is also held
+  /// depends on what started the work: a verb, or opening the notification
+  /// stream, holds it; `pkamAuthenticate()` does not. It does not take that
+  /// mutex itself because the mutex is not reentrant, and a caller on the
+  /// first two paths already holds it.
   ///
   /// The two budgets are those of `OutboundMessageListener.read` and mean the
   /// same things. They are here because authentication does not want one

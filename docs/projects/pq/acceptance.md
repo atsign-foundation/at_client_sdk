@@ -1898,6 +1898,14 @@ map and be refused rather than obeyed.
   second legacy enrollment minted at the same moment, which no retrofit ever
   parented, still authenticates afterwards, as do a freshly minted one and the
   PQ enrollment the retrofit created.
+  `tests/at_client_cli_functional_tests/test/pq_retrofit_save_refused_test.dart`
+  proves the same settlement for a scoped predecessor enrolled over an OTP: once
+  its replacement has logged in, a copy of its keyfile is refused at open with
+  `AT0027`, a session left open as it is closed at its next command, and an
+  un-revoked predecessor's second retrofit is refused as already replaced. The
+  same file proves that a retrofit whose keyfile refuses its save after approval
+  revokes the new enrollment where the predecessor may revoke it, reports the
+  refused revoke where it may not, and retrofits again at the next start.
 
 ## 10. B3 · Mixed-PQ within one atSign
 
@@ -2967,9 +2975,9 @@ Four residues this catalogue states rather than hides:
 
 - **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell
   until arm 4 exists.
-- **UC-B2.2** needs the grace-0 secondary that only
-  `tests/at_end2end_test/runLocal.sh` provisions, so the functional pack cannot
-  host it.
+- **UC-B2.2** is proven only in the e2e pack
+  (`retrofit_retirement_e2e_test.dart`); no atServer setting ties it there, and
+  moving it to the functional pack has not been tried.
 - **UC-C1.4**'s Given is unprovable live.
 - **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
   invariant Then and a Given that legacy cannot satisfy: a posture configuring

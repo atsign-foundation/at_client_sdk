@@ -9,6 +9,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart'
     show PrePublishConveyance;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
@@ -1655,6 +1657,33 @@ void main() {
       // A consumes the answer and now holds the secret.
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
+          'KEYBYTES');
+    });
+
+    test('a request whose requestId is not id-shaped is answered unsolicited',
+        () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.shape', value: 'KEYBYTES'),
+          allowReservedName: true);
+      await sharerA.sendEnvelope(
+          sharerB.myKeyPackage,
+          'myapp',
+          {
+            'kind': PairwiseSecretSharing.secretRequestKind,
+            'requestId': 'not an id',
+            'want': ['__rk.1.shape'],
+          },
+          inReplyTo: EnvelopeAddressing.unsolicited);
+
+      expect(await sharerB.sweepOnce(), 1);
+      expect(
+          remoteData.keys.where((k) => k.contains(
+              '.${EnvelopeAddressing.unsolicited}.${sharerA.kpid}.__ssenv.')),
+          hasLength(1),
+          reason: 'the answer is addressed as unsolicited, carrying nothing '
+              'of a requestId that is not id-shaped');
+      expect(await sharerA.sweepOnce(), 1);
+      expect(sharerA.secretStore.getSecret('myapp', '__rk.1.shape')!.value,
           'KEYBYTES');
     });
 
