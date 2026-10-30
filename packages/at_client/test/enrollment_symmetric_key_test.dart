@@ -157,23 +157,6 @@ void main() {
     verifyApskLookedUp(lookUp, 'revoked-enrollment');
   });
 
-  test('and a signer whose _apsk does not verify is skipped too', () async {
-    // NOTE: the key served is a real one, another enrollment's, so the
-    // refusal is the signature's rather than a malformed key's.
-    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
-        timeout: const Duration(milliseconds: 200),
-        pollInterval: const Duration(milliseconds: 50));
-    final lookUp = lookupWith(
-        signer: 'live-enrollment',
-        apsk: pkamKeyPairFor(atSign, 'other-enrollment').atPublicKey.publicKey);
-
-    await expectLater(
-        resolve(withKeyPackage(), lookUp).toList(),
-        throwsA(isA<StateError>().having((e) => '$e', 'message',
-            contains('No conveyed apkamSymmetricKey arrived'))));
-    verifyApskLookedUp(lookUp, 'live-enrollment');
-  });
-
   const approver = 'approver-enrollment';
   const conveyed = 'the-apkam-symmetric-key';
 
@@ -221,15 +204,16 @@ void main() {
   }
 
   /// A lookup whose scan finds [value] at [key] and whose `_apsk` lookup
-  /// answers with [signer]'s real public key.
-  MockAtLookUp serving(String key, String value, {String signer = approver}) {
+  /// answers with [signer]'s real public key, or with [apsk] when given.
+  MockAtLookUp serving(String key, String value,
+      {String signer = approver, String? apsk}) {
     final lookUp = MockAtLookUp();
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((inv) async {
       final command = inv.positionalArguments[0] as String;
       if (command.startsWith('scan')) return 'data:${jsonEncode([key])}';
       if (command.contains('_apsk.$signer')) {
-        return 'data:${pkamKeyPairFor(atSign, signer).atPublicKey.publicKey}';
+        return 'data:${apsk ?? pkamKeyPairFor(atSign, signer).atPublicKey.publicKey}';
       }
       if (command.contains(key)) return 'data:$value';
       return null;
@@ -293,6 +277,32 @@ void main() {
               .toList(),
           throwsA(isA<StateError>().having((e) => '$e', 'message',
               contains('No conveyed apkamSymmetricKey arrived'))));
+    });
+
+    test(
+        'is skipped when the _apsk of the enrollment it names does not verify '
+        'its signature', () async {
+      // NOTE: the key served is a real one, another enrollment's, so the
+      // signature check is the only one that refuses the envelope.
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      final lookUp = serving(key, await approverEnvelope(),
+          apsk:
+              pkamKeyPairFor(atSign, 'other-enrollment').atPublicKey.publicKey);
+      logs.records.clear();
+
+      await expectLater(
+          resolve(withKeyPackage(), lookUp).toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))),
+          reason: 'only $approver\'s own key verifies what $approver signed');
+      verifyApskLookedUp(lookUp, approver);
+      expect(
+          logs.at('WARNING').where((m) => m.contains(key)),
+          allOf(isNotEmpty,
+              everyElement(contains('failed signature verification'))));
     });
   });
 
