@@ -213,6 +213,8 @@
   `AtClientStorageBase` inherit `true`.
 - fix: a client on `RemoteOnlyAtClientStorage` no longer runs sync, and stops logging
   "Unexpected exception in sync".
+- fix: a `RemoteOnlyAtClientStorage` client runs no expiry or availability timers,
+  and keeps working after its enrollment changes.
 
 ## 3.15.0-rc8
 
