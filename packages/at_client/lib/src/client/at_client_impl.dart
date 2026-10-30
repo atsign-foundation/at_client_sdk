@@ -1499,7 +1499,7 @@ class AtClientImpl implements AtClient {
   ///
   /// Everything else is replaced, `crypto` included.
   @override
-  void setPreferences(AtClientPreference preference) async {
+  void setPreferences(AtClientPreference preference) {
     refuseChangedRolloutAxes(
         running: _preference,
         asked: preference,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 import 'test_utils/hive_store.dart';
@@ -279,6 +281,32 @@ void main() {
       // The control: everything outside the rollout axes is still replaced.
       client.setPreferences(preference()..syncBatchSize = 42);
       expect(client.getPreferences()!.syncBatchSize, 42);
+    });
+
+    test('setPreferences throws its refusal to the caller, at the call',
+        () async {
+      final client = await AtClientImpl.create(atSign, 'wavi', preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference()),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference()));
+
+      Object? thrown;
+      final uncaught = <Object>[];
+      await runZonedGuarded(() async {
+        try {
+          client.setPreferences(preference(
+              dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65}));
+        } catch (e) {
+          thrown = e;
+        }
+        await Future<void>.delayed(Duration.zero);
+      }, (e, _) => uncaught.add(e));
+
+      expect(thrown, isA<ArgumentError>(),
+          reason: 'a refused preference throws to the caller at the call');
+      expect(uncaught, isEmpty,
+          reason: 'and nothing escapes as an unhandled error');
     });
 
     test('a client with no preference at all is not refused', () {
