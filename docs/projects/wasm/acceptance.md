@@ -5,7 +5,8 @@
 `AtClient` work, the measured evidence behind each tier, and — for every tier — an
 explicit statement of what it does *not* establish.
 **Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`; T9 (the app-supplied
-transport) landed on `gkc-client-lifecycle` on 2026-09-13. The measured
+transport) landed on `gkc-client-lifecycle` on 2026-09-13. §9a.1 amended 2026-10-18 for
+the per-passkey record design (K-1..K-9) and 2026-10-27 for K-10/K-11 and unrevoke; T3.1 re-pointed to the SimpleOPFS VFS (D-26) 2026-10-18; no gate was re-measured on those passes. The measured
 baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see
@@ -342,8 +343,8 @@ For everything T2 cannot reach: IndexedDB, the SQLite-wasm VFS, `WebSocket`,
 
 | ID   | Gate                                                                                                                                             | Done when       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the IndexedDB VFS. **V2** — the V1 default bundle has no storage backend (D-17), and which VFS is D-21's product call, not this gate's. | All tests pass. |
-| T3.2 | Same for the `at_client_web` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
+| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_wasm` storage backend, including a write/reload/read cycle against the SimpleOPFS VFS (D-26). **V2** — the V1 default bundle has no storage backend (D-17). | All tests pass. |
+| T3.2 | Same for the `at_client_wasm` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
 | T3.3 | The whole T2 set re-run under Chrome, confirming no dart2js-vs-Chrome-WasmGC divergence.                                                         | All tests pass. |
 
 **Prerequisite:** the first CI run must confirm the platform executes at all — it was
@@ -431,6 +432,26 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K2 | `exportKey` on the wrapping key **throws** | the key is genuinely non-extractable |
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
+
+**Amended 2026-10-18 — K-1..K-9 change what X-K1..X-K4 mean and add X-K5..X-K9; the 2026-10-21 revocation ruling adds X-K10; the 2026-10-27 K-10/K-11 and unrevoke rulings amend X-K9 and X-K10 and add X-K11..X-K14; the 2026-10-27 K-5 re-ruling amends X-K7; the 2026-10-27 K-12 ruling amends X-K5, X-K9 and X-K13; the 2026-10-28 K-13 ruling adds X-K15..X-K19.** Under the K-10 pointer and K-11 document ([`browser-onboarding.md`](browser-onboarding.md)) there is no stored wrapping key to be non-extractable or to go missing: the kek is re-derived from the PRF output on every open, and IndexedDB holds only the credential hint. Read X-K1 as "nothing in IndexedDB holds @keys in plaintext", X-K2 as "the derived kek is imported non-extractable", X-K3 as "a credential hint present with no passkey available (cleared passkey, unsupported browser) raises a distinct documented error", and X-K4 as "enroll → reload → open round-trips in Chrome *and* Safari". None of the new gates below is built (X-K15..X-K19 included: none built).
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-K5 | HKDF with `P` = bytes `00..1f` and atSign `@alice` yields the lookup key, kek and authSeed in [`atkeys-derivation.md`](atkeys-derivation.md), and `@Alice`, `alice`, `@ali.ce` yield the same | K-1, K-3, K-12: the derivation and atSign canonicalisation are stable across implementations |
+| X-K6 | A record whose `v`, `typ`, `alg`, `kdf` or `iv` was edited fails to open | K-4: the AAD binds the clear header (downgrade) |
+| X-K7 | After PKAM, a valid older document whose public keys no longer match the published ones (`public:publickey@<atSign>`) fails hard after it is opened and before the restored @keys are used for any encrypt or decrypt; the same applies on return (3.2) and recovery (3.3) | K-5 (re-ruled 2026-10-27): partial rollback. Not tested, by design: a joint rollback of document and published keys, or a stale-but-valid document with unchanged public keys (K-5 limits) |
+| X-K8 | PRF returns 32 bytes on create and get, and the record opens after a reload, on iOS Safari, Firefox and Windows Hello | K-7: today 4 of 4 rows (Chrome, Safari and Brave on macOS, Brave on Android) pass; these three are untested |
+| X-K9 | After a successful open the credential hint is rewritten and `navigator.storage.persist()` is requested once; with IndexedDB cleared, the passkey alone restores the session (pointer → PKAM with the APKAM key re-derived from `P` → document → K-5 match), with nothing but the passkey as input | K-6 clarification, retained under K-10/K-11, and K-12: eviction is a UX cost, not a loss, on the primary path. The K-12 fallbacks are ruled by K-13 and gated in X-K15..X-K19 |
+| X-K10 | A revoked enrollment's PKAM is refused with `AT0027` until an approver unrevokes it; a new `enroll:request` with the same APKAM public key is refused with `AT0032`, asserted on the message text `The apkamPublicKey is already held by another enrollment` (the code `AT0032` is also returned for a duplicate appName + deviceName) | revocation (2026-10-21): same-key re-enroll needs approver action |
+| X-K11 | The enrolling client writes the pointer `public:_<lookupHex>.atkeysv@<atSign>` exactly once with no TTL and no `ttr` (write-once is client behaviour: the server does not enforce owner binding, bead `m0j`); a foreign `plookup` leaves no `cached:` copy; the pointer is readable by unauthenticated `lookup:` on the atSign's own atServer, opens only as `typ:"eid"`, and is absent from every `scan` (owner, `showhidden:true`, CRAM, APKAM, unauthenticated) | K-10 |
+| X-K12 | The document `atkeys.<eid>.a.__e@<atSign>` is read and written over PKAM by its enrollment; another enrollment is refused; CRAM can read it but its write is refused; it opens only as `typ:"atkeys"` and holds no APKAM private key; it is listed by its own enrollment's and CRAM's scans (not hidden) | K-11 |
+| X-K13 | After revoke the document is unreadable; after `enroll:unrevoke` by CRAM or a `__manage` holder with all target namespaces, the same `enrollmentId` PKAMs again with the same APKAM key, re-derived from the same passkey (K-12), keeps its original expiry, and reads the document; unrevoke of an expired enrollment fails with `AT0028`; `enroll:approve` on a revoked enrollment is refused. Note: unrevoke of an enrollment revoked by cascade is refused while its approver stays revoked, and passes once that approver is deleted (EVH:930-946) | R-a: re-enroll after revoke = unrevoke |
+| X-K14 | Unrevoke of an enrollment does not reinstate the enrollments it approved that the revoke cascaded to | revoke cascade is not undone |
+| X-K15 | **Given** an authenticator without PRF enrolled with a passphrase, **when** the browser storage is cleared and the passphrase is entered, **then** the passphrase-sealed record is fetched by lookup hash without PKAM, unsealed, and the session is restored (PKAM → document → K-5 match) | K-13 a: no-PRF restore, no bootstrap loop |
+| X-K16 | **Given** the no-PRF record, **when** a wrong passphrase is entered, **then** unsealing fails closed: no PKAM attempt, no @keys exposed | K-13 a |
+| X-K17 | **Given** a lost or wiped passkey, **when** restore is attempted for the old enrollment, **then** it cannot be restored; **when** the user enrolls fresh (OTP + approver) and an approver revokes the old enrollment, **then** the new enrollment opens and the old enrollment's PKAM is refused (`AT0027`) | K-13 b: passkey gone = enrollment gone; no recovery path |
+| X-K18 | **Given** a second passkey (another device), **when** it enrolls, **then** it is its own enrollment with its own `enrollmentId` and a different derived PKAM key; it cannot open the first passkey's enrollment | K-13 d: PRF output differs per credential; not a backup |
+| X-K19 | **Given** any open or restore (PRF or no-PRF), **when** IndexedDB is inspected, **then** it holds only the hint (`credentialId`, `enrollmentId`): no key material, no derived key, no passphrase | K-13 c1; c2 rejected, K-12 "never stored" |
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 

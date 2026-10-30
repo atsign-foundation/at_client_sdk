@@ -1,8 +1,8 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-25 that govern the implementation-neutral `AtClient`
-work, the measurements that drove them, the superseded positions from the predecessor
+**Scope:** the rulings D-1..D-26 that govern the implementation-neutral `AtClient`
+work, the K-1..K-13 rulings on browser at-keys custody (K-6 and K-8 superseded; K-5 re-ruled and K-12 ruled 2026-10-27; K-13 ruled 2026-10-28), the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
 [`design.md`](design.md); sequencing in [`implementation-plan.md`](implementation-plan.md);
@@ -11,7 +11,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings)
+- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-13 browser at-keys custody](#browser-at-keys-custody--k-1k-13)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -124,6 +124,8 @@ paths keep their current behaviour and the native suites stay green. It is expli
 not an API-compatibility commitment.
 
 ### D-4 — `at_client_web` is the only new package for now (2026-08-13)
+
+**Amended 2026-10-18 — the package is `at_client_wasm`.** The Dart package is named `at_client_wasm`; every `at_client_web` in D-4, D-8, D-11, D-15, the open questions and the log below means it. The npm facade stays `@atsign/at-client-web`.
 
 Flutter and CLI platform-implementer packages are named as the eventual shape and
 deferred. `at_client_flutter` is in scope as a breaking-change **consumer**;
@@ -580,6 +582,26 @@ util) and T8 (publish 4.0.0) — which is also why the factory type still reache
 and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
 
+**Amended 2026-10-23 — at_lookup's major.** T3–T7 are done in at_lookup 4.0.0-rc1, and
+only T8 (publish) remains, still blocked. `AtLookupTransport` keeps its name and takes
+`transportFactory:` in place of the socket factories; `secureSocketTransport(...)` and
+`secureSocketLookUps(...)` keep their signatures, so the doors above are unchanged. T5
+moved `secure_socket_util.dart` behind `at_lookup_io.dart`, so the factory type no longer
+reaches `dart:io` through the main barrel; `wasm_shakedown` gates it. The web factory
+no longer implements `AtLookupMuxable` itself: `webSocketLookUps()` in
+`at_lookup_web.dart` builds an `AtLookupImpl` over a `WebSocketTransport`, and resolves
+the atServer through the atDirectory's HTTPS face (OQ-7). The web default is that
+**direct** path; the fixed-host `proxyWebSocketLookUps` is dev-only, because a proxy ends
+TLS and sees the authenticated session.
+
+**Web back-pressure: bounded, then closed.** A browser WebSocket cannot pause, so the
+TCP back-pressure the native transport relies on does not exist there.
+`WebSocketTransport.inbound` is bounded in bytes (default: the listener's
+`bufferCapacity`); on overflow the transport closes the connection with a warning log,
+and recovery is reconnect + sync. The `AtTransport` contract and
+`AtLookupMuxable.notifications` state the split: native, TCP back-pressure; web, bounded,
+then closed. `flush()` waits for `bufferedAmount == 0`, bounded by `flushTimeout`.
+
 ---
 
 ### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
@@ -743,6 +765,8 @@ identity integration** ([D-16](#d-16--the-browser-lane-keeps-enterprise-identity
 
 Escalate the remaining trade as a **product** decision before V2 needs it.
 
+> **Amended 2026-10-13 by [D-26](#d-26--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13).** The table above is partly wrong: SimpleOPFS *is* multi-atSign (one instance per directory), and IndexedDB's gap is un-flushed durability, not torn transactions. The pick-two framing no longer holds; the `WasmVfs` rejection does.
+
 ---
 
 ### D-22 — No new process-global state; one client per atSign, created explicitly (2026-08-30)
@@ -869,6 +893,105 @@ beyond that is left out of them, as it confused readers (gkc, 2026-10-09).
 **Why.** Which store suits an app is a platform question (a Flutter app, a command-line
 tool and a browser each want a different one), and a core that names one backend chooses
 for all of them. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327).
+
+---
+
+### D-26 — Browser SQLite storage is **SimpleOPFS, one directory per (atSign, enrollmentId)**; W4 resolved (2026-10-13)
+
+Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) from a live lab, not a benchmark ([`vfs-lab-results.md`](vfs-lab-results.md)). It honours D-21's bound: nothing here is chosen on latency.
+
+**Ruled**
+
+- **W4.** `sqlite3.wasm` costs **+386 KB gz** (+363 KB br) over `remote_only` — a fixed per-app first-load cost. Accepted. D4 (raw IndexedDB) is not triggered; `design.md` §5's SQLite-wasm ruling stands.
+- **P1.** The browser SQLite bundle uses `SimpleOpfsFileSystem`, one instance per (atSign, enrollmentId) via `loadFromStorage(<dir>, vfsName: <unique>)`, hosted in a dedicated worker.
+- **Fallback.** `IndexedDbFileSystem` is acceptable only as an opt-in bundle where OPFS is unavailable, and **only with** (a) `await flush()` before acknowledging a write and (b) a Web Locks single-tab guard.
+
+**Why — evidence, Chromium unless noted**
+
+| Axis | `IndexedDbFileSystem` | `SimpleOpfsFileSystem` |
+| --- | --- | --- |
+| Renderer crash, 200 runs | atomic, but **200/200 lost acknowledged writes** (median 42 tx); 0 lost once flush is awaited | 200/200 clean |
+| Two tabs, one database | **database unusable** | second tab refused, data intact |
+| Multi-atSign | ✅ | ✅ (D-21 said ❌ — per-instance, not per-origin) |
+| Two tabs, Firefox | `integrity_check` fails | second tab refused, data intact |
+| Open at 100k rows | 178 ms (WebKit 349, Firefox 176), grows with size | 13 ms (WebKit 18, Firefox 23), flat |
+
+**Corrects D-21's table.** (1) `SimpleOpfsFileSystem` *does* support multi-atSign: "exactly two files" is per instance. (2) `IndexedDbFileSystem`'s weakness is un-flushed durability and multi-tab corruption, not torn transactions. D-21's `WasmVfs` rejection is unchanged.
+
+**Consequences**
+
+- SQLite runs in a **dedicated worker**; Dart stays on the main thread per D-19 and talks to it across the `AtKeyStore` boundary. A worker hop measured 0.02–0.06 ms.
+- The second tab must handle the open failure (UX: "already open in another tab"); that refusal is the single-writer lock.
+
+**Scope limits (do not lean on this ruling beyond them).** Durability is characterised for renderer death only, not power loss or browser-process kill. Browser coverage is desktop Chromium, Firefox 157, WebKit and Safari 27.0.1; E2 is Chromium-only; mobile is out of scope. A bfcache-parked tab can keep the lock (seen on Firefox), so the app must release on `pagehide` and reacquire on `pageshow` (unbuilt). `sqlite3.wasm` compile time and memory are excluded.
+
+
+### Browser at-keys custody — K-1..K-13
+
+The browser lane holds the atSign's @keys behind a passkey, derived from a single WebAuthn PRF call: a **public pointer** (K-10) names the enrollment, and a **private per-enrollment document** (K-11) holds the sealed @keys. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently. Server evidence below is at_server trunk `acd5a4ba`; `EVH` = `enroll_verb_handler.dart`, `EM` = `enrollment_manager.dart`, `AVH` = `abstract_verb_handler.dart`.
+
+| ID | Ruling | Decided |
+| --- | --- | --- |
+| K-1 | **Constant PRF salt** `SHA-256("atsign:keys:lookup:v1")`; recovery is typing-free. Departs from the architect's model (salt derived from the atSign) | 2026-10-15 |
+| K-2 | **One PRF call, then HKDF; no stored salt.** A server-controlled salt as PRF input lets the server force the blob key to equal the lookup key it already knows | 2026-10-15 |
+| K-3 | **atSign in both HKDF labels** (`atkeys-record-id\|<atSign>`, `atkeys-kek\|<atSign>`), canonical per at_commons `toAtsign()` | 2026-10-15 |
+| K-4 | **AES-256-GCM, AAD = the record's clear header** (`v`, `alg`, `kdf`, `iv`; plus `typ` under K-10/K-11) | 2026-10-15 |
+| K-5 | **Restored public keys must match the published ones before the restored keys are used** (rollback defence): the check runs **after PKAM** (the document is only readable then, K-11) and **before any encrypt or decrypt** with the restored @keys; a mismatch is a **hard fail**. Order: PKAM → `llookup:` the document → open with the kek → match against the published keys → only then use. **Limit:** the published keys come from the same atServer, so a compromised atServer that rolls back the document and the published keys together passes the check; K-5 defends **partial** rollback only. A stale-but-valid document whose public keys are unchanged also passes (acknowledged limit). Re-ruled 2026-10-27; the 2026-10-15 wording "before PKAM" is retired | 2026-10-15, re-ruled 2026-10-27 |
+| K-6 | ~~One record per passkey at `public:_<lookupHex>.atkeysv@<atSign>`, TTL refreshed on open~~ **Superseded 2026-10-27 by K-10/K-11.** Survives: the name, its unauthenticated read and existing verbs with no server change (now K-10). Retired: the TTL and its refresh on open. Resolved OQ-19 and browser-onboarding Q-2 | 2026-10-15 |
+| K-7 | **`prf` is the passkey unlock kind; no `largeBlob`.** 4 of 4 tested rows return PRF; iOS Safari, Firefox, Windows Hello untested. The generated passphrase stays the recovery unlock (K-13 lets the user choose the passphrase of the no-PRF fallback) | 2026-09-25 |
+| K-8 | ~~APKAM private key lives inside the blob~~ **superseded 2026-10-27 by K-11**: the document does not hold the APKAM private key. The primary-path key is now K-12's ML-DSA-65; the clause "signing algorithm = first of `SigningAlgoType.strongestFirst` the browser can sign and the atServer verifies" is kept for the fallbacks (K-13), whose signing algorithm is open (U-2) | 2026-10-13 |
+| K-9 | **A per-write data key is rejected** — its only job is sharing one key across passkeys, the `unlocks[]` pattern K-6 removed and K-10/K-11 keep removed | 2026-10-15 |
+| K-10 | **Enrollment pointer** `public:_<lookupHex>.atkeysv@<atSign>` (K-3 lookup label). Body = the K-4 codec sealing the `enrollmentId` under the kek, header `typ:"eid"` (in the AAD). **No TTL; written once at enroll**, by an enrollment holding `atkeysv:rw`, **with no `ttr`** (or `ttr:0`): a foreign `plookup` then keeps no `cached:` copy, whereas any other `ttr` makes it cache one (`cache_manager.dart:202-216`). Read by unauthenticated `lookup:` on the atSign's own atServer. Hidden from every scan, `showhidden` included (`scan_verb_handler.dart:207-216`), and from the commit log (`hive_at_commit_log.dart:34-43`). Existing verbs, no server change | 2026-10-27 |
+| K-11 | **Enrollment document** `atkeys.<enrollmentId>.a.__e@<atSign>`, private, K-4 codec, header `typ:"atkeys"`: the sealed @keys, **without the APKAM private key**. Read and written over PKAM by that enrollment only (AVH:333-335; other enrollments refused, AVH:299-303); opening it needs the kek, no private key. CRAM can read it (AVH:208-210) but not write it (`reserved_namespace.dart:68-93`). Not `_`-prefixed, so own-enrollment and CRAM scans list it. Revoke moves it to `.r.__e`, delete to `.d.__e`, unrevoke moves it back (EM:498-515, 661-691). Probed P9, 2026-10-20, at_server `7c7e91b3` | 2026-10-27 |
+| K-12 | **The PKAM key is derived from the passkey — the primary path.** `authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1\|<atSign>")` (32 bytes) seeds the enrollment's ML-DSA-65 APKAM key, which is never stored. The same passkey tap that yields the kek yields the PKAM key, so **the passkey alone restores the session** after IndexedDB is cleared (R3). Fallbacks are ruled by **K-13**. Resolves the K-11 gap of a ruled flow with no ruled PKAM key | 2026-10-27 |
+| K-13 | **K-12 fallbacks.** (a) **An authenticator without PRF:** the PKAM key is sealed under a **passphrase-derived** key and stored as a **server-held, public-readable record** (option S), fetched by lookup hash, so no PKAM is needed to read it (no bootstrap loop). The server blob has **no TTL**. The passphrase is **not required to be generated**: the user may choose it. A public blob can be attacked offline, so the passphrase's strength and the KDF cost bound the security; the entropy floor, Argon2id parameters and lookup-key derivation are **not ruled** (browser-onboarding Q-10). (b) **A lost or wiped passkey:** the passkey gone is the enrollment gone; there is **no recovery path**. The user enrolls fresh (OTP + approver) and an approver revokes the old enrollment. (b) is not a fallback. (c) **IndexedDB: c1 only**: it holds a hint (`credentialId`, `enrollmentId`) and nothing secret. c2 (caching the derived key) is **rejected**: it would break K-12's "never stored". (d) **A second passkey is allowed as its own enrollment** (another device): PRF output differs per credential, so it derives a different PKAM key; it is not a backup of the first key. **At-rest key expiry: none**; the server blob has no TTL (consistent with K-10's TTL-less pointer). Revocation by an approver is the kill switch. U-2 (the fallback signing algorithm) stays open. Closes browser-onboarding Q-6 | 2026-10-28 |
+
+**Open flow (K-10, K-11, K-12).** Passkey tap → `P`, `userHandle` = atSign → unauthenticated `lookup:` of the pointer → unseal `enrollmentId` → PKAM → `llookup:` of the document → open with the kek → restored public keys match the published ones, else hard fail (K-5) → only then use the @keys. The PKAM key is the passkey-derived ML-DSA-65 key (K-12), derived from the same `P`.
+
+**Proposed, not ruled.**
+
+| ID | Proposal | Status |
+| --- | --- | --- |
+| K-5 follow-up | Bind the `enrollmentId` and the record name into the document's AEAD AAD, so a valid `typ:"atkeys"` ciphertext cannot be moved from one enrollment's document name to another's under the same kek | Proposed 2026-10-27, follow-up to K-5 |
+| — | Rotation = new passkey, so a new derived key, so a new enrollment + approval | Proposed 2026-10-20 |
+
+**K-6 clarification (2026-10-18), retained under K-10/K-11 for the credential hint.** The credential hint lives in **IndexedDB, independent of the storage bundle** (D-12) and of D-26's SQLite. Custody must be readable before `enrollmentId` — and so the SQLite directory — is known; it must be needed in V1, which has no SQLite; and it must still open in a second tab that D-26's single-writer lock refuses. Loss of the hint is recoverable (the passkey alone restores it on the K-12 primary path, R3), so it needs no D-26-grade durability. On every successful open the client rewrites the hint and requests `navigator.storage.persist()` once; this lowers eviction odds and is not relied on. Whether IndexedDB still keeps a document replica under K-11 is not ruled.
+
+**Revocation (ruled 2026-10-21; mechanism ruled 2026-10-27).** "Revocation is final" is an approver **policy**: the server lets CRAM and `__manage` holders reinstate a revoked enrollment with `enroll:unrevoke`.
+
+| Point | Ruling |
+| --- | --- |
+| Revoked enrollment | stays revoked unless an approver reinstates it; its PKAM is refused with `AT0027` (`pkam_verb_handler.dart:253-256`) |
+| Re-enroll after revoke | the approver **reinstates** the revoked enrollment with `enroll:unrevoke` (at_client `Enrollments.unrevoke`): same `enrollmentId`, same stored APKAM public key, original expiry kept. No server change. Policy note (not a new ruling): unrevoke reinstates the **stored** public key, so whoever holds the matching private key can PKAM again; after a lost or suspected-stolen device the approver must not unrevoke. Re-enrolling after a theft is not ruled |
+| Unrevoke preconditions | target is revoked (EVH:1664-1666); caller is CRAM, or holds `__manage` plus all target namespaces (EVH:856-880); the original approver is still approved (EVH:930-946), unless that approver enrollment no longer exists (EVH:937-938). So after a cascade revoke, unrevoke of the cascaded enrollment is refused (`IllegalStateException`) while its approver stays revoked, and passes once the approver is deleted. An expired target fails with `AT0028` (EVH:683-687). `enroll:approve` refuses a revoked enrollment (EVH:1646-1648) |
+| Revoke cascade | revoking an enrollment also revokes every enrollment it approved (EVH:717, 756-759); unrevoke reinstates the target only |
+| Same-key new request | refused with `AT0032` while the revoked enrollment exists in any state (EVH:1721-1737, EM:765-781) — intended, not a defect. Approver `enroll:delete` then approval of a new request also works (fresh `enrollmentId`, fresh expiry) but is not the ruled path. A duplicate key is never accepted |
+| Per-re-enroll seed salt | none |
+| Revoked, passkey only | locked out by design |
+| Pointer (K-10) | revoke leaves it in place (the revoker cannot derive its name); it keeps resolving, but PKAM as its `enrollmentId` fails until unrevoke |
+| Document (K-11) | revoke makes it unreadable (`.r.__e`), unrevoke restores it, delete removes it (`.d.__e`) |
+
+**R-a closed (2026-10-27):** unrevoke, as above. **R-b dissolved:** it asked whether a re-enrolling browser reuses the record's stored APKAM key or mints a fresh one; unrevoke reinstates the existing enrollment and its stored public key, and K-11 stores no private key.
+
+**Build state.** PB-5 (#2267, #2271, #2272, #2338, #2341) predates K-1/K-2: it derives the PRF input from the atSign and keeps the `unlocks[]` server copy. Rework is bd `5vf.1`–`5vf.7` (record codec v2, `userHandle` from discoverable `get()`, `PasskeyRecordStore`, session flows, `unlocks[]` removal, APKAM browser-enrollment bootstrap), scheduled after the stack is reviewed; `5vf.4`/`5vf.5` are re-scoped to the K-10 pointer and K-11 document.
+
+**Open against K — not ruled.** #2295's blob doc still uses the older salt/AAD/data-key choices and is superseded by K-1, K-4 and K-9 where they differ.
+
+| Item | State |
+| --- | --- |
+| Owner-binding guard: one `atkeysv:rw` enrollment can overwrite or delete another passkey's pointer | Accepted gap, bead `m0j` |
+| Passphrase fallback hardening (browser-onboarding Q-10): the passphrase entropy floor, the Argon2id parameters, and the derivation of the public record's lookup key (K-13) | Open |
+| Signing algorithm on a fallback | K-8's kept clause (first of `strongestFirst`) stands; not fixed to `mldsa65` |
+| K-5 follow-up: bind `enrollmentId` and record name into the AAD | Proposed |
+| Whether IndexedDB keeps a document replica beside the credential hint | Open; the flows store the hint only |
+| Whether header `v` changes with `typ` (stays 2?) | Open |
+| Rotation: a new passkey, so a new derived key, so a new enrollment + approval; the old pointer is deleted | Proposed. `enroll:update` can rekey an approved enrollment in place with proof of possession (EVH:948-1010), so new-enrollment rotation is a policy choice, not a server constraint |
+| Gate IDs: X-K11..X-K14 here collide with the gate-(c) docs branch's X-K10..X-K22 | That branch renumbers when it rebases onto this one |
+| Portal bootstrap under K-11: a portal cut has no enrollment to own a K-11 document, so "both bootstrap sources converge on the same pointer + document pair" ([`browser-onboarding.md`](browser-onboarding.md) §2) is unproven | Open |
+| Pointer written "once at enroll": the write needs PKAM, so the enroll flow writes it after approval | Applied; to confirm |
+| Applied because K-11 is ruled: revoke cascade not undone by unrevoke; CRAM reads but cannot write the document; scans hide the pointer and list the document | Applied; to confirm |
+| at_client `Enrollments.unrevoke` cited by name ([`enterprise-identity.md`](enterprise-identity.md)) | Applied; to confirm |
+| Reinterpretations: BO-5 "recorded in the blob" → "recorded with the enrollment (`signingAlgo`)"; X-K1, X-K3, X-K4 re-read for a hint-only IndexedDB | Applied; to confirm |
 
 ---
 
@@ -1031,6 +1154,9 @@ trunk commit the plan was *written against* — it never held the file.
 | T0.3's ban on `if (dart.library.` in a neutral `lib/`                                          | Withdrawn — D-1's amendment above: both branches of a conditional must be walked. Its cause is gone; not re-ruled.             |
 | R5 — add the `dart test -p node -c dart2wasm` matrix dimension, allowed-to-fail                | Withdrawn. The hosted runner cannot load a suite at all; waits on a pinned Dart/Node pair. §2.7.                               |
 | R1's plan to lift `packages/at_auth/test/wasm/dep_tree_test.dart` into a shared *test* utility | Shipped as a standalone CLI, `tools/wasm_shakedown`, run as its own CI job rather than as a per-package test.                  |
+| The `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array and a merge-on-heal (PB-5 H/J, live-tested in L step 0a) | Superseded 2026-10-13/15 by K-6: one record per passkey, nothing shared, nothing merged. The code is not yet reworked (see K build state). |
+| PRF input derived from the atSign (`prfEvalInput(atSign)`) | Superseded by K-1: the salt is constant. |
+| K-6's per-passkey public record holding the @keys, with a TTL refreshed on open; K-8's APKAM private key inside that record | Superseded 2026-10-27 by K-10 (TTL-less pointer to the `enrollmentId`) and K-11 (private per-enrollment document, no APKAM private key). |
 
 **Resolved.** A prior merge-time follow-up here tracked four references to
 `docs/projects/wasm/plan.md` on the `at_client_sdk-atauth-wasm` branch. None reached trunk:
@@ -1106,19 +1232,31 @@ field). Open for the remaining capabilities.
 abstraction, or file transfer becomes a separate optional native-only `AtFileTransfer`.
 The second is smaller; the first is the better API. See [`design.md`](design.md) §2.8.
 
-**OQ-5 — Which VFS?** `IndexedDbFileSystem` (main thread, async flush) or OPFS (true
-sync, needs a dedicated web worker). Sets `at_client_web`'s execution model. **Not a
-measurement:** deferred by D-17 and constrained by D-21, which make it a product pick-two —
-see the status table below.
+**OQ-5 — Which VFS?** **Resolved by D-26:** `SimpleOpfsFileSystem` in a dedicated web
+worker, one directory per (atSign, enrollmentId). `IndexedDbFileSystem` is an opt-in fallback
+only with flush-before-ack and a single-tab guard.
 
 **OQ-6 — What is the acceptable WASM payload budget?** Compiled `.wasm` +
-JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). Informs whether the IndexedDB fallback is ever needed —
-[`design.md`](design.md) §5, gate X2. Record the number before deciding.
+JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). **Resolved by D-26 (W4):** +386 KB gz, fixed per app, accepted; D4 (raw IndexedDB) is not triggered —
+[`design.md`](design.md) §5, gate X2.
 
 **OQ-7 — Directory lookup from a browser.** `root.atsign.org:64` is a raw TLS socket.
 The `proxy:` convention and the injectable `SecondaryAddressFinder` unblock
 development, but a production browser client needs a WebSocket- or HTTPS-reachable
 directory endpoint. Whose work is that, and does it belong in this project?
+**Resolved 2026-10-23 by at_lookup 4.0.0.** The atDirectory already has an HTTPS face
+(`GET /@alice` → `host:port`, `404` for an unknown atSign), and an atServer upgrades
+`/ws` on its own TLS port. `webSocketLookUps()` uses both: `HttpsSecondaryAddressFinder`
+(`package:web` `fetch`) for the lookup, `wss://` straight to the atServer for the
+session. This is also the answer to the browser replacement for `root.atsign.org:64`
+(R9 in the probe list).
+
+**Open dependencies — the direct path is not usable in production until both land:**
+
+| Dependency | State |
+| --- | --- |
+| CORS on the atDirectory's HTTPS face | The server code sends `Access-Control-Allow-Origin: *` on every HTTP answer since at_root_server 2.3.0 ([at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894), merged 2026-10-23). Open: 2.3.0 deployed to `root.atsign.org`, which the repos cannot show. Only the finder's `fetch` needs it; WebSocket opens are not subject to CORS |
+| Prod HTTPS lookup | The prod atDirectory's `:443` listener is not live; `:64` answers only in the raw protocol |
 
 **OQ-8 — How far does the `AtConnection` break reach outside this repo?** In-repo
 callers are enumerated in [`design.md`](design.md) §2.1. External `implements
@@ -1154,7 +1292,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 
 | Question | Now |
 | --- | --- |
-| **OQ-5** — which VFS | **Deferred by D-17** (the default V1 bundle needs no VFS; a consumer injecting a SQLite bundle does, which is why this is deferred rather than closed) and **constrained by D-21** (`WasmVfs` rejected; the remaining trade is a product decision, not a benchmark) |
+| **OQ-5** — which VFS | **Resolved by D-26** (2026-10-13): `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), dedicated worker. `WasmVfs` stays rejected (D-21). The V1 default bundle still needs no VFS (D-17); this applies to a consumer injecting a SQLite bundle |
 | **OQ-11** — instance-based `AtClientManager` | **Resolved by D-22** in the instance-based direction. The browser lane constructs its own manager; `getInstance()` is demoted over a major rather than deleted |
 | **OQ-12** — process-global factory registry | **Resolved by D-22** — instance-per-client |
 | **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |
@@ -1187,6 +1325,14 @@ Open in every lineage; owner assigned in none. D-17 keeps `sqlite3.wasm` (~1 MB+
 the **default** V1 payload, which relieves the pressure but does not answer the question —
 and a consumer who injects a SQLite bundle pays it back in full. Escalate rather than
 invent a number.
+
+### OQ-16 — Is dart2js or dart2wasm the primary JS/TS target?
+
+D-7 rules dart2js the target for the JS/TS artifact and D-23 puts one TypeScript facade over it; dart2wasm is built and gated in CI (PB-3 stage6, PB-5 J) but advisory. The open part is product sign-off on that call, as against a Flutter Web `--wasm` build. Proposed in the PB-6 plan: dart2js primary, dart2wasm advisory. Not blocking V1 compile gates, which run both.
+
+### OQ-19 — Do prf unlocks accumulate on the server copy? **RESOLVED 2026-10-15 by K-6**
+
+Live test L step 0a found every new passkey appended an unlock to one shared public record, that nothing pruned dead ones, and that a stale device merged them back. Replaced by one PRF-keyed record per passkey with a refreshed TTL ([`browser-onboarding.md`](browser-onboarding.md)); since 2026-10-27 by K-10/K-11: one PRF-named pointer per passkey, without TTL, and one private document per enrollment. The implementation is still to do (K build state).
 
 ---
 
@@ -1222,5 +1368,18 @@ invent a number.
 | 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
 | 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |
+| 2026-09-25 | **K-7 ruled.** OQ-P1 spike (#2269): PRF returns 32 bytes on 4 of 4 rows; `prf` is the unlock kind, `largeBlob` dropped. |
 | 2026-10-07 | **D-25 ruled; D-5 amended.** Client storage is the app's choice, each backend from its own barrel, with a Hive default in one core file until 4.0; every client keeps local storage, and one with `isLocalStoreRequired` false and no storage is refused; the bare-keystore route and `persistenceBundle` are deprecated; each backend says what it protects at rest. D-12's amendment item 3 and D-18's consequence 2 built. Built in [#2327](https://github.com/atsign-foundation/at_client_sdk/pull/2327). |
 | 2026-10-09 | **D-25 amended.** The storage docs no longer say what each backend protects at rest, which confused readers; they say only that end-to-end-encrypted values are stored in local storage as ciphertext, never in the clear (gkc). |
+| 2026-10-13 | **D-26 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Chromium, Firefox 157, WebKit and Safari 27.0.1 agree on E3/E4; Chromium, Firefox and Safari agree on E7. Scope limits in D-26. |
+| 2026-10-13 | **K-8 ruled; OQ-19 raised.** Live test L step 0a showed the shared `unlocks[]` copy leaks device count and accumulates dead entries; [`browser-onboarding.md`](browser-onboarding.md) proposes one record per passkey. PCAM private key moves inside the blob. |
+| 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
+| 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
+| 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |
+| 2026-10-21 | **Revocation is final.** A revoked enrollment's PKAM stays refused; re-enroll after revoke needs explicit approver action; same-key re-enroll refused with `AT0032` is intended; no per-re-enroll seed salt; revoked with only the passkey is locked out by design. Mechanism (reinstate vs duplicate key) open. K-1..K-9 unchanged. |
+| 2026-10-27 | **K-10, K-11 ruled; K-6, K-8 superseded; R-a closed; R-b dissolved.** K-10: TTL-less public pointer `public:_<lookupHex>.atkeysv@<atSign>` sealing the `enrollmentId` (`typ:"eid"`), written once at enroll, hidden from every scan, read unauthenticated. K-11: private document `atkeys.<eid>.a.__e@<atSign>`, read over PKAM by that enrollment only, no private key needed to open; CRAM reads but cannot write it; revoke, delete and unrevoke move it. K-6 survives as K-10's name and read grammar; K-8's signing-algorithm choice survives. Re-enroll after revoke = approver `enroll:unrevoke` (same `enrollmentId`, same public key, original expiry; no server change). "Revocation is final" restated as approver policy. Evidence: at_server trunk `acd5a4ba`. K-5 and K-12 were ruled later the same day (rows below); the K-12 fallbacks and rotation stay open. |
+| 2026-10-27 | **K-5 re-ruled.** The public-key match runs after PKAM and before the restored @keys are used for any encrypt or decrypt; mismatch is a hard fail. Replaces "before PKAM", which K-11 made unmeetable; K-5′ is retired into K-5. Limit stated in the ruling: a compromised atServer can roll back the document and the published keys together, so K-5 defends partial rollback only; a stale-but-valid document with unchanged public keys also passes. Binding `enrollmentId` and record name into the AAD stays a proposed follow-up. |
+| 2026-10-27 | **K-12 ruled (passkey-derived PKAM key).** The PKAM key is derived from the passkey and is the primary path: `HKDF(P, "at_auth/custody/auth-seed/v1\|<atSign>")` seeds ML-DSA-65, never stored. With it the passkey alone restores the session (R3), and the K-11 ledger has a ruled PKAM key. Fallbacks (no-PRF authenticator, lost or wiped passkey, IndexedDB-held key, second passkey) and rotation stay open, not ruled. |
+| 2026-10-23 | **D-15 amended; OQ-7 resolved.** at_lookup 4.0.0-rc1 closes T3–T7 (T8, publish, still blocked): `webSocketLookUps()` is an `AtLookupImpl` over a `WebSocketTransport`, resolving through the atDirectory's HTTPS face and connecting `wss://` to the atServer directly; the proxy factory is dev-only. Web back-pressure is bounded, then closed. Open dependencies: at_root_server 2.3.0 (CORS) deployed to `root.atsign.org`, and the prod `:443` listener. Recorded here 2026-10-28. |
+| 2026-10-28 | **K-13 ruled: K-12 fallbacks.** (a) No-PRF authenticator: the PKAM key sealed under a passphrase-derived key, stored as a server-held public-readable record (option S) fetched by lookup hash, so no PKAM is needed to read it; no TTL; the user may choose the passphrase (not generated-only). (b) Lost or wiped passkey: no recovery path; enroll fresh (OTP + approver), approver revokes the old enrollment. (c) IndexedDB holds the hint only (c1); caching the derived key (c2) rejected. (d) A second passkey is its own enrollment, not a backup. No at-rest expiry; revocation is the kill switch. Opens Q-10 (passphrase entropy floor, Argon2id parameters, lookup-key derivation). U-2 stays open. Closes browser-onboarding Q-6. |
+| 2026-10-28 | **PB-0 reservation dropped.** No D-numbers are held for PB-0's unfiled rulings (the portal-requirements routing, R-5); they take the next free numbers when filed. The old reservation of D-26..D-28 also collided with D-26 (SimpleOPFS). |
