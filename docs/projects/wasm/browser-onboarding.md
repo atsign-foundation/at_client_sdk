@@ -41,7 +41,7 @@ An app client running in a browser must:
 | Lookup key | `HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id\|<atSign>")`, 64 lowercase hex |
 | Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "atkeys-kek\|<atSign>")` — no stored salt (BO-1) |
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
-| Pointer (K-10) | `public:_<lookupHex>.atkeysv@<atSign>`, plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by an enrollment holding `atkeysv:rw` (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.atkeysv@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
+| Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`atkeys-ns`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
 | Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
 | IndexedDB | hint only (K-13 c1): `credentialId`, `enrollmentId` — nothing secret. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
@@ -51,7 +51,7 @@ An app client running in a browser must:
 
 | Source | When |
 |---|---|
-| APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey** (rotation moves it to a new one), requesting the app's namespaces + `atkeysv:rw`. An OTP admits the request, and it must be minted covering the app namespaces + `atkeysv:rw`: a narrower OTP is spent and the request refused (`UnAuthorizedException`, EVH:341-349); it stays **pending** until an approver acts from an existing device (an OTP never approves). A request reusing the appName + deviceName of a pending or approved enrollment is refused with `AT0032` (EVH:1702-1713), the same code as the duplicate-key refusal, so tests match the message text. The APKAM key is derived from the passkey (K-12) | **primary** |
+| APKAM enrollment from the browser, once per onboarding — **each enrollment has exactly one live passkey**, requesting the app's namespaces + `<ns>:rw` (K-17). An OTP admits the request, and it must be minted covering the app namespaces + `<ns>:rw`: a narrower OTP is spent and the request refused (`UnAuthorizedException`, EVH:341-349); it stays **pending** until an approver acts from an existing device (an OTP never approves). A request reusing the appName + deviceName of a pending or approved enrollment is refused with `AT0032` (EVH:1702-1713), the same code as the duplicate-key refusal, so tests match the message text. The APKAM key is derived from the passkey (K-12) | **primary** |
 | Passphrase envelope cut by the portal (R-5) — written only by a cut, never by a browser | **not a browser bootstrap (K-15)**: dev-only, via `tool/cut_keys.dart`. Distinct from K-13's passphrase record, which a browser writes per no-PRF enrollment (§3.5) |
 
 Both converge on the same pointer + document pair — unproven for the portal source under K-11, which has no enrollment to own a document (open, [`decisions.md`](decisions.md) "Open against K").
@@ -77,10 +77,10 @@ sequenceDiagram
     end
     B->>B: lookup = HKDF(P,"atkeys-record-id|atSign"); kek = HKDF(P,"atkeys-kek|atSign")
     B->>B: apkamKey = ML-DSA-65(seed = HKDF(P,"at_auth/custody/auth-seed/v1|atSign")), never stored
-    B->>S: enroll:request (namespaces + atkeysv:rw, OTP minted for both) → pending until approved
+    B->>S: enroll:request (namespaces + ns:rw, OTP minted for both) → pending until approved
     B->>S: PKAM auth as the approved enrollment; keys:get
     B->>S: update atkeys.eid.a.__e (typ "atkeys": @keys without APKAM private key)
-    B->>S: update public:_lookupHex.atkeysv (typ "eid": enrollmentId), no TTL, no ttr, once
+    B->>S: update public:_lookupHex.ns (typ "eid": enrollmentId), no TTL, no ttr, once
     B->>B: IndexedDB: credential-ID hint
 ```
 
@@ -127,7 +127,7 @@ Return and recovery differ only in the credential hint: the server holds everyth
 
 | Event | Action |
 |---|---|
-| Rotation | enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old pointer → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys. A new passkey derives a new APKAM key (K-12); the rotation flow itself is proposed, not ruled. The new enrollment needs a deviceName distinct from the old one while the old one is still approved (`AT0032`). `enroll:update` can rekey an approved enrollment in place (EVH:948-1010), so a new enrollment + approval is a policy choice, not a server constraint |
+| Rotation | **No rotation for now (2026-10-31).** Earlier proposal: enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old pointer → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys. A new passkey derives a new APKAM key (K-12); the rotation flow itself is proposed, not ruled. The new enrollment needs a deviceName distinct from the old one while the old one is still approved (`AT0032`). `enroll:update` can rekey an approved enrollment in place (EVH:948-1010), so a new enrollment + approval is a policy choice, not a server constraint |
 | Browser storage eviction | loses only the credential hint; the recovery flow (3.3) needs none, costing one extra passkey tap. Holds on the K-12 primary path; on the no-PRF path the passphrase restores it (§3.5) |
 | Lost or wiped passkey | the enrollment is gone: no recovery path (K-13 b); enroll fresh and have an approver revoke the old enrollment (§3.6) |
 | Lost or wiped device | revoke its enrollment: its PKAM is refused (`AT0027`) and its document becomes unreadable (`.r.__e`). The pointer stays (the revoker cannot derive its name) — at most one orphan per passkey. Do not unrevoke it afterwards: unrevoke reinstates the stored public key, so whoever holds the device's private key could PKAM again (policy note, [`decisions.md`](decisions.md)) |
@@ -199,7 +199,8 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 **Does not hold:**
 
 - An atServer can still see that *some* record was read on the atSign's own server — the lookup arrives over a connection to that atSign.
-- Any enrollment holding `atkeysv:rw` can overwrite or delete another passkey's pointer **if it knows that pointer's lookup key** (probe P4). The key is PRF-derived and never listed, so this is bounded to a party that already saw it; the effect is denial of recovery, not disclosure. Owner-binding guard deferred (`at_client_sdk-m0j`).
+- ~~Any enrollment holding `atkeysv:rw` can overwrite or delete another passkey's pointer (probe P4, `at_client_sdk-m0j`).~~ Closed by K-17: each passkey's pointer sits in its own namespace, and only that passkey's enrollment holds `<ns>:rw` (probe P8). CRAM can still write it.
+- The approver sees `<ns>` as opaque hex in the request; the approval screen labels it as the passkey's own namespace.
 - CRAM can read every enrollment's document; it is still sealed under the kek.
 - A compromised atServer that rolls back the document **and** `public:publickey@<atSign>` together passes the K-5 check: the published keys come from the same server. K-5 defends partial rollback only.
 - A stale-but-valid document whose public keys are unchanged (other @keys state older) passes the K-5 check — acknowledged limit.
@@ -212,7 +213,7 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 | # | Question | Owner |
 |---|---|---|
 | Q-1 | ~~`T` — record ttl~~ — **withdrawn 2026-10-27:** the K-10 pointer has no TTL | — |
-| Q-2 | ~~at-keys module grammar on the atServer~~ — **resolved 2026-10-15:** existing `update`/`lookup`/`delete` on `public:_<lookupHex>.atkeysv@<atSign>`, no server change (probe P1–P7); kept by K-10 (§2 Pointer row) | — |
+| Q-2 | ~~at-keys module grammar on the atServer~~ — **resolved 2026-10-15:** existing `update`/`lookup`/`delete` on `public:_<lookupHex>.atkeysv@<atSign>`, no server change (probe P1–P7); kept by K-10, namespace moved to the per-passkey `<ns>` by K-17 (probe P8; §2 Pointer row) | — |
 | Q-3 | ~~Bootstrap via APKAM enrollment~~ — **resolved 2026-10-13:** the browser enrolls, one enrollment per passkey; the portal envelope is not a secondary bootstrap (K-15, 2026-10-30) | me + Gary |
 | Q-4 | Which of `mldsa65` / `rsa4096` / `ed25519` / `ecc_secp256r1` the browser lane signs with today (pure Dart under dart2js/dart2wasm, or WebCrypto via #2265) and the atServer verifies for PKAM — sets BO-5's current pick | me (probe) |
 | Q-5 | Which platforms return PRF results from `create()` — decides whether enrollment is one prompt or two | me (probe) |

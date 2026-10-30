@@ -24,13 +24,14 @@ P     = WebAuthn get(prf.eval.first = salt)                 // one prompt
 lookup = HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id|<atSign>")   → 64 lowercase hex
 kek    = HKDF-SHA256(P, salt = ∅, info = "atkeys-kek|<atSign>")
 authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1|<atSign>")   → 32 bytes
+ns     = HKDF-SHA256(P, salt = ∅, info = "atkeys-ns|<atSign>")         → 64 lowercase hex (K-17)
 apkamKey = ML-DSA-65 keygen(seed = authSeed)                    // never stored (K-12)
 
 record = { v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
 AAD    = canonical JSON of the record without ct   (v, typ, alg, kdf, iv)
 ct     = AES-256-GCM(kek, iv, plaintext, AAD)
 
-pointer  = public:_<lookup>.atkeysv@<atSign>     typ "eid"     plaintext = enrollmentId          no TTL, written once at enroll (K-10)
+pointer  = public:_<lookup>.<ns>@<atSign>         typ "eid"     plaintext = enrollmentId          no TTL, written once at enroll (K-10, K-17)
 document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys JSON without     read over PKAM by that enrollment (K-11)
                                                                the APKAM private key
 ```
