@@ -90,3 +90,8 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given an enrollment granted {ns: r}
     When sync brings x.ns@bob down
     Then it is stored locally, and a local put of x.ns@bob by that enrollment is still refused
+
+  Scenario: An enrollment stores its own per-enrollment records from sync, and refuses another enrollment's
+    Given an enrollment without *
+    When sync brings its own __ckcur.<dest>.<ns>.<own eid>.a.__e down
+    Then it is stored; and another enrollment's <eid>.a.__e record is refused

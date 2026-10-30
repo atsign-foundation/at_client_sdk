@@ -564,4 +564,35 @@ void main() {
           reason: 'a delete the atServer sends applies as an update does');
     });
   });
+
+  test(
+      'An enrollment stores its own per-enrollment records from sync, and '
+      'refuses another enrollment\'s', () async {
+    final c = enrolled({'cmp.rotation': 'rw'});
+    const own = '__ckcur.bob.cmp.rotation.$enrollmentId.a.__e@bob';
+    const foreign = '__ckcur.bob.cmp.rotation.other-enrollment.a.__e@bob';
+    final sync = await syncPulling(c.client, [own, foreign]);
+
+    await pull(sync);
+
+    expect(await c.store.exists(own), isTrue,
+        reason: 'every enrollment reads and writes its own <id>.a.__e '
+            'namespace on the atServer without being granted it');
+    expect(await c.store.exists(foreign), isFalse,
+        reason: 'another enrollment\'s namespace is not this one\'s');
+  });
+
+  group('Given an enrollment granted neither `*` nor __atserver', () {
+    test('when it reads x.__atserver@bob, then it may, and it may not write it',
+        () async {
+      final c = enrolled({'cmp.rotation': 'rw'});
+      await c.store.put('x.__atserver@bob', AtData()..data = 'held');
+
+      expect(await llookup(c.local, 'x.__atserver@bob'), 'data:held',
+          reason: 'every enrollment reads __atserver on the atServer');
+      await expectLater(put(c.local, 'x.__atserver@bob'),
+          throwsA(isA<UnAuthorizedException>()),
+          reason: 'and none writes it');
+    });
+  });
 }

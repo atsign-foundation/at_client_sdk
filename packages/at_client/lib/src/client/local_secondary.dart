@@ -980,7 +980,8 @@ class LocalSecondary implements Secondary {
       _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
-    final covering = grantCovering(enrollment!.namespace!, key);
+    final covering =
+        grantCovering(_withImplicitGrants(enrollment!.namespace!), key);
     if (covering == null) {
       _logger.finer('Enrollment ${_atClient.enrollmentId} holds no grant '
           'covering $key, so it is not authorized for the operation');
@@ -1136,6 +1137,18 @@ class LocalSecondary implements Secondary {
       return null;
     }
   }
+
+  /// [grants] with the two every enrollment holds on the atServer without
+  /// being granted them, added as the atServer adds them: read on
+  /// `__atserver` unless a grant names it, and read and write on this
+  /// enrollment's own per-enrollment namespace.
+  Map<String, dynamic> _withImplicitGrants(Map<String, dynamic> grants) => {
+        ...grants,
+        if (!grants.containsKey(AtConstants.atServerReservedNamespace))
+          AtConstants.atServerReservedNamespace: 'r',
+        '${_atClient.enrollmentId}.${EnrollmentConstants.perEnrollmentApproved}':
+            'rw',
+      };
 
   bool _grantsRead(String access) => access == 'r' || access == 'rw';
 
