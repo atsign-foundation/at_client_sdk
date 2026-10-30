@@ -12,6 +12,7 @@ workspace:
   - packages/at_client
   - packages/at_client_cli
   - packages/at_client_flutter
+  - packages/at_client_wasm
   - packages/at_commons
   - packages/at_contact
   - packages/at_lookup
