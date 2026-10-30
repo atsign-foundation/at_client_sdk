@@ -1,6 +1,9 @@
 ## 3.7.1
 
 - chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
+- fix: `AtKeysCrypto.fromHashingAlgorithm` throws an `ArgumentError` naming
+  the hashing type for any type but argon2id, rather than returning an object
+  whose `encrypt` and `decrypt` fail.
 
 ## 3.7.0
 
