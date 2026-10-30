@@ -5,6 +5,8 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show grantCovering;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
@@ -962,35 +964,14 @@ class LocalSecondary implements Secondary {
       _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
-    final enrollNamespaces = enrollment!.namespace;
-    var keyNamespace = AtKey.fromString(key).namespace;
-    _logger.finest(
-        'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
-    // * denotes access to all namespaces.
-    final access = enrollNamespaces!.containsKey('*')
-        ? enrollNamespaces['*']
-        : enrollNamespaces[keyNamespace];
-
-    if (access == null) {
-      _logger.finer(
-          'Access permissions not found for the enrollment id: ${_atClient.enrollmentId}. Not authorized for the operation');
+    final covering = grantCovering(enrollment!.namespace!, key);
+    if (covering == null) {
+      _logger.finer('Enrollment ${_atClient.enrollmentId} holds no grant '
+          'covering $key, so it is not authorized for the operation');
       return false;
     }
-    if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
-      _logger.finer(
-          'Access permissions for the the enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace');
-      if (_isReadAllowed(verbBuilder, access) ||
-          _isWriteAllowed(verbBuilder, access)) {
-        _logger.finest(
-            'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is authorized to perform operation');
-        return true;
-      }
-      _logger.finest(
-          'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is not authorized to perform operation');
-      return false;
-    }
-    return _isReadAllowed(verbBuilder, access) ||
-        _isWriteAllowed(verbBuilder, access);
+    return _isReadAllowed(verbBuilder, covering.access) ||
+        _isWriteAllowed(verbBuilder, covering.access);
   }
 
   /// The enrollment record for the enrollment this client authenticates as,
