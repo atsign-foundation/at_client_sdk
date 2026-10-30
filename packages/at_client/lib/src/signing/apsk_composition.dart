@@ -5,6 +5,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
+import 'package:at_commons/at_commons.dart' show AtKeyNotFoundException;
 
 /// The `_apsk` entries an enrollment advertises: [signing], strongest first,
 /// followed by the signing keys it has withdrawn from service.
@@ -12,6 +13,10 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// Each [withdrawn] entry keeps the status it is given, a key already listed as
 /// an active signer is not listed again, and the [authentication] keypair is
 /// listed only while [signing] is empty.
+///
+/// Throws [AtKeyNotFoundException] when no entry is active — [signing] empty
+/// and no [authentication] — since such a record names nothing this enrollment
+/// signs with and is never published.
 List<ApskSigningKey> apskEntries({
   required List<ApkamSigningKeys> signing,
   required List<
@@ -39,6 +44,11 @@ List<ApskSigningKey> apskEntries({
     if (entries.any((entry) => entry.pub == key.publicKey)) continue;
     entries.add(ApskSigningKey.forPublicKey(
         alg: key.algorithm, pub: key.publicKey, status: key.status));
+  }
+  if (!entries.any((entry) => entry.offeredForNewOperations)) {
+    throw AtKeyNotFoundException('an _apsk advertisement must name at least '
+        'one active signing key, and this one names none, so it is not '
+        'published');
   }
   return entries;
 }

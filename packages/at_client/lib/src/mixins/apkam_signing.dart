@@ -1,7 +1,11 @@
 import 'dart:async' show Completer;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, KeyEntryStatus, publicKeyKidOfBase64;
+    show
+        AtKeys,
+        AtKeysSourceAbsentException,
+        KeyEntryStatus,
+        publicKeyKidOfBase64;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
@@ -148,8 +152,8 @@ mixin ApkamSigning {
   /// The keys this client signs content with, strongest algorithm first:
   /// those of its client data signing keys that have a link, while any do, and
   /// otherwise every one it holds. Never empty: throws
-  /// [AtKeyNotFoundException] when it holds no key to sign with, as when its
-  /// keyfile cannot be read.
+  /// [AtKeyNotFoundException] when it holds no key to sign with, as when it has
+  /// no keyfile, and a keyfile that cannot be read throws that read's error.
   ///
   /// Which keys have a link is what [rememberOwnLinkedKids] last recorded;
   /// until something has, every held key signs.
@@ -209,24 +213,25 @@ mixin ApkamSigning {
     );
   }
 
-  /// [atClient]'s keyfile, or null when it has no key source or the read
-  /// fails; a failure is logged naming [purpose], and the caller falls back.
+  /// [atClient]'s keyfile, or null when it has no key source or no keyfile;
+  /// the absence is logged naming [purpose]. A keyfile that exists and cannot
+  /// be read throws.
   Future<AtKeys?> _readKeyfile(String purpose) async {
     final io = atClient.atKeysIo;
     final atSign = atClient.getCurrentAtSign();
     if (io == null || atSign == null) return null;
     try {
       return await io.read(atSign);
-    } on Object catch (e) {
-      logger.warning('Cannot read $atSign\'s keyfile for its $purpose ($e) — '
-          'falling back to the APKAM authentication key');
+    } on AtKeysSourceAbsentException catch (e) {
+      logger.warning('$atSign has no keyfile to read its $purpose from ($e)');
       return null;
     }
   }
 
   /// What the keyfile holds for [enrollmentId], filtered to what this build
-  /// can sign an envelope with. Empty when the client has no key source, when
-  /// the read fails, or when the enrollment holds none.
+  /// can sign an envelope with. Empty when the client has no key source or no
+  /// keyfile, or when the enrollment holds none; a keyfile that cannot be read
+  /// throws.
   Future<List<ApkamSigningKeys>> get heldSigningKeys async {
     final keys = await _readKeyfile('signing keys');
     if (keys == null) return const [];
@@ -255,8 +260,8 @@ mixin ApkamSigning {
   /// filter asks what *this* build can sign with, and these entries exist for
   /// *other* parties to verify with.
   ///
-  /// Empty when the client has no key source, when the read fails, or when
-  /// nothing has been withdrawn from service.
+  /// Empty when the client has no key source or no keyfile, or when nothing
+  /// has been withdrawn from service; a keyfile that cannot be read throws.
   Future<
       List<
           ({
@@ -264,25 +269,16 @@ mixin ApkamSigning {
             String publicKey,
             KeyEntryStatus status
           })>> get withdrawnSigningKeys async {
-    final io = atClient.atKeysIo;
-    final atSign = atClient.getCurrentAtSign();
-    if (io == null || atSign == null) return const [];
+    final keys = await _readKeyfile('withdrawn signing keys');
+    if (keys == null) return const [];
 
-    try {
-      final keys = await io.read(atSign);
-      return [
-        for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
-          (
-            algorithm: key.algorithm,
-            publicKey: key.publicKey,
-            status: KeyEntryStatus.of(key.status),
-          ),
-      ];
-    } on Object catch (e) {
-      logger.warning('Cannot read $atSign\'s withdrawn signing keys ($e) — '
-          'advertising without them, so anything they signed will not verify '
-          'until a later publish succeeds');
-      return const [];
-    }
+    return [
+      for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
+        (
+          algorithm: key.algorithm,
+          publicKey: key.publicKey,
+          status: KeyEntryStatus.of(key.status),
+        ),
+    ];
   }
 }

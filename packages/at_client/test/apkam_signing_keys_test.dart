@@ -11,6 +11,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/unreadable_keys_io.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -221,12 +222,19 @@ void main() {
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
     });
 
-    test('an unreadable keyfile leaves nothing to sign with, and says so',
-        () async {
+    test('no keyfile leaves nothing to sign with, and says so', () async {
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
       await expectLater(
           signer.signingKeys, throwsA(isA<AtKeyNotFoundException>()));
+    });
+
+    test('a keyfile that cannot be read throws its read\'s error', () async {
+      when(() => atClient.atKeysIo).thenReturn(UnreadableKeysIo());
+
+      await expectLater(signer.signingKeys, throwsA(isA<KeyfileUnreadable>()),
+          reason: 'a keyfile that exists and cannot be read is not one that '
+              'holds nothing');
     });
   });
 
@@ -486,6 +494,32 @@ void main() {
       await signer.publishPublicSigningKey();
 
       expect(written, [pkamPublicKey()]);
+    });
+
+    test('a keyfile that cannot be read publishes nothing', () async {
+      final written = stubPutAndGet(pkamPublicKey());
+      when(() => atClient.atKeysIo).thenReturn(UnreadableKeysIo());
+
+      await expectLater(
+          signer.publishPublicSigningKey(), throwsA(isA<KeyfileUnreadable>()));
+
+      expect(written, isEmpty,
+          reason: 'what is published stays as it is until the keyfile can be '
+              'read');
+    });
+
+    test('with no keyfile nothing is published, since no key would be active',
+        () async {
+      final written = stubPutAndGet(pkamPublicKey());
+      when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
+
+      await expectLater(
+          signer.publishPublicSigningKey(),
+          throwsA(isA<AtKeyNotFoundException>().having((e) => e.message,
+              'message', contains('at least one active signing key'))));
+
+      expect(written, isEmpty,
+          reason: 'an _apsk names at least one active signing key');
     });
   });
 }
