@@ -100,6 +100,30 @@ Attribute values, and the body, must be OpenTelemetry AnyValues: `null`,
 `String`, `bool`, `int`, a finite `double`, `Uint8List`, or a `List` or
 `Map<String, Object?>` of those. Anything else throws `ArgumentError`.
 
+### What to send to the Control Center
+
+The Control Center's operator manages a fleet of endpoints and thinks in the
+app's terms, not the protocol's. The atServer already reports message volume
+between endpoints, connections, authentication, enrollments and notification
+delivery, so an app sends only two kinds of record:
+
+- an `info` event when it finishes something a person or device asked for,
+  such as `acme_gate.door.unlocked`, naming the other endpoint's atSign and
+  linking the notification it acted on
+- an `error` event with `anomaly.kind` and `anomaly.message` attributes when
+  it cannot do its job and a person needs to act, sent once when the problem
+  starts, followed by a `recovered` event when it clears. The Control Center
+  marks these as an Anomaly.
+
+`example/control_center_app_example.dart` shows both. The full guidance, for
+people and coding agents alike, is the `at-telemetry-app-events` skill in
+`skills/`. To install it into your coding agent:
+
+```sh
+dart pub add --dev skills
+dart run skills get
+```
+
 ### Resource attributes
 
 The resource describes who sent the telemetry, and is the same for every
@@ -265,4 +289,5 @@ numbers to reject a repeat.
 ```sh
 dart run example/at_telemetry_example.dart
 dart run example/notification_exporter_example.dart
+dart run example/control_center_app_example.dart
 ```
