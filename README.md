@@ -14,15 +14,24 @@ widgets.
 
 [![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml)
 
-- [at_client](./packages/at_client): the platform-neutral Dart SDK,
-  for command-line apps, headless services, and Internet-of-Things
-  devices. Owns the whole atSign lifecycle — `Atsign('@alice').open`,
+An app depends on its one platform package and imports only that; the
+[SDK shape](./docs/sdk-shape.md) explains the layers.
+
+- [at_client_cli](./packages/at_client_cli): the platform package for
+  every native Dart program that isn't Flutter — command-line tools,
+  daemons, servers and IoT devices. `CLIBase` turns a program's flags into
+  an online `AtClient`, `CliKeys` keeps its keyfile and store, and the
+  `at_activate` and `at_register` tools register, activate and enrol
+  atSigns.
+- [at_client_flutter](./packages/at_client_flutter): the platform package
+  for Flutter apps on mobile and desktop. Adds onboarding and
+  authentication dialogs and device-keychain storage. Flutter web is not a
+  supported target.
+- [at_client](./packages/at_client): the platform-neutral core both
+  re-export. Owns the whole atSign lifecycle — `Atsign('@alice').open`,
   `.activate` and `.enroll` hand back an `AtClient` — as well as
-  collections, sync, notifications and encryption.
-- [at_client_flutter](./packages/at_client_flutter): the Flutter
-  layer on top of `at_client`, for mobile and desktop apps.
-  Adds onboarding / authentication dialogs and device-keychain
-  storage. Flutter web is not a supported target.
+  collections, sync, notifications and encryption. A program imports it
+  directly only when it supplies every dependency itself.
 
 ## Libraries
 
@@ -39,10 +48,8 @@ published on
 - [at_chops](./packages/at_chops): cryptographic and hashing
   operations (encryption, decryption, signing, hashing) used by the
   rest of the SDK, including the post-quantum primitives.
-- [at_cli_commons](./packages/at_cli_commons): helpers for Dart CLI
-  / server programs that use `at_client`. Wraps the boilerplate of
-  parsing flags, loading keys, and producing an authenticated
-  `AtClient`.
+- [at_cli_commons](./packages/at_cli_commons): deprecated; a re-export
+  of [at_client_cli](./packages/at_client_cli), which carries `CLIBase`.
 - [at_commons](./packages/at_commons): foundational types used
   across every package: keys, metadata, atSign validation,
   root-domain parsing, verb builders for the Atsign Protocol wire
@@ -52,16 +59,16 @@ published on
 - [at_lookup](./packages/at_lookup): low-level direct
   implementation of the Atsign Protocol verbs. Used by `at_client`
   and `at_client_flutter`.
-- [at_onboarding_cli](./packages/at_onboarding_cli): the
-  `at_register` and `at_activate` command-line tools for registering,
-  activating and enrolling atSigns, and a small library for programs
-  that drive the same flows headlessly.
+- [at_onboarding_cli](./packages/at_onboarding_cli): deprecated; a
+  re-export of [at_client_cli](./packages/at_client_cli), which carries
+  the `at_register` and `at_activate` tools.
 - [at_policy](./packages/at_policy): scaffolding for building
   policy-management services that talk to enforcement endpoints
   via the Atsign Protocol.
-- [at_server_status](./packages/at_server_status): logs the status
-  of the root server and the atServer for an atSign of your
-  choice.
+- [at_telemetry](./packages/at_telemetry): telemetry for apps and
+  atServers: the record model, the OTLP/JSON logs encoding, and a client
+  that sends an app's telemetry to a collector atSign. Experimental, below
+  1.0.
 - [at_utils](./packages/at_utils): utility library: atSign,
   metadata, configuration, logger.
 - [base2e15](./packages/base2e15): fork of the upstream
@@ -149,11 +156,11 @@ re-enrolls itself at its first start, filing the new enrollment in the
 same keys store beside the legacy fields. ML-DSA authentication needs an
 atServer that verifies it; a `legacy` client makes no such demand.
 
-The default posture moves one stage per major of `at_client` — 3.x
-`legacy`, 4.x `pqReady`, 5.x `pqActive` — because a record may only be
+The default posture moves one stage at a time — `legacy` through 4.0,
+`pqReady` from a later 4.x release, `pqActive` at 5.0 — because a record may only be
 written in a scheme every reader of it supports, so the stage that reads
 post-quantum data rolls out before the stage that writes it by default. An
-app on 3.x names `pqReady` or `pqActive` to move first.
+app names `pqReady` or `pqActive` to move first.
 
 The developer's view, the goals and the ladder are in the
 [at_client README](./packages/at_client/README.md#post-quantum-cryptography);
@@ -161,33 +168,10 @@ the design is under [`docs/projects/pq/`](./docs/projects/pq/roadmap.md).
 
 ## Upgrading
 
-Applications talk to `at_client` (3.x, a minor release), so most need no
-code change: the new lifecycle verbs sit beside `AtClientManager`, whose
-`setCurrentAtSign` is deprecated rather than removed. The packages that
-take a major are the ones that used to hand at_auth's types to an app:
-
-- **at_client_flutter 1.x → 2.0**: `AuthService` and
-  `FlutterEnrollmentService` are gone; the dialogs take the atSign, the
-  keys store and the preference, and hand back the `AtClient`. An app no
-  longer imports at_auth. The table is in the
-  [at_client_flutter README](./packages/at_client_flutter/README.md#migrating-from-1x).
-- **at_onboarding_cli 1.x → 2.0**: `at_activate` should name its command
-  (`at_activate onboard -a @alice`; with none it still runs `onboard`, with a
-  deprecation warning), `--posture` sets how far into the
-  post-quantum rollout every command runs, and `AtOnboardingService` keeps
-  `authenticate()` and `atClient` while `onboard`, `enroll` and `close` become
-  `Atsign.activate`, `Atsign.enroll` and `atClient.stop()`. The table is in
-  the [at_onboarding_cli README](./packages/at_onboarding_cli/README.md#migrating-from-1x).
-- **at_auth 3.x → 4.0**: `AtAuth` and its request and response objects
-  are gone; activation is `activateAtSign(...)`, logging in and every
-  enrollment decision are at_client's. The table is in the
-  [at_auth README](./packages/at_auth/README.md#migrating-from-3x).
-
-If you happen to import `at_onboarding_cli` or `at_auth` directly — which
-almost no application does — the short version is: replace the call that
-built your client with `Atsign('@alice').open(keys: ..., preference: ...)`,
-`.activate(...)` or `.enroll(...)`, drop the import, and read everything
-else off the `AtClient` you get back.
+at_client 4.0 is a major release, and so is each platform package: an app
+moves to at_client_cli 1.0 or at_client_flutter 2.0, imports only that, and
+names its client's storage. [Upgrading to at_client 4.0](./docs/upgrade-to-4.md)
+takes it error by error, with a checklist for each path.
 
 ## Installation
 

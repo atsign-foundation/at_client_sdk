@@ -492,6 +492,522 @@ void main() {
         ],
       );
     });
+
+    test(
+        'UC-A3.6 · a client that needs a private it does not hold fetches it, '
+        'else asks, else fails', () {
+      // GIVEN an own nskey generation published, whose private this
+      //       enrollment's client has not filed.
+      // WHEN  it writes or reads in that namespace.
+      // THEN  for a generation an own advertisement it holds names, it fetches
+      //       the conveyance records addressed to it, files a private one
+      //       carries, and goes on; with none, it asks the other enrollments
+      //       and the put fails saying the private key has not yet been
+      //       conveyed. For a generation none it holds names, it first reads
+      //       the published advertisement, once per askCooldown per namespace
+      //       and only in a namespace it holds an advertisement or a private
+      //       for. It asks about each generation once per askCooldown and not
+      //       while an earlier ask for it waits, and with askOnReadMiss off a
+      //       miss sends nothing.
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a conveyance record for it is waiting, then the fetch files it',
+        proves: 'the fetch comes first and a record it finds is filed and '
+            'used, with nothing asked. Mutation-proven: removing the fetch '
+            'from privateHalf reddens it with a null private',
+        clauses: ['it fetches the conveyance records addressed to it'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart',
+        'a client that started before the key was minted fetches the record '
+            'waiting for it at its first write',
+        proves: 'against a live atServer: a client whose listener is stopped '
+            'and whose keyfile holds nothing for the generation writes, '
+            'reads the value back, and has filed the private the waiting '
+            'record carried',
+        clauses: ['it fetches the conveyance records addressed to it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when no record is waiting, then it asks and holds nothing',
+        proves: 'with nothing waiting the ring asks, after the fetch',
+        clauses: ['asks the other enrollments'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_data_path_test.dart',
+        'a served public half alone is refused, by name',
+        proves: 'the refusal names the generation and says the private key '
+            'has not yet been conveyed to this enrollment',
+        clauses: ['has not yet been conveyed to this enrollment'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when two misses come at once, then one fetch serves both',
+        proves: 'two misses in flight share one fetch, and the second reads '
+            'only after it lands',
+        clauses: ['concurrent misses share one fetch'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when fifty come at once over three namespaces, then one fetch serves '
+            'them all and each generation is asked once',
+        proves: 'fifty misses over six advertised generations in three '
+            'namespaces make one fetch and six asks. Mutation-proven: stamping '
+            'asks per namespace reddens it with three',
+        clauses: [
+          'whichever generations they name',
+          'asks about each generation at most once per',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when kid A misses and then kid B in one namespace, then both are '
+            'asked',
+        proves: 'a second generation in a namespace gets its own ask, with A '
+            'missed twice and asked once as the control. Mutation-proven: '
+            'stamping asks per namespace reddens it with B unasked',
+        clauses: ['a miss on a second generation in the namespace asks'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a generation misses again while its ask is outstanding',
+        proves: 'with no cooldown, a miss while the ask is outstanding asks '
+            'nothing, and once its wait ends the next miss asks. '
+            'Mutation-proven: dropping the outstanding check reddens it with '
+            'two asks',
+        clauses: ['not again while an earlier ask for it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_self_heal_test.dart',
+        'a start with a missing kid sends exactly one ask, and a read miss '
+            'inside the wait adds none',
+        proves: 'the start sends one request and its wait holds back a read '
+            'miss with no cooldown, until the wait ends. Mutation-proven: the '
+            'start reading through privateHalf, and the start not recording '
+            'its ask, each redden it',
+        clauses: ['from a miss or from the client\'s start'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the cooldown has passed, then the next miss asks again and the '
+            'quiet namespaces are forgotten',
+        proves: 'past the cooldown a generation is asked again, and only the '
+            'stamps inside it are held. Mutation-proven: dropping the prune '
+            'reddens it with three',
+        clauses: ['forgets a generation once its cooldown has passed'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the ring knows nothing of its namespace, then nothing is read',
+        proves: 'twenty misses in namespaces the ring holds nothing for read, '
+            'fetch and ask nothing. Mutation-proven: treating every namespace '
+            'as known reddens it with twenty reads',
+        clauses: ['only in a namespace whose own advertisement it holds'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the ring holds its own advertisement for the namespace, then it '
+            'reads the published one once per cooldown',
+        proves: 'forty misses on unnamed kids make one read, no fetch and no '
+            'ask, and a miss past the cooldown reads again. Mutation-proven: '
+            'dropping the read cooldown, and fetching for an unnamed kid, each '
+            'redden it',
+        clauses: ['it first reads'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the keyfile holds a private for the namespace and the published '
+            'advertisement names a newer generation',
+        proves: 'a miss on a newer generation in a namespace only the keyfile '
+            'holds reads once, then fetches and asks, with a namespace the '
+            'keyfile does not hold as the control. Mutation-proven: dropping '
+            'the keyfile from what the ring knows reddens it with no read',
+        clauses: ['whose nskey private its keyfile holds'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when its first read in a granted namespace comes before its startup '
+            'collection',
+        proves: 'a fresh enrollment whose keyfile records only its grants '
+            'reads the published advertisement on its first miss and files '
+            'the conveyance waiting for it. Mutation-proven: dropping the '
+            'grants from what the ring knows reddens it with a null private',
+        clauses: ['or which this enrollment\'s own grants name'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when it reads in a namespace outside its grants',
+        proves: 'a namespace the grants do not name is read, fetched and '
+            'asked nothing. Mutation-proven: counting any grant as naming '
+            'every namespace reddens it',
+        clauses: ['or which this enrollment\'s own grants name'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when its grant is `*`, then a namespace no grant names',
+        proves: 'a `*` grant makes no namespace known. Mutation-proven: '
+            'letting `*` name every namespace reddens it',
+        clauses: ['never `*`'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the client is the atSign\'s own credential',
+        proves: 'grants recorded under `primary` make no namespace known. '
+            'Mutation-proven: letting the credential\'s grants count '
+            'reddens it',
+        clauses: ['never for the atSign\'s own credential'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the atServer cannot be reached at the first miss',
+        proves: 'a read that fails is not retried inside the cooldown, and the '
+            'first miss after it reads, fetches and opens. Mutation-proven: a '
+            'read stamp that never expires reddens it',
+        clauses: ['tried again by the first miss after the cooldown'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the ring is built with askOnReadMiss false',
+        proves: 'neither an unnamed kid in a keyfile namespace nor an '
+            'advertised one reaches the atServer, with the same ring built '
+            'with the gate on as the control. Mutation-proven: ignoring the '
+            'gate reddens it',
+        clauses: ['a miss sends nothing to the atServer'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_client_bootstrap_test.dart',
+        'when the gates are inert, then a miss on it makes no call',
+        proves: 'through the bootstrap over a keyfile, an inert start and then '
+            'a miss on an advertised generation make no remote read, write or '
+            'scan, with the gate on as the control beside it. '
+            'Mutation-proven: ignoring the gate reddens it',
+        clauses: ['a miss sends nothing to the atServer'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when it misses again within askCooldown of an on-miss fetch',
+        proves: 'the cooldown bounds the fetch, with a zero-cooldown control '
+            'beside it that fetches twice',
+        clauses: ['does not fetch again'],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'a sweep that meets an envelope another sweep is filing returns only',
+        proves: 'a fetch that meets an envelope the startup collection is '
+            'still filing waits for it, so the write after it finds the '
+            'private. Mutation-proven: skipping the wait reddens it',
+        clauses: ['for a sweep already filing it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when a write seals to its own key, then it is refused once '
+            'fetchOnMissTimeout passes',
+        proves: 'a write whose fetch is still filing is refused when the '
+            'bound passes, observed by the fetch being unfinished and the '
+            'timeout path logging, and the same write seals once the filing '
+            'lands. Mutation-proven: without the bound the write never '
+            'returns',
+        clauses: ['for a sweep already filing it'],
+      );
+    });
+
+    test(
+        'UC-A3.7 · a namespace key\'s private reaches every listed enrollment '
+        'before anyone can seal to it', () {
+      // GIVEN E1, E2 and E3 hold rw on app_1.my_apps with verified key
+      //       packages, primary is listed with none, nothing is published.
+      // WHEN  E1 mints, rotates or adds a key.
+      // THEN  every new private is conveyed before the advertisement names it,
+      //       primary is skipped silently and a refused package is named, the
+      //       lock's ttl is a roster-sized ceiling, a revocation in the window
+      //       stops the publish and retires the generation, a client meeting
+      //       the lock mints and retires nothing, and a minter with no key
+      //       package mints nothing; a minted root is pushed once published.
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint, a rotation and an add convey their new privates before the '
+            'advertisement naming them is published',
+        proves: 'each conveyance runs while the atServer still serves the '
+            'previous advertisement, for a mint, a rotation and an add. '
+            'Mutation-proven: moving the conveyance after the publish reddens '
+            'it',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart',
+        'a client that started before the key was minted fetches the record '
+            'waiting for it at its first write',
+        proves: 'the atServer stored each conveyance record addressed to the '
+            'other enrollment before it stored the advertisement, by the '
+            'createdAt it stamps on both',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when it conveys, then every kid is pushed before anything returns',
+        proves: 'the conveyance a mint is handed pushes every new private to '
+            'the roster before it returns',
+        clauses: [
+          'is on the atServer before `public:__nskey.app_1.my_apps@alice` '
+              'names it'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when a secret is pushed to the namespace, then it is named and the '
+            'rest are still reached',
+        proves: 'a member whose package was refused is named in a warning and '
+            'conveyed nothing, while primary, listed with no package, is '
+            'skipped without one. Mutation-proven: removing the refused arm '
+            'reddens it',
+        clauses: [
+          '`primary` among them, is skipped silently',
+          'is conveyed nothing and named in a warning',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when a listed member shares no suite with the minter, then the '
+            'conveyance completes',
+        proves: 'convey returns with the generation conveyed, the reachable '
+            'member holds the private, and one warning names the member it '
+            'missed, the generation and the namespace. Mutation-proven: '
+            'dropping the warning, and letting one member\'s failure stop the '
+            'push, each redden it',
+        clauses: ['the push cannot reach'],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'when the push to a listed member fails, then the conveyance '
+            'completes',
+        proves: 'the same, for a member whose envelope the atServer refuses. '
+            'Mutation-proven as above',
+        clauses: ['the push cannot reach'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when the lock is sized, then it is the margin plus the budget for '
+            'each listed enrollment',
+        proves: 'the ttl is the margin plus the per-member budget for each '
+            'listed enrollment, each kid and each conveyance, and is capped '
+            'at the atServer\'s limit. Mutation-proven: sizing for one '
+            'conveyance reddens it',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint, a rotation and an add take the lock with the ttl handed them',
+        proves: 'each operation takes its lock with the ttl it is handed. '
+            'Mutation-proven for all three: falling back to the ring\'s own '
+            'ttl reddens it',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint that overruns its lease publishes nothing',
+        proves: 'a minter whose lease has run out does not publish',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_seed_lock_covers_rotation_test.dart',
+        'when a client seeds it, then the mint lock lasts for two conveyances',
+        proves: 'a seed sizes its lock for the mint\'s conveyance and a '
+            'rotation\'s under the same lock, and an add for one',
+        clauses: ['the mint lock\'s ttl is a ceiling'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when a revocation touches the namespace during the conveyance, then '
+            'the publish is refused and what it filed is retired',
+        proves: 'a revocation read after the conveyance refuses the publish '
+            'and retires the filed generation, with the no-revocation control '
+            'beside it',
+        clauses: [
+          'stops the publish, and the generation E1 filed is retired',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a conveyance that throws publishes nothing',
+        proves: 'the refusal the conveyance throws reaches the mint before '
+            'its publish, so nothing is advertised',
+        clauses: [
+          'stops the publish, and the generation E1 filed is retired',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when this client filed a generation it then failed to publish',
+        proves: 'the next mint publishes a fresh kid, conveys only that kid, '
+            'and retires the filed one, which still reads. Mutation-proven: '
+            'restoring a resume, or dropping the retire, reddens it',
+        clauses: ['a mint that finds nothing published always mints'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when another enrollment conveyed this client a generation and never '
+            'published it',
+        proves: 'a private conveyed through file() and never published is '
+            'retired, and the mint publishes a kid of its own',
+        clauses: ['whichever enrollment minted it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when a second process of this enrollment mints while the first is '
+            'conveying',
+        proves: 'a second ring on the same keyfile meets the first\'s lock, '
+            'throws without minting, and leaves the first\'s filed generation '
+            'active; once the first publishes, a fresh ring holds it and seals '
+            'to it. Mutation-proven: adopting a refused lock, or one whose '
+            'value names this enrollment, reddens it',
+        clauses: ['mints nothing and retires nothing while the lock is held'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_mint_lock_live_test.dart',
+        'a client that meets a lock naming its own enrollment refuses to mint',
+        proves: 'a lock on the atServer whose value is this client\'s own '
+            'enrollment id refuses its mint, and nothing is published',
+        clauses: ['mints nothing and retires nothing while the lock is held'],
+      );
+      provenIn(
+        'packages/at_client/test/mint_lock_self_contention_test.dart',
+        'when a new instance of the same enrollment asks for it',
+        proves: 'a fresh MintLock of the enrollment that took the lock is '
+            'refused without reading it. Mutation-proven as above',
+        clauses: ['refused until the lock\'s ttl runs out'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when a revocation touches the namespace after the conveyance read '
+            'it',
+        proves: 'the keyfile records the owed rotation before the rotation, '
+            'which conveys a successor afresh, with the no-revocation control '
+            'beside it. Mutation-proven: missing the revocation, or skipping '
+            'the record, reddens it',
+        clauses: [
+          'a revocation landing after that read and before the publish'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'when the mint publishes, then the rotation publishes under the same '
+            'lock',
+        proves: 'one lock take, two publishes, and the successor conveyed '
+            'between them. Mutation-proven: skipping afterPublish, or '
+            'conveying nothing, reddens it',
+        clauses: [
+          'a revocation landing after that read and before the publish'
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'when its record stamp is later than the revocation, then it is '
+            'rotated',
+        proves: 'a start rotates a published generation the keyfile records '
+            'as owed, though its stamp answers the revocation, and not once '
+            'its successor is published. Mutation-proven: ignoring the '
+            'record, or reading any record in the namespace, reddens it',
+        clauses: ['E1\'s next start makes the rotation'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when the rotation fails, then the generation published stands',
+        proves: 'a rotation that throws after the publish answers no '
+            'successor, keeps the record and logs the namespace at severe. '
+            'Mutation-proven: rethrowing reddens it with the failure, and '
+            'logging below severe reddens it',
+        clauses: ['the mint still answers the generation it published'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when this enrollment no longer carries a key package to convey a '
+            'successor with',
+        proves: 'with the minter\'s own package gone at the fresh prepare, '
+            'nothing rotates, the record stays and the failure is logged at '
+            'severe. Mutation-proven: throwing when the prepare finds no '
+            'package reddens it',
+        clauses: ['the mint still answers the generation it published'],
+      );
+      provenIn(
+        'packages/at_client/test/pre_publish_conveyance_test.dart',
+        'when it seeds, then it answers noKeyPackage and mints nothing',
+        proves: 'a minter whose own entry carries no key package asks the '
+            'ring for no mint',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'packages/at_client/test/seeding_files_private_test.dart',
+        'when its roster entry carries none, then it answers noKeyPackage and '
+            'publishes nothing',
+        proves: 'ensureReachable answers noKeyPackage and nothing is '
+            'published, with the same fixture carrying a key package as the '
+            'control. Mutation-proven: dropping the mapping reddens it',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_seeding_live_test.dart',
+        'a client on the atSign\'s own credential mints nothing',
+        proves: 'a real atServer lists primary with no key package, and a '
+            'client on the demo keys reads that as noKeyPackage and publishes '
+            'nothing',
+        clauses: ['mints nothing and says why'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'when it publishes, then its private reaches every other fully '
+            'privileged enrollment carrying a verified key package',
+        proves: 'the roster is read only once the root is published, the '
+            'private reaches the fully privileged enrollment with a verified '
+            'package, the refused one is named, the one with none is skipped '
+            'silently, and one without `*` gets nothing. Mutation-proven for '
+            'the privilege filter, the refused arm and the order',
+        clauses: ['pushes its private, once the root is published'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'when the push to one enrollment fails, then the mint succeeds and the '
+            'others still receive it',
+        proves: 'a failed push is logged, the mint returns its key, and the '
+            'enrollment listed after the failure still receives it',
+        clauses: ['pushes its private, once the root is published'],
+      );
+      provenIn(
+        'packages/at_client/test/signing_root_pushed_to_approved_only_test.dart',
+        'when it publishes, then only the approved enrollment receives its '
+            'private',
+        proves: 'of fully privileged enrollments listed approved, pending, '
+            'denied, revoked and expired, only the approved one is pushed '
+            'the root private',
+        clauses: ['pushes its private, once the root is published'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_filing_published_key_test.dart',
+        'with nothing published under its kid, refuses a private whose seed '
+            'derives another kid, and files the real one after it',
+        proves: 'for the start-up bootstrap\'s, a key ring\'s and a '
+            'rotation\'s filing, with nothing published, a seed that does not '
+            'derive its kid is refused and the real one conveyed after it is '
+            'filed, and a seed of one KEM under the other\'s kid is refused. '
+            'Mutation-proven: accepting any seed with nothing published '
+            'reddens every arm',
+        clauses: ['derives the kid it was conveyed under'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_filing_published_key_test.dart',
+        'after a refused seed and the real one filed before the publish, an '
+            'own write seals to the real public half',
+        proves: 'heldPublic, which an own write seals to, answers the real '
+            'generation\'s public half after a refused seed; with the refusal '
+            'removed it answers nothing',
+        clauses: ['derives the kid it was conveyed under'],
+      );
+    });
   });
 }
 

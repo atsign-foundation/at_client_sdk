@@ -7,32 +7,25 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 /// Catalogue: features/at_lookup/one_line_command.feature
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
 
-  late List<FakeAtServerSocket> sockets;
+  late FakeAtServerTransportFactory transports;
   late MockSecondaryAddressFinder addressFinder;
-  late MockSecureSocketFactory socketFactory;
   late int authentications;
 
+  List<FakeAtServerTransport> sockets() => transports.created;
+
   setUp(() {
-    sockets = [];
+    transports = FakeAtServerTransportFactory();
     authentications = 0;
     addressFinder = MockSecondaryAddressFinder();
-    socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final socket = FakeAtServerSocket();
-      sockets.add(socket);
-      return socket;
-    });
   });
 
   AtLookupMuxable build() => AtLookUp.withSecureSocket(
@@ -43,10 +36,7 @@ void main() {
           return true;
         },
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory,
-        ),
+        transport: AtLookupTransport(transportFactory: transports),
       );
 
   /// Sends [command] and, once it has been written, answers it the way the
@@ -55,11 +45,12 @@ void main() {
       {bool auth = false}) async {
     final response = atLookup.executeCommand(command, auth: auth);
     for (var i = 0;
-        i < 100 && (sockets.isEmpty || !sockets.last.written.contains(command));
+        i < 100 &&
+            (sockets().isEmpty || !sockets().last.written.contains(command));
         i++) {
       await Future.delayed(const Duration(milliseconds: 10));
     }
-    await sockets.last.serverSends('data:ok\n@alice@');
+    await sockets().last.serverSends('data:ok\n@alice@');
     return response;
   }
 
@@ -94,7 +85,7 @@ void main() {
       'it is sent', () async {
     final atLookup = build();
     expect(await answered(atLookup, 'noop:0\n'), 'data:ok');
-    final socket = sockets.single;
+    final socket = sockets().single;
     final written = List.of(socket.written);
     final flushes = socket.flushCount;
 
@@ -137,7 +128,7 @@ void main() {
 
     expect(await answered(atLookup, 'lookup:phone@bob\n'), 'data:ok',
         reason: 'the next one-line command is answered');
-    expect(sockets, hasLength(1),
+    expect(sockets(), hasLength(1),
         reason: 'the next command runs on the same connection');
     expect(socket.written, [...written, 'lookup:phone@bob\n'],
         reason: 'the next one-line command is sent as given');
@@ -171,23 +162,23 @@ void main() {
                 allOf(isNot(contains('line one')), isNot(contains('note')))),
         reason: 'executeVerb reports the refusal as AT0022, naming no part of '
             'the command');
-    expect(sockets, isEmpty, reason: 'no connection is opened');
+    expect(sockets(), isEmpty, reason: 'no connection is opened');
     expect(authentications, 0, reason: 'nothing authenticates');
     verifyNever(() => addressFinder.findSecondary(any()));
 
     expect(await answered(atLookup, 'scan\n', auth: true), 'data:ok',
         reason: 'the control: a one-line command needing authentication is '
             'answered');
-    expect(sockets, hasLength(1),
+    expect(sockets(), hasLength(1),
         reason: 'the control opens a connection, so the count can move');
     expect(authentications, 1,
         reason: 'the control authenticates, so the count can move');
-    expect(sockets.single.written, ['scan\n'],
+    expect(sockets().single.written, ['scan\n'],
         reason: 'the control is the only command sent');
   });
 
   test('A one-line command is sent as given', () async {
-    final socket = FakeAtServerSocket();
+    final socket = FakeAtServerTransport();
     final connection = OutboundConnectionImpl(socket);
 
     expect(await errorOf(connection.write('lookup:phone@bob\n')), isNull,
@@ -200,7 +191,7 @@ void main() {
   });
 
   test('A carriage return is sent as given', () async {
-    final socket = FakeAtServerSocket();
+    final socket = FakeAtServerTransport();
     final connection = OutboundConnectionImpl(socket);
 
     expect(await errorOf(connection.write('update:public:note@alice a\rb\r\n')),

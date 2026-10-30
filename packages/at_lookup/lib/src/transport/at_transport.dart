@@ -1,0 +1,88 @@
+/// A bidirectional byte channel to an atServer, opened by an
+/// [AtTransportFactory].
+///
+/// This is everything `at_lookup` needs from a connection, and deliberately no
+/// more: a TLS socket and a browser WebSocket each satisfy it through a thin
+/// wrapper.
+///
+/// There is no `connect()` here. A transport only exists once
+/// [AtTransportFactory.connect] has returned one, so no member has to guard an
+/// unconnected state.
+abstract interface class AtTransport {
+  /// The bytes arriving from the far end. Single-subscription.
+  ///
+  /// An implementation MUST return the underlying stream and MUST NOT wrap it
+  /// in a `StreamController`. Pausing this subscription is how `at_lookup`
+  /// applies back-pressure to the far end; a controller answers the pause out
+  /// of a local buffer instead, and the far end keeps sending.
+  /// `Socket implements Stream<Uint8List>`, so the socket transport returns
+  /// the socket itself and pause and resume survive by construction.
+  ///
+  /// The one exception is a source that cannot be paused, such as a browser
+  /// `WebSocket`. Its implementation MAY use a `StreamController`, but MUST
+  /// bound what it holds while paused, and past that bound MUST close the
+  /// connection and end this stream with an error.
+  ///
+  /// `List<int>` rather than `Uint8List` because that is what
+  /// `OutboundMessageListener` consumes, and it is what lets a `WebSocket`
+  /// implement this.
+  Stream<List<int>> get inbound;
+
+  /// Queues [bytes] for delivery to the far end.
+  ///
+  /// Throws `AtIOException` when the channel can take no more. As with
+  /// [AtTransportFactory.connect], this is part of the contract: an
+  /// implementation's own failure type reaches callers that cannot tell it
+  /// is a failed connection.
+  void add(List<int> bytes);
+
+  /// Completes once everything passed to [add] has left this process, or,
+  /// for a transport that bounds what it queues, once what is still queued is
+  /// within that bound.
+  ///
+  /// Throws `AtIOException` when the channel fails first, or
+  /// `AtTimeoutException` when an implementation that bounds the wait gives
+  /// up.
+  Future<void> flush();
+
+  /// Renders the channel unusable and discards whatever is still queued.
+  ///
+  /// Synchronous, because there is no outcome to wait for: it yields no result
+  /// and no failure a caller could branch on. A graceful shutdown is
+  /// `await flush(); destroy();`, spelled at the call site. Teardown that does
+  /// have something to await belongs on `AtConnection.close()`; an awaitable
+  /// teardown here would let a WebSocket close handshake block the reconnect
+  /// loop on a peer that never answers.
+  void destroy();
+
+  /// Whether the channel can still carry bytes: false once [destroy] has run,
+  /// or once this side has closed it.
+  ///
+  /// A far-end close turns it false only where the transport can see one: the
+  /// WebSocket transport reads its socket's own state, while
+  /// `SecureSocketTransport` sees only a local close. [inbound] ending is the
+  /// signal every transport gives, so a consumer that must notice the far end
+  /// going away watches [inbound].
+  bool get isOpen;
+
+  /// Identifies the far end well enough for one log line.
+  String get description;
+}
+
+/// Opens [AtTransport]s.
+///
+/// Naming an implementation of this is what selects a transport — and, because
+/// the socket implementation is exported from
+/// `package:at_lookup/at_lookup_io.dart` rather than from the default barrel,
+/// it is also what pulls in the library that carries the native imports.
+abstract interface class AtTransportFactory {
+  /// Opens a channel to [host] on [port], giving up after [timeout], or after
+  /// the implementation's own bound when it is null.
+  ///
+  /// Throws `SecondaryConnectException` if the far end cannot be reached. This
+  /// is part of the contract, not a description of one implementation: an
+  /// implementation that lets its own failure type escape — a `SocketException`,
+  /// a `WebSocketException` — escapes `AtLookupImpl.createOutBoundConnection`
+  /// uncaught and loses the atSign the connection was being opened for.
+  Future<AtTransport> connect(String host, String port, {Duration? timeout});
+}

@@ -4,6 +4,9 @@
 
 # at_lookup library
 
+Upgrading from 3.x: see [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).
+
+
 ## Overview:
 
 The AtLookup Library is the low-level direct implementation of the Atsign Protocol verbs. The AtLookup package is an interface
@@ -17,7 +20,7 @@ To add this package as the dependency, add it to your pubspec.yaml
 
 ```dart  
 dependencies:
-  at_lookup: ^3.7.0
+  at_lookup: ^4.0.0
 ```
 
 #### Add to your project
@@ -29,8 +32,14 @@ pub get
 #### Import in your application code
 
 ```dart
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 ```
+
+`at_lookup.dart` is the transport-neutral half: the verbs, `AtLookUp`,
+`AtConnection` and the `AtTransport` interfaces. `at_lookup_io.dart` adds the
+native TLS transport and the atDirectory lookup, and re-exports everything
+above, so it is the one to import unless you are supplying your own transport
+and address finder.
 
 ### Clone it from github
 
@@ -41,13 +50,16 @@ Feel free to fork a copy of the source from the [GitHub Repo](https://github.com
 ### To get the instance of at_lookup
 
 ```dart
+const root = AtRootDomain.atsignDomain;
 final AtLookupMuxable atLookUp = AtLookUp.withSecureSocket(
   atSign: '@alice',
-  rootDomain: AtRootDomain.atsignDomain,
+  rootDomain: root,
   transport: secureSocketTransport(SecureSocketConfig()),
+  secondaryAddressFinder:
+      CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   // How this connection authenticates, as one closure. at_lookup holds no key
   // material of its own; at_auth builds an authenticator from whatever
-  // credential you have - a keystore, an AtChops, or a bare private key.
+  // credential you have - a keystore, a bare private key, or a CRAM secret.
   // Pass null for a connection that never authenticates.
   authenticator: authenticatorFor(keysIo, '@alice'),
 );

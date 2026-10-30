@@ -1,15 +1,12 @@
 @Tags(['pq'])
 library;
 
-// The PQ bootstrap is @experimental; reaching for it is the point here, since
-// only the client's own bootstrap builds the wiring an application gets.
-// ignore_for_file: experimental_member_use
-
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart' show XWingKeyPair;
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
+import 'package:at_commons/at_builders.dart'
+    show LLookupVerbBuilder, UpdateVerbBuilder;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -574,17 +571,25 @@ void main() {
   /// downstream would ever notice. So the sender verifies the advertisement's
   /// APKAM signature against the `_apsk` the signing enrollment published.
   ///
-  /// It is last in the file because it leaves bob's advertisement replaced; the
-  /// genuine one is republished at the end.
+  /// It is last in the file because it replaces bob's advertisement; the
+  /// genuine record is written back at the end.
   test('alice refuses to seal to an advertisement that is not signed',
       () async {
     final bobSide = await nskeyClient(bob);
+    final bobRemote = bobSide.client.getRemoteSecondary()!;
+    // NOTE: the record itself, not a re-mint. A mint here would meet bob's own
+    // lock from the tests above, still inside its ttl, and refuse.
+    final genuine = (await bobRemote.executeVerb(LLookupVerbBuilder()
+          ..atKey = nskeyAdvertisementKey(bob, namespace)))
+        .replaceFirst('data:', '');
+    final genuineKid =
+        (await bobSide.ring.currentPublic(bob, namespace))!.nskeyKid;
 
     // What a substitution looks like from alice's side: a well-formed
     // advertisement for a key bob never minted, carrying no signature. Written
     // straight to bob's atServer, which is where alice reads it from.
     final substituted = await XWingKeyPair.generate();
-    await bobSide.client.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+    await bobRemote.executeVerb(UpdateVerbBuilder()
       ..atKey = nskeyAdvertisementKey(bob, namespace)
       ..value = jsonEncode({
         'nskeyKid': nskeyKidOf(substituted.publicKeyBytes),
@@ -620,6 +625,13 @@ void main() {
 
     // Put bob's genuine, signed advertisement back, so the atServer is not left
     // holding the substituted one.
-    await nskeyClient(bob);
+    await bobRemote.executeVerb(UpdateVerbBuilder()
+      ..atKey = nskeyAdvertisementKey(bob, namespace)
+      ..value = genuine);
+    aliceSide.ring.forgetRemote(bob, namespace);
+    expect((await aliceSide.ring.currentPublic(bob, namespace))?.nskeyKid,
+        genuineKid,
+        reason: 'the control: what alice reads back is bob\'s own '
+            'generation again, signed');
   });
 }

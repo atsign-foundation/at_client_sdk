@@ -8,7 +8,6 @@ import 'package:at_client/src/enroll/signing_key_mint.dart'
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
@@ -16,9 +15,9 @@ import 'package:at_client/src/service/enrollment_service_impl.dart'
     show EnrollmentServiceImpl;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart' show AtClientException, Atsign;
-import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpFactory;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUp, AtLookUpFactory, SecondaryAddressFinder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('selfRetrofit');
 
@@ -45,15 +44,19 @@ final _logger = AtSignLogger('selfRetrofit');
 /// until the new enrollment first does, which is when the atServer revokes
 /// it as superseded (a fully privileged predecessor keeps its life). So a
 /// failure before that point leaves the legacy client fully usable, and
-/// nothing after it does. The new client opens on [storage], or on a Hive
-/// store under the preference's path with none; a retrofit over the legacy
-/// client's own store is that client's to arrange, by stopping with the
-/// store handed over and its principal forgotten before this is called.
+/// nothing after it does. The new client opens on [storage]. To retrofit
+/// over the legacy client's own store, stop that client first, which releases
+/// its claim on a store the caller supplied without `closedByClient: true`,
+/// then call `forgetPrincipal()` on the store, and pass it here: a store
+/// refuses a client acting for another principal than the one that held it
+/// last, and the retrofit's enrollment is one.
 ///
 /// [atLookUp] serves the submission and the client, for a caller that holds
-/// a connection; it is closed between the two, so the client logs in again as
-/// the new enrollment. With none the submission authenticates a connection of
-/// its own from the session's keys and closes it. See `Atsign.open` for
+/// a connection. Between the two its authenticator is cleared and its
+/// connection closed, so the next login on it is the client's, as the new
+/// enrollment; a command needing authentication meanwhile fails rather than
+/// logging in as the legacy one. With none the submission authenticates a
+/// connection of its own from the session's keys and closes it. See `Atsign.open` for
 /// [connectBudget].
 ///
 /// **A fully privileged retrofit also runs the signing-root step in-flow.**
@@ -95,7 +98,6 @@ final _logger = AtSignLogger('selfRetrofit');
 /// names is minted, filed and advertised by `KeyPackageMinting` at the
 /// retrofitted client's first startup, through the `enroll:update` the new
 /// enrollment sends for itself.
-@experimental
 Future<AtClient> selfRetrofit({
   required AtAuthSession session,
   required AtClientPreference preference,
@@ -104,9 +106,10 @@ Future<AtClient> selfRetrofit({
   required Map<String, String> namespaces,
   Duration? apkamKeysExpiryDuration,
   SigningAlgoType? signingAlgo,
-  AtClientStorage? storage,
+  required AtClientStorage storage,
   AtLookUp? atLookUp,
-  AtLookUpFactory? lookUps,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
   Duration connectBudget = AtConnection.defaultBudget,
 }) async {
   final newSession = await retrofitIdentity(
@@ -119,9 +122,11 @@ Future<AtClient> selfRetrofit({
     signingAlgo: signingAlgo,
     atLookUp: atLookUp,
     lookUps: lookUps,
+    secondaryAddressFinder: secondaryAddressFinder,
   );
-  // NOTE: the client never runs on the connection the submission logged in as
-  // the legacy enrollment.
+  // NOTE: nothing logs in on [atLookUp] as the legacy enrollment again, and
+  // the client never runs on the connection the submission logged in as it.
+  atLookUp?.authenticator = null;
   await atLookUp?.close();
 
   preference
@@ -134,6 +139,7 @@ Future<AtClient> selfRetrofit({
       storage: storage,
       atLookUp: atLookUp,
       lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder,
       connectBudget: connectBudget);
 
   try {
@@ -165,8 +171,8 @@ Future<AtClient> selfRetrofit({
 ///
 /// The returned session's `enrollmentId` is the new enrollment, and its
 /// `atKeysIo` reads a keyfile carrying the new enrollment's typed key
-/// material, which is what lets a caller re-derive its AtChops and
-/// connections from the new identity. It carries no connection: the caller's
+/// material, which is what lets a caller re-derive its connections from the
+/// new identity. It carries no connection: the caller's
 /// next connection authenticates as the new enrollment, and reports into the
 /// client's connection state if the atServer refuses it.
 ///
@@ -177,10 +183,9 @@ Future<AtClient> selfRetrofit({
 ///
 /// The request is submitted on [atLookUp], a connection authenticated as the
 /// legacy enrollment, which a client retrofitting itself passes from its own
-/// remote secondary; with none, one is built by [lookUps] (the preference's
-/// default with none), authenticated from the session's keys for the
+/// remote secondary; with none, one is built by [lookUps] over
+/// [secondaryAddressFinder], authenticated from the session's keys for the
 /// submission and closed after it.
-@experimental
 Future<AtAuthSession> retrofitIdentity({
   required AtAuthSession session,
   required AtClientPreference preference,
@@ -190,14 +195,16 @@ Future<AtAuthSession> retrofitIdentity({
   Duration? apkamKeysExpiryDuration,
   SigningAlgoType? signingAlgo,
   AtLookUp? atLookUp,
-  AtLookUpFactory? lookUps,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
 }) async {
   final given = atLookUp;
   final connection = given ??
       await authenticatedLookUp(
           session.atSign, session.atKeysIo, session.rootDomain,
           enrollmentId: session.enrollmentId,
-          lookUps: lookUps ?? defaultLookUps(preference));
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
 
   // NOTE: the preference's value, not the posture's — an app may set
   // `authenticationKeyAlgorithm` beside a posture, and reading

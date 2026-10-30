@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:test/test.dart';
 
 // Tests to verify that what EncryptionUtil encrypts, at_chops' algorithm

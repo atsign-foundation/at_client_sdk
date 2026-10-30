@@ -32,9 +32,7 @@ import 'package:flutter/services.dart';
 ///
 /// Returns:
 /// - The `AtClient` opened on the approved keys, or null if the process fails
-///   or is cancelled. A preference with `isLocalStoreRequired` false and no
-///   [storage] is a programming error: the dialog throws an [ArgumentError] as
-///   it opens, before any request goes out.
+///   or is cancelled.
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
@@ -123,11 +121,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
-    if (widget.storage == null && !widget.preference.isLocalStoreRequired) {
-      // NOTE: before any request goes out; an approval earned for a client
-      // that cannot open is wasted.
-      AtClientImpl.refuseWithoutStorage(widget.atSign, widget.preference);
-    }
     _keys = widget.keys ?? KeychainAtKeysIo();
     _resumeIfPending();
   }

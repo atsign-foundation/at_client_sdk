@@ -1,7 +1,3 @@
-// The substrate is deliberately marked @experimental; exercising it from
-// another package is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -51,8 +47,8 @@ void main() {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
-    AtKeys? enrolleeKeys;
-    final build = enrollmentKeyPackageBuilder(atSign);
+    final build = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65);
 
     final request = AtEnrollmentRequest.pq(
       session: TestUtils.enrollmentSession(atSign),
@@ -60,15 +56,11 @@ void main() {
       deviceName: 'pq-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},
       otp: otp,
-      metadataBuilder: (keysIo) async {
-        built = await build(keysIo);
-        enrolleeKeys = await keysIo.read(atSign);
-        return built;
-      },
+      metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // UC-A2.1 is about the key exchange; which algorithm authenticates the
-      // connection is a separate axis.
-      signingAlgo: SigningAlgoType.rsa2048,
+      // UC-A2.1 is about the key exchange, which at_auth pairs with mldsa65
+      // authentication.
+      signingAlgo: SigningAlgoType.mldsa65,
     );
 
     final response = await AtEnrollment.create().submit(
@@ -82,7 +74,11 @@ void main() {
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
-      keys: enrolleeKeys!,
+      // NOTE: the keyfile as the submission left it, holding the APKAM keypair
+      // under the enrollment id the atServer assigned. A read inside the
+      // metadataBuilder predates that id and would sign as rsa2048.
+      // ignore: deprecated_member_use
+      keys: response.atAuthKeys!,
       response: response,
     );
   }
@@ -128,8 +124,7 @@ void main() {
         enrollmentId: enrolled.enrollmentId);
 
     expect(
-        await enrolleeLookup.pkamAuthenticate(
-            enrollmentId: enrolled.enrollmentId),
+        await enrolleeLookup.pkamAuthenticate(),
         true,
         reason: 'the enrollment is approved, so its APKAM keypair must '
             'authenticate before it can collect anything');

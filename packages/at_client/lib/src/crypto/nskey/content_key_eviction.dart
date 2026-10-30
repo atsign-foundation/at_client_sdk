@@ -5,7 +5,7 @@ import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('ContentKeyEviction');
 
@@ -19,7 +19,6 @@ final _logger = AtSignLogger('ContentKeyEviction');
 ///
 /// Only `remoteToLocal` deletions count; a local delete has already evicted
 /// through `CkManager`.
-@experimental
 class ContentKeyEviction extends SyncProgressListener {
   final ContentKeyCache cache;
 

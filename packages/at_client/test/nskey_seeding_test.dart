@@ -27,6 +27,23 @@ void main() {
     registerFallbackValue(FakeUpdateVerbBuilder());
   });
 
+  /// A key package for the enrollment a fixture mints or rotates as, which
+  /// is what lets it mint at all.
+  late KeyPackage listedPackage;
+  setUpAll(() async {
+    final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+    final pair = await kem.keyPairFromSeed(kem.newSeed());
+    listedPackage = KeyPackage(
+        enrollmentId: 'listed',
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: pair.publicKey)
+        ]);
+  });
+
   NskeySeeding seeding(
       {String? enrollmentId,
       String? preferenceNamespace,
@@ -365,6 +382,7 @@ void main() {
       DateTime? revokedAt,
       DateTime? stamp,
       bool published = true,
+      NskeyAdvertisement? current,
       bool unreadable = false,
       String? enrollmentId = 'enroll-a',
     }) {
@@ -372,7 +390,10 @@ void main() {
           enrollmentId: enrollmentId,
           preferenceNamespace: ns,
           enrollmentNamespaces: {ns: 'rw'});
-      final directory = FakeEnrollmentDirectory();
+      final self = enrollmentId ?? 'primary';
+      final directory = FakeEnrollmentDirectory()
+        ..authorize(ns, self)
+        ..seed(self, listedPackage);
       if (revokedAt != null) {
         directory.authorize(ns, 'enroll-b');
         directory.revoke('enroll-b', at: revokedAt);
@@ -381,6 +402,7 @@ void main() {
 
       final sharing = MockSharing();
       when(() => sharing.directory).thenReturn(directory);
+      when(() => sharing.enrollmentId).thenReturn(self);
       when(() => sharing.secretStore).thenReturn(SecretStore());
       when(() => sharing.pushSecretToNamespaceMembers(any(),
               excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
@@ -389,7 +411,9 @@ void main() {
       final asked = <NskeyRotationContext>[];
       final ring = _RingRotating(
           base.atClient,
-          published ? (advertisement: generation, updatedAt: stamp) : null,
+          published
+              ? (advertisement: current ?? generation, updatedAt: stamp)
+              : null,
           successor);
       return (
         seeding: NskeySeeding(
@@ -445,6 +469,51 @@ void main() {
       expect(w.directory.lastRevokedAtQueries, [ns],
           reason: 'and it really did ask, so the zero above is a short circuit '
               'rather than a fixture that asked nothing');
+    });
+
+    group('and a generation this keyfile records as owing a rotation', () {
+      Future<void> owe(NskeySeeding seeding, NskeyAdvertisement owing) async {
+        final filing = seeding.privateFiling!;
+        await (filing.keysIo as InMemoryAtKeysIo).write(atSign, AtKeys());
+        await filing.store(
+            namespace: ns,
+            nskeyKid: owing.nskeyKid,
+            seed: NskeySeed(Uint8List.fromList(List<int>.filled(32, 3))));
+        expect(
+            await filing.markRotationOwed(
+                ns, [owing.nskeyKid], DateTime.utc(2026, 3, 1)),
+            isTrue);
+      }
+
+      test(
+          'when its record stamp is later than the revocation, then it is '
+          'rotated, unasked', () async {
+        final w = revocable(
+            stamp: DateTime.utc(2026, 4, 1),
+            revokedAt: DateTime.utc(2026, 3, 1));
+        await owe(w.seeding, generation);
+
+        expect(await w.seeding.rotateIfRevoked(atSign, ns), isTrue);
+        expect(w.ring.rotations, [ns],
+            reason: 'the stamps alone say nothing is owed, which is the '
+                'control below; the record is what rotates it');
+        expect(w.asked, isEmpty);
+      });
+
+      test(
+          'when its successor is what is published, then nothing more '
+          'rotates', () async {
+        final w = revocable(
+            current: successor,
+            stamp: DateTime.utc(2026, 4, 1),
+            revokedAt: DateTime.utc(2026, 3, 1));
+        await owe(w.seeding, generation);
+
+        expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+        expect(w.ring.rotations, isEmpty,
+            reason: 'the record belongs to the generation it was made for, '
+                'and that one is no longer published');
+      });
     });
 
     test('an unreadable namespace answer rotates nothing', () async {
@@ -503,6 +572,34 @@ void main() {
   });
 
   group('an add conveys only what it newly minted — UC-G2.6 c4', () {
+    /// A substrate whose roster lists [enrollmentId] in [namespace] with a key
+    /// package, which is what lets an add mint at all.
+    Future<MockSharing> listing(String enrollmentId, String namespace) async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final directory = FakeEnrollmentDirectory()
+        ..authorize(namespace, enrollmentId)
+        ..seed(
+            enrollmentId,
+            KeyPackage(
+                enrollmentId: enrollmentId,
+                createdAt: DateTime.utc(2026),
+                keys: [
+                  PackageKey.fromBytes(
+                      use: SecretSharingAlgos.useEnc,
+                      alg: SecretSharingAlgos.xWing,
+                      pub: pair.publicKey)
+                ]));
+      final sharing = MockSharing();
+      when(() => sharing.directory).thenReturn(directory);
+      when(() => sharing.enrollmentId).thenReturn(enrollmentId);
+      when(() => sharing.secretStore).thenReturn(SecretStore());
+      when(() => sharing.pushSecretToNamespaceMembers(any(),
+              excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
+          .thenAnswer((_) async => 0);
+      return sharing;
+    }
+
     Future<NskeyAdvertisement> advertisement(List<String> algos,
         {DateTime? createdAt}) async {
       final keys = <PackageKey>[];
@@ -536,6 +633,7 @@ void main() {
       await NskeySeeding(
         atClient: base.atClient,
         ring: _RingAdding(base.atClient, current, widened),
+        sharing: await listing('enroll-a', 'my_apps'),
         privateFiling: filing,
       ).seedNamespace(atSign, 'my_apps');
 
@@ -560,6 +658,7 @@ void main() {
       await NskeySeeding(
         atClient: base.atClient,
         ring: _RingAdding(base.atClient, current, current),
+        sharing: await listing('enroll-a', 'my_apps'),
         privateFiling: filing,
       ).seedNamespace(atSign, 'my_apps');
 
@@ -608,8 +707,7 @@ void main() {
               ]);
 
       final lockTakes = <String>[];
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0];
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key != '_nskeylock') {
@@ -628,7 +726,10 @@ void main() {
       });
 
       final sharing = MockSharing();
-      when(() => sharing.directory).thenReturn(FakeEnrollmentDirectory());
+      when(() => sharing.directory).thenReturn(FakeEnrollmentDirectory()
+        ..authorize(writable, 'enroll-r')
+        ..seed('enroll-r', listedPackage));
+      when(() => sharing.enrollmentId).thenReturn('enroll-r');
       when(() => sharing.secretStore).thenReturn(SecretStore());
 
       final asked = <String>[];
@@ -702,12 +803,15 @@ void main() {
       final base =
           seeding(enrollmentId: e3, enrollmentNamespaces: {'app': 'rw'});
       final directory = _GrantCoveringDirectory()
+        ..listed = e3
+        ..listedPackage = listedPackage
         ..revoked[e2] = (
           grants: const {'app': 'rw'},
           at: DateTime.utc(2026, 3, 1),
         );
       final sharing = MockSharing();
       when(() => sharing.directory).thenReturn(directory);
+      when(() => sharing.enrollmentId).thenReturn(e3);
       when(() => sharing.secretStore).thenReturn(SecretStore());
       when(() => sharing.pushSecretToNamespaceMembers(any(),
               excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
@@ -761,11 +865,18 @@ class _GrantCoveringDirectory implements EnrollmentDirectory {
   /// Every namespace [lastRevokedAt] was asked about, in call order.
   final List<String> lastRevokedAtQueries = [];
 
+  /// The enrollment every roster lists, with [listedPackage], so it may mint.
+  String? listed;
+  KeyPackage? listedPackage;
+
   @override
   Future<List<NamespaceMember>> listForNamespace(String namespace,
-          {Set<String> excludeEnrollmentIds = const {}}) =>
-      throw UnimplementedError(
-          'this fixture answers lastRevokedAt only, not a roster');
+          {Set<String> excludeEnrollmentIds = const {}}) async =>
+      [
+        if (listed case final id?)
+          NamespaceMember(
+              enrollmentId: id, access: 'rw', keyPackage: listedPackage)
+      ];
 
   @override
   Future<DateTime?> lastRevokedAt(String namespace) async {
@@ -805,7 +916,20 @@ class _RingAdding extends PublishedNskeyKeyRing {
           (advertisement: _current, updatedAt: null);
 
   @override
-  Future<NskeyAdvertisement?> add(String namespace) async => _widened;
+  List<String> missingKeyAlgorithms(NskeyAdvertisement current) =>
+      _widened.keys.length > _current.keys.length ? ['missing'] : const [];
+
+  @override
+  Future<NskeyAdvertisement?> add(String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      Duration? lockTtl}) async {
+    final before = {for (final key in _current.keys) key.kid};
+    await conveyFirst?.call([
+      for (final key in _widened.keys)
+        if (!before.contains(key.kid)) key.kid
+    ]);
+    return _widened;
+  }
 }
 
 /// Records which generation ids a conveyance was attempted for.
@@ -837,7 +961,10 @@ class _RingPublishingLate extends PublishedNskeyKeyRing {
           reads++ == 0 ? null : (advertisement: _published, updatedAt: null);
 
   @override
-  Future<NskeyAdvertisement?> add(String namespace) async => null;
+  Future<NskeyAdvertisement?> add(String namespace,
+          {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+          Duration? lockTtl}) async =>
+      null;
 }
 
 /// A ring that answers [_published] for every namespace, so a test can put the
@@ -878,8 +1005,12 @@ class _RingRotating extends PublishedNskeyKeyRing {
 
   @override
   Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
-      String namespace) async {
+      String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
+      Duration? lockTtl}) async {
     rotations.add(namespace);
+    await conveyFirst?.call([for (final key in _successor.keys) key.kid]);
     return (rotated: _successor, superseded: _record!.advertisement);
   }
 }

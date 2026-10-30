@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -18,6 +19,10 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/memory_sync_queue.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -61,19 +66,18 @@ void main() {
   setUpAll(() async {
     encryptionKeyPair = RsaKeyPair.generate();
     selfEncryptionKey = AESKey.generate(32).key;
-    atClient = await AtClientImpl.create(
-        currentAtSign,
-        'wavi',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/commit',
+    atClient = await AtClientImpl.create(currentAtSign, 'wavi',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: enrollmentId,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
             selfEncryptionKey: selfEncryptionKey,
             enrollmentId: enrollmentId,
             apkamKeyPair: RsaKeyPair.generate()),
-        remoteSecondary: mockRemoteSecondary);
+        remoteSecondary: mockRemoteSecondary,
+        storage: hiveStoreAt(currentAtSign, 'test/hive'));
     atClient.syncService = MockSyncService();
 
     when(() => mockRemoteSecondary
@@ -124,14 +128,22 @@ void main() {
 
   group('A group of tests related to apkam/enrollments', () {
     test(
-        'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
+        'A test to verify enrollmentId is set in atClient after calling buildAtClient',
         () async {
-      var pref = AtClientPreference()
-        ..hiveStoragePath = "test/hive"
-        ..commitLogPath = "test/hive/commit";
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', pref, enrollmentId: enrollmentId);
-      expect(atClientManager.atClient.enrollmentId, enrollmentId);
+      var pref = AtClientPreference()..hiveStoragePath = "test/hive";
+      // NOTE: a distinct atSign — setUpAll's client is live as @alice under
+      // this enrollment, and buildAtClient refuses a second.
+      final atClient = await buildAtClient(
+          atSign: '@enrolledbuild',
+          namespace: 'wavi',
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor('@enrolledbuild'),
+          enrollmentId: enrollmentId,
+          storage: hiveStoreFor('@enrolledbuild', pref));
+      expect(atClient.enrollmentId, enrollmentId);
+      await atClient.stop();
     });
 
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
@@ -158,10 +170,13 @@ void main() {
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -201,13 +216,13 @@ void main() {
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
 
-      final client = await AtClientImpl.create(
-          currentAtsign,
-          'buzz',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: secondary);
+      final client = await AtClientImpl.create(currentAtsign, 'buzz',
+          AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
 
@@ -241,13 +256,13 @@ void main() {
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
 
-      final client = await AtClientImpl.create(
-          currentAtsign,
-          'buzz',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: secondary);
+      final client = await AtClientImpl.create(currentAtsign, 'buzz',
+          AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(currentAtsign, 'test/hive'));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
 
@@ -298,9 +313,12 @@ void main() {
           atSign,
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: secondary);
+            ..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(atSign),
+          remoteSecondary: secondary,
+          storage: hiveStoreAt(atSign, 'test/hive'));
 
       // Approval seals the approver's own encryption private key and
       // self-encryption key for the enrollee, so a client that holds neither
@@ -379,11 +397,14 @@ void main() {
           EnrollmentStatus.approved
         ];
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -402,6 +423,7 @@ void main() {
       expect(requests[1].appName, jsonDecode(enrollValue2)['appName']);
       expect(requests[1].deviceName, jsonDecode(enrollValue2)['deviceName']);
       expect(requests[1].namespace, jsonDecode(enrollValue2)['namespace']);
+      await client.stop();
     });
 
     test(
@@ -425,11 +447,14 @@ void main() {
       EnrollmentListRequestParam listRequestParam = EnrollmentListRequestParam()
         ..enrollmentListFilter = [EnrollmentStatus.approved];
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -489,7 +514,8 @@ void main() {
       () {
     test('test llookup on cached:@bob:shared_key@alice', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -504,7 +530,8 @@ void main() {
 
     test('test llookup on cached public key', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -521,7 +548,8 @@ void main() {
         'test get on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -537,7 +565,8 @@ void main() {
     test('test get on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -553,7 +582,8 @@ void main() {
     test('test scan on shared key with read access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -574,7 +604,8 @@ void main() {
         'test update on shared key with only read access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -591,7 +622,8 @@ void main() {
         'test update on shared key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -608,7 +640,8 @@ void main() {
         'test update on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -625,7 +658,8 @@ void main() {
         'test update on public key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -642,7 +676,8 @@ void main() {
         'test update on public key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -659,7 +694,8 @@ void main() {
         'test notify on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -676,7 +712,8 @@ void main() {
     test('test notify on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -694,7 +731,8 @@ void main() {
         'test notify on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -712,7 +750,8 @@ void main() {
         'test delete on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -728,7 +767,8 @@ void main() {
     test('test delete on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -745,7 +785,8 @@ void main() {
         'test delete on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient);
+      LocalSecondary ls =
+          LocalSecondary(atClient, syncQueue: memorySyncQueue());
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId

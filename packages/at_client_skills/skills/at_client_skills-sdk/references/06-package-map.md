@@ -7,33 +7,42 @@ All packages are published on pub.dev under the `atsign.org` publisher:
 
 ## Recommended Packages
 
-### Core — always needed
+### One platform package — always needed
 
-```sh
-dart pub add at_client
-```
+An app depends on **one platform package** and imports only its barrel:
 
-`at_client` is the core Dart SDK. It provides `AtClient`, `AtCollection<T>`,
-`CItem<T>`, `Query<T>`, `NotificationService`, `SyncService`, and all
-collection-related APIs. Required for every app that uses the Atsign Protocol.
+| App                                     | Add                 | Import                                             |
+| --------------------------------------- | ------------------- | -------------------------------------------------- |
+| Dart CLI, daemon, server, Dart on IoT   | `at_client_cli`     | `package:at_client_cli/at_client_cli.dart`         |
+| Flutter (mobile, desktop, embedded)     | `at_client_flutter` | `package:at_client_flutter/at_client_flutter.dart` |
+
+Each re-exports at_client's API — `AtClient`, `AtCollection<T>`, `CItem<T>`,
+`Query<T>`, `NotificationService`, `SyncService`, the `Atsign` verbs — with
+the native pieces (`FileAtKeysIo`, `secureSocketLookUps`,
+`CacheableSecondaryAddressFinder`, `HiveAtClientStorage`), and supplies a
+working default for everything that differs by platform (storage, transport,
+keys, logging). You do not add `at_client` beside it.
+
+`at_client` itself is the platform-neutral **core**: public, but for building
+a platform package, or for a program that passes every dependency explicitly.
+A browser platform package, `at_client_web`, does not exist yet.
 
 ---
 
 ### Flutter apps
 
 ```sh
-dart pub add at_client_flutter   # re-exports at_client — one dep is enough
+dart pub add at_client_flutter   # the one SDK dependency
 ```
 
-`at_client_flutter` re-exports `at_client` in full
-(`export 'package:at_client/at_client.dart'`), so a Flutter app only needs this
-one entry. You do not need to add `at_client` separately.
+`at_client_flutter` re-exports at_client's native API
+(`export 'package:at_client/at_client_io.dart'`), its Hive, SQLite and
+in-memory stores and its mixins, so a Flutter app only needs this one entry.
 
 `at_client_flutter` adds:
 
 - Auth dialogs: `AtSignSelectionDialog`, `PkamDialog`, `CramDialog`,
-  `RegistrarCramDialog`, `AtKeysFileDialog`, `ApkamActivationDialog`,
-  `ApkamDialog`
+  `RegistrarCramDialog`, `AtKeysFileDialog`, `ApkamActivationDialog`
 - `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
 - `KeychainAtKeysIo` — read/write keys from the device keychain
 - `RegistrarService` (re-exported from at_auth) — the registrar client CRAM
@@ -46,13 +55,13 @@ one entry. You do not need to add `at_client` separately.
 ### APKAM enrollment / custom auth
 
 No extra package. Onboarding, login and enrollment are verbs on `Atsign` in
-`at_client` (`open`, `activate`, `enroll`, `resumeEnrollment`), and the
-approving side is `client.enrollments`; see
+`at_client` (`open`, `activate`, `enroll`, `resumeEnrollment`), re-exported by
+both platform packages, and the approving side is `client.enrollments`; see
 [15-client-lifecycle.md](15-client-lifecycle.md). An app building its own UI
-calls those; a Flutter app uses the dialogs. **Do not add `at_auth`**: it is the
-protocol layer under `at_client`, its 4.0 removed the request and response
-types apps used to hold, and the one type an app may want from it,
-`RegistrarService`, is re-exported by `at_client_flutter`.
+calls those; a Flutter app uses the dialogs, a CLI program `CLIBase`. **Do not
+add `at_auth`**: it is the protocol layer under `at_client`, its 4.0 removed
+the request and response types apps used to hold, and the one type an app may
+want from it, `RegistrarService`, is re-exported by both platform packages.
 
 `AtRootDomain` comes from `at_commons`, surfaced via `at_client`.
 
@@ -67,21 +76,38 @@ dart pub add at_chops
 Add `at_chops` only if your app performs direct cryptographic operations
 (encrypt, decrypt, sign, verify, hash). Most apps never need this —
 `AtCollection<T>` and the auth dialogs handle all necessary cryptography
-internally.
+internally. at_client 4.0 is on at_chops 3.7, so `dart pub add` picks a 3.x.
 
 ---
 
 ### CLI / headless Dart apps (no Flutter)
 
 ```sh
-dart pub add at_client at_cli_commons
+dart pub add at_client_cli   # the one SDK dependency
 ```
 
-`at_cli_commons` provides helpers for Dart CLI/server apps: `CLIBase`
-(one-line arg parsing + `.atKeys` loading + PKAM auth — see
-[14-multi-agent.md](14-multi-agent.md)) and
-`ServiceFactoryWithNoOpSyncService` for stateless no-sync instances. Not
-needed in Flutter apps.
+`at_client_cli` covers every native Dart program that isn't Flutter. Beside
+at_client's native API, its Hive, SQLite and in-memory stores and its mixins,
+the registrar and the io logging handlers (`StdErrLoggingHandler`, `FileLoggingHandler`, `CLILoggingHandler`),
+it provides:
+
+- `CLIBase` — one-line arg parsing + `.atKeys` loading + an online client;
+  see [14-multi-agent.md](14-multi-agent.md)
+- `CliKeys` — `CliKeys.fileFor(atSign, path:, passPhrase:)` (default
+  `~/.atsign/keys/<atSign>_key.atKeys`) and `CliKeys.storageFor(atSign,
+  program:, id:, path:)` (default: the store `CLIBase` opens for that
+  namespace), for a program that calls the `Atsign` verbs itself
+- `createAtClient(atSign:, atKeysFilePath:, ...)` — the client at_activate's
+  commands open: from the keyfile, syncing nothing, on a store of its own
+- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
+  for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
+  otherwise
+- `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
+- the `at_activate` and `at_register` executables
+  (`dart pub global activate at_client_cli`)
+
+Not needed in Flutter apps. It replaces `at_cli_commons` and
+`at_onboarding_cli`, whose last majors are deprecated re-exports of it.
 
 ---
 
@@ -138,13 +164,21 @@ directly into your own app.
 
 ### `at_invitation_flutter` ⛔
 
-**Deprecated.** Use `AtClientInvitations` from
-`package:at_client/at_client_mixins.dart`, shown in
+**Deprecated.** Use `AtClientInvitations`, which both platform packages
+re-export, shown in
 `packages/at_client_flutter/example/invitations`.
 
 ### `at_sync_ui_flutter` / `at_theme_flutter` ⛔
 
 **Deprecated.** Both packages are being removed. Do not use in new projects.
+
+### `at_cli_commons` / `at_onboarding_cli` ⛔
+
+**Deprecated.** Their last majors, at_cli_commons 4.0.0 and at_onboarding_cli
+2.0.0, only re-export `at_client_cli`. Add `at_client_cli` instead. Their
+`AtOnboardingService`, `AtOnboardingPreference` and `OnboardingUtil` are
+gone, and `createAtClient` comes from `at_client_cli` unchanged; see
+[01-deprecation-guide.md](01-deprecation-guide.md) for what replaces each.
 
 ---
 
@@ -172,14 +206,16 @@ a dependency on packages mid-migration.
 
 ## Supporting / Utility Packages (usually transitive)
 
-These are typically pulled in as transitive dependencies. You only need to pin
-them directly if you're using their types directly in your own API.
+These are pulled in as transitive dependencies, and the platform package
+re-exports what an app uses of them. Add one directly only for an import the
+platform package does not carry.
 
 | Package | When to add it explicitly |
 | --------- | ---------------------- |
-| `at_commons` | If you use `AtKey`, `AtMetadata`, `Atsign` directly |
-| `at_utils` | If you use `AtSignLogger` directly |
+| `at_commons` | Only for `package:at_commons/at_builders.dart` (the verb builders); `AtKey`, `Metadata` and `Atsign` come through the platform package |
+| `at_utils` | Not for `AtSignLogger`, which the platform package re-exports; a `^3.x` constraint cannot resolve beside at_client 4 |
 | `at_lookup` | Rarely needed; low-level verb implementation |
+| `at_client` | Never in an app: the platform package re-exports all of it, the storage backends and mixins included |
 
 ---
 
@@ -188,16 +224,22 @@ them directly if you're using their types directly in your own API.
 ### Dart CLI / server app
 
 ```sh
-dart pub add at_client at_cli_commons
-# at_cli_commons for CLIBase; the lifecycle verbs are in at_client
+dart pub add at_client_cli
+# CLIBase, CliKeys and the lifecycle verbs, all from one import
 ```
 
 ### Flutter mobile / desktop app
 
 ```sh
-dart pub add at_client_flutter path_provider
-# at_client_flutter re-exports at_client (and RegistrarService) — one dep is enough
-# path_provider for getApplicationSupportDirectory()
+dart pub add at_client_flutter
+# at_client_flutter re-exports at_client's API (and RegistrarService) — one dep is enough
+# add path_provider only to build your own storage under getApplicationSupportDirectory()
+```
+
+### Full imports for a CLI program
+
+```dart
+import 'package:at_client_cli/at_client_cli.dart';  // all of at_client, CLIBase, CliKeys
 ```
 
 ### Full imports for a Flutter app

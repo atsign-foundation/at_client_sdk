@@ -1,21 +1,18 @@
 /// Which signer a client's remote connection authenticates with.
 ///
-/// A client built from a keyfile also derives an `AtChops` from it, and the
-/// connection used to inject that `AtChops` as the PKAM signer — so a keyfile
-/// client's own connection never signed from the keyfile. The keyfile is the
-/// source; the `AtChops` is the door for a client that has no keyfile.
+/// The keyfile is the source; a bare private key signs only for a client that
+/// has no keyfile.
 ///
 /// The instrument is at_chops' RSA verifier: the two sources hold different
 /// keypairs, and which public key the PKAM signature verifies under says which
-/// source signed. A lookup without the authenticator seam is covered in
-/// `remote_secondary_test.dart`.
+/// source signed.
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -25,10 +22,6 @@ import 'test_utils/mocks.dart';
 
 /// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockMuxableLookUp extends Mock implements AtLookupImpl {}
-
-/// The frozen interface alone: no authenticator seam, only the credential
-/// fields.
-class MockPlainLookUp extends Mock implements AtLookUp {}
 
 /// Runs an installed [AtAuthenticator] for real and records what it sent.
 class _RecordingExecutor implements AtCommandExecutor {
@@ -54,11 +47,11 @@ void main() {
   final preference = AtClientPreference()..namespace = 'unit';
 
   late RsaKeyPair keyfilePair;
-  late RsaKeyPair chopsPair;
+  late RsaKeyPair privateKeyPair;
 
   setUpAll(() {
     keyfilePair = RsaKeyPair.generate();
-    chopsPair = RsaKeyPair.generate();
+    privateKeyPair = RsaKeyPair.generate();
   });
 
   /// A legacy-shaped keyfile whose APKAM keypair is [keyfilePair].
@@ -72,14 +65,14 @@ void main() {
     return io;
   }
 
-  /// An `AtChops` holding [pair]: the door for a client built without a
-  /// keyfile, and the thing a keyfile client derives and must not sign with.
-  // ignore: deprecated_member_use
-  AtChops chopsOf(RsaKeyPair pair) => AtChopsImpl(AtChopsKeys.create(
-      null,
-      // ignore: deprecated_member_use
-      AtPkamKeyPair.create(
-          pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
+  /// Runs [authenticate] against [challenge] and returns the signature the
+  /// `pkam:` verb carried.
+  Future<Uint8List> signatureFrom(AtAuthenticator authenticate) async {
+    final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+    expect(await authenticate(executor), isTrue);
+    final pkam = executor.sent.last;
+    return base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
+  }
 
   /// Runs the authenticator [lookUp] was handed against [challenge] and
   /// returns the signature the `pkam:` verb carried.
@@ -87,10 +80,7 @@ void main() {
     final installed = verify(() => lookUp.authenticator = captureAny())
         .captured
         .last as AtAuthenticator;
-    final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
-    expect(await installed(executor), isTrue);
-    final pkam = executor.sent.last;
-    return base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
+    return signatureFrom(installed);
   }
 
   Future<bool> verifiesUnder(RsaKeyPair pair, Uint8List signature) =>
@@ -100,100 +90,93 @@ void main() {
           publicKey: base64Decode(pair.atPublicKey.publicKey));
 
   group('which signer the remote connection authenticates with', () {
-    test('the keyfile, for a client holding a keyfile and an AtChops',
+    test('the keyfile, for a client holding a keyfile and a private key',
         () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
+          lookUps: secureSocketLookUps(),
           atLookUp: lookUp,
-          atChops: chopsOf(chopsPair),
+          privateKey: privateKeyPair.atPrivateKey.privateKey,
           atKeysIo: await keyfile());
 
       final signature = await pkamSignatureBy(lookUp);
 
       expect(await verifiesUnder(keyfilePair, signature), isTrue,
-          reason: 'the keyfile is the source; a keyfile client\'s AtChops was '
-              'derived from it and is not a second credential');
-      expect(await verifiesUnder(chopsPair, signature), isFalse,
+          reason: 'the keyfile is the source; a private key beside it is not '
+              'a second credential');
+      expect(await verifiesUnder(privateKeyPair, signature), isFalse,
           reason: 'the control: the two pairs differ, so one verifier says no');
     });
 
     test('the keyfile, for a client holding only a keyfile', () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
-          atLookUp: lookUp, atKeysIo: await keyfile());
+          lookUps: secureSocketLookUps(),
+          atLookUp: lookUp,
+          atKeysIo: await keyfile());
 
       expect(await verifiesUnder(keyfilePair, await pkamSignatureBy(lookUp)),
           isTrue);
     });
 
-    test('the AtChops, for a client whose keyfile holds no keypair', () async {
-      // The shape the live packs build: an empty AtKeys as the key source and
-      // an AtChops carrying the keys. The door, and this is its test.
+    test('nothing, for a client whose keyfile holds no keypair', () async {
       final lookUp = MockMuxableLookUp();
       final empty = InMemoryAtKeysIo();
       await empty.write(atSign, AtKeys());
       RemoteSecondary(atSign, preference,
-          atLookUp: lookUp, atChops: chopsOf(chopsPair), atKeysIo: empty);
+          lookUps: secureSocketLookUps(),
+          atLookUp: lookUp,
+          privateKey: privateKeyPair.atPrivateKey.privateKey,
+          atKeysIo: empty);
+      final installed = verify(() => lookUp.authenticator = captureAny())
+          .captured
+          .last as AtAuthenticator;
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
 
-      expect(
-          await verifiesUnder(chopsPair, await pkamSignatureBy(lookUp)), isTrue,
-          reason:
-              'the keyfile holds nothing to sign with, so the AtChops does');
+      await expectLater(
+          installed(executor), throwsA(isA<AtKeyNotFoundException>()));
+      expect(executor.sent.where((c) => c.startsWith('pkam:')), isEmpty,
+          reason: 'a keyfile client signs from its keyfile or not at all');
     });
 
-    test('the AtChops, for a client holding no keyfile', () async {
-      // The door, kept open while clients built from an AtChops exist.
+    test('the private key, for a client holding no keyfile', () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
-          atLookUp: lookUp, atChops: chopsOf(chopsPair));
+          lookUps: secureSocketLookUps(),
+          atLookUp: lookUp,
+          privateKey: privateKeyPair.atPrivateKey.privateKey);
 
-      expect(await verifiesUnder(chopsPair, await pkamSignatureBy(lookUp)),
+      expect(await verifiesUnder(privateKeyPair, await pkamSignatureBy(lookUp)),
           isTrue);
-    });
-
-    test('a lookup without the seam keeps the credential fields', () async {
-      // at_lookup's ladder, which such a lookup authenticates from; the
-      // fields stay written and leave with the ladder in the at_lookup major.
-      final lookUp = MockPlainLookUp();
-      final chops = chopsOf(chopsPair);
-      RemoteSecondary(atSign, preference,
-          atLookUp: lookUp, atChops: chops, atKeysIo: await keyfile());
-
-      // The ladder write is the assertion.
-      // ignore: deprecated_member_use
-      verify(() => lookUp.atChops = chops).called(1);
     });
   });
 
   group('the remote sync builds for itself', () {
-    late MockAtClient client;
+    late MockAtClientImpl client;
 
     setUp(() {
-      // Building a remote without a lookup asks the manager for an address
-      // finder, as remote_secondary_test does.
+      // Sync builds its remote over the client's transport and finder.
       final finder = MockSecondaryAddressFinder();
       when(() => finder.findSecondary(any())).thenAnswer(
           (_) async => SecondaryAddress('fake.secondary.address', 8010));
-      AtClientManager.getInstance().secondaryAddressFinder = finder;
 
-      // getPreferences() is a concrete override on MockAtClient and answers
-      // its own preference, so it is not stubbed here.
-      client = MockAtClient();
+      client = MockAtClientImpl();
       when(() => client.getCurrentAtSign()).thenReturn(atSign);
+      when(() => client.getPreferences()).thenReturn(AtClientPreference());
       when(() => client.enrollmentId).thenReturn(null);
-      when(() => client.atChops).thenReturn(chopsOf(chopsPair));
+      when(() => client.secondaryAddressFinder).thenReturn(finder);
     });
 
-    test('carries the client\'s AtChops beside its keyfile', () async {
-      // The same two sources the client's own connection has, so sync signs
-      // with the same key: the keyfile's when it holds one, the AtChops when
-      // it holds none.
+    test('signs with the client\'s keyfile', () async {
       when(() => client.atKeysIo).thenReturn(await keyfile());
 
       final remote = SyncServiceImpl.remoteSecondaryFor(client);
 
-      expect(remote.atChops, same(client.atChops));
       expect(remote.atLookUp, isA<AtLookupMuxable>());
+      expect(
+          await verifiesUnder(
+              keyfilePair, await signatureFrom(remote.atLookUp.authenticator!)),
+          isTrue);
     });
   });
 }

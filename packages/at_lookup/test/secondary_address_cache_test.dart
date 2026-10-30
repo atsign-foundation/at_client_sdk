@@ -4,13 +4,14 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'at_lookup_test_utils.dart';
 
+/// Catalogue, in part: features/at_lookup/atdirectory_answer.feature
 void main() async {
   group('this should be moved to functional tests', () {
     test('look up @cicd1 from root.atsign.wtf:64', () async {
@@ -224,6 +225,47 @@ void main() async {
       SecondaryAddress sa = await cachingAtServerFinder.findSecondary(atSign);
       expect(sa.toString(), mockedAtServerAddress);
       expect(numSocketCreateCalls - 1, requiredFailures);
+    });
+
+    test('An answer split across chunks is read whole', () async {
+      requiredFailures = 0;
+      when(() => mockSocket.write('$noAtAtSign\n')).thenAnswer((_) async {
+        socketOnDataFn('@guid.swarm.zone.test:12'.codeUnits);
+        socketOnDataFn('345\r\n@'.codeUnits);
+      });
+
+      final sa = await cachingAtServerFinder.findSecondary(atSign);
+
+      expect(sa.host, 'guid.swarm.zone.test');
+      expect(sa.port, 12345,
+          reason: 'the port is read from the whole line, not from the first '
+              'chunk holding a colon');
+    });
+
+    test('An answer that is not host:port is refused', () async {
+      requiredFailures = 0;
+      when(() => mockSocket.write('$noAtAtSign\n')).thenAnswer((_) async {
+        socketOnDataFn('@not a host:12345\r\n@'.codeUnits);
+      });
+
+      await expectLater(
+          cachingAtServerFinder.findSecondary(atSign,
+              timeout: const Duration(seconds: 5)),
+          throwsA(isA<AtException>()),
+          reason: 'a host name holding a space is not host:port');
+      expect(cachingAtServerFinder.cacheContains(atSign), isFalse);
+    });
+
+    test('An atSign holding a line feed is not sent', () async {
+      requiredFailures = 0;
+
+      await expectLater(
+          cachingAtServerFinder.findSecondary('@ali\nce',
+              timeout: const Duration(milliseconds: 300)),
+          throwsA(isA<AtException>()
+              .having((e) => e.message, 'message', contains('is one line'))),
+          reason: 'an atSign is written to the atDirectory as one line');
+      expect(numSocketCreateCalls, 0, reason: 'no connection is made for it');
     });
 
     test(

@@ -16,18 +16,16 @@ const String testEncryptionPrivateKey = 'dGVzdC1lbmMtcHJpdmF0ZQ==';
 /// A keyfile for [atSign] carrying **typed material only**, so a test can
 /// build its keys without naming a deprecated member.
 ///
-/// This is how production hands a client its keys, and the only route from an
-/// `AtKeysIo` to a client's crypto: pass the result as
+/// This is how production hands a client its keys: pass the result as
 /// `AtClientImpl.create(atSign, namespace, preference, atKeysIo: …)` and the
-/// client derives its own `AtChops` from what is filed here. Injecting an
-/// `AtChops` instead reaches the same place through the deprecated door.
+/// client signs, encrypts and decrypts with what is filed here.
 ///
 /// [enrollmentId] gets an active APKAM **authentication** keypair in
 /// [algorithm] — authentication rather than signing because PKAM proves
 /// possession of the APKAM keypair, which is distinct from the enrollment's
 /// attestation signing keys. Unless [withAtSignKeys] is false, the atSign also
 /// gets its own RSA encryption keypair and a symmetric self-encryption key,
-/// which are what the derived `AtChops` encrypts and decrypts with.
+/// which are what the client encrypts and decrypts with.
 ///
 /// The bytes are stand-ins, not real keys: nothing parses them until a cipher
 /// is actually run, so a test that only needs a client to hold key material
@@ -81,10 +79,8 @@ Future<InMemoryAtKeysIo> typedKeyfile(
 /// [apkamKeyPair] for [enrollmentId] when both are given — into [io], or a
 /// fresh in-memory source, and returns it.
 ///
-/// The typed form of what a test used to hand a client as an `AtChops`: a
-/// client built on the result encrypts, decrypts and signs with these keys,
-/// and nothing here names a deprecated member. Material already in [io] is
-/// kept.
+/// A client built on the result encrypts, decrypts and signs with these keys.
+/// Material already in [io] is kept.
 Future<InMemoryAtKeysIo> keyfileHolding(
   String atSign, {
   RsaKeyPair? encryptionKeyPair,
@@ -138,8 +134,7 @@ Future<InMemoryAtKeysIo> keyfileHolding(
 /// A key source holding [atSign]'s APKAM [keyPair]: typed rsa2048 material
 /// under [enrollmentId] when one is named, the flat legacy pair otherwise.
 ///
-/// The typed form of the AtChops a test used to hand a mock client so that
-/// it could sign; `ApkamSigning` reads the keypair from here.
+/// What a mock client signs with: `ApkamSigning` reads the keypair from here.
 InMemoryAtKeysIo keysHoldingApkam(
     String atSign, String? enrollmentId, RsaKeyPair keyPair) {
   final keys = AtKeys(atsign: atSign.toAtsign());

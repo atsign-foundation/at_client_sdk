@@ -1,40 +1,40 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 /// The signing algorithm is a fact about the enrollment's key material — you
-/// cannot sign ML-DSA with an RSA key — so the client must resolve it from
-/// the keyfile as an explicit init step, not as a side effect of building its
-/// own AtChops.
-///
-/// A client whose AtChops is injected — the auth path — never builds one, so
-/// resolving there would leave it signing the preference's rsa2048 default
-/// under an ML-DSA enrollment and failing every reconnect against the
-/// record-authoritative atServer.
+/// cannot sign ML-DSA with an RSA key — so the client resolves it from the
+/// keyfile as an explicit init step.
 void main() {
   test(
-      'an injected-AtChops client still resolves its enrollment algorithm '
-      'from the key material', () async {
+      'a keyfile client resolves its enrollment algorithm from the key '
+      'material', () async {
     const atSign = '@algo_resolution_1';
     const enrollmentId = 'pq-enrollment-1';
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
-    final preferences = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+    final preferences = AtClientPreference()..hiveStoragePath = 'test/hive';
 
     final ac = await AtClientImpl.create(
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     expect(ac.signingAlgoType, SigningAlgoType.mldsa65,
@@ -51,8 +51,7 @@ void main() {
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
     final preferences = AtClientPreference(posture: PqPosture.legacy)
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
 
     // A keyfile with no typed entries at all — the flat-fields legacy shape.
     // NOTE: the legacy posture above is deliberate — a pqReady client holding
@@ -71,9 +70,12 @@ void main() {
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
       atKeysIo: io,
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     expect(ac.signingAlgoType, SigningAlgoType.rsa2048,
@@ -82,53 +84,64 @@ void main() {
   });
 
   test(
-      'the keypair comes from the keyfile even when the algorithm resolution '
-      'failed', () async {
+      'the PKAM signs with the enrollment\'s own keypair even when the '
+      'algorithm resolution failed', () async {
     const atSign = '@algo_resolution_3';
     const enrollmentId = 'pq-enrollment-3';
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
-    final io = await mlDsaKeyfile(atSign, enrollmentId);
+    final pqPair = await MlDsa65KeyPair.generate();
+    final flatPair = RsaKeyPair.generate();
     // NOTE: the flat fields make this the retrofitted shape — a legacy
     // enrollment's RSA credentials beside the live enrollment's typed
-    // material. Without them toAtChops() throws and the arms differ by an
-    // exception rather than by which key was chosen.
-    final stored = await io.read(atSign);
-    stored.fileLegacyMaterial(
-        apkamPublicKey: _flatApkamPublicKey,
-        apkamPrivateKey: _flatApkamPrivateKey,
-        encryptionPublicKey: 'ZmxhdC1lbmMtcHVibGlj',
-        encryptionPrivateKey: 'ZmxhdC1lbmMtcHJpdmF0ZQ==',
-        selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=');
+    // material — and they are real, so the two arms differ by which key
+    // signed rather than by an exception.
+    final keys = AtKeys(atsign: atSign.toAtsign())
+      ..fileApkamMaterial(
+          enrollmentId: enrollmentId,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+          publicKey: pqPair.atPublicKey.publicKey,
+          privateKey: pqPair.atPrivateKey.privateKey)
+      ..fileLegacyMaterial(
+          apkamPublicKey: flatPair.atPublicKey.publicKey,
+          apkamPrivateKey: flatPair.atPrivateKey.privateKey);
 
-    final preferences = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+    final preferences = AtClientPreference()..hiveStoragePath = 'test/hive';
 
     final ac = await AtClientImpl.create(
       atSign,
       'unit',
       preferences,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preferences),
       remoteSecondary: MockRemoteSecondary(),
-      // No injected AtChops, so the client builds its own — which is the
-      // path under test.
-      atKeysIo: _FailsFirstReadAtKeysIo(io),
+      atKeysIo: _FailsFirstReadAtKeysIo(InMemoryAtKeysIo.holding(atSign, keys)),
       enrollmentId: enrollmentId,
+      storage: hiveStoreFor(atSign, preferences),
     ) as AtClientImpl;
 
     // The resolution read threw, so the preference's rsa2048 stands — the
     // survivable fallback.
     expect(ac.signingAlgoType, SigningAlgoType.rsa2048);
 
-    // The keypair is not survivable: serving the flat fields signs PKAM as the
-    // enrollment that owns them.
-    final pkam =
-        // Reads the carrier the client derived; the derivation is what this asserts.
-        // ignore: deprecated_member_use
-        (ac.atChops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey;
-    expect(pkam.publicKey, isNot(_flatApkamPublicKey),
+    const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+        ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+    final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+    final authenticate = ac.buildRemoteSecondary().atLookUp.authenticator!;
+
+    expect(await authenticate(executor), isTrue);
+
+    final pkam = executor.sent.last;
+    expect(pkam, startsWith('pkam:signingAlgo:mldsa65:'),
         reason: 'the flat fields belong to a different enrollment');
+    expect(
+        MlDsa65PureDartAlgo.verifyBytesSync(
+            Uint8List.fromList(utf8.encode(challenge)),
+            signature:
+                base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim()),
+            publicKey: base64Decode(pqPair.atPublicKey.publicKey)),
+        isTrue);
   });
 }
 
@@ -160,4 +173,19 @@ class _FailsFirstReadAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async =>
       _delegate.flush(atsign, atKeys);
+}
+
+/// Answers each command with the next of [replies] and records what was sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
 }

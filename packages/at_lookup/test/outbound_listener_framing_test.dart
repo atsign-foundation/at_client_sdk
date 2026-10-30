@@ -23,14 +23,14 @@ import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/exception/at_lookup_exception.dart';
 import 'package:test/test.dart';
 
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 void main() {
   /// Feeds [chunks] to a listener in order and reports what it emitted.
   Future<({String? reply, Object? error, List<String> notifications})> drive(
       List<String> chunks) async {
-    final socket = FakeAtServerSocket();
-    final connection = OutboundConnectionImpl(socket);
+    final transport = FakeAtServerTransport();
+    final connection = OutboundConnectionImpl(transport);
     final listener = OutboundMessageListener(connection);
     final notifications = <String>[];
     listener.onNotification = notifications.add;
@@ -44,7 +44,7 @@ void main() {
         .catchError((Object e) => error = e);
 
     for (final chunk in chunks) {
-      await socket.serverSends(chunk);
+      await transport.serverSends(chunk);
     }
     await reading;
     return (reply: reply, error: error, notifications: notifications);
@@ -130,18 +130,18 @@ void main() {
   });
 
   test('an unexpected line closes the connection', () async {
-    final socket = FakeAtServerSocket();
-    final listener = OutboundMessageListener(OutboundConnectionImpl(socket));
+    final transport = FakeAtServerTransport();
+    final listener = OutboundMessageListener(OutboundConnectionImpl(transport));
     listener.listen();
 
     final refused = expectLater(
         listener.read(maxWaitMilliSeconds: 400),
         throwsA(isA<AtLookUpException>()
             .having((e) => e.errorCode, 'errorCode', 'AT0014')));
-    await socket.serverSends('garbage\nin_the_value\n@alice@');
+    await transport.serverSends('garbage\nin_the_value\n@alice@');
     await refused;
 
-    expect(socket.destroyed, isTrue,
+    expect(transport.destroyed, isTrue,
         reason: 'a stray line leaves the rest of the stream unaccounted for, '
             'so the connection that carried it is not reused');
   });

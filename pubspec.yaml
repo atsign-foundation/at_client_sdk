@@ -7,21 +7,22 @@ environment:
 
 workspace:
   - packages/at_auth
+  - packages/at_chops
   - packages/at_cli_commons
   - packages/at_client
+  - packages/at_client_cli
   - packages/at_client_flutter
   - packages/at_commons
   - packages/at_contact
   - packages/at_lookup
   - packages/at_onboarding_cli
   - packages/at_policy
-  - packages/at_server_status
   - packages/at_telemetry
   - packages/at_utils
   - tests/at_end2end_test
   - tests/at_functional_test
-  - tests/at_onboarding_cli_functional_tests
-  - tests/at_onboarding_cli_functional_tests_proxy
+  - tests/at_client_cli_functional_tests
+  - tests/at_client_cli_functional_tests_proxy
   - tools/wasm_shakedown
 
 dependencies:
@@ -37,7 +38,7 @@ dependencies:
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
-  at_persistence_secondary_server: ^5.3.0
+  at_persistence_secondary_server: ^5.4.0
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1

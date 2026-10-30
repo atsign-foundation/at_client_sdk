@@ -230,7 +230,6 @@ void main() {
     });
 
     when(() => mockAtClient.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;

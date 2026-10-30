@@ -4,6 +4,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 
@@ -73,8 +74,8 @@ void main() {
           .thenReturn(mockLocalSecondary);
       when(() => mockAtClient.getRemoteSecondary())
           .thenReturn(mockRemoteSecondary);
-      when(() => mockLocalSecondary.executeVerb(any<DeleteVerbBuilder>(),
-          sync: false)).thenAnswer((_) => Future.value('data:-1'));
+      when(() => mockLocalSecondary.executeVerb(any<DeleteVerbBuilder>()))
+          .thenAnswer((_) => Future.value('data:-1'));
       when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
           .thenAnswer((_) => Future.value('data:null'));
       when(() => mockRemoteSecondary.executeVerb(any<LLookupVerbBuilder>()))

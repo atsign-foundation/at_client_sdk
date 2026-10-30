@@ -122,9 +122,7 @@ class EnrollmentSubmitter {
   /// itself. Every deployed `_apsk` consumer base64-decodes the value as an
   /// RSA key, so a JSON one fails their parse — fail-closed, but
   /// service-breaking for anything already running. Sending the bare key here
-  /// reproduces exactly what the atServer used to compose for such an
-  /// enrollment, so the published record is unchanged from the day this moved
-  /// client-side.
+  /// keeps the published record in the form those consumers parse.
   ///
   /// Everything else sends the array: an enrollment whose advertised key's
   /// algorithm is not the rsa2048 a bare value implies, since nothing could
@@ -145,11 +143,10 @@ class EnrollmentSubmitter {
   /// link the approver conveyed against the old value, leaving the enrollment
   /// silently unsigned.
   ///
-  /// A key package used to force the array here, on the grounds that a bare
-  /// value cannot state the algorithm of whatever signed the package. Where
-  /// that signer is rsa2048 the bare value states exactly it; where it is
-  /// anything else the algorithm test has already sent the array. So the
-  /// condition only ever fired on the case it was wrong about: an
+  /// A key package does not force the array. Where the package's signer is
+  /// rsa2048 the bare value states exactly it; where it is anything else the
+  /// algorithm test has already sent the array. Forcing it for a package
+  /// would fire only where it makes the two composers disagree: an
   /// APKAM-advertising rsa2048 enrollment in pq key-exchange mode, which is
   /// reachable — a legacy posture names an empty signing set, so nothing is
   /// advertised, while `--key-exchange pq` still carries a package.
@@ -243,8 +240,9 @@ class EnrollmentSubmitter {
     // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
     // hands an atSign whose deployment has moved to post-quantum an
     // RSA-authenticating enrollment, which the client retrofits away on its
-    // first start — leaving a discarded enrollment behind and an RSA
-    // credential live for the atServer's grace window.
+    // first start — leaving that enrollment behind, revoked when its
+    // replacement first authenticates if it is scoped, and live for good if
+    // it is fully privileged.
     final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
@@ -374,8 +372,6 @@ class EnrollmentSubmitter {
     // keyfile, where the flat fields are the enrollment that was left behind —
     // and this is not that: one enrollment, and `enrollmentId` above names it,
     // so every reader resolves to the same keypair whichever way it looks.
-    // Clearing them instead breaks the approval handshake, which needs the
-    // symmetric key and the keypair from one assembled `AtChops`.
     if (atEnrollmentRequest.signingAlgo != SigningAlgoType.rsa2048) {
       atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentIdFromServer,
@@ -427,7 +423,10 @@ class EnrollmentSubmitter {
   ///
   /// Idempotent per keyfile: when the keyfile already holds an active
   /// ML-DSA-65 signing material under some enrollment id, that enrollment is
-  /// returned and nothing is minted or submitted. A crash after the request
+  /// returned and nothing is minted or submitted. Otherwise the keyfile is
+  /// written back unchanged first, and one that cannot be written is refused
+  /// before anything is sent; one that refuses the save after approval has
+  /// the new enrollment revoked, best effort. A crash after the request
   /// lands but before the keyfile is written leaves an orphan approved
   /// enrollment server-side whose private nobody holds — unusable and
   /// revocable, and a rerun spawns a fresh enrollment.
@@ -501,6 +500,16 @@ class EnrollmentSubmitter {
             rootDomain: request.rootDomain,
             atAuthKeys: existing,
             session: request.session);
+      }
+
+      // NOTE: the keyfile must take a write before anything is minted or sent.
+      // `update`, not `flush`: a flush recreates a keyfile deleted since the
+      // read.
+      try {
+        await keysIo.update(request.atSign.toAtsign(), (_) => true);
+      } catch (e) {
+        throw AtEnrollmentException('the keyfile for ${request.atSign} could '
+            'not be written ($e), so no self-enrollment was requested');
       }
 
       // Fresh either way: a new enrollment never reuses the legacy key
@@ -618,7 +627,28 @@ class EnrollmentSubmitter {
       // halves), re-tagged with the enrollment id it now belongs to.
       existing.adoptMaterials(constructionKeys.keys,
           enrollmentId: newEnrollmentId);
-      await keysIo.flush(request.atSign.toAtsign(), existing);
+      try {
+        await keysIo.flush(request.atSign.toAtsign(), existing);
+      } catch (e) {
+        // NOTE: an approved enrollment whose keys were not saved is revoked;
+        // revoking needs `__manage`, which a scoped parent may not hold.
+        var cleanup = 'The enrollment $newEnrollmentId it created was '
+            'revoked.';
+        try {
+          await _approver.revoke(
+              EnrollmentRequestDecision.revoked(
+                  newEnrollmentId, request.atSign),
+              atLookUp);
+        } catch (revokeError) {
+          cleanup = 'The enrollment $newEnrollmentId it created could NOT be '
+              'revoked ($revokeError); revoking needs __manage, which the '
+              'enrollment this connection authenticated as may not hold. It '
+              'stays approved, and no keyfile holds its private key.';
+        }
+        throw AtEnrollmentException('the self-enrollment was approved, but '
+            'the keyfile for ${request.atSign} could not be written ($e). '
+            '$cleanup');
+      }
 
       return AtEnrollmentResponse(newEnrollmentId, enrollStatus,
           atSign: request.atSign,

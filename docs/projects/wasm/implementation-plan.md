@@ -169,7 +169,7 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 > at_auth's `max_blocked_packages` from 4 to 3 in the same PR — which is exactly the "T0
 > shrinks" the phase promises, and the first evidence that the one-way baseline is
 > tightened when convenient rather than ignored. Putting the import back fails the at_auth
-> ratchet at 4 blocked packages over the 3 it is baselined at.
+> ratchet by one blocked package over its ceiling.
 
 - **S1 — Plumb the at_lookup socket factories.** ⛔ **Superseded by
   [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)**;
@@ -256,12 +256,14 @@ break; it stays as ruled.
 - **T6 — Follow the raw socket.** `monitor_client.dart` (exported from at_lookup's
   barrel, no consumer in this repository) calls `SecureSocket.connect` directly,
   bypassing `SecureSocketUtil`. It must route through the transport or move to
-  `_io`.
+  `_io`. **Done 2026-10-23:** `MonitorClient` is removed in at_lookup 4.0.0.
 - **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
   opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
   not through `AtLookUpFactory`. Ship a web implementation using one of
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
-  convention. The production answer is OQ-7.
+  convention. The production answer is OQ-7. **Done 2026-10-23:**
+  `HttpsSecondaryAddressFinder` in `at_lookup_web.dart`, behind `webSocketLookUps()`;
+  OQ-7 resolved, pending atDirectory CORS.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
 - **T9 — Let the APP inject the transport, and thread it to every construction site**
   (gkc, 2026-09-06). ✅ **DONE 2026-09-13**, on the client-lifecycle branch, as the
@@ -588,10 +590,10 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection advertises nothing.** `RemoteSecondary` passes
-    `clientConfig: _getClientConfig()` — version, clientId, appName, appVersion, platform —
-    and `NotificationServiceImpl` passes none, so that parameter takes its `const {}`
-    default. `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
+  - **The monitor connection advertises nothing.** `RemoteSecondary`'s authenticator
+    sends `_getClientConfig()` — version, clientId, appName, appVersion, platform — in its
+    `from:`, and the one `NotificationServiceImpl` builds for the monitor carries none.
+    `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
     connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
     its own connection, so there was nothing to inherit. Worth settling if the atServer logs
     or branches on client version per connection.

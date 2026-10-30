@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show SocketException, HandshakeException;
 
 import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart';
@@ -41,9 +40,11 @@ enum AtConnectionCause {
   /// The atServer answered `AT0029`: the enrollment has expired.
   invalidEnrollment,
 
-  /// The atServer answered `AT0025` or `AT0026`: the enrollment was denied,
-  /// or is not yet approved.
+  /// The atServer answered `AT0026`: the enrollment is not yet approved.
   enrollmentNotApproved,
+
+  /// The atServer answered `AT0025`: the enrollment was denied.
+  enrollmentDenied,
 
   /// A refusal the atServer gave no code this build knows for.
   otherRefusal,
@@ -231,13 +232,13 @@ const Map<String, AtConnectionCause> _refusalCodes = {
   'AT0027': AtConnectionCause.revoked,
   'AT0401': AtConnectionCause.unauthenticated,
   'AT0029': AtConnectionCause.invalidEnrollment,
-  'AT0025': AtConnectionCause.enrollmentNotApproved,
+  'AT0025': AtConnectionCause.enrollmentDenied,
   'AT0026': AtConnectionCause.enrollmentNotApproved,
 };
 
 /// The codes at_lookup assigns when it wraps a failure to reach the atServer.
 const Set<String> _unreachableCodes = {
-  'AT0004', // SocketException
+  'AT0004', // a socket error, AtIOException among them
   'AT0021', // SecondaryConnectException
   'AT0023', // AtTimeoutException
 };
@@ -300,8 +301,7 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtConnectException ||
       error is SecondaryConnectException ||
       error is AtTimeoutException ||
-      error is SocketException ||
-      error is HandshakeException ||
+      error is AtIOException ||
       error is TimeoutException) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
         error: error);
@@ -377,7 +377,15 @@ class AtCredentialRefusedException extends AtException {
 
   AtCredentialRefusedException(this.atSign, this.state)
       : super('the atServer refused $atSign\'s keys (${state.cause?.name})'
-            '${state.error == null ? '' : ': ${state.error}'}');
+            '${state.error == null ? '' : ': ${state.error}'}'
+            '${_enrollmentNote(state.cause)}');
+
+  static String _enrollmentNote(AtConnectionCause? cause) => switch (cause) {
+        AtConnectionCause.enrollmentNotApproved =>
+          '; the enrollment awaits approval',
+        AtConnectionCause.enrollmentDenied => '; the enrollment was denied',
+        _ => '',
+      };
 }
 
 class AtOpenRefusedException extends AtException {

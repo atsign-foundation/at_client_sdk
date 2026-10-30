@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
@@ -16,8 +16,12 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/key_package_filing.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 import '../test_utils/remote_backed_client.dart';
+import '../test_utils/test_keypairs.dart' show pkamKeyPairFor;
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -90,6 +94,78 @@ void main() {
   }
 
   test(
+      'an rsa2048 enrollment under the pq key exchange is refused before '
+      'anything is sent', () async {
+    final lookUp = MockAtLookupImpl();
+    await expectLater(
+        Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'wavi',
+            device: 'phone',
+            namespaces: {'wavi': 'rw'},
+            keys: InMemoryAtKeysIo(),
+            preference: AtClientPreference(posture: PqPosture.pqReady)
+              ..rootDomain = InternetAddress.loopbackIPv4.address
+              ..rootPort = await refusedPort()
+              ..hiveStoragePath = dir.path
+              ..namespace = 'lifecycle',
+            signingAlgo: SigningAlgoType.rsa2048,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: lookUp),
+        throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+            allOf(contains('rsa2048'), contains('pq key exchange')))));
+    verifyZeroInteractions(lookUp);
+  });
+
+  test('an enrollment files its first key package under its enrollment id',
+      () async {
+    final lookUp = MockAtLookupImpl();
+    final requests = <String>[];
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((invocation) async {
+      final command = invocation.positionalArguments.first as String;
+      if (command.startsWith('enroll:request:')) {
+        requests.add(command);
+        return 'data:${jsonEncode({
+              'enrollmentId': enrollmentId,
+              'status': 'pending'
+            })}';
+      }
+      throw StateError('the mocked atServer has no answer for: $command');
+    });
+    when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
+      final builder = invocation.positionalArguments.first;
+      if (builder is LookupVerbBuilder && builder.atKey.key == 'publicKey') {
+        return 'data:$encryptionPublicKey';
+      }
+      throw StateError('the mocked atServer has no answer for: '
+          '${(builder as VerbBuilder).buildCommand()}');
+    });
+    when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.isConnectionAvailable()).thenReturn(false);
+    final store = InMemoryAtKeysIo();
+
+    await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: AtClientPreference(posture: PqPosture.pqReady)
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = await refusedPort()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: lookUp);
+
+    expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
+        kid: advertisedKid(requests.single));
+  });
+
+  test(
       'a pq enrollment completes: the symmetric key sealed to its key '
       'package is opened, and the secrets under it read', () async {
     // The enrollee's atServer: answers by verb, and serves whatever the
@@ -139,9 +215,7 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${(builder as VerbBuilder).buildCommand()}');
     });
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async {
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
       if (approved) return true;
       throw AtLookUpException('AT0026', 'enrollment $enrollmentId is pending');
     });
@@ -161,6 +235,8 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
     expect(pending.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
     expect(submitted?['encryptedAPKAMSymmetricKey'], isNull,
@@ -173,15 +249,8 @@ void main() {
     final approver = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
     stubApproverKeys(approver);
-    when(() => approver.getAtKeys(
-        regex: any(named: 'regex'),
-        showHiddenKeys: any(named: 'showHiddenKeys'),
-        useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
-      final regex = RegExp(inv.namedArguments[#regex] as String);
-      return Future.value(
-          remoteData.keys.where(regex.hasMatch).map(AtKey.fromString).toList());
-    });
-    when(() => approver.atKeysIo).thenReturn(null);
+    when(() => approver.atKeysIo).thenReturn(keysHoldingApkam(
+        atSign, 'approver-1', pkamKeyPairFor(atSign, 'approver-1')));
     await AtClientSecretSharing.forClient(approver).register();
     stubApproveListReads(
         approver.getRemoteSecondary()!,

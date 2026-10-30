@@ -1,15 +1,23 @@
 import 'dart:io';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'test_util.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 void main() async {
   try {
     final atsign = '@alice🛠';
     final preference = TestUtil.getPreferenceRemote();
-    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        atsign, 'wavi', preference,
-        storage: InMemoryAtClientStorage(atSign: atsign));
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atsign),
+          storage: InMemoryAtClientStorage(atSign: atsign)));
     var atClient = atClientManager.atClient;
     var result = await atClient
         .getRemoteSecondary()!

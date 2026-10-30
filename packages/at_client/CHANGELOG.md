@@ -1,5 +1,175 @@
-## 3.15.0-rc9
+## 4.0.0
 
+- feat: the first release with post-quantum cryptography, chosen by
+  `AtClientPreference.posture` (`PqPosture.pqReady` or `pqActive`):
+  ML-DSA-65 signing, X-Wing and ML-KEM-1024 key establishment,
+  per-namespace keys, a signing root, secret conveyance between an atSign's
+  enrollments, and key rotation. The default posture is still
+  `PqPosture.legacy`, which runs none of it.
+- note: an envelope's signature is verified with the strongest algorithm the
+  envelope and its signer's `_apsk` both carry, against the key the signature
+  names, and a key the `_apsk` lists as `retired` still verifies, so what an
+  enrollment signed before a rotation stays valid. A later release re-signs
+  what an enrollment publishes under its active key, and then withdraws the
+  retired one.
+- feat: a namespace key's private is conveyed, before the key is published,
+  to every enrollment listed for its namespace that has a key package. An
+  enrollment the conveyance misses first looks for an envelope addressed to
+  it, then asks the others.
+- feat: `AtKeysFormatException` comes through at_client, so an app tells a
+  keyfile that is not a JSON object by its `reason` and `position` without
+  importing at_auth.
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
+  keys it is given.
+- breaking: `AtClientManager.secondaryAddressFinder` and
+  `setSecondaryAddressFinder` are removed; a client asks only the
+  `secondaryAddressFinder` it is built with.
+- breaking: `Atsign.enroll` refuses an `rsa2048` request under the pq key
+  exchange before sending it, and a `PqPosture` refuses `rsa2048`
+  authentication with the pq key exchange, or seeding namespace keys without
+  it. Each refusal names both settings.
+- fix: a write or read no longer fails while the namespace private conveyed
+  to the client is already waiting on the atServer. When none has been
+  conveyed yet, the error says so.
+- fix: a read that lacks a namespace key's private goes to the atServer only
+  for a key this atSign has published, with one request for it at a time,
+  and not at all under `PqStartupGates.inert()` or with `askOnReadMiss` off.
+- fix: `ensureReachable` no longer answers `failed` for a namespace whose key
+  it has just published, when a revocation lands during the mint.
+- feat: namespace-key rotation follows the atServer's `lastKeyHolderRevokedAt`
+  where it answers one, so a revocation of an enrollment that never held a key
+  package no longer triggers a rotation.
+- fix: `EnrollmentDirectory.lastRevokedAt` throws `AtValueException` for an
+  `enroll:infons` answer that names no revocation moment, rather than reading
+  it as no revocation.
+- feat: an enrollment with a key package holds a namespace key from the
+  moment it is published. Only such a client mints one; on the atSign's own
+  credential, `ensureReachable` answers `AtReachability.noKeyPackage`.
+- fix: an enrollment created under the legacy key exchange can open what its
+  other enrollments convey to it, without waiting for a restart.
+- fix: when no namespace key is published, a client retires any it holds and
+  mints and publishes a fresh one.
+- fix: two processes of one enrollment no longer both mint a namespace key. A
+  process restarted after stopping mid-mint waits until the mint lock expires.
+- fix: the record `tryAcquireServerMutex` writes holds the enrollment id
+  followed by a nonce drawn once per isolate.
+- fix: a read refuses a record whose metadata names a namespace or key id
+  that no atKey can carry.
+- fix: a namespace key's private that arrives before its generation is
+  published is kept only if it is that generation's.
+- fix: a client replaces its own atSign's nskey advertisement only when that
+  advertisement does not verify or its signer has no `_apsk`. One it cannot
+  fetch, or one that verifies but offers no key it can use, is left in place,
+  and the error is thrown.
+- fix: `getApkamPublicKey`, and so verifying a signature, refuses a signer
+  that is not an enrollment id with `AtSigningVerificationException`, and an
+  envelope sent through a namespace no atKey can carry is not delivered. A
+  secret request whose `requestId` is not an id is answered as an unsolicited
+  delivery.
+- breaking: `AtClient.telemetry` is removed, with
+  `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
+  `SyncTelemetryEvent`.
+- breaking: `AtClientUtil.findSecondary` is removed. Use
+  `RemoteSecondary.findSecondaryUrl`.
+- breaking: `Atsign.authenticatesAs` no longer takes `atLookUp`; it takes
+  a required `lookUps` and `secondaryAddressFinder`, which choose how it
+  connects.
+- breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
+  the `atChops` parameters of `AtClientImpl.create` and
+  `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`.
+- breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
+  removed; sign with `signingKeys`.
+- breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
+  `EncryptionService.encryptStream`, `decryptStream` and
+  `getSharedKeyForDecryption`: atServers refuse the `stream:` command from
+  3.12.0. Encrypt for another atSign with `put` or `notify`.
+- breaking: `AtClient.persistenceBundle` is removed; read the keystore from
+  the `AtClientStorage` the client was given.
+- breaking: the legacy collection API (`AtCollectionModel`,
+  `AtJsonCollectionModel` and their factories) is removed; use
+  `AtClient.collection`.
+- breaking: the `isDedicated` parameter of `put`, `get`, `delete`, `notify`,
+  `getMeta`, `notifyList` and `notifyAll` is removed; it was ignored.
+- breaking: the `sync` parameter of `executeVerb` and
+  `RemoteSecondary.executeAndParse` is removed; it was ignored.
+- breaking: `RemoteSecondary.isAvailable` is removed; at_lookup's
+  `checkAtSignServer` says whether an atSign's atServer is reachable.
+- breaking: `RemoteSecondary.authenticateCram` is removed; `Atsign.activate`
+  takes the CRAM secret.
+- breaking: `AtClientPreference.atProtocolEmitted` is removed; it was ignored.
+- breaking: the file-transfer API is removed: `uploadFile`, `downloadFile`,
+  `reuploadFiles`, `shareFiles`, `FileTransferObject`, `FileStatus`,
+  `EncryptionService.encryptFileInChunks` and `decryptFileInChunks`, and
+  `AtClientPreference.downloadPath`. File transfer belongs in the app.
+- breaking: `ConnectivityListener` is removed; use a connectivity package of
+  the app's choice.
+- breaking: `RemoteSecondary.addStreamData` is removed.
+- breaking: `AtClientPreference`'s `commitLogPath`, `keyStoreSecret` and
+  `outboundConnectionTimeout` are removed; nothing read them.
+- breaking: `AtClientPreference`'s `decryptPackets`, `tlsKeysSavePath` and
+  `pathToCerts` are removed; set them on the `SecureSocketConfig` of the
+  `lookUps` you pass, `secureSocketLookUps(config: ...)`.
+- breaking: `AtClientPreference.enforceNamespace` is removed: every key but a
+  `local:` one needs a namespace.
+- breaking: `EncryptionUtil` is no longer exported; use at_chops'
+  `AESEncryptionAlgo` and `RsaEncryptionAlgo`.
+- breaking: `AtClientManager.setCurrentAtSign` and `fromAuthSession` are
+  removed: open a client with `Atsign(atSign).open(...)` and make it current
+  with `AtClientManager.getInstance().use(client)`, which does not stop the
+  previous one.
+- breaking: `AtClientImpl.holdsClientFor` is removed.
+- breaking: every call that builds a client (`Atsign.open` and `activate`,
+  `PendingEnrollment.client`, `buildAtClient`, `selfRetrofit`,
+  `pqNativeOnboard`, `AtClientImpl.create`) takes a required `storage`.
+  at_client no longer opens a store under `hiveStoragePath`: to keep using
+  that store, pass `HiveAtClientStorage(atSign: ..., storagePath: <that
+  path>, closedByClient: true)`.
+- breaking: `AtClientImpl.create`'s `localSecondaryKeyStore` is removed; pass
+  a `storage`.
+- breaking: `LocalSecondary` takes a required `syncQueue`, the one the
+  client's storage holds.
+- breaking: `AtClientImpl.create` and `buildAtClient` take a required
+  `atKeysIo`, and a client no longer signs with a PKAM key its local store
+  holds: pass the atSign's keyfile, such as `FileAtKeysIo()`.
+- fix: `AtClientImpl.create` throws a `StateError` for a client of the same
+  atSign and enrollment whose `stop()` is still running, rather than
+  restarting it.
+- breaking: `AtClientImpl.create` keeps one client per atSign and enrollment
+  rather than one per atSign. A caller naming no enrollment, whose keys name
+  none, gets the client for the atSign's own credential; `exactEnrollment:
+  false` hands it the one enrolled client already cached instead.
+- fix: `AtClientImpl.setPreferences` throws the `ArgumentError` for a
+  preference naming different rollout axes at the call, rather than as an
+  unhandled asynchronous error.
+- breaking: `AtReachability.noKeySource` is removed, since every client has a
+  key source.
+- breaking: `FileAtKeysIo`, `secureSocketLookUps` and
+  `CacheableSecondaryAddressFinder` come from the new `at_client_io.dart`;
+  `at_client.dart` no longer exports them, and builds for the web.
+- breaking: every call that builds a client, `enroll`, `resumeEnrollment` and
+  `AtServiceFactory.atClient` take a required `lookUps` and
+  `secondaryAddressFinder`, as do `authenticatesAs` and `retrofitIdentity`,
+  and `RemoteSecondary` a required `lookUps`. `secureSocketLookUps()` and
+  `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`
+  connect as at_client 3 did.
+- feat: `InMemoryAtClientStorage` is pure Dart and needs no native library. A
+  SQLite database held in memory is still
+  `SqliteAtClientStorage(..., dbPath: SqliteAtClientStorage.inMemoryPath)`.
+- chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
+  read by nothing in at_client, and go in 5.0.0.
+- chore: `AtClientPreference.privateKey` is deprecated, and goes in 5.0.0: a
+  client authenticates from its `AtKeysIo`.
+- build: at_client no longer depends on archive, http,
+  internet_connection_checker or async.
+- fix: only a missing keyfile counts as holding no keys.
+  `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when there is no
+  key to sign with, and a keyfile that cannot be read throws its read's error,
+  so no signing key or key package is published from it. An `_apsk` that names
+  no active signing key is not published.
+- chore: `AtClientPreference.hashingAlgoType` and `RemoteSecondary`'s
+  `signingAlgoType` parameter are deprecated and have no effect, since PKAM
+  signs with SHA-256 and the algorithm the keys name. Both go in 5.0.0.
 - feat: an approval by an enrollment that holds the atSign's signing root, or
   a key anchored to it, anchors the enrollment it approves at once, and adding
   or retiring a key no longer undoes that. It needs an atServer with
@@ -11,30 +181,32 @@
   publishes no signing root mints one when it starts.
 - feat: `Enrollment` carries the enrollment's authentication public key, as
   `apkamPublicKey`.
-- experimental: `PqStartupGates.publishChainLink` is removed,
+- feat: a denied enrollment is refused with the new cause
+  `AtConnectionCause.enrollmentDenied`, and `enrollmentNotApproved` means one
+  not yet approved. `AtCredentialRefusedException` says which.
+- breaking: `PqStartupGates.publishChainLink` is removed,
   `PqStartupGates.publishRootLink` is renamed `anchorOwnKeys`, and
   `PqSigningChain`'s methods are replaced.
-- experimental: `selfRetrofit` closes the `atLookUp` it is given once the
+- fix: `selfRetrofit` closes the `atLookUp` it is given once the
   retrofit is submitted, so the client it returns logs in as the new
-  enrollment.
+  enrollment. A command needing authentication on that lookup in between
+  fails rather than logging in as the old one.
+- fix: `selfRetrofit` given no `atLookUp` submits through the
+  `secondaryAddressFinder` it is given, as the client it opens does.
+- fix: `AtRpc` and `AtRpcClient` log request and response payloads at finest
+  only; at INFO and in their warnings a request is named by its id, and a
+  response by its type and request id.
+- fix: on the first start after `keyEstablishmentAlgorithms` stops naming an
+  algorithm, the client treats that algorithm's key as retired at once, not
+  from its next start. `AtClientSecretSharing.heldStatuses` gives the status
+  of each key it holds.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
-- build: requires `at_auth` ^4.0.0-rc8.
-- build: requires `at_lookup` ^3.7.0-rc5.
+- build: requires `at_auth` ^4.0.0.
+- build: requires `at_lookup` ^4.0.0.
+- build: requires `at_persistence_secondary_server` ^5.4.0.
 - chore: constructing `InMemoryAtKeysIo`, which at_client re-exports, outside
   a test draws an analyzer warning: the store a client runs on must be durable,
   since a client may file the atSign's signing root into it.
-- chore: `AtClient.stream` and `AtClient.sendStreamAck`, deprecated since
-  3.5.0, now throw `UnsupportedError` without contacting an atServer, since
-  atServers refuse the `stream:` command these methods sent from 3.12.0. Both
-  are removed in v4.
-- chore: `EncryptionService.encryptStream` and `getSharedKeyForDecryption`,
-  reached through `AtClient.encryptionService`, now throw `UnsupportedError`,
-  since only the stream transfer used them: encrypt for another atSign with
-  `put` or `notify`. Both are removed in v4.
-- chore: `EncryptionService.decryptStream` is deprecated: use
-  `EncryptionUtil.decryptBytes`. It is removed in v4.
-- chore: `AtClientPreference.outboundConnectionTimeout` is deprecated:
-  nothing reads it, and it is removed in v4.
 
 ## 3.15.0-rc8
 

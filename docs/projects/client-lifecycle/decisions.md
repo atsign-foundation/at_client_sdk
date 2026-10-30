@@ -123,9 +123,12 @@ Alternatives: a `PendingEnrollment` record beside the
 store, persisted per platform (the present situation, tidied); in-memory only
 (gives up a recovery both packages built on purpose).
 
-## 6. at_onboarding_cli keeps a three-member `AtOnboardingService`
+## 6. ~~at_onboarding_cli keeps a three-member `AtOnboardingService`~~
 
-`LIVE`. `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
+`SUPERSEDED` on 2026-10-28 by the at_client_cli ledger's
+[ruling 5](../client-cli/decisions.md#5-atonboardingservice-ends): the
+adapter ends, and a program opens with `CLIBase` or `Atsign.open`. As ruled:
+`AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
 `atClient` stay with their present meaning (gkc, 2026-09-13: the deprecated
 `getAtClient()` goes with the rest, its nine external callers moving to
 `atClient` at the dependency bump), implemented over

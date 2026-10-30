@@ -1,10 +1,12 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Records the route a put hands the provider's prepare step, which is the
 /// route any record the provider writes there (a content key's conveyance)
@@ -55,6 +57,9 @@ void main() {
               ..remoteLocalPref = remoteLocalPref
               ..crypto = CryptoConfig(
                   defaultProviderId: provider.id, providers: [provider]),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
+            atKeysIo: noKeysFor('@alice'),
             remoteSecondary: remote,
             storage:
                 InMemoryAtClientStorage(atSign: '@alice', closedByClient: true))

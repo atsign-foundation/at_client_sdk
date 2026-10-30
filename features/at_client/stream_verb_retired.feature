@@ -1,8 +1,8 @@
 Feature: The client SDK no longer uses the stream verb
 
   From atServer 3.12.0 the stream: command at_client sent is refused as an
-  unknown verb. at_client keeps AtClient.stream and AtClient.sendStreamAck,
-  deprecated, until v4, but they no longer contact an atServer.
+  unknown verb. at_client 4.0.0 has no AtClient.stream or
+  AtClient.sendStreamAck.
 
   Races: nothing is sent, read or stored, so there is nothing to race.
   Replay: no stream command or acknowledgement is sent, so none can be
@@ -12,18 +12,6 @@ Feature: The client SDK no longer uses the stream verb
   Forgery and impersonation: the client no longer decrypts bytes a stream
   notification's fields point it at, and at_lookup no longer takes a stream:
   line as an atServer's reply.
-
-  Scenario: AtClient.stream fails at once, sending nothing
-    Given an AtClient
-    When an app calls the deprecated AtClient.stream
-    Then it throws an UnsupportedError saying atServers no longer support the stream verb
-    And nothing is sent to the atServer
-
-  Scenario: AtClient.sendStreamAck fails at once, connecting to nothing
-    Given an AtClient
-    When an app calls the deprecated AtClient.sendStreamAck
-    Then it throws an UnsupportedError saying atServers no longer support the stream verb
-    And no connection is opened
 
   Scenario: at_lookup takes a response starting stream: as unexpected
     Given a connection to an atServer

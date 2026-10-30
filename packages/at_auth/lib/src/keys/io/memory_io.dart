@@ -46,9 +46,8 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// [AtKeysFileOverwriteException] when keys for [atsign] are already
   /// loaded. Use [flush] (or [update]) for later mutations.
   ///
-  /// This double used to replace silently, which made it lie as a stand-in:
-  /// code that double-wrote passed against memory and threw against the
-  /// file store.
+  /// Throwing as the file store does keeps this an honest stand-in: code that
+  /// writes twice fails here as it would against the file.
   @override
   Future<void> write(String atsign, AtKeys atKeys) async {
     final key = atsign.toAtsign();

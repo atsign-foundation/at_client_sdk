@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
-import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -10,8 +9,43 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
-import 'storage/storage_contract.dart' show FakeClient;
 import 'test_utils/no_op_services.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
+
+/// A legacy keyfile enrolled as [enrollmentId]; the key material is any
+/// demo atSign's, since nothing here reaches an atServer.
+AtKeys _demoKeys(String enrollmentId) => AtKeys()
+  // ignore: deprecated_member_use
+  ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPublicKey =
+      AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultEncryptionPrivateKey =
+      AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..defaultSelfEncryptionKey = AtBytes.fromString(demo.aesKeyMap['@alice🛠']!)
+  // ignore: deprecated_member_use
+  ..enrollmentId = enrollmentId;
 
 void main() {
   late Directory dir;
@@ -39,6 +73,9 @@ void main() {
         atSign: '@factoryheld',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factoryheld'),
         storage: storage);
 
     expect(storage.isHeldBy(client), isTrue,
@@ -53,7 +90,13 @@ void main() {
       'every connection of the client resolves its atServer through one '
       'durable finder', () async {
     final client = await buildAtClient(
-        atSign: '@factoryaddr', namespace: 'wavi', preference: pref());
+        atSign: '@factoryaddr',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factoryaddr'),
+        storage: hiveStoreFor('@factoryaddr', pref()));
 
     final own = (client as AtClientImpl).secondaryAddressFinder;
     expect(own, isA<DurableSecondaryAddressFinder>());
@@ -78,19 +121,43 @@ void main() {
     await client.stop();
   });
 
+  test('the finder the client was given is the one it asks', () async {
+    final client = await buildAtClient(
+        atSign: '@factorygiven',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder:
+            FixedSecondaryAddressFinder('given.example', 1234),
+        atKeysIo: noKeysFor('@factorygiven'),
+        storage: hiveStoreFor('@factorygiven', pref()));
+
+    final found = await (client as AtClientImpl)
+        .secondaryAddressFinder
+        .findSecondary('@factorygiven');
+    expect(found.toString(), 'given.example:1234');
+
+    await client.stop();
+  });
+
   test('the client is filed in the instance map, though not as the current one',
       () async {
     final client = await buildAtClient(
-        atSign: '@factorysolo', namespace: 'wavi', preference: pref());
+        atSign: '@factorysolo',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factorysolo'),
+        storage: hiveStoreFor('@factorysolo', pref()));
 
     expect(client.getCurrentAtSign(), '@factorysolo');
     expect(AtClientImpl.atClientInstanceMap['@factorysolo'], same(client),
         reason: 'AtClientImpl.create files every client it builds, this one '
-            'included - so a later setCurrentAtSign for this atSign adopts '
-            'THIS client rather than building its own. Asserting only that the '
-            'manager has no current client passes before create() is ever '
-            'called, which is what made the previous version of this test '
-            'vacuous');
+            'included - so a later buildAtClient for this atSign as the same '
+            'principal is refused rather than building a second. Asserting '
+            'only that the manager has no current client passes before '
+            'create() is ever called');
     expect(() => AtClientManager.getInstance().atClient, throwsStateError,
         reason: 'the manager\'s current client is still unset: create() does '
             'not make this the process-wide current atSign');
@@ -100,7 +167,13 @@ void main() {
 
   test('the services are wired', () async {
     final client = await buildAtClient(
-        atSign: '@factorywired', namespace: 'wavi', preference: pref());
+        atSign: '@factorywired',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factorywired'),
+        storage: hiveStoreFor('@factorywired', pref()));
 
     expect(() => client.syncService, returnsNormally);
     expect(() => client.notificationService, returnsNormally);
@@ -115,7 +188,11 @@ void main() {
         atSign: '@factorybuilder',
         namespace: 'wavi',
         preference: pref(),
-        syncServiceBuilder: (_) => noOp);
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factorybuilder'),
+        syncServiceBuilder: (_) => noOp,
+        storage: hiveStoreFor('@factorybuilder', pref()));
 
     expect(client.syncService, same(noOp),
         reason: 'the caller\'s builder is what supplied the service, rather '
@@ -127,11 +204,23 @@ void main() {
   test('an atSign whose client is live is refused; stop() releases it',
       () async {
     final first = await buildAtClient(
-        atSign: '@factorytwice', namespace: 'wavi', preference: pref());
+        atSign: '@factorytwice',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factorytwice'),
+        storage: hiveStoreFor('@factorytwice', pref()));
 
     await expectLater(
         () => buildAtClient(
-            atSign: '@factorytwice', namespace: 'wavi', preference: pref()),
+            atSign: '@factorytwice',
+            namespace: 'wavi',
+            preference: pref(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref()),
+            atKeysIo: noKeysFor('@factorytwice'),
+            storage: hiveStoreFor('@factorytwice', pref())),
         throwsA(isA<StateError>()
             .having((e) => e.message, 'message', contains('already live'))),
         reason: 'handing back a client this caller does not own would discard '
@@ -139,7 +228,13 @@ void main() {
 
     await first.stop();
     final second = await buildAtClient(
-        atSign: '@factorytwice', namespace: 'wavi', preference: pref());
+        atSign: '@factorytwice',
+        namespace: 'wavi',
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factorytwice'),
+        storage: hiveStoreFor('@factorytwice', pref()));
     expect(second, isNot(same(first)),
         reason: 'stop() frees the atSign, so the refusal is about a LIVE '
             'client rather than the atSign having been used once');
@@ -160,30 +255,14 @@ void main() {
       ..hiveStoragePath = '${dir.path}/$principal'
       ..rootDomain = InternetAddress.loopbackIPv4.address
       ..rootPort = refusedPort;
-    // A legacy keyfile enrolled as [enrollmentId]; the key material is any
-    // demo atSign's, since nothing here reaches an atServer.
-    AtKeys keysAs(String enrollmentId) => AtKeys()
-      // ignore: deprecated_member_use
-      ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..apkamPrivateKey =
-          AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..defaultSelfEncryptionKey =
-          AtBytes.fromString(demo.aesKeyMap['@alice🛠']!)
-      // ignore: deprecated_member_use
-      ..enrollmentId = enrollmentId;
     Future<AtClient> build(String enrollmentId) => buildAtClient(
         atSign: atSign,
         namespace: 'wavi',
         preference: offline(enrollmentId),
-        atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs(enrollmentId)));
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(offline(enrollmentId)),
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys(enrollmentId)),
+        storage: hiveStoreFor(atSign, offline(enrollmentId)));
 
     final first = await build('e1');
     final second = await build('e2');
@@ -200,7 +279,13 @@ void main() {
             'names it');
 
     final own = await buildAtClient(
-        atSign: atSign, namespace: 'wavi', preference: offline('own'));
+        atSign: atSign,
+        namespace: 'wavi',
+        preference: offline('own'),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(offline('own')),
+        atKeysIo: noKeysFor(atSign),
+        storage: hiveStoreFor(atSign, offline('own')));
     expect(own.enrollmentId, isNull,
         reason: 'the atSign\'s own credential is a third principal: with '
             'enrolled clients live, a caller naming no enrollment is not '
@@ -214,13 +299,22 @@ void main() {
             atSign: atSign,
             namespace: 'wavi',
             preference: offline('e1'),
-            atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs('e3'))),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(offline('e1')),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys('e3')),
+            storage: hiveStoreFor(atSign, offline('e1'))),
         throwsA(isA<StateError>().having((e) => e.message, 'message',
             allOf(contains('storage at'), contains('as enrollment e1')))),
         reason: 'one store holds one principal, and the refusal names the '
             'holder');
     final other = await buildAtClient(
-        atSign: '@factoryother', namespace: 'wavi', preference: offline('e1'));
+        atSign: '@factoryother',
+        namespace: 'wavi',
+        preference: offline('e1'),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(offline('e1')),
+        atKeysIo: noKeysFor('@factoryother'),
+        storage: hiveStoreFor('@factoryother', offline('e1')));
     expect(other.getCurrentAtSign(), '@factoryother',
         reason: 'the control: the same directory is another store for '
             'another atSign');
@@ -233,26 +327,39 @@ void main() {
 
   test('buildRemoteSecondary carries the client identity a preference cannot',
       () async {
+    const enrollmentId = 'enrollment-under-test';
     final client = await buildAtClient(
         atSign: '@buildsecondary',
         namespace: 'wavi',
-        preference: pref()..privateKey = 'dummy_private_key',
-        enrollmentId: 'enrollment-under-test') as AtClientImpl;
+        preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        enrollmentId: enrollmentId,
+        atKeysIo: InMemoryAtKeysIo.holding(
+            '@buildsecondary', _demoKeys(enrollmentId)),
+        storage: hiveStoreFor('@buildsecondary', pref())) as AtClientImpl;
 
     final built = client.buildRemoteSecondary();
 
-    // enrollmentId, not the credential: RemoteSecondary recovers privateKey
-    // from the preference on its own (`privateKey ??= preference.privateKey`),
-    // so asserting on the authenticator passes whether or not the factory
-    // threaded anything. The enrollment id is held by the client alone.
-    // The ladder stamp is the assertion.
-    // ignore: deprecated_member_use
-    expect(built.atLookUp.enrollmentId, 'enrollment-under-test',
+    // enrollmentId, not the credential: signing with real keyfile material is
+    // only what lets the authenticator run to completion, not what's under
+    // test. The enrollment id is captured inside the authenticator closure
+    // with nothing on the built object to read it back from, so it's run
+    // against a recording executor and the enrollment id is read off the
+    // `pkam:` command it actually sent.
+    final authenticator = (built.atLookUp as AtLookupMuxable).authenticator;
+    expect(authenticator, isNotNull,
+        reason: 'it authenticates through the seam, not the ladder');
+    final executor = _RecordingExecutor([
+      'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@buildsecondary'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f',
+      'data:success',
+    ]);
+    await expectLater(authenticator!(executor), completion(isTrue));
+    expect(executor.sent.last, contains(':enrollmentId:enrollment-under-test:'),
         reason: 'every RemoteSecondary this client opens is configured FROM '
             'the client, so a second connection acts as the same enrollment '
             'rather than being assembled independently');
-    expect((built.atLookUp as AtLookupMuxable).authenticator, isNotNull,
-        reason: 'and it authenticates through the seam, not the ladder');
 
     await client.stop();
   });
@@ -264,6 +371,9 @@ void main() {
         atSign: '@factorynolocal',
         namespace: 'wavi',
         preference: pref()..isLocalStoreRequired = false,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
+        atKeysIo: noKeysFor('@factorynolocal'),
         storage: storage);
 
     expect(storage.isHeldBy(client), isTrue,
@@ -272,65 +382,6 @@ void main() {
 
     await client.stop();
     await storage.close();
-  });
-
-  test('a preference asking for no local store, with none passed, is refused',
-      () async {
-    await expectLater(
-        () => buildAtClient(
-            atSign: '@factorynone',
-            namespace: 'wavi',
-            preference: pref()..isLocalStoreRequired = false),
-        throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
-            contains('package:at_client/memory.dart'))),
-        reason: 'every client keeps local storage, so the refusal names the '
-            'storage to pass for one with nothing to keep');
-  });
-
-  test('no storage and no hiveStoragePath is refused at construction',
-      () async {
-    await expectLater(
-        () => buildAtClient(
-            atSign: '@factorynopath',
-            namespace: 'wavi',
-            preference: AtClientPreference()),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('hiveStoragePath'))),
-        reason: 'the one refusal for a client with nothing to keep its '
-            'records in, whichever argument is missing');
-  });
-
-  test('a bare keystore with no hiveStoragePath is refused', () async {
-    final keys = InMemoryAtClientStorage(atSign: '@factorybare');
-    await keys.attach(FakeClient('@factorybare', null));
-    addTearDown(keys.close);
-    await expectLater(
-        () => AtClientImpl.create('@factorybare', 'wavi', AtClientPreference(),
-            localSecondaryKeyStore: keys.keyStore),
-        throwsA(isA<ArgumentError>()
-            .having((e) => e.message, 'message', contains('bare keystore'))),
-        reason: 'the sync queue of a client built on a bare keystore lives '
-            'under preference.hiveStoragePath; with none it would open on '
-            'Hive\'s global instance, which is wherever that last pointed');
-  });
-
-  group('Given a bare keystore and a hiveStoragePath', () {
-    test(
-        'when the client is built with isLocalStoreRequired false, then it is '
-        'built', () async {
-      final keys = InMemoryAtClientStorage(atSign: '@factorybareflag');
-      await keys.attach(FakeClient('@factorybareflag', null));
-      addTearDown(keys.close);
-
-      final client = await AtClientImpl.create(
-          '@factorybareflag', 'wavi', pref()..isLocalStoreRequired = false,
-          localSecondaryKeyStore: keys.keyStore);
-
-      expect(client.getLocalSecondary()?.keyStore, same(keys.keyStore),
-          reason: 'the keystore names where the records live, and the path '
-              'where its sync queue does, so the flag has nothing to decide');
-      await client.stop();
-    });
   });
 
   test('a client that fails to build is not left behind', () async {
@@ -344,6 +395,9 @@ void main() {
             atSign: '@factoryhalfbuilt',
             namespace: 'wavi',
             preference: pref(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref()),
+            atKeysIo: noKeysFor('@factoryhalfbuilt'),
             storage: first,
             syncServiceBuilder: (_) => throw StateError('builder exploded')),
         throwsA(isA<StateError>().having(
@@ -356,8 +410,8 @@ void main() {
     expect(AtClientImpl.atClientInstanceMap.containsKey('@factoryhalfbuilt'),
         isFalse,
         reason: 'a client whose build threw is unfiled, rather than sitting in '
-            'the instance map where the next setCurrentAtSign adopts and later '
-            'stops it - while the caller that asked for it holds no reference '
+            'the instance map where it refuses the next buildAtClient for this '
+            'atSign - while the caller that asked for it holds no reference '
             'and cannot stop it itself');
 
     final second = HiveAtClientStorage(
@@ -368,6 +422,9 @@ void main() {
         atSign: '@factoryhalfbuilt',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@factoryhalfbuilt'),
         storage: second);
 
     expect(second.isHeldBy(client), isTrue,

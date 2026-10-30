@@ -1,3 +1,10 @@
+## 4.0.0
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- BREAKING: `at_utils.dart` no longer exports `PseudoServerSocket`, `ApplicationConfiguration`, `FileLoggingHandler`, `StdErrLoggingHandler` or `CLILoggingHandler` — import `at_utils_io.dart` for these. `at_utils.dart`, `at_logger.dart` and `at_progress.dart` reach no dart:io, so a browser build can use them.
+- BREAKING: a `ProgressEvent` prints without terminal colour codes. A CLI that colours progress by type gets `chalkFn` from `at_utils_io.dart`.
+- deprecated: `AtSignLogger.stdErrLoggingHandler`, for removal in 5.0.0 — use `StdErrLoggingHandler()` from `at_utils_io.dart`. It still writes to stderr natively, and writes to the console on the web.
+- BREAKING: removed `AtUtils.formatAtSign` (deprecated since 3.x)
+
 ## 3.5.0
 - feat: AtSignLogger hands its LoggingHandler each record's message and logger
   name with control characters, bidirectional formatting characters and line

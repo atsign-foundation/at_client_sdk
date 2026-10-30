@@ -1,12 +1,13 @@
 import 'dart:convert';
 
-import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// Records every command an authenticator sends, answering each with an empty
 /// response so the authenticator stops after `from:`.
@@ -36,15 +37,14 @@ void main() {
       reset(mockAtLookUp);
       when(() => mockSecondaryAddressFinder.findSecondary(atsign.toLowerCase()))
           .thenAnswer((_) async => fakeSecondaryAddress);
-      AtClientManager.getInstance().secondaryAddressFinder =
-          mockSecondaryAddressFinder;
     });
 
     test(
         'the lookup it builds is a muxable carrying an authenticator, not a '
         'lookup with credentials parked on it', () async {
       final preference = AtClientPreference()..privateKey = 'dummy_private_key';
-      final remoteSecondary = RemoteSecondary(atsign, preference);
+      final remoteSecondary =
+          RemoteSecondary(atsign, preference, lookUps: secureSocketLookUps());
 
       expect(remoteSecondary.atLookUp, isA<AtLookupMuxable>(),
           reason: 'withSecureSocket returns the muxable, which is the only '
@@ -57,19 +57,32 @@ void main() {
     });
 
     test('an injected lookup is used as given', () async {
-      final remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference, atLookUp: mockAtLookUp);
+      final remoteSecondary = RemoteSecondary(atsign, atClientPreference,
+          lookUps: secureSocketLookUps(), atLookUp: mockAtLookUp);
 
       expect(remoteSecondary.atLookUp, same(mockAtLookUp),
           reason: 'the caller supplied it, so it is used as given');
     });
 
-    test('test findSecondaryUrl', () async {
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference);
+    test('findSecondaryUrl asks the finder it was given', () async {
+      RemoteSecondary remoteSecondary = RemoteSecondary(
+          atsign, atClientPreference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: mockSecondaryAddressFinder);
       String? address = await remoteSecondary.findSecondaryUrl();
-      expect(address, isNotNull);
       expect(address, fakeSecondaryAddress.toString());
+    });
+
+    test(
+        'findSecondaryUrl with no finder of its own asks the one its lookup '
+        'connects through', () async {
+      when(() => mockAtLookUp.secondaryAddressFinder)
+          .thenReturn(mockSecondaryAddressFinder);
+      final remoteSecondary = RemoteSecondary(atsign, atClientPreference,
+          lookUps: secureSocketLookUps(), atLookUp: mockAtLookUp);
+
+      expect(await remoteSecondary.findSecondaryUrl(),
+          fakeSecondaryAddress.toString());
     });
 
     test('executeVerb using scan', () async {
@@ -77,8 +90,9 @@ void main() {
       ScanVerbBuilder scanVerbBuilder = ScanVerbBuilder();
       when(() => mockAtLookUp.executeVerb(scanVerbBuilder))
           .thenAnswer((_) async => fakeScanData);
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference);
+      RemoteSecondary remoteSecondary = RemoteSecondary(
+          atsign, atClientPreference,
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookUp;
 
       String result = await remoteSecondary.executeVerb(scanVerbBuilder);
@@ -89,8 +103,9 @@ void main() {
       ScanVerbBuilder scanVerbBuilder = ScanVerbBuilder();
       when(() => mockAtLookUp.executeVerb(scanVerbBuilder))
           .thenThrow('exception123');
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference);
+      RemoteSecondary remoteSecondary = RemoteSecondary(
+          atsign, atClientPreference,
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookUp;
 
       expect(() async => await remoteSecondary.executeVerb(scanVerbBuilder),
@@ -105,8 +120,9 @@ void main() {
           ..sharedBy = '@alice');
       when(() => mockAtLookUp.executeVerb(lookupVerbBuilder))
           .thenAnswer((_) async => fakeLookupData);
-      RemoteSecondary remoteSecondary =
-          RemoteSecondary(atsign, atClientPreference);
+      RemoteSecondary remoteSecondary = RemoteSecondary(
+          atsign, atClientPreference,
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookUp;
       String result = await remoteSecondary.executeAndParse(lookupVerbBuilder);
       expect(result, 'lookup data stub');
@@ -121,14 +137,15 @@ void main() {
 
     final shapes = <String, RemoteSecondary Function()>{
       'atKeysIo': () => RemoteSecondary(atSign, preference(),
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, AtKeys())),
-      'atChops': () => RemoteSecondary(atSign, preference(),
-          // ignore: deprecated_member_use
-          atChops: AtChopsImpl(AtChopsKeys.create(null, null))),
-      'privateKey': () =>
-          RemoteSecondary(atSign, preference()..privateKey = 'unused'),
-      'cramSecret': () =>
-          RemoteSecondary(atSign, preference()..cramSecret = 'unused'),
+          lookUps: secureSocketLookUps(),
+          atKeysIo:
+              keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null))),
+      'privateKey': () => RemoteSecondary(
+          atSign, preference()..privateKey = 'unused',
+          lookUps: secureSocketLookUps()),
+      'cramSecret': () => RemoteSecondary(
+          atSign, preference()..cramSecret = 'unused',
+          lookUps: secureSocketLookUps()),
     };
 
     shapes.forEach((shape, build) {

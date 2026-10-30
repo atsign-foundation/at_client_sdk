@@ -2,23 +2,23 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/memory_sync_queue.dart';
+import 'test_utils/transport.dart';
 
 /// `LocalSecondary`'s key getters resolve across two tiers: the client's key
 /// source, then the keystore.
 ///
 /// The key source is what lets a client take its key material from an
-/// `AtKeysIo` — the non-deprecated way to hand a client its keys — rather
-/// than from an `AtChops` somebody built for it. The PKAM getters reach it
-/// through `authenticationKeyPairFor`, which refuses a keypair filed under an
-/// algorithm this build cannot sign with, and that refusal is not fallen
-/// through to the keystore.
+/// `AtKeysIo`. The PKAM getters reach it through `authenticationKeyPairFor`,
+/// which refuses a keypair filed under an algorithm this build cannot sign
+/// with, and that refusal is not fallen through to the keystore.
 void main() {
   const atSign = '@alice🛠';
   const enrollmentId = 'test-enrollment';
@@ -27,8 +27,10 @@ void main() {
     ..namespace = 'unit'
     ..rootDomain = 'test.atsign.wtf';
 
-  Future<AtClient> clientWith({required InMemoryAtKeysIo? keySource}) async =>
+  Future<AtClient> clientWith({required InMemoryAtKeysIo keySource}) async =>
       AtClientImpl.create(atSign, 'unit', prefs(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(prefs()),
           remoteSecondary: MockRemoteSecondary(),
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
@@ -75,7 +77,8 @@ void main() {
     when(() => atClient.atKeysIo).thenReturn(refusing);
     final storage = InMemoryAtClientStorage(atSign: atSign);
     await storage.attach(atClient);
-    final local = LocalSecondary(atClient, keyStore: storage.keyStore);
+    final local = LocalSecondary(atClient,
+        syncQueue: memorySyncQueue(), keyStore: storage.keyStore);
     // The control: the keystore holds a keypair, so a getter that fell
     // through the refusal would answer this rather than throw.
     await local.putValue(AtConstants.atPkamPrivateKey, 'keystore-private');
@@ -98,7 +101,11 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(source);
       final storage = InMemoryAtClientStorage(atSign: atSign);
       await storage.attach(atClient);
-      return (LocalSecondary(atClient, keyStore: storage.keyStore), storage);
+      return (
+        LocalSecondary(atClient,
+            syncQueue: memorySyncQueue(), keyStore: storage.keyStore),
+        storage
+      );
     }
 
     Future<Object?> outcome(Future<String?> call) =>
@@ -142,13 +149,15 @@ void main() {
     });
   });
 
-  test('control: with no key source the read falls through to the keystore',
-      () async {
+  test(
+      'control: with a key source holding nothing the read falls through to '
+      'the keystore', () async {
     // The keystore is empty, so every tier misses and the keystore's exception
     // comes back — which is what the legacy self-key path catches. Without
     // this arm the tests above would pass on a getter that answered from
     // anywhere at all.
-    final local = (await clientWith(keySource: null)).getLocalSecondary()!;
+    final local =
+        (await clientWith(keySource: InMemoryAtKeysIo())).getLocalSecondary()!;
 
     await expectLater(() => local.getEncryptionSelfKey(),
         throwsA(isA<KeyNotFoundException>()));

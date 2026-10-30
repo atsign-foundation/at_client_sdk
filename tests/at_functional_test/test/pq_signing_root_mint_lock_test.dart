@@ -1,6 +1,3 @@
-// The signing-root surface is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -152,7 +149,7 @@ void main() {
     final ns = 'rot${DateTime.now().microsecondsSinceEpoch}.$namespace';
     // Nothing releases a mint lock but its ttl, so the mint below holds it and
     // the rotation that follows is refused until it lapses.
-    final ring = PublishedNskeyKeyRing(atClient, lockTtl: liveMintLockTtl);
+    final ring = PublishedNskeyKeyRing(atClient, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
 
     // Seed, then rotate: the second write goes through the rotation lever
     // rather than a second mint, so what proves the record mutable is the

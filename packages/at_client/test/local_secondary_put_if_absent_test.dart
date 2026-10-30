@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 /// An in-memory keystore whose write of [parkedValue] waits for [release], so
 /// a test can land another write inside that window.
@@ -51,7 +52,8 @@ void main() {
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.enrollmentId).thenReturn(null);
-    return LocalSecondary(atClient, keyStore: store);
+    return LocalSecondary(atClient,
+        syncQueue: memorySyncQueue(), keyStore: store);
   }
 
   test('writes a record local storage does not hold', () async {

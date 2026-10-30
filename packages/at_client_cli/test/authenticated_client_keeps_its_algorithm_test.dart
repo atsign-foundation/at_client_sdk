@@ -1,0 +1,123 @@
+import 'dart:io';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_client_cli/at_client_cli.dart';
+import 'package:test/test.dart';
+
+import 'lifecycle_rig.dart';
+
+/// Key material outranks the preference for the client `authenticate()`
+/// opens: the connection signs with what the keyfile holds, whatever
+/// algorithm the preference names.
+void main() {
+  AtSignLogger.root_level = 'SHOUT';
+
+  /// A real `.atKeys` file whose [enrollmentId] holds typed ML-DSA
+  /// **authentication** material, written through the same store
+  /// `authenticate()` reads back through.
+  Future<String> pqKeyfile(String atSign, String enrollmentId) async {
+    final path = '${Directory.systemTemp.createTempSync('pq_keys').path}'
+        '/${atSign}_key.atKeys';
+    final pair = await MlDsa65KeyPair.generate();
+    final now = DateTime.now().toUtc();
+    final keys = AtKeys()
+      // ignore: deprecated_member_use
+      ..enrollmentId = enrollmentId
+      ..addKey(CryptographicMaterial(
+        keyId: 'auth:mldsa65:1',
+        enrollmentId: enrollmentId,
+        role: CryptographicMaterialRole.privateAuthentication,
+        algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+        bytes: AtBytes.fromString(pair.atPrivateKey.privateKey),
+        createdAt: now,
+      ))
+      ..addKey(CryptographicMaterial(
+        keyId: 'auth:mldsa65:1',
+        enrollmentId: enrollmentId,
+        role: CryptographicMaterialRole.publicAuthentication,
+        algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+        bytes: AtBytes.fromString(pair.atPublicKey.publicKey),
+        createdAt: now,
+      ));
+    await FileAtKeysIo(filePath: (_) => path).write(atSign, keys);
+    addTearDown(() => File(path).parent.deleteSync(recursive: true));
+    return path;
+  }
+
+  tearDown(() async {
+    for (final client
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await client.stop();
+    }
+    AtClientImpl.atClientInstanceMap.clear();
+    AtClientManager.getInstance().reset();
+  });
+
+  test(
+      'the client\'s connection is stamped from the keyfile, not the '
+      'preference', () async {
+    const atSign = '@pq_own_lookup';
+    const enrollmentId = 'pq-own-1';
+    final storage = Directory.systemTemp.createTempSync('pq_storage');
+    addTearDown(() => storage.deleteSync(recursive: true));
+    // The posture is named, not inherited: an inherited default supplies
+    // mldsa65, and the test would then compare mldsa65 with mldsa65.
+    final keyfile = await pqKeyfile(atSign, enrollmentId);
+    final preference = AtClientPreference(posture: PqPosture.legacy)
+      ..namespace = 'unit_test'
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = await refusedPort();
+    expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
+        reason: 'the rig must supply the legacy algorithm, or this test '
+            'discriminates nothing');
+    // NOTE: a real lookup rather than a mock — the client's connection stamps
+    // it, and a mock would keep nothing to read back. It points at a port
+    // nothing listens on, so the open comes back offline without a network.
+    final own = AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+            InternetAddress.loopbackIPv4.address, preference.rootPort),
+        authenticator: null,
+        transport: secureSocketTransport(SecureSocketConfig()),
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, preference.rootPort));
+    final client = await Atsign(atSign).open(
+        keys: CliKeys.fileFor(atSign, path: keyfile),
+        preference: preference,
+        storage: CliKeys.storageFor(atSign,
+            program: 'unit_test', path: storage.path),
+        atLookUp: own,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: FixedSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, preference.rootPort));
+
+    expect(client.connection.current.isOnline, isFalse,
+        reason: 'nothing listens, so the client is offline; the stamping '
+            'under test happened when the client was built');
+
+    expect(identical(own, client.getRemoteSecondary()!.atLookUp),
+        isTrue,
+        reason: 'the client\'s connection wraps the lookup it was handed; if '
+            'it built its own, the assertions below are about the wrong '
+            'object');
+    expect(own.authenticator, isNotNull,
+        reason: 'the connection authenticates from the keyfile through the '
+            'seam, not from credentials parked on the lookup');
+
+    // The keyfile holds only ML-DSA material for this enrollment — no RSA
+    // key at all. If the connection signed per the preference (rsa2048)
+    // instead of per the keyfile, at_chops would find nothing to sign with
+    // and this would fail rather than complete.
+    final exchange = OfflineExchange(atSign);
+    final authenticator = own.authenticator!;
+    await expectLater(authenticator(exchange), completion(isTrue),
+        reason: 'the keyfile holds ML-DSA material for this enrollment and '
+            'the preference says rsa2048; the key material is what the '
+            'connection has to sign with');
+    expect(exchange.sent.where((c) => c.startsWith('pkam:')), isNotEmpty,
+        reason: 'a green that never reached the pkam: verb would mean the '
+            'authenticator short-circuited rather than signed');
+  });
+}

@@ -1,13 +1,8 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
@@ -16,6 +11,7 @@ import 'package:test/test.dart';
 import 'test_utils/no_op_services.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
@@ -40,8 +36,7 @@ void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
       ..namespace = namespace
-      ..hiveStoragePath = '$namespace/put/hive'
-      ..commitLogPath = '$namespace/put/commitLog';
+      ..hiveStoragePath = '$namespace/put/hive';
 
     late MockRemoteSecondary mockRemoteSecondary;
     late AtClientImpl atClient;
@@ -84,20 +79,18 @@ void main() {
       mockRemoteSecondary = MockRemoteSecondary();
       MockSecondaryAddressFinder mockSecondaryAddressFinder =
           MockSecondaryAddressFinder();
-      AtClientManager.getInstance().secondaryAddressFinder =
-          mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      // NOTE: a signer object the client insists on holding; nothing here
-      // signs, and the key source carries the material that is read.
       atClient = (await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: mockSecondaryAddressFinder,
           remoteSecondary: mockRemoteSecondary,
-          atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
           atKeysIo: await keyfileHolding('@alice',
               encryptionKeyPair: RsaKeyPair.create(
                   alicesRSAKeyPair.publicKey.toString(),
                   alicesRSAKeyPair.privateKey.toString()),
-              selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
+              selfEncryptionKey: selfEncryptionKey),
+          storage: hiveStoreFor('@alice', fullStackPrefs))) as AtClientImpl;
       localStore = atClient.getLocalSecondary()!.keyStore!;
       localSecondary = atClient.getLocalSecondary()!;
       atClient.syncService = NoOpSyncService();
@@ -176,8 +169,7 @@ void main() {
       remoteCommitId = 1;
       remoteUpdateRequestCount = 0;
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<UpdateVerbBuilder>()),
-          sync: any(named: "sync"))).thenAnswer((invocation) async {
+          any(that: isA<UpdateVerbBuilder>()))).thenAnswer((invocation) async {
         remoteUpdateRequestCount++;
         var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
         print('UpdateVerbBuilder : ${builder.buildCommand()}');
@@ -280,14 +272,14 @@ void main() {
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
         // The self-key read reaches the local secondary now, which resolves
-        // it across the client's AtChops, its key source and the keystore. A
-        // mock standing in for that has to answer it.
+        // it across the client's key source and the keystore. A mock standing
+        // in for that has to answer it.
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
 
-        when(() => mockLocalSecondary.executeVerb(
-            any(that: isA<UpdateVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockLocalSecondary
+                .executeVerb(any(that: isA<UpdateVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             // print('mockLocalSecondary.executeVerb with UpdateVerbBuilder'
@@ -301,9 +293,9 @@ void main() {
           }
         });
 
-        when(() => mockRemoteSecondary.executeVerb(
-            any(that: isA<UpdateVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<UpdateVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as UpdateVerbBuilder;
           if (builder.atKey.toString() == atKey.toString()) {
             // print('mockRemoteSecondary.executeVerb with UpdateVerbBuilder'
@@ -408,13 +400,13 @@ void main() {
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
         // The self-key read reaches the local secondary now, which resolves
-        // it across the client's AtChops, its key source and the keystore. A
-        // mock standing in for that has to answer it.
+        // it across the client's key source and the keystore. A mock standing
+        // in for that has to answer it.
         when(() => mockLocalSecondary.getEncryptionSelfKey())
             .thenAnswer((_) async => selfEncryptionKey);
-        when(() => mockLocalSecondary.executeVerb(
-            any(that: isA<DeleteVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockLocalSecondary
+                .executeVerb(any(that: isA<DeleteVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           // print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {
@@ -426,9 +418,9 @@ void main() {
                 'mockLocalSecondary.executeVerb called with unexpected DeleteVerbBuilder');
           }
         });
-        when(() => mockRemoteSecondary.executeVerb(
-            any(that: isA<DeleteVerbBuilder>()),
-            sync: any(named: "sync"))).thenAnswer((invocation) async {
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<DeleteVerbBuilder>())))
+            .thenAnswer((invocation) async {
           var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
           print('DeleteVerbBuilder: ${builder.buildCommand()}');
           if (builder.buildKey() == atKey.toString()) {

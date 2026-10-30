@@ -16,13 +16,7 @@ const Map<String, _Backend> _backends = {
       'package:at_client/src/storage/hive/',
       'package:at_client/hive.dart',
     ],
-    owners: [
-      'src/storage/hive/',
-      'hive.dart',
-      // NOTE: the default seam, which opens Hive for a client given no
-      // storage.
-      'src/storage/default_storage.dart',
-    ],
+    owners: ['src/storage/hive/', 'hive.dart'],
   ),
   'SQLite': (
     engine: [
@@ -32,7 +26,7 @@ const Map<String, _Backend> _backends = {
       'package:at_client/src/storage/sqlite/',
       'package:at_client/sqlite.dart',
     ],
-    owners: ['src/storage/sqlite/', 'sqlite.dart', 'src/storage/memory/'],
+    owners: ['src/storage/sqlite/', 'sqlite.dart'],
   ),
 };
 
@@ -65,9 +59,12 @@ void main() {
         contains('package:hive/hive.dart'));
     expect(importsOf['src/storage/sqlite/sqlite_at_client_storage.dart'],
         contains('package:at_persistence_secondary_server/sqlite.dart'));
-    expect(importsOf['src/at_collection/impl/collection_methods_impl.dart'],
-        contains('package:at_client/src/at_collection/collections.dart'),
-        reason: 'written there as ../collections.dart');
+    expect(
+        _resolve('../collections.dart',
+            from: 'src/collections/impl/collection_item.dart'),
+        'package:at_client/src/collections/collections.dart',
+        reason: 'no library imports relatively today, so the resolver is '
+            'checked on its own');
   });
 
   for (final MapEntry(key: name, value: backend) in _backends.entries) {

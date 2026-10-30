@@ -12,6 +12,8 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/nskey_generation.dart';
+
 /// Moving an arriving nskey private out of the transit buffer and into AtKeys.
 void main() {
   const atSign = '@alice';
@@ -27,42 +29,46 @@ void main() {
     return (io, NskeyPrivateFiling(keysIo: io, atSign: atSign));
   }
 
-  Secret nskeySecret(String kid, {String? ns}) => Secret(
+  Secret nskeySecret(({String kid, Uint8List seed}) generation, {String? ns}) =>
+      Secret(
         namespace: ns ?? namespace,
-        name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-        value: base64Encode(privateBytes),
+        name: '${NskeyPrivateFiling.secretNamePrefix}${generation.kid}',
+        value: base64Encode(generation.seed),
       );
 
   test('an arriving private is filed into AtKeys, keyed by namespace and kid',
       () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    expect(await filer.file(nskeySecret('kid-one')), isTrue);
+    expect(await filer.file(nskeySecret(generation)), isTrue);
 
     final keys = await io.read(atSign);
     final material = keys.getAtSignKey(
-        NskeyPrivateFiling.keyIdFor(namespace, 'kid-one'),
+        NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
         CryptographicMaterialRole.privateDecapsulation);
     expect(material, isNotNull,
         reason: 'this is the only copy that survives a restart — the transit '
             'store is in-memory by design');
-    expect(material!.bytes.bytes, privateBytes);
+    expect(material!.bytes.bytes, generation.seed);
     expect(material.algorithm, CryptographicMaterialAlgorithm.xWing);
   });
 
   test('the same kid in two namespaces files as two keys', () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    await filer.file(nskeySecret('shared-kid'));
-    await filer.file(nskeySecret('shared-kid', ns: 'other'));
+    await filer.file(nskeySecret(generation));
+    await filer.file(nskeySecret(generation, ns: 'other'));
 
     final keys = await io.read(atSign);
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'shared-kid'),
+        keys.getAtSignKey(
+            NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', 'shared-kid'),
+        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull,
         reason: 'kids are truncated hashes and are not unique across '
@@ -72,9 +78,10 @@ void main() {
 
   test('a re-delivered private is not filed twice', () async {
     final (_, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    expect(await filer.file(nskeySecret('kid-one')), isTrue);
-    expect(await filer.file(nskeySecret('kid-one')), isFalse,
+    expect(await filer.file(nskeySecret(generation)), isTrue);
+    expect(await filer.file(nskeySecret(generation)), isFalse,
         reason: 'the substrate converges by re-sending, so arrival has to be '
             'idempotent — AtKeys.addKey rejects a duplicate outright');
   });
@@ -82,17 +89,12 @@ void main() {
   test('with nothing published, a seed is filed under the KEM its length names',
       () async {
     final (io, filer) = await filing();
-    final mlKemSeed = Uint8List.fromList(List<int>.generate(64, (i) => i));
+    final earlier = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
 
-    expect(
-        await filer.file(Secret(
-            namespace: namespace,
-            name: '${NskeyPrivateFiling.secretNamePrefix}kid-earlier',
-            value: base64Encode(mlKemSeed))),
-        isTrue);
+    expect(await filer.file(nskeySecret(earlier)), isTrue);
 
     final material = (await io.read(atSign)).getAtSignKey(
-        NskeyPrivateFiling.keyIdFor(namespace, 'kid-earlier'),
+        NskeyPrivateFiling.keyIdFor(namespace, earlier.kid),
         CryptographicMaterialRole.privateDecapsulation);
     expect(material!.algorithm, CryptographicMaterialAlgorithm.mlKem1024,
         reason: 'an earlier generation is no longer published, and filing its '
@@ -238,11 +240,12 @@ void main() {
 
   test('only nskey privates are filed; other secrets pass through', () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
     expect(
         await filer.filePending([
           Secret(namespace: namespace, name: 'an-app-token', value: 'v'),
-          nskeySecret('kid-two'),
+          nskeySecret(generation),
         ]),
         1);
 
@@ -251,7 +254,8 @@ void main() {
         reason: 'the substrate carries opaque secrets and this only claims its '
             'own — an app secret is none of the crypto layer\'s business');
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
+        keys.getAtSignKey(
+            NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
   });
@@ -260,8 +264,10 @@ void main() {
     final (io, filer) = await filing();
 
     expect(
-        await filer
-            .filePending([nskeySecret('gen-one'), nskeySecret('gen-two')]),
+        await filer.filePending([
+          nskeySecret(await nskeyGeneration()),
+          nskeySecret(await nskeyGeneration())
+        ]),
         2,
         reason: 'data written under a superseded key is still readable, and '
             'only its own private opens it — a client given the current '
@@ -273,7 +279,7 @@ void main() {
 
   test('re-draining the same store files nothing twice', () async {
     final (_, filer) = await filing();
-    final held = [nskeySecret('kid-three')];
+    final held = [nskeySecret(await nskeyGeneration())];
 
     expect(await filer.filePending(held), 1);
     expect(await filer.filePending(held), 0,

@@ -62,7 +62,6 @@ void main() {
     when(() => client.getCurrentAtSign()).thenReturn(atSign);
     when(() => client.atSign).thenReturn(atSign.toAtsign());
     when(() => client.enrollmentId).thenReturn(null);
-    when(() => client.atChops).thenReturn(MockAtChops());
     when(() => client.put(any(), any(),
         putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer(
       (_) async => true,

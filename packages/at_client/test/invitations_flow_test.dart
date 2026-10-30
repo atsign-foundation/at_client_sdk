@@ -99,7 +99,7 @@ class _Client extends Fake implements AtClient {
 
   @override
   Future<bool> put(AtKey key, dynamic value,
-      {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
+      {PutRequestOptions? putRequestOptions}) async {
     final name = key.toString();
     servers.puts.add(name);
     final validation = AtKeyValidators.get().validate(
@@ -132,8 +132,7 @@ class _Client extends Fake implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey key,
-      {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
+  Future<AtValue> get(AtKey key, {GetRequestOptions? getRequestOptions}) async {
     final name = key.toString();
     var record = servers.find(me, name);
     if (record == null && name.startsWith('public:') && key.sharedBy != null) {
@@ -151,8 +150,7 @@ class _Client extends Fake implements AtClient {
 
   @override
   Future<bool> delete(AtKey key,
-      {bool isDedicated = false,
-      DeleteRequestOptions? deleteRequestOptions}) async {
+      {DeleteRequestOptions? deleteRequestOptions}) async {
     final name = key.toString();
     servers.of(me).remove(name);
     final to = key.sharedWith;

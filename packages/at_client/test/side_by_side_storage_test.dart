@@ -1,12 +1,15 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Two AtClients for one atSign, side by side in one process, each given its
 /// own `hiveStoragePath`.
@@ -46,8 +49,11 @@ void main() {
       AtClientPreference()
         ..isLocalStoreRequired = true
         ..syncRegex = ''
-        ..hiveStoragePath = path
-        ..commitLogPath = '$path/commit',
+        ..hiveStoragePath = path,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
+      atKeysIo: noKeysFor(atSign),
+      storage: hiveStoreAt(atSign, path),
     );
     // NOTE: AtClientImpl.create leaves the sync service to its caller - only
     // AtClientManager wires one - and a write on a client without one is
@@ -94,14 +100,12 @@ void main() {
     final a = await clientAt('a');
     final localA = a.getLocalSecondary() as LocalSecondary;
 
-    await localA.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = (AtKey()
-            ..key = 'phone'
-            ..sharedBy = atSign
-            ..metadata = (Metadata()..isPublic = true))
-          ..value = '555',
-        sync: true);
+    await localA.executeVerb(UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = 'phone'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
+      ..value = '555');
 
     expect(await localA.syncQueueSize, 1,
         reason: 'the write must reach a\'s queue, or the check on b below is '

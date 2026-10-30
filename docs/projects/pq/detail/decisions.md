@@ -2314,6 +2314,7 @@ post-enrollment write path, so a locally generated one is an address no sender c
 bought nothing and cost a startup write to the user's keyfile, which the functional pack caught
 by showing a committed test keyfile as modified.
 
+
 `NskeyPrivateFiling.start`/`stop` are deleted in favour of `filePending`. The correspondence
 check the class describes is now wired for the first time, against the *current* advertised
 generation only: an older conveyed generation reads as "no opinion" rather than a rejection,
@@ -6037,8 +6038,10 @@ keyfile), 3. `seedNamespaceKeys` (active, keeps its own
 not a re-survey. The two read-preconditions have no gate field at all:
 ungateable by construction. 14.13's remaining active sites live outside
 the startup and outside this object: `register()`'s
-`publishPublicSigningKey`, and the read-path conveyance hook, which IS
-gated here (`askOnReadMiss` controls whether the ring gets the hook).
+`publishPublicSigningKey`, and the read-path self-heal, which IS gated
+here: the ring takes `askOnReadMiss`, and with it off a miss reads, fetches
+and asks nothing. (Until 2026-10-29 the gate only withheld the hook, and a
+ring holding a filing derived its own ask anyway.)
 
 Deliberate structural change, not just motion: the two racing tasks are
 now one serial sequence (seed placed between collect and the asks), which
@@ -6083,7 +6086,10 @@ reach-up, now behind `secondary_address_finder_source.dart`: the
 manager's constructors register a source reading the singleton's field,
 the read stays lazy and per-call, so the semantics — including the quirk
 that per-atSign managers' own finder fields are never consulted — are
-preserved exactly. `import_topology_test.dart` pins the cut (red-proofed
+preserved exactly. ⚠️ **Amended 2026-10-29:** under Gary's ruling on dead
+code in a major, the source file, the manager's field and
+`setSecondaryAddressFinder` are removed, and a client uses only the finder it
+is given. `import_topology_test.dart` pins the cut (red-proofed
 before the edits): the service impl's closure contains neither the client
 impl nor the manager. The impl still calls the service — one-directional,
 by design.
@@ -11009,7 +11015,9 @@ reads. `AtClientSecretSharing.forClient` is Expando-cached per client, so the
 derived ask uses the same instance the bootstrap holds rather than a rival one,
 and both callers share one body (`requestAndFileNskeyPrivate`) so the two heals
 cannot diverge. What the bootstrap still supplies and nothing derives is the
-**gate**: only it knows `PqStartupGates.askOnReadMiss`.
+**gate**: only it knows `PqStartupGates.askOnReadMiss`, which it hands to
+the ring. (Until 2026-10-29 it withheld only the hook, so the derived ask
+went out with the gate off.)
 
 The ask is gated on the *filing*, not on the client: asking with nowhere to file
 leaves the reply in the in-memory secret store, which repairs the client at its
@@ -12003,7 +12011,9 @@ from plan item 14.19.1 earlier the same day.
 
 15. `ApkamSigning.enrollmentId` substituting the sentinel `'primary'` when
    there is none (`packages/at_client/lib/src/mixins/apkam_signing.dart:68`;
-   also `mint_lock.dart:134`) is deliberate, not a placeholder. A legacy
+   also `server_mutex.dart`'s `_holderOf`, which this cited as
+   `mint_lock.dart:134` until 2026-10-29 and which now writes a per-isolate
+   nonce after it) is deliberate, not a placeholder. A legacy
    PKAM client holding an `AtKeysIo` therefore publishes
    `public:_apsk.primary.a.__e@<atSign>` and signs approval-chain links as
    `"primary"` — because `publishPublicSigningKey` is the only writer for an
@@ -12991,6 +13001,12 @@ not-resurrected assertion fails; make the writer refuse always and only the
 minutes, because the root path pays the cooldown without the protection that
 makes it cheap*
 
+⚠️ **Amended 2026-10-29:** `ownLockIsNotContention` is removed under Gary's
+ruling ("B: nonce in the lock"), so the nskey lock now pays the same cost: a
+client that took it and stopped before publishing is refused for its ttl, two
+minutes plus the roster budget. The 15 seconds here stands. What follows is
+what this ruling said before.
+
 **The ttl decides two things and was sized against only one.** `MintLock`'s
 winner never releases — expiry does — so the ttl is both how long a winner may
 take and how long the *next* attempt is refused. Where a caller passes
@@ -13030,7 +13046,8 @@ process leaves the lock held and nothing published.
 
 **Not taken:** opting the root path into `ownLockIsNotContention`, which would
 need `_mintUnderLock` to re-read inside the lock the way `_mintUnlessPublished`
-does. It remains the way to make the window zero rather than short.
+does. It remained the way to make the window zero rather than short until the
+flag was removed on 2026-10-29.
 
 ## 125. A Hive store's identity is its storage path, not its atSign (2026-08-28)
 
@@ -14314,13 +14331,26 @@ can parse a version 1 document at all, which is the mirror of issue #2154.
 
 ## 138. The posture ladder moves back a stage (2026-09-08)
 
-**In brief:** *3.x defaults to `legacy`, 4.x to `pqReady`, 5.x to `pqActive`*
+**In brief:** *3.x and 4.0 default to `legacy`, a later 4.x release to `pqReady`, 5.x to `pqActive`*
 
 **Ruled by gkc, 2026-09-08.** The shipped default moves back to `PqPosture.legacy`
-for at_client 3.x, `pqReady` becomes the 4.x default, and `pqActive` the 5.x one.
+for at_client 3.x, `pqReady` becomes the default in a 4.x release, and `pqActive` the 5.x one.
 Reverses `06c2b8b22` ("the default posture is pqReady", 2026-08-26) and re-scopes
 the R-2 release step, which had become a single `pqReady` → `pqActive` flip at
 4.0.0 and is now two flips across two majors.
+
+**Amended by gkc, 2026-10-28: 4.0.0 keeps `legacy`.** The flip to `pqReady`
+moves to a later 4.x release, once the machinery it turns on leaves
+`@experimental`. The 4.0.0 GA's goal is his "ideally no breaks should be
+encountered at all unless apps are still using deprecated methods / parameters
+/ etc", and at `pqReady` a client holding a legacy keyfile publishes an `_apsk`,
+mints and publishes a namespace key and, fully privileged, the atSign's signing
+root, and retrofits into an ML-DSA enrollment, all at startup, on an upgrade
+that changes no line of the app.
+
+**Note, 2026-10-29:** that machinery left `@experimental` in 4.0.0 itself
+(gkc: "the post-quantum cryptography is going GA"), and 4.0.0 still ships
+`legacy`.
 
 **The rationale is gkc's:** from 3.x a developer can choose a different posture,
 and the default stays `legacy` faithfully, so that anything the project breaks can
@@ -14342,7 +14372,7 @@ control, and the fixture's job is the one that cannot be done any other way.
 
 **The price, stated rather than discovered later.** A 5.x sender cannot reach a
 3.x recipient that never seeded a namespace key. It is refused, not silently lost.
-The intervening stage is what stops this being worse: 4.x at `pqReady` seeds and
+The intervening stage is what stops this being worse: the 4.x release at `pqReady` seeds and
 reads while still **writing legacy**, so by the time 5.x switches writes on the
 keys are already out there, and the dark 3.x period strands nobody in the
 meantime.
@@ -15497,3 +15527,51 @@ Amends [22.2b](#222b-publishing-a-chain-signature-the-parent-signs-the-child-pub
 [24.2](#242-the-rulings) rules 1 and 4, and supersedes
 [144.2](#1442-a-republish-clears-the-links-a-root-holder-re-anchors) and
 [152](#152-a-conveyed-link-is-stamped-as-it-arrives-and-its-envelope-kept-until-it-is-2026-10-08).
+
+## 158. A key package reconcile advertises the package the client holds (2026-10-29)
+
+**Decided by gkc on 2026-10-29.**
+
+The posture grid's readback found it live. An enrollment whose request carried no key package,
+as one under the legacy key exchange does, ran a posture configuring the post-quantum providers
+and ended its start advertising one key package and holding another.
+`KeyPackageRegistration.register()` on the conveyed-key collection step generated a package and
+held it in memory, which [25.2](#252-what-was-built) intends, since adoption writes nothing back.
+`reconcileKeyPackage` then read a keyfile holding none, minted a second, filed it and advertised
+it. Every conveyance went to the advertised package, which the running client could not open,
+and its asks were refused as coming from a package that was not the roster's.
+
+1. **The reconcile files the key the client holds.** For an algorithm the keyfile lacks, it files
+   the active key the client's own registration already holds under that algorithm, tagged with
+   the enrollment's own id, and mints a fresh one only when the client holds none. The kpid the
+   client has been answering at is the one advertised.
+2. **The client holds what is filed before anything is advertised.** After filing, and before
+   publishing, the client's registration reloads its keys from the keyfile whenever they differ
+   from what is filed there, and a running listener listens at the addresses they now give. So a
+   key minted because the client held none under that algorithm, and a key retired because the
+   preference stopped naming it, are both held as filed when the package goes out; a key held only
+   in memory and never advertised is dropped, and nothing was sealed to it.
+3. **The keyfile is written only when a package is about to be advertised**: registration stays
+   adoption-only, as 25.2 rules, and a client whose reconcile advertises nothing files nothing.
+4. **A client already in the mismatched state heals at its next start**: it loads the package
+   filed and advertised.
+
+Supersedes nothing.
+
+**Known limit.** A keyfile holding an untagged key package, which only an older keyfile does,
+advertises two packages and holds one once the reconcile files a tagged key beside it, as it does
+when the preference adds an algorithm: the publish names both, and a load returns only the tagged
+set, so the client holds the new key alone. Left as it is, since only internal users run the
+post-quantum postures (gkc, 2026-10-29); every submit path files a first key package under its
+enrollment id, and
+[the upgrade guide](../../../upgrade-to-4.md#5-a-keyfile-written-by-a-release-candidate) says
+what a release-candidate keyfile sees.
+
+**Built** in at_client. Proven in-process by `key_package_persistence_test.dart` and
+`pairwise_secret_sharing_test.dart`, and live by `pq_posture_grid_test.dart`'s readback, where a
+receiver that configures the providers and does not seed reads.
+
+**Rejected.** Filing the package at registration, which wrote the keyfile where nothing would
+advertise it, the cost 25.2 refused, and created an enrollment's section in a keyfile holding none
+of its material. Making the reconcile mint and leaving the client on its old key until the next
+start, which advertises an address the running client does not answer at.

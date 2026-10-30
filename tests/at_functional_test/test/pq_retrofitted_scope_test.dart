@@ -1,13 +1,9 @@
-// The enrollment key-package and posture surfaces this file drives are
-// @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupMuxable;
@@ -28,11 +24,11 @@ import 'test_utils.dart';
 /// Each arm drives a real operation rather than stopping at "it
 /// authenticated": at_auth authenticates on its own connection before the
 /// client exists, so a client can report success and still be unable to run a
-/// verb. Each arm also asserts `runningAs != enrolledAs` first, because
-/// `enrolAndAuthenticate` submits an OTP enrollment and that path mints
-/// RSA-2048 unconditionally — a run in which the client did not move would
-/// satisfy every operational assertion below while measuring an ordinary
-/// enrollment.
+/// verb. Each arm also asserts `runningAs != enrolledAs` first: the
+/// enrollment is submitted under the legacy key exchange, which mints RSA-2048
+/// and carries no key package, the shape a production retrofit starts from,
+/// and a run in which the client did not move would satisfy every operational
+/// assertion below while measuring an ordinary enrollment.
 void main() {
   TestUtils.isolateStorage('pq_retrofitted_scope_test');
   late String atSign;
@@ -67,10 +63,11 @@ void main() {
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // pqReady asks for mldsa65 authentication that the OTP path's RSA-2048
-      // enrollment does not have, so the client retrofits. This preference is
-      // the independent variable of the file.
+      // pqReady asks for mldsa65 authentication that the legacy exchange's
+      // RSA-2048 enrollment does not have, so the client retrofits. This
+      // preference is the independent variable of the file.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       // NOTE: (appName, deviceName) is one-shot server state — an
@@ -118,8 +115,8 @@ void main() {
     await expectLater(superseded.executeCommand('scan\n', auth: true),
         throwsA(isA<StoppedException>()),
         reason: 'a connection left able to reconnect would authenticate as '
-            'the superseded enrollment, which the atServer still honours for '
-            'its grace period');
+            'the superseded enrollment, which the atServer honours until the '
+            'replacement first authenticates');
   }, timeout: Timeout(Duration(minutes: 3)));
 
   test('UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
@@ -278,6 +275,7 @@ void main() {
       // Legacy: this client must NOT retrofit, so that step 2 is the first and
       // only retrofit and the keyfile it reads is genuinely pre-PQ.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       deviceName: 'rs-cold-${uuid.v4().hashCode}',
@@ -307,6 +305,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: FileAtKeysIo(filePath: (_) => keysFilePath),
         preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
 

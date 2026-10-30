@@ -1,5 +1,4 @@
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('SecretStore');
 
@@ -15,7 +14,6 @@ final _logger = AtSignLogger('SecretStore');
 /// wins) so the merge is deterministic regardless of any client's wall clock.
 /// [createdAt] is only a tiebreak. Leave [version] null for secrets that are
 /// never rotated.
-@experimental
 class Secret {
   final String namespace;
   final String name;
@@ -79,7 +77,6 @@ class Secret {
 /// [SecretStore] serialises saves, because a backend that completed them out
 /// of order would persist an older snapshot over a newer one and silently lose
 /// a secret.
-@experimental
 abstract class SecretStorePersistence {
   Future<List<Secret>> load();
 
@@ -88,7 +85,6 @@ abstract class SecretStorePersistence {
 
 /// In-memory store of the secrets this atSign's APKAM keypair holds, keyed by
 /// (namespace, name).
-@experimental
 class SecretStore {
   final Map<String, Secret> _secrets = {};
 

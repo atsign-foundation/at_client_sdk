@@ -49,7 +49,7 @@ const guardFiles = <String>[
 const livePackPaths = <String>[
   'tests/at_functional_test/',
   'tests/at_end2end_test/',
-  'tests/at_onboarding_cli_functional_tests/',
+  'tests/at_client_cli_functional_tests/',
 ];
 
 /// Rows allowed to rest on an in-process proof, each with the reason.
@@ -58,6 +58,8 @@ const livePackPaths = <String>[
 /// is "there is no atServer in the loop"; a row that merely owes one belongs
 /// in [liveProofOwed].
 const liveProofExempt = <String, String>{
+  'UC-A2.7':
+      'every clause is a refusal by a constructor, at_auth\'s AtEnrollmentRequest.pq or at_client\'s PqPosture, that throws before any I/O; the Atsign.enroll arm proves it with a lookup that sees no interaction at all. A live arm would watch an ArgumentError beside a virtualenv it never contacts, and would prove less than the unit tests do',
   'UC-G3.9':
       'both rules are AtClientPreference constructor refusals that throw before any I/O, so there is no wire, no atServer and no second process in the mechanism. A live arm would spawn a CLI to watch an ArgumentError and would prove less than the unit test does, more slowly. Recorded as a decision (gkc, 2026-08-30) rather than an omission',
   'UC-A5.6':
@@ -88,10 +90,10 @@ const unprovableClauses = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 283;
+const provenClauseCount = 308;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 124;
+const serverProvenClauseCount = 128;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///

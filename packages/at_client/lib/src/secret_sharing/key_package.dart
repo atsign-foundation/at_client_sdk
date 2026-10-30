@@ -3,7 +3,6 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart' show KeyEntryStatus, publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
-import 'package:meta/meta.dart' show experimental;
 
 /// Re-exported so that every record advertising keys names one type for the
 /// `status` field.
@@ -16,7 +15,6 @@ export 'package:at_auth/at_auth.dart' show KeyEntryStatus;
 /// algorithm id from [SecretSharingAlgos]; readers skip entries whose [alg]
 /// or [use] they do not recognise, which is what lets a key package advertise
 /// new suites without breaking old readers.
-@experimental
 class PackageKey {
   final String kid;
   final String use;
@@ -120,7 +118,6 @@ class PackageKey {
 /// `metadata.keyPackage` is that payload wrapped in the signed envelope.
 /// [enrollmentId] and [apkamId] are carried by the enclosing verb structure,
 /// not duplicated in the payload.
-@experimental
 class KeyPackage {
   static const int currentVersion = 1;
 

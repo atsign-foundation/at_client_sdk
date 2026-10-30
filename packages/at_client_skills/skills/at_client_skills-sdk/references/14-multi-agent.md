@@ -6,18 +6,17 @@ coordinate without stepping on each other.
 
 ---
 
-## Headless auth — `CLIBase` (`at_cli_commons`)
+## Headless auth — `CLIBase` (`at_client_cli`)
 
 Don't hand-roll `.atKeys` loading and PKAM auth in headless Dart. `CLIBase`
 does arg parsing, key loading, authentication, and client setup in one call:
 
 ```sh
-dart pub add at_client at_cli_commons
+dart pub add at_client_cli
 ```
 
 ```dart
-import 'package:at_cli_commons/at_cli_commons.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 
 void main(List<String> args) async {
   final AtClient atClient =
@@ -27,9 +26,17 @@ void main(List<String> args) async {
 ```
 
 Standard flags are provided by `CLIBase.argsParser` (`-a` atsign, `-k` path to
-`.atKeys`, `-n` namespace if not fixed in code, verbose, etc.). This is the
-same pattern the canonical TUI example uses
+`.atKeys`, `-n` namespace if not fixed in code, `-s` storage directory,
+verbose, etc.). This is the same pattern the canonical TUI example uses
 (`packages/at_client/example/bin/collections_todos.dart`).
+
+`CLIBase` waits for the client to come online, and otherwise stops it and
+throws: `AtCredentialRefusedException` when the atServer refuses the keys,
+`AtEnrollmentPendingException` when the keyfile holds only an enrollment
+request, `SecondaryNotFoundException` when the atDirectory has no atServer for
+the atSign, and `SecondaryServerConnectivityException` only when the atServer
+is not reached in time. A retry loop catches that last one alone; the others
+need a person.
 
 ## One process, one storage path
 
@@ -38,24 +45,28 @@ live client: a second `open` on the same location in one process is refused,
 and two processes on one location corrupt it.
 
 ```dart
-import 'package:at_client/hive.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 
 final dir = Directory.systemTemp.createTempSync('agent_').path;
 final prefs = AtClientPreference()..namespace = 'my_app';
-final storage = HiveAtClientStorage(
-    atSign: atSign, storagePath: dir, closedByClient: true);
 final client = await Atsign(atSign).open(
-    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    keys: CliKeys.fileFor(atSign, path: keysPath),
     preference: prefs,
-    storage: storage);
+    storage: CliKeys.storageFor(atSign, program: 'my_app', path: dir),
+    lookUps: lookUpsFor(prefs.rootDomain),
+    secondaryAddressFinder:
+        CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort));
 ```
 
-`AtClientPreference.hiveStoragePath` and `commitLogPath` are deprecated; the
-storage object is where the store lives.
+`CliKeys.storageFor` is a `HiveAtClientStorage` the client closes when it
+stops. The storage object is where the store lives: at_client ignores the
+deprecated `AtClientPreference.hiveStoragePath`, and at_client 4.0 removed
+`commitLogPath`.
 
-`CLIBase` handles this for typical single-instance CLIs; generate a unique temp
-directory per instance when launching several instances of the same agent on
-one machine.
+`CLIBase` handles this for typical single-instance CLIs, keeping the store
+under `~/.atsign/storage/<atSign>/<namespace>/`. When launching several
+instances of the same agent on one machine, generate a unique temp directory
+per instance and pass it as `-s`.
 
 > **Gotcha:** `exit()` does not flush buffered stdout — call
 > `await stdout.flush()` first or log lines vanish when output is redirected.
@@ -118,27 +129,29 @@ no-op sync service, and route all operations to the remote atServer with the
 client-wide preference.
 
 ```dart
-import 'package:at_cli_commons/at_cli_commons.dart';  // NOT in at_client
-import 'package:at_client/hive.dart';
+import 'package:at_client_cli/at_client_cli.dart';  // ServiceFactoryWithNoOpSyncService is NOT in at_client
 
 final prefs = AtClientPreference()
   ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly;  // every op hits the atServer
 
 final client = await Atsign(atSign).open(
-  keys: FileAtKeysIo(filePath: (_) => keysPath),
+  keys: CliKeys.fileFor(atSign, path: keysPath),
   preference: prefs,
-  storage: HiveAtClientStorage(
-      atSign: atSign, storagePath: tempDir.path, closedByClient: true),
+  storage: CliKeys.storageFor(atSign, program: 'my_app', path: tempDir.path),
+  lookUps: lookUpsFor(prefs.rootDomain),
+  secondaryAddressFinder:
+      CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort),
   serviceFactory: ServiceFactoryWithNoOpSyncService(),
 );
 // ... and `await client.stop()` when the instance is done.
 ```
 
-> **Gotcha:** `ServiceFactoryWithNoOpSyncService` ships from **`at_cli_commons`**
-> (`package:at_cli_commons/at_cli_commons.dart`) — it is *not* part of
+> **Gotcha:** `ServiceFactoryWithNoOpSyncService` ships from **`at_client_cli`**
+> (`package:at_client_cli/at_client_cli.dart`) — it is *not* part of
 > `at_client`'s public API (the identical class inside `at_client` is
-> test-only). And it must be paired with `remoteLocalPref = remoteOnly` (or
+> test-only). `CLIBase`'s `--never-sync` flag opens the client with it. And it
+> must be paired with `remoteLocalPref = remoteOnly` (or
 > `useRemoteAtServer` per call — see
 > [12-remote-atserver.md](12-remote-atserver.md)): with sync disabled, a
 > default local write would never leave the machine.
@@ -154,12 +167,18 @@ final client = await Atsign(atSign).open(
 ## Device enrollment from an agent (APKAM)
 
 An always-on agent is a natural approver for new-device APKAM enrollment
-requests. `at_client` exposes this via `atClient.enrollmentService`:
+requests. `at_client` exposes this via `atClient.enrollments`:
 
 ```dart
-final requests = await atClient.enrollmentService!.fetchEnrollmentRequests();
-await atClient.enrollmentService!.approve(decision);   // or deny / revoke
+for (final request in await atClient.enrollments.pending()) {
+  await atClient.enrollments.approve(request.enrollmentId!);   // or deny / revoke
+}
+atClient.enrollments.requests.listen((r) => ...);   // new requests as they arrive
+final passcode = await atClient.enrollments.otp();  // what the new device quotes
 ```
+
+From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do the
+same.
 
 The Flutter-side enrollment flows (the requesting device) are in
 [05-flutter-auth.md](05-flutter-auth.md) (Flow 4).

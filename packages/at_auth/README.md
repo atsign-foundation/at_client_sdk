@@ -4,17 +4,18 @@
 > Everything an app needs — onboarding, login, enrollment, the connection
 > state — is on [`at_client`](../at_client)'s `Atsign` verbs (`open`,
 > `activate`, `enroll`), behind [`at_client_flutter`](../at_client_flutter)'s
-> dialogs for Flutter apps and [`at_onboarding_cli`](../at_onboarding_cli)'s
-> commands for CLI and server apps. `at_auth` is the protocol layer those
+> dialogs for Flutter apps and [`at_client_cli`](../at_client_cli)'s `CLIBase`
+> and commands for CLI and server apps. `at_auth` is the protocol layer those
 > build on: its API changes with the protocol and carries no compatibility
 > promise to applications, and a 4.0 removed every type an app once held.
-> Add `at_client` or `at_client_flutter` to your `pubspec.yaml`, not this.
+> Add your platform package, `at_client_cli` or `at_client_flutter`, to your
+> `pubspec.yaml`, not this.
 
 Platform-neutral core of **activation**, **authentication** and **APKAM
 enrollment** for the Atsign Protocol: the key material, the `.atKeys` store
 and the handshakes. Applications reach it through
 [`at_client`](../at_client)'s `Atsign` verbs — `activate`, `open`, `enroll` —
-and through [`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps)
+and through [`at_client_cli`](../at_client_cli) (CLI / server apps)
 and [`at_client_flutter`](../at_client_flutter) (Flutter apps), which build
 on those, rather than consuming `at_auth` directly.
 
@@ -156,7 +157,7 @@ Why this matters:
 
 See [`example/enrollment_request.dart`](example/enrollment_request.dart)
 for the submitting side; the approve/deny side is demonstrated in
-[`at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart`](../at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart).
+[`at_client_cli/example/bin/apkam_examples/enroll_app_listen.dart`](../at_client_cli/example/bin/apkam_examples/enroll_app_listen.dart).
 
 ## The `.atKeys` file format
 
@@ -275,10 +276,12 @@ a symbolic link or anything other than a regular file.
 
 ## Migrating from 3.x
 
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app through the whole move; this section covers at_auth's own changes.
+
 4.0 keeps the key material, the `.atKeys` stores and the enrollment
 handshakes, and hands everything an application used to call to
 [`at_client`](../at_client)'s `Atsign` verbs. An app on `at_client_flutter`
-or `at_onboarding_cli` follows those packages' own migration notes and never
+or `at_client_cli` follows those packages' own migration notes and never
 sees this table; it is for code that imported `package:at_auth/at_auth.dart`
 directly.
 
@@ -295,7 +298,7 @@ directly.
 | `AtEnrollment.generateOtp(...)` / `.setSpp(...)`, answering an `Otp`                             | `client.enrollments.otp()` / `.spp(value)`, answering a `Passcode`                                                                                                                              |
 | `AtEnrollment.update(EnrollmentUpdateRequest, atLookUp)`                                         | `EnrollmentUpdater().update(request, atLookUp)` from `package:at_client/at_client_mixins.dart`                                                                                                  |
 | `AtAuthRequest.enrollmentId`, or any caller naming the enrollment to authenticate as             | the keys decide: `AtKeys.enrollmentToAuthenticateAs()` — the enrollment holding active typed authentication material, else the flat stored id, else `primary`                                    |
-| `AtKeys.toAtChops()` / `.toAtChopsForEnrollment(id)`                                             | `AtKeys.authenticationFor(id)` for the `AtChops` and its algorithm; `authenticationKeyPairFor(id)`, `encryptionKeyPair` and `selfEncryptionKey` for the material alone                          |
+| `AtKeys.toAtChops()` / `.toAtChopsForEnrollment(id)`                                             | `authenticationKeyPairFor(id)` for the keypair and the algorithm that signs with it; `encryptionKeyPair` and `selfEncryptionKey` for the rest                                                   |
 | `KeyIOMixin`'s `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`, `generateKeyPairs`, `decodeAtKeys` | `FileAtKeysIo.read` / `.write`, which apply the passphrase envelope and the self-encryption themselves                                                                            |
 | `AtKeys.copyWith(...)`                                                                           | `AtKeys.addKey(...)`                                                                                                                                                                            |
 | `AtKeys.apkamPublicKey`, `.apkamPrivateKey`, `.apkamSymmetricKey`, `.defaultEncryptionPublicKey`, `.defaultEncryptionPrivateKey`, `.defaultSelfEncryptionKey`, `.enrollmentId` | still present, deprecated: write a legacy document with `AtKeys.legacy(...)` or `fileLegacyMaterial(...)`, and read it through `authenticationKeyPairFor`, `encryptionKeyPair`, `selfEncryptionKey`, `enrollmentSymmetricKey` and `storedEnrollmentId` |
@@ -337,13 +340,17 @@ final client = await Atsign(atSign).open(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
     storage: HiveAtClientStorage(                // package:at_client/hive.dart
         atSign: atSign, storagePath: storagePath, closedByClient: true),
-    preference: AtClientPreference()..namespace = 'my_app');
+    preference: AtClientPreference()..namespace = 'my_app',
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64));
 client.connection.current;                       // did the atServer accept the keys
 final keys = await client.atKeysIo!.read(atSign); // the material, from the store
 // Which enrollment the keyfile authenticates as, with no client built:
 final principal = await Atsign(atSign).authenticatesAs(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
-    rootDomain: AtRootDomain.atsignDomain);
+    rootDomain: AtRootDomain.atsignDomain,
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64));
 ```
 
 **Onboard with a CRAM secret**
@@ -365,7 +372,8 @@ final enrollmentId = await activateAtSign(
 await lookUp.close();
 // 4.0, in at_client: the activation and the client it opens
 final client = await Atsign(atSign).activate(
-    cramSecret: cramSecret, keys: keys, preference: preference);
+    cramSecret: cramSecret, keys: keys, preference: preference,
+    storage: storage, lookUps: lookUps, secondaryAddressFinder: atDirectory);
 ```
 
 **Request an enrollment and wait for its approval**
@@ -385,8 +393,10 @@ final approved = await enrollment.waitForApproval(submitted);
 // 4.0: the same handshake, filed in `keys` so a restart resumes it
 final pending = await Atsign(atSign).enroll(
     otp: otp, app: 'my_app', device: 'laptop',
-    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference);
-final client = await pending.client(preference);   // throws AtEnrollmentException on a denial
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: atDirectory);
+final client = await pending.client(preference,
+    storage: storage);                             // throws AtEnrollmentException on a denial
 ```
 
 **Approve, deny, revoke; passcodes**
@@ -415,9 +425,9 @@ self-encryption key for the enrollee.
 
 | If you're building…            | Use                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------- |
-| A CLI or server app            | [`at_onboarding_cli`](../at_onboarding_cli) + [`at_cli_commons`](../at_cli_commons)   |
+| A CLI, daemon or server app    | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` tools |
 | A Flutter app                  | [`at_client_flutter`](../at_client_flutter) — includes pre-built onboarding widgets   |
-| Anything that reads/writes data after auth | [`at_client`](../at_client)                                               |
+| A platform package, or a program that passes every dependency itself | [`at_client`](../at_client) |
 
 ## Open source usage and contributions
 

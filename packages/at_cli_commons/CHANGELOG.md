@@ -1,3 +1,16 @@
+## 4.0.0
+
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: at_cli_commons is a deprecated re-export of at_client_cli, which
+  now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
+- breaking: `MySyncProgressListener` is gone, and `CLIBase`'s `preference` is
+  an `AtClientPreference`.
+- breaking: `CLIBase` throws `AtCredentialRefusedException` for every
+  refusal and `SecondaryNotFoundException` for an atSign the atDirectory does
+  not know; `SecondaryServerConnectivityException` now means only an outage.
+- fix: on Windows, `standardAtClientStorageDir` returns its directory under
+  `TEMP` rather than overflowing the stack.
+
 ## 3.1.2-rc3
 
 - build: requires `at_onboarding_cli` ^2.0.0-rc4, `at_client` ^3.15.0-rc4 and

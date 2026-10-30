@@ -1,6 +1,3 @@
-// The substrate is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -57,8 +54,8 @@ void main() {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
-    AtKeys? enrolleeKeys;
-    final build = enrollmentKeyPackageBuilder(atSign);
+    final build = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65);
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
@@ -67,15 +64,10 @@ void main() {
         deviceName: 'scoped-${Uuid().v4().hashCode}',
         namespaces: namespaces,
         otp: otp,
-        metadataBuilder: (keysIo) async {
-          built = await build(keysIo);
-          enrolleeKeys = await keysIo.read(atSign);
-          return built;
-        },
+        metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key exchange; the enrollment still authenticates with an
-        // RSA-2048 APKAM keypair.
-        signingAlgo: SigningAlgoType.rsa2048,
+        // NOTE: at_auth refuses rsa2048 with the pq exchange.
+        signingAlgo: SigningAlgoType.mldsa65,
       ),
       TestUtils.unauthenticatedLookUp(atSign),
     );
@@ -92,7 +84,11 @@ void main() {
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
-      keys: enrolleeKeys!,
+      // NOTE: the keyfile as the submission left it, holding the APKAM keypair
+      // under the enrollment id the atServer assigned. A read inside the
+      // metadataBuilder predates that id and would sign as rsa2048.
+      // ignore: deprecated_member_use
+      keys: response.atAuthKeys!,
       grantedNamespaces:
           (await atClient.enrollmentService!.fetchEnrollmentRequests())
               .where((e) => e.enrollmentId == response.enrollmentId)
@@ -146,8 +142,7 @@ void main() {
 
     try {
       expect(
-          await enrolleeLookup.pkamAuthenticate(
-              enrollmentId: scoped.enrollmentId),
+          await enrolleeLookup.pkamAuthenticate(),
           true,
           reason: 'the enrollment is approved, so it must authenticate — an '
               'enrollment that cannot connect would fail both arms below and '
@@ -229,8 +224,7 @@ void main() {
 
     try {
       expect(
-          await enrolleeLookup.pkamAuthenticate(
-              enrollmentId: scoped.enrollmentId),
+          await enrolleeLookup.pkamAuthenticate(),
           true,
           reason: 'an enrollment that cannot connect fails every arm below '
               'and says nothing about namespaces');

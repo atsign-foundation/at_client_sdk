@@ -2,19 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// Stops and drops every cached client for [atSign], including those filed
 /// under `atSign|enrollmentId`.
@@ -47,7 +48,6 @@ void main() {
     const atSign = '@alice';
     AtClientPreference pref() => AtClientPreference()
       ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/commit'
       ..isLocalStoreRequired = true;
 
     setUp(() async {
@@ -60,13 +60,22 @@ void main() {
     });
 
     test('resolves to the client that superseded it', () async {
+      final storage = hiveStoreFor(atSign, pref());
       final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-new');
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref()),
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-new',
+          storage: storage);
       AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
           '$atSign|enroll-new';
 
       final again = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old');
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref()),
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-old',
+          storage: storage);
 
       expect(identical(again, settled), isTrue,
           reason: 'naming the id captured BEFORE a retrofit must reach the '
@@ -85,10 +94,16 @@ void main() {
       // NOTE: two clients live at the same moment need separate storage — one
       // location holds one.
       final first = await AtClientImpl.create(atSign, 'wavi', pref(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref()),
+          atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-new',
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
       final other = await AtClientImpl.create(atSign, 'wavi', pref(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref()),
+          atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-old',
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
@@ -104,7 +119,11 @@ void main() {
           '$atSign|evicted';
 
       final built = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old');
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref()),
+          atKeysIo: noKeysFor(atSign),
+          enrollmentId: 'enroll-old',
+          storage: hiveStoreFor(atSign, pref()));
 
       expect((built as AtClientImpl).enrollmentId, 'enroll-old');
       expect(AtClientImpl.atClientInstanceMap.containsKey('$atSign|enroll-old'),
@@ -133,28 +152,37 @@ void main() {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test current atsign - backward compatibility', () async {
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
-      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
+        ..hiveStoragePath = 'test/hive';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
       final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          atClientManager: atClientManager,
+          storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
     });
   });
@@ -163,8 +191,7 @@ void main() {
     String atSign = '@alice';
     String namespace = 'wavi';
     AtClientPreference atClientPreference = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
 
     setUp(() async {
       await _dropCachedClients(atSign);
@@ -180,116 +207,76 @@ void main() {
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
+    Future<AtClient> build(String atSign) => buildAtClient(
+        atSign: atSign,
+        namespace: namespace,
+        preference: atClientPreference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(atClientPreference),
+        atKeysIo: noKeysFor(atSign),
+        storage: hiveStoreFor(atSign, atClientPreference));
+
     test('A test to verify change', () async {
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      atClientManager.use(await build(atSign));
 
       expect(atClientManager.getChangeListenersSize(), 0);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@bob', namespace, atClientPreference);
+      atClientManager.use(await build('@bob'));
       expect(atClientManager.getChangeListenersSize(), 0);
-
-      // Notification Service, Sync Service and AtClientImpl do not register
-      // change listeners anymore
     });
 
     test(
         'A test to verify switch atSign event when switching between same atSign',
         () async {
-      String atSign = '@alice';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      final client = await build(atSign);
+      atClientManager.use(client);
 
       expect(atClientManager.getChangeListenersSize(), 0);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, namespace, atClientPreference);
+      atClientManager.use(client);
+      atClientManager.use(client);
+      atClientManager.use(client);
+      atClientManager.use(client);
       expect(atClientManager.getChangeListenersSize(), 0);
-
-      // Notification Service, Sync Service and AtClientImpl do not register
-      // change listeners anymore
     });
 
     test('A test to verify atSigns switched multiple times', () async {
-      String atSign1 = '@alice';
-      String atSign2 = '@bob';
-      String atSign3 = '@emoji';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign3, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
+      final atClientManager = AtClientManager.getInstance();
+      final alice = await build('@alice');
+      final bob = await build('@bob');
+      final emoji = await build('@emoji');
+      atClientManager.use(alice);
+      atClientManager.use(bob);
+      atClientManager.use(alice);
+      atClientManager.use(bob);
+      atClientManager.use(emoji);
+      atClientManager.use(bob);
 
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @bob.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, atSign2);
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign2);
-        }
-      }
+      expect(atClientManager.getChangeListenersSize(), 0,
+          reason: 'the clients and their services register no change '
+              'listeners, however often the current client changes');
+      expect(atClientManager.atClient, same(bob));
     });
 
     test('A test to verify atSigns switched between three different atSign',
         () async {
-      String atSign1 = '@alice';
-      String atSign2 = '@bob';
-      String atSign3 = '@emoji';
-      String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign1, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign2, namespace, atClientPreference);
-      atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign3, namespace, atClientPreference);
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @bob.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, atSign3);
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
-        }
-      }
+      final atClientManager = AtClientManager.getInstance();
+      atClientManager.use(await build('@alice'));
+      atClientManager.use(await build('@bob'));
+      final emoji = await build('@emoji');
+      atClientManager.use(emoji);
+
+      expect(atClientManager.getChangeListenersSize(), 0,
+          reason: 'the clients and their services register no change '
+              'listeners, however often the current client changes');
+      expect(atClientManager.atClient, same(emoji));
     });
   });
 
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
-    late AtClientManager manager;
     late AtClientImpl client;
     AtClientPreference pref = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
     test('Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
@@ -297,9 +284,13 @@ void main() {
         ..sharedBy = '@sender'
         ..sharedWith = '@receiver';
 
-      manager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@sender', null, pref);
-      client = manager.atClient as AtClientImpl;
+      client = await buildAtClient(
+          atSign: '@sender',
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor('@sender'),
+          storage: hiveStoreFor('@sender', pref)) as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
       //this test is only to ensure that when this method is run
@@ -343,16 +334,21 @@ void main() {
 
   group('A group of tests related to apkam/enrollments', () {
     AtClientPreference pref = AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..commitLogPath = 'test/hive/path';
+      ..hiveStoragePath = 'test/hive';
     test(
-        'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
+        'A test to verify enrollmentId is set in atClient after calling buildAtClient',
         () async {
       final testEnrollmentId = 'abc123';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', pref,
-              enrollmentId: testEnrollmentId);
-      expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
+      final atClient = await buildAtClient(
+          atSign: '@alice',
+          namespace: 'wavi',
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor('@alice'),
+          enrollmentId: testEnrollmentId,
+          storage: hiveStoreFor('@alice', pref));
+      expect(atClient.enrollmentId, testEnrollmentId);
     });
 
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
@@ -377,7 +373,11 @@ void main() {
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(currentAtsign),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(currentAtsign, pref));
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
@@ -412,15 +412,16 @@ void main() {
         'A test to verify exception is thrown when SPP contains special characters',
         () async {
       String invalidSPP = 'abc#12';
-      var atClientManager =
-          await AtClientManager.getInstance().setCurrentAtSign(
-              atSign,
-              'wavi',
-              AtClientPreference()
-                ..hiveStoragePath = 'test/hive'
-                ..commitLogPath = 'test/hive/path');
+      final atClient = await buildAtClient(
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreAt(atSign, 'test/hive'));
       expect(
-          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message == '$invalidSPP is not a valid SPP')));
@@ -431,12 +432,17 @@ void main() {
         () async {
       String invalidSPP = 'abc1234';
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi', pref);
+        ..hiveStoragePath = 'test/hive';
+      final atClient = await buildAtClient(
+          atSign: atSign,
+          namespace: 'wavi',
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, pref));
       expect(
-          () async => await atClientManager.atClient.setSPP(invalidSPP),
+          () async => await atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
               e is AtClientException &&
               e.message == '$invalidSPP should be 6 characters')));
@@ -444,10 +450,13 @@ void main() {
 
     test('A test to verify SPP is created successfully', () async {
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor(atSign),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor(atSign, pref));
 
       when(() => mockRemoteSecondary.executeCommand(
           any(that: startsWith('otp:put:ABC123')),
@@ -465,10 +474,13 @@ void main() {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     test('test max length for put method', () async {
       AtClientPreference pref = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
-          remoteSecondary: mockRemoteSecondary);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atKeysIo: noKeysFor('@alice'),
+          remoteSecondary: mockRemoteSecondary,
+          storage: hiveStoreFor('@alice', pref));
       var key = TestUtils.createRandomString(250);
       var atKey = AtKey.fromString('$key@alice');
 
@@ -498,11 +510,12 @@ void main() {
       final client = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
       final atKey = (AtKey.shared('phone',
               namespace: 'buzz', sharedBy: '@alice')
@@ -532,11 +545,12 @@ void main() {
       final client = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
       final atKey =
           (AtKey.shared('phone', namespace: 'buzz', sharedBy: '@alice')
@@ -583,14 +597,16 @@ void main() {
     test('defaults to the legacy crypto config when none is configured',
         () async {
       AtClientPreference preferences = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preferences),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
       // No crypto config => the legacy default. The built-in legacy provider
       // is the runtime's fallback, so it is intentionally not in the config
@@ -614,14 +630,16 @@ void main() {
       // reads post-quantum records and legacy does not, so this arm covers the
       // default posture and not the legacy one.
       AtClientPreference preferences = AtClientPreference()
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preferences),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -634,10 +652,12 @@ void main() {
         '@ready',
         'buzz',
         AtClientPreference(posture: PqPosture.pqReady)
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+          ..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@ready'),
+        storage: hiveStoreAt('@ready', 'test/hive'),
       );
       expect(
           CryptoConfig.eraDefaultFor(ready)!
@@ -654,11 +674,13 @@ void main() {
       // half — a peer seals to it and the record comes back refused.
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preferences),
           remoteSecondary: mockRemoteSecondary,
-          atKeysIo: await typedKeyfile('@alice'));
+          atKeysIo: await typedKeyfile('@alice'),
+          storage: hiveStoreFor('@alice', preferences));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       // Every gate, listed rather than sampled: this client does nothing at
@@ -717,11 +739,13 @@ void main() {
     test('a configuring posture leaves both steps on', () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preferences),
           remoteSecondary: mockRemoteSecondary,
-          atKeysIo: await typedKeyfile('@bob'));
+          atKeysIo: await typedKeyfile('@bob'),
+          storage: hiveStoreFor('@bob', preferences));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       expect([
@@ -746,14 +770,16 @@ void main() {
     test('the legacy posture configures no post-quantum providers', () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preferences),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -771,14 +797,16 @@ void main() {
         () async {
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.pqActive)
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/path';
+            ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preferences),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -796,7 +824,6 @@ void main() {
       final provider = _RecordingCryptoProvider('test-provider');
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path'
         ..crypto = CryptoConfig(
           defaultProviderId: 'test-provider',
           providers: [provider],
@@ -806,8 +833,11 @@ void main() {
         '@alice',
         'buzz',
         preferences,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preferences),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: hiveStoreFor('@alice', preferences),
       );
 
       expect(CryptoConfig.forClient(ac).lookup('test-provider'),
@@ -818,7 +848,6 @@ void main() {
         () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path'
         ..crypto = const CryptoConfig(
           defaultProviderId: 'missing-provider',
         );
@@ -829,8 +858,11 @@ void main() {
           '@alice',
           'buzz',
           preferences,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preferences),
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: keysIo,
+          storage: hiveStoreFor('@alice', preferences),
         ),
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
@@ -840,15 +872,18 @@ void main() {
         'adopts the new crypto config when a cached AtClient is re-used with '
         'an updated preference', () async {
       // First creation registers only the legacy provider.
+      final storage = hiveStoreAt('@alice', 'test/hive');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
         AtClientPreference()
           ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path'
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
       expect(CryptoConfig.forClient(ac1).lookup('late-provider'), isNull);
 
@@ -860,13 +895,15 @@ void main() {
         'buzz',
         AtClientPreference()
           ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path'
           ..crypto = CryptoConfig(
             defaultProviderId: 'legacy',
             providers: [provider],
           ),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
 
       expect(identical(ac1, ac2), true);
@@ -879,54 +916,42 @@ void main() {
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: keysIo,
+        storage: hiveStoreAt('@alice', 'test/hive'),
       );
 
       expect(identical(ac.atKeysIo, keysIo), true);
-    });
-
-    test('has no default key source when none is injected', () async {
-      // Neither an atKeysIo nor an AtChops: the client falls back to reading
-      // key material out of the local secondary, which is the shape this test
-      // is about.
-      AtClient ac = await AtClientImpl.create(
-        '@alice',
-        'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
-        remoteSecondary: mockRemoteSecondary,
-      );
-
-      expect(ac.atKeysIo, isNull);
     });
 
     test(
         'cached re-use retains the original atKeysIo (no adoption, unlike '
         'crypto config)', () async {
       final firstKeysIo = await typedKeyfile('@alice');
+      final storage = hiveStoreAt('@alice', 'test/hive');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: firstKeysIo,
+        storage: storage,
       );
 
       AtClient ac2 = await AtClientImpl.create(
         '@alice',
         'buzz',
-        AtClientPreference()
-          ..hiveStoragePath = 'test/hive'
-          ..commitLogPath = 'test/hive/path',
+        AtClientPreference()..hiveStoragePath = 'test/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
+        storage: storage,
       );
 
       expect(identical(ac1, ac2), true);

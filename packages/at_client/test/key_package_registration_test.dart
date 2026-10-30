@@ -648,6 +648,78 @@ void main() {
             VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
             throwsA(isA<AtValueException>()));
       });
+
+      test('an answer naming neither moment throws rather than reading as none',
+          () async {
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(atClient, 'data:{}');
+
+        await expectLater(
+            VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+            throwsA(isA<AtValueException>()),
+            reason: 'an answer that names neither moment says nothing about '
+                'whether anything was revoked');
+      });
+
+      group('Given an atServer that answers lastKeyHolderRevokedAt', () {
+        test(
+            'when it differs from lastRevokedAt, then the key-holder moment '
+            'is the one returned', () async {
+          final atClient = buildMockClient('enroll-self');
+          stubInfons(
+              atClient,
+              'data:{"lastRevokedAt":"2026-03-04T05:06:07.008Z",'
+              '"lastKeyHolderRevokedAt":"2026-01-02T03:04:05.006Z"}');
+
+          expect(await VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+              DateTime.utc(2026, 1, 2, 3, 4, 5, 6),
+              reason: 'a revocation of an enrollment that never held a key '
+                  'package moves only lastRevokedAt, and owes no rotation');
+        });
+
+        test(
+            'when it is null, then none is returned, whatever lastRevokedAt '
+            'says', () async {
+          final atClient = buildMockClient('enroll-self');
+          stubInfons(
+              atClient,
+              'data:{"lastRevokedAt":"2026-03-04T05:06:07.008Z",'
+              '"lastKeyHolderRevokedAt":null}');
+
+          expect(await VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+              isNull,
+              reason: 'a null is the atServer answering that no key holder '
+                  'was revoked, not a missing answer to fall back from');
+        });
+
+        test(
+            'when it is not a timestamp, then the answer is refused rather '
+            'than read from lastRevokedAt', () async {
+          final atClient = buildMockClient('enroll-self');
+          stubInfons(
+              atClient,
+              'data:{"lastRevokedAt":"2026-03-04T05:06:07.008Z",'
+              '"lastKeyHolderRevokedAt":20260102}');
+
+          await expectLater(
+              VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+              throwsA(isA<AtValueException>().having((e) => e.message,
+                  'message', contains('lastKeyHolderRevokedAt'))));
+        });
+      });
+
+      test(
+          'Given an atServer that answers only lastRevokedAt, when it is '
+          'asked, then lastRevokedAt is returned', () async {
+        // NOTE: the shape every atServer released before
+        // lastKeyHolderRevokedAt answers with.
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(
+            atClient, 'data:{"lastRevokedAt":"2026-03-04T05:06:07.008Z"}');
+
+        expect(await VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+            DateTime.utc(2026, 3, 4, 5, 6, 7, 8));
+      });
     });
 
     test(
