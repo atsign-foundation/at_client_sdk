@@ -740,8 +740,10 @@ class SyncServiceImpl implements SyncService {
   ///    network round-trip per batch — keeps push throughput high
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
-  ///    queue and promote `_latestKnownServerCommitId`. On failure,
-  ///    leave in queue for retry on the next round.
+  ///    queue and promote `_latestKnownServerCommitId`. On a refusal
+  ///    as unauthorized, remove from the queue with a warning, keeping
+  ///    the local copy. On any other failure, leave in queue for retry
+  ///    on the next round.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -843,6 +845,21 @@ class SyncServiceImpl implements SyncService {
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
+          if (commitId == -1 &&
+              responseObject.errorCode ==
+                  error_codes['UnAuthorizedException']) {
+            // NOTE: an unauthorized refusal is not retried, so it cannot hold
+            // up the entries behind it; the local copy stays as written.
+            final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+                source.atKey, source.seq);
+            _bailIfStopped();
+            _logger.warning('The atServer refused ${source.op.name} of '
+                '${source.atKey} as unauthorized for enrollment '
+                '${_atClient.enrollmentId}, so it is not retried and this '
+                'device keeps its local copy'
+                '${removed ? '' : '; a newer write to it pushes next round'}');
+            continue;
+          }
           if (commitId == -1) {
             _logger.severe(
                 '${source.op} for key ${source.atKey} failed. Error code '
@@ -909,8 +926,8 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (e.g. a
-      // server-side per-key authorization issue), the entries we
+      // Defensive: if every entry in this batch failed (a refusal
+      // other than an unauthorized one), the entries we
       // tried weren't removed from the queue. Compare against the
       // pre-batch snapshot — if size hasn't dropped at all (after
       // accounting for any new writes that arrived during the

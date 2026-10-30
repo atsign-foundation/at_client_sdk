@@ -89,6 +89,53 @@ void main() {
         ..atKey = AtKey.fromString(key)
         ..value = 'written');
 
+  /// A sync service for [client] that pushes one queued entry per batch to an
+  /// atServer answering each command as [answer] says: with a commit id, or
+  /// refusing it with an error code. Every command sent joins [sent].
+  Future<SyncServiceImpl> syncPushing(
+      _MockAtClient client,
+      List<String> sent,
+      Future<({int commitId, String? errorCode})> Function(String command)
+          answer) async {
+    final remote = _MockRemoteSecondary();
+    final notifications = _MockNotificationService();
+    when(() => notifications.subscribe(
+            regex: any(named: 'regex'),
+            shouldDecrypt: any(named: 'shouldDecrypt')))
+        .thenAnswer((_) => const Stream<AtNotification>.empty());
+    when(() => client.notificationService).thenReturn(notifications);
+    when(() => client.getPreferences())
+        .thenReturn(AtClientPreference()..syncBatchSize = 1);
+    when(() => client.get(any()))
+        .thenThrow(AtKeyNotFoundException('nothing persisted yet'));
+    when(() => client.put(any(), any(),
+            putRequestOptions: any(named: 'putRequestOptions')))
+        .thenAnswer((_) async => true);
+    when(() => remote.executeCommand(any(that: startsWith('batch:')),
+        auth: any(named: 'auth'))).thenAnswer((inv) async {
+      final batch = (inv.positionalArguments.first as String).trim();
+      final responses = [];
+      for (final request in jsonDecode(batch.substring('batch:'.length))) {
+        final command = request['command'] as String;
+        sent.add(command);
+        final reply = await answer(command);
+        responses.add({
+          'id': request['id'],
+          'response': reply.errorCode == null
+              ? {'data': '${reply.commitId}'}
+              : {'error_code': reply.errorCode, 'error_message': 'refused'},
+        });
+      }
+      return 'data:${jsonEncode(responses)}';
+    });
+    return await SyncServiceImpl.create(client,
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
+  }
+
+  Future<void> push(SyncServiceImpl sync) =>
+      sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: -1);
+
   /// A sync service for [client] whose atServer hands back [entries] on the
   /// pull, each an update.
   Future<SyncServiceImpl> syncPulling(
@@ -310,5 +357,121 @@ void main() {
             reason: 'a put of $key under $grants');
       }
     }
+  });
+
+  /// The atServer's answer to a command it accepts.
+  const accepted = (commitId: 7, errorCode: null);
+
+  /// The atServer's answer to a write it refuses as unauthorized: the code
+  /// its batch handler gives an UnAuthorizedException.
+  const unauthorized = (commitId: -1, errorCode: 'AT0009');
+
+  test(
+      'A queued update the atServer refuses as unauthorized leaves the queue, '
+      'and the entries behind it push', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async =>
+            command.contains('k.wavi@bob') ? unauthorized : accepted);
+
+    await push(sync);
+
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the update behind the refused one reaches the atServer in '
+            'the same round');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(
+        logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        allOf(isNotEmpty,
+            everyElement(allOf(contains('update'), contains(enrollmentId)))));
+    expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
+        reason: 'the local copy stays as written');
+  });
+
+  test(
+      'A queued delete the atServer refuses as unauthorized leaves the queue, '
+      'and the entries behind it push', () async {
+    final c = enrolled({'*': 'rw'});
+    await c.local.executeVerb(
+        UpdateVerbBuilder()
+          ..atKey = AtKey.fromString('k.wavi@bob')
+          ..value = 'held',
+        cameFromServer: true);
+    await c.local.executeVerb(
+        DeleteVerbBuilder()..atKey = AtKey.fromString('k.wavi@bob'));
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async =>
+            command.startsWith('delete:') ? unauthorized : accepted);
+
+    await push(sync);
+
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the update behind the refused delete reaches the atServer in '
+            'the same round');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(
+        logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        allOf(isNotEmpty,
+            everyElement(allOf(contains('delete'), contains(enrollmentId)))));
+    expect(await c.store.exists('k.wavi@bob'), isFalse,
+        reason: 'the local copy stays as written: deleted');
+  });
+
+  test('A queued update refused for any other reason stays queued and retries',
+      () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    final queued = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client, sent, (_) async => (commitId: -1, errorCode: 'AT0016'));
+
+    await push(sync);
+    expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued,
+        reason: 'a refusal that is not about authorization leaves the entry');
+    await push(sync);
+
+    expect(sent, hasLength(2), reason: 'it is sent again on the next round');
+    expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued);
+  });
+
+  group('Given an update of K refused as unauthorized while in flight', () {
+    test(
+        'when a newer write to K lands before the answer, then the newer '
+        'entry stays queued and pushes next round', () async {
+      final c = enrolled({'*': 'rw'});
+      await put(c.local, 'k.wavi@bob');
+      final first = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+      var inFlight = true;
+      final sent = <String>[];
+      final sync = await syncPushing(c.client, sent, (command) async {
+        if (!inFlight) return accepted;
+        inFlight = false;
+        await c.local.executeVerb(UpdateVerbBuilder()
+          ..atKey = AtKey.fromString('k.wavi@bob')
+          ..value = 'newer');
+        return unauthorized;
+      });
+
+      await push(sync);
+      expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq,
+          greaterThan(first),
+          reason: 'the newer write was queued after the refused one was sent, '
+              'so it is a different entry and must not leave with it');
+
+      await push(sync);
+      expect(sent, hasLength(2));
+      expect(sent.last, contains('newer'));
+      expect(await c.local.peekSyncQueue(), isEmpty);
+    });
   });
 }
