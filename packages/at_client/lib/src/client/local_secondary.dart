@@ -685,8 +685,7 @@ class LocalSecondary implements Secondary {
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       final keysToRemove = <String>[];
       await Future.forEach(keys, (key) async {
-        // NOTE: a public key is listed whatever the grant, as the atServer's
-        // scan lists one.
+        // NOTE: a public key is listed whatever the grant.
         if (!key!.startsWith('public:') &&
             !(await isEnrollmentAuthorizedForOperation(
                 key.toString(), builder))) {
@@ -986,8 +985,7 @@ class LocalSecondary implements Secondary {
           'covering $key, so it is not authorized for the operation');
       return false;
     }
-    // NOTE: __manage is reached only through otp, enroll and monitor, and no
-    // local operation is one of them.
+    // NOTE: no local operation reaches a __manage key.
     if (covering.namespace == EnrollmentConstants.enrollManageNamespace ||
         covering.grant == EnrollmentConstants.enrollManageNamespace) {
       return false;
