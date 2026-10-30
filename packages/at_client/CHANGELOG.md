@@ -215,6 +215,8 @@
   "Unexpected exception in sync".
 - fix: a `RemoteOnlyAtClientStorage` client runs no expiry or availability timers,
   and keeps working after its enrollment changes.
+- fix: writes on a `RemoteOnlyAtClientStorage` client complete instead of hanging
+  until they time out.
 
 ## 3.15.0-rc8
 

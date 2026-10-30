@@ -60,7 +60,7 @@ void main() {
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
               .single as String;
-      expect(captured, 'update:@alice:phone@bob 12345');
+      expect(captured, 'update:@alice:phone@bob 12345\n');
     });
   });
 
@@ -100,6 +100,32 @@ void main() {
     });
   });
 
+  group('every write is one newline-terminated protocol line', () {
+    final writes = <String, Future<void> Function(RemoteWriteThroughKeyStore)>{
+      'put': (s) => s.put('@alice:phone@bob', AtData()..data = '12345'),
+      'putMeta': (s) =>
+          s.putMeta('@alice:phone@bob', AtMetaData()..ttl = 60000),
+      'putAll': (s) => s.putAll(
+          '@alice:phone@bob', AtData()..data = '12345', AtMetaData()..ttl = 1),
+      'remove': (s) => s.remove('@alice:phone@bob'),
+    };
+    for (final MapEntry(key: name, value: write) in writes.entries) {
+      test(name, () async {
+        when(() => remoteSecondary.executeCommand(any(), auth: true))
+            .thenAnswer((_) async => 'data:1');
+
+        await write(store);
+
+        final captured = verify(
+                () => remoteSecondary.executeCommand(captureAny(), auth: true))
+            .captured
+            .single as String;
+        expect(captured, endsWith('\n'));
+        expect('\n'.allMatches(captured), hasLength(1));
+      });
+    }
+  });
+
   group('remove', () {
     test('sends delete:key via executeCommand', () async {
       when(() => remoteSecondary.executeCommand(any(), auth: true))
@@ -107,7 +133,7 @@ void main() {
 
       await store.remove('@alice:phone@bob');
 
-      verify(() => remoteSecondary.executeCommand('delete:@alice:phone@bob',
+      verify(() => remoteSecondary.executeCommand('delete:@alice:phone@bob\n',
           auth: true)).called(1);
     });
   });
