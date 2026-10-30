@@ -1622,7 +1622,9 @@ class SyncServiceImpl implements SyncService {
         DeleteVerbBuilder(:final atKey) => atKey,
         _ => builder.runtimeType,
       };
-      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
+      _logger.warning('Not applying the atServer\'s change to $atKey on this '
+          'device: the grants of enrollment ${_atClient.enrollmentId} do not '
+          'cover it locally ($e)');
     }
   }
 

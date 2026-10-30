@@ -40,6 +40,11 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     When it starts
     Then its PQ seeding reads public:__nskey.cmp.rotation@bob without "insufficient privilege"
 
+  Scenario: A record sync refuses is logged at warning, naming the key and the enrollment
+    Given an enrollment granted {cmp.rotation: rw}
+    When sync refuses a record
+    Then it logs at warning naming the key and the enrollment
+
   Scenario: A grant naming the namespace wins over * locally, even when it gives less
     Given an enrollment granted {*: rw, wavi: r}
     When it puts x.wavi@bob locally

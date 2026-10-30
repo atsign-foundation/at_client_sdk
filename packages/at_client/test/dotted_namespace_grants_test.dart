@@ -225,6 +225,24 @@ void main() {
   });
 
   test(
+      'A record sync refuses is logged at warning, naming the key and the '
+      'enrollment', () async {
+    final c = enrolled({'cmp.rotation': 'rw'});
+    const refused = 'x.other.rotation@bob';
+    final sync = await syncPulling(c.client, [refused]);
+
+    await sync.syncInternal(1, SyncRequest()..result = SyncResult(),
+        localCommitIdBeforeSync: -1);
+
+    expect(await c.store.exists(refused), isFalse,
+        reason: 'the premise: the grant does not cover this record');
+    expect(logs.at('WARNING').where((m) => m.contains(refused)),
+        allOf(isNotEmpty, everyElement(contains(enrollmentId))),
+        reason: 'a record this device drops is named at warning, with the '
+            'enrollment whose grants refused it');
+  });
+
+  test(
       'A grant naming the namespace wins over * locally, even when it gives '
       'less', () async {
     final c = enrolled({'*': 'rw', 'wavi': 'r'});
