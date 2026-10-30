@@ -1,3 +1,16 @@
+## 0.1.1
+
+- docs: the `at-telemetry-app-events` agent skill in `skills/`, installable
+  with `dart run skills get`. It says what an app should send to the Control
+  Center: `info` events for intentional actions, and `error` events carrying
+  `anomaly.kind` and `anomaly.message` when an operator needs to act, without
+  repeating what the atServer already reports.
+- docs: `example/control_center_app_example.dart`, a door controller app that
+  sends intent events and operator anomalies, and the README section "What to
+  send to the Control Center".
+- docs: the basic example's event name no longer starts with `atsign.`, which
+  belongs to Atsign.
+
 ## 0.1.0
 
 - feat: initial, experimental release. The contracts below may change in any
