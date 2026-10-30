@@ -4,6 +4,7 @@ import 'dart:js_interop_unsafe';
 import 'package:at_client/at_client.dart';
 import 'package:web/web.dart' as web;
 
+import '../keys/at_keys_file.dart';
 import '../keys/indexeddb_store.dart';
 import '../keys/passkey_kek.dart';
 import '../keys/web_passkey_port.dart';
@@ -152,16 +153,13 @@ Future<DevSession> defaultOpener(DevSessionOptions options) async {
 
 /// Decodes [atKeysText], the `.atKeys` file picked for [atSign].
 ///
-/// Throws [ArgumentError] when no file was picked, and [UnsupportedError]
-/// otherwise: the file's self-encrypted fields have no decoder without
-/// `dart:io` yet.
+/// Throws [ArgumentError] when no file was picked.
 Future<AtKeys> _importAtKeys(String atSign, String? atKeysText) async {
   if (atKeysText == null) {
     throw ArgumentError.value(
         null, 'atKeys', 'pick the .atKeys file for $atSign');
   }
-  throw UnsupportedError(
-      'decoding a .atKeys file in the browser is not available yet');
+  return decodeAtKeysFile(atKeysText);
 }
 
 /// Sets `globalThis.atClientDev`, whose `openSession` uses [opener], by
