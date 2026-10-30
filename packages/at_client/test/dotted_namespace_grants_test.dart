@@ -332,6 +332,26 @@ void main() {
             ..atKey = AtKey.fromString('public:x.other@bob')),
           throwsA(isA<UnAuthorizedException>()));
     });
+
+    test(
+        'when it reads a key shared with an atSign whose name ends in public, '
+        'outside its grant, then it is refused', () async {
+      final c = enrolled({'cmp.rotation': 'rw'});
+      await c.store.put('@republic:x.other@bob', AtData()..data = 'held');
+
+      await expectLater(llookup(c.local, '@republic:x.other@bob'),
+          throwsA(isA<UnAuthorizedException>()),
+          reason: 'only a key read as public skips the grant check');
+    });
+
+    test('when it reads a cached public key outside its grant, then it may',
+        () async {
+      final c = enrolled({'cmp.rotation': 'rw'});
+      await c.store.put('cached:public:x.other@alice', AtData()..data = 'held');
+
+      expect(
+          await llookup(c.local, 'cached:public:x.other@alice'), 'data:held');
+    });
   });
 
   test(

@@ -528,9 +528,8 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
-      // NOTE: a public key is read whatever the grant, as the atServer's
-      // llookup reads one.
-      if (!llookupKey.contains('public:') &&
+      // NOTE: a public key is read whatever the grant.
+      if (!llookupKey.startsWith('public:') &&
           !await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
