@@ -11,6 +11,7 @@ import 'package:at_lookup/src/connection/base_connection.dart'
     show requireOneLine;
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
+import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -1038,7 +1039,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         _throwIfStopped();
         return false;
       }
-      logger.finer('SENDING: ${command.trim()}');
+      logger.finer('SENDING: ${commandForLog(command.trim())}');
       await _connection!.write(command);
       return true;
     } finally {
@@ -1078,7 +1079,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   Future<void> _sendCommand(String command) async {
     await createConnection();
-    logger.finer('SENDING: $command');
+    logger.finer('SENDING: ${commandForLog(command)}');
     await _connection!.write(command);
   }
 }
@@ -1111,7 +1112,7 @@ class _ConnectionPreamble implements AtCommandExecutor {
   @override
   Future<String> sendSync(String command,
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    _lookUp.logger.finer('SENDING (on connect): $command');
+    _lookUp.logger.finer('SENDING (on connect): ${commandForLog(command)}');
     await _lookUp._connection!.write(command);
     return _lookUp.messageListener.read(
         maxWaitMilliSeconds: maxWaitMilliSeconds,
@@ -1146,7 +1147,7 @@ class _SentCommands implements AtCommandExecutor {
               'authentication began on closed before it finished, so the rest '
               'of it is sent on no other connection');
         }
-        _lookUp.logger.finer('SENDING: $command');
+        _lookUp.logger.finer('SENDING: ${commandForLog(command)}');
         await _connection.write(command);
         final response = await _listener.read(
             maxWaitMilliSeconds: maxWaitMilliSeconds,
