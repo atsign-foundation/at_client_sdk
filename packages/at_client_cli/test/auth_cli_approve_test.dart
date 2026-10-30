@@ -33,6 +33,7 @@ class _CapturedStdout extends Fake implements Stdout {
 }
 
 /// Catalogue: features/enrollment/approver_sees_expiry.feature
+/// Catalogue: features/at_client_cli/auto_approve_keeps_listening.feature
 void main() {
   const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
   late _MockAtClient client;
@@ -187,4 +188,74 @@ void main() {
 
     expect(approvals, [b]);
   }, timeout: const Timeout(Duration(seconds: 5)));
+
+  group('auto_approve keeps listening past what it cannot act on', () {
+    const a = 'a0a0a0a0-1a2e-43e4-93bd-378f1d366ea7';
+
+    AtNotification announcing(String enrollmentId, String? value) =>
+        AtNotification(
+            'n-$enrollmentId',
+            '$enrollmentId.new.enrollments.__manage@alice',
+            '@alice',
+            '@alice',
+            DateTime.now().millisecondsSinceEpoch,
+            'key',
+            false)
+          ..value = value;
+
+    /// Runs `at_activate auto_approve` with a limit of one over [arriving],
+    /// and hands back what it printed to stdout and to stderr.
+    Future<(_CapturedStdout, _CapturedStdout)> autoApproveFrom(
+        List<AtNotification> arriving) async {
+      final notifications = _MockNotificationService();
+      when(() => client.notificationService).thenReturn(notifications);
+      when(() => notifications.subscribe(
+              regex: any(named: 'regex'),
+              shouldDecrypt: any(named: 'shouldDecrypt')))
+          .thenAnswer((_) => Stream.fromIterable(arriving));
+      final args = AuthCliArgs().createAutoApproveCommandParser().parse([
+        '-a',
+        '@alice',
+        '--${AuthCliArgs.argNameAppNameRegex}',
+        'wavi',
+        '--${AuthCliArgs.argNameDeviceNameRegex}',
+        'phone',
+      ]);
+      final out = _CapturedStdout();
+      final err = _CapturedStdout();
+      await IOOverrides.runZoned(() async {
+        await auth_cli.autoApprove(args, client);
+        await pumpEventQueue();
+      }, stdout: () => out, stderr: () => err);
+      return (out, err);
+    }
+
+    final request = jsonEncode({'appName': 'wavi', 'deviceName': 'phone'});
+
+    test('A notification that is not an enrollment request is passed over',
+        () async {
+      serveB();
+
+      final (out, err) = await autoApproveFrom(
+          [announcing(b, 'not an enrollment request'), announcing(b, request)]);
+
+      expect(approvals, [b]);
+      expect(out.text, contains('Approved 1 requests - limit was 1 - done.'));
+      expect(err.text, contains('$b.new.enrollments.__manage@alice'),
+          reason: 'the notification it could not act on is reported');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test('A request whose approval fails is passed over', () async {
+      serveB();
+
+      final (out, err) = await autoApproveFrom(
+          [announcing(a, request), announcing(b, request)]);
+
+      expect(approvals, [b],
+          reason: 'a is no longer awaiting approval, so only b is approved');
+      expect(out.text, contains('Approved 1 requests - limit was 1 - done.'));
+      expect(err.text, contains('$a.new.enrollments.__manage@alice'),
+          reason: 'the failed approval is reported');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  });
 }
