@@ -43,6 +43,10 @@
   material; it is rewritten in the flat shape.
 - fix: `FileAtKeysIo` refuses to write keys for one atSign over a keyfile
   that holds no credential and names another atSign.
+- fix: a self-enrollment whose keyfile cannot be written fails before it
+  sends anything. When the keyfile refuses the save after the request is
+  approved, the enrollment it created is revoked, and the error names that
+  enrollment and says whether the revoke succeeded.
 - build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs

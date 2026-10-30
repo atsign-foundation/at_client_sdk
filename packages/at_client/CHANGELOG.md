@@ -40,6 +40,9 @@
 - feat: namespace-key rotation follows the atServer's `lastKeyHolderRevokedAt`
   where it answers one, so a revocation of an enrollment that never held a key
   package no longer triggers a rotation.
+- fix: `EnrollmentDirectory.lastRevokedAt` throws `AtValueException` for an
+  `enroll:infons` answer that names no revocation moment, rather than reading
+  it as no revocation.
 - feat: an enrollment with a key package holds a namespace key from the
   moment it is published. Only such a client mints one; on the atSign's own
   credential, `ensureReachable` answers `AtReachability.noKeyPackage`.
@@ -55,9 +58,15 @@
   that no atKey can carry.
 - fix: a namespace key's private that arrives before its generation is
   published is kept only if it is that generation's.
+- fix: a client replaces its own atSign's nskey advertisement only when that
+  advertisement does not verify or its signer has no `_apsk`. One it cannot
+  fetch, or one that verifies but offers no key it can use, is left in place,
+  and the error is thrown.
 - fix: `getApkamPublicKey`, and so verifying a signature, refuses a signer
   that is not an enrollment id with `AtSigningVerificationException`, and an
-  envelope sent through a namespace no atKey can carry is not delivered.
+  envelope sent through a namespace no atKey can carry is not delivered. A
+  secret request whose `requestId` is not an id is answered as an unsolicited
+  delivery.
 - breaking: `AtClient.telemetry` is removed, with
   `AtClientTelemetryService`, `AtClientTelemetryConsumer` and
   `SyncTelemetryEvent`.
@@ -123,6 +132,16 @@
 - breaking: `AtClientImpl.create` and `buildAtClient` take a required
   `atKeysIo`, and a client no longer signs with a PKAM key its local store
   holds: pass the atSign's keyfile, such as `FileAtKeysIo()`.
+- fix: `AtClientImpl.create` throws a `StateError` for a client of the same
+  atSign and enrollment whose `stop()` is still running, rather than
+  restarting it.
+- breaking: `AtClientImpl.create` keeps one client per atSign and enrollment
+  rather than one per atSign. A caller naming no enrollment, whose keys name
+  none, gets the client for the atSign's own credential; `exactEnrollment:
+  false` hands it the one enrolled client already cached instead.
+- fix: `AtClientImpl.setPreferences` throws the `ArgumentError` for a
+  preference naming different rollout axes at the call, rather than as an
+  unhandled asynchronous error.
 - breaking: `AtReachability.noKeySource` is removed, since every client has a
   key source.
 - breaking: `FileAtKeysIo`, `secureSocketLookUps` and
@@ -143,9 +162,11 @@
   client authenticates from its `AtKeysIo`.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
-- fix: `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when the
-  client holds no key to sign with, including while its keyfile cannot be
-  read.
+- fix: only a missing keyfile counts as holding no keys.
+  `ApkamSigning.signingKeys` throws `AtKeyNotFoundException` when there is no
+  key to sign with, and a keyfile that cannot be read throws its read's error,
+  so no signing key or key package is published from it. An `_apsk` that names
+  no active signing key is not published.
 - chore: `AtClientPreference.hashingAlgoType` and `RemoteSecondary`'s
   `signingAlgoType` parameter are deprecated and have no effect, since PKAM
   signs with SHA-256 and the algorithm the keys name. Both go in 5.0.0.
@@ -172,6 +193,9 @@
   fails rather than logging in as the old one.
 - fix: `selfRetrofit` given no `atLookUp` submits through the
   `secondaryAddressFinder` it is given, as the client it opens does.
+- fix: `AtRpc` and `AtRpcClient` log request and response payloads at finest
+  only; at INFO and in their warnings a request is named by its id, and a
+  response by its type and request id.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.

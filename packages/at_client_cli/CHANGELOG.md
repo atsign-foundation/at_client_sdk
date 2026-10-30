@@ -32,3 +32,8 @@
   not know; `SecondaryServerConnectivityException` now means only an outage.
 - fix: on Windows, `standardAtClientStorageDir` returns its directory under
   `TEMP` rather than overflowing the stack.
+- fix: `at_activate auto` goes on listening after an enrollment request it
+  cannot read or act on, which it reports on stderr, until it has approved as
+  many as it was asked to.
+- fix: with debug logging on, a registrar request is logged by its URL and
+  response status, never by its body.
