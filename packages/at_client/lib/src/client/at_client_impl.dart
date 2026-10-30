@@ -677,9 +677,10 @@ class AtClientImpl implements AtClient {
   /// [secondaryAddressFinder], and every field of [preferences] except
   /// `crypto`.
   ///
-  /// Two mismatches are **refused** rather than ignored: a [storage] the cached
-  /// client does not hold, and a preference naming different rollout axes —
-  /// see [refuseChangedRolloutAxes]. A test or an app that needs a genuinely
+  /// Three things are **refused** rather than ignored: a cached client whose
+  /// [stop] is still running, a [storage] the cached client does not hold, and
+  /// a preference naming different rollout axes — see
+  /// [refuseChangedRolloutAxes]. A test or an app that needs a genuinely
   /// different client must not rely on passing different arguments here.
   ///
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
@@ -689,10 +690,9 @@ class AtClientImpl implements AtClient {
   /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
   /// logged at shout level and ignored.
   ///
-  /// Nothing in this library ever removes an entry from that cache, so a client
-  /// that has been stopped is returned from here and restarted rather than
-  /// rebuilt, and this method cannot hand back a second, genuinely separate
-  /// client for one atSign at all.
+  /// [stop] removes a client from that cache when its teardown finishes, so a
+  /// call after that builds a new client; a call while the teardown is still
+  /// running throws a [StateError] rather than restarting it.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -745,7 +745,15 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
-      if (!storage.isHeldBy(atClientImpl!)) {
+      // NOTE: before the storage check, which a client part way through its
+      // teardown has already detached from.
+      if (atClientImpl!._stopping != null) {
+        throw StateError('A client for $currentAtSign as '
+            '${atClientImpl.enrollmentId == null ? "its own credential" : "enrollment ${atClientImpl.enrollmentId}"} '
+            'is stopping. create() does not restart a client part way through '
+            'stop(); await that stop() first.');
+      }
+      if (!storage.isHeldBy(atClientImpl)) {
         throw ArgumentError.value(
             storage,
             'storage',
