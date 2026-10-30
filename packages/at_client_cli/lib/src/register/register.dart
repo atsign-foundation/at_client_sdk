@@ -15,6 +15,9 @@ import 'package:at_client_cli/src/register/registrar_api_constants.dart';
 ///through [args] by utilizing methods defined in [RegisterUtil]
 ///Requires `List<String> args` containing the following arguments: email
 class Register {
+  /// Registers a free atSign to the email [args] name, then activates it as
+  /// `at_activate onboard` does, exiting with at_activate's code when the
+  /// activation fails.
   Future<void> main(List<String> args) async {
     Map<String, String> params = HashMap<String, String>();
     OnboardingUtil registerUtil = OnboardingUtil();
@@ -61,14 +64,16 @@ class Register {
         .add(ValidateOtp())
         .start();
 
-    await auth_cli.wrappedMain(
+    final activated = await auth_cli.main(
       [
+        'onboard',
         '-a',
         params['atsign']!,
         '-c',
         params['cramkey']!,
       ],
     );
+    if (activated != 0) exit(activated);
   }
 }
 
