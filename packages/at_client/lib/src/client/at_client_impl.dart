@@ -708,11 +708,11 @@ class AtClientImpl implements AtClient {
     String? enrollmentId,
     required AtClientStorage storage,
 
-    /// When true, [enrollmentId], or what the keys name, is the principal
-    /// exactly: a null means the atSign's own credential and never falls
-    /// back to a lone enrolled client, which a caller naming no enrollment
-    /// is otherwise handed.
-    bool exactEnrollment = false,
+    /// When true, the default, [enrollmentId], or what the keys name, is the
+    /// principal exactly: a null means the atSign's own credential. When
+    /// false, a caller naming no enrollment is handed the atSign's enrolled
+    /// client if exactly one is cached.
+    bool exactEnrollment = true,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
