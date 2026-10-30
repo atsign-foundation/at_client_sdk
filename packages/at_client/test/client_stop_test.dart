@@ -28,8 +28,11 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   final Completer<void> startGate = Completer<void>();
   final List<String> calls = [];
 
+  /// What ended the start, once something has.
+  Object? startEndedBy;
+
   _GatedMuxable() {
-    // NOTE: a muxable never started has nobody awaiting the gate its close
+    // NOTE: a muxable never started has nobody awaiting the gate its stop
     // fails.
     startGate.future.ignore();
   }
@@ -47,7 +50,12 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     calls.add('start');
-    await startGate.future;
+    try {
+      await startGate.future;
+    } catch (e) {
+      startEndedBy = e;
+      rethrow;
+    }
   }
 
   /// Takes real time, as closing a socket does, so a close that did not wait
@@ -59,10 +67,10 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   }
 
   @override
-  Future<void> close() async {
-    calls.add('close');
+  Future<void> stop() async {
+    calls.add('stop');
     if (!startGate.isCompleted) {
-      startGate.completeError(StoppedException('the lookup is closed'));
+      startGate.completeError(StoppedException('the lookup is stopped'));
     }
   }
 }
@@ -186,8 +194,8 @@ void main() {
       await monitor.close().timeout(const Duration(seconds: 5),
           onTimeout: () => fail('close waited on the start it should end'));
 
-      expect(lookUp.calls, ['start', 'close', 'stopNotifications'],
-          reason: 'the lookup is closed first, so the start fails at once, '
+      expect(lookUp.calls, ['start', 'stop', 'stopNotifications'],
+          reason: 'the lookup is stopped first, so the start fails at once, '
               'and the teardown has run by the time close returns');
       expect(() => monitor.start(), throwsA(isA<StoppedException>()));
     });
@@ -239,15 +247,21 @@ void main() {
           secondaryAddressFinder: finder) as NotificationServiceImpl;
     }
 
-    test('stop returns once the monitor\'s connection is closed', () async {
+    /// Catalogue: features/at_lookup/close_and_stop.feature
+    test('A stopped monitor ends its lookup at once', () async {
       final lookUp = _GatedMuxable();
       final notifications = await service(lookUp);
       notifications.startListening();
       await Future.delayed(const Duration(milliseconds: 20));
+      expect(lookUp.calls, ['start'], reason: 'the start must be in flight');
 
-      await notifications.stop();
+      await notifications.stop().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the stop waited for the start to finish'));
 
-      expect(lookUp.calls, containsAllInOrder(['close', 'stopNotifications']));
+      expect(lookUp.startEndedBy, isA<StoppedException>(),
+          reason: 'the stop ended the lookup under the start, rather than '
+              'waiting for an atServer that may never answer');
+      expect(lookUp.calls, containsAllInOrder(['stop', 'stopNotifications']));
     });
 
     test('refuses a subscription or a start after stop', () async {
@@ -421,7 +435,7 @@ void main() {
       // The first connection to be closed parks, so the teardown is provably
       // still running when the second caller arrives.
       final closing = Completer<void>();
-      when(() => built.first.close()).thenAnswer((_) => closing.future);
+      when(() => built.first.stop()).thenAnswer((_) => closing.future);
 
       final first = stopping.stop();
       await Future.delayed(const Duration(milliseconds: 20));
@@ -439,7 +453,7 @@ void main() {
       await Future.wait([first, second]);
       expect(secondReturned, isTrue);
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
     });
 
@@ -447,7 +461,7 @@ void main() {
         () async {
       final stopping = await client('@handover');
       final closing = Completer<void>();
-      when(() => built.first.close()).thenAnswer((_) => closing.future);
+      when(() => built.first.stop()).thenAnswer((_) => closing.future);
 
       final first = stopping.stop();
       await Future.delayed(const Duration(milliseconds: 20));
@@ -535,7 +549,7 @@ void main() {
       await stopping.stop();
 
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
     });
 
@@ -552,7 +566,7 @@ void main() {
       await running.stop();
 
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
     });
 

@@ -116,8 +116,10 @@ open, forward-ranked `String` on 2026-08-14 so that adding a token would stop
 being a breaking at-rest change; an older build treats an unknown token as
 not active and refuses transitions on it, which is the right reading of a
 pending keypair. The protection a pending private key gets is the store's own
-(passphrase envelope, OS keychain, or the chmod-600 plaintext the CLI
-checkpoint uses today). Alternatives: a `PendingEnrollment` record beside the
+(passphrase envelope, OS keychain, or a keyfile that `FileAtKeysIo` writes
+readable and writable by its owner alone; this said "the chmod-600
+plaintext the CLI checkpoint uses today" while that checkpoint existed).
+Alternatives: a `PendingEnrollment` record beside the
 store, persisted per platform (the present situation, tidied); in-memory only
 (gives up a recovery both packages built on purpose).
 

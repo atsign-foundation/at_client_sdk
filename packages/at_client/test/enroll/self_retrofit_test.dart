@@ -38,6 +38,10 @@ void main() {
       await client.stop();
     }
     AtClientImpl.atClientInstanceMap.clear();
+    // NOTE: a client that retrofits as it opens links its legacy key to its
+    // new one here, and a link left behind makes a later test's legacy key
+    // resolve to that test's client.
+    AtClientImpl.supersededInstanceKeys.clear();
     dir.deleteSync(recursive: true);
   });
 
@@ -60,8 +64,11 @@ void main() {
     ..enrollmentId = legacyId;
 
   /// An atServer that auto-approves the self-enrollment as [newId], shows an
-  /// empty roster, and records every command it was sent.
-  ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
+  /// empty roster, answers `enroll:fetch` with [record] when given one, and
+  /// records every command it was sent, each completed PKAM as
+  /// `pkam:<enrollmentId>`, and each `close()`.
+  ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
+      {Map<String, dynamic>? record}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
@@ -69,6 +76,9 @@ void main() {
       final command = invocation.positionalArguments.first as String;
       sent.add(command);
       if (command.startsWith('enroll:list')) return 'data:[]';
+      if (record != null && command.startsWith('enroll:fetch')) {
+        return 'data:${jsonEncode(record)}';
+      }
       if (command.startsWith('enroll:')) {
         return 'data:${jsonEncode({
               'enrollmentId': newId,
@@ -88,8 +98,15 @@ void main() {
     });
     when(() =>
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
-    when(() => lookUp.close()).thenAnswer((_) async {});
+        .thenAnswer((invocation) async {
+      // NOTE: a round trip, as an atServer's challenge is, recorded once it
+      // completes, so an attempt that gives up before then is seen not to
+      // have authenticated.
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      sent.add('pkam:${invocation.namedArguments[#enrollmentId]}');
+      return true;
+    });
+    when(() => lookUp.close()).thenAnswer((_) async => sent.add('close()'));
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
   }
@@ -129,6 +146,90 @@ void main() {
             contains('"appName":"wavi"'), contains('"signingAlgo":"mldsa65"')));
     expect(AtClientImpl.holdsLiveClientAs(atSign, legacyId), isFalse,
         reason: 'no legacy client was live, and none is built for it');
+
+    await client.stop();
+  });
+
+  test("A client retrofitted on a caller's lookup logs in again", () async {
+    final server = atServer();
+
+    final client = await selfRetrofit(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, legacyKeys()),
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65,
+        atLookUp: server.lookUp);
+
+    final submitted = server.sent.indexWhere(
+        (c) => c.startsWith('enroll:') && !c.startsWith('enroll:list'));
+    expect(submitted, isNonNegative,
+        reason: 'the premise: the retrofit was submitted on the given lookup');
+    expect(
+        server.sent
+            .skip(submitted + 1)
+            .where((c) => c != 'close()' && !c.startsWith('pkam:')),
+        isNotEmpty,
+        reason: 'the premise: the client ran a command on the lookup it took '
+            'over');
+    expect(server.sent.indexOf('close()'), submitted + 1,
+        reason: 'the connection the submission logged in on closes before the '
+            'client runs anything on it');
+    expect(server.sent.skip(submitted + 1).where((c) => c != 'close()').first,
+        'pkam:$newId',
+        reason: 'the client has authenticated as the new enrollment before it '
+            'runs anything on the lookup it took over');
+    // ignore: deprecated_member_use
+    verify(() => server.lookUp.enrollmentId = newId).called(1);
+
+    await client.stop();
+  });
+
+  test("A superseded enrollment's lookup cannot reconnect after a retrofit",
+      () async {
+    final servers = <({MockAtLookupImpl lookUp, List<String> sent})>[];
+
+    final client = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(atSign, legacyKeys()),
+        preference: AtClientPreference(
+            authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+            dataSigningKeyAlgorithms: {SigningAlgoType.mldsa65})
+          ..hiveStoragePath = dir.path
+          ..namespace = 'lifecycle',
+        lookUps: (
+            {required atSign,
+            required rootDomain,
+            required authenticator,
+            secondaryAddressFinder,
+            clientConfig = const {}}) {
+          final server = atServer(record: {
+            'appName': 'wavi',
+            'deviceName': 'laptop',
+            'namespace': {'wavi': 'rw'},
+            'status': 'approved'
+          });
+          servers.add(server);
+          return server.lookUp;
+        });
+
+    expect(client.enrollmentId, newId,
+        reason: 'the premise: the client retrofitted as it opened');
+    final superseded = servers
+        .where((s) => s.sent.any((c) => c.startsWith('enroll:request')))
+        .single
+        .lookUp;
+    expect(client.getRemoteSecondary()!.atLookUp, isNot(same(superseded)),
+        reason: 'the premise: the client rederived its connection');
+    verify(superseded.stop).called(1);
+    verifyNever(superseded.close);
 
     await client.stop();
   });

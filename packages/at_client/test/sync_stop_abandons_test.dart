@@ -126,7 +126,8 @@ void main() {
               atKey: 'k1.wavi@abandon', op: SyncQueueOp.delete, ts: 1, seq: 1));
       when(() => localSecondary.keyStore).thenReturn(_MockKeyStore());
       when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
-          .thenThrow(StoppedException('the lookup for @abandon is closed'));
+          .thenThrow(
+              StoppedException('the lookup for @abandon has been stopped'));
 
       await expectLater(
           sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
@@ -226,7 +227,7 @@ void main() {
       when(() => localSecondary.executeVerb(any(),
               cameFromServer: any(named: 'cameFromServer')))
           .thenThrow(
-              StoppedException('the lookup for @abandon has been closed'));
+              StoppedException('the lookup for @abandon has been stopped'));
 
       await expectLater(
           sync.syncInternal(5, SyncRequest()..result = SyncResult(),
