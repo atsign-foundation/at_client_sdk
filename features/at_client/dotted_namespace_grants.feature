@@ -7,8 +7,8 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   lets the enrollment read or write is readable and writable locally too. It
   follows the atServer in two more ways: a public key is read whatever the
   grant, and no local operation reaches a __manage key. And a queued write
-  the atServer refuses as unauthorized leaves the sync queue with a warning,
-  so the writes behind it still reach the atServer.
+  the atServer refuses for good leaves the sync queue with a warning, so the
+  writes behind it still reach the atServer.
 
   Races: none arise; the check reads the enrollment's grants, which this does
   not change.
@@ -76,7 +76,12 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     When sync pushes
     Then that entry leaves the queue, a warning names K, the operation and the enrollment, and the entries behind it push in the same round
 
-  Scenario: A queued update refused for any other reason stays queued and retries
-    Given a queued update refused for any other reason
+  Scenario: A queued update refused with any other code stays queued and retries
+    Given a queued update refused with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
     When sync pushes
     Then it stays queued and retries next round, as now
+
+  Scenario: A queued write refused for good with AT0032, AT0016, AT0022 or AT0003 leaves the queue
+    Given a queued update that the atServer refuses with AT0032, AT0016, AT0022 or AT0003
+    When sync pushes
+    Then that entry leaves the queue, a warning names K, the operation, the enrollment and the code, and the entries behind it push in the same round

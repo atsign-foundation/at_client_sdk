@@ -724,6 +724,20 @@ class SyncServiceImpl implements SyncService {
     return syncResult;
   }
 
+  /// The codes with which the atServer refuses a queued write for good, so
+  /// that pushing it again is refused again: unauthorized, an immutable
+  /// record, an invalid key, an illegal argument and invalid syntax.
+  static final Set<String> _refusedForGood = {
+    for (final name in const [
+      'UnAuthorizedException',
+      'IllegalStateException',
+      'InvalidAtKeyException',
+      'IllegalArgumentException',
+      'InvalidSyntaxException',
+    ])
+      error_codes[name] as String,
+  };
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -741,9 +755,9 @@ class SyncServiceImpl implements SyncService {
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
   ///    queue and promote `_latestKnownServerCommitId`. On a refusal
-  ///    as unauthorized, remove from the queue with a warning, keeping
-  ///    the local copy. On any other failure, leave in queue for retry
-  ///    on the next round.
+  ///    for good ([_refusedForGood]), remove from the queue with a
+  ///    warning, keeping the local copy. On any other failure, leave in
+  ///    queue for retry on the next round.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -846,17 +860,17 @@ class SyncServiceImpl implements SyncService {
             commitId = int.parse(responseObject.data!);
           }
           if (commitId == -1 &&
-              responseObject.errorCode ==
-                  error_codes['UnAuthorizedException']) {
-            // NOTE: an unauthorized refusal is not retried, so it cannot hold
-            // up the entries behind it; the local copy stays as written.
+              _refusedForGood.contains(responseObject.errorCode)) {
+            // NOTE: a refusal for good is not retried, so it cannot hold up
+            // the entries behind it; the local copy stays as written.
             final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
                 source.atKey, source.seq);
             _bailIfStopped();
             _logger.warning('The atServer refused ${source.op.name} of '
-                '${source.atKey} as unauthorized for enrollment '
-                '${_atClient.enrollmentId}, so it is not retried and this '
-                'device keeps its local copy'
+                '${source.atKey} for enrollment ${_atClient.enrollmentId} '
+                'with ${responseObject.errorCode} '
+                '(${responseObject.errorMessage}), so it is not retried and '
+                'this device keeps its local copy'
                 '${removed ? '' : '; a newer write to it pushes next round'}');
             continue;
           }

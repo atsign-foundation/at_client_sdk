@@ -387,8 +387,10 @@ void main() {
     expect(await c.local.peekSyncQueue(), isEmpty);
     expect(
         logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
-        allOf(isNotEmpty,
-            everyElement(allOf(contains('update'), contains(enrollmentId)))));
+        allOf(
+            isNotEmpty,
+            everyElement(allOf(contains('update'), contains(enrollmentId),
+                contains('AT0009')))));
     expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
         reason: 'the local copy stays as written');
   });
@@ -420,58 +422,98 @@ void main() {
     expect(await c.local.peekSyncQueue(), isEmpty);
     expect(
         logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
-        allOf(isNotEmpty,
-            everyElement(allOf(contains('delete'), contains(enrollmentId)))));
+        allOf(
+            isNotEmpty,
+            everyElement(allOf(contains('delete'), contains(enrollmentId),
+                contains('AT0009')))));
     expect(await c.store.exists('k.wavi@bob'), isFalse,
         reason: 'the local copy stays as written: deleted');
   });
 
-  test('A queued update refused for any other reason stays queued and retries',
+  test('A queued update refused with any other code stays queued and retries',
       () async {
     final c = enrolled({'*': 'rw'});
     await put(c.local, 'k.wavi@bob');
     final queued = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
     final sent = <String>[];
     final sync = await syncPushing(
-        c.client, sent, (_) async => (commitId: -1, errorCode: 'AT0016'));
+        c.client, sent, (_) async => (commitId: -1, errorCode: 'AT0002'));
 
     await push(sync);
     expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued,
-        reason: 'a refusal that is not about authorization leaves the entry');
+        reason: 'a refusal a retry may get past leaves the entry');
     await push(sync);
 
     expect(sent, hasLength(2), reason: 'it is sent again on the next round');
     expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued);
   });
 
-  group('Given an update of K refused as unauthorized while in flight', () {
-    test(
-        'when a newer write to K lands before the answer, then the newer '
-        'entry stays queued and pushes next round', () async {
-      final c = enrolled({'*': 'rw'});
-      await put(c.local, 'k.wavi@bob');
-      final first = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
-      var inFlight = true;
-      final sent = <String>[];
-      final sync = await syncPushing(c.client, sent, (command) async {
-        if (!inFlight) return accepted;
-        inFlight = false;
-        await c.local.executeVerb(UpdateVerbBuilder()
-          ..atKey = AtKey.fromString('k.wavi@bob')
-          ..value = 'newer');
-        return unauthorized;
+  group(
+      'A queued write refused for good with AT0032, AT0016, AT0022 or AT0003 '
+      'leaves the queue', () {
+    for (final code in ['AT0032', 'AT0016', 'AT0022', 'AT0003']) {
+      test(
+          'when the atServer answers $code, then the entry leaves the queue '
+          'and the one behind it pushes', () async {
+        final c = enrolled({'*': 'rw'});
+        await put(c.local, 'k.wavi@bob');
+        await put(c.local, 'l.wavi@bob');
+        final sent = <String>[];
+        final sync = await syncPushing(
+            c.client,
+            sent,
+            (command) async => command.contains('k.wavi@bob')
+                ? (commitId: -1, errorCode: code)
+                : accepted);
+
+        await push(sync);
+
+        expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+            reason: 'the update behind the refused one reaches the atServer '
+                'in the same round');
+        expect(await c.local.peekSyncQueue(), isEmpty);
+        expect(
+            logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+            allOf(
+                isNotEmpty,
+                everyElement(allOf(contains('update'), contains(enrollmentId),
+                    contains(code)))));
+        expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
+            reason: 'the local copy stays as written');
       });
+    }
+  });
 
-      await push(sync);
-      expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq,
-          greaterThan(first),
-          reason: 'the newer write was queued after the refused one was sent, '
-              'so it is a different entry and must not leave with it');
+  group('Given an update of K refused for good while in flight', () {
+    for (final code in ['AT0009', 'AT0032']) {
+      test(
+          'when a newer write to K lands before the $code answer, then the '
+          'newer entry stays queued and pushes next round', () async {
+        final c = enrolled({'*': 'rw'});
+        await put(c.local, 'k.wavi@bob');
+        final first = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+        var inFlight = true;
+        final sent = <String>[];
+        final sync = await syncPushing(c.client, sent, (command) async {
+          if (!inFlight) return accepted;
+          inFlight = false;
+          await c.local.executeVerb(UpdateVerbBuilder()
+            ..atKey = AtKey.fromString('k.wavi@bob')
+            ..value = 'newer');
+          return (commitId: -1, errorCode: code);
+        });
 
-      await push(sync);
-      expect(sent, hasLength(2));
-      expect(sent.last, contains('newer'));
-      expect(await c.local.peekSyncQueue(), isEmpty);
-    });
+        await push(sync);
+        expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq,
+            greaterThan(first),
+            reason: 'the newer write was queued after the refused one was '
+                'sent, so it is a different entry and must not leave with it');
+
+        await push(sync);
+        expect(sent, hasLength(2));
+        expect(sent.last, contains('newer'));
+        expect(await c.local.peekSyncQueue(), isEmpty);
+      });
+    }
   });
 }
