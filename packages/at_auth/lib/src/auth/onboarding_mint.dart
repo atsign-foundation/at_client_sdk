@@ -100,12 +100,36 @@ Future<({String publicKey, String privateKey})> mintApkamKeyPair(
         privateKey: apkam.atPrivateKey.privateKey.toString(),
       );
     default:
-      throw ArgumentError.value(
-          signingAlgo,
-          'signingAlgo',
-          'an APKAM authentication keypair can be minted as rsa2048 or '
-              'mldsa65; ${signingAlgo.name} has no mint path, and defaulting '
-              'to one of the others would enrol under an algorithm the caller '
-              'did not ask for');
+      throw _noMintPath(signingAlgo);
   }
 }
+
+/// The shape of [mintApkamKeyPair].
+typedef ApkamKeyPairMinter = Future<({String publicKey, String privateKey})>
+    Function(SigningAlgoType signingAlgo);
+
+/// Refuses an APKAM keypair a caller supplied in place of [mintApkamKeyPair]
+/// when [signingAlgo] is one that function has no mint path for, or when it
+/// is `mldsa65` and either half is not base64 of a raw ML-DSA-65 key.
+///
+/// Throws [AtSigningException] for a malformed `mldsa65` pair and
+/// [ArgumentError] for an algorithm with no mint path.
+void checkApkamKeyPair(SigningAlgoType signingAlgo,
+    ({String publicKey, String privateKey}) apkam) {
+  switch (signingAlgo) {
+    case SigningAlgoType.mldsa65:
+      MlDsa65KeyPair.create(apkam.publicKey, apkam.privateKey);
+    case SigningAlgoType.rsa2048:
+      return;
+    default:
+      throw _noMintPath(signingAlgo);
+  }
+}
+
+ArgumentError _noMintPath(SigningAlgoType signingAlgo) => ArgumentError.value(
+    signingAlgo,
+    'signingAlgo',
+    'an APKAM authentication keypair can be minted as rsa2048 or '
+        'mldsa65; ${signingAlgo.name} has no mint path, and defaulting '
+        'to one of the others would enrol under an algorithm the caller '
+        'did not ask for');

@@ -151,8 +151,9 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   final Stream<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
-  /// The algorithm this enrollment's APKAM **authentication** keypair is
-  /// minted under, and the value that rides `EnrollParams.signingAlgo`.
+  /// The algorithm of this enrollment's APKAM **authentication** keypair,
+  /// minted or supplied as [apkamKeyPair], and the value that rides
+  /// `EnrollParams.signingAlgo`.
   ///
   /// **Required, with no default, on purpose:** a default would let a caller
   /// inherit an algorithm it never chose. On an atSign whose deployment
@@ -171,6 +172,18 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// questions, with one exception: [AtEnrollmentRequest.pq] refuses
   /// `rsa2048`.
   final SigningAlgoType signingAlgo;
+
+  /// The APKAM authentication keypair this enrollment enrolls, in place of
+  /// one minted at submission.
+  ///
+  /// Both halves are encoded as a mint under [signingAlgo] encodes them: for
+  /// `mldsa65`, base64 of the raw 1952-byte public and 4032-byte secret keys.
+  /// An `mldsa65` pair of any other shape is refused with
+  /// `AtSigningException`, and a pair under a [signingAlgo] other than
+  /// `rsa2048` or `mldsa65` with `ArgumentError`, before anything is sent.
+  ///
+  /// Null mints a fresh keypair under [signingAlgo].
+  final ({String publicKey, String privateKey})? apkamKeyPair;
 
   /// How this request conveys the enrollment's symmetric key.
   ///
@@ -205,6 +218,7 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
     required this.signingAlgo,
+    this.apkamKeyPair,
     super.advertisedSigningKey,
   })  : keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         apkamSymmetricKeyResolver = null,
@@ -250,6 +264,7 @@ class AtEnrollmentRequest extends EnrollmentRequest {
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
     required SigningAlgoType signingAlgo,
+    this.apkamKeyPair,
     super.advertisedSigningKey,
   })  : signingAlgo = _authenticatingPostQuantum(signingAlgo),
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,
