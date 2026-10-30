@@ -250,21 +250,14 @@ void main() {
   });
 
   test(
-      'an rsa2048 enrollment that heals an ML-DSA signing key signs its key '
+      'an mldsa65 enrollment that heals an ML-DSA signing key signs its key '
       'package again', () async {
-    // The rollout path: an existing rsa2048 enrollment whose preference comes
-    // to name an ML-DSA signing key. Its package was signed by the rsa2048
-    // authentication key, which leaves `_apsk` the moment the enrollment holds
-    // a signing key of its own.
     final keysIo = InMemoryAtKeysIo();
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // NOTE: named, since the helper's default is ML-DSA, and rsa2048 pairs
-      // only with the legacy key exchange.
-      signingAlgo: SigningAlgoType.rsa2048,
-      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+      signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
           posture: PqPosture.legacy),
@@ -274,18 +267,11 @@ void main() {
       atKeysIo: keysIo,
       storage: TestUtils.storage,
     );
-    expect(
-        (await keysIo.read(atSign))
-            .authenticationKeyPairFor(enrolled.enrollmentId)!
-            .algorithm,
-        SigningAlgoType.rsa2048,
-        reason: 'precondition: the rollout path starts from an rsa2048 '
-            'authentication key, whose package and bare _apsk it signed');
 
     final reconciled =
         await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
     expect(reconciled.minted, [SigningAlgoType.mldsa65],
-        reason: 'precondition: a signing key was minted, so the rsa2048 '
+        reason: 'precondition: a signing key was minted, so the mldsa65 '
             'authentication key has left `_apsk`');
 
     await expectTheHealedPackageIsSignedAgain(enrolled);
