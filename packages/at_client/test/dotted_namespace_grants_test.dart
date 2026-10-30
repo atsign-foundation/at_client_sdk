@@ -128,8 +128,10 @@ void main() {
       }
       return 'data:${jsonEncode(responses)}';
     });
-    return await SyncServiceImpl.create(client,
+    final sync = await SyncServiceImpl.create(client,
         remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
+    addTearDown(sync.stop);
+    return sync;
   }
 
   /// One round that pulls the atServer's first commit.
@@ -170,8 +172,10 @@ void main() {
                       'operation': deletes ? '-' : '+',
                     }
                 ])}');
-    return await SyncServiceImpl.create(client,
+    final sync = await SyncServiceImpl.create(client,
         remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
+    addTearDown(sync.stop);
+    return sync;
   }
 
   test(
