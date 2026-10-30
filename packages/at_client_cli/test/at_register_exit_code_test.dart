@@ -47,4 +47,18 @@ void main() {
     expect(run.stderr, isNot(contains('no command was given')),
         reason: 'at_register names the at_activate command it runs');
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('Three refused verification codes exit 5', () async {
+    final run = await runAtRegister('refuses-codes');
+
+    expect(
+        'registrar served POST /api/app/v3/validate-person'
+            .allMatches(run.stderr),
+        hasLength(3),
+        reason: 'the premise: the registrar refused three codes');
+    expect(run.stderr, contains('maximum number of verification attempts'));
+    expect('Enter your verification code'.allMatches(run.stdout), hasLength(3),
+        reason: 'a fourth code would never be sent');
+    expect(run.exitCode, 5);
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

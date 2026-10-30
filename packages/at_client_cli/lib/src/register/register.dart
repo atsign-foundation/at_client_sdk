@@ -194,10 +194,9 @@ class ValidateOtp extends RegisterApiTask {
         stderr.writeln(
             '[Unable to proceed] The verification code you entered is either invalid or expired.\n'
             ' Check your verification code and try again.');
-        params['otp'] = registerUtil.getVerificationCodeFromUser();
+        params.remove('otp');
         result.apiCallStatus = ApiCallStatus.retry;
-        result.exceptionMessage =
-            'Incorrect otp entered 3 times. Max retries reached.';
+        result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
         params.update('confirmation', (value) => 'true');
         result.data['otp'] = params['otp'];
@@ -246,29 +245,31 @@ Future<void> main(List<String> args) async {
       exit(3);
     }
   } on _RegistrarException catch (e) {
+    if (e.message == _otpAttemptsExhausted) {
+      stderr.writeln(
+          '[Unable to proceed] Registration has been terminated as you have'
+          ' reached the maximum number of verification attempts.\n'
+          'Please start again or contact support@atsign.com');
+      exit(5);
+    }
     stderr.writeln(
         '[Error] Failed getting an atsign. It looks like something went wrong on our side.\n'
         'Please try again or contact support@atsign.com, quoting the text displayed below.');
     stderr.writeln('Cause: $e  ExceptionType:${e.runtimeType}');
     exit(4);
   } on Exception catch (e) {
-    if (e
-        .toString()
-        .contains('Incorrect otp entered 3 times. Max retries reached.')) {
-      stderr.writeln(
-          '[Unable to proceed] Registration has been terminated as you have'
-          ' reached the maximum number of verification attempts.\n'
-          'Please start again or contact support@atsign.com');
-      exit(5);
-    } else {
-      stderr.writeln(
-          '[Error] Failed getting an atsign. It looks like something went wrong on our side.\n'
-          'Please try again or contact support@atsign.com, quoting the text displayed below.');
-      stderr.writeln('Cause: ${e.toString()}');
-      exit(6);
-    }
+    stderr.writeln(
+        '[Error] Failed getting an atsign. It looks like something went wrong on our side.\n'
+        'Please try again or contact support@atsign.com, quoting the text displayed below.');
+    stderr.writeln('Cause: ${e.toString()}');
+    exit(6);
   }
 }
+
+/// Why [ValidateOtp] stopped asking: every verification code it was given was
+/// refused.
+const String _otpAttemptsExhausted =
+    'Incorrect otp entered 3 times. Max retries reached.';
 
 /// The registrar refused a step of the registration.
 ///
