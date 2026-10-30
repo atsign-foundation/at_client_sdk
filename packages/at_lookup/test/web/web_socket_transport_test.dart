@@ -34,6 +34,21 @@ void main() {
       transport.destroy();
     });
 
+    test('a binary frame arrives as its bytes', () async {
+      final transport = await WebSocketTransportFactory(scheme: 'ws')
+          .connect('127.0.0.1', port.toString());
+
+      transport.add(utf8.encode('@binary:from:@a\n'));
+
+      final event = await transport.inbound.first
+          .timeout(const Duration(seconds: 5));
+      expect(utf8.decode(event), 'data:from:@a\n',
+          reason: 'a browser hands a binary frame over as a Blob unless the '
+              'socket asks for an ArrayBuffer');
+
+      transport.destroy();
+    });
+
     test('server-side close completes inbound', () async {
       final factory = WebSocketTransportFactory(scheme: 'ws');
       final transport = await factory.connect('127.0.0.1', port.toString());

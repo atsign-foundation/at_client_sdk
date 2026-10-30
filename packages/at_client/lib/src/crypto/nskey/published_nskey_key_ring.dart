@@ -333,6 +333,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// concurrent miss in it shares.
   final Map<String, Future<void>> _readingOnMiss = {};
 
+  /// When a miss on a kid no own advertisement names last fetched and asked,
+  /// per namespace. Stamps older than [askCooldown] are dropped.
+  final Map<String, DateTime> _unnamedPulledAt = {};
+
   /// When each own generation was last asked about. Stamps older than
   /// [askCooldown] are dropped.
   final Map<_OwnGeneration, DateTime> _askedAt = {};
@@ -1103,8 +1107,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     if (held != null || owner != _atClient.getCurrentAtSign()) return held;
     if (!_askOnReadMiss) return null;
 
-    // NOTE: no fetch and no ask for a generation no own advertisement names.
-    if (!await _advertisedOwn(namespace, nskeyKid)) return null;
+    // NOTE: no fetch and no ask in a namespace this ring does not know as its
+    // own. A kid no own advertisement names may still be a generation a
+    // rotation superseded, whose records stay sealed to it and which no
+    // advertisement names any more, so such misses fetch and ask too, but at
+    // most once per [askCooldown] per namespace, whatever kids they name.
+    final advertised = await _advertisedOwn(namespace, nskeyKid);
+    if (advertised == null) return null;
+    if (!advertised && !_mayPullUnnamed(namespace)) return null;
 
     await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
         onTimeout: () => _logger.info('The fetch of the conveyance records '
@@ -1240,19 +1250,31 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return cached || (_kidsReadOnMiss[namespace]?.contains(nskeyKid) ?? false);
   }
 
-  /// Whether this atSign advertises [nskeyKid] in [namespace].
+  /// Whether this atSign advertises [nskeyKid] in [namespace]; null when
+  /// [namespace] is not one [_knowsOwn] accepts.
   ///
   /// When no copy this ring holds names it, reads the published advertisement,
   /// at most once per [askCooldown] per namespace and only for a namespace
   /// [_knowsOwn] accepts.
-  Future<bool> _advertisedOwn(String namespace, String nskeyKid) async {
+  Future<bool?> _advertisedOwn(String namespace, String nskeyKid) async {
     if (_namesOwn(namespace, nskeyKid)) return true;
-    if (!await _knowsOwn(namespace)) return false;
+    if (!await _knowsOwn(namespace)) return null;
     await _readOwnOnMiss(namespace).timeout(fetchOnMissTimeout,
         onTimeout: () => _logger.info('The read of the own advertisement for '
             '$namespace has run past ${fetchOnMissTimeout.inMilliseconds}ms, '
             'so this miss on $nskeyKid fetches and asks nothing'));
     return _namesOwn(namespace, nskeyKid);
+  }
+
+  /// Whether a miss on a kid no own advertisement names may fetch and ask in
+  /// [namespace]: once per [askCooldown] per namespace, stamped when it does.
+  bool _mayPullUnnamed(String namespace) {
+    final now = DateTime.now();
+    _unnamedPulledAt
+        .removeWhere((_, pulledAt) => now.difference(pulledAt) >= askCooldown);
+    if (_unnamedPulledAt.containsKey(namespace)) return false;
+    _unnamedPulledAt[namespace] = now;
+    return true;
   }
 
   /// Whether this ring holds an own advertisement for [namespace], or the

@@ -81,6 +81,20 @@ void main() {
         reason: 'a proxy routes a connection by the atSign it names first');
   });
 
+  test(
+      'A CLIBase given no lookUps and a proxy root names its atSign first on '
+      'each connection', () async {
+    final cli = CLIBase(
+        atSign: '@alice',
+        nameSpace: 'my_app',
+        rootDomain: 'proxy:127.0.0.1:${server.port}',
+        homeDir: certs.path);
+    expect(cli.lookUps, isNull, reason: 'the precondition: the default runs');
+
+    expect(await firstLineFrom(cli.lookUpsToUse), 'from:@alice',
+        reason: 'CLIBase.init opens its client with these');
+  });
+
   test('Straight to an atServer, the command goes first', () async {
     expect(await firstLineFrom(lookUpsFor('root.atsign.org')), 'scan',
         reason: 'an atServer reached directly is sent no from: unasked');

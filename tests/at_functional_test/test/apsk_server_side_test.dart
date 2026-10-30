@@ -261,6 +261,10 @@ void main() {
       approver: approver,
       atSign: atSign,
       namespace: namespace,
+      // NOTE: named, since the helper's default is ML-DSA, and rsa2048 pairs
+      // only with the legacy key exchange.
+      signingAlgo: SigningAlgoType.rsa2048,
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       preference: TestUtils.getPreference(atSign,
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
           posture: PqPosture.legacy),
@@ -270,6 +274,13 @@ void main() {
       atKeysIo: keysIo,
       storage: TestUtils.storage,
     );
+    expect(
+        (await keysIo.read(atSign))
+            .authenticationKeyPairFor(enrolled.enrollmentId)!
+            .algorithm,
+        SigningAlgoType.rsa2048,
+        reason: 'precondition: the rollout path starts from an rsa2048 '
+            'authentication key, whose package and bare _apsk it signed');
 
     final reconciled =
         await SigningKeyMinting(enrolled.client).reconcileSigningKeys();

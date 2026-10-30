@@ -152,12 +152,16 @@ void main() {
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
 
+      // NOTE: a key store, so the refusal asserted is the CRAM one and not the
+      // missing-atKeysIo guard that follows it.
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
-          signingAlgoType: SigningAlgoType.rsa2048);
+          signingAlgoType: SigningAlgoType.rsa2048,
+          atKeysIo: InMemoryAtKeysIo());
 
-      expect(
+      await expectLater(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
-          throwsA(isA<AtAuthenticationException>()));
+          throwsA(isA<AtAuthenticationException>().having((e) => e.message,
+              'message', contains('Cram authentication failed'))));
     });
 
     test('an enrollment refusal surfaces the underlying reason in the message',

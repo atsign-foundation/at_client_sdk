@@ -437,7 +437,8 @@ class KeyPackageMinting with ApkamSigning {
   }
 
   /// Makes [_holder] hold the key package the keyfile holds for [enrolment],
-  /// when it holds anything else.
+  /// when it holds anything else: other keys, or the same keys with another
+  /// status, as when a reconcile only retires one.
   Future<void> _holdWhatIsFiled(
       WrittenAtKeysIo io, String atSign, String enrolment) async {
     final holder = _holder;
@@ -445,11 +446,12 @@ class KeyPackageMinting with ApkamSigning {
     final filed = {
       for (final material in keyPackageMaterials(await io.read(atSign),
           enrollmentId: enrolment))
-        material.keyId
+        material.keyId: KeyEntryStatus.of(material.status)
     };
-    final held = holder.heldKpids;
+    final held = holder.heldStatuses;
     if (filed.isEmpty ||
-        (filed.length == held.length && filed.containsAll(held))) {
+        (filed.length == held.length &&
+            filed.entries.every((e) => held[e.key] == e.value))) {
       return;
     }
     await holder.reloadApkamKeys();

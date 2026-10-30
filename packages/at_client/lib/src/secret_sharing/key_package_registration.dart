@@ -202,6 +202,10 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// envelope this client never scans for is one it never opens.
   Set<String> get heldKpids => {for (final held in _encKeys) held.kid};
 
+  /// The status of every key [heldKpids] names, by kid.
+  Map<String, KeyEntryStatus> get heldStatuses =>
+      {for (final held in _encKeys) held.kid: held.status};
+
   /// The KEM enc keys this APKAM keypair holds, in the shape [saveApkamKeys]
   /// receives; empty until [register].
   PersistedApkamKeys get heldApkamKeys => PersistedApkamKeys(encKeys: [

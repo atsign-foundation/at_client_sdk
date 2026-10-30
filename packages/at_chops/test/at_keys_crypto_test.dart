@@ -48,5 +48,16 @@ void main() {
       expect(() async => await atKeysCrypto.decrypt(atEncrypted, 'abcde'),
           throwsA(predicate((dynamic e) => e is ArgumentError)));
     });
+
+    for (final type in [
+      HashingAlgoType.sha256,
+      HashingAlgoType.sha512,
+      HashingAlgoType.md5,
+    ]) {
+      test('${type.name} is refused where it is chosen, not in encrypt', () {
+        expect(() => AtKeysCrypto.fromHashingAlgorithm(type),
+            throwsA(isA<ArgumentError>()));
+      });
+    }
   });
 }

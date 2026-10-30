@@ -185,6 +185,8 @@ void main() {
     await first;
     expect(transportFactory.created.single.written, ['from:@alice\n'],
         reason: 'nothing goes out on a connection whose preamble failed');
+    expect(transportFactory.created.single.destroyed, isTrue,
+        reason: 'closed, not just dropped with its socket left open');
 
     final second = lookUp.executeCommand('noop:1\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -198,6 +200,8 @@ void main() {
     expect(transportFactory.last.written, ['from:@alice\n', 'noop:1\n']);
     await transportFactory.last.serverSends('data:ok\n@alice@');
     expect(await second, 'data:ok');
+    expect(transportFactory.last.destroyed, isFalse,
+        reason: 'the control: a connection whose onConnect succeeded stays');
 
     await lookUp.close();
   });

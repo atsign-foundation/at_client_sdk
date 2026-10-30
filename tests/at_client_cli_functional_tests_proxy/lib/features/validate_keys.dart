@@ -63,19 +63,11 @@ Future<bool> validateEnrollmentKeys(String atSign, String keyFile, String rootSe
     logger.info('✓ Enrollment keys validated successfully - able to list enrollments');
     return true;
   } else {
-    String stderr = listResult.stderr.toString();
-    String stdout = listResult.stdout.toString();
-
-    // Check for authentication success indicators even with non-zero exit code
-    if (stderr.toLowerCase().contains('connected') ||
-        stdout.toLowerCase().contains('connected') ||
-        stderr.toLowerCase().contains('authenticated') ||
-        stdout.toLowerCase().contains('authenticated')) {
-      logger.info('✓ Enrollment keys validated - successfully connected/authenticated');
-      return true;
-    }
-
-    logger.warning('✗ Enrollment key validation failed: $stderr');
+    // NOTE: a list that fails is a failure, whatever its output says: a
+    // refusal reads "(unauthenticated)", and "Connected" is printed before the
+    // list verb is even sent.
+    logger.warning(
+        '✗ Enrollment key validation failed: ${listResult.stderr}');
     return false;
   }
 }

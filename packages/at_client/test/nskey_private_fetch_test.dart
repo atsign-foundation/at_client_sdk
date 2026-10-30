@@ -401,8 +401,8 @@ void main() {
 
     test(
         'when the ring holds its own advertisement for the namespace, then it '
-        'reads the published one once per cooldown, and with the kid unnamed '
-        'fetches and asks nothing', () async {
+        'reads the published one once per cooldown, and with the kids unnamed '
+        'fetches and asks once per cooldown', () async {
       final g1 = await generation();
       final served = serving({
         namespace: naming([g1.key])
@@ -429,13 +429,83 @@ void main() {
       expect(served.reads, [namespace],
           reason: 'concurrent misses share one read, and the cooldown holds '
               'the rest');
-      expect(fetched, 0);
-      expect(asked, isEmpty);
+      expect(fetched, 1);
+      expect(asked, hasLength(1),
+          reason: 'forty unnamed kids pull once per cooldown, not forty times');
 
       await Future<void>.delayed(const Duration(milliseconds: 250));
       await ring.privateHalf(alice, namespace, 'unnamed');
+      await pumpEventQueue();
       expect(served.reads, [namespace, namespace],
           reason: 'past the cooldown the next miss reads again');
+      expect(asked, [secretOf('unnamed0'), secretOf('unnamed')]);
+    });
+
+    test(
+        'when the kid is a generation a rotation superseded, then the first '
+        'miss fetches and asks for it', () async {
+      final g1 = await generation();
+      final g2 = await generation();
+      final served = serving({
+        namespace: naming([g2.key])
+      });
+      var fetched = 0;
+      final asked = <String>[];
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: await filing(),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async => asked.add(name))
+        ..rememberOwn(alice, namespace, naming([g2.key]));
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid), isNull);
+      await pumpEventQueue();
+      expect(fetched, 1);
+      expect(asked, [secretOf(g1.kid)],
+          reason: 'records sealed before the rotation stay sealed to g1, and '
+              'only an enrollment that holds it can repair this one');
+    });
+
+    test(
+        'when two misses come while the read that names their kid is in '
+        'flight, then both wait on it and both get the private', () async {
+      final g1 = await generation();
+      final g2 = await generation();
+      final reading = Completer<void>();
+      final atClient = MockAtClient();
+      final reads = <String>[];
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        reads.add('${(inv.positionalArguments[0] as AtKey).namespace}');
+        await reading.future;
+        return AtValue()..value = namespace;
+      });
+      final privates = await filing();
+      await privates.store(
+          namespace: namespace, nskeyKid: g1.kid, seed: NskeySeed(g1.seed));
+      var fetched = 0;
+      final ring = PublishedNskeyKeyRing(atClient,
+          verifier: _ServedAsPublished({
+            namespace: naming([g2.key, g1.key])
+          }),
+          privateFiling: privates, fetchConveyance: () async {
+        fetched++;
+        await privates.file(conveyed(g2));
+      }, requestConveyance: (ns, name) async {})
+        ..askCooldown = const Duration(minutes: 10);
+
+      final first = ring.privateHalf(alice, namespace, g2.kid);
+      final second = ring.privateHalf(alice, namespace, g2.kid);
+      await pumpEventQueue();
+      expect(fetched, 0,
+          reason: 'neither miss goes on before the read in flight answers');
+
+      reading.complete();
+      expect(await Future.wait([first, second]), everyElement(isNotNull));
+      expect(reads, [namespace]);
+      expect(fetched, 1);
     });
 
     test(
@@ -491,13 +561,14 @@ void main() {
       final ring = PublishedNskeyKeyRing(served.client,
           verifier: served.verifier,
           privateFiling: privates, fetchConveyance: () async {
+        if (down) throw SecondaryConnectException('still unreachable');
         fetched++;
         await privates.file(conveyed(g2));
       }, requestConveyance: (ns, name) async {})
         ..askCooldown = const Duration(milliseconds: 50);
 
       expect(await ring.privateHalf(alice, namespace, g2.kid), isNull);
-      expect(fetched, 0, reason: 'an unread advertisement names nothing');
+      expect(fetched, 0, reason: 'the atServer could not be reached');
 
       down = false;
       expect(await ring.privateHalf(alice, namespace, g2.kid), isNull,

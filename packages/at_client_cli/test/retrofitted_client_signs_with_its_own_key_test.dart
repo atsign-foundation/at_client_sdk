@@ -117,11 +117,11 @@ void main() {
     // frozen for the mocks implementing it — so the seam is reached through
     // `AtLookupMuxable`.
     //
-    // This completion check is the whole guard now that the ladder's
-    // `enrollmentId`/`signingAlgoType` accessors are gone: a fix that
-    // installed the flat enrolment's RSA signer instead of the retrofitted
-    // ML-DSA one fails right here, not silently on a field nobody reads
-    // anymore.
+    // The completion check alone cannot tell the enrolments apart: the
+    // authenticator takes the keypair and the algorithm it declares from one
+    // place, so a client resolving the flat enrolment signs RSA and completes
+    // too. The client's enrolment and the pkam: it sends say which one it is.
+    expect(client.enrollmentId, retrofittedId);
     final authenticator = (adopted as AtLookupMuxable).authenticator!;
     await expectLater(authenticator(exchange), completion(isTrue),
         reason: 'the lookup declares mldsa65 for the retrofitted enrolment, so '
@@ -131,8 +131,15 @@ void main() {
             'ML-DSA-65 secret key is 4032", and no verb this client runs can '
             'authenticate');
 
-    expect(exchange.sent.where((c) => c.startsWith('pkam:')), isNotEmpty,
+    final pkam = exchange.sent.where((c) => c.startsWith('pkam:'));
+    expect(pkam, isNotEmpty,
         reason: 'a green that never reached the pkam: verb would mean the '
             'authenticator short-circuited rather than signed');
+    expect(
+        pkam,
+        everyElement(allOf(contains('signingAlgo:mldsa65'),
+            contains(':enrollmentId:$retrofittedId:'))),
+        reason: 'the flat enrolment\'s RSA pair also signs, and the exchange '
+            'accepts any pkam:, so only the verb shows which one authenticated');
   });
 }

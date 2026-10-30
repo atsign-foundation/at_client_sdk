@@ -218,6 +218,12 @@ class CLIBase {
   /// proxy convention when the root domain names one.
   final AtLookUpFactory? lookUps;
 
+  /// What [init] builds the client's connections with: [lookUps], else what
+  /// [lookUpsFor] picks for the root domain, so a `proxy:` root names the
+  /// atSign first on each connection.
+  AtLookUpFactory get lookUpsToUse =>
+      lookUps ?? lookUpsFor(atRootDomain.rootDomain);
+
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;
 
@@ -349,7 +355,7 @@ class CLIBase {
           namespace: nameSpace,
           storage: CliKeys.storageFor(atSign,
               program: nameSpace, path: localStoragePathToUse),
-          lookUps: lookUps ?? lookUpsFor(atRootDomain.rootDomain),
+          lookUps: lookUpsToUse,
           secondaryAddressFinder: CacheableSecondaryAddressFinder(
               atRootDomain.rootDomain, atRootDomain.rootPort),
           serviceFactory: atServiceFactory);

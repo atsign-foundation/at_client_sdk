@@ -485,12 +485,16 @@ void main() {
         'when it is built with rsa2048, then it is refused naming both',
         proves: 'the refusal at the one constructor every caller goes '
             'through, on its message naming both rsa2048 and the pq key '
-            'exchange; the accepted arms are the mldsa65 request and the '
-            'rsa2048 legacy request beside it',
-        clauses: [
-          'it is refused where it is built',
-          'the arm that stays',
-        ],
+            'exchange',
+        clauses: ['it is refused where it is built'],
+      );
+      provenIn(
+        'packages/at_auth/test/enrollment_test.dart',
+        'when a legacy request is built with rsa2048 instead, then it is '
+            'accepted',
+        proves: 'the same constructor builds an rsa2048 request under the '
+            'legacy key exchange',
+        clauses: ['the arm that stays'],
       );
       provenIn(
         'packages/at_client/test/lifecycle/enroll_pq_test.dart',

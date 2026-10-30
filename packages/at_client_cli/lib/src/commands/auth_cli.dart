@@ -266,7 +266,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.otp:
         // generate a one-time-passcode for this atSign. This is a passcode
@@ -284,7 +286,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.interactive:
         // Interactive session for various enrollment management activities:
@@ -297,7 +301,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.list:
         await list(
@@ -307,7 +313,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.fetch:
         await fetch(
@@ -318,7 +326,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.approve:
         await approve(
@@ -328,7 +338,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.auto:
         await autoApprove(
@@ -338,7 +350,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.deny:
         await deny(
@@ -349,7 +363,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.revoke:
         await revoke(
@@ -360,7 +376,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.enroll:
         // App which doesn't have auth keys and is not the first app.
@@ -379,7 +397,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
 
       case AuthCliCommand.delete:
         await deleteEnrollment(
@@ -390,7 +410,9 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureForApprover(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults),
+                maxConnectAttempts:
+                    AuthCliArgs.maxConnectAttemptsIn(commandArgResults)));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
 

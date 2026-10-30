@@ -463,6 +463,41 @@ void main() {
       expect(restarted.kpid, first.single.advertised.single);
       expect(again, isEmpty, reason: 'the record already names it');
     });
+
+    test(
+        'when it starts again without an algorithm it holds a key for, then '
+        'that key is held retired and the other is its kpid', () async {
+      final (:client, :holder) = await holding(algorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024
+      ]);
+      final both = await reconcile(client, holder);
+      final xWingKpid = holder.kpid;
+      final mlKemKpid =
+          both.single.advertised.singleWhere((kid) => kid != xWingKpid);
+
+      final mlKemOnly = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      when(() => mlKemOnly.atKeysIo).thenReturn(client.atKeysIo);
+      final restarted = TestRegistrant(mlKemOnly)
+        ..directory = FakeEnrollmentDirectory();
+      bindKeyPackageToAtKeys(restarted,
+          keysIo: client.atKeysIo!, atSign: atSign, enrollmentId: enrollmentId);
+      await restarted.register();
+      expect(restarted.heldStatuses,
+          {xWingKpid: KeyEntryStatus.active, mlKemKpid: KeyEntryStatus.active},
+          reason: 'the precondition: both are filed active');
+
+      await reconcile(mlKemOnly, restarted);
+
+      expect(restarted.heldStatuses[xWingKpid], KeyEntryStatus.retired);
+      expect(restarted.kpid, mlKemKpid,
+          reason: 'the package now advertises the ML-KEM key as its kpid, '
+              'and a request sent from the retired one is ignored');
+    });
   });
 }
 

@@ -487,5 +487,24 @@ void main() {
 
       expect(written, [pkamPublicKey()]);
     });
+
+    test('writes nothing when the keyfile cannot be read', () async {
+      final written = stubPutAndGet(pkamPublicKey());
+      when(() => atClient.atKeysIo).thenReturn(_UnreadableAtKeysIo());
+
+      await expectLater(signer.publishPublicSigningKey(),
+          throwsA(isA<AtKeyNotFoundException>()));
+
+      expect(written, isEmpty,
+          reason: 'an advertisement naming no key would overwrite the one '
+              'peers verify this enrollment\'s signatures with');
+    });
   });
+}
+
+/// A key source whose every read fails, as a locked keychain's does.
+class _UnreadableAtKeysIo extends InMemoryAtKeysIo {
+  @override
+  FutureOr<AtKeys> read(String atsign) =>
+      throw StateError('the keychain is locked');
 }

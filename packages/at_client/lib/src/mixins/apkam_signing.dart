@@ -139,11 +139,25 @@ mixin ApkamSigning {
   ///
   /// The same rule decides the enrollment path's `apsk`-versus-`apskLegacy`,
   /// and the two must agree: they describe one record.
-  Future<String> get publicSigningKeyValue async => apskValueOf(apskEntries(
-        signing: await heldSigningKeys,
-        withdrawn: await withdrawnSigningKeys,
-        authentication: await authenticationSigningKey,
-      ));
+  ///
+  /// Throws [AtKeyNotFoundException] on the condition [signingKeys] does: when
+  /// it holds no key to sign with, as when its keyfile cannot be read. An
+  /// advertisement composed then names no key, and publishing it would
+  /// overwrite the one peers verify this enrollment's signatures with.
+  Future<String> get publicSigningKeyValue async {
+    final signing = await heldSigningKeys;
+    final authentication = await authenticationSigningKey;
+    if (signing.isEmpty && authentication == null) {
+      throw AtKeyNotFoundException('${atClient.getCurrentAtSign()} holds no '
+          'key enrollment $enrollmentId signs with, so there is nothing to '
+          'advertise');
+    }
+    return apskValueOf(apskEntries(
+      signing: signing,
+      withdrawn: await withdrawnSigningKeys,
+      authentication: authentication,
+    ));
+  }
 
   /// The keys this client signs content with, strongest algorithm first:
   /// those of its client data signing keys that have a link, while any do, and
