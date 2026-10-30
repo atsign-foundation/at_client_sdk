@@ -33,13 +33,34 @@ final class MlDsa65PureDartAlgo
   ///
   /// Returns raw `(publicKey: 1952 bytes, secretKey: 4032 bytes)`.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
-    final (Uint8List pk, Uint8List sk) =
-        MlDsa.generateKeyPair(DilithiumParams.mlDsa65);
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      generateKeyPair() async =>
+          _checkedKeyPair(MlDsa.generateKeyPair(DilithiumParams.mlDsa65),
+              operation: 'ML-DSA-65 generateKeyPair');
+
+  /// Deterministically derive the ML-DSA-65 key pair for [seed], the 32-byte
+  /// FIPS 204 `ξ` (`ML-DSA.KeyGen_internal`).
+  ///
+  /// Returns raw `(publicKey: 1952 bytes, secretKey: 4032 bytes)`, the same
+  /// bytes `MlDsa65FfiAlgo.keyPairFromSeed` returns for [seed].
+  ///
+  /// Throws [ArgumentError] unless [seed] is [MlDsa65Sizes.seedBytes] long.
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed) async {
+    MlDsa65Sizes.validateSeed(seed);
+    return _checkedKeyPair(
+        MlDsa.generateKeyPairSeeded(DilithiumParams.mlDsa65, seed),
+        operation: 'ML-DSA-65 keyPairFromSeed');
+  }
+
+  static ({Uint8List publicKey, Uint8List secretKey}) _checkedKeyPair(
+      (Uint8List, Uint8List) keyPair,
+      {required String operation}) {
+    final (Uint8List pk, Uint8List sk) = keyPair;
     checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
-        operation: 'ML-DSA-65 generateKeyPair', label: 'public key');
+        operation: operation, label: 'public key');
     checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
-        operation: 'ML-DSA-65 generateKeyPair', label: 'secret key');
+        operation: operation, label: 'secret key');
     return (publicKey: pk, secretKey: sk);
   }
 
