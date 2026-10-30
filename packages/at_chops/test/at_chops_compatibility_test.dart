@@ -568,13 +568,10 @@ void main() {
       AtSigningInput signingInput = AtSigningInput('abcde');
       signingInput.signingAlgorithm =
           DefaultSigningAlgo(null, signingInput.hashingAlgoType);
-      try {
-        atChops.sign(signingInput);
-      } catch (e) {
-        assert(e is AtSigningException);
-        expect(e.toString(),
-            'Exception: encryption key pair not set for rsa signing algo');
-      }
+      expect(
+          () => atChops.sign(signingInput),
+          throwsA(isA<AtSigningException>().having((e) => e.toString(),
+              'message', 'Exception: encryption key pair not set for rsa signing algo')));
     });
 
     test('Negative test - sign() with incorrect DataType', () {
@@ -585,12 +582,10 @@ void main() {
       AtSigningInput signingInput = AtSigningInput(213456777);
       signingInput.signingAlgorithm =
           DefaultSigningAlgo(encryptionKeypair, signingInput.hashingAlgoType);
-      try {
-        atChops.sign(signingInput);
-      } catch (e) {
-        assert(e is InvalidDataException);
-        expect(e.toString(), 'Exception: Unrecognized type of data: 213456777');
-      }
+      expect(
+          () => atChops.sign(signingInput),
+          throwsA(isA<InvalidDataException>().having((e) => e.toString(),
+              'message', 'Exception: Unrecognized type of data: 213456777')));
     });
   });
 }

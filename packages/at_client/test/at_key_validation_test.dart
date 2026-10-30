@@ -35,6 +35,11 @@ void main() {
     var atSign = '';
     final namespace = 'test';
     final preference = AtClientPreference();
+    // NOTE: keys and store built for a valid atSign, outside the closure, so
+    // the refusal is buildAtClient's own and not theirs.
+    final keys = noKeysFor('@alice');
+    final storage =
+        HiveAtClientStorage(atSign: '@alice', storagePath: 'test/hive');
     await expectLater(
         () => buildAtClient(
             atSign: atSign,
@@ -42,9 +47,8 @@ void main() {
             preference: preference,
             lookUps: secureSocketLookUps(),
             secondaryAddressFinder: atDirectoryOf(preference),
-            atKeysIo: noKeysFor(atSign),
-            storage:
-                HiveAtClientStorage(atSign: atSign, storagePath: 'test/hive')),
+            atKeysIo: keys,
+            storage: storage),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 

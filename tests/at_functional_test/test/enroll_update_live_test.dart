@@ -146,10 +146,15 @@ void main() {
   }
 
   test('UC-G1.10 · rekey keeps the enrollment id', () async {
-    final client = await enrol('g110-rekey');
+    // NOTE: rsa2048, because authenticatesWith signs RSA by hand.
+    final client = await enrol('g110-rekey',
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
     final before = await fetch(client);
     final oldPrivateKey =
         client.keys.authenticationKeyPairFor(client.enrollmentId)!.privateKey;
+    expect(await authenticatesWith(client, oldPrivateKey), isTrue,
+        reason: 'the control: the old key authenticates before the rekey, so '
+            'its failing after it is the rekey\'s doing');
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 

@@ -439,6 +439,76 @@ void main() {
     });
 
     test(
+        'when the kid is a generation a rotation superseded, then the miss '
+        'fetches and asks nothing', () async {
+      final g1 = await generation();
+      final g2 = await generation();
+      final served = serving({
+        namespace: naming([g2.key])
+      });
+      var fetched = 0;
+      final asked = <String>[];
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: await filing(),
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async => asked.add(name))
+        ..rememberOwn(alice, namespace, naming([g2.key]));
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid), isNull);
+      await pumpEventQueue();
+      expect(served.reads, [namespace],
+          reason: 'the miss reads the published advertisement, which names '
+              'only the successor');
+      expect(fetched, 0);
+      expect(asked, isEmpty,
+          reason: 'a rotation publishes the successor alone, so no own '
+              'advertisement names g1');
+    });
+
+    test(
+        'when two misses come while the read that names their kid is in '
+        'flight, then both wait on it and both get the private', () async {
+      final g1 = await generation();
+      final g2 = await generation();
+      final reading = Completer<void>();
+      final atClient = MockAtClient();
+      final reads = <String>[];
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        reads.add('${(inv.positionalArguments[0] as AtKey).namespace}');
+        await reading.future;
+        return AtValue()..value = namespace;
+      });
+      final privates = await filing();
+      await privates.store(
+          namespace: namespace, nskeyKid: g1.kid, seed: NskeySeed(g1.seed));
+      var fetched = 0;
+      final ring = PublishedNskeyKeyRing(atClient,
+          verifier: _ServedAsPublished({
+            namespace: naming([g2.key, g1.key])
+          }),
+          privateFiling: privates, fetchConveyance: () async {
+        fetched++;
+        await privates.file(conveyed(g2));
+      }, requestConveyance: (ns, name) async {})
+        ..askCooldown = const Duration(minutes: 10);
+
+      final first = ring.privateHalf(alice, namespace, g2.kid);
+      final second = ring.privateHalf(alice, namespace, g2.kid);
+      await pumpEventQueue();
+      expect(fetched, 0,
+          reason: 'neither miss goes on before the read in flight answers');
+
+      reading.complete();
+      expect(await Future.wait([first, second]), everyElement(isNotNull));
+      expect(reads, [namespace]);
+      expect(fetched, 1);
+    });
+
+    test(
         'when the keyfile holds a private for the namespace and the published '
         'advertisement names a newer generation, then one read, then a fetch '
         'and an ask', () async {

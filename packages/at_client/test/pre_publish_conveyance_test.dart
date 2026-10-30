@@ -101,15 +101,17 @@ void main() {
         'when its kids reach different numbers of key packages, then pushedTo '
         'is the fewest', () async {
       final s = substrate(directory, 'e1');
-      final reached = {'__nskey.k1': 1, '__nskey.k2': 2};
+      // NOTE: the fewest is neither first nor last, so keeping either, or the
+      // most, gives another answer.
+      final reached = {'__nskey.k1': 3, '__nskey.k2': 1, '__nskey.k3': 2};
       when(() => s.sharing.pushSecretToNamespaceMembers(any(),
               excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
           .thenAnswer((inv) async =>
               reached[(inv.positionalArguments.first as Secret).name]!);
       final conveyance = (await PrePublishConveyance.prepare(
-          s.sharing, await filingHolding(['k1', 'k2']), namespace))!;
+          s.sharing, await filingHolding(['k1', 'k2', 'k3']), namespace))!;
 
-      await conveyance.convey(['k1', 'k2']);
+      await conveyance.convey(['k1', 'k2', 'k3']);
 
       expect(conveyance.pushedTo, 1,
           reason: 'a key package that holds one kid of a generation and not '

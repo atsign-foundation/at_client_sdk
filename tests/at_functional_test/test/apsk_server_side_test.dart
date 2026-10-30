@@ -250,17 +250,14 @@ void main() {
   });
 
   test(
-      'an rsa2048 enrollment that heals an ML-DSA signing key signs its key '
+      'an mldsa65 enrollment that heals an ML-DSA signing key signs its key '
       'package again', () async {
-    // The rollout path: an existing rsa2048 enrollment whose preference comes
-    // to name an ML-DSA signing key. Its package was signed by the rsa2048
-    // authentication key, which leaves `_apsk` the moment the enrollment holds
-    // a signing key of its own.
     final keysIo = InMemoryAtKeysIo();
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
       namespace: namespace,
+      signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
           posture: PqPosture.legacy),
@@ -274,7 +271,7 @@ void main() {
     final reconciled =
         await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
     expect(reconciled.minted, [SigningAlgoType.mldsa65],
-        reason: 'precondition: a signing key was minted, so the rsa2048 '
+        reason: 'precondition: a signing key was minted, so the mldsa65 '
             'authentication key has left `_apsk`');
 
     await expectTheHealedPackageIsSignedAgain(enrolled);

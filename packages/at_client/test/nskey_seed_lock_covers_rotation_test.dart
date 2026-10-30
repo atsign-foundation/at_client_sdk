@@ -23,6 +23,7 @@ void main() {
 
   late MockAtClient atClient;
   late _RecordingRing ring;
+  late MockSharing sharing;
   late NskeySeeding seeding;
 
   setUp(() async {
@@ -52,7 +53,7 @@ void main() {
                       pub: pair.publicKey)
                 ]));
     }
-    final sharing = MockSharing();
+    sharing = MockSharing();
     when(() => sharing.directory).thenReturn(directory);
     when(() => sharing.enrollmentId).thenReturn(listed.first);
     when(() => sharing.secretStore).thenReturn(SecretStore());
@@ -113,6 +114,26 @@ void main() {
               'one conveyance from two');
       expect(ring.mintLockTtls, isEmpty);
     });
+
+    test(
+        'when a client rotates it, then the rotate lock lasts for two '
+        'conveyances to the roster: the rotation\'s own and afterPublish\'s',
+        () async {
+      final kids = ring.wantedKeyAlgorithms().length;
+
+      await NskeyRotation(
+        atClient: atClient,
+        ring: ring,
+        privateFiling:
+            NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign),
+        sharing: sharing,
+      ).rotateNamespaceKey(published);
+
+      expect(ring.rotateLockTtls,
+          {published: ring.lockTtl + oneConveyance(kids) * 2},
+          reason: 'without it the rotation takes the bare mint lock, which a '
+              'roster-wide conveyance outlasts, and publishes nothing');
+    });
   });
 }
 
@@ -125,6 +146,24 @@ class _RecordingRing extends PublishedNskeyKeyRing {
 
   final Map<String, Duration?> mintLockTtls = {};
   final Map<String, Duration?> addLockTtls = {};
+  final Map<String, Duration?> rotateLockTtls = {};
+
+  @override
+  Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
+      String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
+      Duration? lockTtl}) async {
+    rotateLockTtls[namespace] = lockTtl;
+    return (
+      rotated: NskeyAdvertisement.single(
+        publicKey: Uint8List.fromList(List<int>.filled(1216, 11)),
+        alg: SecretSharingAlgos.xWing,
+        createdAt: DateTime.now().toUtc(),
+      ),
+      superseded: published[namespace]!,
+    );
+  }
 
   @override
   Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>

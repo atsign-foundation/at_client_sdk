@@ -176,7 +176,7 @@ void main() {
         storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp,
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory);
+        secondaryAddressFinder: await refusingAtDirectory());
     expect(adopted, same(manager));
 
     final keys = await store.read(atSign);
@@ -210,7 +210,7 @@ void main() {
         storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp,
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory);
+        secondaryAddressFinder: await refusingAtDirectory());
 
     final request = server.sent.where((c) => c.startsWith('enroll:')).single;
     expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,

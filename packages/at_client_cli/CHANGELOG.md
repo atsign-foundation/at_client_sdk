@@ -37,3 +37,7 @@
   many as it was asked to.
 - fix: with debug logging on, a registrar request is logged by its URL and
   response status, never by its body.
+- fix: `RegistrationFlow.start`, and so `Register.main`, throw an
+  `AtClientException` when the registrar refuses a step.
+- fix: at_activate's `--mca` sets how many times a command tries to connect,
+  three seconds apart; the default of 10 waits about 30 seconds.

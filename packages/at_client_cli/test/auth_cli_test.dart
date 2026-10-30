@@ -407,6 +407,22 @@ void postureArgumentTests() {
               'providers is refused by at_client when the request is read');
     });
 
+    test('--mca gives the connection the attempts it names, 10 when unnamed',
+        () {
+      expect(
+          AuthCliArgs.maxConnectAttemptsIn(
+              args.createStatusCommandParser().parse([])),
+          10);
+      expect(
+          AuthCliArgs.maxConnectAttemptsIn(
+              args.createStatusCommandParser().parse(['--mca', '30'])),
+          30);
+      expect(
+          () => AuthCliArgs.maxConnectAttemptsIn(
+              args.createStatusCommandParser().parse(['--mca', '0'])),
+          throwsArgumentError);
+    });
+
     test('an approver may name legacy', () {
       final parsed =
           args.createStatusCommandParser().parse(['--posture', 'legacy']);

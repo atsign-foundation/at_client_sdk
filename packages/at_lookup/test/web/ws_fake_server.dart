@@ -17,6 +17,12 @@ void hybridMain(StreamChannel channel) async {
             webSocket.close();
             return;
           }
+          // NOTE: a List<int> goes out as a binary frame, as some atServers
+          // and proxies answer.
+          if (text.startsWith('@binary:')) {
+            webSocket.add(utf8.encode('data:${text.substring(8)}'));
+            return;
+          }
           webSocket.add('data:$text');
         } else if (message is String) {
           if (message == '@exit') {

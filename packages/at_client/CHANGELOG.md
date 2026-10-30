@@ -196,6 +196,10 @@
 - fix: `AtRpc` and `AtRpcClient` log request and response payloads at finest
   only; at INFO and in their warnings a request is named by its id, and a
   response by its type and request id.
+- fix: on the first start after `keyEstablishmentAlgorithms` stops naming an
+  algorithm, the client treats that algorithm's key as retired at once, not
+  from its next start. `AtClientSecretSharing.heldStatuses` gives the status
+  of each key it holds.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.

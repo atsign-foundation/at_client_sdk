@@ -173,6 +173,17 @@ class AuthCliArgs {
   static PqPosture postureForApprover(ArgResults results) =>
       postureIn(results) ?? AtClientPreference().posture;
 
+  /// The tries `--mca` gives a command's connection to come online.
+  static int maxConnectAttemptsIn(ArgResults results) {
+    final named = results[argNameMaxConnectAttempts] as String;
+    final attempts = int.tryParse(named);
+    if (attempts == null || attempts < 1) {
+      throw ArgumentError.value(named, '--$argNameMaxConnectAttempts',
+          'must be a whole number of attempts, at least 1');
+    }
+    return attempts;
+  }
+
   /// The key-exchange modes a `--key-exchange` argument may name.
   static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {
     'legacy': EnrollmentKeyExchangeMode.legacy,

@@ -266,10 +266,11 @@ Future<void> main(List<String> args) async {
 }
 
 /// The registrar refused a step of the registration.
-class _RegistrarException implements Exception {
-  final String message;
-
-  _RegistrarException(this.message);
+///
+/// An [AtClientException], so a caller of [RegistrationFlow.start] or
+/// [Register.main] can catch it as one.
+class _RegistrarException extends AtClientException {
+  _RegistrarException(super.message) : super.message();
 
   @override
   String toString() => message;

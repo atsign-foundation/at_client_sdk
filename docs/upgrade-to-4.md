@@ -87,21 +87,52 @@ final atClient = AtClientManager.getInstance().atClient;
 ```
 
 ```dart after
-Future<AtClient> openAlice(AtClientPreference preference) async {
-  final client = await Atsign('@alice').open(
-      keys: FileAtKeysIo(filePath: (_) => 'keys/@alice_key.atKeys'),
+AtClient? current;
+
+Future<AtClient> switchTo(String atSign, AtClientPreference preference) async {
+  // setCurrentAtSign reused the client of the atSign already current...
+  final previous = current;
+  if (previous != null && previous.atSign == Atsign(atSign)) {
+    return previous;
+  }
+  final client = await Atsign(atSign).open(
+      keys: FileAtKeysIo(filePath: (_) => 'keys/${atSign}_key.atKeys'),
       preference: preference,
       storage: HiveAtClientStorage(
-          atSign: '@alice', storagePath: 'storage/hive', closedByClient: true),
+          atSign: atSign, storagePath: 'storage/hive', closedByClient: true),
       lookUps: secureSocketLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
+  current = client;
   // Only for code that still reads AtClientManager.getInstance().atClient.
   AtClientManager.getInstance().use(client);
+  // ...and stopped the one it replaced. use() does not, and an atSign whose
+  // client is still live cannot be opened again.
+  await previous?.stop();
   return client;
+}
+
+Future<void> openAlice(AtClientPreference preference) async {
+  try {
+    final client = await switchTo('@alice', preference);
+    print('@alice is ${client.connection.current}');
+  } on AtEnrollmentPendingException catch (e) {
+    print('awaiting approval of ${e.pendingEnrollmentIds}');
+  } on AtOpenRefusedException catch (e) {
+    print('refused: ${e.state}');
+  }
 }
 ```
 
+A client is its opener's to stop: stop the one you are finished with, as
+`switchTo` does, and every one still open before the program exits. Opening an
+atSign whose client is still live throws a `StateError`.
+
+On the first open of an atSign on a device, `Atsign.open` throws
+`AtEnrollmentPendingException` when the keys hold only an enrollment request
+that has not been approved, and
+`AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
+knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` comes back online, offline or refused, and
 `client.connection.current` says which. A command-line program usually lets
 `CLIBase` do all of this; a Flutter app lets the dialogs do it. Sections
