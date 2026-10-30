@@ -511,34 +511,60 @@ void main() {
   });
 
   group('Given an update of K refused for good while in flight', () {
+    /// An enrollment that queued K, and a sync service whose atServer refuses
+    /// K's first push with [code] once a newer write to K has landed.
+    Future<
+        ({
+          LocalSecondary local,
+          SyncServiceImpl sync,
+          List<String> sent,
+          int first
+        })> rewrittenInFlight(String code) async {
+      final c = enrolled({'*': 'rw'});
+      await put(c.local, 'k.wavi@bob');
+      final first = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+      var inFlight = true;
+      final sent = <String>[];
+      final sync = await syncPushing(c.client, sent, (command) async {
+        if (!inFlight) return accepted;
+        inFlight = false;
+        await c.local.executeVerb(UpdateVerbBuilder()
+          ..atKey = AtKey.fromString('k.wavi@bob')
+          ..value = 'newer');
+        return (commitId: -1, errorCode: code);
+      });
+      return (local: c.local, sync: sync, sent: sent, first: first);
+    }
+
     for (final code in ['AT0009', 'AT0032']) {
       test(
           'when a newer write to K lands before the $code answer, then the '
           'newer entry stays queued and pushes next round', () async {
-        final c = enrolled({'*': 'rw'});
-        await put(c.local, 'k.wavi@bob');
-        final first = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
-        var inFlight = true;
-        final sent = <String>[];
-        final sync = await syncPushing(c.client, sent, (command) async {
-          if (!inFlight) return accepted;
-          inFlight = false;
-          await c.local.executeVerb(UpdateVerbBuilder()
-            ..atKey = AtKey.fromString('k.wavi@bob')
-            ..value = 'newer');
-          return (commitId: -1, errorCode: code);
-        });
+        final k = await rewrittenInFlight(code);
 
-        await push(sync);
-        expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq,
-            greaterThan(first),
+        await push(k.sync);
+        expect((await k.local.readSyncQueueEntry('k.wavi@bob'))?.seq,
+            greaterThan(k.first),
             reason: 'the newer write was queued after the refused one was '
                 'sent, so it is a different entry and must not leave with it');
 
-        await push(sync);
-        expect(sent, hasLength(2));
-        expect(sent.last, contains('newer'));
-        expect(await c.local.peekSyncQueue(), isEmpty);
+        await push(k.sync);
+        expect(k.sent, hasLength(2));
+        expect(k.sent.last, contains('newer'));
+        expect(await k.local.peekSyncQueue(), isEmpty);
+      });
+
+      test(
+          'when a newer write to K lands before the $code answer, then sync '
+          'does not report the queue as stalled', () async {
+        final k = await rewrittenInFlight(code);
+
+        await push(k.sync);
+        expect(
+            logs.at('WARNING').where((m) => m.contains('none of the in-batch')),
+            isEmpty,
+            reason: 'the refused entry was answered and a newer write took '
+                'its place, so the queue moved');
       });
     }
   });

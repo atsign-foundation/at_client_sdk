@@ -865,6 +865,7 @@ class SyncServiceImpl implements SyncService {
             // the entries behind it; the local copy stays as written.
             final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
                 source.atKey, source.seq);
+            if (!removed) rewrittenMidPush++;
             _bailIfStopped();
             _logger.warning('The atServer refused ${source.op.name} of '
                 '${source.atKey} for enrollment ${_atClient.enrollmentId} '
@@ -940,9 +941,9 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (a refusal
-      // other than an unauthorized one), the entries we
-      // tried weren't removed from the queue. Compare against the
+      // Defensive: if every entry in this batch failed with a refusal
+      // that is retried, the entries we tried weren't removed from the
+      // queue. Compare against the
       // pre-batch snapshot — if size hasn't dropped at all (after
       // accounting for any new writes that arrived during the
       // batch), bail out and let a subsequent round retry.
