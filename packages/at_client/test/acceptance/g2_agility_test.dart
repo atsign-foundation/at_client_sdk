@@ -258,6 +258,35 @@ void main() {
         clauses: ['without coordinating with another'],
       );
       provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it differs from lastRevokedAt, then the key-holder moment',
+        proves: 'an answer carrying both moments returns the key-holder one. '
+            'Mutation-proven: reading only lastRevokedAt reddens it, with the '
+            'null and malformed rows beside it',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it is null, then none is returned, whatever lastRevokedAt',
+        proves: 'a present null is read as no revocation even beside a '
+            'lastRevokedAt. Mutation-proven: falling back on a null reddens it',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it is not a timestamp, then the answer is refused',
+        proves: 'a malformed key-holder moment is refused by name rather than '
+            'read from lastRevokedAt',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'Given an atServer that answers only lastRevokedAt',
+        proves: 'an answer without the key, the shape every released '
+            'atServer gives, is read from lastRevokedAt',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',
         proves:

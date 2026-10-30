@@ -8,22 +8,18 @@
 /// `CryptoProviderNotRegistered` naming the id it could not find.
 library;
 
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   const atSign = '@alice';
@@ -64,7 +60,6 @@ void main() {
 
     final remoteSecondary = MockRemoteSecondary();
     when(() => remoteSecondary.executeVerb(any(),
-            sync: any(named: 'sync'),
             cameFromServer: any(named: 'cameFromServer')))
         .thenAnswer((invocation) async {
       final builder = invocation.positionalArguments[0];
@@ -89,14 +84,13 @@ void main() {
       atSign,
       namespace,
       AtClientPreference(posture: PqPosture.legacy)
-        ..hiveStoragePath = storageDir
-        ..commitLogPath = '$storageDir/commit',
+        ..hiveStoragePath = storageDir,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: remoteSecondary,
-      // NOTE: a signer object the client insists on holding; nothing here
-      // signs, and the key source carries the material that is read.
-      atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
       atKeysIo: await keyfileHolding(atSign,
           selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus='),
+      storage: hiveStoreAt(atSign, storageDir),
     );
 
     records[record('pq_stamped').toString()] = (

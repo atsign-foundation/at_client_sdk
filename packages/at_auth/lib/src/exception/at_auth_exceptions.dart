@@ -12,6 +12,44 @@ class AtKeysParseException extends AtException {
   AtKeysParseException(super.message);
 }
 
+/// An atKeys document that is not a JSON object: [reason] says why, in the
+/// JSON parser's words when it did not parse, and [position] is the 1-based
+/// character where the parser stopped.
+///
+/// It holds none of the document's text, in its fields or its message.
+class AtKeysFormatException extends FormatException {
+  /// Why the document is not a JSON object.
+  final String reason;
+
+  /// The 1-based character where the parser stopped; null when the document
+  /// parsed, as JSON that is not an object, or the parser named none.
+  final int? position;
+
+  // NOTE: source stays null; the parser's source is the document's text.
+  AtKeysFormatException._(String message, this.reason, this.position)
+      : super(message, null, position == null ? null : position - 1);
+
+  /// [what] did not parse: [parserError] is the JSON parser's own exception.
+  factory AtKeysFormatException.notJson(
+      String what, FormatException parserError) {
+    final offset = parserError.offset;
+    final position = offset == null ? null : offset + 1;
+    return AtKeysFormatException._(
+        '$what is not valid JSON: ${parserError.message}'
+        '${position == null ? '' : ' (at character $position)'}',
+        parserError.message,
+        position);
+  }
+
+  /// [what] parsed, as JSON that is not an object.
+  factory AtKeysFormatException.notAnObject(String what) =>
+      AtKeysFormatException._(
+          '$what is not a JSON object', 'not a JSON object', null);
+
+  @override
+  String toString() => 'AtKeysFormatException: $message';
+}
+
 class AtKeysValidationException extends AtException {
   AtKeysValidationException(super.message);
 }

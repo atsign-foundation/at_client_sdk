@@ -105,7 +105,8 @@ class GateRunner {
                     package: gate.package,
                     because: spec.because,
                     reachesFile: spec.reachesFile,
-                    reachesLibrary: spec.reachesLibrary)),
+                    reachesLibrary: spec.reachesLibrary,
+                    throughPackage: spec.throughPackage)),
         ],
         await _probe(gate),
       );

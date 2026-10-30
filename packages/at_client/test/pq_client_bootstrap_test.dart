@@ -9,8 +9,7 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart'
-    show MlDsa65PureDartAlgo, RsaKeyPair, XWingKeyPair;
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo, RsaKeyPair;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -28,6 +27,8 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
@@ -36,6 +37,8 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/nskey_generation.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -135,7 +138,6 @@ void main() {
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
     when(() => client.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((_) async => true);
   });
@@ -376,8 +378,7 @@ void main() {
       final written = <String>[];
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0];
         if (builder is UpdateVerbBuilder) written.add(builder.atKey.key);
         return 'data:1';
@@ -417,8 +418,7 @@ void main() {
       final lookUp = MockAtLookUp();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:1');
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
       when(() => client.getPreferences())
           .thenReturn(AtClientPreference()..namespace = 'wavi');
 
@@ -463,8 +463,7 @@ void main() {
       final lookUp = MockAtLookUp();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:1');
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
       when(() => client.getPreferences())
           .thenReturn(AtClientPreference()..namespace = 'wavi');
 
@@ -507,14 +506,14 @@ void main() {
         privilege: _FakePrivilege(true),
         sweepUnanchoredEnrollments: () async => 0,
       );
-      final pair = await XWingKeyPair.generate();
+      final generation = await nskeyGeneration();
 
       await bootstrap.sharing.fileReceivedSecret!(Secret(
           namespace: 'wavi',
-          name: '${NskeyPrivateFiling.secretNamePrefix}kid-1',
-          value: base64Encode(pair.privateKeyBytes)));
+          name: '${NskeyPrivateFiling.secretNamePrefix}${generation.kid}',
+          value: base64Encode(generation.seed)));
 
-      expect(await bootstrap.filing!.read('wavi', 'kid-1'), isNotNull,
+      expect(await bootstrap.filing!.read('wavi', generation.kid), isNotNull,
           reason: 'a sweep deletes the envelope once handled, so what it '
               'carried has to be on disk by then');
     });
@@ -866,6 +865,109 @@ void main() {
       expect(changes.hasListener, isTrue,
           reason: 'otherwise a sibling\'s rotation that sync lands waits out '
               'the whole advertisement TTL');
+    });
+  });
+
+  group('Given a key ring over a keyfile, missing an advertised own private',
+      () {
+    const owner = '@bootstrap🛠';
+    const namespace = 'app.ns';
+
+    /// What reaches the atServer: remote reads, writes and scans.
+    ({List<String> gets, List<String> puts, List<String> scans}) recording() {
+      final gets = <String>[];
+      final puts = <String>[];
+      final scans = <String>[];
+      when(() => client.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        gets.add('${inv.positionalArguments[0]}');
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}');
+      });
+      when(() => client.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        puts.add('${inv.positionalArguments[0]}');
+        return true;
+      });
+      when(() => client.getAtKeys(
+              regex: any(named: 'regex'),
+              sharedBy: any(named: 'sharedBy'),
+              sharedWith: any(named: 'sharedWith'),
+              showHiddenKeys: any(named: 'showHiddenKeys'),
+              useRemoteAtServer: any(named: 'useRemoteAtServer')))
+          .thenAnswer((inv) async {
+        scans.add('${inv.namedArguments[#regex]}');
+        return <AtKey>[];
+      });
+      return (gets: gets, puts: puts, scans: scans);
+    }
+
+    /// A bootstrap over a keyfile holding this enrollment's APKAM keys, whose
+    /// ring holds an own advertisement naming a generation it has no private
+    /// for; returns that generation's kid.
+    Future<({PqClientBootstrap bootstrap, String kid})> missing(
+        PqStartupGates gates) async {
+      when(() => client.enrollmentId).thenReturn('b-1');
+      final io = keysHoldingApkam(owner, 'b-1', pkamKeyPairFor(owner, 'b-1'));
+      when(() => client.atKeysIo).thenReturn(io);
+      stubApproverKeys(client);
+      final bootstrap = build(gates: gates, keysIo: io);
+      final generation = await nskeyGeneration();
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final advertised = NskeyAdvertisement.single(
+          publicKey: (await kem.keyPairFromSeed(generation.seed)).publicKey,
+          alg: SecretSharingAlgos.xWing);
+      bootstrap.ring.rememberOwn(owner, namespace, advertised);
+      return (bootstrap: bootstrap, kid: advertised.nskeyKid);
+    }
+
+    test(
+        'when the gates are inert, then a miss on it makes no call to the '
+        'atServer', () async {
+      final wire = recording();
+      final m = await missing(const PqStartupGates.inert());
+      await m.bootstrap.startup();
+
+      expect(
+          await m.bootstrap.ring.privateHalf(owner, namespace, m.kid), isNull);
+      await pumpEventQueue();
+
+      expect(wire.gets, isEmpty);
+      expect(wire.puts, isEmpty);
+      expect(wire.scans, isEmpty);
+      expect(m.bootstrap.ring.asksOnReadMiss, isFalse);
+    });
+
+    test(
+        'when only askOnReadMiss is off, then a miss on it makes no call to '
+        'the atServer', () async {
+      final wire = recording();
+      final m = await missing(const PqStartupGates(askOnReadMiss: false));
+
+      expect(
+          await m.bootstrap.ring.privateHalf(owner, namespace, m.kid), isNull);
+      await pumpEventQueue();
+
+      expect(wire.gets, isEmpty);
+      expect(wire.puts, isEmpty);
+      expect(wire.scans, isEmpty);
+    });
+
+    test(
+        'when askOnReadMiss is on, then a miss on it fetches this '
+        'enrollment\'s conveyance records', () async {
+      // NOTE: the control for the two tests above, through the same bootstrap
+      // and recorder.
+      final wire = recording();
+      final m = await missing(const PqStartupGates());
+
+      expect(
+          await m.bootstrap.ring.privateHalf(owner, namespace, m.kid), isNull);
+      await pumpEventQueue();
+
+      expect(wire.puts.where((key) => key.contains('_apsk')), isNotEmpty);
+      expect(wire.scans, isNotEmpty);
     });
   });
 }

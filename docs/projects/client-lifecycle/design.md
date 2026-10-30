@@ -291,17 +291,31 @@ at_client re-exports, so one import covers an app.
 
 ### at_onboarding_cli (2.0.0)
 
-Keeps `at_activate`, `at_register` and the `auth_cli` sub-commands, thin over
-at_client and at_auth's registrar; keeps the three-member
-`AtOnboardingService` adapter (ruling 6); drops `EnrollmentCheckpoint`
-(ruling 5) and the eleven other service members. `AtOnboardingPreference.lookUps`
-is `proxyLookUps()` when the root domain names a proxy and TLS otherwise, and
-every command passes it to the verbs.
+**Corrected 2026-10-29: superseded by the at_client_cli rulings of
+2026-10-28.** at_onboarding_cli 2.0.0 is a deprecated re-export of
+at_client_cli, which carries its code, its tools and `CLIBase`
+([client-cli ruling 2](../client-cli/decisions.md#2-a-new-package-with-the-old-two-as-shims)),
+and the `AtOnboardingService` adapter ends with it
+([client-cli ruling 5](../client-cli/decisions.md#5-atonboardingservice-ends)).
+A command-line program picks its transport with at_client_cli's
+`lookUpsFor(rootDomain)`: `proxyLookUps()` when the root domain names a proxy,
+TLS otherwise. This section used to read:
+
+> Keeps `at_activate`, `at_register` and the `auth_cli` sub-commands, thin
+> over at_client and at_auth's registrar; keeps the three-member
+> `AtOnboardingService` adapter (ruling 6); drops `EnrollmentCheckpoint`
+> (ruling 5) and the eleven other service members.
+> `AtOnboardingPreference.lookUps` is `proxyLookUps()` when the root domain
+> names a proxy and TLS otherwise, and every command passes it to the verbs.
 
 ### at_cli_commons
 
-`CLIBase` builds on `open`, takes `lookUps:` (the preference's with none)
-and awaits the connection state with a budget
+**Corrected 2026-10-29:** with no `lookUps:`, `CLIBase` takes at_client_cli's
+`lookUpsFor(rootDomain)`, where the sentence below used to read "takes
+`lookUps:` (the preference's with none)".
+
+`CLIBase` builds on `open`, takes `lookUps:` (`lookUpsFor(rootDomain)` with
+none) and awaits the connection state with a budget
 instead of looping on a bool. sshnoports' `admin_api` and `sshnoports` go
 through it; `noports_core` and `sshnoports` also name the service directly.
 
@@ -585,7 +599,7 @@ which requires the connection):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator, `secondaryAddressFinder`, `clientConfig`, the preference's TLS fields |
+| at_client `remote_secondary.dart`                      | the client's own connection, and through it sync's (`remoteSecondaryFor`) and the re-derive after a retrofit | authenticator (carrying `clientConfig`), `secondaryAddressFinder`, the preference's TLS fields |
 | at_client `notification_service_impl.dart`             | the monitor's connection                                                             | authenticator from `AtChops`, the preference's TLS fields                   |
 | at_client `atsign_lifecycle.dart` (`enroll`)           | the unauthenticated submission                                                       | none: `authenticator: null`                                                 |
 | at_client `authenticated_lookup.dart`                  | `open`'s probe and `authenticatesAs`                                                 | authenticator from the keys                                                 |
@@ -599,8 +613,10 @@ Every one passed `secureSocketTransport(SecureSocketConfig())`, the client's
 two adding the preference's `decryptPackets`, `pathToCerts` and
 `tlsKeysSavePath`. Three sites took an optional `AtLookUp?` and built one
 only when handed none; at_client's `open`, `activate`, `enroll`,
-`resumeEnrollment`, `authenticatesAs` and `buildAtClient` all carry that
-`atLookUp:` parameter still (C3), and 23 test files use it to inject a mock.
+`resumeEnrollment` and `buildAtClient` all carry that `atLookUp:` parameter
+still (C3), and test files use it to inject a mock. `authenticatesAs` loses
+it in 4.0.0 (Gary, 2026-10-28): on a lookup it was handed, it signed with
+that lookup's own authenticator while answering the enrollment the keys name.
 
 What that injection did not reach: when a test handed `open` a mock lookup,
 the client's own connection was the mock, but sync's `remoteSecondaryFor` and
@@ -625,7 +641,6 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
   required AtRootDomain rootDomain,
   required AtAuthenticator? authenticator,
   SecondaryAddressFinder? secondaryAddressFinder,
-  Map<String, dynamic> clientConfig,
 });
 
 // at_lookup_io.dart: the default, and the only place that names the TLS
@@ -637,18 +652,19 @@ AtLookUpFactory secureSocketLookUps({
 }) {
   final transport = secureSocketTransport(config ?? SecureSocketConfig());
   return ({required atSign, required rootDomain, required authenticator,
-      secondaryAddressFinder, clientConfig = const {}}) =>
+      secondaryAddressFinder}) =>
         AtLookUp.withSecureSocket(
             atSign: atSign, rootDomain: rootDomain, authenticator: authenticator,
             transport: transport, secondaryAddressFinder: secondaryAddressFinder,
-            clientConfig: clientConfig, onConnect: onConnect);
+            onConnect: onConnect);
 }
 ```
 
 The factory captures **how bytes travel** (the transport and its settings, or
 a wholly different `AtLookUp` implementation); each call names **what the
-connection is for** (which atSign, how it authenticates, which address finder,
-what it announces about itself). The root domain stays a per-call argument,
+connection is for** (which atSign, how it authenticates, which address
+finder); what it announces about itself travels in its authenticator's
+`from:`. The root domain stays a per-call argument,
 from the preference or the verb, so where the atDirectory is does not move.
 
 The application supplies it where it supplies the other two legs:

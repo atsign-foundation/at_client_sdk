@@ -1,20 +1,18 @@
-import 'dart:convert' show base64Encode;
-
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart'
-    show Secret, SecretStore;
+    show SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeyRotation');
 
@@ -22,7 +20,6 @@ final _logger = AtSignLogger('NskeyRotation');
 ///
 /// [conveyedTo] may legitimately be zero: a single-enrollment atSign has nobody
 /// to push to, and an offline holder picks the generation up by pull instead.
-@experimental
 typedef NskeyRotationOutcome = ({
   String namespace,
 
@@ -48,7 +45,6 @@ typedef NskeyRotationOutcome = ({
 /// content-key lever's O(1) job — and it is never automatic, never recovers a
 /// lost generation, and needs the `rw` on the namespace that the atServer
 /// already enforces on the advertisement write.
-@experimental
 class NskeyRotation {
   final AtClient atClient;
   final PublishedNskeyKeyRing ring;
@@ -118,55 +114,31 @@ class NskeyRotation {
     if (owner == null) {
       throw StateError('cannot rotate $namespace: no current atSign');
     }
-    final outcome = await ring.rotate(namespace);
+    final conveyance = await PrePublishConveyance.prepare(
+        sharing, privateFiling, namespace,
+        excludeEnrollmentIds: excludeEnrollmentIds);
+    if (conveyance == null) {
+      throw StateError('cannot rotate $owner:$namespace: this enrollment '
+          'carries no key package, so it mints no namespace key');
+    }
+    // NOTE: the successor's privates are pushed to every listed enrollment
+    // but the excluded ones before the successor is published, under a lock
+    // sized to that roster.
+    final outcome = await ring.rotate(namespace,
+        conveyFirst: conveyance.convey,
+        afterPublish: conveyance.afterPublish,
+        lockTtl: conveyance.lockTtlFor(
+            margin: ring.lockTtl,
+            perMember: ring.lockBudgetPerMember,
+            kids: ring.wantedKeyAlgorithms().length,
+            conveyances: 2));
     final advertisement = outcome.rotated;
-
-    // NOTE: convey the durable SEED read back from filing, one secret per key
-    // the generation carries. A private that failed to persist must never be
-    // conveyed; only the seed lets a receiver re-derive the published public
-    // half; and a key left unconveyed is advertised with its private held by
-    // this client alone.
-    final secrets = <Secret>[];
-    for (final key in advertisement.keys) {
-      final private = await privateFiling.readSeed(namespace, key.kid);
-      if (private == null) {
-        throw StateError(
-            'rotated $owner:$namespace to a generation carrying ${key.alg} '
-            '${key.kid} but cannot read that private back, so NOTHING is '
-            'conveyed — the other enrollments keep the superseded generation '
-            'whole rather than a part of the successor, and a later rotation '
-            'supersedes this one');
-      }
-      secrets.add(Secret(
-        namespace: namespace,
-        name: '${NskeyPrivateFiling.secretNamePrefix}${key.kid}',
-        value: base64Encode(private.bytes),
-      ));
-    }
-
-    // NOTE: into this client's own store before the fan-out. The request-answer
-    // path serves from the secret store, which is filled from the keyfile only
-    // at bootstrap, so without this the enrollment that rotated cannot serve
-    // the successor until it restarts — and it fails silently, writing no
-    // envelope and logging nothing.
-    for (final secret in secrets) {
-      await sharing.secretStore.putIfNewer(secret);
-    }
-
-    // NOTE: outside the mint lock — holding it across a per-enrollment fan-out
-    // would scale the lock-held window with the enrollment count, and the lock
-    // has already refused any concurrent rotation by the time this runs.
-    var conveyedTo = 0;
-    for (final secret in secrets) {
-      conveyedTo = await sharing.pushSecretToNamespaceMembers(
-        secret,
-        excludeEnrollmentIds: excludeEnrollmentIds,
-      );
-    }
+    final conveyedTo = conveyance.pushedTo;
 
     _logger.info('Rotated $owner:$namespace to a generation carrying '
         '${advertisement.keys.map((k) => '${k.alg}/${k.kid}').join(', ')} and '
-        'conveyed ${secrets.length} private(s) to $conveyedTo key package(s)'
+        'conveyed ${conveyance.conveyedKids.length} private(s) to '
+        '$conveyedTo key package(s)'
         '${excludeEnrollmentIds.isEmpty ? '' : ', excluding '
             '${excludeEnrollmentIds.join(', ')}'}');
 

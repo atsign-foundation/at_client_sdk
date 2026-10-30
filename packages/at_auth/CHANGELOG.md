@@ -1,5 +1,36 @@
-## 4.0.0-rc8
+## 4.0.0
 
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: an atKeys file that is not a JSON object is read as
+  `AtKeysFormatException`, a `FormatException` whose `reason` and `position`
+  say why and at which character, and which holds none of the file's text. A
+  JSON value that is not an object no longer fails as a `TypeError`.
+- fix: after `CramAuthenticator.authenticate` the lookup's own authenticator
+  is back in place, and a second CRAM authentication on a lookup already
+  running one throws `StateError`.
+- breaking: `AtAuth.create` takes no `atChops`, and its `atLookUp` is a
+  required `AtLookupMuxable`.
+- breaking: `PkamAuthenticator.authenticate` takes no `enrollmentId`; the
+  lookup's authenticator decides which enrollment logs in.
+- breaking: `ServerEnrollmentRequest` and `EnrollmentServerResponse` are
+  removed; at_client's `client.enrollments.list()` returns each `Enrollment`.
+- breaking: `KeyAlgorithmType`, `CryptographicKeyType`, `KeyPartStatus` and
+  `AtKeysMaterial` are removed; `CryptographicMaterialAlgorithm`,
+  `CryptographicMaterialRole` and `KeyEntryStatus` replace them.
+- breaking: `RegistrarApiEndpoint` loses `getFreeAtsign`,
+  `getFreeAtsignByCategory`, `registerPerson` and `validatePerson`, and
+  `HttpMethod` loses `get`, with the `RegistrarService` methods that used
+  them.
+- BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
+  longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
+  hold, under the algorithm they name.
+- BREAKING: `AtKeys.authenticationFor` is removed; use
+  `authenticationKeyPairFor`.
+- build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
+- breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
+  `ArgumentError`, before anything is sent: an enrollment that takes its keys
+  post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
+  legacy key exchange.
 - fix: on Linux and macOS, a keyfile, and the `.bak` and `.pre-v1` copies
   written beside it, are readable and writable by their owner alone (mode
   0600), whatever mode the keyfile had before.
@@ -12,7 +43,10 @@
   material; it is rewritten in the flat shape.
 - fix: `FileAtKeysIo` refuses to write keys for one atSign over a keyfile
   that holds no credential and names another atSign.
-- build: requires `at_utils` ^3.2.0.
+- fix: a self-enrollment whose keyfile cannot be written fails before it
+  sends anything. When the keyfile refuses the save after the request is
+  approved, the enrollment it created is revoked, and the error names that
+  enrollment and says whether the revoke succeeded.
 - build: requires `ffi` ^2.1.0.
 - chore: constructing `InMemoryAtKeysIo` outside a test draws an analyzer
   warning: nothing it holds survives the process, and the store a client runs
@@ -53,6 +87,7 @@
 - fix: waiting for an enrollment's approval ends at once, with the atServer's
   reason, when the enrollment has expired or the atServer has no record of it
   (`AT0028`), instead of after the whole retry budget.
+- chore(deps): at_utils ^4.0.0-rc1
 
 ## 4.0.0-rc3
 

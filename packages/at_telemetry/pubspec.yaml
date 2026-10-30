@@ -9,7 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_utils: ^3.0.19
+  at_utils: ">=3.0.19 <5.0.0"
   crypto: ^3.0.5
   cryptography: ^2.7.0
 

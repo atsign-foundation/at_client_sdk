@@ -21,6 +21,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// An approver that counts as fully privileged, so the conveyance under test
 /// is the key package read and nothing else.
@@ -555,6 +556,7 @@ void main() {
             alg: PqSigningRoot.rootKeyAlgo,
             pub: base64Encode(List<int>.filled(32, 8)))
       ]));
+      final authentication = pkamKeyPairFor(atSign, 'approver-1');
       final io = InMemoryAtKeysIo();
       await io.write(
           atSign,
@@ -565,7 +567,12 @@ void main() {
               algorithm: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 7))),
               createdAt: DateTime.now().toUtc(),
-            )));
+            ))
+            ..fileApkamMaterial(
+                enrollmentId: 'approver-1',
+                algorithm: CryptographicMaterialAlgorithm.rsa2048,
+                publicKey: authentication.atPublicKey.publicKey,
+                privateKey: authentication.atPrivateKey.privateKey));
       when(() => approver.atKeysIo).thenReturn(io);
       await AtClientSecretSharing.forClient(approver).register();
       return approver;

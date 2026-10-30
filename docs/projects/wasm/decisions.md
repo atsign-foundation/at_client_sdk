@@ -580,6 +580,16 @@ util) and T8 (publish 4.0.0) — which is also why the factory type still reache
 and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
 
+**Amended 2026-10-23 — at_lookup's major.** T3–T7 are done in at_lookup 4.0.0-rc1, and
+only T8 (publish) remains. `AtLookupTransport` keeps its name and takes
+`transportFactory:` in place of the socket factories; `secureSocketTransport(...)` and
+`secureSocketLookUps(...)` keep their signatures, so the doors above are unchanged. T5
+moved `secure_socket_util.dart` behind `at_lookup_io.dart`, so the factory type no longer
+reaches `dart:io` through the main barrel; `wasm_shakedown` gates it. The web factory
+no longer implements `AtLookupMuxable` itself: `webSocketLookUps()` in
+`at_lookup_web.dart` builds an `AtLookupImpl` over a `WebSocketTransport`, and resolves
+the atServer through the atDirectory's HTTPS face (OQ-7).
+
 ---
 
 ### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
@@ -1119,6 +1129,12 @@ JS glue; `sqlite3.wasm` only for a consumer who injects a SQLite bundle (D-17). 
 The `proxy:` convention and the injectable `SecondaryAddressFinder` unblock
 development, but a production browser client needs a WebSocket- or HTTPS-reachable
 directory endpoint. Whose work is that, and does it belong in this project?
+**Resolved 2026-10-23 by at_lookup 4.0.0.** The atDirectory already has an HTTPS face
+(`GET /@alice` → `host:port`, `404` for an unknown atSign), and an atServer upgrades
+`/ws` on its own TLS port. `webSocketLookUps()` uses both: `HttpsSecondaryAddressFinder`
+for the lookup, `wss://` straight to the atServer for the session. The remaining work is
+at_server's: CORS headers on the HTTPS face (bead `at_client_sdk-8n0`), and the prod
+:443 listener.
 
 **OQ-8 — How far does the `AtConnection` break reach outside this repo?** In-repo
 callers are enumerated in [`design.md`](design.md) §2.1. External `implements

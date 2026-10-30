@@ -19,11 +19,13 @@
 library;
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
+
+import 'test_keypairs.dart';
 
 /// A lookup that answers every command with null until a test says otherwise.
 ///
@@ -46,6 +48,7 @@ void _answerCommandsWithNothing(AtLookUp lookUp) {
 class MockAtLookUp extends Mock implements AtLookUp {
   MockAtLookUp() {
     _answerCommandsWithNothing(this);
+    when(stop).thenAnswer((_) async {});
   }
 }
 
@@ -55,11 +58,6 @@ class MockAtLookupImpl extends Mock implements AtLookupImpl {
     when(stop).thenAnswer((_) async {});
   }
 }
-
-/// The signer the deprecated `atChops` doors still take; a test of one of
-/// those doors is what hands this in.
-// ignore: deprecated_member_use
-class MockAtChops extends Mock implements AtChops {}
 
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
@@ -74,15 +72,12 @@ class MockSecondaryAddressFinder extends Mock
 class MockRemoteSecondary extends Mock implements RemoteSecondary {
   MockRemoteSecondary() {
     when(() => closeConnection()).thenAnswer((_) async {});
-    // A real RemoteSecondary always has a lookup, and it carries no
-    // enrollment id unless one was named - so a client built on this is fully
-    // privileged, which is what the fixtures that stub their own lookup also
-    // choose. Only the lookup itself is answered: what it would send is the
-    // fixture's business, and a test needing that supersedes this.
+    // A real RemoteSecondary always has a lookup, so a client built on this
+    // is fully privileged, which is what the fixtures that stub their own
+    // lookup also choose. Only the lookup itself is answered: what it would
+    // send is the fixture's business, and a test needing that supersedes
+    // this.
     final atLookUp = MockAtLookupImpl();
-    // the bridge reads the enrollment id off the lookup until the ladder goes
-    // ignore: deprecated_member_use
-    when(() => atLookUp.enrollmentId).thenReturn(null);
     when(() => this.atLookUp).thenReturn(atLookUp);
   }
 }
@@ -93,6 +88,10 @@ class MockLocalSecondary extends Mock implements LocalSecondary {}
 /// of its own atSign: the encryption private key, which unwraps the symmetric
 /// key a legacy enrollee RSA-wrapped to it, and the self-encryption key, one
 /// of the two secrets approval seals for the enrollee.
+///
+/// It also holds the client's APKAM keypair, [pkamKeyPairFor] its atSign and
+/// enrollment, which is what the client signs with once a test gives it no key
+/// source.
 ///
 /// Real demo material rather than placeholders, so a test that goes on to
 /// unwrap or open with it gets keys that work. Returns the local secondary for
@@ -105,16 +104,20 @@ MockLocalSecondary stubApproverKeys(AtClient atClient,
       .thenAnswer((_) async => demo.encryptionPrivateKeyMap[demoAtSign]!);
   when(() => local.getEncryptionSelfKey())
       .thenAnswer((_) async => demo.aesKeyMap[demoAtSign]!);
+  RsaKeyPair pair() =>
+      pkamKeyPairFor(atClient.getCurrentAtSign()!, atClient.enrollmentId);
+  when(() => local.getPkamPublicKey())
+      .thenAnswer((_) async => pair().atPublicKey.publicKey);
+  when(() => local.getPkamPrivateKey())
+      .thenAnswer((_) async => pair().atPrivateKey.privateKey);
   return local;
 }
 
 /// Stubs [localSecondary] to answer [atSign]'s encryption keypair.
 ///
 /// This is how a client resolves that keypair: `LocalSecondary` consults the
-/// client's key source, then the keystore, then an injected `AtChops`, and a
-/// mock standing in for it answers directly. Stubbing an `AtChops` on the
-/// client instead reaches the same material through the deprecated door, and
-/// leaves the paths that read it through the local secondary unexercised.
+/// client's key source, then the keystore, and a mock standing in for it
+/// answers directly.
 /// [localSecondary] is typed as the interface because that is how the test
 /// trees declare their doubles; mocktail records against the instance.
 void stubEncryptionKeyPair(

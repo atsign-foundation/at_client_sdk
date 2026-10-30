@@ -7,29 +7,27 @@
 /// asked for — which is the way a transport swap otherwise fails silently
 /// instead of failing to compile.
 ///
-/// ⚠️ **Importing this library is not yet the only thing standing between
-/// at_lookup and a non-socket transport, and it does not claim to be.**
-/// `AtConnection` still exposes `Socket getSocket()`, which the message
-/// listener calls and which every `implements AtConnection` would have to
-/// drop. Until that member goes, a transport built on anything other than a
-/// socket cannot satisfy the connection type this one produces. What this
-/// split buys is that the shape is already right when that change lands,
-/// rather than the change also having to remove a default.
+/// Both halves are here: the transport that carries the atServer session, and
+/// [CacheableSecondaryAddressFinder], which resolves an atSign to a host by
+/// asking the atDirectory over raw TLS. A caller that imports `at_lookup.dart`
+/// alone supplies both — its own [AtTransportFactory], and a
+/// [SecondaryAddressFinder] such as `FixedSecondaryAddressFinder`.
 library;
 
 import 'package:at_commons/at_commons.dart'
     show AtRootDomain, SecureSocketConfig;
 
-import 'src/at_lookup.dart'
-    show
-        AtAuthenticator,
-        AtCommandExecutor,
-        AtLookUp,
-        AtLookUpFactory,
-        AtLookupTransport;
-import 'src/cache/secondary_address_finder.dart' show SecondaryAddressFinder;
+import 'at_lookup.dart';
+import 'src/io/cacheable_secondary_address_finder.dart'
+    show CacheableSecondaryAddressFinder;
+import 'src/io/secure_socket_transport.dart' show SecureSocketTransportFactory;
+
+export 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 
 export 'at_lookup.dart';
+export 'src/io/cacheable_secondary_address_finder.dart';
+export 'src/io/secure_socket_transport.dart';
+export 'src/io/secure_socket_util.dart';
 
 /// TLS over TCP — the transport to pass to `AtLookUp.withSecureSocket` unless
 /// you are supplying your own.
@@ -40,7 +38,9 @@ export 'at_lookup.dart';
 /// a site inherit settings its neighbour set deliberately.
 AtLookupTransport secureSocketTransport(
         SecureSocketConfig secureSocketConfig) =>
-    AtLookupTransport(secureSocketConfig: secureSocketConfig);
+    AtLookupTransport(
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: secureSocketConfig));
 
 /// The default [AtLookUpFactory]: every connection over TLS on TCP, under
 /// [config] (the TLS defaults with none), through `AtLookUp.withSecureSocket`.
@@ -58,15 +58,15 @@ AtLookUpFactory secureSocketLookUps({
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) =>
       AtLookUp.withSecureSocket(
         atSign: atSign,
         rootDomain: rootDomain,
         authenticator: authenticator,
         transport: transport,
-        secondaryAddressFinder: secondaryAddressFinder,
-        clientConfig: clientConfig,
+        secondaryAddressFinder: secondaryAddressFinder ??
+            CacheableSecondaryAddressFinder(
+                rootDomain.rootDomain, rootDomain.rootPort),
         onConnect: onConnect,
       );
 }

@@ -1,10 +1,10 @@
-import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/authorised_namespaces.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement, NskeySeed;
 import 'package:at_client/src/crypto/nskey/nskey_rotation.dart'
@@ -22,9 +22,25 @@ import 'package:at_client/src/secret_sharing/secret_store.dart'
     show Secret, SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeySeeding');
+
+/// What [NskeySeeding.seedNamespace] did for one namespace.
+enum NskeySeedOutcome {
+  /// This call minted the key, conveyed its private and published it.
+  minted,
+
+  /// A key was already published, by this client or another enrollment.
+  alreadyPublished,
+
+  /// This client's enrollment carries no key package, so it can be conveyed no
+  /// private and minted none.
+  noKeyPackage,
+
+  /// This client has no secret-sharing substrate to convey a private over, or
+  /// no key source to file one in, so it minted none.
+  cannotConvey,
+}
 
 /// Mints and publishes this atSign's namespace keys at client start, and
 /// conveys each private to the atSign's other enrollments.
@@ -33,7 +49,6 @@ final _logger = AtSignLogger('NskeySeeding');
 /// PQ-capable client for a namespace is already reachable for it, and
 /// best-effort throughout: nothing here throws into a client's startup, and a
 /// namespace that cannot be minted now is minted at the next start.
-@experimental
 class NskeySeeding {
   final AtClient atClient;
   final PublishedNskeyKeyRing ring;
@@ -81,9 +96,10 @@ class NskeySeeding {
   /// [isSeedableNamespace].
   static bool isSeedable(String namespace) => isSeedableNamespace(namespace);
 
-  /// Mints and publishes for every authorised namespace that has no key yet,
-  /// then conveys each new private. Returns the namespaces this start published
-  /// fresh material for — a cold-start mint, or a rotation a revocation owed.
+  /// Mints for every authorised namespace that has no key yet, conveying each
+  /// new private before publishing it. Returns the namespaces this start
+  /// published fresh material for — a cold-start mint, or a rotation a
+  /// revocation owed.
   ///
   /// A namespace this enrollment may only read is skipped, since every step
   /// here writes to it. One its grants let it write without naming it, such as
@@ -120,7 +136,9 @@ class NskeySeeding {
           minted.add(namespace);
           continue;
         }
-        if (await seedNamespace(owner, namespace)) minted.add(namespace);
+        if (await seedNamespace(owner, namespace) == NskeySeedOutcome.minted) {
+          minted.add(namespace);
+        }
       } catch (e) {
         if (e is StoppedException) rethrow;
         _logger.warning('Could not seed $owner:$namespace this start: $e');
@@ -166,16 +184,22 @@ class NskeySeeding {
     }
   }
 
-  /// Mints, publishes and conveys the key for **one** namespace unless one is
-  /// already published, throwing rather than logging, and returns whether this
-  /// call minted.
+  /// Mints, conveys and publishes the key for **one** namespace unless one is
+  /// already published, throwing rather than logging, and says what it did.
   ///
-  /// ⚠️ Concurrent callers of the SAME enrolment are safe only where they share a
-  /// mint-lock instance — the wire lock's value is the enrolment id, so two
-  /// racers of one enrolment each read back their own and each mint — while
-  /// [askRotationPolicy] false suppresses putting an already-published generation
-  /// to [rotationPolicy], for a caller that only wants this atSign reachable.
-  Future<bool> seedNamespace(String owner, String namespace,
+  /// The private is pushed to every enrollment listed for the namespace before
+  /// the key is published; one the push cannot reach is named in a warning,
+  /// and the key is published anyway. A client whose own enrollment carries no
+  /// verified key package mints nothing and answers
+  /// [NskeySeedOutcome.noKeyPackage]; one with nothing to convey over or file
+  /// in answers [NskeySeedOutcome.cannotConvey].
+  ///
+  /// A concurrent caller on the same ring waits for the mint in flight; one on
+  /// another ring, in this process or another, meets the mint lock and mints
+  /// nothing while it is held. [askRotationPolicy] false suppresses putting an
+  /// already-published generation to [rotationPolicy], for a caller that only
+  /// wants this atSign reachable.
+  Future<NskeySeedOutcome> seedNamespace(String owner, String namespace,
       {bool askRotationPolicy = true}) async {
     if (!isSeedable(namespace)) {
       throw ArgumentError.value(
@@ -193,30 +217,46 @@ class NskeySeeding {
       final rotated = askRotationPolicy &&
           await rotateIfPolicyAsks(owner, namespace, published: published);
       if (!rotated) await _addMissing(owner, namespace, published);
-      return false;
+      return NskeySeedOutcome.alreadyPublished;
     }
-    final advertisement = await ring.mintAndPublish(namespace);
+    final conveyance = await _conveyanceFor(namespace);
+    if (conveyance == null) {
+      return _canConvey
+          ? NskeySeedOutcome.noKeyPackage
+          : NskeySeedOutcome.cannotConvey;
+    }
+    final minted = await ring.mintAndPublish(namespace,
+        conveyFirst: conveyance.convey,
+        afterPublish: conveyance.afterPublish,
+        lockTtl: conveyance.lockTtlFor(
+            margin: ring.lockTtl,
+            perMember: ring.lockBudgetPerMember,
+            kids: ring.wantedKeyAlgorithms().length,
+            conveyances: 2));
+    // NOTE: a lost election adopts the winner's generation, which this call
+    // neither minted nor conveyed.
+    return minted.keys.every((key) => conveyance.conveyedKids.contains(key.kid))
+        ? NskeySeedOutcome.minted
+        : NskeySeedOutcome.alreadyPublished;
+  }
 
-    // NOTE: the conveyance is guarded separately because publishing alone makes
-    // this atSign reachable, while conveying only hands its other enrollments
-    // the private half, which they can also pull. A legacy PKAM client cannot
-    // enumerate members at all — `enroll:listns` is APKAM-gated — so reporting
-    // that as a failure to seed would call a reachable atSign unreachable.
-    try {
-      // NOTE: every key the generation carries, not only the id the
-      // advertisement's getter names — an unconveyed key is one peers seal to
-      // and nobody else can open.
-      for (final key in advertisement.keys) {
-        await _convey(namespace, key.kid);
-      }
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      _logger.warning(
-          'Published the nskey for $owner:$namespace, but could not convey '
-          'its private to this atSign\'s other enrollments — they will pull '
-          'it at their next start. Peers can seal here either way: $e');
+  /// Whether this client has a substrate to convey a private over and a key
+  /// source to file one in.
+  bool get _canConvey =>
+      sharing != null && (privateFiling ?? ring.privateFiling) != null;
+
+  /// The conveyance a mint in [namespace] hands its ring, or null when this
+  /// client may mint nothing there, logged.
+  Future<PrePublishConveyance?> _conveyanceFor(String namespace) async {
+    final sharing = this.sharing;
+    final filing = privateFiling ?? ring.privateFiling;
+    if (sharing == null || filing == null) {
+      _logger.info('Not minting the nskey for $namespace: this client has no '
+          '${sharing == null ? 'secret-sharing substrate to convey over' : 'key source to file in'}, '
+          'so no other enrollment could be given the private');
+      return null;
     }
-    return true;
+    return PrePublishConveyance.prepare(sharing, filing, namespace);
   }
 
   /// Adds this client's own missing key-establishment material to a generation
@@ -227,32 +267,25 @@ class NskeySeeding {
   /// under it.
   Future<void> _addMissing(
       String owner, String namespace, NskeyAdvertisement published) async {
-    final before = published.keys.map((key) => key.kid).toSet();
-    final NskeyAdvertisement? widened;
+    final missing = ring.missingKeyAlgorithms(published);
+    if (missing.isEmpty) return;
+    final conveyance = await _conveyanceFor(namespace);
+    if (conveyance == null) return;
     try {
-      widened = await ring.add(namespace);
+      // NOTE: the ring conveys only what this add mints, before it publishes;
+      // an entry already published was conveyed when it was minted.
+      await ring.add(namespace,
+          conveyFirst: conveyance.convey,
+          lockTtl: conveyance.lockTtlFor(
+              margin: ring.lockTtl,
+              perMember: ring.lockBudgetPerMember,
+              kids: missing.length,
+              conveyances: 1));
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.warning('Could not add this client\'s missing key material to '
           'the nskey for $owner:$namespace; the generation already published '
           'is unchanged and the next start tries again: $e');
-      return;
-    }
-    if (widened == null) return;
-
-    for (final key in widened.keys) {
-      // NOTE: an entry already in `before` was conveyed when it was minted, so
-      // re-sending it costs one envelope each for material they can open.
-      if (before.contains(key.kid)) continue;
-      try {
-        await _convey(namespace, key.kid);
-      } catch (e) {
-        if (e is StoppedException) rethrow;
-        _logger.warning('Added ${key.alg} to the nskey for $owner:$namespace '
-            'but could not convey its private to this atSign\'s other '
-            'enrollments — they will pull it at their next start. Peers can '
-            'seal under it either way: $e');
-      }
     }
   }
 
@@ -262,7 +295,6 @@ class NskeySeeding {
   /// [published] is the generation already read where the caller has it, and any
   /// failure returns false rather than throwing — the published generation stays
   /// published, and the question is put again at the next start.
-  @experimental
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
     final generation =
@@ -319,8 +351,9 @@ class NskeySeeding {
   }
 
   /// Rotates [namespace] when a revocation has touched an enrollment granted it
-  /// since that namespace's advertisement was last rotated, and returns whether
-  /// it did.
+  /// since that namespace's advertisement was last rotated, or when this
+  /// client's keyfile records that the published generation owes a rotation,
+  /// and returns whether it did.
   ///
   /// Unconditional rather than [rotationPolicy]'s question, because only a fresh
   /// generation cuts a revoked enrollment off from what is sealed next; both
@@ -328,7 +361,6 @@ class NskeySeeding {
   /// record's `updatedAt`, never the generation's own `createdAt`, which would
   /// compare two clocks — and establishing no cause rotates nothing, while a
   /// published record whose stamp cannot be read does rotate.
-  @experimental
   Future<bool> rotateIfRevoked(String owner, String namespace) async {
     final substrate = sharing;
     final filing = privateFiling;
@@ -365,12 +397,19 @@ class NskeySeeding {
     }
     if (record == null) return false;
 
+    final owed = await _rotationOwed(owner, namespace, record.advertisement);
     final rotatedAt = record.updatedAt;
-    if (rotatedAt != null && !revokedAt.isAfter(rotatedAt)) return false;
+    if (!owed && rotatedAt != null && !revokedAt.isAfter(rotatedAt)) {
+      return false;
+    }
 
-    _logger.info('Rotating $owner:$namespace: a revocation touched it at '
-        '$revokedAt, and what is published there was stamped '
-        '${rotatedAt ?? 'at a moment the atServer did not report'}');
+    _logger.info(owed
+        ? 'Rotating $owner:$namespace: this keyfile records that '
+            '${record.advertisement.nskeyKid} owes a rotation for a '
+            'revocation that touched it after it was conveyed'
+        : 'Rotating $owner:$namespace: a revocation touched it at '
+            '$revokedAt, and what is published there was stamped '
+            '${rotatedAt ?? 'at a moment the atServer did not report'}');
     try {
       await NskeyRotation(
         atClient: atClient,
@@ -384,6 +423,23 @@ class NskeySeeding {
       _logger.warning('A revocation touched $owner:$namespace at $revokedAt '
           'and the rotation it owes did not happen; the published generation '
           'is unchanged and the next start asks again: $e');
+      return false;
+    }
+  }
+
+  /// Whether this client's keyfile records that [published] owes a rotation;
+  /// false, logged, when the keyfile cannot be read.
+  Future<bool> _rotationOwed(
+      String owner, String namespace, NskeyAdvertisement published) async {
+    final filing = privateFiling;
+    if (filing == null) return false;
+    try {
+      return await filing
+          .rotationOwed(namespace, [for (final key in published.keys) key.kid]);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read whether this keyfile records a rotation '
+          '$owner:$namespace owes, so the stamps alone decide this start: $e');
       return false;
     }
   }
@@ -448,18 +504,22 @@ class NskeySeeding {
         // sender would pick: a key added under a second algorithm, or a
         // generation a rotation retired, opens values this enrollment is owed
         // too, and nothing else asks for its private.
-        final names = <String>[];
+        final missing = <String>[];
         for (final entry in advertised.keys) {
           if (entry.use != SecretSharingAlgos.useEnc ||
               !SecretSharingAlgos.keyAlgos.contains(entry.alg)) {
             continue;
           }
-          if (await ring.privateHalf(owner, namespace, entry.kid) != null) {
+          if (await ring.heldPrivateHalf(owner, namespace, entry.kid) != null) {
             continue;
           }
-          names.add('${NskeyPrivateFiling.secretNamePrefix}${entry.kid}');
+          missing.add(entry.kid);
         }
-        if (names.isEmpty) continue;
+        if (missing.isEmpty) continue;
+        final names = [
+          for (final kid in missing)
+            '${NskeyPrivateFiling.secretNamePrefix}$kid'
+        ];
 
         final sent =
             await sharing.requestSecretsFromNamespace(namespace, names: names);
@@ -470,29 +530,33 @@ class NskeySeeding {
         }
         asked.add(namespace);
 
-        // NOTE: unawaited on purpose — a holder may be offline for days, and
-        // neither this sweep nor the client's start may wait on one.
-        for (final name in names) {
-          unawaited(sharing
-              .waitForSecret(namespace, name,
-                  timeout: NskeyPrivateFiling.conveyanceWait)
-              .then((secret) => filing.file(secret))
-              .then((filed) {
-            if (filed) {
-              _logger.info('Healed the nskey private $name for '
-                  '$owner:$namespace from another enrollment');
-            }
-          }).catchError((Object e) {
-            if (e is StoppedException) {
-              _logger.warning('Stopped waiting for the nskey private $name for '
-                  '$owner:$namespace: the client stopped, and the next start '
-                  'asks again');
-              return;
-            }
-            _logger.info('No holder answered for $name in $owner:$namespace '
-                'within the wait; a later answer is filed as it arrives '
-                '($e)');
-          }));
+        // NOTE: never awaited — a holder may be offline for days, and neither
+        // this sweep nor the client's start may wait on one.
+        for (final kid in missing) {
+          final name = '${NskeyPrivateFiling.secretNamePrefix}$kid';
+          ring.noteOutstandingAsk(
+              namespace,
+              kid,
+              sharing
+                  .waitForSecret(namespace, name,
+                      timeout: NskeyPrivateFiling.conveyanceWait)
+                  .then((secret) => filing.file(secret))
+                  .then((filed) {
+                if (filed) {
+                  _logger.info('Healed the nskey private $name for '
+                      '$owner:$namespace from another enrollment');
+                }
+              }).catchError((Object e) {
+                if (e is StoppedException) {
+                  _logger.warning('Stopped waiting for the nskey private $name '
+                      'for $owner:$namespace: the client stopped, and the next '
+                      'start asks again');
+                  return;
+                }
+                _logger.info('No holder answered for $name in '
+                    '$owner:$namespace within the wait; a later answer is '
+                    'filed as it arrives ($e)');
+              }));
         }
       } catch (e) {
         if (e is StoppedException) rethrow;
@@ -583,32 +647,5 @@ class NskeySeeding {
       }
     }
     return sent;
-  }
-
-  /// Sends the minted private to the atSign's other enrollments, and puts it
-  /// in this client's own secret store so it can answer for it.
-  ///
-  /// The private is read back from the durable store, so one that failed to
-  /// persist is never sent, and the store write is what lets the minter serve a
-  /// later pull — the secret store the answering path reads is otherwise filled
-  /// only at bootstrap, before the mint — but ⚠️ a generation minted inside
-  /// [PublishedNskeyKeyRing] never reaches this method, leaving that client's
-  /// store unprimed for it.
-  Future<void> _convey(String namespace, String nskeyKid) async {
-    final sharing = this.sharing;
-    // NOTE: the SEED, never the expanded decapsulation key — a receiver
-    // validates an arrival by re-deriving the published public half, which only
-    // the seed allows. For X-Wing the two are the same bytes; for ML-KEM the
-    // expanded form is refused on arrival and nobody else gets the key.
-    final seed = await privateFiling?.readSeed(namespace, nskeyKid);
-    if (sharing == null || seed == null) return;
-
-    final secret = Secret(
-      namespace: namespace,
-      name: '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid',
-      value: base64Encode(seed.bytes),
-    );
-    await sharing.secretStore.putIfNewer(secret);
-    await sharing.pushSecretToNamespaceMembers(secret);
   }
 }

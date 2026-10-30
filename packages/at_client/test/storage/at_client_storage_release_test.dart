@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
@@ -10,6 +9,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:test/test.dart';
 
 import 'storage_contract.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
@@ -64,15 +66,16 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  AtClientPreference pref() => AtClientPreference()
-    ..hiveStoragePath = dir.path
-    ..commitLogPath = '${dir.path}/commit';
+  AtClientPreference pref() => AtClientPreference()..hiveStoragePath = dir.path;
 
   test(
       'a second storage for one atSign at the same location is refused; '
       'stop() releases it', () async {
-    final first = await AtClientImpl.create('@releaseguard', 'wavi', pref())
-        as AtClientImpl;
+    final first = await AtClientImpl.create('@releaseguard', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@releaseguard'),
+        storage: hiveStoreFor('@releaseguard', pref())) as AtClientImpl;
     final sameStore =
         HiveAtClientStorage(atSign: '@releaseguard', storagePath: dir.path);
     await expectLater(
@@ -188,12 +191,18 @@ void main() {
   test(
       'a fresh create() after stop() gets a new client on freshly opened '
       'storage', () async {
-    final first = await AtClientImpl.create('@releasefresh', 'wavi', pref())
-        as AtClientImpl;
+    final first = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@releasefresh'),
+        storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     final firstStorage = first.storage;
     await first.stop();
-    final again = await AtClientImpl.create('@releasefresh', 'wavi', pref())
-        as AtClientImpl;
+    final again = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@releasefresh'),
+        storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     expect(identical(again, first), isFalse,
         reason: 'the stopped client left the instance map');
     expect(identical(again.storage, firstStorage), isFalse,
@@ -205,12 +214,20 @@ void main() {
       () async {
     final bad = pref()
       ..crypto = const CryptoConfig(defaultProviderId: 'no-such-provider');
-    await expectLater(AtClientImpl.create('@releasefail', 'wavi', bad),
+    await expectLater(
+        AtClientImpl.create('@releasefail', 'wavi', bad,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(bad),
+            atKeysIo: noKeysFor('@releasefail'),
+            storage: hiveStoreFor('@releasefail', bad)),
         throwsA(isA<Exception>()),
         reason: 'the default provider is not registered, so create() throws '
             'after the storage was attached');
-    final ok = await AtClientImpl.create('@releasefail', 'wavi', pref())
-        as AtClientImpl;
+    final ok = await AtClientImpl.create('@releasefail', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@releasefail'),
+        storage: hiveStoreFor('@releasefail', pref())) as AtClientImpl;
     expect(ok.storage, isNotNull,
         reason: 'a failed build must not leave its claim behind, or no client '
             'for that atSign could ever be built in this isolate again');
@@ -223,8 +240,11 @@ void main() {
     // No hiveStoragePath: supplying storage picks the backend AND the
     // location, so the preference no longer has to name one.
     final client = await AtClientImpl.create(
-            '@injected', 'wavi', AtClientPreference(), storage: injected)
-        as AtClientImpl;
+        '@injected', 'wavi', AtClientPreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@injected'),
+        storage: injected) as AtClientImpl;
 
     expect(identical(client.storage, injected), isTrue,
         reason: 'the client used the storage it was handed rather than '
@@ -245,12 +265,18 @@ void main() {
       'hold', () async {
     final held = InMemoryAtClientStorage(atSign: '@cachedstore');
     final first = await AtClientImpl.create(
-            '@cachedstore', 'wavi', AtClientPreference(), storage: held)
-        as AtClientImpl;
+        '@cachedstore', 'wavi', AtClientPreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@cachedstore'),
+        storage: held) as AtClientImpl;
 
     final other = InMemoryAtClientStorage(atSign: '@cachedstore');
     await expectLater(
         () => AtClientImpl.create('@cachedstore', 'wavi', AtClientPreference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+            atKeysIo: noKeysFor('@cachedstore'),
             storage: other),
         throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'storage')),
         reason: 'the cached client keeps its own storage, so accepting '
@@ -260,6 +286,9 @@ void main() {
 
     final again = await AtClientImpl.create(
         '@cachedstore', 'wavi', AtClientPreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        atKeysIo: noKeysFor('@cachedstore'),
         storage: held);
     expect(identical(again, first), isTrue,
         reason: 'offering the storage the cached client already holds is not '
@@ -269,58 +298,13 @@ void main() {
     await other.close();
   });
 
-  test(
-      're-offering the storage a client already holds does not rebuild the '
-      'client', () async {
-    final storage = InMemoryAtClientStorage(atSign: '@sticky');
-    final manager = AtClientManager('@sticky');
-    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
-        storage: storage);
-    final first = manager.atClient;
-
-    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
-        storage: storage);
-
-    expect(first.isStopped, isFalse,
-        reason: 'the second call offered nothing that changed, so it must '
-            'have taken the idempotency short-circuit. The rebuild path stops '
-            'the outgoing client first, so a stopped one means it rebuilt');
-    expect(identical(manager.atClient, first), isTrue,
-        reason: 'and the same client must still be current');
-
-    await first.stop();
-    await storage.close();
-  });
-
-  test('fromAuthSession hands its storage to the client it builds', () async {
-    final injected = InMemoryAtClientStorage(atSign: '@handoff');
-    final keysIo = _AttachWatchingKeysIo(injected);
-    final session = AtAuthSession(
-        atSign: '@handoff',
-        rootDomain: const AtRootDomain('root.atsign.org', 64),
-        namespace: 'wavi',
-        atKeysIo: keysIo);
-
-    // The client derives its AtChops from the session's key source, and this
-    // one refuses - but only after _init has attached whatever storage it was
-    // given, which is the moment the watcher records.
-    await expectLater(
-        () => AtClientManager('@handoff')
-            .fromAuthSession(session, AtClientPreference(), storage: injected),
-        throwsA(anything));
-
-    expect(keysIo.storageWasAttached, isTrue,
-        reason: 'fromAuthSession must pass storage down to '
-            'AtClientImpl.create. Without it the client builds its own from '
-            'hiveStoragePath, which this preference does not set, so it fails '
-            'before ever reading a key');
-    await injected.close();
-  });
-
   test('a client with no injected storage still owns and closes its own',
       () async {
-    final client =
-        await AtClientImpl.create('@ownsits', 'wavi', pref()) as AtClientImpl;
+    final client = await AtClientImpl.create('@ownsits', 'wavi', pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@ownsits'),
+        storage: hiveStoreFor('@ownsits', pref())) as AtClientImpl;
     final own = client.storage!;
     await client.stop();
     await expectLater(() => own.attach(FakeClient('@ownsits', null)),
@@ -336,6 +320,9 @@ void main() {
         atSign: '@closedbyclient',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@closedbyclient'),
         storage: storage);
 
     await client.stop();
@@ -364,6 +351,9 @@ void main() {
         atSign: '@borrowedopen',
         namespace: 'wavi',
         preference: pref(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref()),
+        atKeysIo: noKeysFor('@borrowedopen'),
         storage: storage);
 
     await client.stop();
@@ -383,31 +373,4 @@ void main() {
         reason: 'and closing it is what releases the store');
     await second.close();
   });
-}
-
-/// Records whether [_storage] was already attached when the client asked this
-/// source for key material, then refuses: attachment happens in `_init`, so
-/// reading `true` here proves the storage reached the client.
-/// The first read answers the construction-time identity lookup; the AtChops
-/// read that follows is the one refused.
-class _AttachWatchingKeysIo extends WrittenAtKeysIo {
-  _AttachWatchingKeysIo(this._storage);
-
-  final AtClientStorageBase _storage;
-  bool storageWasAttached = false;
-  bool _identityRead = false;
-
-  @override
-  Future<AtKeys> read(String atSign) async {
-    if (!_identityRead) {
-      _identityRead = true;
-      return AtKeys();
-    }
-    storageWasAttached = _storage.isAttached;
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> write(String atSign, AtKeys atKeys) =>
-      throw UnimplementedError();
 }

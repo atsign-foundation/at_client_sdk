@@ -1,6 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart' show internal, visibleForTesting;
-import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
@@ -12,11 +11,10 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
-import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
-/// Set the preferences for your application and pass it to
-/// `AtClientManager.setCurrentAtSign`.
+/// Set the preferences for your application and pass it to `Atsign.open` or
+/// `buildAtClient`.
 class AtClientPreference {
   /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
   /// take a post-quantum path, or refuse the write.
@@ -235,25 +233,13 @@ class AtClientPreference {
     return Set.unmodifiable(algorithms);
   }
 
-  /// Local device path of hive storage, used when no [AtClientStorage] is
-  /// supplied to [buildAtClient] or [AtClientManager.setCurrentAtSign].
-  ///
-  /// Setting this leaves the client owning its store: it opens the store and
-  /// closes it again when it stops. Supplying a bundle instead chooses the
-  /// backend as well as the location, and can hand the lifetime back with
-  /// `closedByClient: true`, so nothing is given up by supplying one.
-  @Deprecated('Supply an AtClientStorage instead, which chooses the backend as '
-      'well as the location; pass closedByClient: true to keep having the '
-      'client close it. Will be removed in the next major release.')
+  /// Read by nothing in at_client, which opens a client only on the
+  /// [AtClientStorage] it is given. at_client_flutter's flows and dialogs
+  /// still read it when an app gives them no storage.
+  @Deprecated('at_client ignores this: pass an AtClientStorage, such as '
+      'HiveAtClientStorage(atSign: ..., storagePath: ..., '
+      'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
-
-  /// Local device path of commit log.
-  ///
-  /// Read by nothing: the client keeps no commit log of its own, so whatever
-  /// is set here has no effect.
-  @Deprecated('Nothing reads this; the client is commit-log-free. Will be '
-      'removed in the next major release.')
-  String? commitLogPath;
 
   /// Syncing strategy of the client [SyncStrategy]
   /// [Deprecated] Use [SyncService]
@@ -262,28 +248,26 @@ class AtClientPreference {
 
   bool _isLocalStoreRequired = true;
 
-  /// Read only when a client is passed neither a storage nor a keystore: true
-  /// opens the default store under [hiveStoragePath], and false is refused,
-  /// since every client keeps local storage.
+  /// Read by nothing: every client is given its storage.
+  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
+      'Removed in 5.0.0.')
   bool get isLocalStoreRequired => _isLocalStoreRequired;
 
-  @Deprecated("LocalStore is always required")
+  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
+      'Removed in 5.0.0.')
   set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
-  /// Shared secret of the atSign
+  /// The atSign's CRAM secret, read by a `RemoteSecondary` built without an
+  /// `AtKeysIo`; a client authenticates from its `AtKeysIo` and ignores it.
   String? cramSecret;
 
-  /// Private key of the atSign
+  /// Private key of the atSign.
+  @Deprecated('A client authenticates from its AtKeysIo; only a '
+      'RemoteSecondary built without one reads this. Removed in 5.0.0.')
   String? privateKey;
 
   /// Specifies the namespace of an app.
   String? namespace;
-
-  /// Read by nothing: the Hive storage makes its own key and keeps it beside
-  /// the keystore.
-  @Deprecated('Nothing reads this; the Hive storage keeps its own key beside '
-      'the keystore. Removed in 4.0')
-  List<int>? keyStoreSecret;
 
   /// Domain of the root server. Defaults to root.atsign.org
   String rootDomain = 'root.atsign.org';
@@ -294,27 +278,17 @@ class AtClientPreference {
   /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
   int syncIntervalMins = 10;
 
-  /// Read by nothing: setting it changes no timeout.
-  @Deprecated('Read by nothing; removed in v4')
-  int outboundConnectionTimeout = 600000;
-
   /// The process-wide default network timeout: the maximum wall-clock the SDK
   /// will spend reaching/using the atServer (connect + retries + waiting for a
   /// response) before giving up. When set on the `AtClientPreference` used to
   /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
   /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies. This supersedes
-  /// [outboundConnectionTimeout], which nothing reads.
+  /// the existing default (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
   /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
-
-  /// Directory for file transfer: [AtClient.downloadFile] saves files there by
-  /// default, and an upload keeps a copy of each file it sends under its
-  /// `sent-files`.
-  String? downloadPath;
 
   /// regex to perform sync
   String? syncRegex;
@@ -370,38 +344,6 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  /// When true, the TLS keys of every connection are logged to
-  /// [tlsKeysSavePath].
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..decryptPackets = true) to the verb that opens the client. Read by '
-      'the default factory until removed in 4.0.')
-  bool decryptPackets = false;
-
-  /// Where the TLS keys are written when [decryptPackets] is set.
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..tlsKeysSavePath = ...) to the verb that opens the client. Read by '
-      'the default factory until removed in 4.0.')
-  String? tlsKeysSavePath;
-
-  /// Path to the trusted certificates the TLS security context is built from.
-  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
-      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
-      '..pathToCerts = ...) to the verb that opens the client. Read by the '
-      'default factory until removed in 4.0.')
-  String? pathToCerts;
-
-  /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the
-  /// string representation of the AtKey.
-  /// * When set to true, keys such as public:foo@alice or @bob:foo@alice will be rejected
-  /// because they do not have a namespace. But keys such as public:foo.bar@alice of @bob:foo.bar.baz.bash@alice will be accepted.
-  /// * When set to false keys such as public:foo@alice or @bob:foo@alice will not be rejected
-  /// * Defaults to true, as applications should always be placing keys within a namespace
-  @Deprecated(
-      "namespace presence will become mandatory in next major version of the SDK")
-  bool enforceNamespace = true;
-
   /// Fetch the notifications received while the client was offline, from the
   /// last one it received. Defaults to true.
   ///
@@ -412,11 +354,6 @@ class AtClientPreference {
 
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
-
-  /// Poorly named variable which used to control some aspects of at_client's
-  /// default data encryption. Is now fully ignored.
-  @Deprecated('Ignored. Will be removed in next major version')
-  Version atProtocolEmitted = Version(2, 0, 0);
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
@@ -430,7 +367,8 @@ class AtClientPreference {
       'typed signing material')
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
-  /// hashing algorithm to use for pkam authentication
+  /// Hashing algorithm once used for pkam authentication.
+  @Deprecated('Has no effect: pkam signs with SHA-256. Removed in 5.0.0.')
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
   /// Set this to [RemoteLocalPref.remoteOnly]

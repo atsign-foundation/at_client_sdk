@@ -28,7 +28,7 @@ import 'package:at_client/src/signing/signing_key_minting.dart'
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Gates for the PQ startup's steps — **every** step, not only the ones that
 /// write to the atServer.
@@ -36,7 +36,6 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// Every default is on; [PqStartupGates.inert] turns the whole startup off, so
 /// the client makes no wire write, takes no subscription and changes no
 /// keyfile.
-@experimental
 class PqStartupGates {
   /// Every gate is on unless this call names it false.
   const PqStartupGates({
@@ -98,11 +97,11 @@ class PqStartupGates {
   final bool refreshOwnLinks;
 
   /// Active: brings this enrollment's advertised key package into line with
-  /// `AtClientPreference.keyEstablishmentAlgorithms` — minting, filing and
-  /// advertising an encapsulation keypair for every algorithm the list names
-  /// and the enrollment does not hold, and retiring every one it holds that
-  /// the list no longer names. Inert unless that list has changed since the
-  /// enrollment was created, which is every start after the first.
+  /// `AtClientPreference.keyEstablishmentAlgorithms` — filing and advertising
+  /// an encapsulation keypair for every algorithm the list names and the
+  /// keyfile does not hold, the client's own where it holds one, and retiring
+  /// every one it holds that the list no longer names. Inert once the keyfile
+  /// holds what the list names.
   final bool reconcileKeyPackage;
 
   /// Active: mints and publishes this atSign's namespace keys. ANDed with
@@ -127,9 +126,9 @@ class PqStartupGates {
   /// Writes the atServer's view of this enrollment's grants onto the keyfile.
   final bool reconcileEnrollmentSnapshot;
 
-  /// Active: the read path's self-heal — a miss on an own generation
-  /// broadcasts a pull. Off means the key ring is built without the
-  /// conveyance-request hook.
+  /// Active: the read path's self-heal — a miss on an own generation reads
+  /// the own advertisement, fetches this enrollment's conveyance records and
+  /// broadcasts a pull. Off, a miss makes no call to the atServer.
   final bool askOnReadMiss;
 
   /// The gates that are off, in declaration order, or `every step` when none
@@ -187,7 +186,6 @@ class PqStartupGates {
 ///
 /// [startupComplete] completes when the last step has run; the client's init
 /// fires [startup] unawaited and must never await it.
-@experimental
 class PqClientBootstrap {
   /// Builds the instances the startup steps share; [gates] decides which of
   /// those steps [startup] then runs.
@@ -221,11 +219,12 @@ class PqClientBootstrap {
       // An answer left in the in-memory secret store is not filed again until
       // the next start, so a hook that only broadcast would heal the client
       // one start late.
-      requestConveyance: (keysIo == null || !gates.askOnReadMiss)
+      requestConveyance: keysIo == null
           ? null
           : (namespace, secretName) => requestAndFileNskeyPrivate(
               sharing, filing, namespace, secretName,
               logger: _logger),
+      askOnReadMiss: gates.askOnReadMiss,
     );
     seeding = NskeySeeding(
       atClient: _atClient,
@@ -246,7 +245,7 @@ class PqClientBootstrap {
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
-    keyPackageMinting = KeyPackageMinting(_atClient);
+    keyPackageMinting = KeyPackageMinting(_atClient, holder: sharing);
   }
 
   final AtClient _atClient;

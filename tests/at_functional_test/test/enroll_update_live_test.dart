@@ -47,7 +47,12 @@ void main() {
   AtLookUp lookupOf(EnrolledClient c) =>
       c.client.getRemoteSecondary()!.atLookUp;
 
-  Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
+  /// [keyExchangeMode] legacy gives an rsa2048 enrollment, which at_auth
+  /// refuses to pair with the pq exchange.
+  Future<EnrolledClient> enrol(String device,
+          {EnrollmentKeyExchangeMode keyExchangeMode =
+              EnrollmentKeyExchangeMode.pq}) =>
+      enrolAndAuthenticate(
         approver: approver,
         atSign: atSign,
         namespace: namespace,
@@ -55,6 +60,7 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
+        keyExchangeMode: keyExchangeMode,
         storage: TestUtils.storage,
       );
 
@@ -140,10 +146,15 @@ void main() {
   }
 
   test('UC-G1.10 · rekey keeps the enrollment id', () async {
-    final client = await enrol('g110-rekey');
+    // NOTE: rsa2048, because authenticatesWith signs RSA by hand.
+    final client = await enrol('g110-rekey',
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
     final before = await fetch(client);
     final oldPrivateKey =
         client.keys.authenticationKeyPairFor(client.enrollmentId)!.privateKey;
+    expect(await authenticatesWith(client, oldPrivateKey), isTrue,
+        reason: 'the control: the old key authenticates before the rekey, so '
+            'its failing after it is the rekey\'s doing');
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 
@@ -189,7 +200,9 @@ void main() {
   });
 
   test('UC-G1.11 · proof of possession is required', () async {
-    final client = await enrol('g111-pop');
+    // NOTE: rsa2048, because the proofs below are signed RSA by hand.
+    final client = await enrol('g111-pop',
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
     final fresh = freshApkamPair();
 
     Future<String?> sendWith(String? signature) {

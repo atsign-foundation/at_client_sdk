@@ -1,9 +1,12 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A record as the atServer serves it: the value bytes and the raw `metaData`
 /// map, exactly as they travel.
@@ -41,8 +44,7 @@ Future<AtClient> buildPipelineBackedClient({
 }) async {
   final remoteSecondary = MockRemoteSecondary();
 
-  when(() => remoteSecondary.executeVerb(any(), sync: any(named: 'sync')))
-      .thenAnswer((invocation) async {
+  when(() => remoteSecondary.executeVerb(any())).thenAnswer((invocation) async {
     final builder = invocation.positionalArguments[0];
     // NOTE: both `lookup` and `llookup` reach this fixture; matching on the
     // built command rather than the builder's type keeps them on one path.
@@ -60,17 +62,14 @@ Future<AtClient> buildPipelineBackedClient({
         })}';
   });
 
-  // NOTE: the lookup is answered but its `executeCommand` deliberately is not.
-  // A real AtClientImpl runs its PQ startup, whose steps read the enrollment
-  // id from here; measured, none of them reaches a command against this
-  // fixture, so answering one would put words in the atServer's mouth that no
-  // test asked for. If a step ever does reach it, an unstubbed member raises a
-  // TypeError, which now logs at severe rather than passing for a condition.
+  // NOTE: the lookup is answered but its `executeCommand` deliberately is
+  // not. A real AtClientImpl's PQ startup never reaches a command against
+  // this fixture, so answering one would put words in the atServer's mouth
+  // that no test asked for. If a step ever does reach it, an unstubbed
+  // member raises a TypeError, which now logs at severe rather than passing
+  // for a condition.
   final atLookUp = MockAtLookupImpl();
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-  // the bridge reads the enrollment id off the lookup until the ladder goes
-  // ignore: deprecated_member_use
-  when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
   // NOTE: the posture is named rather than defaulted because
   // `AtClientPreference.crypto` refuses a config registering the post-quantum
@@ -78,7 +77,6 @@ Future<AtClient> buildPipelineBackedClient({
   // provider-less stage builds its own preference.
   final preference = AtClientPreference(posture: PqPosture.pqReady)
     ..hiveStoragePath = storagePath
-    ..commitLogPath = '$storagePath/commit'
     ..isLocalStoreRequired = true;
   if (crypto != null) preference.crypto = crypto;
 
@@ -86,7 +84,11 @@ Future<AtClient> buildPipelineBackedClient({
     atSign,
     namespace,
     preference,
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder: atDirectoryOf(preference),
+    atKeysIo: noKeysFor(atSign),
     remoteSecondary: remoteSecondary,
     enrollmentId: enrollmentId,
+    storage: hiveStoreFor(atSign, preference),
   );
 }

@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_file_saver/at_file_saver.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;

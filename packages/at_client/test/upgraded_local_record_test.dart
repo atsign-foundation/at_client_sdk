@@ -1,13 +1,8 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -19,6 +14,8 @@ import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/no_op_services.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 class _FakeMonitor extends Fake implements Monitor {
   @override
@@ -103,12 +100,13 @@ void main() {
         namespace,
         AtClientPreference()
           ..namespace = namespace
-          ..hiveStoragePath = dir.path
-          ..commitLogPath = dir.path,
+          ..hiveStoragePath = dir.path,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: MockRemoteSecondary(),
-        atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
-        atKeysIo: await keyfileHolding(atSign,
-            selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
+        atKeysIo:
+            await keyfileHolding(atSign, selfEncryptionKey: selfEncryptionKey),
+        storage: hiveStoreAt(atSign, dir.path))) as AtClientImpl;
     atClient.syncService = NoOpSyncService();
     store = atClient.getLocalSecondary()!.keyStore!;
     await atClient
@@ -257,7 +255,8 @@ void main() {
     setUp(() async {
       atClient.notificationService = await NotificationServiceImpl.create(
           atClient,
-          monitor: _FakeMonitor());
+          monitor: _FakeMonitor(),
+          secondaryAddressFinder: defaultAtDirectory);
       syncService = await SyncServiceImpl.create(atClient,
           remoteSecondary: MockRemoteSecondary(),
           warmStartSync: false) as SyncServiceImpl;
@@ -309,7 +308,9 @@ void main() {
 
     setUp(() async {
       service = await NotificationServiceImpl.create(atClient,
-          monitor: _FakeMonitor()) as NotificationServiceImpl;
+              monitor: _FakeMonitor(),
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       atClient.notificationService = service;
     });
 

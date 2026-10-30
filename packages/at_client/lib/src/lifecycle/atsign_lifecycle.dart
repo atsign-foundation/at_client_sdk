@@ -10,7 +10,6 @@ import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -27,21 +26,30 @@ import 'package:at_utils/at_progress.dart';
 /// it holds keys for.
 ///
 /// ```dart
+/// final preference = AtClientPreference();
+/// final lookUps = secureSocketLookUps();
+/// final finder = CacheableSecondaryAddressFinder(
+///     preference.rootDomain, preference.rootPort);
 /// final client = await Atsign('@alice').open(
-///     keys: FileAtKeysIo(), storage: storage,
-///     preference: AtClientPreference());
+///     keys: FileAtKeysIo(), storage: storage, preference: preference,
+///     lookUps: lookUps, secondaryAddressFinder: finder);
 /// client.connection.current;          // online, offline or refused
 /// client.connection.changes.listen((state) { ... });
 /// AtClientManager.getInstance().use(client);
 ///
 /// final pending = await Atsign('@alice').enroll(otp: otp, app: 'wavi',
 ///     device: 'phone', namespaces: {'wavi': 'rw'}, keys: FileAtKeysIo(),
-///     preference: preference);
+///     preference: preference, lookUps: lookUps,
+///     secondaryAddressFinder: finder);
 /// final client = await pending.client(preference, storage: storage);
 /// // after a restart:
 /// final resumed = await Atsign('@alice').resumeEnrollment(app: 'wavi',
-///     device: 'phone', keys: FileAtKeysIo(), preference: preference);
+///     device: 'phone', keys: FileAtKeysIo(), preference: preference,
+///     lookUps: lookUps, secondaryAddressFinder: finder);
 /// ```
+///
+/// `FileAtKeysIo`, `secureSocketLookUps` and `CacheableSecondaryAddressFinder`
+/// are a native program's, from `package:at_client/at_client_io.dart`.
 extension AtsignLifecycle on Atsign {
   /// Builds a client for this atSign from [keys], tries once to reach the
   /// atServer within [connectBudget], and hands the client back with
@@ -63,17 +71,16 @@ extension AtsignLifecycle on Atsign {
   /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
   ///
   /// [namespace] defaults to the preference's. [storage] is the client's
-  /// local storage, borrowed unless it was built with `closedByClient: true`;
-  /// with none, a Hive store opens under `preference.hiveStoragePath`, and
-  /// with no path either the open is refused with an [ArgumentError].
+  /// local storage, borrowed unless it was built with `closedByClient: true`.
   /// [lookUps] builds every connection the client opens - its own, its
   /// sync's, its monitor's - and is how an application chooses the transport
-  /// or a proxy convention; with none, TLS on TCP from the preference.
+  /// or a proxy convention. [secondaryAddressFinder] finds the atServer each
+  /// of them reaches, and the client remembers its answer in [storage], so a
+  /// later start with the atDirectory unreachable still finds it.
   /// [atLookUp] is a connection to use instead of one built, for a caller
   /// that already holds one; the client takes it over and installs its own
   /// credentials on it, so a caller that goes on using it acts as the client;
-  /// stopping the client stops it, or closes it when it is not an
-  /// [AtLookupMuxable].
+  /// stopping the client stops it.
   /// [serviceFactory] supplies the client's
   /// notification, sync and enrollment services in place of the defaults; a
   /// process that must not sync hands in a factory whose sync service does
@@ -86,9 +93,10 @@ extension AtsignLifecycle on Atsign {
     required AtKeysIo keys,
     required AtClientPreference preference,
     String? namespace,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
@@ -101,6 +109,7 @@ extension AtsignLifecycle on Atsign {
       atKeysIo: keys,
       atLookUp: atLookUp,
       lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder,
       notificationServiceBuilder: serviceFactory == null
           ? null
           : (client) => serviceFactory.notificationService(
@@ -129,21 +138,21 @@ extension AtsignLifecycle on Atsign {
   /// `open` would have reported; a failure to reach the atServer is thrown
   /// as it is.
   ///
-  /// [lookUps] builds the connection; [atLookUp] is one to authenticate on
-  /// instead, for a caller that already holds one, and is left open.
+  /// [lookUps] builds the connection, which finds the atServer through
+  /// [secondaryAddressFinder].
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
-    AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
     try {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
           enrollmentId: enrollmentId,
-          on: atLookUp,
-          lookUps: lookUps ?? defaultLookUps());
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -151,7 +160,7 @@ extension AtsignLifecycle on Atsign {
       }
       rethrow;
     }
-    if (atLookUp == null) await lookUp.close();
+    await lookUp.close();
     return enrollmentId;
   }
 
@@ -173,11 +182,10 @@ extension AtsignLifecycle on Atsign {
   /// answers or [provisioningBudget] is spent, five minutes with none, and
   /// then throws [AtTimeoutException].
   ///
-  /// A client it could not build for want of local storage is refused with
-  /// an [ArgumentError] before the [cramSecret] is spent.
-  ///
-  /// See [open] for [namespace], [storage], [lookUps], [atLookUp] and
-  /// [connectBudget]; the activation runs on a connection [lookUps] builds,
+  /// See [open] for [namespace], [storage], [lookUps],
+  /// [secondaryAddressFinder], [atLookUp] and [connectBudget]; the activation
+  /// runs on a connection [lookUps] builds to the atServer
+  /// [secondaryAddressFinder] finds,
   /// or on a supplied [atLookUp], which is taken as having already reached
   /// the atServer, so the provisioning wait is skipped.
   Future<AtClient> activate({
@@ -185,7 +193,7 @@ extension AtsignLifecycle on Atsign {
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     String? namespace,
-    AtClientStorage? storage,
+    required AtClientStorage storage,
     String app = firstEnrollmentAppName,
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
@@ -194,10 +202,10 @@ extension AtsignLifecycle on Atsign {
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
     AtLookupMuxable? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    AtClientImpl.refuseWithoutStorage(this, preference, storage: storage);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
@@ -218,8 +226,11 @@ extension AtsignLifecycle on Atsign {
     // The activation's own connection, built the way the application chose
     // and closed when it is done; a supplied one is the caller's to close.
     final connection = atLookUp ??
-        (lookUps ?? defaultLookUps(preference))(
-            atSign: this, rootDomain: rootDomain, authenticator: null);
+        lookUps(
+            atSign: this,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: secondaryAddressFinder);
     try {
       await activateAtSign(
           atSign: this,
@@ -251,6 +262,7 @@ extension AtsignLifecycle on Atsign {
         storage: storage,
         atLookUp: atLookUp,
         lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder,
         connectBudget: connectBudget);
     if (pqNative) {
       await mintSigningRootAfterActivation(client, atKeysIo: keys);
@@ -272,15 +284,16 @@ extension AtsignLifecycle on Atsign {
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
   /// preference's posture. [apkamKeysExpiry] asks the atServer to expire the
   /// enrollment's keys after that long. [lookUps] builds the connection the
-  /// request goes out on and every one the enrollment opens after it;
+  /// request goes out on and every one the enrollment opens after it, each to
+  /// the atServer [secondaryAddressFinder] finds;
   /// [atLookUp] is one to submit on instead, for a caller that already holds
   /// one, and the client the enrollment opens takes it over as [open] does.
   /// The request itself travels unauthenticated, since this device holds no
   /// credential yet.
   ///
-  /// It takes no storage, so the request goes out before any storage is
-  /// checked; the [PendingEnrollment]'s `client` refuses a client it could not
-  /// build before it waits for the decision.
+  /// It takes no storage: the request goes out first, and the
+  /// [PendingEnrollment]'s `client` waits for the decision and then opens on
+  /// the storage it is given.
   Future<PendingEnrollment> enroll({
     required String otp,
     required String app,
@@ -292,7 +305,8 @@ extension AtsignLifecycle on Atsign {
     EnrollmentKeyExchangeMode? keyExchangeMode,
     Duration? apkamKeysExpiry,
     AtLookupMuxable? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
   }) async {
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
@@ -340,8 +354,11 @@ extension AtsignLifecycle on Atsign {
     request.apkamKeysExpiryDuration = apkamKeysExpiry;
 
     final lookUp = atLookUp ??
-        (lookUps ?? defaultLookUps(preference))(
-            atSign: this, rootDomain: rootDomain, authenticator: null);
+        lookUps(
+            atSign: this,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: secondaryAddressFinder);
     final AtEnrollmentResponse response;
     try {
       response = await AtEnrollment.create().submit(request, lookUp);
@@ -369,7 +386,8 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
-        lookUps: lookUps ?? defaultLookUps(preference));
+        lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
@@ -377,7 +395,8 @@ extension AtsignLifecycle on Atsign {
   /// up an enrollment it submitted before a restart.
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
-  /// the enrollment opens, and [atLookUp] is one for the approval handshake,
+  /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
+  /// and [atLookUp] is one for the approval handshake,
   /// for a caller that already holds one, which the client the enrollment
   /// opens takes over as [open] does.
   Future<PendingEnrollment?> resumeEnrollment({
@@ -386,7 +405,8 @@ extension AtsignLifecycle on Atsign {
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookupMuxable? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
   }) async {
     final AtKeys stored;
     try {
@@ -420,7 +440,8 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
-          lookUps: lookUps ?? defaultLookUps(preference));
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder);
     }
     return null;
   }

@@ -305,9 +305,17 @@ never a confidentiality control; substitution is prevented by the APKAM signatur
 the envelope, verified against `_apsk`. What immutability *was* doing is stopping two
 of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
-since no one else can write the owner's records. Take the lock, **re-read**, mint,
-write the advertisement, convey the private; nothing deletes the lock, and its ttl
-releases it. The loser of the race backs off and re-reads.
+since no one else can write the owner's records. Read the namespace's roster, take
+the lock, **re-read**, mint, file the private, convey it to every enrollment on the
+roster, and only then write the advertisement, so publishing is the commit point
+([UC-A3.7](acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
+The conveyance is best effort per member: one the push cannot reach is named in a
+warning and the mint publishes anyway, and that enrollment gets the private on its
+first miss, by fetching and then asking
+([UC-A3.6](acceptance.md#46-uc-a36--a-client-that-needs-a-private-it-does-not-hold-fetches-it-else-asks-else-fails)).
+A client whose own roster entry carries no verified key package could be conveyed
+nothing, so it mints nothing. Nothing deletes the lock, and its ttl releases it. The
+loser of the race backs off and re-reads.
 
 Both re-reads go to the **atServer**, never to local storage or a cache: a sibling
 enrollment's publication is not in local storage until sync catches up, and reading
@@ -318,8 +326,11 @@ peers already hold. A cold-start mint that finds one adopts it; a **rotation** t
 found one would have rotated nothing while reporting success, so it does not adopt.
 
 **The ttl is the only release, so it is a cooldown — and it binds rotation as well
-as minting.** A rotation of a namespace minted or rotated within `mintLockTtl` is
-refused rather than queued. That is the protocol rather than a defect: the only case
+as minting.** A mint sizes it from the roster it read: `mintLockTtl` plus a
+per-member budget for each listed enrollment, never more than the atServer's
+15-minute mutex limit, and a winner that spends it abandons rather than publishing. A
+rotation of a namespace minted or rotated within that ttl is refused rather than
+queued. That is the protocol rather than a defect: the only case
 where a second election is wanted inside the window is the winner having failed,
 which is what the ttl bounds. It has one operational consequence worth stating,
 because `revokeEnrollmentAndRotate` **revokes first**: a rotation the cooldown
@@ -709,7 +720,7 @@ migration is the app, and an app is an enrollment**: its own AtKeys, its own APK
 keypair, its own namespaces. Apps migrate independently and never have to agree.
 
 **The two releases.**
-1. **Capability (4.x, or `PqPosture.pqReady` named today).** A rebuild plus
+1. **Capability (a 4.x release after 4.0.0, or `PqPosture.pqReady` named today).** A rebuild plus
    the posture → a **universal reader** + back-compat
    writer: reads anything ever written (legacy or nskey), upgrades its enrollment
    ([§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment)),
@@ -721,7 +732,7 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    of an app developer, and it replaces every piece of removed machinery.
 2. **Active use (5.x, or an explicit opt-in today).** The app now writes the
    nskey data path. **The SDK never decides to write PQ — the app tells it
-   to**, implicitly by riding the 5.x default (4.x defaults to `pqReady`, the
+   to**, implicitly by riding the 5.x default (a 4.x release after 4.0.0 defaults to `pqReady`, the
    reading stage, per
    [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)),
    or explicitly by naming a
@@ -1290,7 +1301,12 @@ the client does not check), and minting is
 restricted to a fully privileged enrollment (`rw` on `*` **and** `__manage`). The
 winner of the lock re-reads the record under it, generates the ML-DSA-65 keypair,
 stores the private half in its own `.atKeys`, seeds it as the conveyable root secret,
-and serves it on request **to the other fully privileged enrollments only**. A loser
+and serves it on request **to the other fully privileged enrollments only**. Once the
+record is published it also pushes the private to every other approved, fully
+privileged enrollment carrying a verified key package, and a failed push never fails
+the mint. The push follows the publish because a receiver files a root private only
+against a published root
+([UC-A3.7](acceptance.md#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)). A loser
 of the lock mints nothing and files nothing → it **pulls** the private half
 ([§2.2](#22-secretstore-push--pull-primitives)), verifies public/private
 correspondence, and stores. A lock is a protocol rather than the atServer's absolute
@@ -1345,14 +1361,13 @@ Constraints beyond the ruling above:
   name ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
   item 1). Distinctness is what lets an owner tell one device's enrollment
   from another's in `enroll:list`.
-- **The expiry cap RE-ARMS**, one grace period after the *last* clone upgrades and
-  never past the enrollment's own posture, grace ratified at 720h
-  ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
-  item 3). ⚠️ **What arms it is ruled and NOT landed**: the built atServer caps at
-  the retrofit submission and exempts the atSign's first enrollment;
-  [`decisions.md` 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-  moves the trigger to the child's first authentication on its own connection and
-  retires the exemption. This bullet read "ruled and landed" until 2026-08-27.
+- **No expiry cap and no grace.** A predecessor is settled once, at its
+  successor's first authentication on a connection it opened itself: one that
+  is not fully privileged is revoked as superseded, and a fully privileged one
+  keeps its life
+  ([`decisions.md` 133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+  A connection still open as a revoked predecessor is closed at its next
+  command, and a copy of its keyfile is refused at open.
 - **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
   the legacy parent enrollment (which holds nothing to push). Store-and-forward in
   both directions, so "heals when each device next runs" is latency, not
@@ -1540,14 +1555,14 @@ but retained for back-compat so call sites migrate over time (ratified 2026-07-0
 [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
 working name). It stays the single in-memory holder of every key the client knows
 (per-enrollment *and* per-APKAM), which providers read keys from and mint/add/write
-through. *(NOT a wrapper over `AtChops` — `AtKeys` already produces one via
-`toAtChops()` and carries a `metadata` stash.)* The provider seam is injected an
+through. *(NOT a wrapper over `AtChops`, which at_auth and at_client no longer
+use; `AtKeys` carries a `metadata` stash.)* The provider seam is injected an
 **`AtKeysIo`** (the key source, extended with runtime persistence — one
 whole-state `flush(atsign, atKeys)`: mutate in memory, then flush; on an existing
 target the rewrite is safety-checked by `AtKeysAssurance.validateMapUpdate` and is
 atomic, write-to-temp + rename, keeping the previous state as `<file>.bak`)
-alongside `(AtClient, AtChops)`; `CryptoContext` carries the `AtKeysIo` —
-**additive** (`CryptoContext` is `{atClient}`, with no `atChops` field). Convergence
+alongside the `AtClient`; `CryptoContext` carries the `AtKeysIo` —
+**additive** (`CryptoContext` is `{atClient}`). Convergence
 (newest-wins / pull recovery) stays in the secret-sharing substrate; the stores are
 **dumb** key-value backends.
 
@@ -2720,8 +2735,8 @@ the array on the at_auth side as well, on the grounds that a bare value cannot
 state the algorithm of whatever signed the package. Where that signer is
 rsa2048 the bare value states exactly it, and where it is not, the algorithm
 had already chosen the array — so the condition fired only on the case it was
-wrong about: an APKAM-advertising rsa2048 enrollment in pq key-exchange mode,
-which a legacy posture plus `--key-exchange pq` reaches. Removed 2026-08-31.
+wrong about: an APKAM-advertising rsa2048 enrollment carrying a key package,
+which a legacy request with a key package reaches. Removed 2026-08-31.
 
 #### 9.8.3 The chain: one link per key
 

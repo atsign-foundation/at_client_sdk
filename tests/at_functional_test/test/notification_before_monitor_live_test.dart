@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -42,6 +42,8 @@ void main() {
         preference:
             TestUtils.getPreference(receiverAtSign, posture: PqPosture.legacy)
               ..monitorAutoStart = false,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(receiverAtSign));
     addTearDown(receiver.stop);

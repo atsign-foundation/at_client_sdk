@@ -1,14 +1,24 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 
 import '../test_util.dart';
+import '../../test_utils/hive_store.dart';
+import '../../test_utils/no_keys.dart';
+import '../../test_utils/transport.dart';
 
 void main() async {
   AtSignLogger.root_level = 'finer';
   final atSign = '@alice🛠';
-  var atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign(atSign, 'wavi', TestUtil.getAlicePreference());
+  var atClientManager = AtClientManager.getInstance()
+    ..use(await buildAtClient(
+        atSign: atSign,
+        namespace: 'wavi',
+        preference: TestUtil.getAlicePreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
+        atKeysIo: noKeysFor(atSign),
+        storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
   final atClient = atClientManager.atClient;
   // phone.me@alice🛠
   for (var i = 0; i < 2; i++) {
@@ -18,8 +28,15 @@ void main() async {
     print(result);
   }
   sleep(Duration(minutes: 1));
-  atClientManager = await AtClientManager.getInstance()
-      .setCurrentAtSign('@bob🛠', 'wavi', TestUtil.getBobPreference());
+  atClientManager = AtClientManager.getInstance()
+    ..use(await buildAtClient(
+        atSign: '@bob🛠',
+        namespace: 'wavi',
+        preference: TestUtil.getBobPreference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(TestUtil.getBobPreference()),
+        atKeysIo: noKeysFor('@bob🛠'),
+        storage: hiveStoreFor('@bob🛠', TestUtil.getBobPreference())));
   // phone.me@alice🛠
   for (var i = 0; i < 2; i++) {
     var phoneKey = AtKey()..key = 'ph_$i';

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -19,7 +19,7 @@ class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 /// shape of a keychain or file whose write failed silently.
 class _StaleKeysIo extends WrittenAtKeysIo {
   final AtKeys _held;
-  int flushes = 0;
+  AtKeys? lastFlushed;
 
   _StaleKeysIo(this._held);
 
@@ -32,7 +32,7 @@ class _StaleKeysIo extends WrittenAtKeysIo {
 
   @override
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
-    flushes++;
+    lastFlushed = atKeys;
   }
 }
 
@@ -111,6 +111,8 @@ void main() {
               enrollmentId: legacyId),
           atLookUp: lookUp,
           preference: preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: MockSecondaryAddressFinder(),
           appName: 'wavi',
           deviceName: 'laptop',
           namespaces: const {'*': 'rw', '__manage': 'rw'},
@@ -145,8 +147,7 @@ void main() {
         enrollCommand,
         allOf(contains('"appName":"wavi"'), contains('"deviceName":"laptop"'),
             contains('"signingAlgo":"mldsa65"')));
-    verifyNever(() => server.lookUp
-        .pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')));
+    verifyNever(() => server.lookUp.pkamAuthenticate());
   });
 
   test('the client\'s namespace fills a session that names none', () async {
@@ -171,8 +172,9 @@ void main() {
                 contains('authenticates as $legacyId'),
                 contains('retrofitting to $newId'),
                 contains('legacy client is untouched')))));
-    expect(stale.flushes, 1,
-        reason: 'the write was attempted, and the read-back is what caught it');
+    expect(stale.lastFlushed?.keysForEnrollment(newId), isNotEmpty,
+        reason: 'the write of the new enrollment was attempted, and the '
+            'read-back is what caught it');
     expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1),
         reason: 'the atServer holds an approved enrollment nobody can use, '
             'which a rerun replaces rather than reuses');

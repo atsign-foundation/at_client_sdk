@@ -1,8 +1,4 @@
-// PqStartupGates is @experimental; this pack's post-quantum files drive that
-// substrate deliberately.
-// ignore_for_file: experimental_member_use
-
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
@@ -126,6 +122,17 @@ class TestPreferences {
     return _singleton;
   }
 
+  /// Where this pack's atServers are found, from `root_server` in the
+  /// config; the port defaults to the standard root port 64 when absent, and
+  /// a base-port virtualenv run sets it.
+  static String get _rootDomain => ConfigUtil.getYaml()['root_server']['url'];
+  static int get _rootPort => ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+
+  /// The atDirectory this pack's atServers are found through, asked over
+  /// TLS, for a client to remember its answers in.
+  static SecondaryAddressFinder get atDirectory =>
+      CacheableSecondaryAddressFinder(_rootDomain, _rootPort);
+
   /// The preference for [atSign], built on the first ask and reused after.
   ///
   /// [posture] has no default **on purpose**: it decides whether this client
@@ -163,11 +170,8 @@ class TestPreferences {
     // argument rather than one of the assignments below.
     var atClientPreference = AtClientPreference(
         posture: posture, pqStartupGates: _gatesFor(posture));
-    atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
-    // Optional `root_server.port` (e.g. a base-port virtualenv run); defaults
-    // to the standard root port 64 when absent.
-    atClientPreference.rootPort =
-        ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+    atClientPreference.rootDomain = _rootDomain;
+    atClientPreference.rootPort = _rootPort;
     atClientPreference.syncRegex = TestConstants.namespace;
     refuseDurableWritesToLongLivedAtSigns(atSign, atClientPreference);
     atClientPreferencesMap[atSign] = atClientPreference;

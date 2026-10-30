@@ -212,12 +212,12 @@ silent mismatches or runtime errors. Direct string comparisons between
 atsigns also fail when one has `@` and the other doesn't.
 
 **Fix:** Use the `Atsign` extension type (from `at_commons`, re-exported by
-`at_client`) in your own method signatures. When you receive a string from
-user input or an external source, call `.toAtsign()` to normalise and
-validate it:
+`at_client` and so by both platform packages) in your own method signatures.
+When you receive a string from user input or an external source, call
+`.toAtsign()` to normalise and validate it:
 
 ```dart
-import 'package:at_client/at_client.dart'; // re-exports Atsign
+import 'package:at_client_cli/at_client_cli.dart'; // or at_client_flutter; both re-export Atsign
 
 // ✓ In your own APIs — use Atsign, not String
 Future<void> shareWith(Atsign recipient) async {
@@ -242,6 +242,6 @@ missing, and **silently strips dots from the domain part** (e.g.
 strings, and reserved characters — surface this to the user rather than
 swallowing it.
 
-**Note on spelling:** The SDK spells the type as `Atsign` (not `AtSign`) and
-the concept as `atsign` (not `atSign`). Use these spellings consistently in
-your own code.
+**Note on spelling:** The SDK spells the type `Atsign` (not `AtSign`), and
+names and parameters `atSign` (`getCurrentAtSign`, `atSign:`). Use these
+spellings consistently in your own code.

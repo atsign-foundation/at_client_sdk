@@ -36,11 +36,6 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  /// The signer a caller injected through [AtAuth.create], else the one
-  /// [authenticate] and [onboard] build from the keys they resolved.
-  // ignore: deprecated_member_use
-  AtChops? _chops;
-
   CramAuthenticator? cramAuthenticator;
 
   PkamAuthenticator? pkamAuthenticator;
@@ -52,13 +47,10 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl(
       {required this.atLookUp,
-      // ignore: deprecated_member_use
-      AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
       AtEnrollment? atEnrollment})
-      : _chops = atChops,
-        atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -161,35 +153,9 @@ class AtAuthImpl implements AtAuth {
         mintLegacyMaterial: atOnboardingRequest.mintLegacyMaterial ?? true);
     _atAuthKeys = mint.keys;
 
-    // A PQ-native activation authenticates with the keypair just minted, which
-    // is not in the flat fields `authenticationFor` reads for an enrollment
-    // naming no algorithm — and the enrollment it will be filed under does
-    // not exist yet, so there is nothing to resolve. Build the chops from the
-    // minted halves
-    // directly, and name the algorithm: at_lookup defaults to rsa2048 and
-    // would otherwise sign an ML-DSA key with the RSA routine.
-    if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
-      // ignore: deprecated_member_use
-      _chops ??= AtChopsImpl(AtChopsKeys.create(
-          null,
-          // ignore: deprecated_member_use
-          AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
-        ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
-            ? null
-            : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
-    } else {
-      _chops ??= _atAuthKeys.authenticationFor(null).chops;
-    }
-    // The algorithm is named rather than derived here. A PQ-native activation
-    // signs with the keypair minted a few lines above, which is in no keyfile,
-    // under an enrollment the atServer has not created yet - so there is
-    // nothing for the keystore to resolve, and the rsa2048 default would sign
-    // an ML-DSA key with the RSA routine.
     atLookUp.authenticator = authenticatorFor(
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
-      chops: _chops,
-      signingAlgo: atOnboardingRequest.signingAlgoType,
     );
 
     //3. send onboarding enrollment
@@ -204,22 +170,12 @@ class AtAuthImpl implements AtAuth {
     );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
-    // Reinstall, now that the atServer has named the enrollment. The
-    // authenticator installed above closed over a null id because none
-    // existed yet, and `enrollmentId` is captured at install time rather than
-    // read per call - so without this the activation PKAM below goes out with
-    // no `enrollmentId:` segment however the id is passed to
-    // `pkamAuthenticate`. The atServer then authenticates that connection as
-    // `pkamLegacy` against the default PKAM public key, while at_lookup
-    // records it as authenticated for this enrollment: the two ends disagree
-    // about who is on the connection, and the enrollment-record-authoritative
-    // signing-algorithm check never runs.
+    // NOTE: an authenticator signs as the enrollment it was built with, so
+    // the PKAM below must run on one built after the atServer named it.
     atLookUp.authenticator = authenticatorFor(
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
       enrollmentId: enrollmentIdFromServer,
-      chops: _chops,
-      signingAlgo: atOnboardingRequest.signingAlgoType,
     );
 
     //4. Drop the CRAM-authenticated connection; the PKAM below opens another
@@ -232,9 +188,8 @@ class AtAuthImpl implements AtAuth {
     //6. Do pkam auth
     pkamAuthenticator ??= PkamAuthenticator();
     try {
-      var pkamResponse = await pkamAuthenticator!.authenticate(
-          atOnboardingRequest.atSign, atLookUp,
-          enrollmentId: enrollmentIdFromServer);
+      var pkamResponse = await pkamAuthenticator!
+          .authenticate(atOnboardingRequest.atSign, atLookUp);
       if (!pkamResponse) {
         _addProgress(
             "onboarding",
@@ -419,11 +374,11 @@ class AtAuthImpl implements AtAuth {
   /// assigned.
   ///
   /// A PQ-native activation's APKAM goes in as typed material — the flat
-  /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
-  /// through `signingAlgorithmForEnrollment` / `authenticationFor` and
-  /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
-  /// activation already wrote its APKAM to the flat fields and adds nothing
-  /// here, which is what keeps a legacy keyfile byte-identical.
+  /// fields stay empty, so its authenticator resolves this enrollment through
+  /// `authenticationKeyPairFor` and signs ML-DSA with no caller-supplied
+  /// algorithm anywhere. An `rsa2048` activation already wrote its APKAM to
+  /// the flat fields and adds nothing here, which is what keeps a legacy
+  /// keyfile byte-identical.
   ///
   /// Whatever the metadataBuilder minted — the key package's two halves —
   /// is re-tagged with the enrollment id either way. It is the only copy of

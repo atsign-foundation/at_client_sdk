@@ -18,6 +18,8 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/privilege_resolver.dart'
+    show isFullyPrivileged;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
@@ -34,6 +36,11 @@ import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show KeyPackageStatus;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
+import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -42,13 +49,14 @@ import 'package:at_commons/at_commons.dart'
     show
         AtBytes,
         AtKey,
+        EnrollmentConstants,
+        EnrollmentStatus,
         AtKeyNotFoundException,
         AtValue,
         KeyNotFoundException,
         StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('PqSigningRoot');
 
@@ -59,7 +67,6 @@ final _logger = AtSignLogger('PqSigningRoot');
 /// One root per atSign: only a fully privileged enrollment mints one, and a
 /// short-ttl lock on `_rootlock@<atSign>` ([MintLock]) serialises them, the
 /// mutable record itself refusing nothing.
-@experimental
 class PqSigningRoot {
   static const String recordName = pqSigningRootRecordName;
 
@@ -120,10 +127,15 @@ class PqSigningRoot {
   /// wires the real one.
   final MintLock mintLock;
 
+  /// The other fully privileged enrollments a published root is pushed to;
+  /// null reads them from the atServer.
+  final Future<List<KeyPackage>> Function()? fullyPrivilegedRoster;
+
   PqSigningRoot(this.atClient,
       {this.keysIo,
       MintLock? mintLock,
-      Duration lockTtl = signingRootMintLockTtl})
+      Duration lockTtl = signingRootMintLockTtl,
+      this.fullyPrivilegedRoster})
       : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
         mintLock = mintLock ?? MintLock(atClient);
 
@@ -214,7 +226,7 @@ class PqSigningRoot {
   ///
   /// Returns the public half, or null when this client did not mint: it is not
   /// fully privileged, its key source cannot file a private, a root is already
-  /// published, or another of this atSign's enrollments holds the mint lock.
+  /// published, or another client of this atSign holds the mint lock.
   /// Without a key source that can file the private, neither is the published
   /// root read nor the mint lock taken.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {
@@ -258,6 +270,7 @@ class PqSigningRoot {
     if (publicKey == null) return null;
 
     await _anchorSelf(atSign);
+    await pushToFullyPrivileged(atSign);
     return publicKey;
   }
 
@@ -284,6 +297,7 @@ class PqSigningRoot {
     _logger.info('Published the signing root this client filed for $atSign '
         'and had not published');
     await _anchorSelf(atSign);
+    await pushToFullyPrivileged(atSign);
     return publicKey;
   }
 
@@ -427,6 +441,82 @@ class PqSigningRoot {
     }
 
     return publicKey;
+  }
+
+  /// Pushes the root private this client just published to every other fully
+  /// privileged enrollment carrying a verified key package, and returns how
+  /// many it reached.
+  ///
+  /// After the publish, so a receiver finds the root its private corresponds
+  /// to. Never fails the mint: a failure is logged, and an enrollment the push
+  /// missed still asks for the root at its next start, as one approved after
+  /// the roster was read is conveyed it at its approval.
+  Future<int> pushToFullyPrivileged(String atSign) async {
+    try {
+      final private = (await signingKey(atSign))?.private;
+      if (private == null) return 0;
+      final putIn = atClient.getPreferences()?.namespace;
+      if (putIn == null || putIn.isEmpty) {
+        _logger.warning('Published the signing root for $atSign and pushed its '
+            'private to no other enrollment: this client names no namespace '
+            'to put the envelopes in, so they ask for it at their next start');
+        return 0;
+      }
+      final roster = await (fullyPrivilegedRoster ?? _fullyPrivilegedRoster)();
+      final sharing = AtClientSecretSharing.forClient(atClient);
+      final secret = Secret(
+          namespace: putIn, name: secretName, value: base64Encode(private));
+      var pushed = 0;
+      for (final to in roster) {
+        try {
+          await sharing.shareSecretWith(to, secret,
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          pushed++;
+        } catch (e) {
+          if (e is StoppedException) rethrow;
+          _logger.warning('Could not push the signing root private for '
+              '$atSign to enrollment ${to.enrollmentId}; it asks for it at '
+              'its next start: $e');
+        }
+      }
+      return pushed;
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Published the signing root for $atSign but could not '
+          'push its private; the other fully privileged enrollments ask for '
+          'it at their next start: $e');
+      return 0;
+    }
+  }
+
+  /// The key packages of this atSign's other approved, fully privileged
+  /// enrollments, each verified against its `_apsk`; one that fails is named
+  /// and left out, and one with none is left out silently.
+  Future<List<KeyPackage>> _fullyPrivilegedRoster() async {
+    final sharing = AtClientSecretSharing.forClient(atClient);
+    final selfId = sharing.enrollmentId;
+    final privileged = <String>{
+      for (final enrollment
+          in await atClient.enrollmentService!.fetchEnrollmentRequests())
+        if (enrollment.enrollmentStatus == EnrollmentStatus.approved &&
+            isFullyPrivileged(enrollment.namespace) &&
+            enrollment.enrollmentId != null &&
+            enrollment.enrollmentId != selfId)
+          enrollment.enrollmentId!
+    };
+    final roster = <KeyPackage>[];
+    for (final member in await sharing.directory
+        .listForNamespace(EnrollmentConstants.enrollManageNamespace)) {
+      if (!privileged.contains(member.enrollmentId)) continue;
+      if (member.keyPackageStatus == KeyPackageStatus.rejected) {
+        _logger.warning('Not pushing the signing root private to enrollment '
+            '${member.enrollmentId}: its key package did not verify');
+        continue;
+      }
+      final package = member.keyPackage;
+      if (package != null) roster.add(package);
+    }
+    return roster;
   }
 
   /// Links this enrollment's keys to the root it just published.

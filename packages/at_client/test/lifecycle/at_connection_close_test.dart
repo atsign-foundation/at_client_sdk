@@ -1,11 +1,14 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/no_op_services.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A stopping client fails its own in-flight requests by closing their
 /// connections, and what those requests fail with says nothing about the
@@ -69,9 +72,6 @@ void main() {
         () async {
       final lookUp = MockAtLookupImpl();
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
-      // the bridge reads the enrollment id off the lookup until the ladder goes
-      // ignore: deprecated_member_use
-      when(() => lookUp.enrollmentId).thenReturn(null);
       late AtClient client;
       // What the remote does when the stop ends its lookup underneath a
       // request in flight: classifies the failure and reports it.
@@ -84,8 +84,12 @@ void main() {
           preference: AtClientPreference()
             ..hiveStoragePath = dir.path
             ..monitorAutoStart = false,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor('@stopquiet'),
           atLookUp: lookUp,
-          syncServiceBuilder: (_) => NoOpSyncService());
+          syncServiceBuilder: (_) => NoOpSyncService(),
+          storage: hiveStoreAt('@stopquiet', dir.path));
       final before = client.connection.current;
       final emitted = client.connection.changes.toList();
 

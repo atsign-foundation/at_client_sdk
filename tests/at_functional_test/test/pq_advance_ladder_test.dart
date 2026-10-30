@@ -1,13 +1,10 @@
-// The enrollment key-package surface is @experimental; an advance drives it.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 20))
 @Tags(['pq'])
 library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -63,14 +60,16 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approver, atSign);
     await AtClientSecretSharing.forClient(approver).register();
 
-    // The rung-0 enrollment: `enrolAndAuthenticate` submits over OTP, and that
-    // path mints RSA-2048 unconditionally — the starting state rung 1 advances
-    // FROM. An enrollment born ML-DSA would make rung 1 a no-op.
+    // The rung-0 enrollment: submitted under the legacy key exchange, which
+    // mints RSA-2048 as a legacy app does — the starting state rung 1
+    // advances FROM. An enrollment born ML-DSA would make rung 1 a no-op.
     keysIo = InMemoryAtKeysIo();
     final deviceName = 'ladder-$runId';
     final enrolled = await enrolAndAuthenticate(
@@ -78,6 +77,7 @@ void main() {
       atSign: atSign,
       namespace: namespace,
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       namespaces: {namespace: 'rw'},
@@ -108,7 +108,9 @@ void main() {
         await Atsign(atSign).authenticatesAs(
             keys: keysIo,
             rootDomain:
-                AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+                AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         enrollmentId,
         reason: 'the ladder keyfile must authenticate, and resolve to the '
             'rung being asked for');
@@ -125,6 +127,8 @@ void main() {
     ladderClient = await Atsign(atSign).open(
         keys: keysIo,
         preference: TestUtils.getPreference(atSign, posture: posture),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: ladderStorage);
     return ladderClient;

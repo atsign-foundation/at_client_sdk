@@ -18,7 +18,7 @@ import 'package:at_commons/at_commons.dart'
     show AtKey, AtValue, StoppedException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
-    show NamespaceMember;
+    show KeyPackageStatus, NamespaceMember;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
@@ -26,13 +26,14 @@ import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
+import 'package:at_client/src/util/at_key_grammar.dart'
+    show isAtKeyNamespace, isIdShaped;
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:uuid/uuid.dart' show Uuid;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// A decrypted, signature-verified payload received from another APKAM
 /// keypair of the same atSign.
-@experimental
 class ReceivedEnvelope {
   /// The key-package id the sender named. Only the handling of a secret
   /// request checks it against the directory; [fromEnrollmentId] is what the
@@ -57,7 +58,6 @@ class ReceivedEnvelope {
 }
 
 /// A [Secret] another APKAM keypair of this atSign shared with this client.
-@experimental
 class ReceivedSecret {
   final Secret secret;
 
@@ -82,7 +82,6 @@ class ReceivedSecret {
 /// `false` to ignore. Set [PairwiseSecretSharing.answerSecretRequests] to
 /// override the default (answer any authorized same-atSign requester — the
 /// atServer already gates deliverability by namespace).
-@experimental
 typedef SecretRequestPolicy = FutureOr<bool> Function(
     ReceivedEnvelope request, KeyPackage requester);
 
@@ -102,7 +101,6 @@ typedef SecretRequestPolicy = FutureOr<bool> Function(
 /// clients like any self key, but only the addressed APKAM keypair can decrypt
 /// it. The recipient deletes the envelope after consuming it; unconsumed
 /// envelopes expire via [envelopeTtl].
-@experimental
 mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// Marker segment in envelope key names — see [EnvelopeAddressing], which
   /// owns the address format.
@@ -472,6 +470,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
   }
 
+  /// Reloads the held keys and, when listening, listens at the addresses they
+  /// now give.
+  @override
+  Future<void> reloadApkamKeys() async {
+    await super.reloadApkamKeys();
+    if (_listeningFor == null || _stopped) return;
+    stopListening();
+    await startListening();
+  }
+
   /// Stops watching. The [receivedEnvelopes] stream stays open; a later
   /// [startListening] resumes.
   void stopListening() {
@@ -585,6 +593,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// wake-up sweep — each envelope key is claimed synchronously before any
   /// await, so the same payload is never emitted twice.
   ///
+  /// An envelope another sweep is still handling is waited for rather than
+  /// skipped, so whatever it files is filed by the time this returns.
+  ///
   /// [fromRemote] reads (and deletes) against the atServer rather than the
   /// local store; the wake-up path uses it so a sync-less client — which has
   /// no synced local copy — can still receive envelopes.
@@ -607,54 +618,71 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       // claim is released again (below) if the envelope turns out not to be
       // processable, so a later sweep can retry it.
       if (!_consumedEnvelopeKeys.add(keyString)) {
+        await _handling[keyString];
         continue;
       }
-      final ReceivedEnvelope? received;
+      final handled = _sweepOne(envelopeKey, keyString, fromRemote);
+      _handling[keyString] = handled.then((_) {}, onError: (_) {});
       try {
-        received = await _consume(envelopeKey, fromRemote: fromRemote);
-      } catch (e) {
-        // Includes transient failures (e.g. fetching the signer's _apsk key)
-        // — never delete on failure; release the claim so the next sweep
-        // retries. Nothing has been emitted yet, so a retry repeats nothing.
-        _consumedEnvelopeKeys.remove(keyString);
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logger.warning('Failed to process envelope $envelopeKey: $e');
-        continue;
-      }
-      if (received == null) {
-        // Not (or not yet) processable by this client; leave it for a
-        // sibling/upgraded client or for ttl expiry.
-        _consumedEnvelopeKeys.remove(keyString);
-        continue;
-      }
-      _receivedController.add(received);
-      try {
-        await _handleSecretPayload(received); // no-op unless kind=='secret'
-        await _handleRequestPayload(received); // no-op unless kind=='request'
-      } catch (e) {
-        // NOTE: the envelope has been EMITTED — releasing the claim here would
-        // hand it to the next sweep for a second emission. The claim and the
-        // envelope are both kept; a fresh process retries the whole thing.
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logger.warning('Envelope $envelopeKey was received but its payload '
-            'handler failed; it is kept for a retry at the next start: $e');
-        continue;
-      }
-      consumed++;
-      try {
-        await atClient.delete(envelopeKey,
-            deleteRequestOptions: DeleteRequestOptions()
-              ..useRemoteAtServer = fromRemote);
-      } catch (e) {
-        if (e is StoppedException) rethrow;
-        _throwIfStopped();
-        logSwallowed(
-            logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
+        if (await handled) consumed++;
+      } finally {
+        _handling.remove(keyString)?.ignore();
       }
     }
     return consumed;
+  }
+
+  /// The envelopes a sweep has claimed and is still handling, by key.
+  final Map<String, Future<void>> _handling = {};
+
+  /// Handles one claimed envelope for [sweepOnce]; returns whether it was
+  /// consumed.
+  Future<bool> _sweepOne(
+      AtKey envelopeKey, String keyString, bool fromRemote) async {
+    final ReceivedEnvelope? received;
+    try {
+      received = await _consume(envelopeKey, fromRemote: fromRemote);
+    } catch (e) {
+      // Includes transient failures (e.g. fetching the signer's _apsk key)
+      // — never delete on failure; release the claim so the next sweep
+      // retries. Nothing has been emitted yet, so a retry repeats nothing.
+      _consumedEnvelopeKeys.remove(keyString);
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logger.warning('Failed to process envelope $envelopeKey: $e');
+      return false;
+    }
+    if (received == null) {
+      // Not (or not yet) processable by this client; leave it for a
+      // sibling/upgraded client or for ttl expiry.
+      _consumedEnvelopeKeys.remove(keyString);
+      return false;
+    }
+    _receivedController.add(received);
+    try {
+      await _handleSecretPayload(received); // no-op unless kind=='secret'
+      await _handleRequestPayload(received); // no-op unless kind=='request'
+    } catch (e) {
+      // NOTE: the envelope has been EMITTED — releasing the claim here would
+      // hand it to the next sweep for a second emission. The claim and the
+      // envelope are both kept; a fresh process retries the whole thing.
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logger.warning('Envelope $envelopeKey was received but its payload '
+          'handler failed; it is kept for a retry at the next start: $e');
+      return false;
+    }
+    try {
+      await atClient.delete(envelopeKey,
+          deleteRequestOptions: DeleteRequestOptions()
+            ..useRemoteAtServer = fromRemote);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
+      logSwallowed(
+          logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
+    }
+    return true;
   }
 
   /// Verifies and decrypts one envelope. Returns null (after logging) for
@@ -689,6 +717,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     if (envelope.appNamespace != addressedThrough) {
       logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
           'sender signed it for ${envelope.appNamespace}; skipping');
+      return null;
+    }
+    if (!isAtKeyNamespace(envelope.appNamespace)) {
+      logger.warning('Envelope $envelopeKey names '
+          '${jsonEncode(envelope.appNamespace)}, which is not a namespace an '
+          'atKey can carry; skipping');
       return null;
     }
     // Resolving the KEM doubles as the support check: a suite with no KEM
@@ -900,13 +934,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
     // Read from the SEALED payload, never from the key name: the name is
     // written by the sender and nothing authenticates it.
-    final String? requestId = received.payload['requestId'] as String?;
+    final Object? carried = received.payload['requestId'];
+    // NOTE: only an id-shaped requestId goes into a regex or a key name.
+    final String? requestId =
+        carried is String && isIdShaped(carried) ? carried : null;
     if (requestId == null) {
       // Fail open: answering costs a duplicate the requester merges away,
       // while standing down costs it the secret with no error either side.
       logger.info('Answering kpid ${received.fromKpid} in '
           '${received.appNamespace} without checking whether another holder '
-          'already did: the request carries no requestId to correlate on');
+          'already did: the request carries no id-shaped requestId to '
+          'correlate on');
     }
     final suppressedBy = requestId == null
         ? const <String>{}
@@ -1228,6 +1266,14 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final String selfId = enrollmentId;
     int pushed = 0;
     for (final member in members) {
+      // NOTE: an enrollment with no key package, `primary` or a legacy one, is
+      // skipped silently; one whose package was refused is named.
+      if (member.keyPackageStatus == KeyPackageStatus.rejected) {
+        logger.warning('Not pushing "${secret.name}" to enrollment '
+            '${member.enrollmentId} in ${secret.namespace}: its key package '
+            'did not verify, so nothing can be sealed to it');
+        continue;
+      }
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
         // Per member: one peer this client cannot seal to must not stop the

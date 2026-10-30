@@ -3,7 +3,6 @@ import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 /// The signing and verifying half of the secret-sharing substrate, on its own:
 /// [ApkamSigning] and [EnvelopeSigning] sign a payload with this client's APKAM
@@ -12,7 +11,6 @@ import 'package:meta/meta.dart' show experimental;
 ///
 /// Use `AtClientSecretSharing.forClient` instead when the caller also sends or
 /// receives secrets; it mixes these in too.
-@experimental
 class AtClientEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override
   final AtClient atClient;

@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:test/test.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// The eviction trigger for coarse forward secrecy: a client drops a cached
 /// content key when it observes that key's conveyance record being deleted.
@@ -169,13 +172,18 @@ void main() {
     test('a client registers the eviction listener on its sync service',
         () async {
       final client = await AtClientImpl.create(
-          '@evictionwiring',
-          'test',
-          // NOTE: the posture is named rather than defaulted — the default
-          // runs no post-quantum startup, which is the startup under test.
-          AtClientPreference(posture: PqPosture.pqReady)
-            ..hiveStoragePath = 'test/hive/evictionwiring'
-            ..commitLogPath = 'test/hive/evictionwiring') as AtClientImpl;
+              '@evictionwiring',
+              'test',
+              // NOTE: the posture is named rather than defaulted — the default
+              // runs no post-quantum startup, which is the startup under test.
+              AtClientPreference(posture: PqPosture.pqReady)
+                ..hiveStoragePath = 'test/hive/evictionwiring',
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
+              atKeysIo: noKeysFor('@evictionwiring'),
+              storage:
+                  hiveStoreAt('@evictionwiring', 'test/hive/evictionwiring'))
+          as AtClientImpl;
       final registered = <SyncProgressListener>[];
       final sync = _RecordingSyncService(registered);
 

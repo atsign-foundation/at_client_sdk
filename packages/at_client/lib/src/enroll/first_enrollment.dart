@@ -12,7 +12,6 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('firstEnrollment');
 
@@ -69,7 +68,6 @@ typedef PqNativeActivationMaterial = ({
 /// [keyEstablishmentAlgo] is decided at this call, because the builder runs
 /// before any client exists; changing it afterwards needs an `enroll:update`
 /// the enrollment must send for itself.
-@experimental
 Future<PqNativeActivationMaterial> pqNativeActivationMaterial({
   required String atSign,
   required Set<SigningAlgoType> dataSigningKeyAlgorithms,
@@ -97,7 +95,6 @@ Future<PqNativeActivationMaterial> pqNativeActivationMaterial({
 /// [client] must be authenticated as the atSign's **first** enrollment, which
 /// the atServer grants `__manage` — that is what entitles it to create the root
 /// at all.
-@experimental
 Future<void> mintSigningRootAfterActivation(
   AtClient client, {
   required AtKeysIo atKeysIo,

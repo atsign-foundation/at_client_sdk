@@ -1,9 +1,5 @@
-// The enrollment key-package surface is @experimental; driving it is the
-// point of this helper.
-// ignore_for_file: experimental_member_use
-
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:uuid/uuid.dart';
@@ -98,7 +94,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   );
 
   Map<String, dynamic>? built;
-  final build = enrollmentKeyPackageBuilder(atSign);
+  final build =
+      enrollmentKeyPackageBuilder(atSign, signingAlgo: SigningAlgoType.mldsa65);
 
   final atLookUp = secureSocketLookUps()(
     atSign: atSign,
@@ -118,9 +115,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
         // advertised key package rather than RSA-wrapping one the enrollee sent.
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key EXCHANGE; the APKAM authentication keypair stays
-        // RSA-2048.
-        signingAlgo: SigningAlgoType.rsa2048,
+        // NOTE: at_auth refuses rsa2048 with the pq exchange.
+        signingAlgo: SigningAlgoType.mldsa65,
       ),
       atLookUp,
     );
@@ -141,7 +137,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
       preference: preference
         ..rootDomain = rootDomain
         ..rootPort = rootPort,
-      storage: storage);
+      storage: storage,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder:
+          CacheableSecondaryAddressFinder(rootDomain, rootPort));
 
   final payload =
       SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;

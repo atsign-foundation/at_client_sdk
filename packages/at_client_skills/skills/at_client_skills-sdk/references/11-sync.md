@@ -49,8 +49,8 @@ or decryption — it only excludes other apps' unrelated keys.
   the network. A stale or empty read means sync hasn't caught up yet — not that
   the data is missing.
 - **Writes apply locally immediately, then sync in the background.** The write
-  returns as soon as it's in the local commit log; `SyncService` pushes it to
-  the atServer afterward.
+  returns as soon as it's in the local store and queued for sync;
+  `SyncService` pushes it to the atServer afterward.
 - **Fallback cadence: `AtClientPreference.syncIntervalMins` (default 10).** This
   periodic full-sync reconciles a *missed* live notification (the app was
   backgrounded, the monitor was reconnecting, or the recipient was offline when

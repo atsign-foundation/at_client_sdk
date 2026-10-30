@@ -3,12 +3,14 @@
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 /// A client that holds NO enrollment gives itself one — driven through
 /// `AtClientImpl.create`, not through the pieces.
@@ -48,7 +50,6 @@ void main() {
   AtClientPreference preferenceAt(PqPosture posture, String atSign) =>
       AtClientPreference(posture: posture)
         ..hiveStoragePath = 'test/hive/$atSign'
-        ..commitLogPath = 'test/hive/$atSign/commit'
         // NOTE: unroutable as a backstop. The refusal below stops the
         // retrofit before the step that would dial this, so nothing should
         // reach it - and if anything ever does, it must fail rather than
@@ -95,11 +96,12 @@ void main() {
     when(() => mockRemote.executeCommand(any(that: startsWith('enroll:listns')),
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
-    final chops = AtChopsImpl(AtChopsKeys.create(encryptionKeyPair, pkamKeyPair)
-      ..selfEncryptionKey = AESKey(selfKey));
-
     await AtClientImpl.create(atSign, 'buzz', preferenceAt(posture, atSign),
-        remoteSecondary: mockRemote, atChops: chops, atKeysIo: keysIo);
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        remoteSecondary: mockRemote,
+        atKeysIo: keysIo,
+        storage: hiveStoreFor(atSign, preferenceAt(posture, atSign)));
 
     final captured = <String>[];
     try {

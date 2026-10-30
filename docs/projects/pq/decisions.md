@@ -118,7 +118,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [59]  | Phase-3 at_chops surface rulings                                                            | 2026-08-09 | LIVE                      |
 | [60]  | JWS stage one lands: readers always-on, producer behind the version flag                    | 2026-08-09 | LIVE                      |
 | [61]  | The barrel cycle is cut: no src file imports a public barrel                                | 2026-08-10 | LIVE                      |
-| [62]  | PqClientBootstrap: one owner for the PQ startup                                             | 2026-08-10 | LIVE                      |
+| [62]  | PqClientBootstrap: one owner for the PQ startup                                             | 2026-08-10 | AMENDED 2026-10-29        |
 | [63]  | Phase 4e: EnrollmentConveyance out of EnrollmentServiceImpl                                 | 2026-08-10 | LIVE                      |
 | [64]  | Phase 4f: one CryptoRuntime.prepareWrite()                                                  | 2026-08-10 | LIVE                      |
 | [65]  | Phase 4g: the secret-sharing seam work                                                      | 2026-08-10 | LIVE                      |
@@ -181,7 +181,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [121] | A revocation publishes what it obliges                                                      | 2026-08-28 | SUPERSEDED by [129], [130] |
 | [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | PARTLY SUPERSEDED by [155]|
 | [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
-| [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
+| [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | AMENDED 2026-10-29        |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |
@@ -195,7 +195,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [135] | `legacy` is the control arm: no wire write, no keyfile change                               | 2026-09-08 | LIVE               |
 | [136] | at_auth stays posture-blind, and both doors demand the algorithm                            | 2026-09-08 | LIVE               |
 | [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
-| [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | LIVE               |
+| [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | AMENDED 2026-10-28 |
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
@@ -215,6 +215,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [155] | Content keys and namespace keys rotate yearly by default                                     | 2026-10-09 | LIVE               |
 | [156] | The e2e pack's enrollments expire on their own, and nothing tears them down                  | 2026-10-13 | LIVE               |
 | [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | AMENDED 2026-10-18 |
+| [158] | A key package reconcile advertises the package the client holds                              | 2026-10-29 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -374,3 +375,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [155]: detail/decisions.md#155-content-keys-and-namespace-keys-rotate-yearly-by-default-2026-10-09
 [156]: detail/decisions.md#156-the-e2e-packs-enrollments-expire-on-their-own-and-nothing-tears-them-down-2026-10-13
 [157]: detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16
+[158]: detail/decisions.md#158-a-key-package-reconcile-advertises-the-package-the-client-holds-2026-10-29

@@ -3,13 +3,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -116,9 +118,7 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${(builder as VerbBuilder).buildCommand()}');
     });
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) => decide(++attempts));
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) => decide(++attempts));
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return lookUp;
@@ -134,6 +134,8 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: store,
           preference: await preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
   test('submission files the minted keys as pending in the store named',
@@ -174,13 +176,16 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server);
     expect(File(path).existsSync(), isTrue,
         reason: 'the submission is on disk before anyone approves it');
     expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
 
     final client = await pending.client(await preference(),
-        retryInterval: const Duration(milliseconds: 10));
+        retryInterval: const Duration(milliseconds: 10),
+        storage: hiveStoreFor(pending.atSign, await preference()));
 
     final completed = await store.read(atSign);
     expect(completed.enrollmentToAuthenticateAs(), enrollmentId);
@@ -199,8 +204,12 @@ void main() {
     await submit(store, atServer(decide: (_) async => true));
 
     await expectLater(
-        () async =>
-            Atsign(atSign).open(keys: store, preference: await preference()),
+        () async => Atsign(atSign).open(
+            keys: store,
+            preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
@@ -212,14 +221,24 @@ void main() {
     final pref = await preference();
 
     final resumed = await Atsign(atSign).resumeEnrollment(
-        app: 'wavi', device: 'phone', keys: store, preference: pref);
+        app: 'wavi',
+        device: 'phone',
+        keys: store,
+        preference: pref,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
     expect(resumed?.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
 
     expect(
         await Atsign(atSign).resumeEnrollment(
-            app: 'wavi', device: 'tablet', keys: store, preference: pref),
+            app: 'wavi',
+            device: 'tablet',
+            keys: store,
+            preference: pref,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'another device\'s request is not this one');
     expect(
@@ -227,7 +246,9 @@ void main() {
             app: 'wavi',
             device: 'phone',
             keys: InMemoryAtKeysIo(),
-            preference: pref),
+            preference: pref,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'and a store holding nothing resumes nothing');
   });
@@ -259,7 +280,8 @@ void main() {
     final pending = await submit(store, server);
 
     final client = await pending.client(await preference(),
-        retryInterval: const Duration(milliseconds: 10));
+        retryInterval: const Duration(milliseconds: 10),
+        storage: hiveStoreFor(pending.atSign, await preference()));
 
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, isEmpty);
@@ -297,7 +319,8 @@ void main() {
 
     await expectLater(
         () async => pending.client(await preference(),
-            retryInterval: const Duration(milliseconds: 10)),
+            retryInterval: const Duration(milliseconds: 10),
+            storage: hiveStoreFor(pending.atSign, await preference())),
         throwsA(isA<AtEnrollmentException>()
             .having((e) => e.message, 'message', contains('denied'))));
 
@@ -329,6 +352,8 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: denying);
 
     await expectLater(
@@ -348,6 +373,8 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: atServer(decide: (_) async => true));
     expect(
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
@@ -358,7 +385,8 @@ void main() {
   /// what decides how the symmetric key travels and what the enrollment
   /// advertises, and the atServer parks it pending.
   Future<Map<String, dynamic>> submittedUnder(PqPosture posture,
-      {EnrollmentKeyExchangeMode? keyExchangeMode}) async {
+      {EnrollmentKeyExchangeMode? keyExchangeMode,
+      SigningAlgoType? signingAlgo}) async {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
@@ -393,7 +421,10 @@ void main() {
           ..rootDomain = InternetAddress.loopbackIPv4.address
           ..rootPort = 1
           ..namespace = 'lifecycle',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         keyExchangeMode: keyExchangeMode,
+        signingAlgo: signingAlgo,
         atLookUp: lookUp);
 
     final command = sent.where((c) => c.startsWith('enroll:request:')).single;
@@ -458,8 +489,11 @@ void main() {
           reason: 'the mode decides how the key travels, not what the '
               'enrollment advertises');
 
+      // NOTE: mldsa65 named too, since the legacy posture's rsa2048 is refused
+      // with the pq exchange.
       final pqUnderLegacy = await submittedUnder(PqPosture.legacy,
-          keyExchangeMode: EnrollmentKeyExchangeMode.pq);
+          keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+          signingAlgo: SigningAlgoType.mldsa65);
       expect(pqUnderLegacy['encryptedAPKAMSymmetricKey'], isNull);
       expect(pqUnderLegacy['metadata']?['keyPackage'], isNotNull);
     });

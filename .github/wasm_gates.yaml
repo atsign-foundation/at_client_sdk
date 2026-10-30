@@ -2,28 +2,12 @@
 #
 # Adding a package is one stanza — nothing in the package, nothing in CI. Gate a
 # package only once it is web-safe, so a gate holds a line rather than recording
-# a backlog: at_utils, at_lookup and at_client own 3, 6 and 7 offenders today,
-# which is why they are not here.
+# a backlog. at_utils, at_lookup and at_client joined below as each was ported.
 #
 # `ratchets` walk the import graph, `probe` compiles, `controls` keep the walk
 # honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
 
 at_chops:
-  # NOT resolvable from the workspace. at_chops 4.0.0 is detached from the root
-  # `workspace:` list until at_client migrates off the 3.x facade, so
-  # `package:at_chops/...` resolves out of the pub cache there and a plain run
-  # would walk the PUBLISHED 3.x. Run this gate against the package's own
-  # `dart pub get`, which is what the `wasm_ratchet` job does:
-  #
-  #   dart pub get -C packages/at_chops
-  #   dart run wasm_shakedown -c .github/wasm_gates.yaml \
-  #     --resolve-from at_chops=packages/at_chops
-  #
-  # Without the flag the baselines below fail rather than pass — 3.x owns 2
-  # blocked packages and puts the bindings at a different path — so forgetting
-  # it is red, not a false green. Drop this note when at_chops rejoins
-  # `workspace:`.
-
   # Web-safe first: every OpenSSL and FFI algorithm lives behind
   # at_chops_ffi.dart, so at_chops.dart is pure Dart.
   #
@@ -50,24 +34,20 @@ at_chops:
     - package:at_chops/types.dart
   controls:
     - barrel: package:at_chops/at_chops_ffi.dart
-      reaches_file: lib/src/ffi/openssl_ffi_bindings.dart
+      reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
       reaches_library: dart:ffi
       because: the FFI algorithms it exists to quarantine
 
 at_auth:
-  # Gated since the 4.0.0 barrel split (#2179). at_auth.dart holds key material,
-  # the stores' interfaces and the auth flows; anything needing a filesystem, a
-  # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
-  #
-  # All three blocked packages are inherited: at_lookup (sockets), at_utils and
-  # chalkdart (the logger), each reached through at_lookup.dart or
-  # at_logger.dart and coming off as each is ported. at_auth builds no
-  # connection of its own - its atServer check asks over the lookup it is
-  # handed - so nothing it reaches imports at_lookup_io.dart or at_server_status.
+  # at_auth.dart holds key material, the stores' interfaces and the auth flows;
+  # anything needing a filesystem, a raw socket or the dart:io HTTP stack is in
+  # at_auth_io.dart. at_auth builds no connection of its own - its atServer
+  # check asks over the lookup it is handed - so nothing it reaches imports
+  # at_lookup_io.dart.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 3
+      max_blocked_packages: 0
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
@@ -75,3 +55,162 @@ at_auth:
     - barrel: package:at_auth/at_auth_io.dart
       reaches_file: lib/src/keys/io/file_io.dart
       because: the filesystem code it exists to quarantine
+
+at_utils:
+  # at_utils.dart, at_logger.dart and at_progress.dart hold what a browser can
+  # run: AtSignLogger, AtUtils, atmetadata and the progress events. The file,
+  # stderr and CLI logging handlers, the progress colours, PseudoServerSocket
+  # and ApplicationConfiguration need dart:io, or chalkdart, which pulls it in,
+  # so they are in at_utils_io.dart. AtSignLogger.stdErrLoggingHandler comes
+  # through a conditional import: the console handler on the web, the stderr
+  # handler natively. The second control walks that native branch.
+  ratchets:
+    - barrel: package:at_utils/at_utils.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 90
+    - barrel: package:at_utils/at_logger.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 10
+    # at_progress.dart has no ratchet: its walk is two files, and no floor
+    # both sits under two and above one. at_auth.dart's ratchet walks it, and
+    # at_utils' web_safe_test.dart walks it for dart:io.
+  probe:
+    - package:at_utils/at_utils.dart
+    - package:at_utils/at_logger.dart
+    - package:at_utils/at_progress.dart
+  controls:
+    - barrel: package:at_utils/at_utils_io.dart
+      reaches_file: lib/src/networking/pseudo_server_socket.dart
+      reaches_library: dart:io
+      because: the native code it exists to quarantine
+    - barrel: package:at_utils/at_utils.dart
+      reaches_file: lib/src/logging/io_handlers.dart
+      reaches_library: dart:io
+      because: the stderr handler AtSignLogger holds on the native branch
+
+at_lookup:
+  # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the
+  # AtConnection/AtTransport byte-channel seam and the address-finder interface;
+  # the TLS socket, the atDirectory lookup and the SecureSocketTransport that
+  # implements the seam moved to at_lookup_io.dart. at_lookup_web.dart holds
+  # the WebSocket transport.
+  #
+  # Zero blocked packages. The neutral barrel reaches at_commons, at_utils,
+  # meta and mutex; at_utils.dart is the neutral barrel of its own 4.0.0 major,
+  # which keeps chalkdart off this graph. at_lookup_web.dart adds package:web.
+  ratchets:
+    - barrel: package:at_lookup/at_lookup.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 150
+    - barrel: package:at_lookup/at_lookup_web.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 340
+  probe:
+    # at_lookup_io.dart is absent on purpose. dart compile wasm accepts dart:io
+    # and stubs it, so probing the io barrel would pass and prove nothing; the
+    # ratchet is what holds that line. The controls below assert the io barrel
+    # still holds what it isolates.
+    - package:at_lookup/at_lookup.dart
+    - package:at_lookup/at_lookup_web.dart
+  controls:
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/secure_socket_util.dart
+      reaches_library: dart:io
+      because: the TLS socket construction it exists to quarantine
+
+    # A second island, not a duplicate of the first: the address path and the
+    # transport path are quarantined for different reasons, and one control on
+    # the socket util stays green with the finder gutted.
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/cacheable_secondary_address_finder.dart
+      because: the raw-TLS atDirectory lookup, which has no browser equivalent
+
+at_client:
+  # Gated by the 4.0.0 io split. at_client.dart builds a client from what it is
+  # given - its keys, storage, transport and atDirectory lookup - and names no
+  # native default for any of them; FileAtKeysIo, secureSocketLookUps and
+  # CacheableSecondaryAddressFinder are in at_client_io.dart. memory.dart is the
+  # pure-Dart storage a browser build uses; hive.dart and sqlite.dart are native.
+  ratchets:
+    - barrel: package:at_client/at_client.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1111 files.
+      min_files_walked: 1000
+    - barrel: package:at_client/memory.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1074 files.
+      min_files_walked: 950
+  probe:
+    # at_client_io.dart is absent for the reason at_lookup_io.dart is: dart2wasm
+    # stubs dart:io, so its probe would pass and prove nothing.
+    - package:at_client/at_client.dart
+    - package:at_client/memory.dart
+  controls:
+    # at_client_io.dart reaches dart:io only through at_auth and at_lookup,
+    # whose own controls hold those seams; a control here sees at_client's
+    # sources alone.
+    - barrel: package:at_client/at_client.dart
+      reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
+      reaches_library: dart:ffi
+      because: the native crypto backends the VM's branch of a conditional import takes
+
+at_contact:
+  # A feature package on core alone: at_client.dart and the foundation, no
+  # platform package and no native code of its own, so its control looks
+  # through at_client at the native crypto backends the VM branch takes.
+  ratchets:
+    - barrel: package:at_contact/at_contact.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1141 files.
+      min_files_walked: 1050
+  probe:
+    - package:at_contact/at_contact.dart
+  controls:
+    - barrel: package:at_contact/at_contact.dart
+      through_package: at_client
+      reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
+      reaches_library: dart:ffi
+      because: the native crypto backends at_client's conditional import takes on the VM
+
+at_policy:
+  # As at_contact: core and the foundation only. at_client_cli is a dev
+  # dependency, for the example, and never reaches a consumer.
+  ratchets:
+    - barrel: package:at_policy/at_policy.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 1122 files.
+      min_files_walked: 1000
+  probe:
+    - package:at_policy/at_policy.dart
+  controls:
+    - barrel: package:at_policy/at_policy.dart
+      through_package: at_client
+      reaches_file: lib/src/crypto/backends/crypto_backends_native.dart
+      reaches_library: dart:ffi
+      because: the native crypto backends at_client's conditional import takes on the VM
+
+at_telemetry:
+  # Depends on at_utils' logger and two crypto packages, not on at_client; its
+  # control looks through at_utils at the stderr handler on the native branch.
+  ratchets:
+    - barrel: package:at_telemetry/at_telemetry.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      # The walk is 162 files.
+      min_files_walked: 140
+  probe:
+    - package:at_telemetry/at_telemetry.dart
+  controls:
+    - barrel: package:at_telemetry/at_telemetry.dart
+      through_package: at_utils
+      reaches_file: lib/src/logging/io_handlers.dart
+      reaches_library: dart:io
+      because: the stderr handler AtSignLogger holds on the native branch

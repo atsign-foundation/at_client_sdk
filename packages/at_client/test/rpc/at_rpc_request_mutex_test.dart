@@ -49,8 +49,7 @@ void main() {
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
     when(() => atClient.notificationService).thenReturn(notifications);
     when(() => atClient.isStopped).thenReturn(false);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => remote.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as VerbBuilder;
       commands.add(builder.buildCommand());
       if (builder is! UpdateVerbBuilder) {
@@ -90,8 +89,8 @@ void main() {
     await responder().handleRequestNotification(requestFromBob(42));
 
     expect(commands, [
-      'update:nc:ttl:30000:isEncrypted:false:immutable:true:'
-          '42.session_mutexes.mutex.__rpcs.testing@alice e-1\n'
+      matches(RegExp(r'^update:nc:ttl:30000:isEncrypted:false:immutable:true:'
+          r'42\.session_mutexes\.mutex\.__rpcs\.testing@alice e-1:[0-9a-f]{32}\n$'))
     ]);
     expect(callbacks.handled, 1);
   });

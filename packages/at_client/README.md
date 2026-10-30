@@ -13,17 +13,23 @@ notifications.
 `at_client` runs on **both Dart (CLI / server)** and **Flutter
 (mobile / desktop / IoT)**. It is intentionally platform-neutral:
 the actual onboarding dialogs, secure key storage, and CLI scaffolding
-live in sibling packages that depend on `at_client`. **Flutter web
-is not supported** — atSign onboarding and key storage rely on
-platform plugins that don't have web implementations today.
+live in the platform packages that depend on `at_client`, and an app
+imports its platform package rather than this one
+([the SDK shape](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/sdk-shape.md)).
+**Flutter web is not supported** — atSign onboarding and key storage rely
+on platform plugins that don't have web implementations today.
+
+Upgrading from 3.x: see
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).
 
 ## Which package do I actually want?
 
-| If you're building…                        | Start with                                                                                                               |
-|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI or server app**               | [`at_cli_commons`](../at_cli_commons) for boilerplate + [`at_onboarding_cli`](../at_onboarding_cli) to provision atSigns |
-| A **Flutter app** (mobile/desktop/IoT)     | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets (web not supported)  |
-| **Understanding** the atSign lifecycle     | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup            |
+| If you're building…                                     | Start with                                                                                                         |
+|---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **platform package**, or a program that passes every dependency itself | this package                                                                      |
+| **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 
 ## Core surface
 
@@ -127,19 +133,25 @@ summary is:
 for a client; every verb hands back an `AtClient` the app owns and stops.
 
 ```dart
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 // Every client keeps local storage, here Hive in a directory the app picks.
 AtClientStorage storage() => HiveAtClientStorage(
     atSign: '@alice', storagePath: '/data/alice', closedByClient: true);
 
+// How the client reaches its atServer, and the atDirectory that says where.
+final lookUps = secureSocketLookUps();
+final atDirectory = CacheableSecondaryAddressFinder('root.atsign.org', 64);
+
 // Log in: a client on keys the app already holds. It comes back online,
 // offline or refused, and says which; offline it serves its local store.
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: storage(),
-    preference: AtClientPreference()..namespace = 'todos');
+    preference: AtClientPreference()..namespace = 'todos',
+    lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 client.connection.current;                  // online | offline | refused
 client.connection.changes.listen((state) => print(state));
 await client.connection.awaitOnline();      // wait, with a budget
@@ -147,17 +159,20 @@ await client.connection.awaitOnline();      // wait, with a budget
 // Onboard: activate a newly registered atSign with its CRAM secret. The
 // keys it mints land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, storage: storage(), preference: preference);
+    cramSecret: secret, keys: keys, storage: storage(), preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: atDirectory);
 
 // Enroll: ask the atSign's owner to approve this app. The request is filed
 // in `keys` as pending, so a restart resumes it rather than repeating it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
-    preference: preference);
+    preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 final enrolled = await pending.client(preference,
     storage: storage());                                 // waits for approval
 final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
-    device: 'phone', keys: keys, preference: preference);
+    device: 'phone', keys: keys, preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: atDirectory);
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.
 final requests = await owner.enrollments.pending();
@@ -172,58 +187,57 @@ final passcode = await owner.enrollments.otp();
 AtClientManager.getInstance().use(client);
 ```
 
-Three things are the platform's to supply, and every verb takes them the
-same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
-Flutter keychain, memory); **`storage:`**, the client's local store, each
+Four things are the platform's to supply, and every verb takes them the
+same way; at_client_cli and at_client_flutter supply each for their apps.
+**`keys:`** is where the atSign's keys live (`FileAtKeysIo`, the
+Flutter keychain, memory); **`storage:`** is the client's local store, each
 backend from its own import (`HiveAtClientStorage` from
 `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 `package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
-`package:at_client/memory.dart`); and **`lookUps:`**, how
-the client reaches its atServer. The last is an `AtLookUpFactory`, a function
+`package:at_client/memory.dart`); **`secondaryAddressFinder:`** is the
+atDirectory that says where the atServer is (`CacheableSecondaryAddressFinder`
+natively); and **`lookUps:`** is how the client reaches its atServer. The last is an `AtLookUpFactory`, a function
 that builds every connection the client opens - its own, its sync's, its
 monitor's - so a transport or a proxy convention is chosen once:
 
 ```dart
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
     preference: AtClientPreference()..namespace = 'todos',
+    secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
         config: SecureSocketConfig()..pathToCerts = '/certs',
         onConnect: (connection) => connection.sendSync('from:@alice\n')));
 ```
 
-With no `lookUps`, connections are TLS on TCP with the defaults;
-`secureSocketLookUps` is that default, taking a `SecureSocketConfig` and an
-`onConnect` run on each new connection before anything else (a proxy that
-routes on `from:` is what that is for). A factory of your own can hand back
-any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
-`tlsKeysSavePath` are deprecated in favour of the factory's config.
+`lookUps` builds every connection the client opens. `secureSocketLookUps`
+connects with TLS on TCP, taking a `SecureSocketConfig` and an `onConnect`
+run on each new connection before anything else (a proxy that routes on
+`from:` is what that is for). A factory of your own can hand back any
+`AtLookUp`.
 
-Every client keeps local storage, even if only in memory. A client given none
-opens Hive under `preference.hiveStoragePath` until 4.0. One given none and
-no path, or none with `isLocalStoreRequired` false, is refused with an
-`ArgumentError` before anything irreversible, such as spending a CRAM secret
-or waiting for an approval; `InMemoryAtClientStorage` keeps nothing on
-disk.
+Every client keeps local storage, even if only in memory: `storage` is
+required, and `InMemoryAtClientStorage` keeps nothing on disk.
 End-to-end-encrypted values are stored in local storage as their ciphertext,
 never in the clear. A backend of your own
 needs types at_client doesn't export, so raise a
 [feature request](https://github.com/atsign-foundation/at_client_sdk/issues)
 for it.
 
-`Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
-enrollment a keys store authenticates as without building a client.
+`Atsign.authenticatesAs(keys: ..., rootDomain: ..., lookUps: ...,
+secondaryAddressFinder: ...)` answers which enrollment a keys store
+authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in
 [`at_client_flutter`](../at_client_flutter); CLI apps get them behind
-[`at_onboarding_cli`](../at_onboarding_cli)'s commands and
-[`at_cli_commons`](../at_cli_commons)' `CLIBase`.
+[`at_client_cli`](../at_client_cli)'s `CLIBase` and `at_activate` commands.
 
 `AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
-current client for the caller, are deprecated and go in 4.0: build the
-client with a verb above and make it current with `use`.
+current client for the caller, are removed in 4.0: build the client with a
+verb above and make it current with `use`.
 
 ## Collections
 
@@ -526,14 +540,15 @@ final preference = AtClientPreference(posture: PqPosture.pqReady)
 
 ### The rollout ladder, and why it is a ladder
 
-The default posture moves one stage per major version of `at_client`. An
-app that names no posture rides the default; an app can name a later stage
-at any time, or name `legacy` to stay put.
+The default posture moves one stage at a time: to `pqReady` in a 4.x
+release after 4.0.0, and to `pqActive` at 5.0.0. An app that names no
+posture rides the default; an app can name a later stage at any time, or
+name `legacy` to stay put.
 
 | `at_client` | Default posture      | A client that names no posture                                                                                  |
 | ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 3.x         | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
-| 4.x         | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
+| 3.x, 4.0    | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
+| later 4.x   | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
 | 5.x         | `PqPosture.pqActive` | Writes post-quantum by default and refuses a legacy write                                                       |
 
 The order follows from the one invariant above: a record may only be
@@ -541,14 +556,15 @@ written in a scheme every reader of it supports. So the whole population of
 clients has to be *able to read* post-quantum data (`pqReady`) before any
 client *writes* it by default (`pqActive`), and the stage that adds the
 reading has to be rolled out before the stage that changes the writing. Two
-majors give every app one release to become a reader and another to become
+stages give every app one release to become a reader and another to become
 a writer, with the SDK's default carrying apps that never think about it.
 Legacy key material is still minted at every stage, because when an atSign
 can stop holding it is a question about every client of that atSign, not
 about one build.
 
-**You do not have to wait for 4.x or 5.x.** The stages are postures, and a
-posture is a construction-time choice, so a 3.x app names the stage it wants:
+**You do not have to wait for the default to move.** The stages are
+postures, and a posture is a construction-time choice, so an app names the
+stage it wants:
 
 ```dart
 // Reads post-quantum data, authenticates with ML-DSA-65, writes legacy
@@ -583,9 +599,14 @@ What each posture switches on:
   `keyEstablishmentAlgorithms`, and every build opens both.
 - **Writing in an atSign's own namespace.** Each value is encrypted under a
   key of its own, derived from the content key and a fresh salt. A client
-  writes in its own namespace once it holds that namespace key's private half;
-  until then the write throws `NskeyPrivateNotHeldException`, and
+  writes in its own namespace once it holds that namespace key's private half.
+  A write that finds it missing first fetches what was conveyed to this
+  client, and only then throws `NskeyPrivateNotHeldException`;
   `ensureReachable` reports `holdsPrivate`.
+- **Who mints a namespace key.** Only an enrollment carrying a key package
+  mints one, and it conveys the private to the namespace's other enrollments
+  before publishing it. A client on the atSign's own credential mints nothing,
+  and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Rotation.** A content key is replaced once it is a year old, and a
   namespace key once its generation is a year old; `CryptoConfig`'s
   `ckRotationPolicy` and `nskeyRotationPolicy` change that. A revocation

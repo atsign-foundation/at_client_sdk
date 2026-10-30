@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 /// Local storage as a keystore holds it: canonical key strings, each with its
 /// value and the metadata sync carried in.
@@ -84,8 +85,8 @@ void main() {
     when(() => client.getCurrentAtSign()).thenReturn(alice);
     when(() => client.enrollmentId).thenReturn(enrolledAs);
     final store = _Store();
-    when(() => client.getLocalSecondary())
-        .thenReturn(LocalSecondary(client, keyStore: store));
+    when(() => client.getLocalSecondary()).thenReturn(
+        LocalSecondary(client, syncQueue: memorySyncQueue(), keyStore: store));
     final sync = MockSyncService();
     when(() => client.syncService).thenReturn(sync);
     when(() => sync.isInSync()).thenAnswer((_) async => true);
@@ -115,7 +116,6 @@ void main() {
     });
     final deleted = <String>[];
     when(() => client.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((inv) async {
       final key = (inv.positionalArguments[0] as AtKey).toString();

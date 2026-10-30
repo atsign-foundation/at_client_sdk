@@ -11,30 +11,21 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/storage/default_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_utils.dart';
 
 /// Builds a client for [atSign] and wires its notification, sync and
 /// enrollment services.
 ///
 /// The caller owns the client's lifetime and ends it with [stop].
-///
-/// ⚠️ The client is filed in `AtClientImpl.atClientInstanceMap` like any
-/// other, so a later [AtClientManager.setCurrentAtSign] for the same atSign
-/// adopts THIS client, replaces its notification, sync and enrollment
-/// services without stopping the ones it had, and stops it on the next atSign
-/// switch. Do not mix this factory and the manager for one atSign in one
-/// process.
+/// [AtClientManager.use] makes it the current client.
 ///
 /// [storage] is borrowed by default, so [stop] detaches from it without
 /// closing it and the caller closes it when done; a bundle built with
-/// `closedByClient: true` is closed by the client instead. Supplying none
-/// falls back to a Hive store under the deprecated
-/// `preference.hiveStoragePath`, and is refused when
-/// `preference.isLocalStoreRequired` is false or that path is unset.
+/// `closedByClient: true` is closed by the client instead.
 /// [lookUps] builds every connection the client opens (its own, its sync's,
-/// its monitor's); with none, TLS on TCP from the preference.
+/// its monitor's), and [secondaryAddressFinder] finds the atServer each one
+/// reaches, the client remembering its answer in [storage] for a start with
+/// the atDirectory unreachable. The platform package supplies both.
 ///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -51,12 +42,12 @@ Future<AtClient> buildAtClient({
   required String atSign,
   required AtClientPreference preference,
   String? namespace,
-  AtClientStorage? storage,
-  AtKeysIo? atKeysIo,
+  required AtClientStorage storage,
+  required AtKeysIo atKeysIo,
   String? enrollmentId,
   AtLookUp? atLookUp,
-  AtLookUpFactory? lookUps,
-  SecondaryAddressFinder? secondaryAddressFinder,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
   FutureOr<NotificationService> Function(AtClient)? notificationServiceBuilder,
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
   FutureOr<EnrollmentService> Function(AtClient)? enrollmentServiceBuilder,
@@ -69,7 +60,7 @@ Future<AtClient> buildAtClient({
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
   }
-  final location = _locationOf(atSign, preference, storage);
+  final location = storage is AtClientStorageBase ? storage.location : null;
   final holder = location == null ? null : AtClientImpl.liveClientOn(location);
   if (holder != null) {
     throw StateError('The storage at $location is held by the live client for '
@@ -85,17 +76,17 @@ Future<AtClient> buildAtClient({
     atKeysIo: atKeysIo,
     atLookUp: atLookUp,
     lookUps: lookUps,
+    secondaryAddressFinder: secondaryAddressFinder,
     enrollmentId: enrollmentId,
     storage: storage,
     exactEnrollment: true,
-  );
+  ) as AtClientImpl;
   try {
     client.notificationService = notificationServiceBuilder == null
         ? await NotificationServiceImpl.create(client,
-            secondaryAddressFinder: secondaryAddressFinder ??
-                (client is AtClientImpl ? client.secondaryAddressFinder : null),
+            secondaryAddressFinder: client.secondaryAddressFinder,
             connection: client.connection,
-            lookUps: client is AtClientImpl ? client.lookUps : null)
+            lookUps: client.lookUps)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
         ? await SyncServiceImpl.create(client)
@@ -115,8 +106,7 @@ Future<AtClient> buildAtClient({
 /// `AtClientImpl.create` applies, asked here so the refusal above names the
 /// principal that would be built.
 Future<String?> _principalOf(
-    String atSign, AtKeysIo? atKeysIo, String? enrollmentId) async {
-  if (atKeysIo == null) return enrollmentId;
+    String atSign, AtKeysIo atKeysIo, String? enrollmentId) async {
   final AtKeys keys;
   try {
     keys = await atKeysIo.read(atSign);
@@ -125,19 +115,4 @@ Future<String?> _principalOf(
   }
   if (!keys.holdsAuthenticationMaterial) return enrollmentId;
   return keys.enrollmentToAuthenticateAs();
-}
-
-/// Where a client built from these arguments would keep its storage, or
-/// null when it would be refused for want of storage: the bundle supplied,
-/// else the Hive store `AtClientImpl.create` opens under
-/// `preference.hiveStoragePath`.
-String? _locationOf(
-    String atSign, AtClientPreference preference, AtClientStorage? storage) {
-  if (storage != null) {
-    return storage is AtClientStorageBase ? storage.location : null;
-  }
-  if (!preference.isLocalStoreRequired) return null;
-  final path = preference.hiveStoragePath;
-  if (path == null) return null;
-  return defaultStorageLocation(AtUtils.fixAtSign(atSign), path);
 }

@@ -2,6 +2,20 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Teaches at_client 4.0: one platform package per app (`at_client_cli` or
+  `at_client_flutter`), the storage, transport and atDirectory finder every
+  client is opened with, and what 4.0 removed, named as removed.
+- A CLI program takes its `lookUps:` from at_client_cli's
+  `lookUpsFor(rootDomain)`, which routes through a proxy when the root domain
+  names one (`SKILL.md`; `references/06`, `14`, `15`).
+- `createAtClient` is at_client_cli's, unchanged, not a removed API
+  (`SKILL.md`; `references/01`, `06`).
+- A Flutter app with its own UI calls the verbs through at_client_flutter's
+  `AtsignFlows`, and a pending enrollment's client takes its store from
+  `storageOrDefault` (`SKILL.md`; `references/01`).
+- A `refused` connection lists `enrollmentDenied` among its causes.
+- An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
+  that parameter (`references/15`).
 - Multiple instances of one agent take their lock with
   `tryAcquireServerMutex`.
 - Storage: each backend comes from its own import, `HiveAtClientStorage` from
@@ -27,9 +41,8 @@
   `stop()` does and does not do (new `references/15-client-lifecycle.md`;
   `SKILL.md` §11; later sections renumbered).
 - The package map, the headless-agent and sync references and the
-  deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
-  `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage
-  object.
+  deprecation guide drop `at_auth` and `setCurrentAtSign`, and point from
+  `hiveStoragePath` to a storage object.
 - Evals: the two auth evals follow the new flows; two new evals cover
   logout / switching and the connection state.
 - The connections an `AtLookUpFactory` builds no longer include a file

@@ -268,8 +268,7 @@ class EnrollmentHandshake {
       try {
         // _attemptPkamAuth returns boolean value true when authentication is successful.
         // Returns UnAuthenticatedException when authentication fails.
-        pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
-            enrollmentId: enrollmentIdFromServer);
+        pkamAuthSucceeded = await atLookUp.pkamAuthenticate();
       } on UnAuthenticatedException catch (e) {
         // A refusal is an ANSWER: the atServer was reached and reported on the
         // enrollment, so this costs nothing against the budget.

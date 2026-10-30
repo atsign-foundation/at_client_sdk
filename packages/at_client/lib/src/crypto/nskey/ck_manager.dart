@@ -648,9 +648,9 @@ class CkManager {
   static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>
       switch (reached.outcome) {
         AtReachability.postureDoesNotSeed => 'seedNamespaceKeys is off',
-        AtReachability.noKeySource =>
-          'this client has no key source to file one in',
         AtReachability.notAuthorised => '$ckNs can never hold a key',
+        AtReachability.noKeyPackage =>
+          'this enrollment carries no key package, so it mints none',
         AtReachability.timedOut => 'minting one timed out',
         AtReachability.failed => 'minting one failed: ${reached.error}',
         AtReachability.alreadyReachable ||

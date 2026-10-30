@@ -18,4 +18,10 @@ void main() {
           'this package as its only import',
     );
   });
+
+  test('the other storage backends and the mixins come through it too', () {
+    expect(InMemoryAtClientStorage, isA<Type>());
+    expect(SqliteAtClientStorage, isA<Type>());
+    expect(EnrollmentUpdater, isA<Type>());
+  });
 }

@@ -1,8 +1,10 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
+import 'package:at_lookup/src/transport/at_transport.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 /// Throws `IllegalArgumentException` when [command] holds a line feed anywhere
 /// but its last character, since the atServer ends a command at a line feed.
@@ -17,24 +19,34 @@ void requireOneLine(String command) {
   }
 }
 
-/// Base class for common socket operations
+/// Base class for common transport operations
 abstract class BaseConnection extends AtConnection {
   late final AtSignLogger logger;
-  late final Socket _socket;
+  final AtTransport _transport;
   StringBuffer? buffer;
   AtConnectionMetaData? metaData;
 
-  BaseConnection(Socket? socket) {
+  /// Non-nullable: the previous `AtTransport?` parameter was dereferenced with
+  /// `!` on the next line, so a null argument was already a crash - stated in
+  /// the signature rather than discovered at runtime.
+  BaseConnection(this._transport) {
     logger = AtSignLogger(runtimeType.toString());
     buffer = StringBuffer();
-    socket?.setOption(SocketOption.tcpNoDelay, true);
-    _socket = socket!;
   }
 
   @override
-  AtConnectionMetaData? getMetaData() {
-    return metaData;
-  }
+  AtConnectionMetaData? getMetaData() => metaData;
+
+  /// Whether the transport under this connection can still carry bytes.
+  @protected
+  bool get isTransportOpen => _transport.isOpen;
+
+  /// The transport's inbound stream, cast rather than upcast: a socket's is a
+  /// `Stream<Uint8List>`, and through the wider type `transform(utf8.decoder)`
+  /// and `pipe(sink)` would pass analysis and then fail their run-time check
+  /// against `Uint8List`. A pause still reaches the transport.
+  @override
+  Stream<List<int>> get inbound => _transport.inbound.cast<List<int>>();
 
   @override
   Future<void> close() async {
@@ -42,42 +54,20 @@ abstract class BaseConnection extends AtConnection {
       logger.finer('close(): connection is already closed');
       return;
     }
-
     try {
-      var address = _socket.remoteAddress;
-      var port = _socket.remotePort;
-
-      logger.finer('close(): calling socket.destroy()'
-          ' on connection to $address:$port');
-      _socket.destroy();
+      logger.finer('close(): calling destroy()'
+          ' on connection to ${_transport.description}');
+      _transport.destroy();
     } catch (e) {
-      // Ignore errors or exceptions on a connection close
-      logger.finer('Exception "$e" while destroying socket - ignoring');
+      logger.finer('Exception "$e" while destroying transport - ignoring');
       getMetaData()!.isStale = true;
     } finally {
       getMetaData()!.isClosed = true;
     }
   }
 
-  @Deprecated('Read through BaseConnection.inbound and write raw bytes '
-      'through BaseConnection.add(). Removed in 4.0.0.')
   @override
-  Socket getSocket() {
-    return _socket;
-  }
-
-  /// The bytes arriving from the far end: the socket, so pausing a
-  /// subscription to it reaches the far end.
-  ///
-  /// Cast, not just upcast: the socket is a `Stream<Uint8List>`, and through
-  /// the wider type `transform(utf8.decoder)` and `pipe(sink)` would pass
-  /// analysis and then fail their run-time check against `Uint8List`.
-  Stream<List<int>> get inbound => getSocket().cast<List<int>>();
-
-  /// Writes raw bytes, without waiting for them to leave.
-  ///
-  /// Unlike [write], does not update [AtConnectionMetaData.lastAccessed].
-  void add(List<int> bytes) => getSocket().add(bytes);
+  void add(List<int> bytes) => _transport.add(bytes);
 
   /// Writes [data] and flushes it.
   ///
@@ -87,12 +77,11 @@ abstract class BaseConnection extends AtConnection {
   Future<void> write(String data) async {
     requireOneLine(data);
     if (isInValid()) {
-      //# Replace with specific exception
       throw ConnectionInvalidException('write(): Connection is invalid');
     }
     try {
-      getSocket().write(data);
-      await getSocket().flush();
+      _transport.add(utf8.encode(data));
+      await _transport.flush();
       getMetaData()!.lastAccessed = DateTime.now().toUtc();
     } on Exception {
       getMetaData()!.isStale = true;

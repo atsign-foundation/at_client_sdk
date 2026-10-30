@@ -50,8 +50,8 @@ Future<AtSyncQueue> openHiveSyncQueue(String atSign,
   final claim = '${HiveInstances.canonicalPathFor(storagePath)}::$name';
   if (!_claimed.add(claim)) {
     throw StateError('the sync queue of $atSign under $storagePath is already '
-        'open for another client; give this one its own hiveStoragePath, or '
-        'stop that client first');
+        'open for another client; give this one storage of its own, or stop '
+        'that client first');
   }
   try {
     final box = await openReportingOnce(

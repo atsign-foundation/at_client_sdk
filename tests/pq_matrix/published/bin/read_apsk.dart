@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:pq_matrix_published/arm.dart' show publishedPreference;
 import 'package:pq_matrix_scenario/pq_matrix_scenario.dart'
-    show ClientSpec, attachWithoutKeySource, connect, readPeerApskAsReleasedReader;
+    show ClientSpec, connect, readPeerApskAsReleasedReader;
+import 'package:pq_matrix_scenario/released.dart' show attachWithDemoAtChops;
 
 /// Reports what at_client **3.14.0** makes of an enrollment's `_apsk`.
 ///
@@ -33,7 +34,7 @@ Future<void> main(List<String> args) async {
   final client = await connect(
     spec: spec,
     preference: publishedPreference(spec, 'published'),
-    attach: attachWithoutKeySource,
+    attach: attachWithDemoAtChops,
   );
 
   final verdict = await readPeerApskAsReleasedReader(

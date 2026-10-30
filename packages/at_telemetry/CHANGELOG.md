@@ -10,6 +10,7 @@
   send to the Control Center".
 - docs: the basic example's event name no longer starts with `atsign.`, which
   belongs to Atsign.
+- chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
 
 ## 0.1.0
 

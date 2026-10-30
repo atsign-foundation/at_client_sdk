@@ -15,6 +15,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData;
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
+import 'package:pq_matrix_scenario/current.dart' show attachWithDemoKeys;
 import 'package:test/test.dart';
 import 'package:upgrade_scenario/upgrade_scenario.dart';
 
@@ -65,7 +66,7 @@ void main() {
   Future<AtClient> open(ClientSpec spec) => connect(
       spec: spec,
       preference: upgradePreference(spec),
-      attach: attachWithoutKeySource);
+      attach: attachWithDemoKeys);
 
   late AtClient peerClient;
 
@@ -336,7 +337,7 @@ Future<Map<String, Object?>> _seedHere(ClientSpec spec, String peer) async {
   final client = await connect(
       spec: spec,
       preference: upgradePreference(spec),
-      attach: attachWithoutKeySource);
+      attach: attachWithDemoKeys);
   final facts = await seed(client,
       me: spec.atSign, peer: peer, namespace: spec.namespace);
   final observed = await snapshot(client,

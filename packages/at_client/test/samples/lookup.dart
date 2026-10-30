@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart' show authenticatorForCramSecret;
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
 import 'package:at_lookup/at_lookup_io.dart';
 
@@ -15,7 +16,7 @@ void lookItUp(String atSign) async {
       atSign: atSign,
       rootDomain: AtRootDomain('test.do-sf2.atsign.zone', 64),
       authenticator: authenticatorForCramSecret(atSign, cramSecret));
-  var result = await lookUp.scan();
+  var result = await lookUp.executeVerb(ScanVerbBuilder());
   print(result);
-  await lookUp.close();
+  await lookUp.stop();
 }

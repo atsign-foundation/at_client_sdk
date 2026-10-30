@@ -16,8 +16,6 @@ import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -202,20 +200,26 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Sync's own connection, built from the same key material the client
+  /// Sync's own connection, built from the same credentials the client
   /// holds, so its authenticator matches the client's rather than falling to
-  /// a different credential: the keyfile's keypair when it holds one, the
-  /// client's `AtChops` when it holds none.
+  /// a different one, and over the client's transport.
+  ///
+  /// Throws an [ArgumentError] for a client that is not an [AtClientImpl],
+  /// which holds no transport to build it with; pass `remoteSecondary` to
+  /// [create] instead.
   @visibleForTesting
-  static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
-      RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-          atChops: atClient.atChops,
-          enrollmentId: atClient.enrollmentId,
-          signingAlgoType: signingAlgoOf(atClient),
-          atKeysIo: atClient.atKeysIo,
-          secondaryAddressFinder:
-              atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
-          lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
+  static RemoteSecondary remoteSecondaryFor(AtClient atClient) {
+    if (atClient is! AtClientImpl) {
+      throw ArgumentError.value(atClient, 'atClient',
+          'holds no transport to build sync\'s connection with: pass one');
+    }
+    return RemoteSecondary(
+        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+        enrollmentId: atClient.enrollmentId,
+        atKeysIo: atClient.atKeysIo,
+        secondaryAddressFinder: atClient.secondaryAddressFinder,
+        lookUps: atClient.lookUps);
+  }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary,
       {required bool ownsRemoteSecondary})
@@ -457,12 +461,8 @@ class SyncServiceImpl implements SyncService {
     final lc = _atClient.getLocalSecondary();
     if (lc != null) {
       try {
-        // syncQueueSize is async only because of the lazy-open guard;
-        // once opened it returns from the in-memory length. We don't
-        // await here to keep _informSyncProgress synchronous (its
-        // callers fire it from within sync rounds where awaits would
-        // change ordering); instead we read the cached value via the
-        // opened queue and skip if it isn't open yet.
+        // NOTE: read synchronously; awaiting here would move this progress
+        // event relative to the sync round it describes.
         final q = lc.syncQueueSyncSnapshot;
         if (q != null) syncProgress.pendingPushCount = q;
       } on Exception {

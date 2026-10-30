@@ -7,8 +7,6 @@ import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_utils/at_logger.dart';
 
-//#TODO Replace calls to methods in this class with at_chops methods and
-// move this class to test folder in next major release
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
 
@@ -60,7 +58,7 @@ class EncryptionUtil {
     return rsaPublicKey.encrypt(aesKey);
   }
 
-  @Deprecated('Use AtChops package')
+  @Deprecated('Use the at_chops algorithm classes')
   static String decryptKey(String aesKey, String privateKey) {
     var rsaPrivateKey = RSAPrivateKey.fromString(privateKey);
     return rsaPrivateKey.decrypt(aesKey);

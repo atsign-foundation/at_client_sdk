@@ -1,9 +1,15 @@
-## 2.0.0-rc9
+## 2.0.0
 
-- feat: `at_activate list` shows whether each approved enrollment's keys are
-  anchored to the atSign's signing root, naming a key that is not.
-- build: requires `at_client` ^3.15.0-rc9.
-
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: at_onboarding_cli is a deprecated re-export of at_client_cli,
+  which now carries its code and its at_activate and at_register tools.
+  Depend on at_client_cli; `dart pub global activate at_client_cli` installs
+  the tools, and activating this package still does.
+- breaking: `AtOnboardingService`, `AtOnboardingPreference`,
+  `OnboardingUtil`, `AuthKeyType`, `EnrollmentDetails` and
+  `PrintAllArgParserUsage` are gone; at_client_cli's README names what
+  replaces each. `createAtClient` comes through from at_client_cli with the
+  same parameters.
 ## 2.0.0-rc8
 
 - feat: `at_activate list` shows the key expiry each enrollment asked for and

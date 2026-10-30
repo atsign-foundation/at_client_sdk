@@ -11,14 +11,11 @@ import 'test_utils/test_crypto_provider.dart';
 void main() {
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
-    late MockAtChops mockAtChops;
     late GetResponseTransformer transformer;
     setUp(() {
       mockAtClient = MockAtClient();
-      mockAtChops = MockAtChops();
       transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
       // Data in these tests carries no appMetadata.providerId, so the get path
       // looks up the 'legacy' provider; register a CipherProvider under that id
       // so the runtime resolves it.

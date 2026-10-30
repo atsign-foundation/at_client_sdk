@@ -25,6 +25,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/unreadable_keys_io.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -175,6 +176,30 @@ void main() {
       expect(await mint(), [SigningAlgoType.mldsa65]);
       expect(await mint(), isEmpty);
       expect(updates, hasLength(1));
+    });
+
+    test('a keyfile read that fails stops the reconcile before it mints',
+        () async {
+      await keysIo.update(atSign.toAtsign(), (keys) {
+        keys.fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: base64Encode(utf8.encode('held-pub')),
+            privateKey: base64Encode(utf8.encode('held-priv')));
+        return true;
+      });
+      final io = UnreadableKeysIo(failing: 1);
+      await io.write(atSign, await keysIo.read(atSign));
+      when(() => atClient.atKeysIo).thenReturn(io);
+
+      await expectLater(
+          minter().reconcileSigningKeys(), throwsA(isA<KeyfileUnreadable>()),
+          reason: 'a read that fails is not a keyfile holding no signing key, '
+              'so the reconcile stops with that read\'s error');
+
+      expect(updates, isEmpty);
+      expect(
+          (await io.read(atSign)).signingKeysFor(enrollmentId), hasLength(1));
     });
   });
 

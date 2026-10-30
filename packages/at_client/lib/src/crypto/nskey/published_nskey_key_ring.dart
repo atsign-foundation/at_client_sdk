@@ -2,13 +2,21 @@ import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:convert' show jsonDecode;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysIo, AtKeysSourceAbsentException;
 import 'package:at_client/src/crypto/crypto.dart'
     show FiledNskeyPrivate, SignalsPrivateFiling;
+import 'package:at_client/src/enroll/at_sign_credential.dart'
+    show isAtSignCredential;
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show isSeedableNamespace;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart'
+    show collectConveyedKeyMaterial;
 import 'package:at_client/src/client/server_mutex.dart'
     show ServerMutexLease, checkedServerMutexTtl;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
@@ -28,15 +36,17 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
 
 /// Asks this atSign's other enrollments for one missing nskey private, then
 /// waits for a holder to answer and files the answer.
 ///
-/// The wait is unawaited and best-effort: a holder may be offline for a long
-/// time and a read must not block on one.
+/// Throws only when the ask cannot be sent. Otherwise completes once the
+/// answer is filed, the wait for it ends, or no other enrollment was there to
+/// ask, so a caller can tell an ask that is still outstanding; a read must not
+/// await it, since a holder may be offline for a long time.
 Future<void> requestAndFileNskeyPrivate(
   PairwiseSecretSharing sharing,
   NskeyPrivateFiling? filing,
@@ -45,25 +55,30 @@ Future<void> requestAndFileNskeyPrivate(
   required AtSignLogger logger,
   Duration timeout = NskeyPrivateFiling.conveyanceWait,
 }) async {
-  await sharing.requestSecretsFromNamespace(namespace, names: [secretName]);
-  unawaited(sharing
-      .waitForSecret(namespace, secretName, timeout: timeout)
-      .then((secret) async => await filing?.file(secret) ?? false)
-      .then((filed) {
-    if (filed) {
+  final sent =
+      await sharing.requestSecretsFromNamespace(namespace, names: [secretName]);
+  if (sent == 0) {
+    logger.info('Wanted the nskey private $namespace:$secretName but found no '
+        'other key package to ask');
+    return;
+  }
+  logger.info('Asked the other enrollments for the nskey private '
+      '$namespace:$secretName; the answer is filed when a holder replies');
+  try {
+    final secret =
+        await sharing.waitForSecret(namespace, secretName, timeout: timeout);
+    if (await filing?.file(secret) ?? false) {
       logger.info('Filed the nskey private $namespace:$secretName that a '
           'holder conveyed on request');
     }
-  }).catchError((Object e) {
-    if (e is StoppedException) {
-      logger.warning('Stopped waiting for the nskey private '
-          '$namespace:$secretName: the client stopped, and the next start '
-          'asks again');
-      return;
-    }
+  } on StoppedException {
+    logger.warning('Stopped waiting for the nskey private '
+        '$namespace:$secretName: the client stopped, and the next start '
+        'asks again');
+  } catch (e) {
     logger.info('No holder conveyed $namespace:$secretName within the wait; '
-        'the next start asks again: $e');
-  }));
+        'a read miss after it asks again: $e');
+  }
 }
 
 /// Checks that a fetched advertisement really came from the atSign that claims
@@ -92,12 +107,20 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 
   @override
   Future<NskeyAdvertisement> verify(String owner, String payload) async {
-    final SignedEnvelope envelope;
+    final Object? decoded;
     try {
-      envelope = SignedEnvelope.fromJson(jsonDecode(payload) as Map);
+      decoded = jsonDecode(payload);
     } on FormatException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner is not JSON: ${e.message}');
+    }
+    if (decoded is! Map) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner is not a JSON object');
+    }
+    final SignedEnvelope envelope;
+    try {
+      envelope = SignedEnvelope.fromJson(decoded);
     } on AtSigningVerificationException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner carries no APKAM signature, so the '
@@ -147,20 +170,35 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
       }
     }
     if (understood == 0) {
-      throw AtSigningVerificationException(
+      throw _UnusableAdvertisementException(
           'the advertised nskey for $owner offers only key-establishment '
           'algorithms this build cannot encapsulate to '
           '(${advertisement.keys.map((k) => '"${k.alg}"').join(', ')}) — '
           'refusing rather than sealing under one it did not name');
     }
     if (sealable == 0) {
-      throw AtSigningVerificationException(
+      throw _UnusableAdvertisementException(
           'the advertised nskey for $owner retires every key this build can '
           'encapsulate to, so it names nothing to seal to now');
     }
     return advertisement;
   }
 }
+
+/// An advertisement whose signature verifies and that names nothing this build
+/// can encapsulate to now.
+class _UnusableAdvertisementException extends AtSigningVerificationException {
+  _UnusableAdvertisementException(super.message);
+}
+
+/// Whether [e], from verifying this atSign's own advertisement, says the record
+/// may be minted over: it was read and does not verify, or the enrollment that
+/// signed it publishes no `_apsk`.
+bool _replaceableOwnAdvertisement(Object e) =>
+    (e is AtSigningVerificationException &&
+        e is! _UnusableAdvertisementException) ||
+    e is AtKeyNotFoundException ||
+    e is KeyNotFoundException;
 
 /// One freshly minted key: the seed that is filed, and the pair it derives.
 typedef _MintedKey = ({
@@ -178,6 +216,9 @@ typedef _CachedAdvertisement = ({
   String? payload,
 });
 
+/// One generation of this client's own atSign.
+typedef _OwnGeneration = ({String namespace, String nskeyKid});
+
 /// Everything a mint computes **before** it holds the lock — the keys, the
 /// advertisement built from them, and this enrollment's signature over it.
 typedef _PreparedMint = ({
@@ -185,6 +226,19 @@ typedef _PreparedMint = ({
   NskeyAdvertisement advertisement,
   String signedPayload,
 });
+
+/// Rotates onto a fresh generation under the mint lock the caller's mint still
+/// holds, conveying through [conveyFirst] and then running [afterPublish] as a
+/// mint does.
+typedef NskeyRotateHoldingLease = Future<NskeyAdvertisement> Function(
+    {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+    Future<void> Function(NskeyAdvertisement published)? afterPublish});
+
+/// What a mint or a rotation runs once its advertisement is published, handed
+/// that advertisement and a rotation under the lock it still holds; answers
+/// the generation published after it, or null when it published nothing more.
+typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
+    NskeyAdvertisement published, NskeyRotateHoldingLease rotate);
 
 /// An [NskeyKeyRing] that publishes the owner's nskey and discovers other
 /// atSigns' by `plookup`.
@@ -220,6 +274,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// sibling's rotation — so it re-reads at once rather than when
   /// [advertisementTtl] runs out. It is listened to from the first read of an
   /// own advertisement, so a client that never reads one subscribes to nothing.
+  ///
+  /// [askOnReadMiss] false makes a miss on an own private touch nothing but
+  /// local storage: no advertisement read, no fetch and no ask.
   PublishedNskeyKeyRing(
     this._atClient, {
     AdvertisedKeyVerifier? verifier,
@@ -227,15 +284,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     this.advertisementStaleGrace = const Duration(minutes: 15),
     MintLock? mintLock,
     Duration lockTtl = mintLockTtl,
+    this.lockBudgetPerMember = const Duration(seconds: 2),
     NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
+    Future<void> Function()? fetchConveyance,
     Stream<DataEvent> Function()? ownChanges,
+    bool askOnReadMiss = true,
   })  : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
         verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
         _requestConveyance = requestConveyance,
+        _fetchConveyance = fetchConveyance,
         _ownChanges = ownChanges,
+        _askOnReadMiss = askOnReadMiss,
         _signer = AtClientEnvelopeSigner(_atClient) {
     _privateFiling = privateFiling ?? _filingFor(_atClient, this);
   }
@@ -264,26 +326,73 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// The request is store-and-forward: any current holder answers when it next
   /// runs, and whoever supplies this owns waiting for the answer and filing it
   /// — see [requestAndFileNskeyPrivate]. Null is not silence, since a ring
-  /// with a [privateFiling] derives its own ask; null with no filing to derive
-  /// from is what turns asking off.
+  /// with a [privateFiling] derives its own ask; it asks nothing with no
+  /// filing to derive from, or with `askOnReadMiss` false.
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
 
-  /// When each generation was last asked for, so a burst of failed reads
-  /// collapses to one broadcast without a generation ever falling permanently
-  /// silent.
-  final Map<String, DateTime> _askedConveyance = {};
+  /// Fetches the conveyance records addressed to this enrollment from the
+  /// atServer and files what they carry, when [privateHalf] comes up empty for
+  /// an own generation; derived like [_requestConveyance] when null.
+  final Future<void> Function()? _fetchConveyance;
 
-  /// How long after asking for a generation this ring stays quiet about it.
+  final bool _askOnReadMiss;
+
+  /// The on-miss fetch in flight, which every concurrent miss shares.
+  Future<void>? _fetching;
+
+  /// When the last on-miss fetch started; the startup collection does not
+  /// count.
+  DateTime? _fetchedOnMiss;
+
+  /// The kids each own namespace's advertisement named when a miss last read
+  /// it, kept apart from the advertisements writes seal to.
+  final Map<String, Set<String>> _kidsReadOnMiss = {};
+
+  /// When a miss last read each own namespace's advertisement.
+  final Map<String, DateTime> _readOnMissAt = {};
+
+  /// The on-miss advertisement read in flight per namespace, which every
+  /// concurrent miss in it shares.
+  final Map<String, Future<void>> _readingOnMiss = {};
+
+  /// When each own generation was last asked about. Stamps older than
+  /// [askCooldown] are dropped.
+  final Map<_OwnGeneration, DateTime> _askedAt = {};
+
+  /// The asks whose answer is still awaited, by whichever route they went out.
+  final Map<_OwnGeneration, Future<void>> _outstanding = {};
+
+  /// How many namespaces this ring asked about within the last [askCooldown].
+  @visibleForTesting
+  int get namespacesAskedRecently =>
+      _askedAt.keys.map((asked) => asked.namespace).toSet().length;
+
+  /// How long after an on-miss fetch, an on-miss read of an own advertisement,
+  /// or an ask about a generation, this ring stays quiet about it.
   ///
   /// Long enough to collapse the burst a synced backlog produces, short
-  /// enough that a request nobody answered is asked again while the reader
-  /// that needs it is still waiting.
+  /// enough that an atServer that could not be reached is tried again while
+  /// the reader that needs it is still waiting.
   @visibleForTesting
   Duration askCooldown = const Duration(seconds: 5);
 
+  /// How long a miss on an own private waits for each of the on-miss read of
+  /// the own advertisement and the fetch of this enrollment's conveyance
+  /// records.
+  ///
+  /// Each goes on past it: a fetch then files a private that releases
+  /// whatever parked waiting for one, and a read records the kids a later
+  /// miss sees.
+  @visibleForTesting
+  Duration fetchOnMissTimeout = const Duration(seconds: 10);
+
   /// Serialises minting between this atSign's own enrollments.
   final MintLock mintLock;
+
+  /// What each enrollment listed for a namespace adds to [lockTtl] for a mint
+  /// that conveys before it publishes, so the lock outlasts the conveyance.
+  final Duration lockBudgetPerMember;
 
   /// How long this ring holds a namespace's mint lock once it has taken it.
   ///
@@ -387,16 +496,22 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// here is resolved by adopting the winner's advertisement and returning it,
   /// so a call can succeed having rotated nothing. Use [rotate] to supersede a
   /// generation.
-  Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
+  ///
+  /// [conveyFirst] is handed the kids of what is about to be published, after
+  /// their privates are filed and before the advertisement goes out; if it
+  /// throws, nothing is published. [afterPublish] runs once it is out, still
+  /// under the lock, and what it answers is returned in its place. [lockTtl]
+  /// overrides the ring's for this call.
+  Future<NskeyAdvertisement> mintAndPublish(String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
+      Duration? lockTtl}) async {
     final owner = _atClient.getCurrentAtSign()!;
     final prepared = await _prepareMint(owner, namespace);
     final minted = await mintLock.withLock(
-        nskeyMintLockKey(owner, namespace, ttl: lockTtl),
-        (lease) => _mintUnlessPublished(owner, namespace, lease, prepared),
-        // NOTE: safe only because this critical section re-reads what is
-        // published and adopts it; `rotate` takes the same lock without this,
-        // so that the cooldown binds it.
-        ownLockIsNotContention: true);
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
+        (lease) => _mintUnlessPublished(
+            owner, namespace, lease, prepared, conveyFirst, afterPublish));
     if (minted != null) return minted;
 
     final published = await publishedAdvertisement(owner, namespace);
@@ -410,9 +525,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return published;
     }
 
-    throw StateError(
-        'another enrollment holds the mint lock for $owner:$namespace and has '
-        'published no advertisement yet, so this client has no namespace key '
+    throw StateError('another client of this atSign holds the mint lock for '
+        '$owner:$namespace and has published no advertisement yet, so this client has no namespace key '
         'to seal to and must not mint a second one; retry after the lock\'s '
         'ttl elapses');
   }
@@ -442,12 +556,18 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// already fetched it goes on sealing to a generation its owner will never
   /// look for. Adopting is right only for the cold-start mint; [rotate] runs
   /// [_mint] directly.
-  Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
-      String namespace, ServerMutexLease lease, _PreparedMint prepared) async {
+  Future<NskeyAdvertisement> _mintUnlessPublished(
+      String owner,
+      String namespace,
+      ServerMutexLease lease,
+      _PreparedMint prepared,
+      Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish) async {
     final published = await publishedAdvertisement(owner, namespace);
     if (published == null) {
-      final filed = await _filedUnpublished(owner, namespace);
-      return _mint(owner, namespace, lease, filed ?? prepared);
+      await _retireUnpublished(owner, namespace);
+      return _mint(owner, namespace, lease, prepared,
+          conveyFirst: conveyFirst, afterPublish: afterPublish);
     }
     _logger.info(
         'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
@@ -463,9 +583,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// earlier generation still open.
   ///
   /// Throws where [mintAndPublish] adopts — on losing the mint lock, and on
-  /// finding nothing published to supersede.
+  /// finding nothing published to supersede. [conveyFirst], [afterPublish] and
+  /// [lockTtl] are as for [mintAndPublish].
   Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
-      String namespace) async {
+      String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      NskeyAfterPublish? afterPublish,
+      Duration? lockTtl}) async {
     final owner = _atClient.getCurrentAtSign()!;
     final superseded = await publishedAdvertisement(owner, namespace);
     if (superseded == null) {
@@ -476,14 +600,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
     final prepared = await _prepareMint(owner, namespace);
     final rotated = await mintLock.withLock(
-        nskeyMintLockKey(owner, namespace, ttl: lockTtl),
-        (lease) => _mint(owner, namespace, lease, prepared));
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
+        (lease) => _mint(owner, namespace, lease, prepared,
+            conveyFirst: conveyFirst, afterPublish: afterPublish));
     if (rotated == null) {
-      throw StateError(
-          'another enrollment holds the mint lock for $owner:$namespace, so '
-          'this rotation did not happen; retry once its ttl elapses. Reporting '
-          'success here would leave the excluded enrollment holding the live '
-          'generation');
+      throw StateError('another client of this atSign holds the mint lock for '
+          '$owner:$namespace, so this rotation did not happen; retry once its '
+          'ttl elapses. Reporting success here would leave the excluded '
+          'enrollment holding the live generation');
     }
     _logger.info('Rotated $owner:$namespace from ${superseded.nskeyKid} to '
         '${rotated.nskeyKid}; the superseded private is retained so records '
@@ -501,8 +625,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// ⚠️ **The conveyance excludes nobody** — a child an enrollment self-spawned
   /// before being revoked receives what this add conveys.
-  @experimental
-  Future<NskeyAdvertisement?> add(String namespace) async {
+  ///
+  /// [conveyFirst] is handed only the kids this add mints; [lockTtl] is as for
+  /// [mintAndPublish].
+  Future<NskeyAdvertisement?> add(String namespace,
+      {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+      Duration? lockTtl}) async {
     final owner = _atClient.getCurrentAtSign()!;
     final current = await publishedAdvertisement(owner, namespace);
     if (current == null) {
@@ -520,7 +648,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         createdAt: current.createdAt);
 
     final added = await mintLock.withLock(
-        nskeyMintLockKey(owner, namespace, ttl: lockTtl), (lease) async {
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl ?? this.lockTtl),
+        (lease) async {
       // NOTE: re-read inside the lock. The check above ran outside it, and a
       // rotation landing in between would be silently rolled back by
       // publishing material built from a generation that is gone.
@@ -533,7 +662,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         return null;
       }
       return _mint(owner, namespace, lease, prepared,
-          assertUpdatedAt: fresh.updatedAt);
+          assertUpdatedAt: fresh.updatedAt, conveyFirst: conveyFirst);
     });
 
     if (added == null) {
@@ -546,6 +675,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         '${added.keys.map((k) => '${k.alg}/${k.kid}').join(', ')}');
     return added;
   }
+
+  /// Which of this client's configured algorithms [current] offers no key for,
+  /// which is what [add] would mint.
+  List<String> missingKeyAlgorithms(NskeyAdvertisement current) =>
+      _missingAlgorithms(current);
 
   /// Which of this client's configured algorithms [current] offers no key for.
   ///
@@ -602,46 +736,22 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return _preparedFrom(minted, retaining: retaining, createdAt: createdAt);
   }
 
-  /// The generation this client filed for `(owner, namespace)` and did not
-  /// publish, prepared for publishing, or null when it holds none.
+  /// Retires every active private filed for [namespace], whichever enrollment
+  /// minted it, before a cold-start mint with nothing published there.
   ///
-  /// Asked only when nothing is published there, which is what a stop between
-  /// a mint's filing and its publish leaves: minting again would orphan the
-  /// filed private. For each algorithm the mint wants, the private filed most
-  /// recently under it is taken; a filing missing one of them is minted afresh
-  /// rather than published short.
-  Future<_PreparedMint?> _filedUnpublished(
-      String owner, String namespace) async {
+  /// A cold-start mint always publishes a fresh generation, so none filed
+  /// before it is ever published. A retired private still opens what was
+  /// sealed to it.
+  Future<void> _retireUnpublished(String owner, String namespace) async {
     final filing = privateFiling;
-    if (filing == null) return null;
+    if (filing == null) return;
     final filed = await filing.filedFor(namespace);
-    if (filed.isEmpty) return null;
-
-    final minted = <_MintedKey>[];
-    for (final keyAlgo in wantedKeyAlgorithms()) {
-      final newest = filed
-          .where((f) => f.keyAlgo == keyAlgo)
-          .fold<FiledNskeySeed?>(
-              null,
-              (best, f) => best == null || f.createdAt.isAfter(best.createdAt)
-                  ? f
-                  : best);
-      if (newest == null) return null;
-      final pair = await SecretSharingAlgos.kemFor(keyAlgo)!
-          .keyPairFromSeed(newest.seed.bytes);
-      if (nskeyKidOf(pair.publicKey) != newest.nskeyKid) return null;
-      minted.add((
-        keyAlgo: keyAlgo,
-        seed: newest.seed,
-        publicKey: pair.publicKey,
-        secretKey: pair.secretKey,
-      ));
-    }
-    _logger.info('Publishing the nskey generation '
-        '${minted.map((k) => nskeyKidOf(k.publicKey)).join(', ')} this client '
-        'filed for $owner:$namespace and never published, rather than minting '
-        'another');
-    return _preparedFrom(minted);
+    if (filed.isEmpty) return;
+    final kids = [for (final f in filed) f.nskeyKid];
+    await filing.retire(namespace, kids);
+    _logger.info('Retired the nskey private(s) ${kids.join(', ')} filed for '
+        '$owner:$namespace, none of them published, before minting a fresh '
+        'generation');
   }
 
   /// The advertisement for [minted] and this enrollment's signature over it.
@@ -682,7 +792,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// implements one can mint material for it and a generation holds a key per
   /// algorithm the fleet needs. A duplicate is dropped, because the second key
   /// under one algorithm is minted, filed and conveyed for nobody.
-  @visibleForTesting
   List<String> wantedKeyAlgorithms() {
     final configured = _atClient.getPreferences()?.keyEstablishmentAlgorithms ??
         const [SecretSharingAlgos.xWing];
@@ -701,12 +810,17 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// rotation and a cold-start mint pass nothing and take a fresh stamp, which
   /// is what makes `updatedAt` mean *when this generation was minted*; never a
   /// locally computed time.
+  ///
+  /// [afterPublish] runs once the advertisement is out, handed a rotation under
+  /// [lease], and what it answers is returned in place of this generation.
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
     ServerMutexLease lease,
     _PreparedMint prepared, {
     DateTime? assertUpdatedAt,
+    Future<void> Function(List<String> nskeyKids)? conveyFirst,
+    NskeyAfterPublish? afterPublish,
   }) async {
     final advertisement = prepared.advertisement;
     final payload = prepared.signedPayload;
@@ -720,12 +834,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final filing = privateFiling;
     if (filing != null) {
       for (final key in prepared.minted) {
-        // NOTE: a generation resumed from the keyfile is already filed, and a
-        // second store of it reports nothing stored.
-        if (await filing.readSeed(namespace, nskeyKidOf(key.publicKey)) !=
-            null) {
-          continue;
-        }
         final stored = await filing.store(
           namespace: namespace,
           nskeyKid: nskeyKidOf(key.publicKey),
@@ -750,6 +858,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // NOTE: the verification key must land before the advertisement that
     // depends on it, or a peer has nothing to check the signature against.
     await _signer.publishPublicSigningKey();
+
+    // NOTE: conveyed before the publish, so every enrollment it reaches holds
+    // the private by the time anyone can seal to the generation; a mint that
+    // dies here leaves a generation nobody can seal to.
+    await conveyFirst
+        ?.call([for (final key in prepared.minted) nskeyKidOf(key.publicKey)]);
 
     // NOTE: checked last, not earlier. A keygen, a keyfile write and a
     // signature can each take arbitrarily long on a suspended or loaded
@@ -781,7 +895,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _mintedPublics[generation] = PackageKey.fromBytes(
           use: SecretSharingAlgos.useEnc, alg: key.keyAlgo, pub: key.publicKey);
     }
-    return advertisement;
+    if (afterPublish == null) return advertisement;
+    final next = await afterPublish(
+        advertisement,
+        ({conveyFirst, afterPublish}) async =>
+            _mint(owner, namespace, lease, await _prepareMint(owner, namespace),
+                conveyFirst: conveyFirst,
+                afterPublish: afterPublish == null
+                    ? null
+                    : (published, _) async {
+                        await afterPublish(published);
+                        return null;
+                      }));
+    return next ?? advertisement;
   }
 
   @override
@@ -956,7 +1082,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// ⚠️ **At this atSign's own address an advertisement that does not verify
   /// also reads as none**, so a corrupt or hostile write can be minted over;
-  /// for a peer's address that failure propagates instead.
+  /// for a peer's address that failure propagates instead. Not being able to
+  /// fetch what it is checked against, and an advertisement that verifies but
+  /// names nothing this build can seal to, throw at both.
   Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
       publishedRecord(String owner, String namespace) async {
     final AtValue value;
@@ -976,7 +1104,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     try {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
-      if (e is StoppedException || owner != _atClient.getCurrentAtSign()) {
+      if (owner != _atClient.getCurrentAtSign() ||
+          !_replaceableOwnAdvertisement(e)) {
         rethrow;
       }
       _logger.warning(
@@ -998,12 +1127,73 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       String owner, String namespace, String nskeyKid) async {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (held != null || owner != _atClient.getCurrentAtSign()) return held;
+    if (!_askOnReadMiss) return null;
+
+    // NOTE: no fetch and no ask for a generation no own advertisement names.
+    if (!await _advertisedOwn(namespace, nskeyKid)) return null;
+
+    await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
+        onTimeout: () => _logger.info('The fetch of the conveyance records '
+            'for $namespace:$nskeyKid has run past ${fetchOnMissTimeout.inMilliseconds}ms, '
+            'so this miss asks the other enrollments while it goes on'));
+    final fetched = await heldPrivateHalf(owner, namespace, nskeyKid);
+    if (fetched != null) return fetched;
 
     // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
     // owns waiting for the answer and filing it; nothing else does, so an ask
     // wired without that repairs the client only at its next start.
     _askForMissingPrivate(namespace, nskeyKid);
     return null;
+  }
+
+  /// How this ring fetches its own conveyance records, supplied or derived;
+  /// null when there is no key source to file into.
+  Future<void> Function()? get _fetch {
+    final supplied = _fetchConveyance;
+    if (supplied != null) return supplied;
+    final keysIo = _atClient.atKeysIo;
+    if (keysIo == null || privateFiling == null) return null;
+    return () async {
+      await collectConveyedKeyMaterial(_atClient, keysIo, ring: this);
+    };
+  }
+
+  /// Fetches this enrollment's conveyance records at most once per
+  /// [askCooldown], whichever generation missed, sharing a fetch already in
+  /// flight: one fetch files every record waiting, not only the one missed.
+  Future<void> _fetchOnMiss(String namespace, String nskeyKid) {
+    final fetch = _fetch;
+    if (fetch == null) return Future.value();
+    final inFlight = _fetching;
+    if (inFlight != null) return inFlight;
+    final fetchedAt = _fetchedOnMiss;
+    if (fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < askCooldown) {
+      return Future.value();
+    }
+    _fetchedOnMiss = DateTime.now();
+    final fetching = _fetchLogged(fetch, namespace, nskeyKid).whenComplete(() {
+      _fetching = null;
+    });
+    _fetching = fetching;
+    return fetching;
+  }
+
+  /// [fetch], with a failure logged rather than thrown, since the ask that
+  /// follows is the fallback.
+  Future<void> _fetchLogged(
+      Future<void> Function() fetch, String namespace, String nskeyKid) async {
+    try {
+      await fetch();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      logSwallowed(
+          _logger,
+          e,
+          'Could not fetch this enrollment\'s conveyance records for '
+          '$namespace:$nskeyKid; asking the other enrollments instead: $e',
+          routine: true);
+    }
   }
 
   @override
@@ -1063,35 +1253,180 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         logger: _logger);
   }
 
-  /// Whether a read miss on an own generation will broadcast a pull: a ring
-  /// that answers false cannot heal, however the rest of it is wired.
-  @visibleForTesting
-  bool get asksOnReadMiss => _ask != null;
+  /// Whether an own advertisement this ring holds names [nskeyKid]: the copy
+  /// writes seal to, or the one a miss last read.
+  bool _namesOwn(String namespace, String nskeyKid) {
+    final owner = _atClient.getCurrentAtSign();
+    if (owner == null) return false;
+    final cached = _remote[_scope(owner, namespace)]
+            ?.advertisement
+            .keys
+            .any((key) => key.kid == nskeyKid) ??
+        false;
+    return cached || (_kidsReadOnMiss[namespace]?.contains(nskeyKid) ?? false);
+  }
 
-  void _askForMissingPrivate(String namespace, String nskeyKid) {
-    final ask = _ask;
-    if (ask == null) return;
-    final generation = _generation('own', namespace, nskeyKid);
-    final asked = _askedConveyance[generation];
-    if (asked != null && DateTime.now().difference(asked) < askCooldown) {
-      return;
+  /// Whether this atSign advertises [nskeyKid] in [namespace].
+  ///
+  /// When no copy this ring holds names it, reads the published advertisement,
+  /// at most once per [askCooldown] per namespace and only for a namespace
+  /// [_knowsOwn] accepts.
+  Future<bool> _advertisedOwn(String namespace, String nskeyKid) async {
+    if (_namesOwn(namespace, nskeyKid)) return true;
+    if (!await _knowsOwn(namespace)) return false;
+    await _readOwnOnMiss(namespace).timeout(fetchOnMissTimeout,
+        onTimeout: () => _logger.info('The read of the own advertisement for '
+            '$namespace has run past ${fetchOnMissTimeout.inMilliseconds}ms, '
+            'so this miss on $nskeyKid fetches and asks nothing'));
+    return _namesOwn(namespace, nskeyKid);
+  }
+
+  /// Whether this ring holds an own advertisement for [namespace], or the
+  /// keyfile holds an nskey private for it or names it among this
+  /// enrollment's grants.
+  Future<bool> _knowsOwn(String namespace) async {
+    final owner = _atClient.getCurrentAtSign();
+    if (owner == null) return false;
+    if (_remote.containsKey(_scope(owner, namespace))) return true;
+    final filing = privateFiling;
+    if (filing == null) return false;
+    if ((await filing.readAllWhere((ns) => ns == namespace)).isNotEmpty) {
+      return true;
     }
-    _askedConveyance[generation] = DateTime.now();
+    return _grantedOwn(filing.keysIo, owner, namespace);
+  }
 
-    final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
-    unawaited(ask(namespace, secretName).then((_) {
-      _logger.info('Asked the other enrollments for the nskey private '
-          '$namespace:$nskeyKid; the answer is filed when a holder replies');
-    }).catchError((Object e) {
-      // NOTE: the stamp stays, so an ask that keeps failing goes out at most
-      // once per [askCooldown].
+  /// Whether the keyfile's snapshot of this enrollment's record names
+  /// [namespace] in its grants: as the enrollment request named them, and
+  /// as each start reconciles them with the atServer's record.
+  ///
+  /// `*` and the atSign's own credential name no namespace here, since
+  /// neither bounds the namespaces a record could name.
+  Future<bool> _grantedOwn(
+      AtKeysIo keysIo, String owner, String namespace) async {
+    final enrollmentId = _atClient.enrollmentId;
+    if (isAtSignCredential(enrollmentId) || !isSeedableNamespace(namespace)) {
+      return false;
+    }
+    final AtKeys keys;
+    try {
+      keys = await keysIo.read(owner);
+    } on AtKeysSourceAbsentException {
+      return false;
+    }
+    final folded = namespace.toLowerCase();
+    return keys
+            .enrollmentInfo(enrollmentId!)
+            ?.namespaces
+            ?.keys
+            .any((granted) => granted.toLowerCase() == folded) ??
+        false;
+  }
+
+  /// Reads [namespace]'s own advertisement from the atServer at most once per
+  /// [askCooldown], sharing a read already in flight.
+  Future<void> _readOwnOnMiss(String namespace) {
+    final inFlight = _readingOnMiss[namespace];
+    if (inFlight != null) return inFlight;
+    final now = DateTime.now();
+    final readAt = _readOnMissAt[namespace];
+    if (readAt != null && now.difference(readAt) < askCooldown) {
+      return Future.value();
+    }
+    _readOnMissAt[namespace] = now;
+    final reading = _readOwn(namespace).whenComplete(() {
+      _readingOnMiss.remove(namespace);
+    });
+    _readingOnMiss[namespace] = reading;
+    return reading;
+  }
+
+  /// Records the kids [namespace]'s published own advertisement names. A
+  /// failure is logged and leaves what an earlier read recorded.
+  Future<void> _readOwn(String namespace) async {
+    final owner = _atClient.getCurrentAtSign()!;
+    try {
+      final AtValue value;
+      try {
+        value = await _atClient.get(nskeyAdvertisementKey(owner, namespace),
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+      } on KeyNotFoundException {
+        _kidsReadOnMiss.remove(namespace);
+        return;
+      } on AtKeyNotFoundException {
+        _kidsReadOnMiss.remove(namespace);
+        return;
+      }
+      final payload = value.value as String?;
+      if (payload == null) {
+        _kidsReadOnMiss.remove(namespace);
+        return;
+      }
+      final cached = _remote[_scope(owner, namespace)];
+      final advertisement = cached?.payload == payload
+          ? cached!.advertisement
+          : await verifier.verify(owner, payload);
+      _kidsReadOnMiss[namespace] = {
+        for (final key in advertisement.keys) key.kid
+      };
+    } catch (e) {
+      if (e is StoppedException) rethrow;
       logSwallowed(
           _logger,
           e,
-          'Could not request the missing nskey private for '
-          '$namespace:$nskeyKid, and a read miss once the ask cooldown has '
-          'passed asks again: $e',
+          'Could not read the own advertisement for $namespace, so a miss on '
+          'a generation no copy this client holds names fetches and asks '
+          'nothing until a read after the cooldown: $e',
           routine: true);
+    }
+  }
+
+  /// Whether a read miss on an own generation will broadcast a pull: a ring
+  /// that answers false cannot heal, however the rest of it is wired.
+  @visibleForTesting
+  bool get asksOnReadMiss => _askOnReadMiss && _ask != null;
+
+  /// Asks the other enrollments for one missing own private, unless an ask
+  /// for it is outstanding or went out within [askCooldown].
+  void _askForMissingPrivate(String namespace, String nskeyKid) {
+    final ask = _ask;
+    if (ask == null) return;
+    final generation = (namespace: namespace, nskeyKid: nskeyKid);
+    if (_outstanding.containsKey(generation)) return;
+    final now = DateTime.now();
+    _askedAt
+        .removeWhere((_, askedAt) => now.difference(askedAt) >= askCooldown);
+    if (_askedAt.containsKey(generation)) return;
+
+    final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
+    noteOutstandingAsk(
+        namespace,
+        nskeyKid,
+        ask(namespace, secretName).catchError((Object e) {
+          // NOTE: the stamp stays, so an ask that keeps failing goes out at
+          // most once per [askCooldown].
+          logSwallowed(
+              _logger,
+              e,
+              'Could not request the missing nskey private for '
+              '$namespace:$nskeyKid, and a read miss once the ask cooldown '
+              'has passed asks again: $e',
+              routine: true);
+        }));
+  }
+
+  /// Records an ask for `(namespace, nskeyKid)` whose answer is awaited until
+  /// [outstanding] completes, so a read miss meanwhile asks nothing more.
+  @internal
+  void noteOutstandingAsk(
+      String namespace, String nskeyKid, Future<void> outstanding) {
+    final generation = (namespace: namespace, nskeyKid: nskeyKid);
+    _askedAt[generation] = DateTime.now();
+    _outstanding[generation] = outstanding;
+    unawaited(outstanding.then((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (identical(_outstanding[generation], outstanding)) {
+        _outstanding.remove(generation);
+      }
     }));
   }
 }

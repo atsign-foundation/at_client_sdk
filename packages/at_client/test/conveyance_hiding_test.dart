@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
@@ -9,6 +9,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 const _owner = '@alice';
 const _namespace = 'wavi';
@@ -86,7 +89,9 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
       service = await NotificationServiceImpl.create(atClient,
-          monitor: _FakeMonitor()) as NotificationServiceImpl;
+              monitor: _FakeMonitor(),
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
     });
 
     tearDown(() => service.stopAllSubscriptions());
@@ -127,23 +132,25 @@ void main() {
     setUp(() async {
       storage = await Directory.systemTemp.createTemp('conveyance_hiding');
       final remote = MockRemoteSecondary();
-      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer(
-              (inv) async => inv.positionalArguments[0] is ScanVerbBuilder
-                  ? 'data:${jsonEncode([
-                          'phone.$_namespace$_owner',
-                          'ck0000000000001.__ck.$_namespace$_owner',
-                          '@bob:ck0000000000001.__ck.$_namespace$_owner',
-                          'cached:$_owner:ck0000000000002.__ck.$_namespace@bob',
-                        ])}'
-                  : throw AtKeyNotFoundException('nothing else is stored'));
+      when(() => remote.executeVerb(any())).thenAnswer(
+          (inv) async => inv.positionalArguments[0] is ScanVerbBuilder
+              ? 'data:${jsonEncode([
+                      'phone.$_namespace$_owner',
+                      'ck0000000000001.__ck.$_namespace$_owner',
+                      '@bob:ck0000000000001.__ck.$_namespace$_owner',
+                      'cached:$_owner:ck0000000000002.__ck.$_namespace@bob',
+                    ])}'
+              : throw AtKeyNotFoundException('nothing else is stored'));
       client = await AtClientImpl.create(
         _owner,
         _namespace,
         AtClientPreference(posture: PqPosture.legacy)
-          ..hiveStoragePath = '${storage.path}/hive'
-          ..commitLogPath = '${storage.path}/commit',
+          ..hiveStoragePath = '${storage.path}/hive',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
+        atKeysIo: noKeysFor(_owner),
         remoteSecondary: remote,
+        storage: hiveStoreAt(_owner, '${storage.path}/hive'),
       );
     });
 

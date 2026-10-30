@@ -1,10 +1,7 @@
-// The nskey surface is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
@@ -88,6 +85,8 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference: TestUtils.getPreference(atSign, posture: PqPosture.pqActive)
           ..namespace = other,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: other,
         storage: TestUtils.storageForPrincipal(atSign, 'unheld'));
     addTearDown(second.stop);

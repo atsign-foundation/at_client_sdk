@@ -1,6 +1,3 @@
-// The nskey surface is @experimental; driving it from another package is the
-// point of this file.
-// ignore_for_file: experimental_member_use
 @Tags(['pq'])
 library;
 

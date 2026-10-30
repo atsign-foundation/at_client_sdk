@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -9,20 +9,23 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
-AtClientPreference _createPreference(String storagePath) => AtClientPreference()
-  ..hiveStoragePath = 'test/hive/$storagePath'
-  ..commitLogPath = 'test/hive/$storagePath';
+AtClientPreference _createPreference(String storagePath) =>
+    AtClientPreference()..hiveStoragePath = 'test/hive/$storagePath';
 
-Future<AtClient> _initializeAtClient(String atSign) async {
-  final atClientManager = AtClientManager.getInstance();
-  await atClientManager.setCurrentAtSign(
-    atSign,
-    'test',
-    _createPreference(atSign.replaceAll('@', '')),
-  );
-  return atClientManager.atClient;
-}
+Future<AtClient> _buildAtClient(String atSign) => buildAtClient(
+      atSign: atSign,
+      namespace: 'test',
+      preference: _createPreference(atSign.replaceAll('@', '')),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
+      atKeysIo: noKeysFor(atSign),
+      storage:
+          hiveStoreFor(atSign, _createPreference(atSign.replaceAll('@', ''))),
+    );
 
 void main() {
   tearDown(() async {
@@ -46,6 +49,11 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_integration'),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
+            atKeysIo: noKeysFor(atSign),
+            storage:
+                hiveStoreFor(atSign, _createPreference('stop_integration')),
           ) as AtClientImpl;
 
           expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
@@ -81,7 +89,11 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_errors'),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
+            atKeysIo: noKeysFor(atSign),
             remoteSecondary: mockRemoteSecondary,
+            storage: hiveStoreFor(atSign, _createPreference('stop_errors')),
           ) as AtClientImpl;
           await atClient.stop();
           expect(atClient.isStopped, true);
@@ -91,16 +103,17 @@ void main() {
         },
       );
 
-      test('close() should close RemoteSecondary connection', () async {
+      test('closeConnection() stops the RemoteSecondary\'s lookup', () async {
         final mockAtLookup = MockAtLookUp();
         bool calledFlag = false;
-        when(() => mockAtLookup.close()).thenAnswer((_) async {
+        when(() => mockAtLookup.stop()).thenAnswer((_) async {
           calledFlag = true;
         });
 
         final remoteSecondary = RemoteSecondary(
           '@test',
           AtClientPreference(),
+          lookUps: secureSocketLookUps(),
           atLookUp: mockAtLookup,
         );
 
@@ -161,59 +174,18 @@ void main() {
       });
     });
 
-    group('AtSign switching tests', () {
-      test('should maintain correct client instances in map', () async {
-        final firstAtSign = '@alice_switch';
-        final secondAtSign = '@bob_switch';
-
-        final atClient1 =
-            await _initializeAtClient(firstAtSign) as AtClientImpl;
-        expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
-
-        await _initializeAtClient(secondAtSign);
-        expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
-            reason: 'switching away stops the outgoing client, and a stopped '
-                'client releases its storage and leaves the map');
-        expect(
-          AtClientImpl.atClientInstanceMap.containsKey(secondAtSign),
-          true,
-        );
-        expect(atClient1.isStopped, true);
-        final rebuilt = await _initializeAtClient(firstAtSign);
-        expect(identical(atClient1, rebuilt), false,
-            reason: 'switching back opens storage afresh on a new client');
-        expect(rebuilt.isStopped, false);
-      });
-
-      test('switching to same atSign should handle correctly', () async {
-        final atSign = '@test_same_atsign';
-
-        // init both atClients with same atSign
-        final atClient1 = await _initializeAtClient(atSign);
-        final atClient2 = await _initializeAtClient(atSign);
-
-        // AtClientImpl.create() caches by default regardless of useClientCaching
-        // useClientCaching only affects behavior on atSign SWITCH, not create()
-        // So without close() between calls, both modes return the same instance
-        expect(
-          identical(atClient1, atClient2),
-          true,
-          reason:
-              'create() returns cached instance when not closed between calls',
-        );
-      });
-
+    group('Rebuilding a stopped client', () {
       test(
-        'switching to same atSign after close should create new instance',
+        'building the same atSign after stop() creates a new instance',
         () async {
           final atSign = '@test_same_atsign_close';
 
-          final atClient1 = await _initializeAtClient(atSign);
+          final atClient1 = await _buildAtClient(atSign);
           await atClient1.stop();
-          final atClient2 = await _initializeAtClient(atSign);
+          final atClient2 = await _buildAtClient(atSign);
           expect(identical(atClient1, atClient2), false,
-              reason: 'the stopped client released its storage; the manager '
-                  'builds and wires a new one');
+              reason: 'the stopped client released its storage; a new one is '
+                  'built and wired');
 
           expect((atClient2.syncService as SyncServiceImpl).isStopped, false);
           expect(
@@ -224,130 +196,7 @@ void main() {
         },
       );
     });
-
-    group('setCurrentAtSign idempotency', () {
-      // The same-atSign short-circuit added with the
-      // bypasscache_test flake fix. Forced-reset cases (callers
-      // passing atChops / atLookUp / enrollmentId, or an explicitly
-      // stopped atClient) must still recreate; bare no-arg calls
-      // must reuse.
-
-      test(
-        'same-atSign, no override args → identical syncService preserved',
-        () async {
-          final atSign = '@idempotent_no_override';
-
-          final atClient1 = await _initializeAtClient(atSign);
-          final syncService1 = atClient1.syncService;
-
-          // Second call with the exact same atSign / namespace / prefs
-          // and no override args must short-circuit — atClient AND its
-          // syncService both stay identical. Catches regressions where
-          // setCurrentAtSign recreates anyway and leaves two
-          // SyncService instances on the same Hive backing (the original
-          // cause of the bypasscache_test localToRemote race).
-          final atClient2 = await _initializeAtClient(atSign);
-          expect(
-            identical(atClient1, atClient2),
-            true,
-            reason: 'idempotent setCurrentAtSign returns same atClient',
-          );
-          expect(
-            identical(syncService1, atClient2.syncService),
-            true,
-            reason: 'syncService is preserved across idempotent calls',
-          );
-          expect(
-            (atClient2.syncService as SyncServiceImpl).isStopped,
-            false,
-            reason: 'preserved syncService is not stopped',
-          );
-        },
-      );
-
-      test('same-atSign with atChops override → recreates', () async {
-        final atSign = '@idempotent_with_atchops';
-
-        final atClient1 = await _initializeAtClient(atSign);
-        final syncService1 = atClient1.syncService;
-
-        // Caller passes atChops — the idempotency check must NOT
-        // short-circuit, because the override is a signal the caller
-        // wants a fresh atClient.
-        final mockAtChops = MockAtChops();
-        await AtClientManager.getInstance().setCurrentAtSign(
-          atSign,
-          'test',
-          _createPreference(atSign.replaceAll('@', '')),
-          atChops: mockAtChops,
-        );
-        final atClient2 = AtClientManager.getInstance().atClient;
-        // syncService MUST be a fresh instance.
-        expect(
-          identical(syncService1, atClient2.syncService),
-          false,
-          reason: 'atChops override forces syncService recreate',
-        );
-      });
-
-      test('same-atSign with enrollmentId override → recreates', () async {
-        final atSign = '@idempotent_with_enrollment';
-
-        final atClient1 = await _initializeAtClient(atSign);
-        final syncService1 = atClient1.syncService;
-
-        await AtClientManager.getInstance().setCurrentAtSign(
-          atSign,
-          'test',
-          _createPreference(atSign.replaceAll('@', '')),
-          enrollmentId: 'some-enrollment-id',
-        );
-        final atClient2 = AtClientManager.getInstance().atClient;
-        expect(
-          identical(syncService1, atClient2.syncService),
-          false,
-          reason: 'enrollmentId override forces syncService recreate',
-        );
-      });
-
-      test('idempotent call does not fire SwitchAtSignEvent', () async {
-        final atSign = '@idempotent_no_event';
-
-        await _initializeAtClient(atSign);
-
-        // Register a change listener AFTER the initial setCurrentAtSign
-        // so we only observe the second (idempotent) call's behaviour.
-        final events = <SwitchAtSignEvent>[];
-        final listener = _CapturingAtSignChangeListener(events.add);
-        AtClientManager.getInstance().listenToAtSignChange(listener);
-
-        await _initializeAtClient(atSign);
-
-        // Existing code path only fires the event when previous and
-        // current atSigns differ; idempotent short-circuit returns
-        // before that branch. Regression guard for accidentally
-        // moving the event emission ahead of the short-circuit.
-        expect(
-          events,
-          isEmpty,
-          reason: 'no SwitchAtSignEvent on idempotent setCurrentAtSign',
-        );
-
-        AtClientManager.getInstance().removeChangeListeners(listener);
-      });
-    });
   });
-}
-
-/// Test-only AtSignChangeListener that forwards every event to a
-/// caller-supplied callback. Avoids hand-rolling a mock inside each
-/// test.
-class _CapturingAtSignChangeListener implements AtSignChangeListener {
-  _CapturingAtSignChangeListener(this._onEvent);
-  final void Function(SwitchAtSignEvent) _onEvent;
-
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
 }
 
 /// Stands in for the muxable the Monitor now drives, so these tests exercise

@@ -1,35 +1,33 @@
 ---
 name: at_client_skills-sdk
 description: >
-  Use this skill when a developer is building a Dart or Flutter app that
-  depends on at_client or at_client_flutter from pub.dev, stores or shares
-  data via the Atsign Protocol, needs onboarding (CRAM new-atsign, atKeys
-  file, keychain, APKAM) or APKAM enrollment, asks how to open, own, stop or
-  switch an AtClient or read its connection state (online / offline /
-  refused), how its sync and notification services start and stop, or asks
-  about AtCollection<T>,
-  CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
-  typed predicates, or watchWithTree deep hierarchies. Also use when the
-  developer asks how to send or receive notifications via NotificationService,
-  how to do request/response RPC between atsigns (AtRpc), how to run headless
-  agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
-  or write directly against the remote atServer (useRemoteAtServer), which
-  pub.dev packages to add, how to unit-test without a live atServer, or
-  whether to use AtCollection vs notifications+SQLite. Warns
-  against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
-  at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
+  Use this skill when a developer builds or upgrades a Dart or Flutter app on
+  the Atsign Protocol with at_client_cli (CLI, daemon or server) or
+  at_client_flutter, including upgrading to at_client 4.0. Covers onboarding
+  (CRAM, atKeys files, keychain) and APKAM enrollment; opening, stopping or
+  switching an AtClient and its connection state; sync and notification
+  lifecycles; AtCollection<T>, CItem<T>, Query<T>, sub-collections, event
+  streams, read receipts, wherePath and watchWithTree; NotificationService;
+  AtRpc; headless agents and CLIs (CLIBase) and multiple agent instances;
+  useRemoteAtServer; which pub.dev packages to add; unit tests without a live
+  atServer; and AtCollection vs notifications plus SQLite. Warns against
+  AtCollectionModel and the other APIs at_client 4.0 removed, the deprecated
+  at_cli_commons and at_onboarding_cli, and at_common_flutter,
+  at_backupkey_flutter, at_invitation_flutter, at_sync_ui_flutter and
+  at_theme_flutter.
 license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Sun, 13 Sep 2026 00:00:00 GMT"
+  last_modified: "Wed, 28 Oct 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
 
-> **Audience:** developers adding `at_client` / `at_client_flutter` to their own
-> Dart or Flutter app from pub.dev — not developers editing the SDK repo itself.
+> **Audience:** developers adding the Atsign Dart SDK (at_client 4.0) to their
+> own Dart or Flutter app from pub.dev — not developers editing the SDK repo
+> itself.
 
 ---
 
@@ -38,8 +36,8 @@ metadata:
 **Always use `AtCollection<T>`.** Never use `AtCollectionModel`.
 
 ```dart
-// ✅ CORRECT — modern API
-import 'package:at_client/at_client.dart';
+// ✅ CORRECT — modern API, through the app's one platform package
+import 'package:at_client_flutter/at_client_flutter.dart'; // CLI: at_client_cli
 final todos = await atClient.collection<Todo>(
   'todos.my_app',
   const Duration(days: 7),
@@ -47,45 +45,56 @@ final todos = await atClient.collection<Todo>(
   typeTag: 'Todo',
 );
 
-// ❌ WRONG — deprecated, do not use
-class MyModel extends AtCollectionModel { ... }  // @Deprecated("Use AtClient.collection...")
+// ❌ WRONG — removed in at_client 4.0; does not compile
+class MyModel extends AtCollectionModel { ... }
 ```
 
-The entire `AtCollectionModel` hierarchy is annotated
-`@Deprecated("Use AtClient.collection for collection-style operations")`.
+at_client 4.0 removed the entire `AtCollectionModel` hierarchy
+(`AtCollectionModel`, `AtJsonCollectionModel`, their factories and operations),
+which 3.x had deprecated in favour of `AtClient.collection`.
 
 > **If asked how to use `AtCollectionModel`:** do NOT show any
-> `AtCollectionModel` code, even in a "before/deprecated" comparison. Show ONLY
-> the `AtCollection<T>` pattern above, state it is deprecated, and quote the
-> `@Deprecated` message.
+> `AtCollectionModel` code, even in a "before/removed" comparison. Show ONLY
+> the `AtCollection<T>` pattern above, and state that at_client 4.0 removed
+> `AtCollectionModel`, so code using it no longer compiles.
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
-for the full migration table from old to new API.
+for the full migration table from old to new API, and everything else
+at_client 4.0 removed.
 
 ---
 
 ## 2. Package Map
 
+An app depends on **one platform package** and imports only its barrel. The
+platform package re-exports at_client's API and supplies a working default for
+everything that differs by platform (storage, transport, keys, logging).
 Install with `dart pub add` — it resolves the latest compatible version:
 
-| Use case                       | packages to add                                                  |
-| ------------------------------ | ---------------------------------------------------------------- |
-| Dart CLI / server / IoT        | `at_client`                                                      |
-| Flutter app                    | `at_client_flutter` (re-exports `at_client` — one dep)           |
-| CLI / headless Dart            | `at_client`, `at_cli_commons`                                    |
-| Onboarding, login, APKAM       | `at_client` (the `Atsign` verbs) or `at_client_flutter` (dialogs) |
-| Raw cryptographic operations   | `at_client` or `at_client_flutter`, plus `at_chops`              |
+| Use case                                   | packages to add                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------ |
+| Dart CLI / daemon / server / IoT           | `at_client_cli` (`CLIBase`, `CliKeys`, and all of at_client's API)       |
+| Flutter app                                | `at_client_flutter` (the dialogs, the keychain, and all of at_client's API) |
+| Onboarding, login, APKAM                   | the platform package: the `Atsign` verbs, `CLIBase`, or the Flutter dialogs |
+| Raw cryptographic operations               | the platform package, plus `at_chops` (at_client 4.0 is on at_chops 3.7) |
+| A platform package, or a program that passes every dependency itself | `at_client`, the platform-neutral core                 |
 
-An app never imports `at_auth`: `at_client` owns onboarding, login and
-enrollment (see §11), and `at_client_flutter` re-exports the one at_auth type
-an app may want, `RegistrarService`.
+An app imports `package:at_client_cli/at_client_cli.dart` or
+`package:at_client_flutter/at_client_flutter.dart`, and nothing else from the
+SDK beyond any feature package it adds (`at_contact`, `at_policy`,
+`at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
+login and enrollment (see §11), and both platform packages re-export the one
+at_auth type an app may want, `RegistrarService`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
-`at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
+`at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`, and the
+deprecated `at_cli_commons` and `at_onboarding_cli`, whose last majors only
+re-export `at_client_cli`.
 
-> **Never hardcode version constraints** for `at_client` / `at_client_flutter`
-> (e.g. `at_client: ^3.11.0`) in `pubspec.yaml` or generated templates — run
+> **Never hardcode version constraints** for `at_client_cli` /
+> `at_client_flutter` (e.g. `at_client_flutter: ^2.0.0`) in `pubspec.yaml` or
+> generated templates — run
 > `dart pub add` and let pub choose. Pinned constraints go stale between SDK
 > releases and cause resolution conflicts; stability comes from a fixed
 > `typeTag` string literal (§3), not a fixed SDK version.
@@ -371,30 +380,47 @@ hands back an `AtClient` the app **owns and stops**. The Flutter dialogs (§10)
 and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 
 ```dart
-import 'package:at_client/at_client.dart';
-import 'package:at_client/hive.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
+final preference = AtClientPreference()
+  ..namespace = 'my_namespace'
+  ..syncRegex = 'my_namespace';
 final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
-  preference: AtClientPreference()..namespace = 'my_namespace'..syncRegex = 'my_namespace',
+  preference: preference,
   storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
-  lookUps: secureSocketLookUps(),   // optional: how every connection is built
+  lookUps: secureSocketLookUps(),   // how every connection is built
+  secondaryAddressFinder: CacheableSecondaryAddressFinder(
+      preference.rootDomain, preference.rootPort),   // where the atServer is
 );
-// Also: Atsign(a).activate(cramSecret:, keys:, preference:)  — onboard a new atSign
-//       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:) → PendingEnrollment
-//       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:)         — after a restart
+// Also: Atsign(a).activate(cramSecret:, keys:, preference:, storage:, lookUps:, secondaryAddressFinder:)
+//         — onboard a new atSign
+//       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:, lookUps:,
+//         secondaryAddressFinder:) → PendingEnrollment; pending.client(preference, storage:)
+//       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:, lookUps:,
+//         secondaryAddressFinder:) — after a restart
 ```
 
-**The platform bundle** is the three things every verb takes the same way:
-`keys:` (where the keys live), `storage:` (the local store) and `lookUps:`
-(an `AtLookUpFactory` that builds **every** connection the client opens: its
-own, its sync's, its monitor's). Omit `lookUps` for TLS on TCP with the
-defaults; pass `secureSocketLookUps(config: SecureSocketConfig()..pathToCerts
-= ...)` for TLS settings, `secureSocketLookUps(onConnect: ...)` for a proxy
-that needs `from:` first, or a factory of your own for another transport. The
-Flutter dialogs and `CLIBase` take `lookUps:` too. The preference's
-`decryptPackets`, `pathToCerts` and `tlsKeysSavePath` are deprecated in its
-favour.
+**The platform bundle** is what every verb that builds a client takes, all of
+it **required** in at_client 4.0: `keys:` (where the keys live), `storage:`
+(the local store), `lookUps:` (an `AtLookUpFactory` that builds **every**
+connection the client opens: its own, its sync's, its monitor's) and
+`secondaryAddressFinder:` (how the atDirectory is asked where the atServer is).
+`secureSocketLookUps()` is TLS on TCP with the defaults; pass
+`secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = ...)` for TLS
+settings, at_client_cli's `lookUpsFor(preference.rootDomain)`, which is
+`proxyLookUps()` for a root domain of the form `proxy:host:port`, or a factory
+of your own for another transport. A CLI
+program takes its keys and store from `CliKeys.fileFor(atSign)` and
+`CliKeys.storageFor(atSign, program: ...)`. The Flutter dialogs and `CLIBase`
+supply the whole bundle themselves and take `lookUps:` (and the dialogs
+`storage:`) only to override it. A Flutter app with its own UI gets the same
+bundle from at_client_flutter's `AtsignFlows`
+(`const AtsignFlows().open(atSign, keys:, preference:)`, and `activate`,
+`enroll` and `resumeEnrollment` likewise), and a pending enrollment's client
+takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 removed the preference's
+`decryptPackets`, `pathToCerts` and `tlsKeysSavePath`: a `SecureSocketConfig`
+carries them.
 
 **Connection state — the client comes back whatever the network did:**
 
@@ -408,7 +434,8 @@ await client.connection.attempt();                  // try again now
 - **offline** (`unreachable`, `noAtServer`): the client serves its local store;
   writes queue and sync when the atServer is reached.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
-  `enrollmentNotApproved`): the atServer rejected the keys — the app decides.
+  `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
+  — the app decides.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
   serve. Keys holding only a pending enrollment throw
@@ -444,8 +471,8 @@ await client.connection.attempt();                  // try again now
 - A stopped client is not restarted — open the atSign again.
 - `AtClientManager.getInstance().use(client)` makes a client current for code
   that reads `AtClientManager.getInstance().atClient`; `use` does **not** stop
-  the previous current client. `setCurrentAtSign` / `fromAuthSession` are
-  deprecated. `reset()` is a test hook, not a logout.
+  the previous current client. at_client 4.0 removed `setCurrentAtSign` and
+  `fromAuthSession`. `reset()` is a test hook, not a logout.
 
 Read [references/15-client-lifecycle.md](references/15-client-lifecycle.md)
 for the full verb list, the storage object, every `AtConnectionCause`, the
@@ -519,7 +546,9 @@ send/subscribe walkthrough.
 ## 14. Testing Without a Live atServer
 
 ```dart
-import 'package:at_client/at_client.dart'; // test hooks are re-exported here
+// The test hooks come through the platform package (a Flutter app's tests
+// import package:at_client_flutter/at_client_flutter.dart).
+import 'package:at_client_cli/at_client_cli.dart';
 
 final ctrl = StreamController<AtNotification>.broadcast();
 final coll = collectionWithInjectedNotifications<Todo>(
@@ -545,7 +574,8 @@ and MockAtClient stubs.
 ## 15. RPC — Request/Response Between Atsigns
 
 For "call another atsign and get an answer back" (actions and queries — not
-data), use `AtRpc`/`AtRpcClient` from `at_client`:
+data), use `AtRpc`/`AtRpcClient` from `at_client`, re-exported by both
+platform packages:
 
 ```dart
 // Requester — call() sends, awaits the success response, returns its payload
@@ -573,27 +603,36 @@ multi-instance mutex.
 ## 16. Headless Agents & Multi-Instance Coordination
 
 Authenticate a UI-less process (agent, daemon, CLI) in one line with
-`CLIBase` from `at_cli_commons`:
+`CLIBase` from `at_client_cli` (the one dependency: `dart pub add
+at_client_cli`):
 
 ```dart
+import 'package:at_client_cli/at_client_cli.dart';
+
 final AtClient atClient =
     (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
 ```
 
-- **Every process needs its own storage** (`HiveAtClientStorage(atSign:,
-  storagePath:)` from `package:at_client/hive.dart`, or the deprecated
-  `hiveStoragePath`) — one store is held by
-  one live client and a second open on it is refused. Use
-  `Directory.systemTemp.createTempSync('agent_')` per instance, and
-  `client.stop()` when the process is done.
+- **`CLIBase` tells a refusal from an outage.** It throws
+  `AtCredentialRefusedException` when the atServer refuses the keys,
+  `AtEnrollmentPendingException` when the keyfile holds only an enrollment
+  request, `SecondaryNotFoundException` when the atDirectory has no atServer
+  for the atSign, and `SecondaryServerConnectivityException` only for an
+  outage — the one exception a retry loop should catch.
+- **Every process needs its own storage** (`CliKeys.storageFor(atSign,
+  program:, path:)`, a `HiveAtClientStorage(atSign:, storagePath:)`, or
+  `CLIBase`'s `-s` flag) — one store is held by one live client and a second
+  open on it is refused. Use `Directory.systemTemp.createTempSync('agent_')`
+  per instance, and `client.stop()` when the process is done.
 - **Multiple instances of one agent** coordinate via a server mutex
   (`atClient.tryAcquireServerMutex(key, ttl: …)`, which returns null when
   an immutable record already exists at the lock's key and throws any other
   failure; it needs an
   atServer from p3.13.0), or run
   stateless with `Atsign(a).open(..., serviceFactory:
-  ServiceFactoryWithNoOpSyncService())` (from `at_cli_commons`, NOT
-  `at_client`) + remote operations.
+  ServiceFactoryWithNoOpSyncService())` (from `at_client_cli`, NOT
+  `at_client`; `CLIBase`'s `--never-sync` flag does the same) + remote
+  operations.
 
 Read [references/14-multi-agent.md](references/14-multi-agent.md) when
 building headless agents, daemons, or anything that runs more than one
@@ -630,23 +669,40 @@ an operation must see or produce server-side truth immediately.
 
 ---
 
-## 18. Deprecated — Do Not Use
+## 18. Removed or Deprecated — Do Not Use
+
+**Removed in at_client 4.0 and its platform packages** — code using these no
+longer compiles:
 
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `AtCollectionModel` / `AtJsonCollectionModel`                                                                                                                | `AtCollection<T>` via `atClient.collection(...)` |
+| `AtCollectionModel` / `AtJsonCollectionModel`, their factories and operations                                                                                | `AtCollection<T>` via `atClient.collection(...)` |
+| `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` (§11), then `AtClientManager.getInstance().use(client)` only for code that reads the manager |
+| `AtClient.atChops`; the `atChops:` parameters                                                                                                                | The client signs and encrypts with the `AtKeysIo` it was given |
+| `isDedicated:` (on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`, `notifyAll`), `sync:` (on `executeVerb`, `executeAndParse`)                  | Delete the argument                              |
+| `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout`, `enforceNamespace`                   | Delete the assignment                            |
+| `AtClientPreference.decryptPackets`, `pathToCerts`, `tlsKeysSavePath`                                                                                        | A `SecureSocketConfig` given to `secureSocketLookUps(config:)` |
+| `atClient.stream(...)`, `sendStreamAck`; `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                                         | `put` or `notify` the value; file transfer belongs in the app |
+| `ConnectivityListener`; `RemoteSecondary.isAvailable()`; `atClient.persistenceBundle`                                                                        | The app's own connectivity package; `checkAtSignServer(lookUp, atSign)`; the `AtClientStorage` the client was given |
+| `AtOnboardingService`, `AtOnboardingPreference`, `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener` (at_onboarding_cli, at_cli_commons)                   | `CLIBase`, or `Atsign(a).open(...)` with `CliKeys` (§16)  |
+| `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
+
+**Deprecated, or being retired** — avoid in new code:
+
+| Avoid                                                                                                                                                        | Use instead                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `at_cli_commons`, `at_onboarding_cli` (their last majors re-export `at_client_cli`)                                                                          | `at_client_cli`                                  |
+| `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage), `isLocalStoreRequired`, `hashingAlgoType`; all removed in 5.0 | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
+| `AtClientManager.getInstance().syncService`, `.notificationService`                                                                                          | `client.syncService`, `client.notificationService` |
 | `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
 | `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
 | `at_invitation_flutter`                                                                                                                                      | `AtClientInvitations` in `at_client`             |
 | `at_sync_ui_flutter`, `at_theme_flutter`                                                                                                                     | Deprecated — do not use                          |
 | `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
-| `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
-| `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
-| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage` (`at_client/hive.dart`) as `storage`       |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old `AtCollectionModel` patterns to
-`AtCollection<T>`.
+`AtCollection<T>`, and the rest of what at_client 4.0 removed.
 
 ---
 
@@ -660,6 +716,8 @@ for the full migration table from old `AtCollectionModel` patterns to
   `NotificationService` send/subscribe
 - `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
 - `packages/at_client_flutter/example/dockerstats/` — notifications + SQLite
+- `docs/upgrade-to-4.md` — upgrading an app from at_client 3.x, by the error
+  `dart analyze` or `flutter analyze` reports
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
 `AtCollection<T>`:** Both APIs share the same underlying atServer keystore but

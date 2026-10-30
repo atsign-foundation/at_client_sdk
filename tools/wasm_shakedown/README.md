@@ -9,25 +9,23 @@ wasm and stops them gaining browser-hostile imports. Not published; run by
 dart run wasm_shakedown                    # every gated package
 dart run wasm_shakedown --package at_auth  # just one (repeatable)
 dart run wasm_shakedown --config PATH      # a config other than the default
-dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
+dart run wasm_shakedown --resolve-from PACKAGE=DIR
 ```
 
 `--resolve-from PACKAGE=DIR` walks and compiles one gate against `DIR`'s own package
 config instead of the workspace's, leaving the others alone. It is for a package outside
-the root `workspace:` list — `at_chops`, while 4.0.0 is detached — whose name otherwise
-resolves to the published copy in the pub cache, so its gate would measure a different
-package than this tree. `DIR` needs its own `dart pub get`, and a missing one is an error
-rather than a fall back to the workspace config. The `wasm_ratchet` job passes the flag;
-drop it there and here when at_chops rejoins `workspace:`.
+the root `workspace:` list, whose name otherwise resolves to the published copy in the
+pub cache, so its gate would measure a different package than this tree. `DIR` needs its
+own `dart pub get`, and a missing one is an error rather than a fall back to the workspace
+config. Every package gated today is a workspace member, so none needs it.
 
 The default config is `.github/wasm_gates.yaml`, resolved against the pub workspace
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,
 so the workflow names the file rather than leaning on that default.
 
-at_chops and at_auth are gated today — both already web-safe, at_chops behind
-`at_chops_ffi.dart` and at_auth behind `at_auth_io.dart`, so each gate holds a line
-rather than recording a backlog. at_utils, at_lookup and at_client own 3, 6 and 7
-offenders respectively and join as each is ported.
+at_chops, at_auth, at_utils, at_lookup and at_client are gated today — each
+web-safe behind its own `_io`/`_ffi` barrel, so a gate holds a line rather than
+recording a backlog.
 
 ## Why this exists
 
@@ -92,6 +90,10 @@ pins that a forbidden library is still reached but not where, `reaches_file` pin
 package source directly imports a forbidden library. Controls resolve with io semantics;
 `environment: web` pins the other branch of a conditional export.
 
+A control looks at the gated package's own sources. A package with no native code of its own
+names `through_package:` instead: the control then asserts the walk still reaches that
+dependency's known native source, which a walk that stalled in the gated package cannot.
+
 The walk crosses package boundaries via `.dart_tool/package_config.json` and resolves
 configurable URIs the way the target platform would. Run `dart pub get` first.
 
@@ -116,14 +118,13 @@ live walk. There is deliberately no way to write a baseline back from a run — 
 generator existed once and was removed, because the failure output already carries
 what it would have printed.
 
-Both gated packages have an empty allow list. at_chops' ceiling is 0 — nothing under its
-barrel reaches a blocked package, since 4.0.0 dropped the facade that pulled in the
-logger. at_auth's 3 are `at_utils`, `chalkdart` and `at_lookup`, all inherited.
+Every gated package has an empty allow list and a ceiling of 0.
 
 Every run prints its figures whether or not it fails:
 
 ```
-package:at_chops/at_chops.dart — 433 files walked, 0/0 offenders, 0/0 blocked
+package:at_chops/at_chops.dart — 435 files walked, 0/0 offenders, 0/0 blocked
+package:at_auth/at_auth.dart — 948 files walked, 0/0 offenders, 1/1 blocked
 ```
 
 `min_files_walked` guards the rest — every other check is about what the walk did
@@ -143,7 +144,7 @@ Controls need no such floor: their checks are positive.
 The split is what makes the gates testable: `verdict.dart` judges a walk it is handed,
 so `test/verdict_test.dart` writes down the walks it wants instead of arranging a
 filesystem that produces them. That is the only way to cover the baseline logic —
-both gated packages baseline an empty allow list over a package owning no offender, so
+every gated package baselines an empty allow list over a package owning no offender, so
 the live figures cannot tell a correct subtraction from a reversed one.
 
 ```bash

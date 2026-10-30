@@ -4,7 +4,7 @@ description: The at_client library is the non-platform specific Client SDK which
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 3.15.0-rc9
+version: 4.0.0
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -22,27 +22,23 @@ dependencies:
   crypton: ^2.2.1
   encrypt: ^5.0.3
   uuid: ^4.0.0
-  archive: ^4.0.7
-  http: ^1.2.1
-  internet_connection_checker: ^1.0.0+1
-  async: ^2.9.0
   at_base2e15: ^1.0.0
   # enroll:link, which pq_signing_chain.dart sends, needs 5.23.0.
   at_commons: ^5.23.0
-  at_utils: ^3.2.0
+  at_utils: ^4.0.0
   at_chops: ^3.7.0
-  at_lookup: ^3.7.0-rc5
+  at_lookup: ^4.0.0
   # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
   # describes, needs 4.0.0-rc8.
-  at_auth: ^4.0.0-rc8
-  at_persistence_secondary_server: ^5.3.0
+  at_auth: ^4.0.0
+  at_persistence_secondary_server: ^5.4.0
   hive: ^2.2.3
   meta: ^1.16.0
-  version: ^3.0.2
   mutex: ^3.1.0
   collection: ^1.16.0
 
 dev_dependencies:
+  analyzer: ^13.3.0
   lints: ^6.0.0
   test: ^1.25.0
   build_version: ^2.1.1
