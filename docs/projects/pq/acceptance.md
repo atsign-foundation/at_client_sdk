@@ -1898,6 +1898,14 @@ map and be refused rather than obeyed.
   second legacy enrollment minted at the same moment, which no retrofit ever
   parented, still authenticates afterwards, as do a freshly minted one and the
   PQ enrollment the retrofit created.
+  `tests/at_client_cli_functional_tests/test/pq_retrofit_save_refused_test.dart`
+  proves the same settlement for a scoped predecessor enrolled over an OTP: once
+  its replacement has logged in, a copy of its keyfile is refused at open with
+  `AT0027`, a session left open as it is closed at its next command, and an
+  un-revoked predecessor's second retrofit is refused as already replaced. The
+  same file proves that a retrofit whose keyfile refuses its save after approval
+  revokes the new enrollment where the predecessor may revoke it, reports the
+  refused revoke where it may not, and retrofits again at the next start.
 
 ## 10. B3 · Mixed-PQ within one atSign
 
