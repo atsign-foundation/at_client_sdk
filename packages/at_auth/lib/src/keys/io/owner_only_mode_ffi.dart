@@ -29,11 +29,28 @@ bool get runningAsRoot =>
 @visibleForTesting
 bool? runningAsRootForTesting;
 
+/// Whether [writeNewOwnerOnly] could run here, and whether a failed call
+/// would carry its OS error, were errno and its description looked up as
+/// [errnoSymbol] and [strerrorSymbol] in place of this libc's own names.
+@visibleForTesting
+({bool ownerOnlyWrites, bool osErrors}) lookUpLibcForTesting(
+    {String? errnoSymbol, String? strerrorSymbol}) {
+  final libc =
+      _Libc._lookUp(errnoSymbol: errnoSymbol, strerrorSymbol: strerrorSymbol);
+  return (ownerOnlyWrites: libc != null, osErrors: libc?.errors != null);
+}
+
+/// Stands in for a libc whose errno cannot be looked up when true, so a test
+/// drives the calls below as they run there.
+@visibleForTesting
+bool osErrorsUnavailableForTesting = false;
+
 /// Reads the file at [path] through one descriptor opened without following
 /// a symbolic link, taking its owner and group from that descriptor.
 ///
-/// Throws [FileSystemException] when [path] is a symbolic link or anything
-/// other than a regular file, or cannot be read.
+/// Throws [FileSystemException], carrying the OS error when this libc can
+/// report one, when [path] is a symbolic link or anything other than a
+/// regular file, or cannot be read.
 ///
 /// NOTE: opened non-blocking, so a FIFO at [path] is refused rather than
 /// blocking this isolate inside the open until something writes to it.
@@ -44,16 +61,10 @@ KeyfileRead readNoFollow(String path) {
     throw FileSystemException(
         'Cannot open a file without following a link on this platform', path);
   }
-  final nativePath = path.toNativeUtf8();
-  final int fd;
-  try {
-    fd = libc.open(nativePath, flags, 0);
-  } finally {
-    malloc.free(nativePath);
-  }
+  final (:fd, :error) = _open(libc, path, flags, 0);
   if (fd < 0) {
     throw FileSystemException(
-        'Cannot open the file without following a link', path);
+        'Cannot open the file without following a link', path, error);
   }
   try {
     final owner = _fdOwnerReader?.call(fd, path);
@@ -68,15 +79,17 @@ KeyfileRead readNoFollow(String path) {
 /// when one is named.
 ///
 /// Says whether the file system took the mode and whether the owner was set;
-/// the bytes are written either way. Throws [FileSystemException] when
-/// anything already exists at [path], a symbolic link included, or the file
-/// cannot be created or written.
+/// the bytes are written either way. Throws [FileSystemException], carrying
+/// the OS error when this libc can report one, when anything already exists
+/// at [path], a symbolic link included, or the file cannot be created or
+/// written.
 ({bool modeSet, bool ownerSet}) writeNewOwnerOnly(String path, List<int> bytes,
     {OwnerAndGroup? owner}) {
   final libc = _Libc.instance!;
-  final fd = _createNew(libc, path, ownerOnlyMode);
+  final (:fd, :error) =
+      _open(libc, path, libc.createNewForWriting, ownerOnlyMode);
   if (fd < 0) {
-    throw FileSystemException('Cannot create the file', path);
+    throw FileSystemException('Cannot create the file', path, error);
   }
   try {
     final ownerSet =
@@ -93,15 +106,17 @@ KeyfileRead readNoFollow(String path) {
 /// that created it, so nothing put at [path] after the create is written
 /// through.
 ///
-/// Returns false, having written nothing, when anything already exists at
-/// [path], a symbolic link included, or the file cannot be created. Throws
-/// [FileSystemException] when the file was created but [bytes] could not be
-/// written, after removing it.
-bool createNewWith(String path, List<int> bytes) {
+/// Returns null once the file is created and written. Returns the error the
+/// create failed with, having written nothing, when anything already exists
+/// at [path], a symbolic link included, or the file cannot be created; that
+/// error has no message or code when this libc cannot report one.
+/// Throws [FileSystemException] when the file was created but [bytes] could
+/// not be written, after removing it.
+OSError? createNewWith(String path, List<int> bytes) {
   final libc = _Libc.instance!;
   // NOTE: 0666, narrowed by the umask, as dart:io creates a file.
-  final fd = _createNew(libc, path, 0x1b6);
-  if (fd < 0) return false;
+  final (:fd, :error) = _open(libc, path, libc.createNewForWriting, 0x1b6);
+  if (fd < 0) return error ?? const OSError();
   try {
     _writeAll(libc, fd, bytes, path);
   } on FileSystemException {
@@ -114,7 +129,7 @@ bool createNewWith(String path, List<int> bytes) {
     rethrow;
   }
   libc.close(fd);
-  return true;
+  return null;
 }
 
 /// Sets the access and modification times of whatever is at [path] to now,
@@ -131,15 +146,39 @@ bool touchNoFollow(String path) {
   }
 }
 
-/// Opens a file this call creates at [path] with [mode] for writing, or
-/// returns a negative number when anything is already there or it cannot be
-/// created.
-int _createNew(_Libc libc, String path, int mode) {
+/// Opens [path] with [flags], creating it with [mode] when [flags] say to;
+/// returns the descriptor, negative when the open failed, with the error it
+/// failed with when this libc can report one.
+({int fd, OSError? error}) _open(_Libc libc, String path, int flags, int mode) {
   final nativePath = path.toNativeUtf8();
   try {
-    return libc.open(nativePath, libc.createNewForWriting, mode);
+    final fd = libc.open(nativePath, flags, mode);
+    // NOTE: errno is read before the path is freed, which may set it.
+    return (fd: fd, error: fd < 0 ? _lastError(libc) : null);
   } finally {
     malloc.free(nativePath);
+  }
+}
+
+/// The error the libc call made just before this one failed with, or null
+/// when this libc cannot report one.
+///
+/// NOTE: best effort, since errno can change between the two calls; use it
+/// only in messages, never in a decision.
+OSError? _lastError(_Libc libc) {
+  final errors = osErrorsUnavailableForTesting ? null : libc.errors;
+  if (errors == null) return null;
+  final code = errors.errno().value;
+  return OSError(_describe(errors.strerror(code)), code);
+}
+
+/// [description] decoded as UTF-8, or empty when the locale's character set
+/// is another one.
+String _describe(Pointer<Utf8> description) {
+  try {
+    return description.toDartString();
+  } on FormatException {
+    return '';
   }
 }
 
@@ -151,7 +190,8 @@ void _writeAll(_Libc libc, int fd, List<int> bytes, String path) {
     while (written < bytes.length) {
       final count = libc.write(fd, buffer + written, bytes.length - written);
       if (count <= 0) {
-        throw FileSystemException('Cannot write the file', path);
+        throw FileSystemException(
+            'Cannot write the file', path, count < 0 ? _lastError(libc) : null);
       }
       written += count;
     }
@@ -168,7 +208,8 @@ List<int> _readAll(_Libc libc, int fd, String path) {
     while (true) {
       final count = libc.read(fd, buffer, chunk);
       if (count < 0) {
-        throw FileSystemException('Cannot read the file', path);
+        throw FileSystemException(
+            'Cannot read the file', path, _lastError(libc));
       }
       if (count == 0) return bytes.takeBytes();
       bytes.add(buffer.asTypedList(count));
@@ -186,6 +227,9 @@ typedef _CloseFunction = int Function(int);
 typedef _UidFunction = int Function();
 typedef _UtimensatFunction = int Function(
     int, Pointer<Utf8>, Pointer<Void>, int);
+typedef _ErrnoFunction = Pointer<Int32> Function();
+typedef _StrerrorFunction = Pointer<Utf8> Function(int);
+typedef _ErrorReporting = ({_ErrnoFunction errno, _StrerrorFunction strerror});
 
 final class _Libc {
   _Libc._(
@@ -199,6 +243,7 @@ final class _Libc {
       required this.close,
       required this.geteuid,
       required this.utimensat,
+      required this.errors,
       required this.currentDirectory,
       required this.noFollow});
 
@@ -217,6 +262,10 @@ final class _Libc {
   final _UidFunction geteuid;
   final _UtimensatFunction utimensat;
 
+  /// Where this thread's errno is and how to describe it, or null when this
+  /// libc does not export both.
+  final _ErrorReporting? errors;
+
   /// `AT_FDCWD`.
   final int currentDirectory;
 
@@ -225,9 +274,15 @@ final class _Libc {
 
   static final _Libc? instance = _lookUp();
 
-  static _Libc? _lookUp() {
+  static _Libc? _lookUp({String? errnoSymbol, String? strerrorSymbol}) {
     if (!Platform.isLinux && !Platform.isMacOS) return null;
     final libc = DynamicLibrary.process();
+    // NOTE: looked up apart from the calls below, so a libc whose errno
+    // cannot be found still writes owner-only.
+    final errors = _lookUpErrorReporting(
+        libc,
+        errnoSymbol ?? (Platform.isMacOS ? '__error' : '__errno_location'),
+        strerrorSymbol ?? 'strerror');
     try {
       final read = libc.lookupFunction<
           IntPtr Function(Int32, Pointer<Uint8>, Size),
@@ -262,6 +317,7 @@ final class _Libc {
             close: close,
             geteuid: geteuid,
             utimensat: utimensat,
+            errors: errors,
             currentDirectory: -2,
             noFollow: 0x20);
       }
@@ -277,11 +333,29 @@ final class _Libc {
           close: close,
           geteuid: geteuid,
           utimensat: utimensat,
+          errors: errors,
           currentDirectory: -100,
           noFollow: 0x100);
     } on ArgumentError {
       return null;
     }
+  }
+}
+
+/// errno and strerror, looked up as [errnoSymbol] and [strerrorSymbol], or
+/// null when either is not found.
+_ErrorReporting? _lookUpErrorReporting(
+    DynamicLibrary libc, String errnoSymbol, String strerrorSymbol) {
+  try {
+    return (
+      errno: libc.lookupFunction<Pointer<Int32> Function(), _ErrnoFunction>(
+          errnoSymbol),
+      strerror:
+          libc.lookupFunction<Pointer<Utf8> Function(Int32), _StrerrorFunction>(
+              strerrorSymbol),
+    );
+  } on ArgumentError {
+    return null;
   }
 }
 
