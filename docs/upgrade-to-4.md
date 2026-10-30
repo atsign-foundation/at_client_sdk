@@ -92,7 +92,7 @@ AtClient? current;
 Future<AtClient> switchTo(String atSign, AtClientPreference preference) async {
   // setCurrentAtSign reused the client of the atSign already current...
   final previous = current;
-  if (previous != null && previous.getCurrentAtSign() == atSign) {
+  if (previous != null && previous.atSign == Atsign(atSign)) {
     return previous;
   }
   final client = await Atsign(atSign).open(
@@ -128,9 +128,9 @@ A client is its opener's to stop: stop the one you are finished with, as
 `switchTo` does, and every one still open before the program exits. Opening an
 atSign whose client is still live throws a `StateError`.
 
-On the first open of an atSign on a device, `Atsign.open` returns no client if
-it cannot get one online. It throws `AtEnrollmentPendingException` when the
-keys hold only an enrollment request that has not been approved, and
+On the first open of an atSign on a device, `Atsign.open` throws
+`AtEnrollmentPendingException` when the keys hold only an enrollment request
+that has not been approved, and
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` comes back online, offline or refused, and
