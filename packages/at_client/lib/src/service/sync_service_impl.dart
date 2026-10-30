@@ -738,6 +738,44 @@ class SyncServiceImpl implements SyncService {
       error_codes[name] as String,
   };
 
+  /// How many refusals in a row of one queued version drop it from the queue,
+  /// whatever the code.
+  static const _refusalsBeforeDrop = 3;
+
+  /// For each atKey whose queued version the atServer has refused, or whose
+  /// answer sync could not process, that version's [SyncQueueEntry.seq] and
+  /// how many times in a row. Held in memory, so each process allows
+  /// [_refusalsBeforeDrop] more.
+  final Map<String, ({int seq, int count})> _refusals = {};
+
+  /// How many atKeys hold a refusal count.
+  @visibleForTesting
+  int get refusalsHeld => _refusals.length;
+
+  /// Counts one more refusal of [source]'s queued version and returns how
+  /// many it has had in a row; a newer version of the atKey starts again.
+  int _countRefusal(_BatchSource source) {
+    final held = _refusals[source.atKey];
+    final count = held != null && held.seq == source.seq ? held.count + 1 : 1;
+    _refusals[source.atKey] = (seq: source.seq, count: count);
+    return count;
+  }
+
+  /// Removes [source]'s queued version, keeping the local copy, and logs
+  /// [refusal] at warning. Returns false when a newer write replaced it,
+  /// which then pushes next round.
+  Future<bool> _dropRefused(LocalSecondary localSecondary, _BatchSource source,
+      String refusal) async {
+    _refusals.remove(source.atKey);
+    final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+        source.atKey, source.seq);
+    _bailIfStopped();
+    _logger.warning('$refusal, so it is not retried and this device keeps '
+        'its local copy'
+        '${removed ? '' : '; a newer write to it pushes next round'}');
+    return removed;
+  }
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -756,8 +794,11 @@ class SyncServiceImpl implements SyncService {
   /// 4. For each per-entry response: on success, remove from the
   ///    queue and promote `_latestKnownServerCommitId`. On a refusal
   ///    for good ([_refusedForGood]), remove from the queue with a
-  ///    warning, keeping the local copy. On any other failure, leave in
-  ///    queue for retry on the next round.
+  ///    warning, keeping the local copy. On any other refusal, or an
+  ///    answer sync cannot process, leave it queued for the next round,
+  ///    and remove it the same way once one queued version has had
+  ///    [_refusalsBeforeDrop] in a row. A batch that fails as a whole
+  ///    removes nothing.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -850,37 +891,39 @@ class SyncServiceImpl implements SyncService {
         return keyInfoList;
       }
       for (final entry in batchResponse) {
+        _BatchSource? source;
         try {
           final batchId = entry['id'] as int;
+          source = batchSources.elementAt(batchId - 1);
           final serverResponse = entry['response'];
           final responseObject = Response.fromJson(serverResponse);
-          final source = batchSources.elementAt(batchId - 1);
           var commitId = -1;
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
-          if (commitId == -1 &&
-              _refusedForGood.contains(responseObject.errorCode)) {
-            // NOTE: a refusal for good is not retried, so it cannot hold up
-            // the entries behind it; the local copy stays as written.
-            final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
-                source.atKey, source.seq);
-            if (!removed) rewrittenMidPush++;
-            _bailIfStopped();
-            _logger.warning('The atServer refused ${source.op.name} of '
+          if (commitId == -1) {
+            final refusal = 'The atServer refused ${source.op.name} of '
                 '${source.atKey} for enrollment ${_atClient.enrollmentId} '
                 'with ${responseObject.errorCode} '
-                '(${responseObject.errorMessage}), so it is not retried and '
-                'this device keeps its local copy'
-                '${removed ? '' : '; a newer write to it pushes next round'}');
-            continue;
-          }
-          if (commitId == -1) {
-            _logger.severe(
-                '${source.op} for key ${source.atKey} failed. Error code '
-                '${responseObject.errorCode} error message '
-                '${responseObject.errorMessage}');
-            // Leave in queue for retry. Don't remove.
+                '(${responseObject.errorMessage})';
+            // NOTE: a refusal for good is not retried, so it cannot hold up
+            // the entries behind it; the local copy stays as written.
+            if (_refusedForGood.contains(responseObject.errorCode)) {
+              if (!await _dropRefused(localSecondary, source, refusal)) {
+                rewrittenMidPush++;
+              }
+              continue;
+            }
+            final refusals = _countRefusal(source);
+            if (refusals < _refusalsBeforeDrop) {
+              _logger.severe('$refusal, $refusals of $_refusalsBeforeDrop '
+                  'refusals in a row, so it is pushed again next round');
+              continue;
+            }
+            if (!await _dropRefused(
+                localSecondary, source, '$refusal $refusals times in a row')) {
+              rewrittenMidPush++;
+            }
             continue;
           }
           _promoteServerCommitId(commitId);
@@ -897,6 +940,7 @@ class SyncServiceImpl implements SyncService {
           }
           final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
               source.atKey, source.seq);
+          _refusals.remove(source.atKey);
           if (!removed) {
             // NOTE: a newer local write to this atKey replaced the queue entry
             // while this batch was in flight. The server has the version this
@@ -919,6 +963,18 @@ class SyncServiceImpl implements SyncService {
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception processing batch response entry $entry: $cause');
+          if (source == null) continue;
+          final refusals = _countRefusal(source);
+          if (refusals >= _refusalsBeforeDrop &&
+              !await _dropRefused(
+                  localSecondary,
+                  source,
+                  'Sync could not process the atServer\'s answer to '
+                  '${source.op.name} of ${source.atKey} for enrollment '
+                  '${_atClient.enrollmentId} ($cause) $refusals times in a '
+                  'row')) {
+            rewrittenMidPush++;
+          }
         }
       }
       batchesDone++;

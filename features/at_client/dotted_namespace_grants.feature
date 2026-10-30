@@ -95,3 +95,13 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given an enrollment without *
     When sync brings its own __ckcur.<dest>.<ns>.<own eid>.a.__e down
     Then it is stored; and another enrollment's <eid>.a.__e record is refused
+
+  Scenario: A queued write refused three rounds in a row with any other code leaves the queue, and the entries behind it push
+    Given a queued update the atServer refuses with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
+    When sync pushes it three rounds in a row
+    Then the third refusal removes it from the queue with a warning, and the entries behind it push
+
+  Scenario: A batch that fails as a whole drops nothing, however many rounds fail
+    Given a queued update, and a push whose whole batch fails, as when offline
+    When sync pushes it round after round
+    Then nothing is dropped however many rounds fail

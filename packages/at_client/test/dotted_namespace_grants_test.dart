@@ -90,13 +90,11 @@ void main() {
         ..value = 'written');
 
   /// A sync service for [client] that pushes one queued entry per batch to an
-  /// atServer answering each command as [answer] says: with a commit id, or
-  /// refusing it with an error code. Every command sent joins [sent].
-  Future<SyncServiceImpl> syncPushing(
-      _MockAtClient client,
-      List<String> sent,
-      Future<({int commitId, String? errorCode})> Function(String command)
-          answer) async {
+  /// atServer answering each command as [answer] says: with a commit id,
+  /// refusing it with an error code, or with a raw response map. Every command
+  /// sent joins [sent].
+  Future<SyncServiceImpl> syncPushing(_MockAtClient client, List<String> sent,
+      Future<Object> Function(String command) answer) async {
     final remote = _MockRemoteSecondary();
     final notifications = _MockNotificationService();
     when(() => notifications.subscribe(
@@ -121,9 +119,17 @@ void main() {
         final reply = await answer(command);
         responses.add({
           'id': request['id'],
-          'response': reply.errorCode == null
-              ? {'data': '${reply.commitId}'}
-              : {'error_code': reply.errorCode, 'error_message': 'refused'},
+          'response': switch (reply) {
+            Map() => reply,
+            (commitId: final int commitId, errorCode: null) => {
+                'data': '$commitId'
+              },
+            (commitId: _, errorCode: final String code) => {
+                'error_code': code,
+                'error_message': 'refused'
+              },
+            _ => throw ArgumentError('an answer the fake cannot send: $reply'),
+          },
         });
       }
       return 'data:${jsonEncode(responses)}';
@@ -571,6 +577,182 @@ void main() {
                 'its place, so the queue moved');
       });
     }
+  });
+
+  /// The atServer's answer to a write its store failed to apply: a code
+  /// outside the five refused for good.
+  const storeFailed = (commitId: -1, errorCode: 'AT0002');
+
+  /// The warnings that drop [key] after refusals in a row.
+  Iterable<String> droppedInARow(String key) => logs
+      .at('WARNING')
+      .where((m) => m.contains(key) && m.contains('3 times in a row'));
+
+  test(
+      'A queued write refused three rounds in a row with any other code '
+      'leaves the queue, and the entries behind it push', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async =>
+            command.contains('k.wavi@bob') ? storeFailed : accepted);
+
+    await push(sync);
+    await push(sync);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob', 'l.wavi@bob'],
+        reason: 'two refusals in a row leave it queued, ahead of the entry '
+            'behind it');
+    expect(sent.where((s) => s.contains('l.wavi@bob')), isEmpty);
+
+    await push(sync);
+    expect(sent.where((s) => s.contains('k.wavi@bob')), hasLength(3));
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the third refusal drops it, so the entry behind it pushes in '
+            'the same round');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(sync.refusalsHeld, isZero,
+        reason: 'nothing is held for the entry it dropped');
+    expect(await c.store.exists('k.wavi@bob'), isTrue,
+        reason: 'the device keeps its local copy');
+    expect(
+        droppedInARow('k.wavi@bob'),
+        allOf(
+            hasLength(1),
+            everyElement(allOf(contains('update'), contains(enrollmentId),
+                contains('AT0002')))));
+  });
+
+  test('A batch that fails as a whole drops nothing, however many rounds fail',
+      () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    var reachable = false;
+    final sent = <String>[];
+    final sync = await syncPushing(c.client, sent, (command) async {
+      if (!reachable) throw AtConnectException('the atServer is unreachable');
+      return accepted;
+    });
+
+    for (var round = 0; round < 5; round++) {
+      await push(sync);
+    }
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+        reason: 'a batch that failed as a whole says nothing about its '
+            'entries');
+    expect(sent, hasLength(5), reason: 'the premise: every round tried it');
+
+    reachable = true;
+    await push(sync);
+    expect(await c.local.peekSyncQueue(), isEmpty);
+  });
+
+  group('Given a queued update of K the atServer refuses with AT0002', () {
+    test(
+        'when a batch fails as a whole between its refusals, then it neither '
+        'counts nor restarts the count', () async {
+      final c = enrolled({'*': 'rw'});
+      await put(c.local, 'k.wavi@bob');
+      var reachable = true;
+      final sent = <String>[];
+      final sync = await syncPushing(c.client, sent, (command) async {
+        if (!reachable) throw AtConnectException('the atServer is unreachable');
+        return storeFailed;
+      });
+
+      await push(sync);
+      await push(sync);
+      reachable = false;
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), ['k.wavi@bob']);
+      reachable = true;
+      await push(sync);
+
+      expect(await c.local.peekSyncQueue(), isEmpty,
+          reason: 'three refusals of one version, with only a whole-batch '
+              'failure between them');
+    });
+
+    test(
+        'when a newer write to K is queued after two refusals, then the newer '
+        'one leaves the queue only after three refusals of its own', () async {
+      final c = enrolled({'*': 'rw'});
+      await put(c.local, 'k.wavi@bob');
+      final older = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+      final sent = <String>[];
+      final sync =
+          await syncPushing(c.client, sent, (command) async => storeFailed);
+      await push(sync);
+      await push(sync);
+      await put(c.local, 'k.wavi@bob');
+      expect((await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq,
+          greaterThan(older),
+          reason: 'the premise: the newer write is a new queued version');
+
+      await push(sync);
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+          reason: 'two refusals of the newer version are not three in a row');
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), isEmpty);
+    });
+
+    test(
+        'when it is accepted after two refusals and a newer write to K is '
+        'refused, then the newer one stays queued until three refusals of its '
+        'own', () async {
+      final c = enrolled({'*': 'rw'});
+      await put(c.local, 'k.wavi@bob');
+      ({int commitId, String? errorCode}) answer = storeFailed;
+      final sent = <String>[];
+      final sync = await syncPushing(c.client, sent, (command) async => answer);
+      await push(sync);
+      await push(sync);
+      expect(sync.refusalsHeld, 1,
+          reason: 'the premise: two refusals are held for K');
+      answer = accepted;
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), isEmpty,
+          reason: 'the premise: the third push was accepted');
+      expect(sync.refusalsHeld, isZero,
+          reason: 'an accepted push clears the count it held');
+
+      answer = storeFailed;
+      await put(c.local, 'k.wavi@bob');
+      await push(sync);
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+          reason: 'the count restarts after an accepted push');
+      await push(sync);
+      expect(await c.local.peekSyncQueue(), isEmpty);
+    });
+  });
+
+  test(
+      'Given a queued update whose answer sync cannot process, when that '
+      'happens three rounds in a row, then it leaves the queue with a warning',
+      () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client, sent, (command) async => {'data': 'not-a-commit-id'});
+
+    await push(sync);
+    await push(sync);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob']);
+    await push(sync);
+
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(
+        droppedInARow('k.wavi@bob'),
+        allOf(
+            hasLength(1),
+            everyElement(allOf(contains('update'), contains(enrollmentId),
+                contains('FormatException')))));
   });
 
   test(
