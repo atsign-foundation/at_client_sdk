@@ -2078,8 +2078,9 @@ class AtClientImpl implements AtClient {
   /// `at_pkam_publickey`, which at_lookup signs with rsa2048, so a
   /// post-quantum posture moves it exactly as it moves a legacy enrollment.
   /// What differs is only where the new enrollment's name and grants come from
-  /// — see [firstEnrollmentIdentity] — and that the atServer parks the request
-  /// `pending`, which at_auth approves over the same connection.
+  /// — see [firstEnrollmentIdentity]. The atServer answers that connection as
+  /// `primary`, the enrollment it keeps for the flat credential, and approves
+  /// the request outright as a retrofit of it.
   ///
   /// **Sequenced here rather than moved afterwards.** The monitor, the sync
   /// service's own `RemoteSecondary` and the encryption service are all built
@@ -2159,8 +2160,8 @@ class AtClientImpl implements AtClient {
               AtRootDomain(_preference!.rootDomain, _preference!.rootPort),
           atKeysIo: keysIo,
           namespace: _preference!.namespace,
-          // Null for a pre-enrollment atSign, which is how at_auth decides it
-          // must approve its own request.
+          // Null for a pre-enrollment atSign, which authenticates with the
+          // flat key.
           enrollmentId: id,
         ),
         atLookUp: _remoteSecondary!.atLookUp,
