@@ -66,45 +66,57 @@ void main() {
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
     });
 
-    test('test switch atsign - check progress listener cleared', () async {
+    test(
+        'when the app switches from Alice\'s client to Bob\'s, then each sync '
+        'service keeps its own client\'s listeners', () async {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
       final alicePreference = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
-      atClientManager.use(await buildAtClient(
+      final alice = await buildAtClient(
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
-          storage: hiveStoreFor(aliceAtSign, alicePreference)));
-      expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      atClientManager.atClient.syncService
-          .addProgressListener(AliceSyncProgressListener());
+          storage: hiveStoreFor(aliceAtSign, alicePreference));
+      atClientManager.use(alice);
+      final aliceSync = alice.syncService as SyncServiceImpl;
+      aliceSync.addProgressListener(AliceSyncProgressListener());
       final bobPreference = AtClientPreference()..hiveStoragePath = 'test/hive';
       final bobAtSign = '@bob';
-      atClientManager.use(await buildAtClient(
+      final bob = await buildAtClient(
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(bobPreference),
           atKeysIo: noKeysFor(bobAtSign),
-          storage: hiveStoreFor(bobAtSign, bobPreference)));
-      atClientManager.atClient.syncService
-          .addProgressListener(BobSyncProgressListener());
-      expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
+          storage: hiveStoreFor(bobAtSign, bobPreference));
+      atClientManager.use(bob);
+      final bobSync = bob.syncService as SyncServiceImpl;
+      bobSync.addProgressListener(BobSyncProgressListener());
+      expect(atClientManager.atClient, same(bob));
+      // NOTE: a stop marks the client stopped at once but empties its sync
+      // service's listeners only after an await, which a synchronous switch
+      // returns before.
+      expect(alice.isStopped, isFalse,
+          reason: 'the switch leaves Alice\'s client running');
       // NOTE: by identity rather than by count — the SDK registers a listener
       // of its own on every sync service, so a bare count says nothing about
-      // whose app listeners survived the switch.
-      final listeners =
-          (atClientManager.atClient.syncService as SyncServiceImpl)
-              .progressListeners();
-      expect(listeners.whereType<BobSyncProgressListener>(), hasLength(1));
-      expect(listeners.whereType<AliceSyncProgressListener>(), isEmpty,
-          reason: 'the previous atSign\'s listener must not carry over — it '
-              'would be handed the new atSign\'s sync events');
+      // whose app listeners a service holds.
+      expect(
+          aliceSync.progressListeners().whereType<AliceSyncProgressListener>(),
+          hasLength(1),
+          reason: 'her listener still hears her client\'s sync');
+      expect(aliceSync.progressListeners().whereType<BobSyncProgressListener>(),
+          isEmpty);
+      expect(bobSync.progressListeners().whereType<BobSyncProgressListener>(),
+          hasLength(1));
+      expect(bobSync.progressListeners().whereType<AliceSyncProgressListener>(),
+          isEmpty,
+          reason: 'Alice\'s listener would be handed Bob\'s sync events');
     });
   });
 }
