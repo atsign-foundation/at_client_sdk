@@ -424,7 +424,8 @@ class EnrollmentSubmitter {
   /// ML-DSA-65 signing material under some enrollment id, that enrollment is
   /// returned and nothing is minted or submitted. Otherwise the keyfile is
   /// written back unchanged first, and one that cannot be written is refused
-  /// before anything is sent. A crash after the request
+  /// before anything is sent; one that refuses the save after approval has
+  /// the new enrollment revoked, best effort. A crash after the request
   /// lands but before the keyfile is written leaves an orphan approved
   /// enrollment server-side whose private nobody holds — unusable and
   /// revocable, and a rerun spawns a fresh enrollment.
@@ -625,7 +626,28 @@ class EnrollmentSubmitter {
       // halves), re-tagged with the enrollment id it now belongs to.
       existing.adoptMaterials(constructionKeys.keys,
           enrollmentId: newEnrollmentId);
-      await keysIo.flush(request.atSign.toAtsign(), existing);
+      try {
+        await keysIo.flush(request.atSign.toAtsign(), existing);
+      } catch (e) {
+        // NOTE: an approved enrollment whose keys were not saved is revoked;
+        // revoking needs `__manage`, which a scoped parent may not hold.
+        var cleanup = 'The enrollment $newEnrollmentId it created was '
+            'revoked.';
+        try {
+          await _approver.revoke(
+              EnrollmentRequestDecision.revoked(
+                  newEnrollmentId, request.atSign),
+              atLookUp);
+        } catch (revokeError) {
+          cleanup = 'The enrollment $newEnrollmentId it created could NOT be '
+              'revoked ($revokeError); revoking needs __manage, which the '
+              'enrollment this connection authenticated as may not hold. It '
+              'stays approved, and no keyfile holds its private key.';
+        }
+        throw AtEnrollmentException('the self-enrollment was approved, but '
+            'the keyfile for ${request.atSign} could not be written ($e). '
+            '$cleanup');
+      }
 
       return AtEnrollmentResponse(newEnrollmentId, enrollStatus,
           atSign: request.atSign,

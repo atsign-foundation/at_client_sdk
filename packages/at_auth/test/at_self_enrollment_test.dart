@@ -683,6 +683,66 @@ void main() {
               contains('no self-enrollment was requested')));
     });
 
+    test(
+        'a keyfile that refuses the save after approval has the new '
+        'enrollment revoked', () async {
+      final (_, session) = await sessionRefusingWrites(from: 2);
+      final sent = <String>[];
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl()
+            .submit(requestFor(session), recordingLookUp(sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      final revokes = sent.where((c) => c.startsWith('enroll:revoke:'));
+      expect(revokes, hasLength(1),
+          reason: 'an approved enrollment whose keys were not saved is '
+              'revoked over the same connection');
+      // FROZEN: the same command at_client's `client.enrollments.revoke`
+      // sends without force; the atServer parses this.
+      expect(revokes.single, 'enroll:revoke:{"enrollmentId":"new-123"}\n',
+          reason: 'it revokes the id the atServer returned, and only that');
+      expect(sent.indexWhere((c) => c.startsWith('enroll:request:')),
+          lessThan(sent.indexOf(revokes.single)));
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('could not be written'),
+                  contains('new-123 it created was revoked'))),
+          reason: 'the error names the enrollment and says it was revoked');
+    });
+
+    test('a revoke the atServer refuses is reported in the error', () async {
+      final (_, session) = await sessionRefusingWrites(from: 2);
+      final sent = <String>[];
+      const refusal = 'error:AT0009-UnAuthorized Exception: Failed to revoke '
+          'enrollment id: new-123. Client is not authorized for namespaces '
+          'in the enrollment request';
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestFor(session), recordingLookUp(sent, revokeAnswer: refusal));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('new-123 it created could NOT be revoked'),
+                  contains('AT0009'), contains('__manage'))),
+          reason: 'a revoke that fails is reported with the atServer\'s '
+              'answer, rather than implying the atServer was left clean');
+    });
+
     test('a keyfile that takes writes saves and returns the new enrollment',
         () async {
       final (keysIo, session) = await sessionRefusingWrites(from: 1 << 30);
