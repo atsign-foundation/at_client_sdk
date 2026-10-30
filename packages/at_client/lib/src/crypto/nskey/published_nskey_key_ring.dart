@@ -107,12 +107,20 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 
   @override
   Future<NskeyAdvertisement> verify(String owner, String payload) async {
-    final SignedEnvelope envelope;
+    final Object? decoded;
     try {
-      envelope = SignedEnvelope.fromJson(jsonDecode(payload) as Map);
+      decoded = jsonDecode(payload);
     } on FormatException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner is not JSON: ${e.message}');
+    }
+    if (decoded is! Map) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner is not a JSON object');
+    }
+    final SignedEnvelope envelope;
+    try {
+      envelope = SignedEnvelope.fromJson(decoded);
     } on AtSigningVerificationException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner carries no APKAM signature, so the '
@@ -162,20 +170,35 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
       }
     }
     if (understood == 0) {
-      throw AtSigningVerificationException(
+      throw _UnusableAdvertisementException(
           'the advertised nskey for $owner offers only key-establishment '
           'algorithms this build cannot encapsulate to '
           '(${advertisement.keys.map((k) => '"${k.alg}"').join(', ')}) — '
           'refusing rather than sealing under one it did not name');
     }
     if (sealable == 0) {
-      throw AtSigningVerificationException(
+      throw _UnusableAdvertisementException(
           'the advertised nskey for $owner retires every key this build can '
           'encapsulate to, so it names nothing to seal to now');
     }
     return advertisement;
   }
 }
+
+/// An advertisement whose signature verifies and that names nothing this build
+/// can encapsulate to now.
+class _UnusableAdvertisementException extends AtSigningVerificationException {
+  _UnusableAdvertisementException(super.message);
+}
+
+/// Whether [e], from verifying this atSign's own advertisement, says the record
+/// may be minted over: it was read and does not verify, or the enrollment that
+/// signed it publishes no `_apsk`.
+bool _replaceableOwnAdvertisement(Object e) =>
+    (e is AtSigningVerificationException &&
+        e is! _UnusableAdvertisementException) ||
+    e is AtKeyNotFoundException ||
+    e is KeyNotFoundException;
 
 /// One freshly minted key: the seed that is filed, and the pair it derives.
 typedef _MintedKey = ({
@@ -1059,7 +1082,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   ///
   /// ⚠️ **At this atSign's own address an advertisement that does not verify
   /// also reads as none**, so a corrupt or hostile write can be minted over;
-  /// for a peer's address that failure propagates instead.
+  /// for a peer's address that failure propagates instead. Not being able to
+  /// fetch what it is checked against, and an advertisement that verifies but
+  /// names nothing this build can seal to, throw at both.
   Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
       publishedRecord(String owner, String namespace) async {
     final AtValue value;
@@ -1079,7 +1104,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     try {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
-      if (e is StoppedException || owner != _atClient.getCurrentAtSign()) {
+      if (owner != _atClient.getCurrentAtSign() ||
+          !_replaceableOwnAdvertisement(e)) {
         rethrow;
       }
       _logger.warning(
