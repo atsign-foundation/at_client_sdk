@@ -7,14 +7,14 @@ import 'package:chalkdart/chalk.dart';
 import 'common.dart';
 
 void main(List<String> args) async {
+  final argsParser = CLIBase.createArgsParser()
+    ..addOption('policy-atsign',
+        mandatory: true, help: "the atSign of the policy service");
   try {
-    var argsParser = CLIBase.argsParser
-      ..addOption('policy-atsign',
-          mandatory: true, help: "the atSign of the policy service");
-
     var policyAtsign = argsParser.parse(args)['policy-atsign'];
 
-    var atClient = (await CLIBase.fromCommandLineArgs(args)).atClient;
+    var atClient =
+        (await CLIBase.fromCommandLineArgs(args, parser: argsParser)).atClient;
 
     var policyRpcClient = AtRpcClient(
       atClient: atClient,
@@ -39,7 +39,7 @@ void main(List<String> args) async {
     thisRpcServer.start();
   } catch (e) {
     print(e);
-    print(CLIBase.argsParser.usage);
+    print(argsParser.usage);
   }
 }
 
