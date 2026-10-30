@@ -55,8 +55,10 @@ void main() {
       HashingAlgoType.md5,
     ]) {
       test('${type.name} is refused where it is chosen, not in encrypt', () {
-        expect(() => AtKeysCrypto.fromHashingAlgorithm(type),
-            throwsA(isA<ArgumentError>()));
+        expect(
+            () => AtKeysCrypto.fromHashingAlgorithm(type),
+            throwsA(isA<ArgumentError>().having(
+                (e) => e.invalidValue, 'invalidValue', type.name)));
       });
     }
   });

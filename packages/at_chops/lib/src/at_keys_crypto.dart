@@ -30,7 +30,7 @@ abstract class AtKeysCrypto {
   /// [encrypt] or [decrypt].
   static AtKeysCrypto fromHashingAlgorithm(HashingAlgoType hashingAlgoType) {
     if (hashingAlgoType != HashingAlgoType.argon2id) {
-      throw ArgumentError.value(hashingAlgoType, 'hashingAlgoType',
+      throw ArgumentError.value(hashingAlgoType.name, 'hashingAlgoType',
           'AtKeysCrypto supports only ${HashingAlgoType.argon2id.name}');
     }
     return _AtKeysCryptoImpl(hashingAlgoType);
