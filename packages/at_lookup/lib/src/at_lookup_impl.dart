@@ -676,6 +676,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   bool _isNotifying = false;
 
+  /// The [startNotifications] in flight and the notification generation it
+  /// belongs to, which a second call in that generation joins.
+  ({int generation, Future<void> done})? _starting;
+
   // --- reconnect, reauth and heartbeat -----------------------------------
   //
   // Owned here because this object holds the socket. at_client's Monitor
@@ -948,6 +952,32 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       logger.info('startNotifications: already notifying, nothing sent');
       return;
     }
+    final inFlight = _starting;
+    if (inFlight != null && inFlight.generation == _notifyGeneration) {
+      logger.info('startNotifications: already starting, nothing sent');
+      return inFlight.done;
+    }
+    final generation = _notifyGeneration;
+    final done = _beginNotifications(generation,
+        regex: regex,
+        getLastNotificationTime: getLastNotificationTime,
+        selfNotificationsEnabled: selfNotificationsEnabled);
+    _starting = (generation: generation, done: done);
+    try {
+      await done;
+    } finally {
+      if (identical(_starting?.done, done)) _starting = null;
+    }
+  }
+
+  /// The body of [_startNotifications] for [generation]: sends `monitor:` and
+  /// marks this lookup as notifying, unless a stop retires [generation] first.
+  Future<void> _beginNotifications(
+    int generation, {
+    required String? regex,
+    required Future<int?> Function()? getLastNotificationTime,
+    required bool selfNotificationsEnabled,
+  }) async {
     // Reading this getter is what creates the controller and installs the
     // seam, so it must happen before `monitor:` goes out - otherwise the first
     // notifications arrive with nowhere to go.
@@ -966,7 +996,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
 
-    final generation = _notifyGeneration;
     if (!await _openNotificationStream(generation)) return;
     // NOTE: a stopNotifications() that landed while `monitor:` went out owns
     // the state now.
