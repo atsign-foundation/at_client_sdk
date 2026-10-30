@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart';
 
+import 'passkey_ceremony.dart';
 import 'passkey_port.dart';
 
 Uint8List _randomBytes(int length) {
@@ -61,8 +62,8 @@ class WebPasskeyPort implements PasskeyPort {
       }
     }.jsify() as CredentialCreationOptions;
 
-    final credential = await window.navigator.credentials.create(options).toDart
-        as PublicKeyCredential;
+    final credential =
+        await passkeyCeremony(window.navigator.credentials.create(options));
     final credentialId = credential.rawId.toDart.asUint8List();
 
     return (credentialId: credentialId, prfFirst: _prfFirst(credential));
@@ -97,8 +98,8 @@ class WebPasskeyPort implements PasskeyPort {
       }
     }.jsify() as CredentialRequestOptions;
 
-    final credential = await window.navigator.credentials.get(options).toDart
-        as PublicKeyCredential;
+    final credential =
+        await passkeyCeremony(window.navigator.credentials.get(options));
     final credentialId = credential.rawId.toDart.asUint8List();
 
     return (credentialId: credentialId, prfFirst: _prfFirst(credential));
