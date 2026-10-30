@@ -3,10 +3,13 @@ library;
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
+
+import 'ml_dsa_65_acvp_vectors.dart';
 
 void main() {
   group('ML-DSA-65 FFI', () {
@@ -170,6 +173,54 @@ void main() {
           signature: garbageSig, publicKey: kp.publicKey);
 
       expect(ok, isFalse);
+    });
+
+    group('keyPairFromSeed', () {
+      for (final v in mlDsa65KeyGenVectors()) {
+        test('ACVP tcId ${v.tcId}: the seed derives the published keypair',
+            () async {
+          final kp = await MlDsa65FfiAlgo.fromLib(lib!).keyPairFromSeed(v.seed);
+          expect(kp.publicKey, v.pk);
+          expect(kp.secretKey, v.sk);
+        });
+      }
+
+      test('derives the same keypair as pure-Dart for random seeds', () async {
+        final ffi = MlDsa65FfiAlgo.fromLib(lib!);
+        final pure = MlDsa65PureDartAlgo();
+        final Random random = Random.secure();
+        for (var i = 0; i < 16; i++) {
+          final Uint8List seed = Uint8List.fromList(List<int>.generate(
+              MlDsa65Sizes.seedBytes, (_) => random.nextInt(256)));
+          final a = await ffi.keyPairFromSeed(seed);
+          final b = await pure.keyPairFromSeed(seed);
+          expect(a.publicKey, b.publicKey, reason: 'seed $seed');
+          expect(a.secretKey, b.secretKey, reason: 'seed $seed');
+        }
+      });
+
+      test('a seeded keypair signs with FFI and verifies with pure-Dart',
+          () async {
+        final ffi = MlDsa65FfiAlgo.fromLib(lib!);
+        final kp = await ffi.keyPairFromSeed(
+            Uint8List.fromList(List<int>.filled(MlDsa65Sizes.seedBytes, 9)));
+        final Uint8List message = Uint8List.fromList('seeded ffi'.codeUnits);
+        final Uint8List sig =
+            await ffi.signBytes(message, secretKey: kp.secretKey);
+        expect(
+            await MlDsa65PureDartAlgo()
+                .verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+            isTrue);
+      });
+
+      for (final int length in [0, 31, 33, 64]) {
+        test('a $length-byte seed throws ArgumentError', () {
+          expect(
+              () => MlDsa65FfiAlgo.fromLib(lib!)
+                  .keyPairFromSeed(Uint8List(length)),
+              throwsA(isA<ArgumentError>()));
+        });
+      }
     });
   });
 }

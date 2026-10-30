@@ -14,6 +14,17 @@ abstract final class MlDsa65Sizes {
   /// Signature size.
   static const int signatureBytes = 3309;
 
+  /// Key-generation seed size: FIPS 204 `ξ`.
+  static const int seedBytes = 32;
+
+  /// Throws [ArgumentError] unless [seed] is exactly [seedBytes] long.
+  static void validateSeed(Uint8List seed) {
+    if (seed.length != seedBytes) {
+      throw ArgumentError.value(
+          seed.length, 'seed', 'an ML-DSA-65 seed must be $seedBytes bytes');
+    }
+  }
+
   /// Throws [ArgumentError] unless [secretKey] is exactly [secretKeyBytes]
   /// long.
   ///
