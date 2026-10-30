@@ -5,6 +5,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
 
 /// A command-line program's [AtClient], opened by [init] from the program's
 /// arguments, with the keyfile and the local store defaulting to locations
@@ -221,6 +222,7 @@ class CLIBase {
   /// What [init] builds the client's connections with: [lookUps], else what
   /// [lookUpsFor] picks for the root domain, so a `proxy:` root names the
   /// atSign first on each connection.
+  @visibleForTesting
   AtLookUpFactory get lookUpsToUse =>
       lookUps ?? lookUpsFor(atRootDomain.rootDomain);
 

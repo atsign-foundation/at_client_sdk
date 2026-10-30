@@ -267,8 +267,8 @@ Future<void> main(List<String> args) async {
 
 /// The registrar refused a step of the registration.
 ///
-/// An [AtClientException], as the AtOnboardingException it replaces was, so a
-/// caller of [Register.main] that catches that still catches this.
+/// An [AtClientException], so a caller of [RegistrationFlow.start] or
+/// [Register.main] can catch it as one.
 class _RegistrarException extends AtClientException {
   _RegistrarException(super.message) : super.message();
 
