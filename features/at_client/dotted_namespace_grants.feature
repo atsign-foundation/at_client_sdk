@@ -4,7 +4,9 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   atServer reads a key's namespace as its last segment and also matches a
   grant against the key's name, so cmp.rotation covers x.cmp.rotation. The
   client's local access check decides the same way, so a record the atServer
-  lets the enrollment read or write is readable and writable locally too.
+  lets the enrollment read or write is readable and writable locally too. It
+  follows the atServer in one more way: a public key is read whatever the
+  grant.
 
   Races: none arise; the check reads the enrollment's grants, which this does
   not change.
@@ -44,6 +46,13 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given an enrollment granted {cmp.rotation: rw}
     When sync refuses a record
     Then it logs at warning naming the key and the enrollment
+
+  Scenario: A public key outside the grant is read locally, as the atServer allows, and not written
+    Given an enrollment granted {cmp.rotation: rw}
+    When it gets public:x.other@bob locally
+    Then it succeeds, as the atServer allows
+    When it puts public:x.other@bob
+    Then it is refused
 
   Scenario: A grant naming the namespace wins over * locally, even when it gives less
     Given an enrollment granted {*: rw, wavi: r}

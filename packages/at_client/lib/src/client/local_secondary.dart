@@ -525,7 +525,10 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
-      if (!await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
+      // NOTE: a public key is read whatever the grant, as the atServer's
+      // llookup reads one.
+      if (!llookupKey.contains('public:') &&
+          !await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
       }
@@ -679,8 +682,11 @@ class LocalSecondary implements Secondary {
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       final keysToRemove = <String>[];
       await Future.forEach(keys, (key) async {
-        if (!(await isEnrollmentAuthorizedForOperation(
-            key.toString(), builder))) {
+        // NOTE: a public key is listed whatever the grant, as the atServer's
+        // scan lists one.
+        if (!key!.startsWith('public:') &&
+            !(await isEnrollmentAuthorizedForOperation(
+                key.toString(), builder))) {
           keysToRemove.add(key.toString());
         }
       });

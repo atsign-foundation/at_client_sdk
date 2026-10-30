@@ -243,6 +243,45 @@ void main() {
   });
 
   test(
+      'A public key outside the grant is read locally, as the atServer '
+      'allows, and not written', () async {
+    final c = enrolled({'cmp.rotation': 'rw'});
+    const key = 'public:x.other@bob';
+    await c.store.put(key, AtData()..data = 'held');
+
+    expect(await llookup(c.local, key), 'data:held');
+    await expectLater(put(c.local, key), throwsA(isA<UnAuthorizedException>()),
+        reason: 'the atServer checks a write to a public key like any other');
+  });
+
+  group('Given an enrollment granted {cmp.rotation: rw}', () {
+    test(
+        'when it lists its keys, then a public key outside its grant is listed',
+        () async {
+      final c = enrolled({'cmp.rotation': 'rw'});
+      await c.store.put('public:x.other@bob', AtData()..data = 'held');
+      await c.store.put('x.other@bob', AtData()..data = 'held');
+
+      final listed =
+          jsonDecode((await c.local.executeVerb(ScanVerbBuilder()))!);
+      expect(listed, contains('public:x.other@bob'));
+      expect(listed, isNot(contains('x.other@bob')),
+          reason: 'the control: the same key, not public, is still checked');
+    });
+
+    test('when it deletes a public key outside its grant, then it is refused',
+        () async {
+      final c = enrolled({'cmp.rotation': 'rw'});
+      await c.store.put('public:x.other@bob', AtData()..data = 'held');
+
+      await expectLater(
+          c.local.executeVerb(DeleteVerbBuilder()
+            ..atKey = AtKey.fromString('public:x.other@bob')),
+          throwsA(isA<UnAuthorizedException>()));
+    });
+  });
+
+  test(
       'A grant naming the namespace wins over * locally, even when it gives '
       'less', () async {
     final c = enrolled({'*': 'rw', 'wavi': 'r'});
