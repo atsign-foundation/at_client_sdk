@@ -34,6 +34,7 @@ typedef RpcRequestHandler = Future<AtRpcResp> Function(
 );
 
 class AtRpcClient implements AtRpcCallbacks {
+  // NOTE: a request or response payload is logged at finest only.
   static final AtSignLogger logger =
       AtSignLogger(' AtRpcClient ', loggingHandler: rpcLoggingHandler());
 
@@ -90,7 +91,8 @@ class AtRpcClient implements AtRpcCallbacks {
     final completer = Completer<Map<String, dynamic>>();
     completerMap[request.reqId] = completer;
     completer.future.ignore();
-    logger.info('Sending request to $serverAtsign : $request');
+    logger.info('Sending request ${request.reqId} to $serverAtsign');
+    logger.finest('Request ${request.reqId} payload: ${request.payload}');
     try {
       await rpc.sendRequest(
           toAtSign: serverAtsign,
@@ -111,28 +113,31 @@ class AtRpcClient implements AtRpcCallbacks {
 
   @override
   Future<void> handleResponse(AtRpcResp response) async {
-    logger.info('Got response ${response.payload}');
+    logger.info('Got ${response.respType.name} response for request '
+        '${response.reqId}');
+    logger.finest('Response ${response.reqId} payload: ${response.payload}');
 
     final Completer? completer = completerMap[response.reqId];
 
     if (completer == null || completer.isCompleted) {
-      logger.warning('Ignoring response, no completer found : $response');
+      logger.warning('Ignoring the ${response.respType.name} response for '
+          'request ${response.reqId}: no completer found');
       return;
     }
 
     switch (response.respType) {
       case AtRpcRespType.ack:
         // We don't complete the future when we get an ack
-        logger.info('Got ack : $response');
+        logger.info('Got ack for request ${response.reqId}');
         break;
       case AtRpcRespType.success:
-        logger.info('Got success response : $response');
+        logger.info('Got success response for request ${response.reqId}');
         completer.complete(response.payload);
         completerMap.remove(response.reqId);
         break;
       default:
-        logger.warning('Got non-success response '
-            ' : $response');
+        logger.warning('Got ${response.respType.name} response for request '
+            '${response.reqId}');
         completer.completeError('Got non-success response : $response');
         completerMap.remove(response.reqId);
         break;
@@ -155,6 +160,7 @@ class AtRpcClient implements AtRpcCallbacks {
 /// ```
 /// ```
 class AtRpc {
+  // NOTE: a request or response payload is logged at finest only.
   static final AtSignLogger logger = AtSignLogger('AtRpc');
 
   static Duration defaultNotificationExpiry = Duration(seconds: 30);
@@ -414,8 +420,9 @@ class AtRpc {
         attemptNumber <= maxSendAttempts && !sent;
         attemptNumber++) {
       try {
-        logger.info(
-            'Sending notification ${requestRecordID.toString()} with payload $requestJson');
+        logger.info('Sending notification ${requestRecordID.toString()}');
+        logger.finest(
+            'Notification ${requestRecordID.toString()} payload: $requestJson');
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(requestRecordID,
                 value: requestJson,
@@ -427,17 +434,18 @@ class AtRpc {
         logger.info('Notification ${requestRecordID.toString()} sent');
       } catch (e) {
         if (atClient.isStopped) {
-          logger.warning('Not sending request $request: the client stopped');
+          logger.warning(
+              'Not sending request ${request.reqId}: the client stopped');
           throw StoppedException('the client for '
               '${atClient.getCurrentAtSign()} stopped before request '
               '${request.reqId} was sent');
         }
         if (attemptNumber < maxSendAttempts) {
           logger.warning(
-              'Exception $e sending request $request on attempt $attemptNumber - will retry in $delayMillis ms');
+              'Exception $e sending request ${request.reqId} on attempt $attemptNumber - will retry in $delayMillis ms');
         } else {
           logger.severe(
-              'Exception $e sending request $request on attempt $attemptNumber - giving up');
+              'Exception $e sending request ${request.reqId} on attempt $attemptNumber - giving up');
         }
         await Future.delayed(Duration(milliseconds: delayMillis));
         if (delayMillis < 5000) {
@@ -475,11 +483,15 @@ class AtRpc {
       if (allowAll) {
         logger.warning('Will handle request from atSign ${notification.from}'
             ' which is not on allowList (but allowAll is true)'
-            ' : $notification');
+            ' : ${notification.key}');
+        logger
+            .finest('Request notification ${notification.key}: $notification');
       } else {
         logger.shout('Ignoring request from atSign ${notification.from}'
             ' which is not on the allowList (and allowAll is false)'
-            ' : $notification');
+            ' : ${notification.key}');
+        logger
+            .finest('Request notification ${notification.key}: $notification');
         return;
       }
     }
@@ -510,8 +522,10 @@ class AtRpc {
     try {
       request = AtRpcReq.fromJson(jsonDecode(notification.value!));
     } catch (e, st) {
-      logger.warning(
-          'Failed to deserialize AtRpcReq from ${notification.value}: $e');
+      logger.warning('Failed to deserialize AtRpcReq from '
+          '${notification.key}: ${_withoutSource(e)}');
+      logger.finest('Request notification ${notification.key} value: '
+          '${notification.value}');
       logger.warning(st);
       final unparsed = AtRpcReq(reqId: requestId, payload: {});
       await sendResponse(
@@ -549,15 +563,20 @@ class AtRpc {
       await sendResponse(notification, request, response);
     } catch (e, st) {
       if (e is StoppedException || atClient.isStopped) {
-        logger.warning('Abandoned request $request: the client stopped');
+        logger
+            .warning('Abandoned request ${request.reqId}: the client stopped');
         return;
       }
-      var message =
-          'Exception $e from callbacks.handleRequest for request $request';
-      logger.warning(message);
+      logger.warning('Exception $e from callbacks.handleRequest for request '
+          '${request.reqId}');
       logger.warning(st);
-      await sendResponse(notification, request,
-          AtRpcResp.nack(request: request, message: message));
+      await sendResponse(
+          notification,
+          request,
+          AtRpcResp.nack(
+              request: request,
+              message: 'Exception $e from callbacks.handleRequest for '
+                  'request $request'));
     }
   }
 
@@ -602,11 +621,15 @@ class AtRpc {
       if (allowAll) {
         logger.warning('Will handle response from atSign ${notification.from}'
             ' which is not on allowList (but allowAll is true)'
-            ' : $notification');
+            ' : ${notification.key}');
+        logger
+            .finest('Response notification ${notification.key}: $notification');
       } else {
         logger.shout('Ignoring response from atSign ${notification.from}'
             ' which is not on the allowList (and allowAll is false)'
-            ' : $notification');
+            ' : ${notification.key}');
+        logger
+            .finest('Response notification ${notification.key}: $notification');
         return;
       }
     }
@@ -637,9 +660,10 @@ class AtRpc {
     try {
       response = AtRpcResp.fromJson(jsonDecode(notification.value!));
     } catch (e, st) {
-      var message =
-          'Failed to deserialize AtRpcResp from ${notification.value}: $e';
-      logger.warning(message);
+      logger.warning('Failed to deserialize AtRpcResp from '
+          '${notification.key}: ${_withoutSource(e)}');
+      logger.finest('Response notification ${notification.key} value: '
+          '${notification.value}');
       logger.warning(st);
       return;
     }
@@ -656,11 +680,12 @@ class AtRpc {
       await callbacks.handleResponse(response);
     } catch (e, st) {
       if (e is StoppedException) {
-        logger.warning('Abandoned response $response: the client stopped');
+        logger.warning('Abandoned the ${response.respType.name} response for '
+            'request ${response.reqId}: the client stopped');
         return;
       }
-      logger.warning(
-          'Exception $e from callbacks.handleResponse for response $response');
+      logger.warning('Exception $e from callbacks.handleResponse for the '
+          '${response.respType.name} response for request ${response.reqId}');
       logger.warning(st);
     }
   }
@@ -704,8 +729,8 @@ class AtRpc {
 
         var responseJson = jsonEncode(response.toJson());
 
-        logger.info(
-            "Sending notification $responseAtKey with payload $responseJson");
+        logger.info('Sending notification $responseAtKey');
+        logger.finest('Notification $responseAtKey payload: $responseJson');
         final result = await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
                 value: responseJson,
@@ -722,7 +747,8 @@ class AtRpc {
           if (cryptoProviderId != null &&
               failure is AtEncryptionException &&
               CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
-            logger.warning('Could not seal response $response under '
+            logger.warning('Could not seal the ${response.respType.name} '
+                'response for request ${response.reqId} under '
                 '$cryptoProviderId, the scheme its request arrived in; the '
                 'next attempt answers under this client\'s default');
             cryptoProviderId = null;
@@ -732,15 +758,16 @@ class AtRpc {
         sent = true;
       } catch (e) {
         if (atClient.isStopped) {
-          logger.warning('Not sending response $response: the client stopped');
+          logger.warning('Not sending the ${response.respType.name} response '
+              'for request ${response.reqId}: the client stopped');
           return;
         }
         if (attemptNumber < maxSendAttempts) {
           logger.warning(
-              'Exception $e sending response $response on attempt $attemptNumber - will retry in $delayMillis ms');
+              'Exception $e sending the ${response.respType.name} response for request ${response.reqId} on attempt $attemptNumber - will retry in $delayMillis ms');
         } else {
           logger.severe(
-              'Exception $e sending response $response on attempt $attemptNumber - giving up');
+              'Exception $e sending the ${response.respType.name} response for request ${response.reqId} on attempt $attemptNumber - giving up');
         }
         await Future.delayed(Duration(milliseconds: delayMillis));
         if (delayMillis < 5000) {
@@ -793,3 +820,8 @@ class _Callbacks implements AtRpcCallbacks {
     throw UnimplementedError();
   }
 }
+
+/// [e] as a log line may carry it: a [FormatException] by its message alone,
+/// since its own text quotes the source it could not parse.
+String _withoutSource(Object e) =>
+    e is FormatException ? 'FormatException: ${e.message}' : '$e';
