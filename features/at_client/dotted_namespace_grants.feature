@@ -15,9 +15,9 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   Replay: none arise; nothing sent or accepted changes.
   DoS: none arise; the check walks the grants once per key, as the atServer
   does.
-  Forgery and impersonation: none arise; a grant covers locally exactly the
-  keys it covers on the atServer, and sync stores only records the atServer
-  sent this enrollment.
+  Forgery and impersonation: none arise; the atServer checks every operation
+  this device pushes, and sync stores only records the atServer sent this
+  enrollment.
 
   Scenario: An enrollment granted a dotted namespace puts, gets, deletes and lists its keys locally
     Given an enrollment granted {cmp.rotation: rw}
