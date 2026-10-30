@@ -285,7 +285,7 @@ a fixed rule the corpus rail checks:
 | Host | Driver | Runs |
 |---|---|---|
 | `tests/at_functional_test` | `test/gherkin_<section>_test.dart`, `@Tags(['pq'])` before `library;` | `@live` scenarios with no product-surface tag |
-| `tests/at_end2end_test` | `test/pq/gherkin_<section>_test.dart` (under `test/pq/` so the `paths:` allowlist never names it, tagged `pq` as `suite_manifest_test` requires) | `@live` scenarios tagged `@legacy-server` (the pinned pre-PQ image) or `@zero-grace` (the `@eve🛠` secondary with `apkamSelfEnrollmentGraceHours=0`, which only this pack's virtualenv provisions and two retrofit rows need) |
+| `tests/at_end2end_test` | `test/pq/gherkin_<section>_test.dart` (under `test/pq/` so the `paths:` allowlist never names it, tagged `pq` as `suite_manifest_test` requires) | `@live` scenarios tagged `@legacy-server` (the pinned pre-PQ image), and the retrofit rows proven only in this pack |
 | `tests/at_client_cli_functional_tests` | `test/gherkin_<section>_test.dart` | `@live @cli` |
 | `packages/at_client` | `test/acceptance/gherkin_<section>_test.dart`, declared in `manifest.dart` so `architecture_guard_test` keeps enumerating | `@in-process` scenarios |
 | `packages/at_auth` | `test/gherkin_<section>_test.dart` | `@in-process` scenarios about the keyfile alone, if at_auth stays a host ([`decisions.md`](decisions.md)); otherwise none, and at_client binds them since it depends on at_auth |
@@ -600,9 +600,9 @@ Each is a few lines; each settles a claim the design rests on and nobody has run
 - **Declarations as scenario descriptions in the shared file.** Puts Dart test names
   and this repo's projects in front of every SDK's engineer; the maps already have
   rails.
-- **Routing e2e PQ scenarios into the functional pack.** Two retrofit rows need the
-  zero-grace secondary only the e2e virtualenv provisions; the catalogue already
-  records that the functional pack cannot host UC-B2.2.
+- **Routing e2e PQ scenarios into the functional pack.** Two retrofit rows are
+  proven only in the e2e pack, and moving them to the functional pack has not
+  been tried.
 - **`@UC-A1_1` as the tag spelling.** Needed only because `package:test` rejects the
   dot; Cucumber and JUnit accept `UC-A1.1`, so the underscore would be a Dart-ism in the
   shared file. The id travels in the test name instead.

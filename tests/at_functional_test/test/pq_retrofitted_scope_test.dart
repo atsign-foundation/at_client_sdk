@@ -115,8 +115,8 @@ void main() {
     await expectLater(superseded.executeCommand('scan\n', auth: true),
         throwsA(isA<StoppedException>()),
         reason: 'a connection left able to reconnect would authenticate as '
-            'the superseded enrollment, which the atServer still honours for '
-            'its grace period');
+            'the superseded enrollment, which the atServer honours until the '
+            'replacement first authenticates');
   }, timeout: Timeout(Duration(minutes: 3)));
 
   test('UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',

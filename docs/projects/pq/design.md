@@ -1361,14 +1361,13 @@ Constraints beyond the ruling above:
   name ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
   item 1). Distinctness is what lets an owner tell one device's enrollment
   from another's in `enroll:list`.
-- **The expiry cap RE-ARMS**, one grace period after the *last* clone upgrades and
-  never past the enrollment's own posture, grace ratified at 720h
-  ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
-  item 3). ⚠️ **What arms it is ruled and NOT landed**: the built atServer caps at
-  the retrofit submission and exempts the atSign's first enrollment;
-  [`decisions.md` 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-  moves the trigger to the child's first authentication on its own connection and
-  retires the exemption. This bullet read "ruled and landed" until 2026-08-27.
+- **No expiry cap and no grace.** A predecessor is settled once, at its
+  successor's first authentication on a connection it opened itself: one that
+  is not fully privileged is revoked as superseded, and a fully privileged one
+  keeps its life
+  ([`decisions.md` 133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+  A connection still open as a revoked predecessor is closed at its next
+  command, and a copy of its keyfile is refused at open.
 - **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
   the legacy parent enrollment (which holds nothing to push). Store-and-forward in
   both directions, so "heals when each device next runs" is latency, not

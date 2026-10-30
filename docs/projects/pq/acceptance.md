@@ -2967,9 +2967,9 @@ Four residues this catalogue states rather than hides:
 
 - **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell
   until arm 4 exists.
-- **UC-B2.2** needs the grace-0 secondary that only
-  `tests/at_end2end_test/runLocal.sh` provisions, so the functional pack cannot
-  host it.
+- **UC-B2.2** is proven only in the e2e pack
+  (`retrofit_retirement_e2e_test.dart`); no atServer setting ties it there, and
+  moving it to the functional pack has not been tried.
 - **UC-C1.4**'s Given is unprovable live.
 - **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
   invariant Then and a Given that legacy cannot satisfy: a posture configuring
