@@ -314,7 +314,9 @@ class LocalSecondary implements Secondary {
   /// `_update` / `_delete` to skip the sync-queue enqueue — the
   /// server already has the entry; bouncing it back would be a loop,
   /// and a queued entry carries only the key's name, so a later drain
-  /// would send whatever local storage held by then.
+  /// would send whatever local storage held by then. Such a change
+  /// needs only read access to be stored, since the atServer sent or
+  /// accepted it for this enrollment.
   @override
   Future<String?> executeVerb(VerbBuilder builder,
       {bool cameFromServer = false}) async {
@@ -390,7 +392,8 @@ class LocalSecondary implements Secondary {
     if (!cameFromServer) _writesInProgress.add(updateKey);
     try {
       dynamic updateResult;
-      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
+      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder,
+          fromAtServer: cameFromServer)) {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
@@ -563,7 +566,8 @@ class LocalSecondary implements Secondary {
       bool isExpiry = false}) async {
     var deleteKey = builder.buildKey();
     if (!isExpiry &&
-        !await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+        !await isEnrollmentAuthorizedForOperation(deleteKey, builder,
+            fromAtServer: cameFromServer)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -956,8 +960,14 @@ class LocalSecondary implements Secondary {
     return true;
   }
 
+  /// Whether this client's enrollment may perform [verbBuilder] on [key] in
+  /// local storage, decided by its grants as the atServer decides it.
+  ///
+  /// [fromAtServer] marks a change the atServer sent or accepted for this
+  /// enrollment, which needs only read access to be stored.
   Future<bool> isEnrollmentAuthorizedForOperation(
-      String key, VerbBuilder verbBuilder) async {
+      String key, VerbBuilder verbBuilder,
+      {bool fromAtServer = false}) async {
     // Do whatever you want with "local" keys
     if (key.startsWith('local:')) {
       return true;
@@ -982,6 +992,7 @@ class LocalSecondary implements Secondary {
         covering.grant == EnrollmentConstants.enrollManageNamespace) {
       return false;
     }
+    if (fromAtServer) return _grantsRead(covering.access);
     return _isReadAllowed(verbBuilder, covering.access) ||
         _isWriteAllowed(verbBuilder, covering.access);
   }
@@ -1125,6 +1136,8 @@ class LocalSecondary implements Secondary {
       return null;
     }
   }
+
+  bool _grantsRead(String access) => access == 'r' || access == 'rw';
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
     return (verbBuilder is LLookupVerbBuilder ||

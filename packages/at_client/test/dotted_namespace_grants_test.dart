@@ -132,14 +132,20 @@ void main() {
         remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
   }
 
+  /// One round that pulls the atServer's first commit.
+  Future<void> pull(SyncServiceImpl sync) =>
+      sync.syncInternal(1, SyncRequest()..result = SyncResult(),
+          localCommitIdBeforeSync: -1);
+
   Future<void> push(SyncServiceImpl sync) =>
       sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
           localCommitIdBeforeSync: -1);
 
   /// A sync service for [client] whose atServer hands back [entries] on the
-  /// pull, each an update.
+  /// pull, each an update, or each a delete when [deletes].
   Future<SyncServiceImpl> syncPulling(
-      _MockAtClient client, List<String> entries) async {
+      _MockAtClient client, List<String> entries,
+      {bool deletes = false}) async {
     final remote = _MockRemoteSecondary();
     final notifications = _MockNotificationService();
     when(() => notifications.subscribe(
@@ -158,10 +164,10 @@ void main() {
                   for (final (i, atKey) in entries.indexed)
                     {
                       'atKey': atKey,
-                      'value': 'synced',
+                      'value': deletes ? null : 'synced',
                       'metadata': null,
                       'commitId': i + 1,
-                      'operation': '+',
+                      'operation': deletes ? '-' : '+',
                     }
                 ])}');
     return await SyncServiceImpl.create(client,
@@ -515,5 +521,47 @@ void main() {
         expect(await c.local.peekSyncQueue(), isEmpty);
       });
     }
+  });
+
+  test(
+      'An enrollment granted read only stores what sync brings it, and its '
+      'own put is still refused', () async {
+    final c = enrolled({'ns': 'r'});
+    final sync = await syncPulling(c.client, ['x.ns@bob']);
+
+    await pull(sync);
+
+    expect(await c.store.exists('x.ns@bob'), isTrue,
+        reason: 'the atServer sends a record to an enrollment that may read '
+            'it, and storing it is not a write by that enrollment');
+    await expectLater(
+        put(c.local, 'x.ns@bob'), throwsA(isA<UnAuthorizedException>()),
+        reason: 'the enrollment itself still may not write ns');
+  });
+
+  group('Given an enrollment that may only read a namespace', () {
+    test(
+        'when it also holds `*: rw`, then sync still stores that '
+        'namespace\'s advertisement', () async {
+      final c = enrolled({'readonly': 'r', '*': 'rw', '__manage': 'rw'});
+      final sync = await syncPulling(c.client, ['public:__nskey.readonly@bob']);
+
+      await pull(sync);
+
+      expect(await c.store.exists('public:__nskey.readonly@bob'), isTrue,
+          reason: 'readonly gives read, which is enough to store what sync '
+              'brings');
+    });
+
+    test('when sync brings a delete, then the record goes', () async {
+      final c = enrolled({'ns': 'r'});
+      await c.store.put('x.ns@bob', AtData()..data = 'held');
+      final sync = await syncPulling(c.client, ['x.ns@bob'], deletes: true);
+
+      await pull(sync);
+
+      expect(await c.store.exists('x.ns@bob'), isFalse,
+          reason: 'a delete the atServer sends applies as an update does');
+    });
   });
 }

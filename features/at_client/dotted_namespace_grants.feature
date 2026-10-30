@@ -85,3 +85,8 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given a queued update that the atServer refuses with AT0032, AT0016, AT0022 or AT0003
     When sync pushes
     Then that entry leaves the queue, a warning names K, the operation, the enrollment and the code, and the entries behind it push in the same round
+
+  Scenario: An enrollment granted read only stores what sync brings it, and its own put is still refused
+    Given an enrollment granted {ns: r}
+    When sync brings x.ns@bob down
+    Then it is stored locally, and a local put of x.ns@bob by that enrollment is still refused
