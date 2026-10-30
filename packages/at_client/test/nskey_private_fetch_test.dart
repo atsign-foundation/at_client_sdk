@@ -401,8 +401,8 @@ void main() {
 
     test(
         'when the ring holds its own advertisement for the namespace, then it '
-        'reads the published one once per cooldown, and with the kids unnamed '
-        'fetches and asks once per cooldown', () async {
+        'reads the published one once per cooldown, and with the kid unnamed '
+        'fetches and asks nothing', () async {
       final g1 = await generation();
       final served = serving({
         namespace: naming([g1.key])
@@ -429,21 +429,18 @@ void main() {
       expect(served.reads, [namespace],
           reason: 'concurrent misses share one read, and the cooldown holds '
               'the rest');
-      expect(fetched, 1);
-      expect(asked, hasLength(1),
-          reason: 'forty unnamed kids pull once per cooldown, not forty times');
+      expect(fetched, 0);
+      expect(asked, isEmpty);
 
       await Future<void>.delayed(const Duration(milliseconds: 250));
       await ring.privateHalf(alice, namespace, 'unnamed');
-      await pumpEventQueue();
       expect(served.reads, [namespace, namespace],
           reason: 'past the cooldown the next miss reads again');
-      expect(asked, [secretOf('unnamed0'), secretOf('unnamed')]);
     });
 
     test(
-        'when the kid is a generation a rotation superseded, then the first '
-        'miss fetches and asks for it', () async {
+        'when the kid is a generation a rotation superseded, then the miss '
+        'fetches and asks nothing', () async {
       final g1 = await generation();
       final g2 = await generation();
       final served = serving({
@@ -460,10 +457,13 @@ void main() {
 
       expect(await ring.privateHalf(alice, namespace, g1.kid), isNull);
       await pumpEventQueue();
-      expect(fetched, 1);
-      expect(asked, [secretOf(g1.kid)],
-          reason: 'records sealed before the rotation stay sealed to g1, and '
-              'only an enrollment that holds it can repair this one');
+      expect(served.reads, [namespace],
+          reason: 'the miss reads the published advertisement, which names '
+              'only the successor');
+      expect(fetched, 0);
+      expect(asked, isEmpty,
+          reason: 'a rotation publishes the successor alone, so no own '
+              'advertisement names g1');
     });
 
     test(
@@ -561,14 +561,13 @@ void main() {
       final ring = PublishedNskeyKeyRing(served.client,
           verifier: served.verifier,
           privateFiling: privates, fetchConveyance: () async {
-        if (down) throw SecondaryConnectException('still unreachable');
         fetched++;
         await privates.file(conveyed(g2));
       }, requestConveyance: (ns, name) async {})
         ..askCooldown = const Duration(milliseconds: 50);
 
       expect(await ring.privateHalf(alice, namespace, g2.kid), isNull);
-      expect(fetched, 0, reason: 'the atServer could not be reached');
+      expect(fetched, 0, reason: 'an unread advertisement names nothing');
 
       down = false;
       expect(await ring.privateHalf(alice, namespace, g2.kid), isNull,
