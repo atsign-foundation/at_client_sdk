@@ -14,6 +14,7 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -227,20 +228,8 @@ class LocalSecondary implements Secondary {
   /// cache write) flow into the sync queue, where the server then
   /// rejects them with `AT0003 Invalid syntax`.
   @visibleForTesting
-  static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) {
-    if (atKey.startsWith('cached:')) {
-      // Receiver-initiated delete of a cached key is the one
-      // legitimate client→server case for cached:; everything else
-      // (puts, meta updates) is server-originated and shouldn't be
-      // pushed back.
-      return op == SyncQueueOp.delete;
-    }
-    final type = AtKey.getKeyType(atKey);
-    return type == KeyType.selfKey ||
-        type == KeyType.sharedKey ||
-        type == KeyType.publicKey ||
-        type == KeyType.reservedKey;
-  }
+  static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) =>
+      syncsKey(atKey, op);
 
   /// Enqueues [atKey] for client→server sync with operation [op] and
   /// triggers the sync service to drain. Called from [_update] /

@@ -11,6 +11,7 @@ import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
@@ -802,37 +803,6 @@ class SyncServiceImpl implements SyncService {
     return _dropRefused(localSecondary, source, '$why $count times in a row');
   }
 
-  /// The atServer's inbound buffer, in bytes: a command longer than this
-  /// closes the connection.
-  static const _atServerInboundBytes = 10240000;
-
-  /// The headroom a push batch keeps below [_atServerInboundBytes], the same
-  /// the default [AtClientPreference.maxDataSize] leaves.
-  static const _batchHeadroomBytes = 10000;
-
-  /// The most UTF-8 bytes one `batch:` command may take. It stays within
-  /// [AtClientPreference.maxDataSize] as well, which [RemoteSecondary] checks
-  /// in UTF-16 code units, and a string never has more of those than UTF-8
-  /// bytes.
-  int get _batchBudgetBytes {
-    const inbound = _atServerInboundBytes - _batchHeadroomBytes;
-    final maxDataSize = _atClient.getPreferences()!.maxDataSize;
-    return maxDataSize < inbound ? maxDataSize : inbound;
-  }
-
-  /// The UTF-8 bytes of the `batch:` command [sendBatch] sends for [count]
-  /// requests whose JSON takes [requestBytes] in all: `batch:[`, the requests
-  /// joined by commas, then `]` and the line feed.
-  static int _batchCommandBytes(int requestBytes, int count) =>
-      'batch:['.length + requestBytes + count - 1 + ']\n'.length;
-
-  /// The UTF-8 bytes of a [BatchRequest] with [id] whose command, encoded as a
-  /// JSON string, takes [commandBytes].
-  static int _requestBytes(int id, int commandBytes) =>
-      utf8.encode(jsonEncode(BatchRequest(id, ''))).length -
-      '""'.length +
-      commandBytes;
-
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -847,7 +817,7 @@ class SyncServiceImpl implements SyncService {
   ///    timing windows (rare, but the alternative is leaking queue
   ///    entries forever). An entry whose command cannot be built is
   ///    passed over and counted as a refusal is. One whose command
-  ///    alone is over [_batchBudgetBytes] is removed with a warning,
+  ///    alone is over [pushBudgetBytes] is removed with a warning,
   ///    keeping the local copy, and the batch closes before the entry
   ///    that would take it over.
   /// 3. Build a `BatchRequest` list and send via [sendBatch] (single
@@ -871,7 +841,7 @@ class SyncServiceImpl implements SyncService {
     final localSecondary = _atClient.getLocalSecondary()!;
     final batchSize = _atClient.getPreferences()!.syncBatchSize;
     final keyInfoList = <KeyInfo>[];
-    final budget = _batchBudgetBytes;
+    final budget = pushBudgetBytes(_atClient.getPreferences()!.maxDataSize);
     // NOTE: an entry this round has counted stays queued, and is not offered
     // again until the next round.
     final passedOver = <String>{};
@@ -943,9 +913,9 @@ class SyncServiceImpl implements SyncService {
           seq: entry.seq,
         );
         final wireCommand = VerbUtil.replaceNewline(command);
-        final commandBytes = utf8.encode(jsonEncode(wireCommand)).length;
+        final commandBytes = pushedCommandBytes(command);
         final aloneBytes =
-            _batchCommandBytes(_requestBytes(1, commandBytes), 1);
+            batchCommandBytes(batchRequestBytes(1, commandBytes), 1);
         if (aloneBytes > budget) {
           await _dropRefused(
               localSecondary,
@@ -956,9 +926,9 @@ class SyncServiceImpl implements SyncService {
           continue;
         }
         final batchId = batchRequests.length + 1;
-        final bytes = _requestBytes(batchId, commandBytes);
+        final bytes = batchRequestBytes(batchId, commandBytes);
         if (batchRequests.isNotEmpty &&
-            _batchCommandBytes(requestBytes + bytes, batchId) > budget) {
+            batchCommandBytes(requestBytes + bytes, batchId) > budget) {
           break;
         }
         requestBytes += bytes;
@@ -1137,8 +1107,7 @@ class SyncServiceImpl implements SyncService {
           // catches [KeyNotFoundException] and removes it.
           throw KeyNotFoundException('$atKey not found in keystore');
         }
-        final keyGen = '${metadataToString(value.metaData)}:$atKey';
-        return 'update$keyGen ${value.data}';
+        return pushUpdateCommand(atKey, value.metaData, value.data);
     }
   }
 
@@ -1481,12 +1450,8 @@ class SyncServiceImpl implements SyncService {
   /// The sync push's metadata serializer, delegating to the canonical
   /// [Metadata.toAtProtocolFragment] that direct writes also go through.
   @visibleForTesting
-  static String metadataToString(AtMetaData? metadata) {
-    // NOTE: `toCommonsMetadata` omits the timestamp fields
-    // (createdAt/updatedAt/expiresAt/availableAt) and sharedKeyStatus, so the
-    // push does not send them and the atServer re-derives them on receipt.
-    return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
-  }
+  static String metadataToString(AtMetaData? metadata) =>
+      pushMetadataFragment(metadata);
 
   @override
   Future<bool> isInSync() async {
