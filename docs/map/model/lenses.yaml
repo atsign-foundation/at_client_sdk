@@ -1,0 +1,29 @@
+# Starting points for a reader, each opening with the flows it lists.
+lenses:
+  - id: notifications
+    title: Notifications and subscriptions
+    summary: >-
+      How a write on one atSign's client reaches another atSign's client as a
+      notification, across both atServers.
+    flows: [share-record]
+    links:
+      - title: The notifications example
+        href: packages/at_client/example/bin/notifications.dart
+  - id: sync
+    title: Online / offline, remote / local and sync
+    summary: >-
+      How a write lands in local storage first and reaches the atServer
+      through the sync queue.
+    flows: [share-record]
+    links:
+      - title: at_client README
+        href: packages/at_client/README.md
+  - id: e2e
+    title: End-to-end encryption
+    summary: >-
+      Where a shared value is encrypted for its recipient before it leaves
+      the client.
+    flows: [share-record]
+    links:
+      - title: at_client README
+        href: packages/at_client/README.md

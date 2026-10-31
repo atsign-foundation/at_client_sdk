@@ -107,6 +107,47 @@ jobs:
             packages/at_client/citations.jsonl
           if-no-files-found: warn
 
+  # The SDK map's gate: docs/map must be what a fresh build gives against
+  # at_server at the SHA docs/map/model/roots.yaml pins. The clone has full
+  # history and tags, for the production tag check and the lane note.
+  map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out at_server at the pinned SHA
+        run: |
+          pin=$(awk '/^server:/ {s=1} s && /^  sha:/ {print $2; exit}' docs/map/model/roots.yaml)
+          git clone --quiet https://github.com/atsign-foundation/at_server.git "$RUNNER_TEMP/at_server"
+          git -C "$RUNNER_TEMP/at_server" checkout --quiet --detach "$pin"
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in at_map
+        working-directory: tools/at_map
+        run: dart pub get
+
+      - name: Install dependencies in the pinned at_server
+        working-directory: ${{ runner.temp }}/at_server/packages/at_secondary_server
+        run: dart pub get --enforce-lockfile
+
+      - name: Analyze at_map
+        working-directory: tools/at_map
+        run: dart analyze --fatal-warnings
+
+      - name: Check that at_map is correctly formatted
+        working-directory: tools/at_map
+        run: dart format . -o none --set-exit-if-changed
+
+      - name: Test at_map
+        working-directory: tools/at_map
+        run: dart test --concurrency=1
+        env:
+          AT_MAP_SERVER_REPO: ${{ runner.temp }}/at_server
+
+      - name: Check the map
+        run: dart run at_map check --server-repo "$RUNNER_TEMP/at_server"
+
   unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
