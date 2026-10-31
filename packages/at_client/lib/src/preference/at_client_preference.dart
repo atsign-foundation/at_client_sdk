@@ -287,7 +287,8 @@ class AtClientPreference {
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
-  /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
+  /// `AtClient.put` throws [BufferOverFlowException] when the value, after
+  /// encryption or encoding, takes more UTF-8 bytes than this.
   int maxDataSize = 10230000;
 
   /// regex to perform sync

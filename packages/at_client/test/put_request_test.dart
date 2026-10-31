@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
@@ -200,6 +202,65 @@ void main() {
               e is AtClientException &&
               e.message ==
                   'The length of value exceeds the buffer size. Maximum buffer size is 1 bytes. Found 14 bytes')));
+    });
+
+    /// A client of `@bob` whose put transforms every value to [stored], with
+    /// [preference].
+    Future<AtClientImpl> putting(
+        AtClientPreference preference, String stored) async {
+      registerFallbackValue(FakeTuple());
+      final transformer = MockPutRequestTransformer();
+      when(() => transformer.transform(any(that: TupleMatcher()),
+              encryptionPrivateKey: any(named: 'encryptionPrivateKey'),
+              requestOptions: any(named: 'requestOptions')))
+          .thenAnswer((inv) async => UpdateVerbBuilder()
+            ..atKey = (inv.positionalArguments.first as Tuple).one as AtKey
+            ..value = stored);
+      final atClientImpl = await AtClientImpl.create('@bob', 'wavi', preference,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
+              atKeysIo: noKeysFor('@bob'),
+              remoteSecondary: MockRemoteSecondary(),
+              storage:
+                  InMemoryAtClientStorage(atSign: '@bob', closedByClient: true))
+          as AtClientImpl;
+      addTearDown(atClientImpl.stop);
+      atClientImpl.putRequestTransformer = transformer;
+      return atClientImpl;
+    }
+
+    test(
+        'a plain-text value under maxDataSize in code units but over it in '
+        'UTF-8 bytes is refused at put, naming its size in bytes', () async {
+      final twoBytesEach = 'é' * 6;
+      final atClientImpl =
+          await putting(AtClientPreference()..maxDataSize = 10, twoBytesEach);
+
+      await expectLater(
+          atClientImpl.put(
+              AtKey.self('phone', namespace: 'wavi').build(), twoBytesEach),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message ==
+                  'The length of value exceeds the maximum allowed length. '
+                      'Maximum buffer size is 10 bytes. Found 12 bytes')));
+    });
+
+    test('an encrypted value of exactly maxDataSize bytes is not refused',
+        () async {
+      final base64AtTheCap = base64Encode(List.filled(9, 0));
+      final preference = AtClientPreference()..maxDataSize = 12;
+      final atClientImpl = await putting(preference, base64AtTheCap);
+      final atKey = AtKey.self('phone', namespace: 'wavi').build();
+
+      expect(await atClientImpl.put(atKey, 'x'), isTrue,
+          reason: 'a base64 value takes as many bytes as code units');
+      preference.maxDataSize = 11;
+      await expectLater(
+          atClientImpl.put(atKey, 'x'),
+          throwsA(isA<AtClientException>()
+              .having((e) => e.message, 'message', contains('Found 12 bytes'))),
+          reason: 'the control: one byte under the value is refused');
     });
   });
 

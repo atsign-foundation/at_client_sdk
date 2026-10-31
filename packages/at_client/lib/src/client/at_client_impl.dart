@@ -1920,12 +1920,15 @@ class AtClientImpl implements AtClient {
       // provider is finally selected.
       requestOptions: options,
     );
-    // Validate the size of the value after encryption/encoding
+    // Validate the size in UTF-8 bytes of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
     // will not be null.
-    if (putBuilder.value.length > _preference!.maxDataSize) {
+    final stored = putBuilder.value;
+    final storedBytes =
+        stored is String ? utf8.encode(stored).length : stored.length;
+    if (storedBytes > _preference!.maxDataSize) {
       throw BufferOverFlowException(
-        'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes',
+        'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found $storedBytes bytes',
       );
     }
 
