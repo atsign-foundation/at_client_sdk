@@ -866,13 +866,13 @@ class SyncServiceImpl implements SyncService {
             final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
                 source.atKey, source.seq);
             if (!removed) rewrittenMidPush++;
-            _bailIfStopped();
             _logger.warning('The atServer refused ${source.op.name} of '
                 '${source.atKey} for enrollment ${_atClient.enrollmentId} '
                 'with ${responseObject.errorCode} '
                 '(${responseObject.errorMessage}), so it is not retried and '
                 'this device keeps its local copy'
                 '${removed ? '' : '; a newer write to it pushes next round'}');
+            _bailIfStopped();
             continue;
           }
           if (commitId == -1) {

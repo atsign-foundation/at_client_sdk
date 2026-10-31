@@ -8,6 +8,8 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/memory/memory_at_key_value_store.dart';
+import 'package:at_client/src/storage/memory/memory_sync_queue_store.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     hide AtNotification;
@@ -42,6 +44,23 @@ class _AcceptingVerifier implements AdvertisedKeyVerifier {
       advertisement;
 }
 
+/// A sync queue store whose deletes wait on [gate] once it is set, and which
+/// completes [deleting] when one starts waiting.
+class _GatedQueueStore extends MemorySyncQueueStore {
+  Completer<void>? gate;
+  final deleting = Completer<void>();
+
+  @override
+  Future<void> delete(String atKey) async {
+    final held = gate;
+    if (held != null) {
+      if (!deleting.isCompleted) deleting.complete();
+      await held.future;
+    }
+    return super.delete(atKey);
+  }
+}
+
 /// A dotted namespace grant in the client's local access check, which decides
 /// as the atServer's own check does, and sync pushing past a write the
 /// atServer refuses for good.
@@ -67,7 +86,7 @@ void main() {
   /// of its own. Its local `get` runs through the local secondary, as the
   /// client's does for a key of its own atSign.
   ({_MockAtClient client, MemoryAtKeyValueStore store, LocalSecondary local})
-      enrolled(Map<String, String> grants) {
+      enrolled(Map<String, String> grants, {AtSyncQueue? syncQueue}) {
     final client = _MockAtClient();
     when(() => client.getCurrentAtSign()).thenReturn(atSign);
     when(() => client.atSign).thenReturn(atSign.toAtsign());
@@ -75,7 +94,9 @@ void main() {
     when(() => client.syncService).thenReturn(_MockSyncService());
     final store = MemoryAtKeyValueStore(atSign);
     final local = LocalSecondary(client,
-        syncQueue: memorySyncQueue(), keyStore: store, onEvent: (_) {});
+        syncQueue: syncQueue ?? memorySyncQueue(),
+        keyStore: store,
+        onEvent: (_) {});
     local.enrollment = Enrollment()
       ..enrollmentId = enrollmentId
       ..namespace = grants;
@@ -514,6 +535,37 @@ void main() {
             reason: 'the local copy stays as written');
       });
     }
+  });
+
+  test(
+      'Given a queued update the atServer refuses for good, when sync is '
+      'stopped while it is being removed, then the warning naming it is still '
+      'logged', () async {
+    final queueStore = _GatedQueueStore();
+    final queue = AtSyncQueue(atSign: atSign);
+    unawaited(queue.open(store: queueStore));
+    final c = enrolled({'*': 'rw'}, syncQueue: queue);
+    await put(c.local, 'k.wavi@bob');
+    final sent = <String>[];
+    final sync =
+        await syncPushing(c.client, sent, (command) async => unauthorized);
+    queueStore.gate = Completer<void>();
+
+    final round = push(sync);
+    await queueStore.deleting.future;
+    final stopping = sync.stop();
+    queueStore.gate!.complete();
+    await round.then((_) {}, onError: (_) {});
+    await stopping;
+
+    expect(await c.local.peekSyncQueue(), isEmpty,
+        reason: 'the premise: the removal finished after the stop');
+    expect(
+        logs
+            .at('WARNING')
+            .where((m) => m.contains('k.wavi@bob') && m.contains('AT0009')),
+        hasLength(1),
+        reason: 'an entry sync removes is named at warning, stop or no stop');
   });
 
   group('Given an update of K refused for good while in flight', () {
