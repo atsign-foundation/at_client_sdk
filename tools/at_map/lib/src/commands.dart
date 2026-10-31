@@ -9,7 +9,6 @@ import 'evidence.dart';
 import 'model.dart';
 import 'output.dart';
 import 'source.dart';
-import 'tokens.dart';
 
 /// Where generated files live, relative to the SDK checkout.
 const String dataDir = 'docs/map/data';
@@ -240,6 +239,11 @@ Future<int> runDiffProd(Workspace ws,
   final model = _model(ws, log);
   if (model == null) return 1;
   final roots = model.roots;
+  final problem = serverCheckoutProblem(ws.server.dir, roots.serverSha);
+  if (problem != null) {
+    log('FAIL $problem');
+    return 1;
+  }
   final prod = GitRefTree(ws.serverGit, roots.productionSha);
   for (final f in model.flows) {
     for (final s in f.steps) {
@@ -258,17 +262,9 @@ Future<int> runDiffProd(Workspace ws,
   return 0;
 }
 
-String? _hashAt(String? text, CodeRef a) {
-  if (text == null) return null;
-  final hits = indexDeclarations(parseUnit(text))[a.symbol];
-  if (hits == null || hits.length != 1) return null;
-  final tokens = nodeTokens(hits.single.node);
-  if (a.contains != null &&
-      tokenMatches(tokens, lexemes(a.contains!)).length != 1) {
-    return null;
-  }
-  return tokenHash(tokens, skip: hits.single.nameToken);
-}
+String? _hashAt(String? text, CodeRef a) => text == null
+    ? null
+    : locateAnchor(indexDeclarations(parseUnit(text)), a).hash;
 
 /// `at_map bless FLOW.STEP...`: records each step's current body hash as
 /// reviewed, writing each flow file through [write].
@@ -277,6 +273,15 @@ int runBless(Workspace ws, List<String> ids,
   write ??= (path, text) => File(ws.sdk.absolute(path)).writeAsStringSync(text);
   final model = _model(ws, log);
   if (model == null) return 1;
+  final serverSteps = ids.any((id) => model.flows.any((f) => f.steps.any((s) =>
+      '${f.id}.${s.id}' == id && model.lanes[s.lane]?.role == 'server')));
+  final problem = serverSteps
+      ? serverCheckoutProblem(ws.server.dir, model.roots.serverSha)
+      : null;
+  if (problem != null) {
+    log('FAIL $problem');
+    return 1;
+  }
   var code = 0;
   for (final id in ids) {
     final dot = id.indexOf('.');
@@ -358,15 +363,21 @@ Future<int> runIndexes(Workspace ws,
     return 1;
   }
   final literals = testLiterals(ws.server);
-  final sdkTests = ws.sdk.files().where((f) =>
-      f.endsWith('_test.dart') &&
-      (f.startsWith('packages/') || f.startsWith('tests/')) &&
-      f.contains('/test/'));
-  final examples = ws.sdk.files().where((f) =>
-      f.endsWith('.dart') &&
-      (f.startsWith('packages/at_client/example/') ||
-          f.startsWith('packages/at_client_flutter/example/')));
-  final serverTests = ws.server.files().where(isServerTest);
+  Map<String, String> texts(Tree tree, bool Function(String) want) =>
+      {for (final f in tree.files().where(want)) f: tree.read(f) ?? ''};
+  final sdkTests = texts(
+      ws.sdk,
+      (f) =>
+          f.endsWith('_test.dart') &&
+          (f.startsWith('packages/') || f.startsWith('tests/')) &&
+          f.contains('/test/'));
+  final examples = texts(
+      ws.sdk,
+      (f) =>
+          f.endsWith('.dart') &&
+          (f.startsWith('packages/at_client/example/') ||
+              f.startsWith('packages/at_client_flutter/example/')));
+  final serverTests = texts(ws.server, isServerTest);
   final catalogue = RegExp(r'^///\s*Catalogue:\s*`?(features/\S+?\.feature)`?',
       multiLine: true);
   final sha = git(ws.sdk.dir, ['rev-parse', 'HEAD'])?.trim() ?? 'unknown';
@@ -384,8 +395,8 @@ Future<int> runIndexes(Workspace ws,
       final server = s.lane.role == 'server';
       final tests = <Map<String, Object?>>[];
       final features = <String>{};
-      for (final t in server ? serverTests : sdkTests) {
-        final text = (server ? ws.server : ws.sdk).read(t) ?? '';
+      for (final MapEntry(key: t, value: text)
+          in (server ? serverTests : sdkTests).entries) {
         if (!word.hasMatch(text)) continue;
         tests.add({'path': t, 'url': server ? serverUrl(t) : '../../$t'});
         if (!server) {
@@ -394,8 +405,8 @@ Future<int> runIndexes(Workspace ws,
       }
       final ex = <String>[
         if (!server)
-          for (final e in examples)
-            if (word.hasMatch(ws.sdk.read(e) ?? '')) e
+          for (final e in examples.entries)
+            if (word.hasMatch(e.value)) e.key
       ];
       final exits = <String, Object?>{};
       for (var i = 0; i < s.exits.length; i++) {

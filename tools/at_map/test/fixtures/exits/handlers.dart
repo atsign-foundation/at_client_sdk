@@ -144,6 +144,14 @@ class Fixture {
     throw InvalidSyntaxException('from a helper');
   }
 
+  /// A throw inside a closure, which the walker does not follow.
+  void closure(List<int> items) {
+    last = items.every((i) {
+      if (i < 0) throw InvalidSyntaxException('negative item');
+      return true;
+    }).toString();
+  }
+
   /// A generator, whose yield the walker does not handle.
   Iterable<int> generator(bool x) sync* {
     if (x) throw InvalidSyntaxException('before the yield');

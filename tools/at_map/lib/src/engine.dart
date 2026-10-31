@@ -27,7 +27,7 @@ class Workspace {
   Workspace(
       {required String sdkDir, required String serverDir, String? serverGit})
       : sdk = Tree('sdk', sdkDir),
-        server = Tree('server', serverDir),
+        server = Tree('server', serverDir, tracked: true),
         serverGit = serverGit ?? serverDir;
 
   /// This checkout of at_client_sdk.
@@ -55,7 +55,8 @@ class Workspace {
       Map<String, String> server = const {},
       Map<String, String> outside = const {}}) async {
     this.sdk = Tree('sdk', this.sdk.dir, overlays: Map.of(sdk));
-    this.server = Tree('server', this.server.dir, overlays: Map.of(server));
+    this.server = Tree('server', this.server.dir,
+        overlays: Map.of(server), tracked: true);
     this.outside = Map.of(outside);
     _dispatch = null;
     await _resolver?.setOverlays(_absoluteOverlays());
@@ -276,31 +277,27 @@ void _tier1(Workspace ws, StepOut s) {
   }
   final unit = parseUnit(text);
   final idx = indexDeclarations(unit);
-  final hits = idx[a.symbol] ?? const [];
-  if (hits.length != 1) {
+  final hit = locateAnchor(idx, a);
+  final decl = hit.decl;
+  if (decl == null) {
     final cands = _candidates(idx, s.step, a.symbol);
     s.failures.add('${s.id}: anchor ${a.root}:${a.path} has '
-        '${hits.isEmpty ? 'no declaration' : '${hits.length} declarations'} '
+        '${hit.declarations == 0 ? 'no declaration' : '${hit.declarations} declarations'} '
         '${a.symbol}'
         '${cands.isEmpty ? '' : '; candidates: ${cands.join(', ')}'}');
     s.facts['anchor'] = 'FAIL no declaration';
     return;
   }
-  final decl = hits.single;
-  final tokens = nodeTokens(decl.node);
   final li = unit.lineInfo;
-  int? matchLine;
-  if (a.contains != null) {
-    final m = tokenMatches(tokens, lexemes(a.contains!));
-    if (m.length != 1) {
-      s.failures.add('${s.id}: anchor ${a.symbol} holds "${a.contains}" '
-          '${m.length} times, not exactly once (compared as tokens)');
-      s.facts['anchor'] = 'FAIL contains ${m.length}';
-      return;
-    }
-    matchLine = li.getLocation(m.single).lineNumber;
+  if (hit.hash == null) {
+    s.failures.add('${s.id}: anchor ${a.symbol} holds "${a.contains}" '
+        '${hit.matches} times, not exactly once (compared as tokens)');
+    s.facts['anchor'] = 'FAIL contains ${hit.matches}';
+    return;
   }
-  s.hash = tokenHash(tokens, skip: decl.nameToken);
+  final matchLine =
+      hit.match == null ? null : li.getLocation(hit.match!).lineNumber;
+  s.hash = hit.hash;
   s._decl = decl;
   s.facts['anchor'] = s.hash;
 
@@ -341,6 +338,50 @@ void _tier1(Workspace ws, StepOut s) {
   };
 }
 
+/// Where an anchor lands in a file's declarations.
+class AnchorHit {
+  /// Creates a record.
+  AnchorHit(this.declarations,
+      {this.decl, this.matches = 0, this.match, this.hash});
+
+  /// How many declarations carry the symbol.
+  final int declarations;
+
+  /// The one declaration, when there is exactly one.
+  final Decl? decl;
+
+  /// How many times `contains` occurs in it.
+  final int matches;
+
+  /// The offset of the one occurrence of `contains`.
+  final int? match;
+
+  /// The body hash, when the anchor resolves.
+  final String? hash;
+}
+
+/// Resolves [a] against the declarations [idx] of its file: one declaration,
+/// and its `contains` exactly once as tokens.
+AnchorHit locateAnchor(Map<String, List<Decl>> idx, CodeRef a) {
+  final hits = idx[a.symbol] ?? const [];
+  if (hits.length != 1) return AnchorHit(hits.length);
+  final decl = hits.single;
+  final tokens = nodeTokens(decl.node);
+  int? match;
+  var matches = 0;
+  if (a.contains != null) {
+    final m = tokenMatches(tokens, lexemes(a.contains!));
+    matches = m.length;
+    if (m.length != 1) return AnchorHit(1, decl: decl, matches: m.length);
+    match = m.single;
+  }
+  return AnchorHit(1,
+      decl: decl,
+      matches: matches,
+      match: match,
+      hash: tokenHash(tokens, skip: decl.nameToken));
+}
+
 (String, int, bool) _snippet(
     String text, LineInfo li, int first, int last, int? match) {
   final lines = text.split('\n');
@@ -367,12 +408,15 @@ List<String> _candidates(
       }
     }
   }
-  final container =
-      symbol.contains('.') ? symbol.substring(0, symbol.indexOf('.')) : '';
-  final member = symbol.substring(symbol.indexOf('.') + 1);
+  final dot = symbol.indexOf('.');
+  final prefix = dot < 0 ? '' : symbol.substring(0, dot + 1);
+  final member = symbol.substring(dot + 1);
   for (final name in idx.keys) {
-    if (!name.startsWith('$container.')) continue;
-    final other = name.substring(container.length + 1);
+    if (!name.startsWith(prefix) ||
+        name.substring(prefix.length).contains('.')) {
+      continue;
+    }
+    final other = name.substring(prefix.length);
     if (_distance(other, member) <= (member.length / 4).ceil()) {
       out.add(name);
     }
@@ -397,9 +441,9 @@ int _distance(String a, String b) {
 }
 
 void _validateLinks(Workspace ws, Model model, Build b) {
+  final files = ws.sdk.files();
   bool exists(String path) =>
-      ws.sdk.read(path) != null ||
-      ws.sdk.files().any((f) => f.startsWith('$path/'));
+      ws.sdk.read(path) != null || files.any((f) => f.startsWith('$path/'));
   void check(String holder, Link l) {
     if (!allowedHref(l.href, existsInRepo: exists)) {
       b.failures.add('$holder: link "${l.href}" is neither a path in this '
@@ -831,6 +875,12 @@ Future<void> _exitsAndContracts(Workspace ws, Resolver r, StepOut s) async {
         continue;
       }
       final e = on.first;
+      if (c.isAuthority &&
+          !const {'throw', 'rethrow', 'error'}.contains(e.kind)) {
+        s.failures.add('$what is backed by the exit "${b.exitGuard}" in '
+            '${b.exitSymbol}, a ${e.kind} exit, which refuses nothing');
+        continue;
+      }
       out['backing'] = {
         'exit': {
           'symbol': e.symbol,

@@ -125,4 +125,11 @@ void main() {
     expect(inv.exits.map((e) => e.symbol), isNot(contains('Other.check')),
         reason: 'a method on another object is not the handler\'s helper');
   });
+
+  test('A throw inside a closure marks the inventory incomplete', () async {
+    final inv = await walk('closure');
+    expect(inv.incomplete, ['throw inside a closure in Fixture.closure'],
+        reason: 'an exit the walker cannot attribute is named, so the list '
+            'is not read as complete');
+  });
 }

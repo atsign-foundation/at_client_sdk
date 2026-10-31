@@ -63,11 +63,12 @@ bool allowedHref(String href, {required bool Function(String) existsInRepo}) {
         !rest.contains('//') &&
         RegExp(r'''^[A-Za-z0-9_./#%:@+=~-]+$''').hasMatch(rest);
   }
-  if (href.contains(':') || href.startsWith('/') || href.contains('\\')) {
+  if (!RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_./-]*(#L\d+(-L\d+)?)?$')
+      .hasMatch(href)) {
     return false;
   }
   final path = href.split('#').first;
-  if (path.isEmpty || p.split(path).contains('..')) return false;
+  if (p.split(path).contains('..')) return false;
   return existsInRepo(path);
 }
 

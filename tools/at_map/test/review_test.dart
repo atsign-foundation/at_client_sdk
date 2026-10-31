@@ -77,6 +77,19 @@ void main() {
         reason: 'the blessed step is no longer drawn amber');
   });
 
+  test('Blessing a server step refuses an at_server checkout off the pin',
+      () async {
+    final dir = '${h.temp.path}/off-pin';
+    gitIn(h.temp.path, ['clone', '--quiet', '--shared', h.ws.server.dir, dir]);
+    gitIn(dir, ['checkout', '--quiet', '--detach', 'HEAD~1']);
+    final lines = <String>[];
+    final status = runBless(Workspace(sdkDir: repoRoot(), serverDir: dir),
+        ['share-record.bob-server-accept'],
+        log: lines.add, write: (_, __) => fail('nothing may be written'));
+    expect(status, isNot(0));
+    expect(lines, contains(contains('not the pinned')), reason: '$lines');
+  });
+
   test('A server step changed since review fails the map job', () async {
     final changed = edit(
         h.serverFile(_notifyHandler),

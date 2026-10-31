@@ -65,6 +65,28 @@ void main() {
         reason: 'a rename that also changes the body is found by its name');
   });
 
+  test('A renamed top-level anchor names its candidate', () async {
+    const keyLength =
+        'packages/at_secondary_server/lib/src/notification/notification_key_length.dart';
+    final yaml = '${h.sdkFile(flowYaml)}\n'
+        '  - id: bob-key-length\n'
+        '    lane: bob.server\n'
+        '    intent: Refuse a notification key too long to hold.\n'
+        '    anchor:\n'
+        '      code: server:$keyLength\n'
+        '      symbol: refuseOverlongNotificationKey\n'
+        '    reached: {via: untraced, note: x}\n';
+    final renamed = h.serverFile(keyLength).replaceAll(
+        'refuseOverlongNotificationKey', 'refuseOverlongNotificationKeys');
+    final r =
+        await h.check(sdk: {flowYaml: yaml}, server: {keyLength: renamed});
+    expect(
+        r.failures,
+        contains(allOf(contains('share-record.bob-key-length'),
+            contains('candidates: refuseOverlongNotificationKeys'))),
+        reason: '$r');
+  });
+
   test('An anchored statement edited in place fails the map job', () async {
     final edited = edit(
         h.sdkFile(_localSecondary),

@@ -466,7 +466,18 @@ class ExitWalker {
   Future<void> _expr(Expression e, _Ctx c) async {
     final calls = <AstNode>[];
     final throws = <ThrowExpression>[];
-    e.accept(_ExprScan(calls, throws));
+    final closures = <FunctionExpression>[];
+    e.accept(_ExprScan(calls, throws, closures));
+    for (final f in closures) {
+      final inner = <ThrowExpression>[];
+      f.accept(_Throws(inner));
+      if (inner.isNotEmpty) {
+        _incomplete.add('throw inside a closure in ${c.symbol}');
+      }
+      if (!c.helper && c.next.isNotEmpty && _contains(f, c.next.first)) {
+        _incomplete.add('path call inside a closure in ${c.symbol}');
+      }
+    }
     for (final t in throws) {
       final parent = t.parent;
       String? guard;
@@ -681,12 +692,13 @@ List<String> fixedSegments(Expression e) {
 
 /// Collects calls and throws in an expression, not entering closures.
 class _ExprScan extends RecursiveAstVisitor<void> {
-  _ExprScan(this.calls, this.throws);
+  _ExprScan(this.calls, this.throws, this.closures);
   final List<AstNode> calls;
   final List<ThrowExpression> throws;
+  final List<FunctionExpression> closures;
 
   @override
-  void visitFunctionExpression(FunctionExpression node) {}
+  void visitFunctionExpression(FunctionExpression node) => closures.add(node);
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
@@ -704,6 +716,18 @@ class _ExprScan extends RecursiveAstVisitor<void> {
   void visitThrowExpression(ThrowExpression node) {
     super.visitThrowExpression(node);
     throws.add(node);
+  }
+}
+
+/// Collects every throw under a node.
+class _Throws extends RecursiveAstVisitor<void> {
+  _Throws(this.out);
+  final List<ThrowExpression> out;
+
+  @override
+  void visitThrowExpression(ThrowExpression node) {
+    out.add(node);
+    super.visitThrowExpression(node);
   }
 }
 

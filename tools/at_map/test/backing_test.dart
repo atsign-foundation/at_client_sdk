@@ -76,6 +76,24 @@ void main() {
             'the failure names the claim and the branch the exit is on: $r');
   });
 
+  test(
+      'A refusal claim backed by an exit that does not refuse fails the map '
+      'job', () async {
+    final r = await h.check(sdk: {
+      flowYaml: withClaim(
+          h,
+          '      - refuses: an expired notification\n'
+          '        backing:\n'
+          '          exit: {symbol: NotifyVerbHandler._handlePolAuthenticatedConnection, guard: "n.isExpired()"}\n')
+    });
+    expect(r.code, isNot(0));
+    expect(
+        r.failures,
+        contains(allOf(contains('refuses an expired notification'),
+            contains('a success exit, which refuses nothing'))),
+        reason: 'only a throw or an error answer backs a refusal: $r');
+  });
+
   test('A Gherkin backing whose clause changed fails the map job', () async {
     final changed = edit(h.serverFile(_feature), 'Then it gets data:success',
         'Then it gets data:ok');

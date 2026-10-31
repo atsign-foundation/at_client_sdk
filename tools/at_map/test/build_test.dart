@@ -4,6 +4,8 @@
 /// Catalogue: features/at_map/sdk_map.feature
 library;
 
+import 'dart:io';
+
 import 'package:at_map/at_map.dart';
 import 'package:at_map/src/source.dart';
 import 'package:test/test.dart';
@@ -140,6 +142,66 @@ void main() {
             contains('budget of ${1536 * 1024}'))),
         reason: 'the failure names the file, its size and the budget: '
             '${r.failures}');
+  });
+
+  test('Model text naming an atSign other than @alice or @bob fails the build',
+      () async {
+    final note = await h.build(sdk: {
+      flowYaml: edit(
+          h.sdkFile(flowYaml),
+          'note: the put transformer reaches it through the crypto provider the key\'s write selected',
+          'note: handed over by @carol\'s client')
+    });
+    expect(note.code, isNot(0));
+    expect(note.failures, contains(contains('names @carol')), reason: '$note');
+    final sample = await h.build(sdk: {
+      flowYaml: edit(
+          h.sdkFile(flowYaml), 'sample: "from:@alice"', 'sample: "from:@dave"')
+    });
+    expect(sample.code, isNot(0));
+    expect(sample.failures, contains(contains('names @dave')),
+        reason: '$sample');
+  });
+
+  test('A step reached from itself fails the build', () async {
+    final yaml = edit(
+        h.sdkFile(flowYaml),
+        '    reached:\n      from: alice-put\n    reviewed: 06f7912c16904574\n',
+        '    reached:\n      from: alice-route\n    reviewed: 06f7912c16904574\n');
+    final r = await h.build(sdk: {flowYaml: yaml});
+    expect(r.code, isNot(0));
+    expect(
+        r.failures,
+        contains(allOf(contains('share-record.alice-route'),
+            contains('not an earlier step'))),
+        reason: '$r');
+  });
+
+  test('A repository link the page would refuse fails the build', () async {
+    final yaml = edit(
+        h.sdkFile(flowYaml),
+        '      contains: "_refuseForeignAtSigns(verbParams,"\n',
+        '      contains: "_refuseForeignAtSigns(verbParams,"\n'
+            '    links:\n'
+            '      - {title: Usage, href: "packages/at_client/README.md#usage"}\n');
+    final r = await h.build(sdk: {flowYaml: yaml});
+    expect(r.code, isNot(0));
+    expect(
+        r.failures, contains(contains('"packages/at_client/README.md#usage"')),
+        reason: 'the gate allows only the links the page draws: $r');
+  });
+
+  test('The server tree lists tracked files only', () async {
+    final repo = h.cloneServerGit().replaceAll('.git', '-tree');
+    gitIn(h.temp.path, ['clone', '--quiet', '--shared', h.ws.server.dir, repo]);
+    File('$repo/packages/at_secondary_server/test/scratch_test.dart')
+        .writeAsStringSync("void main() { print('untracked literal'); }\n");
+    final tracked = Tree('server', repo, tracked: true).files();
+    expect(tracked,
+        contains('packages/at_secondary_server/test/notify_verb_test.dart'));
+    expect(tracked,
+        isNot(contains('packages/at_secondary_server/test/scratch_test.dart')),
+        reason: 'a file CI\'s clone never has must not change a build');
   });
 
   test('A retired step id cannot be reused', () async {

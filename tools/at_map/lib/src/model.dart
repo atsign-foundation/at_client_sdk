@@ -572,6 +572,11 @@ String _prose(_R r, {int max = 2000, bool oneLine = false}) {
   if (s.isEmpty) r.bad('is empty');
   if (s.length > max) r.bad('is ${s.length} characters, over $max');
   if (oneLine && s.contains('\n')) r.bad('must be one line');
+  return _roles(r, s);
+}
+
+/// [s], refused when it names an atSign other than @alice and @bob.
+String _roles(_R r, String s) {
   for (final m in _atSignWord.allMatches(s)) {
     final w = m.group(0)!;
     if (w != '@alice' && w != '@bob') {
@@ -643,8 +648,9 @@ Map<String, Lane> _lanes(_R r) {
           '[.<instance>]');
     }
     if (out.containsKey(id)) l.bad('lane "$id" twice');
-    out[id] = Lane(id, _prose(l.need('title'), max: 80),
-        l.at('sublanes')?.strings() ?? const []);
+    out[id] = Lane(id, _prose(l.need('title'), max: 80), [
+      for (final s in l.at('sublanes')?.list() ?? <_R>[]) _roles(s, s.str())
+    ]);
   }
   return out;
 }
@@ -729,9 +735,10 @@ Reached _reached(_R? r) {
   r.map({'from', 'via', 'hop', 'wire', 'sample', 'nested', 'push', 'note'});
   final from = r.at('from') == null ? null : _ident(r.at('from')!);
   final viaNode = r.at('via');
-  final note = r.at('note')?.str();
+  final note =
+      r.at('note') == null ? null : _roles(r.at('note')!, r.at('note')!.str());
   if (r.at('wire') != null) {
-    final sample = r.need('sample').str();
+    final sample = _roles(r.need('sample'), r.need('sample').str());
     if (sample.length > 400 || sample.contains('\n')) {
       r.need('sample').bad('a sample is one line of at most 400 characters');
     }
@@ -743,7 +750,8 @@ Reached _reached(_R? r) {
         nested: r.at('nested')?.boolean() ?? false);
   }
   if (r.at('push') != null) {
-    return Reached('push', from: from, note: r.need('push').str());
+    return Reached('push',
+        from: from, note: _roles(r.need('push'), r.need('push').str()));
   }
   final hop = r.at('hop');
   if (hop != null) {
@@ -854,6 +862,10 @@ List<String> _crossCheck(Model m) {
     }
     for (final s in f.steps) {
       final sid = '${f.id}.${s.id}';
+      final from = s.reached.from;
+      if (from != null && !ids.contains(from)) {
+        out.add('$sid: reached from "$from", which is not an earlier step');
+      }
       if (!ids.add(s.id)) out.add('$sid: step id used twice');
       if (f.retired.contains(s.id)) {
         out.add('$sid: "${s.id}" is retired in ${f.file} and may not be '
@@ -876,10 +888,6 @@ List<String> _crossCheck(Model m) {
       }
       if (s.navigateTo != null && !flowIds.contains(s.navigateTo)) {
         out.add('$sid: navigateTo names no flow "${s.navigateTo}"');
-      }
-      final from = s.reached.from;
-      if (from != null && !ids.contains(from)) {
-        out.add('$sid: reached from "$from", which is not an earlier step');
       }
     }
     if (f.steps.isEmpty || f.steps.first.reached.kind != 'entry') {

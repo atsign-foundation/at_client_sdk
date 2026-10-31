@@ -32,9 +32,13 @@ String? git(String dir, List<String> args) {
 /// overlays taking precedence.
 class Tree {
   /// Creates a tree over [dir], named [name] ("sdk" or "server").
-  Tree(this.name, String dir, {Map<String, String>? overlays})
+  Tree(this.name, String dir,
+      {Map<String, String>? overlays, this.tracked = false})
       : dir = p.normalize(p.absolute(dir)),
         overlays = overlays ?? {};
+
+  /// Whether only files git tracks are listed, leaving untracked ones out.
+  final bool tracked;
 
   /// The root's name in the model.
   final String name;
@@ -80,12 +84,15 @@ class Tree {
 
   /// Every file git would track here, plus overlays, sorted.
   List<String> files() {
-    _listed ??=
-        (git(dir, ['ls-files', '--cached', '--others', '--exclude-standard']) ??
-                '')
-            .split('\n')
-            .where((l) => l.isNotEmpty)
-            .toList();
+    _listed ??= (git(dir, [
+              'ls-files',
+              '--cached',
+              if (!tracked) ...['--others', '--exclude-standard']
+            ]) ??
+            '')
+        .split('\n')
+        .where((l) => l.isNotEmpty)
+        .toList();
     return ({..._listed!, ...overlays.keys}.toList()..sort());
   }
 
