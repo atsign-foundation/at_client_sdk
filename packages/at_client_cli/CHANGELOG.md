@@ -43,5 +43,8 @@
   three seconds apart; the default of 10 waits about 30 seconds.
 - fix: at_register exits with at_activate's non-zero code, instead of 0,
   when the activation after registration fails.
+- fix: at_register confirms a verification code the registrar accepts with a
+  follow-up at once, so the third code accepted still gets the CRAM key.
+- fix: the at_activate Dockerfile builds from the repo root on Dart 3.
 - fix: at_register exits 5, not 4, after three refused verification codes,
   and asks for no fourth code.
