@@ -287,8 +287,11 @@ class AtClientPreference {
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
-  /// `AtClient.put` throws [BufferOverFlowException] when the value, after
-  /// encryption or encoding, takes more UTF-8 bytes than this.
+  /// `AtClient.put` throws [BufferOverFlowException] by UTF-8 bytes after
+  /// encryption or encoding: for a key sync pushes, when the command sync
+  /// would push for it, with its key and metadata, takes more than this or
+  /// than 10,230,000, whichever is less; for a key sync never pushes, such as
+  /// a `local:` key, when the value alone takes more than this.
   int maxDataSize = 10230000;
 
   /// regex to perform sync
