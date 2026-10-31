@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
+import 'package:at_auth/src/enroll/enrollment_approver.dart';
+import 'package:at_auth/src/enroll/enrollment_progress.dart';
+import 'package:at_auth/src/enroll/enrollment_submitter.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -169,6 +172,202 @@ void main() {
       expect(keys.signingKeysFor(enrollmentId), isEmpty,
           reason: 'an enrollment that advertised no signing key holds none; '
               'filing one anyway would publish a key nothing asked for');
+    });
+  });
+
+  group('an OTP enrolment with a caller-supplied APKAM keypair', () {
+    const atSign = '@alice🛠';
+    const enrollmentId = 'otp-supplied-1';
+
+    late ({String publicKey, String privateKey}) supplied;
+
+    setUpAll(() async {
+      final kp = await MlDsa65KeyPair.generate();
+      supplied = (
+        publicKey: kp.atPublicKey.publicKey,
+        privateKey: kp.atPrivateKey.privateKey
+      );
+    });
+
+    (AtLookUp, List<String>) recordingLookUp() {
+      final mock = MockAtLookUp();
+      final sent = <String>[];
+      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
+          auth: any(named: 'auth'))).thenAnswer((inv) async {
+        sent.add(inv.positionalArguments[0] as String);
+        return 'data:{"enrollmentId":"$enrollmentId","status":"pending"}';
+      });
+      when(() => mock.executeVerb(any()))
+          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
+      return (mock, sent);
+    }
+
+    Map<String, dynamic> paramsOf(String command) =>
+        jsonDecode(command.substring(command.indexOf('{')))
+            as Map<String, dynamic>;
+
+    AtEnrollmentRequest legacyRequest(
+            {({String publicKey, String privateKey})? apkamKeyPair,
+            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)?
+                metadataBuilder}) =>
+        AtEnrollmentRequest(
+            atSign: atSign,
+            appName: 'wavi',
+            deviceName: 'browser',
+            otp: 'ABC123',
+            namespaces: {'wavi': 'rw'},
+            signingAlgo: SigningAlgoType.mldsa65,
+            apkamKeyPair: apkamKeyPair,
+            metadataBuilder: metadataBuilder);
+
+    test('its public key is the one sent, in the request and in _apsk',
+        () async {
+      final (lookUp, sent) = recordingLookUp();
+      await AtEnrollmentImpl()
+          .submit(legacyRequest(apkamKeyPair: supplied), lookUp);
+
+      final params = paramsOf(sent.single);
+      expect(params['apkamPublicKey'], supplied.publicKey);
+      expect(
+          (params['apsk']['keys'] as List).single['pub'], supplied.publicKey);
+    });
+
+    test('its private key is the one kept', () async {
+      final (lookUp, _) = recordingLookUp();
+      final keys = (await AtEnrollmentImpl()
+              .submit(legacyRequest(apkamKeyPair: supplied), lookUp))
+          .atAuthKeys!;
+
+      expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
+      expect(keys.apkamPublicKey.toString(), supplied.publicKey);
+
+      String filed(CryptographicMaterialRole role) => keys
+          .keysForEnrollment(enrollmentId)
+          .singleWhere((m) => m.role == role)
+          .bytes
+          .toString();
+      expect(filed(CryptographicMaterialRole.privateAuthentication),
+          supplied.privateKey);
+      expect(filed(CryptographicMaterialRole.publicAuthentication),
+          supplied.publicKey);
+    });
+
+    test('the metadataBuilder is handed the supplied keypair', () async {
+      final (lookUp, _) = recordingLookUp();
+      AtKeys? seen;
+      await AtEnrollmentImpl().submit(
+          legacyRequest(
+              apkamKeyPair: supplied,
+              metadataBuilder: (keysIo) async {
+                seen = await keysIo.read(atSign);
+                return null;
+              }),
+          lookUp);
+
+      expect(seen!.apkamPrivateKey.toString(), supplied.privateKey);
+      expect(seen!.apkamPublicKey.toString(), supplied.publicKey);
+    });
+
+    test('a pq request carries it too', () async {
+      final (lookUp, sent) = recordingLookUp();
+      final keys = (await AtEnrollmentImpl().submit(
+              AtEnrollmentRequest.pq(
+                atSign: atSign,
+                appName: 'wavi',
+                deviceName: 'browser',
+                otp: 'ABC123',
+                namespaces: {'wavi': 'rw'},
+                signingAlgo: SigningAlgoType.mldsa65,
+                apkamKeyPair: supplied,
+                metadataBuilder: (_) async => {
+                  'keyPackage': {'v': 1, 'keys': []}
+                },
+                apkamSymmetricKeyResolver: _unusedResolver,
+              ),
+              lookUp))
+          .atAuthKeys!;
+
+      expect(paramsOf(sent.single)['apkamPublicKey'], supplied.publicKey);
+      expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
+    });
+
+    test('a pair that is not mldsa65 key material is refused before sending',
+        () async {
+      final (lookUp, sent) = recordingLookUp();
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              legacyRequest(apkamKeyPair: (
+                publicKey: base64Encode(List<int>.filled(32, 1)),
+                privateKey: base64Encode(List<int>.filled(32, 2))
+              )),
+              lookUp),
+          throwsA(isA<AtSigningException>()));
+      expect(sent, isEmpty);
+    });
+
+    (EnrollmentSubmitter, List<SigningAlgoType>) countingSubmitter() {
+      final mints = <SigningAlgoType>[];
+      return (
+        EnrollmentSubmitter(EnrollmentProgress(), EnrollmentApprover(),
+            mintApkamKeyPair: (signingAlgo) async {
+          mints.add(signingAlgo);
+          final kp = await MlDsa65KeyPair.generate();
+          return (
+            publicKey: kp.atPublicKey.publicKey,
+            privateKey: kp.atPrivateKey.privateKey
+          );
+        }),
+        mints
+      );
+    }
+
+    test('the keypair minter is never invoked', () async {
+      final (lookUp, _) = recordingLookUp();
+      final (submitter, mints) = countingSubmitter();
+      await submitter.submit(legacyRequest(apkamKeyPair: supplied), lookUp);
+
+      expect(mints, isEmpty);
+    });
+
+    test('without one, the keypair minter is invoked once, under signingAlgo',
+        () async {
+      final (lookUp, _) = recordingLookUp();
+      final (submitter, mints) = countingSubmitter();
+      await submitter.submit(legacyRequest(), lookUp);
+
+      expect(mints, [SigningAlgoType.mldsa65]);
+    });
+
+    test('under an algorithm with no mint path, it is refused before sending',
+        () async {
+      final (lookUp, sent) = recordingLookUp();
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              AtEnrollmentRequest(
+                  atSign: atSign,
+                  appName: 'wavi',
+                  deviceName: 'browser',
+                  otp: 'ABC123',
+                  namespaces: {'wavi': 'rw'},
+                  signingAlgo: SigningAlgoType.ed25519,
+                  apkamKeyPair: supplied),
+              lookUp),
+          throwsA(isA<ArgumentError>()));
+      expect(sent, isEmpty);
+    });
+
+    test('without one, a fresh keypair is minted', () async {
+      final (lookUp, sent) = recordingLookUp();
+      final keys = (await AtEnrollmentImpl().submit(legacyRequest(), lookUp))
+          .atAuthKeys!;
+
+      final sentPublicKey = paramsOf(sent.single)['apkamPublicKey'];
+      expect(sentPublicKey, isNot(supplied.publicKey));
+      expect(keys.apkamPublicKey.toString(), sentPublicKey);
+      expect(
+          MlDsa65KeyPair.create(
+              sentPublicKey as String, keys.apkamPrivateKey.toString()),
+          isNotNull);
     });
   });
 

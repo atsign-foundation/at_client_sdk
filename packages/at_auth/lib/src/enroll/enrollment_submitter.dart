@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/src/auth/onboarding_mint.dart' show mintApkamKeyPair;
+import 'package:at_auth/src/auth/onboarding_mint.dart' as mint
+    show ApkamKeyPairMinter, checkApkamKeyPair, mintApkamKeyPair;
 import 'package:at_auth/src/enroll/apsk_advertisement.dart';
 import 'package:at_auth/src/enroll/enrollment_approver.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
@@ -37,7 +38,11 @@ class EnrollmentSubmitter {
   final EnrollmentProgress _progress;
   final EnrollmentApprover _approver;
 
-  EnrollmentSubmitter(this._progress, this._approver);
+  final mint.ApkamKeyPairMinter _mintApkamKeyPair;
+
+  EnrollmentSubmitter(this._progress, this._approver,
+      {mint.ApkamKeyPairMinter mintApkamKeyPair = mint.mintApkamKeyPair})
+      : _mintApkamKeyPair = mintApkamKeyPair;
 
   Future<AtEnrollmentResponse> submit(
       EnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
@@ -237,13 +242,18 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
+    final supplied = atEnrollmentRequest.apkamKeyPair;
+    if (supplied != null) {
+      mint.checkApkamKeyPair(atEnrollmentRequest.signingAlgo, supplied);
+    }
     // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
     // hands an atSign whose deployment has moved to post-quantum an
     // RSA-authenticating enrollment, which the client retrofits away on its
     // first start — leaving that enrollment behind, revoked when its
     // replacement first authenticates if it is scoped, and live for good if
     // it is fully privileged.
-    final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
+    final apkam =
+        supplied ?? await _mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
