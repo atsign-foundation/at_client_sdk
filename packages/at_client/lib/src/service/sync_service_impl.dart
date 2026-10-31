@@ -775,8 +775,9 @@ class SyncServiceImpl implements SyncService {
   /// 4. For each per-entry response: on success, remove from the
   ///    queue and promote `_latestKnownServerCommitId`. On a refusal
   ///    for good ([_dropsForGood]), remove from the queue logged at
-  ///    severe, keeping the local copy. On any other failure, leave in
-  ///    queue for retry on the next round.
+  ///    severe, keeping the local copy. On any other answer without a
+  ///    commit id, leave in queue logged at warning, and on any other
+  ///    failure leave in queue, for retry.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -894,7 +895,7 @@ class SyncServiceImpl implements SyncService {
             continue;
           }
           if (commitId == -1) {
-            _logger.severe(
+            _logger.warning(
                 '${source.op} for key ${source.atKey} failed. Error code '
                 '${responseObject.errorCode} error message '
                 '${responseObject.errorMessage}');

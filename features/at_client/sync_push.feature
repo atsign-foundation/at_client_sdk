@@ -21,8 +21,8 @@ Feature: Sync pushes past a write the atServer refuses for good
   Replay: none arise; nothing sent or accepted changes.
   DoS: a write the atServer refuses for good is no longer sent again every
   round. A write refused any other way is sent again with each batch of a
-  round, so once per batch, and the rounds that send it are as frequent as
-  sync's own.
+  round, so once per batch, logging at most one line each time, and the
+  rounds that send it are as frequent as sync's own.
   Forgery and impersonation: none arise; the atServer checks every write this
   device pushes, and a drop removes only this device's own queued write.
 
@@ -39,7 +39,7 @@ Feature: Sync pushes past a write the atServer refuses for good
   Scenario: A queued update refused with any other listed code stays queued and retries
     Given a queued update refused with a code at_commons' error_codes lists, other than AT0009, AT0032, AT0016, AT0022 and AT0003
     When sync pushes
-    Then it stays queued, and sync sends it again next round
+    Then it stays queued, each refusal is logged once at warning with its code and not at severe, and sync sends it again next round
 
   Scenario: A queued write refused for good with AT0032, AT0016, AT0022 or AT0003 leaves the queue
     Given a queued update that the atServer refuses with AT0032, AT0016, AT0022 or AT0003

@@ -215,10 +215,11 @@
   invalid syntax, or a code at_commons does not list), so the writes behind
   it still reach the atServer. It logs the write at severe, and the device
   keeps its own copy.
-- note: a write the atServer refuses with any other code stays queued and
-  is sent again with each batch. Held writes that fill a batch at the head
-  of the queue hold up every write behind them, and a queued write this
-  device cannot read back stops each round before anything is pushed.
+- note: a write the atServer refuses with any other code stays queued,
+  logged at warning, and is sent again with each batch. Held writes that
+  fill a batch at the head of the queue hold up every write behind them,
+  and a queued write this device cannot read back stops each round before
+  anything is pushed.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.

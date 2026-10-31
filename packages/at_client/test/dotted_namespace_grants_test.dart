@@ -510,6 +510,12 @@ void main() {
 
     expect(sent, hasLength(2), reason: 'it is sent again on the next round');
     expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued);
+    expect(logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        allOf(hasLength(2), everyElement(contains('AT0002'))),
+        reason: 'each refusal of a write sync holds is logged once, at '
+            'warning, with its code');
+    expect(logs.at('SEVERE').where((m) => m.contains('k.wavi@bob')), isEmpty,
+        reason: 'a write sync holds is not logged at severe');
   });
 
   group(
