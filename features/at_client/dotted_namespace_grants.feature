@@ -105,3 +105,18 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given a queued update, and a push whose whole batch fails, as when offline
     When sync pushes it round after round
     Then nothing is dropped however many rounds fail
+
+  Scenario: Values that fit a batch one by one but not together push in separate batches
+    Given two queued updates whose values each fit a push batch, measured in UTF-8 bytes, but not both together
+    When sync pushes
+    Then each goes in a batch of its own, and both reach the atServer in the same round
+
+  Scenario: An entry too large ever to push leaves the queue with a warning, and the entries behind it push
+    Given a queued update whose command alone is over the bytes a push batch may take
+    When sync pushes
+    Then it leaves the queue unsent, with a warning naming the key, the operation and its size, the device keeps its copy, and the entries behind it push
+
+  Scenario: An entry whose command cannot be built is skipped and the round goes on, then it leaves after three
+    Given a queued update whose record this device cannot read back
+    When sync pushes three rounds in a row
+    Then each round skips it and pushes the entries behind it, and the third removes it from the queue with a warning

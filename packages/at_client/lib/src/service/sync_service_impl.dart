@@ -790,6 +790,37 @@ class SyncServiceImpl implements SyncService {
     return _dropRefused(localSecondary, source, '$why $count times in a row');
   }
 
+  /// The atServer's inbound buffer, in bytes: a command longer than this
+  /// closes the connection.
+  static const _atServerInboundBytes = 10240000;
+
+  /// The headroom a push batch keeps below [_atServerInboundBytes], the same
+  /// the default [AtClientPreference.maxDataSize] leaves.
+  static const _batchHeadroomBytes = 10000;
+
+  /// The most UTF-8 bytes one `batch:` command may take. It stays within
+  /// [AtClientPreference.maxDataSize] as well, which [RemoteSecondary] checks
+  /// in UTF-16 code units, and a string never has more of those than UTF-8
+  /// bytes.
+  int get _batchBudgetBytes {
+    const inbound = _atServerInboundBytes - _batchHeadroomBytes;
+    final maxDataSize = _atClient.getPreferences()!.maxDataSize;
+    return maxDataSize < inbound ? maxDataSize : inbound;
+  }
+
+  /// The UTF-8 bytes of the `batch:` command [sendBatch] sends for [count]
+  /// requests whose JSON takes [requestBytes] in all: `batch:[`, the requests
+  /// joined by commas, then `]` and the line feed.
+  static int _batchCommandBytes(int requestBytes, int count) =>
+      'batch:['.length + requestBytes + count - 1 + ']\n'.length;
+
+  /// The UTF-8 bytes of a [BatchRequest] with [id] whose command, encoded as a
+  /// JSON string, takes [commandBytes].
+  static int _requestBytes(int id, int commandBytes) =>
+      utf8.encode(jsonEncode(BatchRequest(id, ''))).length -
+      '""'.length +
+      commandBytes;
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -802,7 +833,11 @@ class SyncServiceImpl implements SyncService {
   ///    if the keystore value is missing — race-tolerated handling
   ///    of a write that landed between queue-write and keystore-write
   ///    timing windows (rare, but the alternative is leaking queue
-  ///    entries forever).
+  ///    entries forever). An entry whose command cannot be built is
+  ///    passed over and counted as a refusal is. One whose command
+  ///    alone is over [_batchBudgetBytes] is removed with a warning,
+  ///    keeping the local copy, and the batch closes before the entry
+  ///    that would take it over.
   /// 3. Build a `BatchRequest` list and send via [sendBatch] (single
   ///    network round-trip per batch — keeps push throughput high
   ///    under heavy load).
@@ -824,6 +859,7 @@ class SyncServiceImpl implements SyncService {
     final localSecondary = _atClient.getLocalSecondary()!;
     final batchSize = _atClient.getPreferences()!.syncBatchSize;
     final keyInfoList = <KeyInfo>[];
+    final budget = _batchBudgetBytes;
     // NOTE: an entry this round has counted stays queued, and is not offered
     // again until the next round.
     final passedOver = <String>{};
@@ -850,6 +886,7 @@ class SyncServiceImpl implements SyncService {
       // can correlate the response without re-parsing the wire.
       final batchRequests = <BatchRequest>[];
       final batchSources = <_BatchSource>[];
+      var requestBytes = 0;
       for (final atKey in atKeys) {
         final entry = await localSecondary.readSyncQueueEntry(atKey);
         _bailIfStopped();
@@ -881,16 +918,47 @@ class SyncServiceImpl implements SyncService {
           await localSecondary.removeFromSyncQueueIfUnchanged(atKey, entry.seq);
           _bailIfStopped();
           continue;
+        } on _SyncAbandoned {
+          rethrow;
+        } on Exception catch (e) {
+          if (e is StoppedException || isStopped) throw const _SyncAbandoned();
+          final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+          passedOver.add(atKey);
+          await _countOrDrop(
+              localSecondary,
+              _BatchSource(atKey: atKey, op: entry.op, seq: entry.seq),
+              'Sync could not build the command for ${entry.op.name} of '
+              '$atKey for enrollment ${_atClient.enrollmentId} ($cause)');
+          continue;
         }
-        _logger.info('Will push ${entry.op} for $atKey');
-        final batchId = batchRequests.length + 1;
-        batchRequests
-            .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
-        batchSources.add(_BatchSource(
+        final source = _BatchSource(
           atKey: atKey,
           op: entry.op,
           seq: entry.seq,
-        ));
+        );
+        final wireCommand = VerbUtil.replaceNewline(command);
+        final commandBytes = utf8.encode(jsonEncode(wireCommand)).length;
+        final aloneBytes =
+            _batchCommandBytes(_requestBytes(1, commandBytes), 1);
+        if (aloneBytes > budget) {
+          await _dropRefused(
+              localSecondary,
+              source,
+              'Sync cannot push ${entry.op.name} of $atKey for enrollment '
+              '${_atClient.enrollmentId}: it takes $aloneBytes bytes, more '
+              'than the $budget a push batch may take');
+          continue;
+        }
+        final batchId = batchRequests.length + 1;
+        final bytes = _requestBytes(batchId, commandBytes);
+        if (batchRequests.isNotEmpty &&
+            _batchCommandBytes(requestBytes + bytes, batchId) > budget) {
+          break;
+        }
+        requestBytes += bytes;
+        _logger.info('Will push ${entry.op} for $atKey');
+        batchRequests.add(BatchRequest(batchId, wireCommand));
+        batchSources.add(source);
       }
       if (batchRequests.isEmpty) {
         // Every queued atKey we pulled was a phantom; loop and try
@@ -1041,7 +1109,7 @@ class SyncServiceImpl implements SyncService {
       _bailIfStopped();
       final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
       _bailIfStopped();
-      final atKeysSet = atKeys.toSet();
+      final atKeysSet = {for (final source in batchSources) source.atKey};
       final allBatchKeysStillPresent =
           pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
       if (pendingNow > 0 &&

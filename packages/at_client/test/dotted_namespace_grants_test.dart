@@ -42,6 +42,21 @@ class _AcceptingVerifier implements AdvertisedKeyVerifier {
       advertisement;
 }
 
+/// A store that cannot read back the record of [unreadable].
+class _UnreadableStore extends MemoryAtKeyValueStore {
+  String? unreadable;
+
+  _UnreadableStore(super.atSign);
+
+  @override
+  Future<AtData?> get(String key) async {
+    if (key == unreadable) {
+      throw DataStoreException('$key cannot be read back');
+    }
+    return super.get(key);
+  }
+}
+
 /// A dotted namespace grant in the client's local access check, which decides
 /// as the atServer's own check does.
 ///
@@ -65,13 +80,13 @@ void main() {
   /// of its own. Its local `get` runs through the local secondary, as the
   /// client's does for a key of its own atSign.
   ({_MockAtClient client, MemoryAtKeyValueStore store, LocalSecondary local})
-      enrolled(Map<String, String> grants) {
+      enrolled(Map<String, String> grants, {MemoryAtKeyValueStore? store}) {
     final client = _MockAtClient();
     when(() => client.getCurrentAtSign()).thenReturn(atSign);
     when(() => client.atSign).thenReturn(atSign.toAtsign());
     when(() => client.enrollmentId).thenReturn(enrollmentId);
     when(() => client.syncService).thenReturn(_MockSyncService());
-    final store = MemoryAtKeyValueStore(atSign);
+    store ??= MemoryAtKeyValueStore(atSign);
     final local = LocalSecondary(client,
         syncQueue: memorySyncQueue(), keyStore: store, onEvent: (_) {});
     local.enrollment = Enrollment()
@@ -84,19 +99,29 @@ void main() {
   Future<String?> llookup(LocalSecondary local, String key) =>
       local.executeVerb(LLookupVerbBuilder()..atKey = AtKey.fromString(key));
 
-  Future<String?> put(LocalSecondary local, String key) =>
+  Future<String?> put(LocalSecondary local, String key,
+          {String value = 'written'}) =>
       local.executeVerb(UpdateVerbBuilder()
         ..atKey = AtKey.fromString(key)
-        ..value = 'written');
+        ..value = value);
+
+  /// The atServer's inbound buffer, in bytes.
+  const atServerInboundBytes = 10240000;
+
+  /// The default [AtClientPreference.maxDataSize], which [RemoteSecondary]
+  /// checks a command against in UTF-16 code units.
+  const maxDataSize = 10230000;
 
   /// A sync service for [client] that pushes up to [batchSize] queued entries
   /// per batch to an atServer answering each command as [answer] says: with a
   /// commit id, refusing it with an error code, with a raw response map, or,
   /// for a Symbol, leaving it out of the reply. Every command sent joins
-  /// [sent].
+  /// [sent], and each batch's size in UTF-8 bytes joins [batchBytes]. A batch
+  /// [RemoteSecondary] or the atServer's inbound buffer would refuse fails as
+  /// a whole.
   Future<SyncServiceImpl> syncPushing(_MockAtClient client, List<String> sent,
       Future<Object> Function(String command) answer,
-      {int batchSize = 1}) async {
+      {int batchSize = 1, List<int>? batchBytes}) async {
     final remote = _MockRemoteSecondary();
     final notifications = _MockNotificationService();
     when(() => notifications.subscribe(
@@ -114,6 +139,11 @@ void main() {
     when(() => remote.executeCommand(any(that: startsWith('batch:')),
         auth: any(named: 'auth'))).thenAnswer((inv) async {
       final wire = inv.positionalArguments.first as String;
+      final bytes = utf8.encode(wire).length;
+      if (wire.length > maxDataSize || bytes > atServerInboundBytes) {
+        throw BufferOverFlowException('a batch of $bytes bytes');
+      }
+      batchBytes?.add(bytes);
       final responses = [];
       for (final request
           in jsonDecode(wire.trim().substring('batch:'.length))) {
@@ -814,6 +844,115 @@ void main() {
             'follow it');
     expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
         reason: 'one refusal in a round is one of three');
+  });
+
+  test(
+      'Values that fit a batch one by one but not together push in separate '
+      'batches', () async {
+    final c = enrolled({'*': 'rw'});
+    final twoBytesEach = 'é' * 3000000;
+    await put(c.local, 'k.wavi@bob', value: twoBytesEach);
+    await put(c.local, 'l.wavi@bob', value: twoBytesEach);
+    final sent = <String>[];
+    final batchBytes = <int>[];
+    final sync = await syncPushing(c.client, sent, (command) async => accepted,
+        batchSize: 5, batchBytes: batchBytes);
+
+    await push(sync);
+
+    expect(batchBytes, hasLength(2),
+        reason: 'together they are over the atServer\'s buffer in bytes, '
+            'though under maxDataSize in code units');
+    expect(batchBytes, everyElement(lessThanOrEqualTo(10230000)));
+    expect(sent, hasLength(2));
+    expect(await c.local.peekSyncQueue(), isEmpty);
+  });
+
+  test(
+      'An entry too large ever to push leaves the queue with a warning, and the '
+      'entries behind it push', () async {
+    final c = enrolled({'*': 'rw'});
+    final threeBytesEach = '€' * 3500000;
+    await put(c.local, 'k.wavi@bob', value: threeBytesEach);
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(c.client, sent, (command) async => accepted);
+
+    await push(sync);
+
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(sent.where((s) => s.contains('k.wavi@bob')), isEmpty,
+        reason: 'it is never sent');
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the entry behind it pushes in the same round');
+    expect(await c.store.exists('k.wavi@bob'), isTrue,
+        reason: 'the device keeps its local copy');
+    expect(
+        logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        allOf(
+            hasLength(1),
+            everyElement(allOf(contains('update'), contains(enrollmentId),
+                contains('bytes')))));
+  });
+
+  test(
+      'Given a queued update whose batch takes exactly the push budget, when '
+      'sync pushes, then it is sent, and one byte more leaves the queue unsent',
+      () async {
+    final c = enrolled({'*': 'rw'});
+    final sent = <String>[];
+    final batchBytes = <int>[];
+    final sync = await syncPushing(c.client, sent, (command) async => accepted,
+        batchBytes: batchBytes);
+    await put(c.local, 'k.wavi@bob', value: 'x');
+    await push(sync);
+    final framing = batchBytes.single - 1;
+
+    await put(c.local, 'k.wavi@bob', value: 'x' * (10230000 - framing));
+    await push(sync);
+    expect(batchBytes.last, 10230000,
+        reason: 'a batch of exactly the budget is sent');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+
+    await put(c.local, 'k.wavi@bob', value: 'x' * (10230001 - framing));
+    await push(sync);
+    expect(batchBytes, hasLength(2),
+        reason: 'one byte over the budget is never sent');
+    expect(await c.local.peekSyncQueue(), isEmpty,
+        reason: 'and it leaves the queue');
+  });
+
+  test(
+      'An entry whose command cannot be built is skipped and the round goes '
+      'on, then it leaves after three', () async {
+    final store = _UnreadableStore(atSign);
+    final c = enrolled({'*': 'rw'}, store: store);
+    await put(c.local, 'k.wavi@bob');
+    await put(c.local, 'l.wavi@bob');
+    store.unreadable = 'k.wavi@bob';
+    final sent = <String>[];
+    final sync = await syncPushing(c.client, sent, (command) async => accepted);
+
+    await expectLater(push(sync), completes,
+        reason: 'an entry that cannot be built does not fail the round');
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the entry behind it pushes in the same round');
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob']);
+
+    await push(sync);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob']);
+    await push(sync);
+
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(sent.where((s) => s.contains('k.wavi@bob')), isEmpty);
+    expect(await c.store.exists('k.wavi@bob'), isTrue,
+        reason: 'the device keeps its local copy');
+    expect(
+        droppedInARow('k.wavi@bob'),
+        allOf(
+            hasLength(1),
+            everyElement(allOf(
+                contains(enrollmentId), contains('cannot be read back')))));
   });
 
   test(
