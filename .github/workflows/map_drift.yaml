@@ -1,0 +1,37 @@
+# Weekly: how many steps of the SDK map a move of its at_server pin to
+# at_server trunk would change. The log gives counts only, because it is
+# public; `dart run at_map check --server DIR` lists the steps locally. The
+# job reads and reports, and moves no pin.
+name: map_drift
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out at_server trunk
+        run: git clone --quiet --depth 1 --branch trunk https://github.com/atsign-foundation/at_server.git "$RUNNER_TEMP/at_server"
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in at_map
+        working-directory: tools/at_map
+        run: dart pub get
+
+      - name: Install dependencies in at_server trunk
+        working-directory: ${{ runner.temp }}/at_server/packages/at_secondary_server
+        run: dart pub get --enforce-lockfile
+
+      - name: Count the steps a move to trunk would change
+        run: dart run at_map check --server "$RUNNER_TEMP/at_server"
