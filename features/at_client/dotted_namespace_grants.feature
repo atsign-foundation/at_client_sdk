@@ -98,7 +98,7 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
 
   Scenario: A queued write refused three rounds in a row with any other code leaves the queue, and the entries behind it push
     Given a queued update the atServer refuses with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
-    When sync pushes it three rounds in a row
+    When sync pushes it in three rounds, each at least 30 seconds after the last one that counted it
     Then the third refusal removes it from the queue with a warning, and the entries behind it push
 
   Scenario: A batch that fails as a whole drops nothing, however many rounds fail
@@ -118,5 +118,10 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
 
   Scenario: An entry whose command cannot be built is skipped and the round goes on, then it leaves after three
     Given a queued update whose record this device cannot read back
-    When sync pushes three rounds in a row
+    When sync pushes in three rounds, each at least 30 seconds after the last one that counted it
     Then each round skips it and pushes the entries behind it, and the third removes it from the queue with a warning
+
+  Scenario: Refusals closer together than the sync interval count once
+    Given a queued update the atServer refuses with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
+    When sync pushes it in several rounds less than 30 seconds apart
+    Then it counts as refused once, and stays queued

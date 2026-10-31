@@ -742,14 +742,24 @@ class SyncServiceImpl implements SyncService {
   };
 
   /// How many refusals in a row of one queued version drop it from the queue,
-  /// whatever the code.
+  /// whatever the code, each counted at least [refusalSpacing] after the
+  /// last.
   static const _refusalsBeforeDrop = 3;
 
+  /// The least time between two refusals of one queued version that both
+  /// count, so a burst of rounds counts once.
+  @visibleForTesting
+  Duration refusalSpacing = _periodicSyncInterval;
+
+  /// The clock refusals are counted by.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
+
   /// For each atKey whose queued version the atServer has refused, or whose
-  /// answer sync could not process, that version's [SyncQueueEntry.seq] and
-  /// how many times in a row. Held in memory, so each process allows
-  /// [_refusalsBeforeDrop] more.
-  final Map<String, ({int seq, int count})> _refusals = {};
+  /// answer sync could not process, that version's [SyncQueueEntry.seq], how
+  /// many times in a row, and when the last of them counted. Held in memory,
+  /// so each process allows [_refusalsBeforeDrop] more.
+  final Map<String, ({int seq, int count, DateTime countedAt})> _refusals = {};
 
   /// How many atKeys hold a refusal count.
   @visibleForTesting
@@ -766,12 +776,20 @@ class SyncServiceImpl implements SyncService {
   }
 
   /// Counts one more refusal of [source]'s queued version and returns how
-  /// many it has had in a row; a newer version of the atKey starts again.
+  /// many it has had in a row; a newer version of the atKey starts again,
+  /// and a refusal less than [refusalSpacing] after the last that counted
+  /// does not count.
   int _countRefusal(_BatchSource source) {
+    final now = clock();
     final held = _refusals[source.atKey];
-    final count = held != null && held.seq == source.seq ? held.count + 1 : 1;
-    _refusals[source.atKey] = (seq: source.seq, count: count);
-    return count;
+    if (held != null && held.seq == source.seq) {
+      if (now.difference(held.countedAt) < refusalSpacing) return held.count;
+      _refusals[source.atKey] =
+          (seq: source.seq, count: held.count + 1, countedAt: now);
+      return held.count + 1;
+    }
+    _refusals[source.atKey] = (seq: source.seq, count: 1, countedAt: now);
+    return 1;
   }
 
   /// Removes [source]'s queued version, keeping the local copy, and logs
@@ -829,8 +847,9 @@ class SyncServiceImpl implements SyncService {
   ///    warning, keeping the local copy. On any other refusal, an
   ///    answer sync cannot process, or no answer, leave it queued for
   ///    the next round, and remove it the same way once one queued
-  ///    version has had [_refusalsBeforeDrop] in a row. A batch that
-  ///    fails as a whole removes nothing.
+  ///    version has had [_refusalsBeforeDrop] in a row, each at least
+  ///    [refusalSpacing] after the last. A batch that fails as a whole
+  ///    removes nothing.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.

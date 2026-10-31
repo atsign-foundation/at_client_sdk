@@ -95,6 +95,10 @@ void main() {
 
   setUp(logs.records.clear);
 
+  /// The time on every pushing sync service's clock.
+  var now = DateTime.utc(2026, 10, 31);
+  setUp(() => now = DateTime.utc(2026, 10, 31));
+
   /// A client of [atSign] whose enrollment holds [grants], over a local store
   /// of its own. Its local `get` runs through the local secondary, as the
   /// client's does for a key of its own atSign.
@@ -192,6 +196,7 @@ void main() {
     });
     final sync = await SyncServiceImpl.create(client,
         remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
+    sync.clock = () => now;
     addTearDown(sync.stop);
     return sync;
   }
@@ -201,9 +206,17 @@ void main() {
       sync.syncInternal(1, SyncRequest()..result = SyncResult(),
           localCommitIdBeforeSync: -1);
 
-  Future<void> push(SyncServiceImpl sync) =>
+  /// One round that pushes, on the test's clock as it stands.
+  Future<void> pushNow(SyncServiceImpl sync) =>
       sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
           localCommitIdBeforeSync: -1);
+
+  /// One round that pushes [SyncServiceImpl.refusalSpacing] after the last,
+  /// so a refusal in it counts.
+  Future<void> push(SyncServiceImpl sync) {
+    now = now.add(sync.refusalSpacing);
+    return pushNow(sync);
+  }
 
   /// A sync service for [client] whose atServer hands back [entries] on the
   /// pull, each an update, or each a delete when [deletes].
@@ -926,6 +939,52 @@ void main() {
     expect(await c.local.peekSyncQueue(), ['k1.wavi@bob', 'k2.wavi@bob']);
     expect(logs.at('WARNING'), isEmpty,
         reason: 'two refusals that are tried again are not a stalled queue');
+  });
+
+  test('Refusals closer together than the sync interval count once', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    final sent = <String>[];
+    final sync =
+        await syncPushing(c.client, sent, (command) async => storeFailed);
+
+    await pushNow(sync);
+    for (var round = 0; round < 4; round++) {
+      now = now.add(const Duration(seconds: 7));
+      await pushNow(sync);
+    }
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+        reason: 'five refusals within 30 seconds count once');
+    expect(sent, hasLength(5), reason: 'the premise: every round sent it');
+    now = now.add(const Duration(seconds: 2));
+    await pushNow(sync);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+        reason: 'the refusal 30 seconds after the first counts as the second');
+
+    now = now.add(const Duration(seconds: 30));
+    await pushNow(sync);
+    expect(await c.local.peekSyncQueue(), isEmpty,
+        reason: 'the third refusal to count, 30 seconds after the second, '
+            'drops it');
+    expect(droppedInARow('k.wavi@bob'), hasLength(1));
+  });
+
+  test(
+      'Given a refusal spacing of 5 seconds, when the atServer refuses K in '
+      'three rounds 5 seconds apart, then the third drops it', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    final sync =
+        await syncPushing(c.client, <String>[], (command) async => storeFailed);
+    sync.refusalSpacing = const Duration(seconds: 5);
+
+    for (var round = 0; round < 3; round++) {
+      now = now.add(const Duration(seconds: 5));
+      await pushNow(sync);
+    }
+
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(droppedInARow('k.wavi@bob'), hasLength(1));
   });
 
   group('Given a queued update of K the atServer has refused once', () {
