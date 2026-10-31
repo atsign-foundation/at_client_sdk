@@ -74,8 +74,9 @@ share-record's steps:
 on the step's own branch path, or a Gherkin step line matching exactly once,
 compared as words. A backed server claim renders "enforced by <lane>"; a
 client-lane check renders "client-side, best effort". An unbacked
-authorization or refusal claim fails; other unbacked text is "unverified" and
-counted.
+authorization or refusal claim fails, and so does one whose exit refuses
+nothing: it must be a throw, a rethrow or an error answer. Other unbacked text
+is "unverified" and counted.
 
 ## 3. The generator's two tiers
 
@@ -126,7 +127,8 @@ catches, by type, is not an exit. Helpers are followed into files within the
 root, four deep: implicit `this`, `super`, static and top-level calls, never a
 call on another object. In a helper only throws are exits, and an
 `if (...) return;` narrows the statements after it. An unhandled construct
-marks the inventory "incomplete".
+marks the inventory "incomplete", and so does a throw inside a closure, or the
+next path call made inside one, since the walk does not enter closures.
 
 Fixtures with positive and negative expectations cover if/else, else-if,
 early returns, switch, try/catch, rethrow, and helpers in the class, in the
@@ -267,9 +269,9 @@ above.
   keystore's own key-length limit in at_persistence_secondary_server, so that
   match is a false positive. The 14th is named only by a live-pack test, not
   run here.
-- **The suite.** `dart test --concurrency=1` in `tools/at_map`: 59 tests, the
-  53 scenarios, five more fixture controls and the scenario index, in about
-  3 minutes.
+- **The suite.** `dart test --concurrency=1` in `tools/at_map`: 67 tests, the
+  53 scenarios, 13 more controls and the scenario index, in 3 minutes 16
+  seconds.
 - **Mutation pass.** For 52 of the 53 scenarios, a mutant of the code that
   makes the check turned that scenario's test red, failing on its own
   assertion. The 53rd, an index-only change passing the job, asserts a pass;
