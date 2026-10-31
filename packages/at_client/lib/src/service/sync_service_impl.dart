@@ -873,12 +873,6 @@ class SyncServiceImpl implements SyncService {
           .toList();
       _bailIfStopped();
       if (atKeys.isEmpty) break;
-      // Snapshot the queue size BEFORE this batch so the
-      // no-progress guard at the bottom can detect "the entries
-      // we just tried didn't get removed" without conflating it
-      // with "the queue is large because more writes arrived".
-      final queueSizeBefore = await localSecondary.syncQueueSize;
-      _bailIfStopped();
       // Build the batch. Order in `batchRequests` mirrors the order
       // we got from `peekSyncQueue` — and the response comes back
       // 1-indexed by batch id, so index N-1 in our list is the entry
@@ -1094,36 +1088,12 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed with a refusal
-      // that is retried, the entries we tried weren't removed from the
-      // queue. Compare against the
-      // pre-batch snapshot — if size hasn't dropped at all (after
-      // accounting for any new writes that arrived during the
-      // batch), bail out and let a subsequent round retry.
-      // Concurrent writes during the batch can keep `pendingNow`
-      // ≥ `queueSizeBefore`, which is fine — those new writes will
-      // be drained when the next round picks them up; what matters
-      // here is whether the in-batch entries themselves got
-      // removed.
-      final pendingNow = await localSecondary.syncQueueSize;
-      _bailIfStopped();
-      final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
-      _bailIfStopped();
-      final atKeysSet = {for (final source in batchSources) source.atKey};
-      final allBatchKeysStillPresent =
-          pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
-      if (pendingNow > 0 &&
-          pendingNow >= queueSizeBefore &&
-          allBatchKeysStillPresent) {
-        if (rewrittenMidPush == batchSources.length) {
-          _logger.finer('sync queue: every in-batch entry reached the '
-              'atServer and was rewritten meanwhile; the newer writes push '
-              'next round');
-        } else {
-          _logger.warning('sync queue: $pendingNow pending after batch (was '
-              '$queueSizeBefore); none of the in-batch entries were '
-              'removed — bailing out, will retry next round');
-        }
+      // NOTE: every other batch removed an entry or passed one over, so the
+      // round ends; passedOver cannot bound a key rewritten while in flight.
+      if (rewrittenMidPush == batchSources.length) {
+        _logger.finer('sync queue: every in-batch entry reached the '
+            'atServer and was rewritten meanwhile; the newer writes push '
+            'next round');
         break;
       }
     }

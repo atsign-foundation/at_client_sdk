@@ -225,8 +225,7 @@ class LocalSecondary implements Secondary {
   /// misclassification lets cached encryption-public-key writes
   /// (from `AbstractAtKeyEncryption._getSharedWithPublicKey`'s local
   /// cache write) flow into the sync queue, where the server then
-  /// rejects them with `AT0003 Invalid syntax` and the no-progress
-  /// guard burns retries forever.
+  /// rejects them with `AT0003 Invalid syntax`.
   @visibleForTesting
   static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) {
     if (atKey.startsWith('cached:')) {

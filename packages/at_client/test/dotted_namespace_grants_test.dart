@@ -599,14 +599,15 @@ void main() {
       });
 
       test(
-          'when a newer write to K lands before the $code answer, then sync '
-          'does not report the queue as stalled', () async {
+          'when a newer write to K lands before the $code answer, then the '
+          'round warns of the refusal and nothing else', () async {
         final k = await rewrittenInFlight(code);
 
         await push(k.sync);
         expect(
-            logs.at('WARNING').where((m) => m.contains('none of the in-batch')),
-            isEmpty,
+            logs.at('WARNING'),
+            allOf(hasLength(1),
+                everyElement(contains('The atServer refused update'))),
             reason: 'the refused entry was answered and a newer write took '
                 'its place, so the queue moved');
       });
@@ -636,18 +637,17 @@ void main() {
             command.contains('k.wavi@bob') ? storeFailed : accepted);
 
     await push(sync);
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the entry behind it pushes in the round that first refused '
+            'it');
     await push(sync);
-    expect(await c.local.peekSyncQueue(), ['k.wavi@bob', 'l.wavi@bob'],
-        reason: 'two refusals in a row leave it queued, ahead of the entry '
-            'behind it');
-    expect(sent.where((s) => s.contains('l.wavi@bob')), isEmpty);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+        reason: 'two refusals in a row leave it queued');
 
     await push(sync);
     expect(sent.where((s) => s.contains('k.wavi@bob')), hasLength(3));
-    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
-        reason: 'the third refusal drops it, so the entry behind it pushes in '
-            'the same round');
-    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(await c.local.peekSyncQueue(), isEmpty,
+        reason: 'the third refusal drops it');
     expect(sync.refusalsHeld, isZero,
         reason: 'nothing is held for the entry it dropped');
     expect(await c.store.exists('k.wavi@bob'), isTrue,
@@ -804,15 +804,16 @@ void main() {
             command.contains('k.wavi@bob') ? #noAnswer : accepted);
 
     await push(sync);
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the entry behind it pushes in the round that first left it '
+            'out');
     await push(sync);
-    expect(await c.local.peekSyncQueue(), ['k.wavi@bob', 'l.wavi@bob'],
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
         reason: 'two rounds without an answer leave it queued');
     await push(sync);
 
     expect(await c.local.peekSyncQueue(), isEmpty,
-        reason: 'the third round without an answer drops it, and the entry '
-            'behind it pushes');
-    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1));
+        reason: 'the third round without an answer drops it');
     expect(
         droppedInARow('k.wavi@bob'),
         allOf(
@@ -844,6 +845,34 @@ void main() {
             'follow it');
     expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
         reason: 'one refusal in a round is one of three');
+  });
+
+  test(
+      'Given batches of two led by two updates the atServer refuses with '
+      'AT0002, when sync pushes, then the entries behind them push in the same '
+      'round', () async {
+    final c = enrolled({'*': 'rw'});
+    for (final key in ['k1', 'k2', 'a', 'b']) {
+      await put(c.local, '$key.wavi@bob');
+    }
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async => command.contains(RegExp(r'k[12]\.wavi@bob'))
+            ? storeFailed
+            : accepted,
+        batchSize: 2);
+
+    await push(sync);
+
+    expect(
+        sent.where((s) => s.contains(RegExp(r':[ab]\.wavi@bob'))), hasLength(2),
+        reason: 'a batch whose every entry is held for the next round does not '
+            'end this one');
+    expect(await c.local.peekSyncQueue(), ['k1.wavi@bob', 'k2.wavi@bob']);
+    expect(logs.at('WARNING'), isEmpty,
+        reason: 'two refusals that are tried again are not a stalled queue');
   });
 
   test(
