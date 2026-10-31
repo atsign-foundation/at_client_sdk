@@ -439,11 +439,13 @@ void main() {
             'the same round');
     expect(await c.local.peekSyncQueue(), isEmpty);
     expect(
-        logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        logs.at('SEVERE').where((m) => m.contains('k.wavi@bob')),
         allOf(
             isNotEmpty,
             everyElement(allOf(contains('update'), contains(enrollmentId),
                 contains('AT0009')))));
+    expect(logs.at('WARNING').where((m) => m.contains('k.wavi@bob')), isEmpty,
+        reason: 'a dropped write is logged once, at severe');
     expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
         reason: 'the local copy stays as written');
   });
@@ -474,11 +476,13 @@ void main() {
             'the same round');
     expect(await c.local.peekSyncQueue(), isEmpty);
     expect(
-        logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+        logs.at('SEVERE').where((m) => m.contains('k.wavi@bob')),
         allOf(
             isNotEmpty,
             everyElement(allOf(contains('delete'), contains(enrollmentId),
                 contains('AT0009')))));
+    expect(logs.at('WARNING').where((m) => m.contains('k.wavi@bob')), isEmpty,
+        reason: 'a dropped write is logged once, at severe');
     expect(await c.store.exists('k.wavi@bob'), isFalse,
         reason: 'the local copy stays as written: deleted');
   });
@@ -526,11 +530,14 @@ void main() {
                 'in the same round');
         expect(await c.local.peekSyncQueue(), isEmpty);
         expect(
-            logs.at('WARNING').where((m) => m.contains('k.wavi@bob')),
+            logs.at('SEVERE').where((m) => m.contains('k.wavi@bob')),
             allOf(
                 isNotEmpty,
                 everyElement(allOf(contains('update'), contains(enrollmentId),
                     contains(code)))));
+        expect(
+            logs.at('WARNING').where((m) => m.contains('k.wavi@bob')), isEmpty,
+            reason: 'a dropped write is logged once, at severe');
         expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
             reason: 'the local copy stays as written');
       });
@@ -539,7 +546,7 @@ void main() {
 
   test(
       'Given a queued update the atServer refuses for good, when sync is '
-      'stopped while it is being removed, then the warning naming it is still '
+      'stopped while it is being removed, then the line naming it is still '
       'logged', () async {
     final queueStore = _GatedQueueStore();
     final queue = AtSyncQueue(atSign: atSign);
@@ -562,10 +569,10 @@ void main() {
         reason: 'the premise: the removal finished after the stop');
     expect(
         logs
-            .at('WARNING')
+            .at('SEVERE')
             .where((m) => m.contains('k.wavi@bob') && m.contains('AT0009')),
         hasLength(1),
-        reason: 'an entry sync removes is named at warning, stop or no stop');
+        reason: 'an entry sync removes is named at severe, stop or no stop');
   });
 
   group('Given an update of K refused for good while in flight', () {

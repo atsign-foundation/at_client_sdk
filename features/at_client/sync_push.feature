@@ -18,12 +18,12 @@ Feature: Sync pushes past a write the atServer refuses for good
   Scenario: A queued update the atServer refuses as unauthorized leaves the queue, and the entries behind it push
     Given a queued update of K that the atServer refuses as unauthorized
     When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation and the enrollment, and the entries behind it push in the same round
+    Then that entry leaves the queue, a severe log line names K, the operation and the enrollment, and the entries behind it push in the same round
 
   Scenario: A queued delete the atServer refuses as unauthorized leaves the queue, and the entries behind it push
     Given a queued delete of K that the atServer refuses as unauthorized
     When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation and the enrollment, and the entries behind it push in the same round
+    Then that entry leaves the queue, a severe log line names K, the operation and the enrollment, and the entries behind it push in the same round
 
   Scenario: A queued update refused with any other code stays queued and retries
     Given a queued update refused with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
@@ -33,4 +33,4 @@ Feature: Sync pushes past a write the atServer refuses for good
   Scenario: A queued write refused for good with AT0032, AT0016, AT0022 or AT0003 leaves the queue
     Given a queued update that the atServer refuses with AT0032, AT0016, AT0022 or AT0003
     When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation, the enrollment and the code, and the entries behind it push in the same round
+    Then that entry leaves the queue, a severe log line names K, the operation, the enrollment and the code, and the entries behind it push in the same round

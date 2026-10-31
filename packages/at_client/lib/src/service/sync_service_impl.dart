@@ -866,7 +866,7 @@ class SyncServiceImpl implements SyncService {
             final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
                 source.atKey, source.seq);
             if (!removed) rewrittenMidPush++;
-            _logger.warning('The atServer refused ${source.op.name} of '
+            _logger.severe('The atServer refused ${source.op.name} of '
                 '${source.atKey} for enrollment ${_atClient.enrollmentId} '
                 'with ${responseObject.errorCode} '
                 '(${responseObject.errorMessage}), so it is not retried and '
