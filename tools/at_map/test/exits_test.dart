@@ -112,15 +112,18 @@ void main() {
                 .contains('atConnectionMetadata.isAuthenticated')),
         isEmpty);
 
-    final model = loadModel(h.ws.sdk).model!;
-    final r = await h.ws.resolver(model.roots);
-    final file = p.join(h.ws.server.dir,
-        'packages/at_secondary_server/lib/src/verb/handler/notify_verb_handler.dart');
-    final inv = await ExitWalker(r, h.ws.server.dir).walk([
-      (await r.declaration(file, 'NotifyVerbHandler.processVerb'))!,
-      (await r.declaration(
-          file, 'NotifyVerbHandler._handlePolAuthenticatedConnection'))!,
-    ]);
+    final inv = await h.exclusive(() async {
+      await h.ws.overlay();
+      final model = loadModel(h.ws.sdk).model!;
+      final r = await h.ws.resolver(model.roots);
+      final file = p.join(h.ws.server.dir,
+          'packages/at_secondary_server/lib/src/verb/handler/notify_verb_handler.dart');
+      return ExitWalker(r, h.ws.server.dir).walk([
+        (await r.declaration(file, 'NotifyVerbHandler.processVerb'))!,
+        (await r.declaration(
+            file, 'NotifyVerbHandler._handlePolAuthenticatedConnection'))!,
+      ]);
+    });
     final client = inv.exits
         .where((e) =>
             e.symbol == 'NotifyVerbHandler._handleAuthenticatedConnection')

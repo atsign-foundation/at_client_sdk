@@ -2,7 +2,6 @@
 /// changed server body fails the job.
 ///
 /// Catalogue: features/at_map/sdk_map.feature
-@Timeout(Duration(minutes: 2))
 library;
 
 import 'package:at_map/at_map.dart';
@@ -49,12 +48,14 @@ void main() {
     expect(stepOf(flowJson(amber), 'alice-enqueue')['changed'], isTrue,
         reason: 'the step starts out changed since reviewed');
 
-    await h.ws.overlay(sdk: code);
     String? blessed;
-    final status = runBless(h.ws, ['share-record.alice-enqueue'], log: (_) {},
-        write: (path, text) {
-      expect(path, flowYaml);
-      blessed = text;
+    final status = await h.exclusive(() async {
+      await h.ws.overlay(sdk: code);
+      return runBless(h.ws, ['share-record.alice-enqueue'], log: (_) {},
+          write: (path, text) {
+        expect(path, flowYaml);
+        blessed = text;
+      });
     });
     expect(status, 0);
     expect(blessed, isNotNull);

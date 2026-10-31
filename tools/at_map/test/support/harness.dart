@@ -114,16 +114,31 @@ class Harness {
   String serverFile(String rel) =>
       File(p.join(ws.server.dir, rel)).readAsStringSync();
 
+  Future<void> _idle = Future<void>.value();
+
+  /// Runs [body] once every earlier use of [ws] has finished.
+  ///
+  /// A test that times out leaves its build running, and the next test's
+  /// overlays would change the files that build is still resolving; waiting
+  /// for it keeps every build on one consistent analysis session.
+  Future<T> exclusive<T>(Future<T> Function() body) {
+    final turn = _idle.then((_) => body());
+    _idle = turn.then((_) {}, onError: (Object _) {});
+    return turn;
+  }
+
   Future<Result> _run(Future<int> Function(Log log) body, String data,
       {Map<String, String> sdk = const {},
       Map<String, String> server = const {},
       Map<String, String> outside = const {},
-      String? serverGit}) async {
-    await ws.overlay(sdk: sdk, server: server, outside: outside);
-    ws.serverGit = serverGit ?? ws.server.dir;
-    final lines = <String>[];
-    final code = await body(lines.add);
-    return Result(code, lines, data);
+      String? serverGit}) {
+    return exclusive(() async {
+      await ws.overlay(sdk: sdk, server: server, outside: outside);
+      ws.serverGit = serverGit ?? ws.server.dir;
+      final lines = <String>[];
+      final code = await body(lines.add);
+      return Result(code, lines, data);
+    });
   }
 
   /// `at_map build` into [data], a fresh directory when null.

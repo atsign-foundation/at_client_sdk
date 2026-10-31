@@ -2,7 +2,6 @@
 /// and the figure the map job reports against `ratchet.yaml`.
 ///
 /// Catalogue: features/at_map/sdk_map.feature
-@Timeout(Duration(minutes: 2))
 library;
 
 import 'dart:convert';
