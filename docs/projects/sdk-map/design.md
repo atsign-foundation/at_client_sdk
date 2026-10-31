@@ -92,7 +92,9 @@ the call edges, `via` chains and binders; the dispatch table read from
 its `VerbSyntax` read in both at_commons versions; and the exit walk. It needs
 `dart pub get` in at_server's `packages/at_secondary_server`, so the at_server
 checkout must be at the pinned SHA and clean; files are read from it with any
-test overlays on top.
+test overlays on top. Each wire sample is replayed once per at_commons
+version, and a failure names the version it was replayed with. Dispatch
+picks the handler by `accept` alone, which no at_commons version changes.
 
 Both tiers' times are in [section 10](#10-measurements).
 
@@ -106,7 +108,9 @@ Both tiers' times are in [section 10](#10-measurements).
   links, and the test evidence. It is labelled with the at_client_sdk commit it
   was built at.
 - A build stages every file in a directory beside `data/` and renames each
-  into place, and writes nothing when anything fails.
+  into place, so each file is written whole, and it writes nothing when
+  anything fails. A build cut short can leave a mix of old and new files,
+  which the gate then reports as stale.
 
 ## 4. The exit walk
 
@@ -203,7 +207,8 @@ The feature file's header answers each class.
 - **Races.** Trunk already requires branches up to date, with required checks
   and a review, so making `map` a required check (a settings change once the
   job exists) prevents two green pull requests breaking trunk together. A
-  build stages and renames, so an interrupted one leaves whole files.
+  build writes each file whole; one cut short can leave a mix of old and new
+  files, which the gate reports as stale.
 - **Replay.** Each flow file records its inputs, and the gate refuses one a
   fresh build would not reproduce; retired ids stay retired.
 - **DoS.** `contains` is a token sequence, never a regular expression; model

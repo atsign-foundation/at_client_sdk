@@ -22,8 +22,9 @@ Feature: The SDK map draws share-record from a curated model, checked against th
   protection already requires a branch to be up to date before it merges, so
   making the map job a required check prevents that; until then, its run on
   every push to trunk only detects it. A build
-  writes to a temporary directory and renames it, so an interrupted build
-  leaves the old files whole. The production tag is pinned by name and SHA.
+  writes each file whole, staging it and renaming it into place, so a build
+  cut short can leave a mix of old and new files, which the gate then
+  reports as stale. The production tag is pinned by name and SHA.
   A tag published later changes no build, and a tag moved to another commit
   fails the job.
   Replay: each generated flow file records the inputs it was built from: the
@@ -106,7 +107,7 @@ Feature: The SDK map draws share-record from a curated model, checked against th
   Scenario: A sample dispatching elsewhere fails the map job
     Given share-record.bob-server-accept is reached by a notify: sample
     When its sample is changed to a notify:list command and the map job runs
-    Then it fails, naming the step, NotifyListVerbHandler as the handler dispatch chose, and the at_commons version that chose it
+    Then it fails, naming the step and NotifyListVerbHandler as the handler dispatch chose
 
   Scenario: A sample one at_commons version rejects fails the map job
     Given a wire sample that the client's at_commons VerbSyntax accepts and the at_commons version in at_server's lock rejects
