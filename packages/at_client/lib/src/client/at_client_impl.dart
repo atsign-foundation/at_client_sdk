@@ -45,7 +45,9 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart' show SyncQueueOp;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     as resolved_algo;
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
@@ -1831,6 +1833,34 @@ class AtClientImpl implements AtClient {
     }
   }
 
+  /// Refuses [putBuilder]'s value, after encryption or encoding, when it is
+  /// too large: for a key sync pushes, the command sync would push for it
+  /// against [pushBudgetBytes]; for any other, the value itself against
+  /// [AtClientPreference.maxDataSize]. Each size counts UTF-8 bytes.
+  void _refuseOversize(UpdateVerbBuilder putBuilder) {
+    final maxDataSize = _preference!.maxDataSize;
+    final atKey = putBuilder.buildKey();
+    final stored = putBuilder.value;
+    final int limit;
+    final int found;
+    if (syncsKey(atKey, SyncQueueOp.updateAll)) {
+      limit = pushBudgetBytes(maxDataSize);
+      found = pushBytesAlone(pushUpdateCommand(
+          atKey,
+          AtMetaData.fromCommonsMetadata(
+              putBuilder.atKey.metadata, getCurrentAtSign()!),
+          stored));
+    } else {
+      limit = maxDataSize;
+      found = stored is String ? utf8.encode(stored).length : stored.length;
+    }
+    if (found > limit) {
+      throw BufferOverFlowException(
+        'The length of value exceeds the maximum allowed length. Maximum buffer size is $limit bytes. Found $found bytes',
+      );
+    }
+  }
+
   Future<AtResponse> _putInternal(
     AtKey atKey,
     dynamic value,
@@ -1920,14 +1950,7 @@ class AtClientImpl implements AtClient {
       // provider is finally selected.
       requestOptions: options,
     );
-    // Validate the size of the value after encryption/encoding
-    // Since AtClientPreference is mandatory argument in create method, _preference
-    // will not be null.
-    if (putBuilder.value.length > _preference!.maxDataSize) {
-      throw BufferOverFlowException(
-        'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes',
-      );
-    }
+    _refuseOversize(putBuilder);
 
     var putResponse = await executeUpdateOrDelete(
         putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));

@@ -175,7 +175,9 @@ extension AtsignLifecycle on Atsign {
   /// key package on the request that creates the record, and the signing
   /// root minted once the client is up. [mintLegacyMaterial] cuts the RSA
   /// encryption keypair and the self-encryption key, and defaults to the
-  /// posture's answer. [onProgress] hears each step of the activation.
+  /// posture's answer. Without them `AtClient.put` of a public value throws
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key. [onProgress] hears each step of the activation.
   ///
   /// A newly registered atSign can take minutes to be provisioned: the
   /// activation polls every [provisioningPollInterval] until the atServer

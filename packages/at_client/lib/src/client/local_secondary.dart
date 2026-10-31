@@ -5,6 +5,8 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show grantCovering;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
@@ -12,6 +14,7 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -223,23 +226,10 @@ class LocalSecondary implements Secondary {
   /// misclassification lets cached encryption-public-key writes
   /// (from `AbstractAtKeyEncryption._getSharedWithPublicKey`'s local
   /// cache write) flow into the sync queue, where the server then
-  /// rejects them with `AT0003 Invalid syntax` and the no-progress
-  /// guard burns retries forever.
+  /// rejects them with `AT0003 Invalid syntax`.
   @visibleForTesting
-  static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) {
-    if (atKey.startsWith('cached:')) {
-      // Receiver-initiated delete of a cached key is the one
-      // legitimate client→server case for cached:; everything else
-      // (puts, meta updates) is server-originated and shouldn't be
-      // pushed back.
-      return op == SyncQueueOp.delete;
-    }
-    final type = AtKey.getKeyType(atKey);
-    return type == KeyType.selfKey ||
-        type == KeyType.sharedKey ||
-        type == KeyType.publicKey ||
-        type == KeyType.reservedKey;
-  }
+  static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) =>
+      syncsKey(atKey, op);
 
   /// Enqueues [atKey] for client→server sync with operation [op] and
   /// triggers the sync service to drain. Called from [_update] /
@@ -312,7 +302,9 @@ class LocalSecondary implements Secondary {
   /// `_update` / `_delete` to skip the sync-queue enqueue — the
   /// server already has the entry; bouncing it back would be a loop,
   /// and a queued entry carries only the key's name, so a later drain
-  /// would send whatever local storage held by then.
+  /// would send whatever local storage held by then. Such a change
+  /// needs only read access to be stored, since the atServer sent or
+  /// accepted it for this enrollment.
   @override
   Future<String?> executeVerb(VerbBuilder builder,
       {bool cameFromServer = false}) async {
@@ -388,7 +380,8 @@ class LocalSecondary implements Secondary {
     if (!cameFromServer) _writesInProgress.add(updateKey);
     try {
       dynamic updateResult;
-      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
+      if (!await isEnrollmentAuthorizedForOperation(updateKey, builder,
+          fromAtServer: cameFromServer)) {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
@@ -523,7 +516,9 @@ class LocalSecondary implements Secondary {
     var llookupKey = '';
     try {
       llookupKey = builder.buildKey();
-      if (!await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
+      // NOTE: a public key is read whatever the grant.
+      if (!llookupKey.startsWith('public:') &&
+          !await isEnrollmentAuthorizedForOperation(llookupKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
       }
@@ -558,7 +553,8 @@ class LocalSecondary implements Secondary {
       bool isExpiry = false}) async {
     var deleteKey = builder.buildKey();
     if (!isExpiry &&
-        !await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+        !await isEnrollmentAuthorizedForOperation(deleteKey, builder,
+            fromAtServer: cameFromServer)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -677,8 +673,10 @@ class LocalSecondary implements Secondary {
       keys.removeWhere((key) => _shouldHideKeys(key!, builder.showHiddenKeys));
       final keysToRemove = <String>[];
       await Future.forEach(keys, (key) async {
-        if (!(await isEnrollmentAuthorizedForOperation(
-            key.toString(), builder))) {
+        // NOTE: a public key is listed whatever the grant.
+        if (!key!.startsWith('public:') &&
+            !(await isEnrollmentAuthorizedForOperation(
+                key.toString(), builder))) {
           keysToRemove.add(key.toString());
         }
       });
@@ -948,8 +946,14 @@ class LocalSecondary implements Secondary {
     return true;
   }
 
+  /// Whether this client's enrollment may perform [verbBuilder] on [key] in
+  /// local storage, decided by its grants as the atServer decides it.
+  ///
+  /// [fromAtServer] marks a change the atServer sent or accepted for this
+  /// enrollment, which needs only read access to be stored.
   Future<bool> isEnrollmentAuthorizedForOperation(
-      String key, VerbBuilder verbBuilder) async {
+      String key, VerbBuilder verbBuilder,
+      {bool fromAtServer = false}) async {
     // Do whatever you want with "local" keys
     if (key.startsWith('local:')) {
       return true;
@@ -962,35 +966,21 @@ class LocalSecondary implements Secondary {
       _logger.finest('Skipping enrollment authorization check for key: $key');
       return true;
     }
-    final enrollNamespaces = enrollment!.namespace;
-    var keyNamespace = AtKey.fromString(key).namespace;
-    _logger.finest(
-        'Checking for enrollment authorization for key: $key with enrollmentId : ${_atClient.enrollmentId} for namespace: $keyNamespace');
-    // * denotes access to all namespaces.
-    final access = enrollNamespaces!.containsKey('*')
-        ? enrollNamespaces['*']
-        : enrollNamespaces[keyNamespace];
-
-    if (access == null) {
-      _logger.finer(
-          'Access permissions not found for the enrollment id: ${_atClient.enrollmentId}. Not authorized for the operation');
+    final covering =
+        grantCovering(_withImplicitGrants(enrollment!.namespace!), key);
+    if (covering == null) {
+      _logger.finer('Enrollment ${_atClient.enrollmentId} holds no grant '
+          'covering $key, so it is not authorized for the operation');
       return false;
     }
-    if (keyNamespace == null && enrollNamespaces.containsKey('*')) {
-      _logger.finer(
-          'Access permissions for the the enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace');
-      if (_isReadAllowed(verbBuilder, access) ||
-          _isWriteAllowed(verbBuilder, access)) {
-        _logger.finest(
-            'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is authorized to perform operation');
-        return true;
-      }
-      _logger.finest(
-          'Enrollment id: ${_atClient.enrollmentId} : $access for namespace: $keyNamespace is not authorized to perform operation');
+    // NOTE: no local operation reaches a __manage key.
+    if (covering.namespace == EnrollmentConstants.enrollManageNamespace ||
+        covering.grant == EnrollmentConstants.enrollManageNamespace) {
       return false;
     }
-    return _isReadAllowed(verbBuilder, access) ||
-        _isWriteAllowed(verbBuilder, access);
+    if (fromAtServer) return _grantsRead(covering.access);
+    return _isReadAllowed(verbBuilder, covering.access) ||
+        _isWriteAllowed(verbBuilder, covering.access);
   }
 
   /// The enrollment record for the enrollment this client authenticates as,
@@ -1132,6 +1122,20 @@ class LocalSecondary implements Secondary {
       return null;
     }
   }
+
+  /// [grants] with the two every enrollment holds on the atServer without
+  /// being granted them, added as the atServer adds them: read on
+  /// `__atserver` unless a grant names it, and read and write on this
+  /// enrollment's own per-enrollment namespace.
+  Map<String, dynamic> _withImplicitGrants(Map<String, dynamic> grants) => {
+        ...grants,
+        if (!grants.containsKey(AtConstants.atServerReservedNamespace))
+          AtConstants.atServerReservedNamespace: 'r',
+        '${_atClient.enrollmentId}.${EnrollmentConstants.perEnrollmentApproved}':
+            'rw',
+      };
+
+  bool _grantsRead(String access) => access == 'r' || access == 'rw';
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
     return (verbBuilder is LLookupVerbBuilder ||

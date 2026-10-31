@@ -202,17 +202,22 @@ void main() {
     expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
         reason: 'the premise: the newer write is still queued after the '
             'round, so the round ended with nothing removed');
-    expect(logs.at('WARNING').where((m) => m.contains('in-batch')), isEmpty,
+    expect(logs.at('WARNING'), isEmpty,
         reason: 'the atServer took every entry and the newer writes push next '
             'round, which is not a failure');
   });
 
-  test('a batch the atServer refuses is still warned about', () async {
+  test(
+      'a batch the atServer refuses is logged with its code, and its entry '
+      'stays queued', () async {
     await pushOnce('data:[{"id":1,"response":'
-        '{"error_code":"AT0003","error_message":"refused"}}]');
+        '{"error_code":"AT0002","error_message":"refused"}}]');
 
-    expect(logs.at('WARNING').where((m) => m.contains('in-batch')), isNotEmpty,
-        reason: 'nothing in the batch reached the atServer, and the round '
-            'gives up on it until the next');
+    expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
+        reason: 'a refusal a retry may get past leaves the entry queued');
+    expect(logs.at('SEVERE').where((m) => m.contains('AT0002')), isNotEmpty,
+        reason: 'the refusal is logged, with its code');
+    expect(logs.at('WARNING'), isEmpty,
+        reason: 'one refusal tried again next round is not a stalled queue');
   });
 }

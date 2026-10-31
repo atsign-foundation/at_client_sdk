@@ -11,6 +11,7 @@ import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
@@ -719,9 +720,105 @@ class SyncServiceImpl implements SyncService {
       _bailIfStopped();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
+    await _pruneRefusals(localSecondary);
+    _bailIfStopped();
     syncResult.lastSyncedOn = DateTime.now().toUtc();
     syncResult.syncStatus = SyncStatus.success;
     return syncResult;
+  }
+
+  /// The codes with which the atServer refuses a queued write for good, so
+  /// that pushing it again is refused again: unauthorized, an immutable
+  /// record, an invalid key, an illegal argument and invalid syntax.
+  static final Set<String> _refusedForGood = {
+    for (final name in const [
+      'UnAuthorizedException',
+      'IllegalStateException',
+      'InvalidAtKeyException',
+      'IllegalArgumentException',
+      'InvalidSyntaxException',
+    ])
+      error_codes[name] as String,
+  };
+
+  /// How many refusals in a row of one queued version drop it from the queue,
+  /// whatever the code, each counted at least [refusalSpacing] after the
+  /// last.
+  static const _refusalsBeforeDrop = 3;
+
+  /// The least time between two refusals of one queued version that both
+  /// count, so a burst of rounds counts once.
+  @visibleForTesting
+  Duration refusalSpacing = _periodicSyncInterval;
+
+  /// The clock refusals are counted by.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
+
+  /// For each atKey whose queued version the atServer has refused, or whose
+  /// answer sync could not process, that version's [SyncQueueEntry.seq], how
+  /// many times in a row, and when the last of them counted. Held in memory,
+  /// so each process allows [_refusalsBeforeDrop] more.
+  final Map<String, ({int seq, int count, DateTime countedAt})> _refusals = {};
+
+  /// How many atKeys hold a refusal count.
+  @visibleForTesting
+  int get refusalsHeld => _refusals.length;
+
+  /// Forgets the count of each atKey that has left the queue, however it
+  /// left.
+  Future<void> _pruneRefusals(LocalSecondary localSecondary) async {
+    for (final atKey in _refusals.keys.toList()) {
+      if (await localSecondary.readSyncQueueEntry(atKey) == null) {
+        _refusals.remove(atKey);
+      }
+    }
+  }
+
+  /// Counts one more refusal of [source]'s queued version and returns how
+  /// many it has had in a row; a newer version of the atKey starts again,
+  /// and a refusal less than [refusalSpacing] after the last that counted
+  /// does not count.
+  int _countRefusal(_BatchSource source) {
+    final now = clock();
+    final held = _refusals[source.atKey];
+    if (held != null && held.seq == source.seq) {
+      if (now.difference(held.countedAt) < refusalSpacing) return held.count;
+      _refusals[source.atKey] =
+          (seq: source.seq, count: held.count + 1, countedAt: now);
+      return held.count + 1;
+    }
+    _refusals[source.atKey] = (seq: source.seq, count: 1, countedAt: now);
+    return 1;
+  }
+
+  /// Removes [source]'s queued version, keeping the local copy, and logs
+  /// [why] at warning. Returns false when a newer write replaced it, which
+  /// then pushes next round.
+  Future<bool> _dropRefused(
+      LocalSecondary localSecondary, _BatchSource source, String why) async {
+    _refusals.remove(source.atKey);
+    final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+        source.atKey, source.seq);
+    _logger.warning('$why, so it is not retried and this device keeps its '
+        'local copy'
+        '${removed ? '' : '; a newer write to it pushes next round'}');
+    _bailIfStopped();
+    return removed;
+  }
+
+  /// Counts one more failure of [source]'s queued version, logging [why], and
+  /// drops it once it has had [_refusalsBeforeDrop] in a row. Returns false
+  /// when the drop found a newer write in its place.
+  Future<bool> _countOrDrop(
+      LocalSecondary localSecondary, _BatchSource source, String why) async {
+    final count = _countRefusal(source);
+    if (count < _refusalsBeforeDrop) {
+      _logger.severe('$why, $count of $_refusalsBeforeDrop in a row, so it is '
+          'tried again next round');
+      return true;
+    }
+    return _dropRefused(localSecondary, source, '$why $count times in a row');
   }
 
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
@@ -729,19 +826,30 @@ class SyncServiceImpl implements SyncService {
   ///
   /// Per round:
   /// 1. Peek the next [AtClientPreference.syncBatchSize] atKeys from
-  ///    the queue (FIFO).
+  ///    the queue (FIFO), passing over any this round has already left
+  ///    queued.
   /// 2. For each, read the queued op (and value+metadata from the
   ///    keystore for non-DELETE ops). Skip + remove the queue entry
   ///    if the keystore value is missing — race-tolerated handling
   ///    of a write that landed between queue-write and keystore-write
   ///    timing windows (rare, but the alternative is leaking queue
-  ///    entries forever).
+  ///    entries forever). An entry whose command cannot be built is
+  ///    passed over and counted as a refusal is. One whose command
+  ///    alone is over [pushBudgetBytes] is removed with a warning,
+  ///    keeping the local copy, and the batch closes before the entry
+  ///    that would take it over.
   /// 3. Build a `BatchRequest` list and send via [sendBatch] (single
   ///    network round-trip per batch — keeps push throughput high
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
-  ///    queue and promote `_latestKnownServerCommitId`. On failure,
-  ///    leave in queue for retry on the next round.
+  ///    queue and promote `_latestKnownServerCommitId`. On a refusal
+  ///    for good ([_refusedForGood]), remove from the queue with a
+  ///    warning, keeping the local copy. On any other refusal, an
+  ///    answer sync cannot process, or no answer, leave it queued for
+  ///    the next round, and remove it the same way once one queued
+  ///    version has had [_refusalsBeforeDrop] in a row, each at least
+  ///    [refusalSpacing] after the last. A batch that fails as a whole
+  ///    removes nothing.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -752,18 +860,20 @@ class SyncServiceImpl implements SyncService {
     final localSecondary = _atClient.getLocalSecondary()!;
     final batchSize = _atClient.getPreferences()!.syncBatchSize;
     final keyInfoList = <KeyInfo>[];
+    final budget = pushBudgetBytes(_atClient.getPreferences()!.maxDataSize);
+    // NOTE: an entry this round has counted stays queued, and is not offered
+    // again until the next round.
+    final passedOver = <String>{};
     var batchesDone = 0;
     while (true) {
       _throwIfStopped();
-      final atKeys = await localSecondary.peekSyncQueue(limit: batchSize);
+      final atKeys = (await localSecondary.peekSyncQueue(
+              limit: batchSize + passedOver.length))
+          .where((atKey) => !passedOver.contains(atKey))
+          .take(batchSize)
+          .toList();
       _bailIfStopped();
       if (atKeys.isEmpty) break;
-      // Snapshot the queue size BEFORE this batch so the
-      // no-progress guard at the bottom can detect "the entries
-      // we just tried didn't get removed" without conflating it
-      // with "the queue is large because more writes arrived".
-      final queueSizeBefore = await localSecondary.syncQueueSize;
-      _bailIfStopped();
       // Build the batch. Order in `batchRequests` mirrors the order
       // we got from `peekSyncQueue` — and the response comes back
       // 1-indexed by batch id, so index N-1 in our list is the entry
@@ -771,6 +881,7 @@ class SyncServiceImpl implements SyncService {
       // can correlate the response without re-parsing the wire.
       final batchRequests = <BatchRequest>[];
       final batchSources = <_BatchSource>[];
+      var requestBytes = 0;
       for (final atKey in atKeys) {
         final entry = await localSecondary.readSyncQueueEntry(atKey);
         _bailIfStopped();
@@ -802,16 +913,47 @@ class SyncServiceImpl implements SyncService {
           await localSecondary.removeFromSyncQueueIfUnchanged(atKey, entry.seq);
           _bailIfStopped();
           continue;
+        } on _SyncAbandoned {
+          rethrow;
+        } on Exception catch (e) {
+          if (e is StoppedException || isStopped) throw const _SyncAbandoned();
+          final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+          passedOver.add(atKey);
+          await _countOrDrop(
+              localSecondary,
+              _BatchSource(atKey: atKey, op: entry.op, seq: entry.seq),
+              'Sync could not build the command for ${entry.op.name} of '
+              '$atKey for enrollment ${_atClient.enrollmentId} ($cause)');
+          continue;
         }
-        _logger.info('Will push ${entry.op} for $atKey');
-        final batchId = batchRequests.length + 1;
-        batchRequests
-            .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
-        batchSources.add(_BatchSource(
+        final source = _BatchSource(
           atKey: atKey,
           op: entry.op,
           seq: entry.seq,
-        ));
+        );
+        final wireCommand = VerbUtil.replaceNewline(command);
+        final commandBytes = pushedCommandBytes(command);
+        final aloneBytes =
+            batchCommandBytes(batchRequestBytes(1, commandBytes), 1);
+        if (aloneBytes > budget) {
+          await _dropRefused(
+              localSecondary,
+              source,
+              'Sync cannot push ${entry.op.name} of $atKey for enrollment '
+              '${_atClient.enrollmentId}: it takes $aloneBytes bytes, more '
+              'than the $budget a push batch may take');
+          continue;
+        }
+        final batchId = batchRequests.length + 1;
+        final bytes = batchRequestBytes(batchId, commandBytes);
+        if (batchRequests.isNotEmpty &&
+            batchCommandBytes(requestBytes + bytes, batchId) > budget) {
+          break;
+        }
+        requestBytes += bytes;
+        _logger.info('Will push ${entry.op} for $atKey');
+        batchRequests.add(BatchRequest(batchId, wireCommand));
+        batchSources.add(source);
       }
       if (batchRequests.isEmpty) {
         // Every queued atKey we pulled was a phantom; loop and try
@@ -833,22 +975,36 @@ class SyncServiceImpl implements SyncService {
         _logger.severe('sendBatch failed: $cause');
         return keyInfoList;
       }
+      final answered = <int>{};
       for (final entry in batchResponse) {
+        _BatchSource? source;
         try {
           final batchId = entry['id'] as int;
+          source = batchSources.elementAt(batchId - 1);
+          answered.add(batchId);
           final serverResponse = entry['response'];
           final responseObject = Response.fromJson(serverResponse);
-          final source = batchSources.elementAt(batchId - 1);
           var commitId = -1;
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
           if (commitId == -1) {
-            _logger.severe(
-                '${source.op} for key ${source.atKey} failed. Error code '
-                '${responseObject.errorCode} error message '
-                '${responseObject.errorMessage}');
-            // Leave in queue for retry. Don't remove.
+            final refusal = 'The atServer refused ${source.op.name} of '
+                '${source.atKey} for enrollment ${_atClient.enrollmentId} '
+                'with ${responseObject.errorCode} '
+                '(${responseObject.errorMessage})';
+            // NOTE: a refusal for good is not retried, so it cannot hold up
+            // the entries behind it; the local copy stays as written.
+            if (_refusedForGood.contains(responseObject.errorCode)) {
+              if (!await _dropRefused(localSecondary, source, refusal)) {
+                rewrittenMidPush++;
+              }
+              continue;
+            }
+            passedOver.add(source.atKey);
+            if (!await _countOrDrop(localSecondary, source, refusal)) {
+              rewrittenMidPush++;
+            }
             continue;
           }
           _promoteServerCommitId(commitId);
@@ -865,6 +1021,7 @@ class SyncServiceImpl implements SyncService {
           }
           final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
               source.atKey, source.seq);
+          _refusals.remove(source.atKey);
           if (!removed) {
             // NOTE: a newer local write to this atKey replaced the queue entry
             // while this batch was in flight. The server has the version this
@@ -885,8 +1042,31 @@ class SyncServiceImpl implements SyncService {
         } on Exception catch (e) {
           if (e is StoppedException || isStopped) throw const _SyncAbandoned();
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-          _logger.severe(
-              'exception processing batch response entry $entry: $cause');
+          if (source == null) {
+            _logger.severe(
+                'exception processing batch response entry $entry: $cause');
+            continue;
+          }
+          passedOver.add(source.atKey);
+          if (!await _countOrDrop(
+              localSecondary,
+              source,
+              'Sync could not process the atServer\'s answer to '
+              '${source.op.name} of ${source.atKey} for enrollment '
+              '${_atClient.enrollmentId} ($cause)')) {
+            rewrittenMidPush++;
+          }
+        }
+      }
+      for (final (index, source) in batchSources.indexed) {
+        if (answered.contains(index + 1)) continue;
+        passedOver.add(source.atKey);
+        if (!await _countOrDrop(
+            localSecondary,
+            source,
+            'The atServer gave no answer to ${source.op.name} of '
+            '${source.atKey} for enrollment ${_atClient.enrollmentId}')) {
+          rewrittenMidPush++;
         }
       }
       batchesDone++;
@@ -909,36 +1089,12 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (e.g. a
-      // server-side per-key authorization issue), the entries we
-      // tried weren't removed from the queue. Compare against the
-      // pre-batch snapshot — if size hasn't dropped at all (after
-      // accounting for any new writes that arrived during the
-      // batch), bail out and let a subsequent round retry.
-      // Concurrent writes during the batch can keep `pendingNow`
-      // ≥ `queueSizeBefore`, which is fine — those new writes will
-      // be drained when the next round picks them up; what matters
-      // here is whether the in-batch entries themselves got
-      // removed.
-      final pendingNow = await localSecondary.syncQueueSize;
-      _bailIfStopped();
-      final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
-      _bailIfStopped();
-      final atKeysSet = atKeys.toSet();
-      final allBatchKeysStillPresent =
-          pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
-      if (pendingNow > 0 &&
-          pendingNow >= queueSizeBefore &&
-          allBatchKeysStillPresent) {
-        if (rewrittenMidPush == batchSources.length) {
-          _logger.finer('sync queue: every in-batch entry reached the '
-              'atServer and was rewritten meanwhile; the newer writes push '
-              'next round');
-        } else {
-          _logger.warning('sync queue: $pendingNow pending after batch (was '
-              '$queueSizeBefore); none of the in-batch entries were '
-              'removed — bailing out, will retry next round');
-        }
+      // NOTE: every other batch removed an entry or passed one over, so the
+      // round ends; passedOver cannot bound a key rewritten while in flight.
+      if (rewrittenMidPush == batchSources.length) {
+        _logger.finer('sync queue: every in-batch entry reached the '
+            'atServer and was rewritten meanwhile; the newer writes push '
+            'next round');
         break;
       }
     }
@@ -970,8 +1126,7 @@ class SyncServiceImpl implements SyncService {
           // catches [KeyNotFoundException] and removes it.
           throw KeyNotFoundException('$atKey not found in keystore');
         }
-        final keyGen = '${metadataToString(value.metaData)}:$atKey';
-        return 'update$keyGen ${value.data}';
+        return pushUpdateCommand(atKey, value.metaData, value.data);
     }
   }
 
@@ -1314,12 +1469,8 @@ class SyncServiceImpl implements SyncService {
   /// The sync push's metadata serializer, delegating to the canonical
   /// [Metadata.toAtProtocolFragment] that direct writes also go through.
   @visibleForTesting
-  static String metadataToString(AtMetaData? metadata) {
-    // NOTE: `toCommonsMetadata` omits the timestamp fields
-    // (createdAt/updatedAt/expiresAt/availableAt) and sharedKeyStatus, so the
-    // push does not send them and the atServer re-derives them on receipt.
-    return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
-  }
+  static String metadataToString(AtMetaData? metadata) =>
+      pushMetadataFragment(metadata);
 
   @override
   Future<bool> isInSync() async {
@@ -1622,7 +1773,9 @@ class SyncServiceImpl implements SyncService {
         DeleteVerbBuilder(:final atKey) => atKey,
         _ => builder.runtimeType,
       };
-      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
+      _logger.warning('Not applying the atServer\'s change to $atKey on this '
+          'device: the grants of enrollment ${_atClient.enrollmentId} do not '
+          'cover it locally ($e)');
     }
   }
 

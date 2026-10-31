@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/service/sync_push.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_builders.dart';
@@ -200,6 +203,107 @@ void main() {
               e is AtClientException &&
               e.message ==
                   'The length of value exceeds the buffer size. Maximum buffer size is 1 bytes. Found 14 bytes')));
+    });
+
+    /// A client of `@bob` whose put transforms each value to what [stored]
+    /// returns, with [preference].
+    Future<AtClientImpl> putting(
+        AtClientPreference preference, String Function() stored) async {
+      registerFallbackValue(FakeTuple());
+      final transformer = MockPutRequestTransformer();
+      when(() => transformer.transform(any(that: TupleMatcher()),
+              encryptionPrivateKey: any(named: 'encryptionPrivateKey'),
+              requestOptions: any(named: 'requestOptions')))
+          .thenAnswer((inv) async => UpdateVerbBuilder()
+            ..atKey = (inv.positionalArguments.first as Tuple).one as AtKey
+            ..value = stored());
+      final atClientImpl = await AtClientImpl.create('@bob', 'wavi', preference,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
+              atKeysIo: noKeysFor('@bob'),
+              remoteSecondary: MockRemoteSecondary(),
+              storage:
+                  InMemoryAtClientStorage(atSign: '@bob', closedByClient: true))
+          as AtClientImpl;
+      addTearDown(atClientImpl.stop);
+      atClientImpl.putRequestTransformer = transformer;
+      return atClientImpl;
+    }
+
+    /// The UTF-8 bytes sync's batch carries for [atKey]'s stored record
+    /// alone: `batch:`, the JSON of one request holding the command sync
+    /// pushes for it, and a line feed.
+    Future<int> pushedAlone(AtClientImpl atClientImpl, AtKey atKey) async {
+      final key = atKey.toString();
+      final record =
+          (await atClientImpl.getLocalSecondary()!.keyStore!.get(key))!;
+      final command = pushUpdateCommand(key, record.metaData, record.data);
+      return utf8
+          .encode('batch:${jsonEncode([
+                BatchRequest(1, VerbUtil.replaceNewline(command))
+              ])}\n')
+          .length;
+    }
+
+    test(
+        'a value whose push takes exactly the budget is put and is pushable, '
+        'and one byte more is refused at put', () async {
+      var stored = 'x';
+      final atClientImpl =
+          await putting(AtClientPreference()..maxDataSize = 400, () => stored);
+      final atKey = AtKey.self('phone', namespace: 'wavi').build();
+      expect(await atClientImpl.put(atKey, 'v'), isTrue);
+      final framing = await pushedAlone(atClientImpl, atKey) - 1;
+
+      stored = 'x' * (400 - framing);
+      expect(await atClientImpl.put(atKey, 'v'), isTrue,
+          reason: 'a push of exactly the budget is put');
+      expect(await pushedAlone(atClientImpl, atKey), 400,
+          reason: 'and sync pushes what was put, at exactly the budget');
+
+      stored = 'x' * (401 - framing);
+      await expectLater(
+          atClientImpl.put(atKey, 'v'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message ==
+                  'The length of value exceeds the maximum allowed length. '
+                      'Maximum buffer size is 400 bytes. Found 401 bytes')),
+          reason: 'one byte over is refused at put, not dropped by sync');
+    });
+
+    test(
+        'a plain-text value whose push is under the budget in code units but '
+        'over it in UTF-8 bytes is refused at put', () async {
+      final twoBytesEach = 'é' * 190;
+      final atClientImpl = await putting(
+          AtClientPreference()..maxDataSize = 400, () => twoBytesEach);
+
+      await expectLater(
+          atClientImpl.put(
+              AtKey.self('phone', namespace: 'wavi').build(), twoBytesEach),
+          throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+              contains('Maximum buffer size is 400 bytes'))));
+    });
+
+    test(
+        'a local: value is measured alone in UTF-8 bytes, so exactly '
+        'maxDataSize is put and one byte more is refused', () async {
+      var stored = 'é' * 200;
+      final atClientImpl =
+          await putting(AtClientPreference()..maxDataSize = 400, () => stored);
+      final atKey = AtKey.local('phone', '@bob', namespace: 'wavi').build();
+
+      expect(await atClientImpl.put(atKey, 'v'), isTrue,
+          reason: 'a value no sync pushes is held to maxDataSize alone');
+      stored = '${'é' * 200}x';
+      await expectLater(
+          atClientImpl.put(atKey, 'v'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message ==
+                  'The length of value exceeds the maximum allowed length. '
+                      'Maximum buffer size is 400 bytes. Found 401 bytes')));
     });
   });
 
