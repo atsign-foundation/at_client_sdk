@@ -6,15 +6,13 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
   client's local access check decides the same way, so a record the atServer
   lets the enrollment read or write is readable and writable locally too. It
   follows the atServer in two more ways: a public key is read whatever the
-  grant, and no local operation reaches a __manage key. And a queued write
-  the atServer refuses for good leaves the sync queue with a warning, so the
-  writes behind it still reach the atServer.
+  grant, and no local operation reaches a __manage key.
 
   Races: none arise; the check reads the enrollment's grants, which this does
   not change.
   Replay: none arise; nothing sent or accepted changes.
-  DoS: none arise; the check walks the grants once per key, as the atServer
-  does.
+  DoS: none arise; per key, the check copies the enrollment's grants and
+  walks them at most twice.
   Forgery and impersonation: none arise; the atServer checks every operation
   this device pushes, and sync stores only records the atServer sent this
   enrollment.
@@ -65,26 +63,6 @@ Feature: A dotted namespace grant covers locally what it covers on the atServer
     Given any enrollment
     When it puts or gets k.x.__manage@bob or x.__manage@bob locally
     Then it is refused
-
-  Scenario: A queued update the atServer refuses as unauthorized leaves the queue, and the entries behind it push
-    Given a queued update of K that the atServer refuses as unauthorized
-    When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation and the enrollment, and the entries behind it push in the same round
-
-  Scenario: A queued delete the atServer refuses as unauthorized leaves the queue, and the entries behind it push
-    Given a queued delete of K that the atServer refuses as unauthorized
-    When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation and the enrollment, and the entries behind it push in the same round
-
-  Scenario: A queued update refused with any other code stays queued and retries
-    Given a queued update refused with a code other than AT0009, AT0032, AT0016, AT0022 and AT0003
-    When sync pushes
-    Then it stays queued and retries next round, as now
-
-  Scenario: A queued write refused for good with AT0032, AT0016, AT0022 or AT0003 leaves the queue
-    Given a queued update that the atServer refuses with AT0032, AT0016, AT0022 or AT0003
-    When sync pushes
-    Then that entry leaves the queue, a warning names K, the operation, the enrollment and the code, and the entries behind it push in the same round
 
   Scenario: An enrollment granted read only stores what sync brings it, and its own put is still refused
     Given an enrollment granted {ns: r}

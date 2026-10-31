@@ -43,9 +43,11 @@ class _AcceptingVerifier implements AdvertisedKeyVerifier {
 }
 
 /// A dotted namespace grant in the client's local access check, which decides
-/// as the atServer's own check does.
+/// as the atServer's own check does, and sync pushing past a write the
+/// atServer refuses for good.
 ///
 /// Catalogue: features/at_client/dotted_namespace_grants.feature
+/// Catalogue: features/at_client/sync_push.feature
 void main() {
   const atSign = '@bob';
   const enrollmentId = 'enroll-1';
