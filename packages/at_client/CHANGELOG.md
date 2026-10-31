@@ -210,16 +210,16 @@
   the writes queued behind it. Sync stops retrying it at once when the
   atServer refuses it for good (unauthorized, an immutable record, an invalid
   key, an illegal argument or invalid syntax) or it is too large ever to
-  send, and otherwise after three rounds in a row of refusals, no answer, or
-  a record this device cannot read back, logging a warning that names it. A
-  write that cannot reach the atServer at all, as when offline, stays queued,
-  and the device keeps its own copy.
+  send, and otherwise after three rounds in a row, at least 30 seconds
+  apart, of refusals, no answer, or a record this device cannot read back,
+  logging a warning that names it. A write that cannot reach the atServer
+  at all, as when offline, stays queued, and the device keeps its own copy.
 - fix: sync keeps each push batch within the atServer's size limit, counted
   in bytes, so several large values, or non-ASCII text near the limit, no
   longer stall it.
-- fix: `AtClient.put` measures a value against `maxDataSize` in UTF-8 bytes,
-  so a non-ASCII plain-text value too large to sync is refused at put rather
-  than dropped by sync.
+- fix: `AtClient.put` refuses a value too large for sync to push, measuring
+  in UTF-8 bytes the command sync would send, with its key and metadata, so
+  the value is refused at put rather than dropped by sync.
 - fix: an enrollment granted read-only access to a namespace keeps the
   records sync brings it on the device, rather than dropping them. Its own
   writes there are still refused.
