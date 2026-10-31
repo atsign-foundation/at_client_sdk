@@ -89,12 +89,14 @@ void main() {
         ..atKey = AtKey.fromString(key)
         ..value = 'written');
 
-  /// A sync service for [client] that pushes one queued entry per batch to an
-  /// atServer answering each command as [answer] says: with a commit id,
-  /// refusing it with an error code, or with a raw response map. Every command
-  /// sent joins [sent].
+  /// A sync service for [client] that pushes up to [batchSize] queued entries
+  /// per batch to an atServer answering each command as [answer] says: with a
+  /// commit id, refusing it with an error code, with a raw response map, or,
+  /// for a Symbol, leaving it out of the reply. Every command sent joins
+  /// [sent].
   Future<SyncServiceImpl> syncPushing(_MockAtClient client, List<String> sent,
-      Future<Object> Function(String command) answer) async {
+      Future<Object> Function(String command) answer,
+      {int batchSize = 1}) async {
     final remote = _MockRemoteSecondary();
     final notifications = _MockNotificationService();
     when(() => notifications.subscribe(
@@ -103,7 +105,7 @@ void main() {
         .thenAnswer((_) => const Stream<AtNotification>.empty());
     when(() => client.notificationService).thenReturn(notifications);
     when(() => client.getPreferences())
-        .thenReturn(AtClientPreference()..syncBatchSize = 1);
+        .thenReturn(AtClientPreference()..syncBatchSize = batchSize);
     when(() => client.get(any()))
         .thenThrow(AtKeyNotFoundException('nothing persisted yet'));
     when(() => client.put(any(), any(),
@@ -111,12 +113,14 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => remote.executeCommand(any(that: startsWith('batch:')),
         auth: any(named: 'auth'))).thenAnswer((inv) async {
-      final batch = (inv.positionalArguments.first as String).trim();
+      final wire = inv.positionalArguments.first as String;
       final responses = [];
-      for (final request in jsonDecode(batch.substring('batch:'.length))) {
+      for (final request
+          in jsonDecode(wire.trim().substring('batch:'.length))) {
         final command = request['command'] as String;
         sent.add(command);
         final reply = await answer(command);
+        if (reply is Symbol) continue;
         responses.add({
           'id': request['id'],
           'response': switch (reply) {
@@ -753,6 +757,63 @@ void main() {
             hasLength(1),
             everyElement(allOf(contains('update'), contains(enrollmentId),
                 contains('FormatException')))));
+  });
+
+  test(
+      'Given a queued update the atServer leaves out of its reply, when that '
+      'happens three rounds in a row, then it leaves the queue with a warning, '
+      'and the entries behind it push', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async =>
+            command.contains('k.wavi@bob') ? #noAnswer : accepted);
+
+    await push(sync);
+    await push(sync);
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob', 'l.wavi@bob'],
+        reason: 'two rounds without an answer leave it queued');
+    await push(sync);
+
+    expect(await c.local.peekSyncQueue(), isEmpty,
+        reason: 'the third round without an answer drops it, and the entry '
+            'behind it pushes');
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1));
+    expect(
+        droppedInARow('k.wavi@bob'),
+        allOf(
+            hasLength(1),
+            everyElement(
+                allOf(contains(enrollmentId), contains('no answer')))));
+  });
+
+  test(
+      'Given batches of two and a queued update the atServer refuses with '
+      'AT0002, when a round pushes the entries behind it, then the refused one '
+      'is sent and counted once in that round', () async {
+    final c = enrolled({'*': 'rw'});
+    for (final key in ['k', 'a', 'b', 'c']) {
+      await put(c.local, '$key.wavi@bob');
+    }
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async =>
+            command.contains('k.wavi@bob') ? storeFailed : accepted,
+        batchSize: 2);
+
+    await push(sync);
+
+    expect(sent.where((s) => s.contains('k.wavi@bob')), hasLength(1),
+        reason: 'a round sends a refused entry once, however many batches '
+            'follow it');
+    expect(await c.local.peekSyncQueue(), ['k.wavi@bob'],
+        reason: 'one refusal in a round is one of three');
   });
 
   test(
