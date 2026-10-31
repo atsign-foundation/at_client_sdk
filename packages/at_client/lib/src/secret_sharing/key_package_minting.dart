@@ -164,16 +164,10 @@ class KeyPackageMinting with ApkamSigning {
     // hand-rolled read → mutate → write: a concurrent start files conveyed key
     // material through this same keyfile, and whichever flushed second would
     // drop the other's addition.
-    //
-    // NOTE: minted keys join the set the enrollment holds, untagged when that
-    // set is. Tagged material wins over untagged, so a first tagged key would
-    // hide every untagged one still advertised beside it: the holder, reloaded
-    // from the keyfile below, would stop answering at those.
-    final owner = advertised.tagged || held.isEmpty ? enrolment : null;
     await io.update(AtUtils.fixAtSign(atSign).toAtsign(), (keys) {
       for (final key in minted) {
         keys.addKey(CryptographicMaterial(
-          enrollmentId: owner,
+          enrollmentId: enrolment,
           keyId: key.kpid,
           role: CryptographicMaterialRole.publicEncapsulation,
           algorithm: key.materialAlgo,
@@ -181,7 +175,7 @@ class KeyPackageMinting with ApkamSigning {
           createdAt: key.createdAt,
         ));
         keys.addKey(CryptographicMaterial(
-          enrollmentId: owner,
+          enrollmentId: enrolment,
           keyId: key.kpid,
           role: CryptographicMaterialRole.privateDecapsulation,
           algorithm: key.materialAlgo,
