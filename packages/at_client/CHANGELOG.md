@@ -200,6 +200,25 @@
   algorithm, the client treats that algorithm's key as retired at once, not
   from its next start. `AtClientSecretSharing.heldStatuses` gives the status
   of each key it holds.
+- fix: an app enrolled with a dotted namespace, such as the todos
+  example's `todos.demos`, reads, writes and syncs its own records on the
+  device rather than being refused for insufficient privilege. As on the
+  atServer, a grant naming a namespace wins over `*`, a public key is
+  readable whatever the grant, no `__manage` key is reachable, and every
+  enrollment reads `__atserver` and reads and writes its own
+  per-enrollment records.
+- fix: an enrollment granted read-only access to a namespace stores the
+  records sync brings it, rather than refusing them. Its own writes there
+  are still refused.
+- fix: sync stops retrying a queued write the atServer refuses for good
+  (unauthorized, an immutable record, an invalid key, an illegal argument,
+  invalid syntax, or a code at_commons does not list), so the writes behind
+  it still reach the atServer. It logs the write at severe, and the device
+  keeps its own copy.
+- note: a write the atServer refuses with any other code stays queued and
+  is sent again with each batch. Held writes that fill a batch at the head
+  of the queue hold up every write behind them, and a queued write this
+  device cannot read back stops each round before anything is pushed.
 - build: requires `at_commons` ^5.23.0, the first to carry `enroll:link`.
 - build: requires `at_auth` ^4.0.0.
 - build: requires `at_lookup` ^4.0.0.
