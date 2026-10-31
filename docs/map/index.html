@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+<title>at_client SDK map</title>
+<link rel="stylesheet" href="app.css">
+<script src="data/core.js"></script>
+</head>
+<body>
+<header>
+  <h1>at_client SDK map</h1>
+  <nav id="lenses" aria-label="Lenses"></nav>
+</header>
+<main>
+  <section id="flow" aria-labelledby="flow-title">
+    <h2 id="flow-title"></h2>
+    <p id="flow-summary"></p>
+    <div id="diagram"></div>
+  </section>
+  <aside id="panel" aria-live="polite"></aside>
+</main>
+<noscript>The map draws its flows with JavaScript; the same content is in data/flows/*.md.</noscript>
+<script src="app.js"></script>
+</body>
+</html>

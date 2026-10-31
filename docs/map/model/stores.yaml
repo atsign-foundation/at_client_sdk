@@ -1,0 +1,22 @@
+# Stores a step reads or writes, each anchored to the type that defines it.
+stores:
+  - id: sync-queue
+    title: the client's sync queue
+    anchor:
+      code: sdk:packages/at_client/lib/src/sync/at_sync_queue.dart
+      symbol: AtSyncQueue
+  - id: keystore
+    title: the atServer's keystore
+    anchor:
+      code: server:packages/at_persistence_secondary_server/lib/src/spec/keystore/at_keyvalue_store.dart
+      symbol: AtKeyValueStore
+  - id: commit-log
+    title: the atServer's commit log
+    anchor:
+      code: server:packages/at_persistence_secondary_server/lib/src/spec/commitlog/at_commit_log.dart
+      symbol: AtCommitLog
+  - id: notification-store
+    title: the atServer's notification store
+    anchor:
+      code: server:packages/at_persistence_secondary_server/lib/src/spec/notifications/at_notification_keystore.dart
+      symbol: AtNotificationKeystore
