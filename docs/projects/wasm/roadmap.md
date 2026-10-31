@@ -45,7 +45,7 @@ the second is on the path to first release. The default bundle also touches neit
 two process globals we do not own.
 
 Everything in the storage lane below remains correct; it is **deferred, not withdrawn**, and
-`decisions.md` D-21 constrains the VFS choice for when it resumes.
+the VFS is settled by `decisions.md` D-26 (SimpleOPFS, one directory per atSign and enrollment).
 
 ---
 
@@ -60,7 +60,7 @@ canonical home rather than duplicating it.
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
 | [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove. Plus §9a: confidentiality, remote-only, deployment and surface-stability gates.                                                                                                  |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-25), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-26), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
 | [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
 
@@ -180,9 +180,8 @@ at_client is not forked, and nothing below its doors names a platform type.
   SQLite-wasm over IndexedDB — stands, and under **D-12** a SQLite bundle stays injectable —
   in a browser once
   [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) gives it a
-  web open path — and becomes the default in V2. Its **VFS** half is a separate and
-  still-open question: **D-21** makes it pick-two, so nothing in §5 settles
-  which VFS V2 gets.)*
+  web open path — and becomes the default in V2. Its **VFS** half is settled
+  separately by **D-26**: SimpleOPFS in a dedicated worker.)*
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
   `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though

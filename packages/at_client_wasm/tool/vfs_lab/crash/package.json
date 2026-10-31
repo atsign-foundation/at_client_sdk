@@ -1,0 +1,9 @@
+{
+  "name": "vfs-lab-crash",
+  "private": true,
+  "type": "module",
+  "description": "Playwright harness for the VFS crash-consistency lab (E2)",
+  "dependencies": {
+    "playwright": "^1.64.0"
+  }
+}
