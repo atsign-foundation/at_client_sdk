@@ -769,10 +769,10 @@ class SyncServiceImpl implements SyncService {
     _refusals.remove(source.atKey);
     final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
         source.atKey, source.seq);
-    _bailIfStopped();
     _logger.warning('$why, so it is not retried and this device keeps its '
         'local copy'
         '${removed ? '' : '; a newer write to it pushes next round'}');
+    _bailIfStopped();
     return removed;
   }
 
