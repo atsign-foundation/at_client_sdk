@@ -310,7 +310,8 @@ void postureArgumentTests() {
                 'handed; naming one here restates a default where nothing '
                 'reviews it:\n${(byFile[path] ?? const []).join('\n')}');
       }
-      final args = byFile['lib/src/commands/auth_cli_args.dart'] ?? const <String>[];
+      final args =
+          byFile['lib/src/commands/auth_cli_args.dart'] ?? const <String>[];
       expect(args, hasLength(3),
           reason: 'expected the three postureNames entries and nothing else: '
               'an unnamed posture is at_client\'s default, inherited through '

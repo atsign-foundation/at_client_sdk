@@ -61,8 +61,8 @@ void main() {
   test('an answer naming a host behind an @ is refused', () async {
     await expectLater(
         finder.findSecondary('@elsewhere'),
-        throwsA(isA<AtException>().having(
-            (e) => e.message, 'message', contains('not host:port'))));
+        throwsA(isA<AtException>()
+            .having((e) => e.message, 'message', contains('not host:port'))));
   });
 
   test('An oversized atDirectory answer is refused', () async {
@@ -80,8 +80,7 @@ void main() {
       () async {
     final sw = Stopwatch()..start();
     await expectLater(
-        finder.findSecondary('@endless',
-            timeout: const Duration(seconds: 15)),
+        finder.findSecondary('@endless', timeout: const Duration(seconds: 15)),
         throwsA(isA<AtException>().having(
             (e) => e.message, 'message', contains('longer than 512 bytes'))),
         reason: 'the body never ends, so only a reader that stops at the '

@@ -68,13 +68,13 @@ void main() {
               'C0000010': '+CSIM: 36,"${prf}9000"\r\nOK\r\n',
             }));
 
-      expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'),
-          contains(prf));
+      expect(
+          signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), contains(prf));
     });
 
     test('gives up on a key pair the modem answers with ERROR', () {
-      final modem = _ScriptedModem({..._opened, 'B9000005': 'ERROR\r\n'},
-          readLimit: 6);
+      final modem =
+          _ScriptedModem({..._opened, 'B9000005': 'ERROR\r\n'}, readLimit: 6);
       final signer = ExternalSigner()
         ..initWithPort('000001', modem)
         ..readInterval = Duration.zero;
@@ -83,8 +83,7 @@ void main() {
     });
 
     test('gives up on a signature the modem never finishes', () {
-      final modem = _ScriptedModem({..._opened, '2B800122': ''},
-          readLimit: 10);
+      final modem = _ScriptedModem({..._opened, '2B800122': ''}, readLimit: 10);
       final signer = ExternalSigner()
         ..initWithPort('000001', modem)
         ..maxReads = 3

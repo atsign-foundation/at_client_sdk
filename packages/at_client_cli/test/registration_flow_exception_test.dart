@@ -49,13 +49,12 @@ void main() {
     expect(registrar.confirmations, ['false', 'false', 'false', 'true']);
   });
 
-
   test(
       'when the registrar refuses a step, then the flow throws an '
       'AtClientException, as the README tells a migrating caller to catch',
       () async {
-    final flow = RegistrationFlow({'authority': 'registrar.example'},
-        _RefusingRegistrar())
+    final flow = RegistrationFlow(
+        {'authority': 'registrar.example'}, _RefusingRegistrar())
       ..add(GetFreeAtsign());
 
     await expectLater(flow.start(), throwsA(isA<AtClientException>()));

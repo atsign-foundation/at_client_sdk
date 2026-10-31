@@ -236,15 +236,13 @@ Future<void> main(List<String> args) async {
     if (e.toString().contains('Missing argument')) {
       stderr.writeln(
           '[Unable to run Register CLI] Please re-run with your email address');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(1);
     } else if (e.toString().contains('Could not find an option or flag')) {
       stderr
           .writeln('[Unable to run Register CLI] The option entered is invalid.'
               ' Please use the \'-e\' flag to input your email');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(2);
     } else {
       stderr.writeln(

@@ -269,8 +269,8 @@ void main() async {
       await expectLater(
           cachingAtServerFinder.findSecondary(atSign,
               timeout: const Duration(seconds: 5)),
-          throwsA(isA<AtException>().having((e) => e.message, 'message',
-              contains('longer than 512 bytes'))),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('longer than 512 bytes'))),
           reason: 'an answer past the bound is refused, not read until the '
               'deadline');
       expect(sw.elapsed, lessThan(const Duration(seconds: 3)),

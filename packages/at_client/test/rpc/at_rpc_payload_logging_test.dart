@@ -87,8 +87,7 @@ void main() {
       ..from = '@bob'
       ..to = '@alice'
       ..key = '@alice:request.$id.logging.__rpcs.testing@bob'
-      ..value =
-          jsonEncode(AtRpcReq(reqId: id, payload: {'question': marker})));
+      ..value = jsonEncode(AtRpcReq(reqId: id, payload: {'question': marker})));
     await server.handleRequestNotification(AtNotification.empty()
       ..from = '@bob'
       ..to = '@alice'
@@ -102,8 +101,8 @@ void main() {
         ..from = '@bob'
         ..to = '@alice'
         ..key = '@alice:${type.name}.$id.logging.__rpcs.testing@bob'
-        ..value = jsonEncode(AtRpcResp(
-            reqId: id, respType: type, payload: {'answer': marker})));
+        ..value = jsonEncode(
+            AtRpcResp(reqId: id, respType: type, payload: {'answer': marker})));
     }
     expect(await answer, {'answer': marker});
 
