@@ -719,6 +719,8 @@ class SyncServiceImpl implements SyncService {
       _bailIfStopped();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
+    await _pruneRefusals(localSecondary);
+    _bailIfStopped();
     syncResult.lastSyncedOn = DateTime.now().toUtc();
     syncResult.syncStatus = SyncStatus.success;
     return syncResult;
@@ -751,6 +753,16 @@ class SyncServiceImpl implements SyncService {
   /// How many atKeys hold a refusal count.
   @visibleForTesting
   int get refusalsHeld => _refusals.length;
+
+  /// Forgets the count of each atKey that has left the queue, however it
+  /// left.
+  Future<void> _pruneRefusals(LocalSecondary localSecondary) async {
+    for (final atKey in _refusals.keys.toList()) {
+      if (await localSecondary.readSyncQueueEntry(atKey) == null) {
+        _refusals.remove(atKey);
+      }
+    }
+  }
 
   /// Counts one more refusal of [source]'s queued version and returns how
   /// many it has had in a row; a newer version of the atKey starts again.

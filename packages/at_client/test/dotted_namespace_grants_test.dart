@@ -928,6 +928,64 @@ void main() {
         reason: 'two refusals that are tried again are not a stalled queue');
   });
 
+  group('Given a queued update of K the atServer has refused once', () {
+    /// An enrollment that queued K over [queueStore], and a sync service
+    /// whose atServer refused K once.
+    Future<
+        ({
+          ({
+            _MockAtClient client,
+            MemoryAtKeyValueStore store,
+            LocalSecondary local
+          }) c,
+          AtSyncQueue queue,
+          SyncServiceImpl sync
+        })> refusedOnce(MemorySyncQueueStore queueStore) async {
+      final queue = AtSyncQueue(atSign: atSign);
+      unawaited(queue.open(store: queueStore));
+      final c = enrolled({'*': 'rw'}, syncQueue: queue);
+      await put(c.local, 'k.wavi@bob');
+      final sync = await syncPushing(
+          c.client, <String>[], (command) async => storeFailed);
+      await push(sync);
+      expect(sync.refusalsHeld, 1, reason: 'the premise: K holds a count');
+      return (c: c, queue: queue, sync: sync);
+    }
+
+    test('when its record is gone from the keystore, then no count is held',
+        () async {
+      final k = await refusedOnce(MemorySyncQueueStore());
+      await k.c.store.remove('k.wavi@bob');
+
+      await push(k.sync);
+
+      expect(await k.c.local.peekSyncQueue(), isEmpty,
+          reason: 'the premise: the round dropped the entry it cannot build');
+      expect(k.sync.refusalsHeld, isZero);
+    });
+
+    test('when its queue record is gone, then no count is held', () async {
+      final queueStore = MemorySyncQueueStore();
+      final k = await refusedOnce(queueStore);
+      await queueStore.delete('k.wavi@bob');
+
+      await push(k.sync);
+
+      expect(await k.c.local.peekSyncQueue(), isEmpty,
+          reason: 'the premise: the round removed the entry with no record');
+      expect(k.sync.refusalsHeld, isZero);
+    });
+
+    test('when the queue is cleared, then no count is held', () async {
+      final k = await refusedOnce(MemorySyncQueueStore());
+      await k.queue.clear();
+
+      await push(k.sync);
+
+      expect(k.sync.refusalsHeld, isZero);
+    });
+  });
+
   test(
       'Values that fit a batch one by one but not together push in separate '
       'batches', () async {
