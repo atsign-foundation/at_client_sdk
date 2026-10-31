@@ -50,6 +50,8 @@ class Chrome {
       '--disable-background-networking',
       '--disable-component-update',
       '--disable-sync',
+      '--use-mock-keychain',
+      '--password-store=basic',
       'about:blank',
     ]);
     unawaited(process.stdout.drain<void>());

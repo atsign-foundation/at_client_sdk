@@ -2,6 +2,7 @@
 ///
 /// Catalogue: features/at_map/sdk_map.feature
 @Timeout(Duration(minutes: 2))
+@Tags(['chrome'])
 library;
 
 import 'dart:convert';

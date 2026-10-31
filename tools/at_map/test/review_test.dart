@@ -75,7 +75,7 @@ void main() {
             '.classList.contains("amber")'),
         isFalse,
         reason: 'the blessed step is no longer drawn amber');
-  });
+  }, tags: 'chrome');
 
   test('Blessing a server step refuses an at_server checkout off the pin',
       () async {

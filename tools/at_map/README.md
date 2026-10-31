@@ -33,8 +33,10 @@ dart run at_map check --server-repo /tmp/at_server
 counts there: both would otherwise name steps in a public log.
 
 The tests need the same checkout through `AT_MAP_SERVER_REPO`, and Chrome for
-the page tests (`CHROME_EXECUTABLE`, or an installed Chrome or Chromium):
+the tests tagged `chrome` (`CHROME_EXECUTABLE`, or an installed Chrome or
+Chromium), which `-x chrome` leaves out:
 
 ```bash
 AT_MAP_SERVER_REPO=/tmp/at_server dart test --concurrency=1
+AT_MAP_SERVER_REPO=/tmp/at_server dart test --concurrency=1 -x chrome
 ```

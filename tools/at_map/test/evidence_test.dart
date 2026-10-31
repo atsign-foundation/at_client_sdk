@@ -30,22 +30,21 @@ Map<String, Object?> _exit(Map<String, Object?> ix, String step, String id) =>
 
 void main() {
   late Harness h;
-  late Chrome chrome;
+  Chrome? chrome;
   late Result built;
   setUpAll(() async {
     h = await Harness.open();
-    chrome = await Chrome.start();
     built = await h.build();
     final ix = await h.indexes(data: built.data);
     expect(ix.code, 0, reason: '$ix');
   });
   tearDownAll(() async {
-    await chrome.close();
+    await chrome?.close();
     await h.close();
   });
 
   Future<String> exitRow(String step, String id) async {
-    final page = await chrome
+    final page = await (chrome ??= await Chrome.start())
         .open('${pageOver(built.data, h.temp)}#flow=share-record&step=$step');
     await page.waitFor(
         'document.body.getAttribute("data-ready") === "share-record.$step"');
@@ -70,7 +69,7 @@ void main() {
       expect(row, contains(t['test'] as String),
           reason: 'the page lists each test whose literal holds the text');
     }
-  });
+  }, tags: 'chrome');
 
   test('An exit no test names says so', () async {
     final ev = _exit(
@@ -85,7 +84,7 @@ void main() {
             contains("'Unable to verify signature'")),
         reason: 'the row is the exit raising that message');
     expect(row, contains('no test names this'));
-  });
+  }, tags: 'chrome');
 
   test('The job reports test evidence against the recorded figure', () async {
     final clean = await h.check();

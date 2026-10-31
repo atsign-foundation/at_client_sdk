@@ -1,0 +1,3 @@
+tags:
+  chrome:
+    description: Opens the page in headless Chrome.
