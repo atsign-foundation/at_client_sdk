@@ -1063,6 +1063,47 @@ void main() {
   });
 
   test(
+      'Given two queued updates whose batch together takes exactly the push '
+      'budget, when sync pushes, then they go in one batch, and one byte more '
+      'splits them', () async {
+    final c = enrolled({'*': 'rw'});
+    final sent = <String>[];
+    final batchBytes = <int>[];
+    final sync = await syncPushing(c.client, sent, (command) async => accepted,
+        batchSize: 2, batchBytes: batchBytes);
+    await put(c.local, 'k.wavi@bob', value: 'x');
+    await push(sync);
+    await put(c.local, 'l.wavi@bob', value: 'x');
+    await push(sync);
+    // NOTE: a batch is `batch:[`, its requests joined by commas, then `]\n`;
+    // each probe above is a batch of one carrying a one-byte value.
+    final kBare = batchBytes[0] - 'batch:['.length - ']\n'.length - 1;
+    final lBare = batchBytes[1] - 'batch:['.length - ']\n'.length - 1;
+    const kValue = 5000000;
+    final lValue = 10230000 -
+        'batch:['.length -
+        kBare -
+        kValue -
+        ','.length -
+        lBare -
+        ']\n'.length;
+
+    await put(c.local, 'k.wavi@bob', value: 'x' * kValue);
+    await put(c.local, 'l.wavi@bob', value: 'x' * lValue);
+    await push(sync);
+    expect(batchBytes.sublist(2), [10230000],
+        reason: 'two requests that together take exactly the budget share a '
+            'batch');
+
+    await put(c.local, 'k.wavi@bob', value: 'x' * kValue);
+    await put(c.local, 'l.wavi@bob', value: 'x' * (lValue + 1));
+    await push(sync);
+    expect(batchBytes.sublist(3), hasLength(2),
+        reason: 'one byte more splits them into a batch each');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+  });
+
+  test(
       'An entry whose command cannot be built is skipped and the round goes '
       'on, then it leaves after three', () async {
     final store = _UnreadableStore(atSign);
