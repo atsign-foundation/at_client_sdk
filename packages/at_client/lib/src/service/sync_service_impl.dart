@@ -727,16 +727,24 @@ class SyncServiceImpl implements SyncService {
   /// The codes with which the atServer refuses a queued write for good, so
   /// that pushing it again is refused again: unauthorized, an immutable
   /// record, an invalid key, an illegal argument and invalid syntax.
-  static final Set<String> _refusedForGood = {
-    for (final name in const [
-      'UnAuthorizedException',
-      'IllegalStateException',
-      'InvalidAtKeyException',
-      'IllegalArgumentException',
-      'InvalidSyntaxException',
-    ])
-      error_codes[name] as String,
-  };
+  static final Set<String> _refusedForGood = refusedForGoodCodes();
+
+  /// The codes at_commons' [codes] gives the exceptions [_refusedForGood] is
+  /// named by.
+  ///
+  /// Throws a [StateError] naming an exception [codes] lists no code for.
+  @visibleForTesting
+  static Set<String> refusedForGoodCodes([Map codes = error_codes]) => {
+        for (final name in const [
+          'UnAuthorizedException',
+          'IllegalStateException',
+          'InvalidAtKeyException',
+          'IllegalArgumentException',
+          'InvalidSyntaxException',
+        ])
+          codes[name] as String? ??
+              (throw StateError('at_commons lists no error code for $name')),
+      };
 
   /// The codes at_commons lists for the atServer's exceptions.
   static final Set<String> _listedCodes = {

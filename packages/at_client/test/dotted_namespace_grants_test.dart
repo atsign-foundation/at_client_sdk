@@ -632,6 +632,25 @@ void main() {
         reason: 'an answer carrying no code is not a refusal for good');
   });
 
+  group('Given the exceptions a refusal for good is named by', () {
+    test('when at_commons lists each, then each has its code', () {
+      expect(SyncServiceImpl.refusedForGoodCodes(),
+          {'AT0009', 'AT0032', 'AT0016', 'AT0022', 'AT0003'});
+    });
+
+    test('when at_commons lists no code for one, then the error names it', () {
+      final lacking = Map.of(error_codes)..remove('IllegalArgumentException');
+
+      expect(
+          () => SyncServiceImpl.refusedForGoodCodes(lacking),
+          throwsA(isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('at_commons'),
+                  contains('IllegalArgumentException')))));
+    });
+  });
+
   group('Given an update of K refused for good while in flight', () {
     /// An enrollment that queued K, and a sync service whose atServer refuses
     /// K's first push with [code] once a newer write to K has landed.
