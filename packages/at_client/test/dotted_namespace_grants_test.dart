@@ -113,13 +113,11 @@ void main() {
         ..value = 'written');
 
   /// A sync service for [client] that pushes one queued entry per batch to an
-  /// atServer answering each command as [answer] says: with a commit id, or
-  /// refusing it with an error code. Every command sent joins [sent].
-  Future<SyncServiceImpl> syncPushing(
-      _MockAtClient client,
-      List<String> sent,
-      Future<({int commitId, String? errorCode})> Function(String command)
-          answer) async {
+  /// atServer answering each command as [answer] says: with a commit id,
+  /// refusing it with an error code, or with a raw response map. Every
+  /// command sent joins [sent].
+  Future<SyncServiceImpl> syncPushing(_MockAtClient client, List<String> sent,
+      Future<Object> Function(String command) answer) async {
     final remote = _MockRemoteSecondary();
     final notifications = _MockNotificationService();
     when(() => notifications.subscribe(
@@ -144,9 +142,17 @@ void main() {
         final reply = await answer(command);
         responses.add({
           'id': request['id'],
-          'response': reply.errorCode == null
-              ? {'data': '${reply.commitId}'}
-              : {'error_code': reply.errorCode, 'error_message': 'refused'},
+          'response': switch (reply) {
+            Map() => reply,
+            (commitId: final int commitId, errorCode: null) => {
+                'data': '$commitId'
+              },
+            (commitId: _, errorCode: final String code) => {
+                'error_code': code,
+                'error_message': 'refused'
+              },
+            _ => throw ArgumentError('an answer the fake cannot send: $reply'),
+          },
         });
       }
       return 'data:${jsonEncode(responses)}';
@@ -487,8 +493,9 @@ void main() {
         reason: 'the local copy stays as written: deleted');
   });
 
-  test('A queued update refused with any other code stays queued and retries',
-      () async {
+  test(
+      'A queued update refused with any other listed code stays queued and '
+      'retries', () async {
     final c = enrolled({'*': 'rw'});
     await put(c.local, 'k.wavi@bob');
     final queued = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
@@ -573,6 +580,56 @@ void main() {
             .where((m) => m.contains('k.wavi@bob') && m.contains('AT0009')),
         hasLength(1),
         reason: 'an entry sync removes is named at severe, stop or no stop');
+  });
+
+  test(
+      'A queued update refused with a code at_commons does not list leaves the '
+      'queue at once', () async {
+    const unlisted = 'AT0099';
+    expect(error_codes.values, isNot(contains(unlisted)),
+        reason: 'the premise: at_commons lists no such code');
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    await put(c.local, 'l.wavi@bob');
+    final sent = <String>[];
+    final sync = await syncPushing(
+        c.client,
+        sent,
+        (command) async => command.contains('k.wavi@bob')
+            ? (commitId: -1, errorCode: unlisted)
+            : accepted);
+
+    await push(sync);
+
+    expect(sent.where((s) => s.contains('k.wavi@bob')), hasLength(1),
+        reason: 'it is sent once, and not again in the same round');
+    expect(sent.where((s) => s.contains('l.wavi@bob')), hasLength(1),
+        reason: 'the update behind it reaches the atServer in the same round');
+    expect(await c.local.peekSyncQueue(), isEmpty);
+    expect(
+        logs.at('SEVERE').where((m) => m.contains('k.wavi@bob')),
+        allOf(
+            isNotEmpty,
+            everyElement(allOf(contains('update'), contains(enrollmentId),
+                contains(unlisted)))));
+    expect(await llookup(c.local, 'k.wavi@bob'), 'data:written',
+        reason: 'the local copy stays as written');
+  });
+
+  test(
+      'A queued update answered with neither a commit id nor a code stays '
+      'queued', () async {
+    final c = enrolled({'*': 'rw'});
+    await put(c.local, 'k.wavi@bob');
+    final queued = (await c.local.readSyncQueueEntry('k.wavi@bob'))!.seq;
+    final sent = <String>[];
+    final sync = await syncPushing(c.client, sent, (_) async => const {});
+
+    await push(sync);
+
+    expect(sent, hasLength(1), reason: 'the premise: it was sent');
+    expect((await c.local.readSyncQueueEntry('k.wavi@bob'))?.seq, queued,
+        reason: 'an answer carrying no code is not a refusal for good');
   });
 
   group('Given an update of K refused for good while in flight', () {

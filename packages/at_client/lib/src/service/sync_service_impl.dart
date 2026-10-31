@@ -738,6 +738,17 @@ class SyncServiceImpl implements SyncService {
       error_codes[name] as String,
   };
 
+  /// The codes at_commons lists for the atServer's exceptions.
+  static final Set<String> _listedCodes = {
+    for (final code in error_codes.values) code as String,
+  };
+
+  /// Whether the atServer's refusal [code] drops a queued write for good: one
+  /// of [_refusedForGood], or a code at_commons does not list.
+  static bool _dropsForGood(String? code) =>
+      code != null &&
+      (_refusedForGood.contains(code) || !_listedCodes.contains(code));
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -755,8 +766,8 @@ class SyncServiceImpl implements SyncService {
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
   ///    queue and promote `_latestKnownServerCommitId`. On a refusal
-  ///    for good ([_refusedForGood]), remove from the queue with a
-  ///    warning, keeping the local copy. On any other failure, leave in
+  ///    for good ([_dropsForGood]), remove from the queue logged at
+  ///    severe, keeping the local copy. On any other failure, leave in
   ///    queue for retry on the next round.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
@@ -859,8 +870,7 @@ class SyncServiceImpl implements SyncService {
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
-          if (commitId == -1 &&
-              _refusedForGood.contains(responseObject.errorCode)) {
+          if (commitId == -1 && _dropsForGood(responseObject.errorCode)) {
             // NOTE: a refusal for good is not retried, so it cannot hold up
             // the entries behind it; the local copy stays as written.
             final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
