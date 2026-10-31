@@ -201,6 +201,7 @@ class ValidateOtp extends RegisterApiTask {
         // The registrar accepted the code and only wants it confirmed. That
         // confirmation is not another attempt at the code, so it is made now
         // rather than spending one of the attempts [shouldRetry] counts.
+        // NOTE: the confirmation is asked for once; a second ask ends the flow.
         if (params['confirmation'] == 'true') {
           result.exceptionMessage =
               'The registrar asked again to confirm a confirmed code.';

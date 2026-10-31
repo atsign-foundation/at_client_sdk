@@ -61,7 +61,7 @@ void main() {
         throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
             'message', contains('Failed to connect within 1 attempts'))));
     expect(waited.elapsed, lessThan(const Duration(seconds: 9)),
-        reason: 'one attempt is waited for, 3 seconds, not the default 5');
+        reason: 'one attempt, 3 seconds, not the default 5 attempts');
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
         reason: 'the client it opened is stopped');
   });

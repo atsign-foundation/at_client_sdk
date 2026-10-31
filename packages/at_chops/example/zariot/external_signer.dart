@@ -183,7 +183,12 @@ class ExternalSigner {
         "AT+CSIM=10, \"8${channelNumber.substring(1)}C0000010\"\r\n");
     var prfResult = _serialPort.read(256, 1000);
     _logger.finest('prfResult :$prfResult');
-    return prfResult.toString();
+    final key = _parseAtCsimResult(prfResult.toString()).result;
+    if (key == null || !key.endsWith('9000')) {
+      throw Exception('Compute PRF failure: no key in $prfResult');
+    }
+    // remove the success code at the end.
+    return key.substring(0, key.length - 4);
   }
 
   String _readPublicKey(
@@ -322,6 +327,9 @@ class ExternalSigner {
     bool isComputeSignatureSuccess = _parseComputeSignatureUpdateResult(
         computeSignatureUpdateResult.toString());
     _logger.finest('isComputeSignatureSuccess :$isComputeSignatureSuccess');
+    if (!isComputeSignatureSuccess) {
+      throw Exception('compute signature failure');
+    }
   }
 
   String _retrieveSignature(String channelNumber) {
@@ -331,14 +339,12 @@ class ExternalSigner {
     _logger.finest('getSignatureResult $getSignatureResult');
     final signatureData = _parseAtCsimResult(getSignatureResult.toString());
     _logger.info('signature: ${signatureData.result}');
-    var signatureStr = '';
-    if (signatureData.result != null &&
-        signatureData.result!.startsWith('330040')) {
-      // remove start tag, length and success code at the end.
-      signatureStr =
-          signatureData.result!.substring(6, signatureData.result!.length - 4);
+    final result = signatureData.result;
+    if (result == null || !result.startsWith('330040')) {
+      throw Exception('no signature in $getSignatureResult');
     }
-    return signatureStr.toLowerCase();
+    // remove start tag, length and success code at the end.
+    return result.substring(6, result.length - 4).toLowerCase();
   }
 
   OpenChannelResult _getChannelNumber(String openChannelResult) {

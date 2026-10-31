@@ -32,10 +32,20 @@ class _FollowUpRegistrar extends OnboardingUtil {
   }
 }
 
+/// A registrar that answers 'follow-up' to every code, confirmed or not.
+class _EndlessFollowUpRegistrar extends _FollowUpRegistrar {
+  _EndlessFollowUpRegistrar() : super([_FollowUpRegistrar._code]);
+
+  @override
+  Future<String> validateOtp(String atSign, String email, String otp,
+      {String confirmation = 'true', String authority = ''}) async {
+    confirmations.add(confirmation);
+    return 'follow-up';
+  }
+}
+
 void main() {
-  test(
-      'when the last verification code allowed is accepted with a follow-up, '
-      'then the flow confirms it and gets the CRAM key', () async {
+  test('A third code accepted with a follow-up gets the CRAM key', () async {
     final registrar = _FollowUpRegistrar(['WRONG1', 'WRONG2', 'RIGHT']);
     final params = {
       'authority': 'registrar.example',
@@ -47,6 +57,23 @@ void main() {
 
     expect(params['cramkey'], 'the-cram-key');
     expect(registrar.confirmations, ['false', 'false', 'false', 'true']);
+  });
+
+  test('A registrar asking twice to confirm a code ends the registration',
+      () async {
+    final registrar = _EndlessFollowUpRegistrar();
+    final flow = RegistrationFlow({
+      'authority': 'registrar.example',
+      'atsign': 'alice123',
+      'email': 'alice@example.com',
+    }, registrar)
+      ..add(ValidateOtp());
+
+    await expectLater(
+        flow.start(),
+        throwsA(isA<AtClientException>().having(
+            (e) => e.message, 'message', contains('asked again to confirm'))));
+    expect(registrar.confirmations, ['false', 'true']);
   });
 
   test(

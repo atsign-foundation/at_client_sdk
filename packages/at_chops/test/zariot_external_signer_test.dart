@@ -56,8 +56,8 @@ const _opened = {
 };
 
 void main() {
-  group('The zariot ExternalSigner', () {
-    test('returns the activation key the SIM computes', () {
+  group('Given a zariot ExternalSigner', () {
+    test('when the SIM computes the activation key, then it is returned', () {
       const prf = '00112233445566778899AABBCCDDEEFF';
       final signer = ExternalSigner()
         ..initWithPort(
@@ -68,11 +68,23 @@ void main() {
               'C0000010': '+CSIM: 36,"${prf}9000"\r\nOK\r\n',
             }));
 
-      expect(
-          signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), contains(prf));
+      expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), prf);
     });
 
-    test('gives up on a key pair the modem answers with ERROR', () {
+    test('when the SIM refuses the PRF, then there is no activation key', () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '48000032': '+CSIM: 4,"6A80"\r\nOK\r\n',
+              'C0000010': '+CSIM: 36,"0011EEFF9000"\r\nOK\r\n',
+            }));
+
+      expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
+    });
+
+    test('when the modem answers a key pair with ERROR, then it gives up', () {
       final modem =
           _ScriptedModem({..._opened, 'B9000005': 'ERROR\r\n'}, readLimit: 6);
       final signer = ExternalSigner()
@@ -82,7 +94,7 @@ void main() {
       expect(signer.generateKeyPair('0001'), isNull);
     });
 
-    test('gives up on a signature the modem never finishes', () {
+    test('when the modem never finishes a signature, then it gives up', () {
       final modem = _ScriptedModem({..._opened, '2B800122': ''}, readLimit: 10);
       final signer = ExternalSigner()
         ..initWithPort('000001', modem)
@@ -90,7 +102,18 @@ void main() {
         ..readInterval = Duration.zero;
 
       expect(signer.sign('ab' * 32), isNull);
-      expect(modem.reads, lessThanOrEqualTo(10));
+      // 3 reads of the update, and one each to open, select, init and close.
+      expect(modem.reads, 7);
+    });
+
+    test('when the modem answers a signature with ERROR, then there is none',
+        () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001', _ScriptedModem({..._opened, '2B800122': 'ERROR\r\n'}))
+        ..readInterval = Duration.zero;
+
+      expect(signer.sign('ab' * 32), isNull);
     });
   });
 }

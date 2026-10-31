@@ -22,8 +22,11 @@ AtClientPreference vePreference(
 /// startup has settled, and a test opens its own afterwards, the way a
 /// program does.
 Future<void> activateThroughCli(
-        String atSign, auth_cli.EnrollerSettings settings) =>
-    auth_cli.activate(atSign, settings);
+    String atSign, auth_cli.EnrollerSettings settings) {
+  assert(settings.preference.cramSecret != null,
+      'activate would fetch a CRAM secret from the live registrar');
+  return auth_cli.activate(atSign, settings);
+}
 
 /// A client of [atSign] on the keyfile and store [settings] name, through
 /// `Atsign.open`, made the manager's current client.

@@ -44,7 +44,9 @@
 - fix: at_register exits with at_activate's non-zero code, instead of 0,
   when the activation after registration fails.
 - fix: at_register confirms a verification code the registrar accepts with a
-  follow-up at once, so the third code accepted still gets the CRAM key.
+  follow-up at once, so the third code accepted still gets the CRAM key. A
+  registrar that asks again to confirm a confirmed code ends the registration
+  with exit 4.
 - fix: the at_activate Dockerfile builds from the repo root on Dart 3.
 - fix: at_register exits 5, not 4, after three refused verification codes,
   and asks for no fourth code.

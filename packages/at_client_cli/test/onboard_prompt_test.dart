@@ -3,6 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
 
+/// Points at_activate at a registrar and a root nothing listens on, so a run
+/// that gets past the prompt cannot reach the production registrar (which
+/// would email whoever owns the atSign) or atDirectory.
+const _offline = ['-g', '127.0.0.1:9', '--root-server', '127.0.0.1'];
+
 /// What at_activate run with [args] and no stdin writes until it says it is
 /// onboarding and a moment more, for a prompt to follow, or until it has run
 /// for 20 seconds; it is then killed.
@@ -68,7 +73,7 @@ void main() {
         'bash',
         [
           '-c',
-          'timeout 5s bash -c "echo Y | dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath"'
+          'timeout 5s bash -c "echo Y | dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath ${_offline.join(' ')}"'
         ],
         workingDirectory: Directory.current.path,
       );
@@ -82,7 +87,7 @@ void main() {
     test('CLI with --cramkey bypasses prompt (implies --yes)', () async {
       expectNoPrompt(await runPastPrompt([
         'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
-        '--cramkey', 'dummy-key',
+        '--cramkey', 'dummy-key', ..._offline,
       ]));
     }, timeout: Timeout(Duration(seconds: 30)));
 
@@ -91,7 +96,7 @@ void main() {
         () async {
       expectNoPrompt(await runPastPrompt([
         'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
-        '--cramkey', 'dummy-key', '--yes',
+        '--cramkey', 'dummy-key', '--yes', ..._offline,
       ]));
     }, timeout: Timeout(Duration(seconds: 30)));
 
@@ -99,7 +104,7 @@ void main() {
     test('CLI with --yes bypasses prompt and continues', () async {
       expectNoPrompt(await runPastPrompt([
         'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
-        '--yes',
+        '--yes', ..._offline,
       ]));
     }, timeout: Timeout(Duration(seconds: 30)));
 

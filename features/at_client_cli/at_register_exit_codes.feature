@@ -14,6 +14,18 @@ Feature: at_register's exit code says how registration ended
     When at_register runs
     Then it exits 1, as at_activate does for the same failure
 
+  Scenario: A third code accepted with a follow-up gets the CRAM key
+    Given a registrar that refuses two codes and accepts the third with a follow-up
+    When at_register is given three codes
+    Then it sends the third code again as a confirmation
+    And it gets the CRAM key
+
+  Scenario: A registrar asking twice to confirm a code ends the registration
+    Given a registrar that answers every code with a follow-up
+    When at_register is given a code
+    Then it sends two validate-person requests, no more
+    And it exits 4
+
   Scenario: Three refused verification codes exit 5
     Given a registrar that refuses every verification code
     When at_register is given three codes
