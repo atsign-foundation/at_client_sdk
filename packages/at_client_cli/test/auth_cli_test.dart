@@ -318,7 +318,9 @@ void postureArgumentTests() {
               'Anything else is a default in disguise:\n${args.join('\n')}');
     });
 
-    test('every command that builds a client passes the posture to it', () {
+    /// The auth_cli.dart lines whose `await createAtClient(` call passes no
+    /// [argument].
+    List<int> createAtClientCallsWithout(String argument) {
       // NOTE: read from source because driving each command needs an atServer
       // per row.
       final source = File('lib/src/commands/auth_cli.dart').readAsStringSync();
@@ -330,14 +332,26 @@ void postureArgumentTests() {
       final without = <int>[];
       for (final call in calls) {
         final end = source.indexOf(');', call.start);
-        if (!source.substring(call.start, end).contains('posture:')) {
+        if (!source.substring(call.start, end).contains('$argument:')) {
           without
               .add('\n'.allMatches(source.substring(0, call.start)).length + 1);
         }
       }
+      return without;
+    }
+
+    test('every command that builds a client passes the posture to it', () {
+      final without = createAtClientCallsWithout('posture');
       expect(without, isEmpty,
           reason: 'auth_cli.dart lines $without call createAtClient without a '
               'posture, so those commands ignore --posture');
+    });
+
+    test('every command that builds a client passes --mca to it', () {
+      final without = createAtClientCallsWithout('maxConnectAttempts');
+      expect(without, isEmpty,
+          reason: 'auth_cli.dart lines $without call createAtClient without '
+              'maxConnectAttempts, so those commands ignore --mca');
     });
 
     test('the retired argument is gone from every one of them', () {

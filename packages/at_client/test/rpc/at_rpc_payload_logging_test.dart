@@ -47,7 +47,9 @@ void main() {
     when(() => notifications.subscribe(
             regex: any(named: 'regex'),
             shouldDecrypt: any(named: 'shouldDecrypt')))
-        .thenAnswer((_) => const Stream.empty());
+        // NOTE: never done, or the caller's listener would end and fail the
+        // call before its response arrived.
+        .thenAnswer((_) => StreamController<AtNotification>().stream);
     when(() => notifications.notify(any(),
         checkForFinalDeliveryStatus: any(named: 'checkForFinalDeliveryStatus'),
         waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
@@ -59,36 +61,57 @@ void main() {
     return client;
   }
 
-  /// Sends a request, answers one, and receives a response nobody waits for,
-  /// each carrying [marker] in its payload; returns the request's id.
+  /// Calls through an [AtRpcClient] and answers the call, an unparsable
+  /// request and a response nobody waits for, each carrying [marker]; returns
+  /// the call's request id.
   Future<int> exercise() async {
     final client = atClient();
-    final rpc = AtRpc(
+    final caller = AtRpcClient(
+        serverAtsign: '@bob',
+        atClient: client,
+        baseNameSpace: 'testing',
+        domainNameSpace: 'logging');
+    final answer = caller.call({'question': marker});
+    final id = caller.completerMap.keys.single;
+    await pumpEventQueue();
+
+    final server = AtRpc(
         atClient: client,
         baseNameSpace: 'testing',
         domainNameSpace: 'logging',
         callbacks: _Answers({'answer': marker}),
         allowList: {'@bob'},
-        isClient: true,
+        isClient: false,
         isServer: true);
-    final request = AtRpcReq.create({'question': marker});
-
-    await rpc.sendRequest(toAtSign: '@bob', request: request);
-    await rpc.handleRequestNotification(AtNotification.empty()
+    await server.handleRequestNotification(AtNotification.empty()
       ..from = '@bob'
       ..to = '@alice'
-      ..key = '@alice:request.${request.reqId}.logging.__rpcs.testing@bob'
-      ..value = jsonEncode(request.toJson()));
-    await AtRpcClient(
-            serverAtsign: '@bob',
-            atClient: client,
-            baseNameSpace: 'testing',
-            domainNameSpace: 'logging')
-        .handleResponse(AtRpcResp(
-            reqId: request.reqId,
-            respType: AtRpcRespType.success,
-            payload: {'answer': marker}));
-    return request.reqId;
+      ..key = '@alice:request.$id.logging.__rpcs.testing@bob'
+      ..value =
+          jsonEncode(AtRpcReq(reqId: id, payload: {'question': marker})));
+    await server.handleRequestNotification(AtNotification.empty()
+      ..from = '@bob'
+      ..to = '@alice'
+      ..key = '@alice:request.${id + 1}.logging.__rpcs.testing@bob'
+      ..value = '{"question": "$marker"');
+
+    // NOTE: through the notification handler, so the ack and success branches
+    // run against the completer the call registered.
+    for (final type in [AtRpcRespType.ack, AtRpcRespType.success]) {
+      await caller.rpc.handleResponseNotification(AtNotification.empty()
+        ..from = '@bob'
+        ..to = '@alice'
+        ..key = '@alice:${type.name}.$id.logging.__rpcs.testing@bob'
+        ..value = jsonEncode(AtRpcResp(
+            reqId: id, respType: type, payload: {'answer': marker})));
+    }
+    expect(await answer, {'answer': marker});
+
+    await caller.handleResponse(AtRpcResp(
+        reqId: id,
+        respType: AtRpcRespType.success,
+        payload: {'answer': marker}));
+    return id;
   }
 
   /// Every line both RPC loggers emit at [level] while [body] runs.

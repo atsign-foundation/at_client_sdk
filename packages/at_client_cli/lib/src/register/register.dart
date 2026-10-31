@@ -198,9 +198,18 @@ class ValidateOtp extends RegisterApiTask {
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
+        // The registrar accepted the code and only wants it confirmed. That
+        // confirmation is not another attempt at the code, so it is made now
+        // rather than spending one of the attempts [shouldRetry] counts.
+        if (params['confirmation'] == 'true') {
+          result.exceptionMessage =
+              'The registrar asked again to confirm a confirmed code.';
+          result.apiCallStatus = ApiCallStatus.failure;
+          return result;
+        }
         params.update('confirmation', (value) => 'true');
         result.data['otp'] = params['otp'];
-        result.apiCallStatus = ApiCallStatus.retry;
+        return await run();
       } else if (apiResponse.startsWith("@")) {
         result.data['cramkey'] = apiResponse.split(":")[1];
         stdout.writeln(

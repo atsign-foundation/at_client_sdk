@@ -76,6 +76,19 @@ void main() {
         reason: 'refused at the bound, without echoing what was read');
   });
 
+  test('An oversized atDirectory answer fails without reading the rest',
+      () async {
+    final sw = Stopwatch()..start();
+    await expectLater(
+        finder.findSecondary('@endless',
+            timeout: const Duration(seconds: 15)),
+        throwsA(isA<AtException>().having(
+            (e) => e.message, 'message', contains('longer than 512 bytes'))),
+        reason: 'the body never ends, so only a reader that stops at the '
+            'bound can refuse it before the timeout');
+    expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+  });
+
   test('a close of the lookup it asks for ends the request at once', () async {
     final abandonment = Abandonment();
     final asked = abandonment.run(() => finder.findSecondary('@slow'));

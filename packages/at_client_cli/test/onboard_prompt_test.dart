@@ -1,5 +1,47 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
+
+/// What at_activate run with [args] and no stdin writes until it says it is
+/// onboarding and a moment more, for a prompt to follow, or until it has run
+/// for 20 seconds; it is then killed.
+///
+/// NOTE: without a reply the backup prompt never ends, so a run that shows it
+/// cannot be told by its exit code from one still onboarding.
+Future<({String stdout, String stderr})> runPastPrompt(
+    List<String> args) async {
+  final process =
+      await Process.start('dart', ['bin/at_activate.dart', ...args]);
+  await process.stdin.close();
+  final out = StringBuffer();
+  final err = StringBuffer();
+  final onboarding = Completer<void>();
+  process.stdout.transform(utf8.decoder).listen(out.write);
+  process.stderr.transform(utf8.decoder).listen((text) {
+    err.write(text);
+    if (!onboarding.isCompleted &&
+        err.toString().contains('Onboarding your atSign')) {
+      onboarding.complete();
+    }
+  });
+  await Future.any([
+    onboarding.future.then((_) => Future.delayed(Duration(seconds: 1))),
+    process.exitCode,
+    Future.delayed(Duration(seconds: 20)),
+  ]);
+  process.kill();
+  await process.exitCode;
+  return (stdout: out.toString(), stderr: err.toString());
+}
+
+/// [output] got as far as onboarding, and showed no backup prompt on the way.
+void expectNoPrompt(({String stdout, String stderr}) output) {
+  expect(output.stderr, contains('Onboarding your atSign'),
+      reason: 'it got as far as onboarding');
+  expect(output.stdout, isNot(contains('losing these keys')),
+      reason: 'the backup prompt was skipped');
+}
 
 void main() {
   group('Functional tests for at_activate --yes', () {
@@ -38,46 +80,28 @@ void main() {
 
     // Test #3: Tests that using the `--cramkey` implies `--yes` and bypasses the backup key prompt
     test('CLI with --cramkey bypasses prompt (implies --yes)', () async {
-      final result = await Process.run(
-        'bash',
-        [
-          '-c',
-          'timeout 5s dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key'
-        ],
-        workingDirectory: Directory.current.path,
-      );
-
-      expect(result.exitCode, isNot(equals(0)));
-    }, timeout: Timeout(Duration(seconds: 10)));
+      expectNoPrompt(await runPastPrompt([
+        'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
+        '--cramkey', 'dummy-key',
+      ]));
+    }, timeout: Timeout(Duration(seconds: 30)));
 
     // Test #4: Tests that using `--cramkey` with `--yes` is the same as using `--cramkey` without `--yes`
     test('CLI with --cramkey and --yes behaves the same as without --yes',
         () async {
-      final result = await Process.run(
-        'bash',
-        [
-          '-c',
-          'timeout 5s dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key --yes'
-        ],
-        workingDirectory: Directory.current.path,
-      );
-
-      expect(result.exitCode, isNot(equals(0)));
-    }, timeout: Timeout(Duration(seconds: 10)));
+      expectNoPrompt(await runPastPrompt([
+        'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
+        '--cramkey', 'dummy-key', '--yes',
+      ]));
+    }, timeout: Timeout(Duration(seconds: 30)));
 
     // Test #5: Tests that using just `--yes` bypasses the backup key prompt
     test('CLI with --yes bypasses prompt and continues', () async {
-      final result = await Process.run(
-        'bash',
-        [
-          '-c',
-          'timeout 5s dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --yes'
-        ],
-        workingDirectory: Directory.current.path,
-      );
-
-      expect(result.exitCode, isNot(equals(0)));
-    }, timeout: Timeout(Duration(seconds: 10)));
+      expectNoPrompt(await runPastPrompt([
+        'onboard', '--atsign', '@8incanteater', '--keys', testKeysPath, //
+        '--yes',
+      ]));
+    }, timeout: Timeout(Duration(seconds: 30)));
 
     // runs after each individual test
     tearDown(() {

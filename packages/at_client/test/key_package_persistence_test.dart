@@ -423,6 +423,53 @@ void main() {
     });
 
     test(
+        'when its keyfile holds an untagged package and the preference names a '
+        'second algorithm, then it keeps holding the untagged key it still '
+        'advertises', () async {
+      final client = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          keyEstablishmentAlgorithms: const [
+            SecretSharingAlgos.xWing,
+            SecretSharingAlgos.mlKem1024
+          ]);
+      final (older, untaggedKpid) = await keyfileWithPackage();
+      final untagged = (await older.read(atSign)).keys.toList();
+      await (client.atKeysIo! as InMemoryAtKeysIo).update(atSign.toAtsign(),
+          (keys) {
+        untagged.forEach(keys.addKey);
+        return true;
+      });
+      final holder = TestRegistrant(client)
+        ..directory = FakeEnrollmentDirectory();
+      bindKeyPackageToAtKeys(holder,
+          keysIo: client.atKeysIo!, atSign: atSign, enrollmentId: enrollmentId);
+      await holder.register();
+      expect(holder.heldKpids, {untaggedKpid},
+          reason: 'the precondition: the untagged package is the fallback');
+
+      final published = await reconcile(client, holder);
+
+      expect(published, hasLength(1));
+      expect(published.single.advertised, hasLength(2));
+      expect(published.single.advertised, contains(untaggedKpid));
+      expect(published.single.held, published.single.advertised.toSet(),
+          reason: 'the untagged X-Wing key stays advertised active, so a peer '
+              'seals to it, and a holder reloaded onto the minted key alone '
+              'would never open that envelope');
+      expect(holder.heldKpids, published.single.advertised.toSet());
+
+      final restarted = TestRegistrant(client)
+        ..directory = FakeEnrollmentDirectory();
+      bindKeyPackageToAtKeys(restarted,
+          keysIo: client.atKeysIo!, atSign: atSign, enrollmentId: enrollmentId);
+      await restarted.register();
+      expect(restarted.heldKpids, published.single.advertised.toSet(),
+          reason: 'and the next start holds both again');
+    });
+
+    test(
         'when the preference names only an algorithm it holds no key for, then '
         'a fresh key is minted, held and advertised alone', () async {
       final held = await holding();
