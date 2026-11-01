@@ -206,7 +206,7 @@ abstract class NotificationService {
   /// To get the status of a notification
   ///```dart
   /// var notificationService = client.notificationService;
-  /// var notificationResult = await notificationService.status('abc-123');
+  /// var notificationResult = await notificationService.getStatus('abc-123');
   ///```
   ///
   /// * Returns [NotificationResult] for the given notification-id.

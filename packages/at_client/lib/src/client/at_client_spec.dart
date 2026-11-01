@@ -107,7 +107,8 @@ abstract class AtClient {
 
   EnrollmentService? get enrollmentService;
 
-  /// Sets the preferences such as sync strategy, storage path etc., for the client.
+  /// Sets the preferences this client reads, such as its namespace and its
+  /// post-quantum posture.
   void setPreferences(AtClientPreference preference);
 
   AtClientPreference? getPreferences();
@@ -361,7 +362,9 @@ abstract class AtClient {
   /// ```
   Future<Metadata?> getMeta(AtKey key);
 
-  /// Delete the [key] from user's local secondary and syncs the delete to cloud secondary if client's sync preference is immediate.
+  /// Deletes [key] from local storage, and sync later pushes the removal to
+  /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the
+  /// atServer directly.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
@@ -456,13 +459,14 @@ abstract class AtClient {
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  /// var atKey = AtKey()..key = 'phone@bob'
+  /// var atKey = AtKey()..key = 'phone'
   ///                    ..sharedWith = '@alice'
-  ///                    ..sharedBy = ‘@bob’
-  /// Execute the notify verb
-  /// var notificationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
-  ///  Get the status for notificationId
-  ///   notifyStatus(notificationId);
+  ///                    ..sharedBy = '@bob';
+  /// Send the notification
+  /// var result = await atClient.notificationService.notify(
+  ///     NotificationParams.forUpdate(atKey, value: '+1 987 986 2233'));
+  ///  Get the status for its id
+  ///   notifyStatus(result.notificationID);
   ///
   ///```
   Future<String> notifyStatus(String notificationId);
