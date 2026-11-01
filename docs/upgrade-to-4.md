@@ -313,7 +313,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 to `executeVerb` with a verb builder. A lookup authenticates through its
 `authenticator` rather than `cramAuthenticate(secret)` or
 `authenticate(privateKey)`, and a lookup is built by an `AtLookUpFactory`, not
-the deprecated `AtLookupImpl(...)` constructor:
+the `AtLookupImpl(...)` constructor, which 4.0 makes internal to at_lookup:
 
 ```dart after
 import 'package:at_commons/at_builders.dart';

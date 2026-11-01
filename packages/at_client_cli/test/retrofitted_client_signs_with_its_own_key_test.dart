@@ -86,11 +86,13 @@ void main() {
     // NOTE: a real lookup, pointed at a port nothing listens on: the client's
     // connection wraps and stamps it, and the open comes back offline without
     // a network.
-    final own = AtLookupImpl(atSign, InternetAddress.loopbackIPv4.address, port,
+    final own = AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain: AtRootDomain(InternetAddress.loopbackIPv4.address, port),
+        authenticator: null,
+        transport: secureSocketTransport(SecureSocketConfig()),
         secondaryAddressFinder: FixedSecondaryAddressFinder(
-            InternetAddress.loopbackIPv4.address, port),
-        transportFactory: SecureSocketTransportFactory(
-            secureSocketConfig: SecureSocketConfig()));
+            InternetAddress.loopbackIPv4.address, port));
     final client = await Atsign(atSign).open(
         keys: CliKeys.fileFor(atSign, path: keysFilePath),
         preference: AtClientPreference(posture: PqPosture.legacy)

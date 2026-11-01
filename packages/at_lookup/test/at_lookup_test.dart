@@ -104,11 +104,15 @@ void main() {
       return metaData;
     }
 
-    AtLookupImpl newAtLookup() => AtLookupImpl('@alice', atServerHost, 64,
-        secondaryAddressFinder: mockSecondaryAddressFinder,
-        transportFactory: mockTransportFactory,
-        socketListenerFactory: mockSecureSocketListenerFactory,
-        outboundConnectionFactory: mockOutboundConnectionFactory);
+    AtLookupImpl newAtLookup() => AtLookUp.withTransport(
+        atSign: '@alice',
+        rootDomain: AtRootDomain(atServerHost, 64),
+        authenticator: null,
+        transport: AtLookupTransport(
+            transportFactory: mockTransportFactory,
+            listenerFactory: mockSecureSocketListenerFactory,
+            connectionFactory: mockOutboundConnectionFactory),
+        secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
 
     test('pkam auth records the enrollment its accepted pkam: named', () async {
       final metaData = primeConnection([fromChallenge, 'data:success']);
@@ -208,11 +212,15 @@ void main() {
 
   group('A group of tests to verify executeCommand method', () {
     test('executeCommand - from verb - auth false', () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       final fromResponse =
           'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@alice:c3d345fc-5691-4f90-bc34-17cba31f060f';
       when(() => mockOutboundListener.read())
@@ -223,11 +231,15 @@ void main() {
 
     test('executeCommand -llookup verb - auth true - auth key not set',
         () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       final fromResponse = 'data:1234';
       when(() => mockOutboundListener.read())
           .thenAnswer((_) => Future.value(fromResponse));
@@ -238,11 +250,15 @@ void main() {
     });
 
     test('executeCommand -llookup verb - auth true', () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse = 'data:1234';
       when(() => mockOutBoundConnection.write(llookupCommand))
@@ -256,11 +272,15 @@ void main() {
     });
 
     test('executeCommand - test non json error handling', () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse = 'error:AT0015-Exception: fubar';
       when(() => mockOutBoundConnection.write(llookupCommand))
@@ -276,11 +296,15 @@ void main() {
     });
 
     test('executeCommand - test json error handling', () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       final llookupCommand = 'llookup:phone@alice\n';
       final llookupResponse =
           'error:{"errorCode":"AT0015","errorDescription":"Exception: fubar"}';
@@ -300,11 +324,15 @@ void main() {
   group('Validate executeVerb() behaviour', () {
     test('a write the transport refuses comes back with the socket error code',
         () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
       when(() => mockOutBoundConnection.write(any()))
           .thenThrow(AtIOException('connection to 127.0.0.1:64 failed'));
       when(() => mockOutBoundConnection.getMetaData())
@@ -324,11 +352,15 @@ void main() {
     });
 
     test('validate EnrollVerbHandler behaviour - request', () async {
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
 
       String appName = 'unit_test_1';
       String deviceName = 'test_device';
@@ -362,11 +394,15 @@ void main() {
 
     test('validate behaviour with EnrollVerbHandler - approve', () async {
       var logins = 0;
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory)
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl
         ..authenticator = (executor) async {
           logins++;
           return true;
@@ -411,11 +447,15 @@ void main() {
 
     test('validate behaviour with EnrollVerbHandler - revoke', () async {
       var logins = 0;
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory)
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl
         ..authenticator = (executor) async {
           logins++;
           return true;
@@ -454,11 +494,15 @@ void main() {
 
     test('validate behaviour with EnrollVerbHandler - deny', () async {
       var logins = 0;
-      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
-          secondaryAddressFinder: mockSecondaryAddressFinder,
-          transportFactory: mockTransportFactory,
-          socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory)
+      final atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain(atServerHost, 64),
+          authenticator: null,
+          transport: AtLookupTransport(
+              transportFactory: mockTransportFactory,
+              listenerFactory: mockSecureSocketListenerFactory,
+              connectionFactory: mockOutboundConnectionFactory),
+          secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl
         ..authenticator = (executor) async {
           logins++;
           return true;

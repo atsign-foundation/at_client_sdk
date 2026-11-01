@@ -14,6 +14,7 @@ import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
+import 'package:meta/meta.dart' show internal;
 import 'package:mutex/mutex.dart';
 
 /// The `from:` challenge an atServer issues a client, once the `data:` prefix
@@ -109,10 +110,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late AtLookupOutboundConnectionFactory outboundConnectionFactory;
 
-  /// Prefer [AtLookUp.withTransport] or `AtLookUp.withSecureSocket`, which
+  /// Built by [AtLookUp.withTransport] and `AtLookUp.withSecureSocket`, which
   /// take an [AtRootDomain] and return the [AtLookupMuxable] interface.
-  @Deprecated('Use AtLookUp.withTransport or AtLookUp.withSecureSocket, '
-      'which return an AtLookupMuxable')
+  @internal
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {required this.secondaryAddressFinder,
       required this.transportFactory,
