@@ -214,7 +214,9 @@
   (unauthorized, an immutable record, an invalid key, an illegal argument,
   invalid syntax, or a code at_commons does not list), so the writes behind
   it still reach the atServer. It logs the write at severe, and the device
-  keeps its own copy.
+  keeps its own copy. Because a code at_commons does not list counts as a
+  refusal for good, a write refused with a code that a newer atServer adds
+  is dropped too, rather than held.
 - note: a write the atServer refuses with any other code stays queued,
   logged at warning, and is sent again with each batch. Held writes that
   fill a batch at the head of the queue hold up every write behind them,
