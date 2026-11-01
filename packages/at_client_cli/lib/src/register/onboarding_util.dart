@@ -18,6 +18,13 @@ const String noRegistrarApiKey =
     'No registrar API key. Create one via the registrar at my.atsign.com, '
     'and set $registrarApiKeyVariable to it.';
 
+/// What at_register and at_activate say when the registrar API key holds a
+/// character an HTTP header cannot carry.
+const String badRegistrarApiKey =
+    'The registrar API key in $registrarApiKeyVariable holds a character an '
+    'HTTP header cannot carry, such as a line break. Set it to the key exactly '
+    'as the registrar at my.atsign.com issued it.';
+
 ///class containing utilities to perform registration of a free atsign
 class OnboardingUtil {
   static bool allowBadCertificates = false;
@@ -31,12 +38,20 @@ class OnboardingUtil {
 
   /// A registrar client naming the app with [registrarApiKey]. Throws
   /// [at_client.AtClientException] saying where to create a key when there
-  /// is none.
+  /// is none, and without quoting it when it holds a character an HTTP
+  /// header cannot carry.
   OnboardingUtil(String? registrarApiKey)
-      : registrarApiKey =
-            registrarApiKey == null || registrarApiKey.trim().isEmpty
-                ? throw at_client.AtClientException.message(noRegistrarApiKey)
+      : registrarApiKey = registrarApiKey == null ||
+                registrarApiKey.trim().isEmpty
+            ? throw at_client.AtClientException.message(noRegistrarApiKey)
+            : !_fitsAHeader(registrarApiKey)
+                ? throw at_client.AtClientException.message(badRegistrarApiKey)
                 : registrarApiKey;
+
+  /// Whether [value] holds only what an HTTP header value carries: visible
+  /// ASCII, spaces and tabs.
+  static bool _fitsAHeader(String value) => value.codeUnits
+      .every((unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7e));
 
   void _createClient() {
     HttpClient ioc = HttpClient();

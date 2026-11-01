@@ -97,6 +97,31 @@ void main() {
     expect(run.exitCode, 8);
   }, timeout: const Timeout(Duration(minutes: 3)));
 
+  test(
+      'A registrar API key holding a character an HTTP header cannot carry is '
+      'refused without being quoted', () {
+    for (final bad in ['$key\n', '$key\r', '$keyé']) {
+      expect(
+          () => OnboardingUtil(bad),
+          throwsA(isA<Exception>()
+              .having((e) => '$e', 'message', contains(badRegistrarApiKey))
+              .having((e) => '$e', 'message', isNot(contains(key)))),
+          reason: 'refused: ${jsonEncode(bad.substring(key.length))}');
+    }
+  });
+
+  test(
+      'at_register with a registrar API key a header cannot carry refuses '
+      'before it reaches the registrar, and never echoes the key', () async {
+    final run = await atRegister(registrarApiKey: '$key\n');
+
+    expect(run.output, contains(badRegistrarApiKey));
+    expect(run.output, isNot(contains(key)));
+    expect(run.output, isNot(contains('registrar served')),
+        reason: 'nothing is sent to the registrar');
+    expect(run.exitCode, isNot(0));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('A registrar API key that is empty or blank is refused as a missing one',
       () {
     for (final blank in ['', ' ', '\t\n']) {

@@ -24,6 +24,11 @@ Feature: at_register and at_activate take the registrar API key from the environ
     When at_register asks the registrar for a free atSign
     Then the request carries that key as its Authorization header, and no log line carries it
 
+  Scenario: at_register with a registrar API key a header cannot carry refuses before it reaches the registrar, and never echoes the key
+    Given AT_REGISTRAR_API_KEY holds a line break, or a character outside ASCII
+    When at_register runs with an email
+    Then it exits non-zero saying the key holds a character an HTTP header cannot carry, its output does not carry the key, and nothing is sent to the registrar
+
   Scenario: at_activate onboard with a CRAM secret needs no registrar API key
     Given AT_REGISTRAR_API_KEY is not set
     When at_activate onboard runs with an atSign and -c with its CRAM secret
