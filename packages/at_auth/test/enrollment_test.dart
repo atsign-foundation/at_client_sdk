@@ -364,12 +364,14 @@ void main() {
   });
 
   group('AtEnrollmentRequest session wiring', () {
+    AtAuthSession selfHostedSession() => AtAuthSession(
+          atSign: '@alice🛠',
+          rootDomain: AtRootDomain('vip.ve.atsign.zone', 25000),
+          atKeysIo: InMemoryAtKeysIo(),
+        );
+
     test('session is the source of atSign and rootDomain', () {
-      final session = AtAuthSession(
-        atSign: '@alice🛠',
-        rootDomain: const AtRootDomain('root.atsign.org', 64),
-        atKeysIo: InMemoryAtKeysIo(),
-      );
+      final session = selfHostedSession();
 
       final request = AtEnrollmentRequest(
         session: session,
@@ -383,6 +385,27 @@ void main() {
       expect(request.session, same(session));
       expect(request.atSign, '@alice🛠');
       expect(request.rootDomain, same(session.rootDomain));
+      expect(request.rootDomain.rootDomain, 'vip.ve.atsign.zone',
+          reason: 'a session naming a root other than the default keeps it');
+    });
+
+    test('a pq request takes its atSign and rootDomain from the session', () {
+      final session = selfHostedSession();
+
+      final request = AtEnrollmentRequest.pq(
+        session: session,
+        appName: 'wavi',
+        deviceName: 'pixel',
+        otp: 'A123FE',
+        namespaces: {'wavi': 'rw'},
+        metadataBuilder: (_) => null,
+        apkamSymmetricKeyResolver: (_, __) => const Stream.empty(),
+        signingAlgo: SigningAlgoType.mldsa65,
+      );
+
+      expect(request.atSign, '@alice🛠');
+      expect(request.rootDomain, same(session.rootDomain));
+      expect(request.rootDomain.rootDomain, 'vip.ve.atsign.zone');
     });
   });
 
