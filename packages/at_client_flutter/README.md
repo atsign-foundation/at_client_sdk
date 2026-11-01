@@ -167,7 +167,7 @@ The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
 the client opens on. With none, they open a Hive store in the app's support
 directory (`getApplicationSupportDirectory()`), or under
 `preference.hiveStoragePath` while the app still sets it. An app that kept its
-store anywhere else passes it as `storage:` before at_client 4.0 removes
+store anywhere else passes it as `storage:` before at_client 5.0 removes
 `hiveStoragePath`. They also take `lookUps:`, at_client's
 `AtLookUpFactory`, for an app that chooses its transport or reaches its
 atServers through a proxy: every connection the client they hand back opens

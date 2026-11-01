@@ -21,10 +21,10 @@
   `getFreeAtsignByCategory`, `registerPerson` and `validatePerson`, and
   `HttpMethod` loses `get`, with the `RegistrarService` methods that used
   them.
-- BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
+- breaking: `authenticatorForChops` is removed, and `authenticatorFor` no
   longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
   hold, under the algorithm they name.
-- BREAKING: `AtKeys.authenticationFor` is removed; use
+- breaking: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
 - feat: `waitForApproval` takes `cancelled`: once it completes, no further
   poll starts and the wait throws `StoppedException`. A stopped connection

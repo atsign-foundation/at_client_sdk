@@ -261,7 +261,7 @@ goes in 5.0.
 
 ### `No named parameter with the name 'isDedicated'`, or `'sync'`
 
-Delete the argument. `isDedicated:` left `put`, `get`, `delete`, `notify`,
+Delete the argument. `isDedicated:` left `put`, `get`, `delete`,
 `getMeta` and `notifyList`; `sync:` left `executeVerb` and
 `executeAndParse`.
 
@@ -362,6 +362,7 @@ enrollments moved onto the client:
 | `KeyIOMixin` | `FileAtKeysIo.read` and `write` |
 | `RegistrarService.getFreeAtSign`, `registerPerson`, `validatePerson` | `registerAtSign` |
 | `FileAtKeysIo`, `getHomeDirectory`, `getDefaultAtKeysFilePath` from `at_auth.dart` | your platform package, or `package:at_auth/at_auth_io.dart` |
+| `AtEnrollmentRequest(atSign: ..., rootDomain: ..., apkamPublicKey: ..., encryptedAPKAMSymmetricKey: ...)`, and the same on `.pq` | `session: AtAuthSession(...)`, which names the atSign, the root domain and where the new keys go; or at_client's `Atsign(atSign).enroll(...)` |
 
 ```dart after
 Future<void> approveWhatIsPending(AtClient client) async {
@@ -550,6 +551,13 @@ Future<void> main(List<String> args) async {
 }
 ```
 
+**Two command-line options are gone.** The tools and `CLIBase` take the
+root domain only as `-r`/`--root-server`: a script passing
+`-d`/`--legacy-root-domain` stops with `Could not find an option or flag
+"-d"`. `at_activate` and `at_register` no longer take `--hashingAlgoType`,
+which did nothing. A program passing `addLegacyRootDomainArg:` to
+`CLIBase.createArgsParser` or `fromCommandLineArgs` deletes it.
+
 **Checklist**
 
 - [ ] `at_client_cli: ^1.0.0` replaces at_client, at_onboarding_cli,
@@ -562,6 +570,7 @@ Future<void> main(List<String> args) async {
 - [ ] A retry loop around `CLIBase` catches
       `SecondaryServerConnectivityException`, not every exception.
 - [ ] Scripts name `at_activate`'s command (`at_activate onboard ...`).
+- [ ] Scripts pass the root domain as `-r`, and no `--hashingAlgoType`.
 - [ ] `dart analyze` is clean.
 
 ## 4. A Flutter app: at_client_flutter
@@ -659,6 +668,11 @@ final stepOne = AtClientPreference(posture: PqPosture.pqReady)
 final stepTwo = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_app';
 ```
+
+After step 2, a device's first write in a namespace needs the atServer,
+which seeds or conveys that namespace's key, and a share needs it whenever
+the client holds no current copy of the recipient's key. Once a device has
+written in a namespace, it goes on writing there offline, across restarts.
 
 A new app has no legacy readers, so it starts at `PqPosture.pqActive`. The
 [at_client README](../packages/at_client/README.md#post-quantum-cryptography)

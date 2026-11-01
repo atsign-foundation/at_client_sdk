@@ -24,11 +24,11 @@ its atServer must be registered in the **atDirectory** (the atServer address
 registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
 app / the registrar.
 
-Opening an atsign that isn't activated (or a typo) comes back **refused** with
+Opening an atsign that isn't activated (or a typo) comes back **offline** with
 cause `noAtServer`: the atDirectory has no atServer for it. On the first open
-of those keys on a device that is a thrown `AtOpenRefusedException`, since
-there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
-(existing keys / keychain / APKAM) will resolve it.
+of those keys on a device, `open` throws `AtOpenRefusedException` instead,
+since there is nothing local to serve. Activate it first (Flow 1), then
+Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
 
 ---
 
@@ -38,7 +38,7 @@ there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign()
 
-const namespace = 'my_namespace';
+const namespace = 'my_app';
 
 AtClientPreference _preference() => AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = namespace
@@ -67,12 +67,17 @@ with a registrar URL and API key. The service sends the key to the registrar
 on the calls that find a free atSign and exchange the code emailed to the
 user for that atSign's CRAM secret; it names the app to the registrar and
 acts for no atSign. An app developer can create an API key via the
-registrar at my.atsign.com.
+registrar at my.atsign.com. Keep it out of the source: a Flutter app takes
+it at build time with `--dart-define`, and at_client_cli's commands read
+`AT_REGISTRAR_API_KEY`.
 
 ```dart
+// flutter run --dart-define=REGISTRAR_API_KEY=<your key>
+const registrarApiKey = String.fromEnvironment('REGISTRAR_API_KEY');
+
 final registrar = RegistrarService(
   registrarUrl: 'my.atsign.com',
-  apiKey: 'your-api-key',        // created via the registrar at my.atsign.com
+  apiKey: registrarApiKey,
 );
 
 Future<void> activateNewAtSign(BuildContext context) async {
@@ -230,10 +235,19 @@ There is no second `PkamDialog`: the enrolled client is the one handed back.
 **The approve side**, on the manager device:
 
 ```dart
-final pending = await client.enrollments.pending();
-await client.enrollments.approve(pending.first.enrollmentId!);   // or deny(id)
-client.enrollments.requests.listen((r) => ...);                  // new requests as they arrive
-final passcode = await client.enrollments.otp();                 // what the new device types
+// Show the person each request: the app, the device and the namespaces it
+// asks for. Anyone holding a passcode can ask for anything, so approve only
+// what they recognise.
+for (final request in await client.enrollments.pending()) {
+  if (!context.mounted) return;
+  if (await confirmWithUser(context, request)) {   // your dialog
+    await client.enrollments.approve(request.enrollmentId!);
+  } else {
+    await client.enrollments.deny(request.enrollmentId!);
+  }
+}
+client.enrollments.requests.listen((r) => ...);    // new requests as they arrive
+final passcode = await client.enrollments.otp();   // what the new device types
 ```
 
 or drop in `EnrollmentRequestList(atClient: client)`, which renders the roster
