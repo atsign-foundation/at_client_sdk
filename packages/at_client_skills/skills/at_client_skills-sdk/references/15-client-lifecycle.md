@@ -42,6 +42,8 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
+// pending.cancel() ends that wait, as a Cancel button or a dispose() would;
+// the request stays on the atServer until its manager decides it.
 final resumed = await Atsign('@alice').resumeEnrollment(
     app: 'my_app', device: 'phone', keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
@@ -71,6 +73,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
 | `AtEnrollmentException`         | `pending.client(...)`: the request was denied                                                            | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
 | `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
 
 ---

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -67,11 +68,17 @@ void main() {
   /// [decide] answers each PKAM attempt after submission: `true` approves,
   /// and an exception is the atServer's refusal, `AT0026` for not-yet-decided
   /// and `AT0025` for denied.
+  ///
+  /// [onKeyFetch] runs as the handshake fetches the last secret the approval
+  /// released. A poll after [AtLookUp.stop] is refused, as a stopped
+  /// connection refuses everything.
   MockAtLookupImpl atServer(
-      {required Future<bool> Function(int attempt) decide}) {
+      {required Future<bool> Function(int attempt) decide,
+      void Function()? onKeyFetch}) {
     final lookUp = MockAtLookupImpl();
     String? wrappedSymmetricKey;
     var attempts = 0;
+    var stopped = false;
 
     /// What a real approver does with the request: unwrap the symmetric key
     /// with the atSign's encryption private key, and seal a secret under it.
@@ -106,6 +113,7 @@ void main() {
       }
       if (command
           .startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
+        onKeyFetch?.call();
         return 'data:${jsonEncode(await sealed(selfEncryptionKey))}';
       }
       throw StateError('the mocked atServer has no answer for: $command');
@@ -118,7 +126,11 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${(builder as VerbBuilder).buildCommand()}');
     });
-    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) => decide(++attempts));
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
+      if (stopped) throw StoppedException('the connection was stopped');
+      return decide(++attempts);
+    });
+    when(lookUp.stop).thenAnswer((_) async => stopped = true);
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return lookUp;
@@ -504,6 +516,220 @@ void main() {
           signingAlgo: SigningAlgoType.mldsa65);
       expect(pqUnderLegacy['encryptedAPKAMSymmetricKey'], isNull);
       expect(pqUnderLegacy['metadata']?['keyPackage'], isNotNull);
+    });
+  });
+
+  /// Catalogue: features/at_client/pending_enrollment_cancel.feature
+  group('PendingEnrollment.cancel()', () {
+    /// Lets the event loop run until [done] holds, for at most five seconds.
+    Future<void> until(bool Function() done) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (!done()) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail('the condition did not hold within five seconds');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    }
+
+    Never notYetDecided() => throw UnAuthenticatedException(
+        'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed');
+
+    const pollEvery = Duration(milliseconds: 10);
+
+    /// A submission whose handshake connection the pending enrollment builds
+    /// itself through its lookUps, rather than one the app supplied.
+    Future<PendingEnrollment> submitOwning(
+            InMemoryAtKeysIo store, MockAtLookupImpl server) async =>
+        Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'wavi',
+            device: 'phone',
+            namespaces: {'wavi': 'rw'},
+            keys: store,
+            preference: await preference(),
+            lookUps: (
+                    {required atSign,
+                    required rootDomain,
+                    required authenticator,
+                    secondaryAddressFinder}) =>
+                server,
+            secondaryAddressFinder: await refusingAtDirectory());
+
+    Future<AtClient> clientOf(PendingEnrollment pending) async =>
+        pending.client(await preference(),
+            retryInterval: pollEvery,
+            storage: hiveStoreFor(pending.atSign, await preference()));
+
+    test('Cancel ends a wait for approval', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+
+      await pending.cancel();
+      await waiting;
+
+      final atCancel = polls;
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(polls, atCancel, reason: 'no further poll reaches the atServer');
+      verify(() => server.stop()).called(1);
+    });
+
+    test('An approval that arrives after cancel writes nothing', () async {
+      var polls = 0;
+      var approved = false;
+      final server = atServer(decide: (_) async {
+        polls++;
+        return approved ? true : notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+      final waiting = expectLater(
+          clientOf(pending), throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+
+      await pending.cancel();
+      await waiting;
+      approved = true;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentIds, isEmpty);
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+          reason: 'no client is opened');
+    });
+
+    test('A cancel that lands between the atServer\'s approval and the write',
+        () async {
+      late PendingEnrollment pending;
+      final server = atServer(
+          decide: (_) async => true,
+          onKeyFetch: () => unawaited(pending.cancel()));
+      final store = InMemoryAtKeysIo();
+      pending = await submit(store, server);
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.enrollmentIds, isEmpty, reason: 'nothing is written');
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+    });
+
+    test('A cancel while client() opens the approved client', () async {
+      late PendingEnrollment pending;
+      var approvedAt = 0;
+      final server = atServer(decide: (attempt) async {
+        if (approvedAt == 0) {
+          approvedAt = attempt;
+        } else {
+          // NOTE: a later PKAM is the opening client's own.
+          unawaited(pending.cancel());
+        }
+        return true;
+      });
+      final store = InMemoryAtKeysIo();
+      pending = await submit(store, server);
+
+      await expectLater(
+          clientOf(pending), throwsA(isA<AtEnrollmentCancelledException>()));
+
+      expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+          reason: 'the client it opened is stopped');
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentToAuthenticateAs(), enrollmentId,
+          reason: 'the approved keys stay in the store');
+      expect(stored.holdsAuthenticationMaterial, isTrue);
+    });
+
+    test('Cancel after approval does nothing', () async {
+      final server = atServer(decide: (_) async => true);
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+      final client = await clientOf(pending);
+
+      await pending.cancel();
+
+      expect(AtClientImpl.holdsLiveClient(atSign), isTrue,
+          reason: 'the client keeps running');
+      expect(client.connection.current.isOnline, isTrue);
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentToAuthenticateAs(), enrollmentId);
+      expect(stored.holdsAuthenticationMaterial, isTrue);
+      await client.stop();
+    });
+
+    test('A repeat cancel does nothing', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+      await pending.cancel();
+      await waiting;
+      final before = (await store.read(atSign)).toJson();
+
+      await pending.cancel();
+
+      expect((await store.read(atSign)).toJson(), before);
+      verify(() => server.stop()).called(1);
+    });
+
+    test('A connection the app supplied is left open', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+
+      await pending.cancel();
+      await waiting;
+
+      final atCancel = polls;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(polls, atCancel, reason: 'no further poll runs on it');
+      verifyNever(() => server.stop());
+      verifyNever(() => server.close());
+    });
+
+    test('Cancel before anyone waits', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+
+      await pending.cancel();
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      expect(polls, 0);
     });
   });
 }

@@ -16,6 +16,10 @@
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
   it, then asks the others.
+- feat: `PendingEnrollment.cancel()` ends the wait `client` or
+  `awaitApproval` is in, which throws `AtEnrollmentCancelledException`, and
+  removes the enrollment's pending keys. The request stays on the atServer
+  until the atSign's manager decides it.
 - feat: `AtKeysFormatException` comes through at_client, so an app tells a
   keyfile that is not a JSON object by its `reason` and `position` without
   importing at_auth.

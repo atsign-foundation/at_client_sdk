@@ -41,6 +41,9 @@
   `AtsignFlows`, and a pending enrollment's client takes its store from
   `storageOrDefault` (`SKILL.md`; `references/01`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
+- `pending.cancel()` ends an enrollment's wait, and
+  `AtEnrollmentCancelledException` is what the wait then throws
+  (`references/15`).
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).
 - Multiple instances of one agent take their lock with
