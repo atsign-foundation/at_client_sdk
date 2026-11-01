@@ -137,6 +137,8 @@
 - fix: `AtClientImpl.create` throws a `StateError` for a client of the same
   atSign and enrollment whose `stop()` is still running, rather than
   restarting it.
+- fix: a stopped client's `collection()`, `startCompactionJob` and service
+  getters throw `StoppedException`, like its other calls.
 - breaking: `AtClientImpl.create` keeps one client per atSign and enrollment
   rather than one per atSign. A caller naming no enrollment, whose keys name
   none, gets the client for the atSign's own credential; `exactEnrollment:

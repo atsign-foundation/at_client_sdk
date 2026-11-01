@@ -332,7 +332,7 @@ class AtClientImpl implements AtClient {
   @override
   SyncService get syncService {
     if (_syncService == null) {
-      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
+      _refuseIfStopped('hand out its sync service');
       throw StateError('SyncService has not yet been set');
     }
     return _syncService!;
@@ -354,7 +354,7 @@ class AtClientImpl implements AtClient {
   @override
   NotificationService get notificationService {
     if (_notificationService == null) {
-      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
+      _refuseIfStopped('hand out its notification service');
       throw StateError('notificationService has not yet been set');
     }
     return _notificationService!;
@@ -374,6 +374,7 @@ class AtClientImpl implements AtClient {
   @override
   EnrollmentService? get enrollmentService {
     if (_enrollmentService == null) {
+      _refuseIfStopped('hand out its enrollment service');
       throw StateError('EnrollmentService has not yet been set');
     }
     return _enrollmentService;
@@ -629,6 +630,7 @@ class AtClientImpl implements AtClient {
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
+    _refuseIfStopped('hand out the collection $namespace');
     if (!namespace.contains('.')) {
       throw ArgumentError(
         'namespace must be fully qualified — provide the complete namespace '
@@ -1261,6 +1263,15 @@ class AtClientImpl implements AtClient {
   @override
   bool get isStopped => _isStopped;
 
+  /// Throws [StoppedException], naming [what] could not be done, once this
+  /// client has stopped.
+  void _refuseIfStopped(String what) {
+    if (_isStopped) {
+      throw StoppedException('the client for $_atSign has stopped, so it '
+          'cannot $what');
+    }
+  }
+
   /// The teardown in flight, shared by every caller.
   ///
   /// Held so that a second [stop] returns when the teardown has finished
@@ -1435,6 +1446,7 @@ class AtClientImpl implements AtClient {
   Future<void> startCompactionJob({
     Duration? commitLogCompactionDuration,
   }) async {
+    _refuseIfStopped('start a compaction job');
     // No-op: the commit-log-free client has no commit log to compact.
   }
 
