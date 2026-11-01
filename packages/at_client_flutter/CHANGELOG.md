@@ -20,6 +20,8 @@
 - feat: `at_client_flutter.dart` re-exports `at_client_io.dart`, so an app
   importing it has `FileAtKeysIo`, `secureSocketLookUps` and
   `CacheableSecondaryAddressFinder`.
+- fix: dismissing `ApkamActivationDialog` while it waits for approval cancels
+  the enrollment, and the atSign can be opened again afterwards.
 - build: requires `at_client` ^4.0.0.
 - build: requires `at_persistence_secondary_server` ^5.4.0.
 - chore(deps): at_utils ^4.0.0

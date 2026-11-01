@@ -32,7 +32,9 @@ import 'package:flutter/services.dart';
 ///
 /// Returns:
 /// - The `AtClient` opened on the approved keys, or null if the process fails
-///   or is cancelled.
+///   or is cancelled. Dismissing the dialog before then cancels the
+///   enrollment's wait (`PendingEnrollment.cancel`), and stops a client the
+///   approval opens after the dismissal.
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
@@ -117,6 +119,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   String _status = 'Waiting for approval..';
   late final WrittenAtKeysIo _keys;
   StreamSubscription<dynamic>? _progress;
+  PendingEnrollment? _waitingOn;
 
   @override
   void initState() {
@@ -164,6 +167,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   );
 
   Future<void> _awaitAndOpen(PendingEnrollment pending) async {
+    if (!mounted) {
+      await pending.cancel();
+      return;
+    }
+    _waitingOn = pending;
     _progress = pending.progress.listen((event) {
       if (mounted) setState(() => _status = event.msg);
     });
@@ -177,7 +185,12 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
           widget.storage,
         ),
       );
-      if (!mounted) return;
+      if (!mounted) {
+        // NOTE: nothing receives a client opened after the dismissal, and
+        // while it is live the atSign cannot be opened again.
+        await client.stop();
+        return;
+      }
       Navigator.of(context).pop(client);
     } catch (e) {
       // The approval was refused, the atServer went away, or the request was
@@ -193,6 +206,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
+      _waitingOn = null;
       await _progress?.cancel();
       _progress = null;
       // Guard against setState after the dialog was dismissed mid-await; a bare
@@ -207,6 +221,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
   @override
   void dispose() {
+    final waitingOn = _waitingOn;
+    if (waitingOn != null) unawaited(waitingOn.cancel());
     _progress?.cancel();
     _otpController.dispose();
     _otpFocusNode.dispose();
