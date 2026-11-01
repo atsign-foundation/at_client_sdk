@@ -398,4 +398,23 @@ void main() {
             .additional!['nskeyKid'],
         adopted);
   });
+
+  group('Given a share to a recipient that has published nothing', () {
+    test(
+        "when the writer's own seeding fails, then the share is refused "
+        'naming the recipient', () async {
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      wire(c);
+      final writing = write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      expect(await _pending(writing), isTrue);
+
+      c.seeding.failed('todos.demos', 'the mint lock is held elsewhere');
+      c.seeding.finish();
+
+      await expectLater(
+          atOnce(writing),
+          throwsA(isA<NamespaceKeyUnavailableException>()
+              .having((e) => e.atSign, 'atSign', _bob)));
+    });
+  });
 }

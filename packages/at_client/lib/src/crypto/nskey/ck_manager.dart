@@ -151,8 +151,13 @@ class CkManager {
         namespace = await resolver.startLevelOf(holder, valueKey);
         advertised = await resolver.resolve(owner, namespace);
         final failure = startUpSeeding?.failureFor(covering);
-        if (advertised == null && failure != null) {
-          throw NamespaceKeyUnavailableException(holder!, covering,
+        // NOTE: start-up's failure is the reason only for this atSign's own
+        // key; a share that still finds nothing is refused naming the
+        // recipient.
+        if (advertised == null &&
+            failure != null &&
+            owner.toAtsign() == holder!.toAtsign()) {
+          throw NamespaceKeyUnavailableException(holder, covering,
               because: 'this client\'s start-up could not publish it: '
                   '$failure');
         }
