@@ -208,6 +208,54 @@ void main() {
       expect(polled.length, 1,
           reason: 'no poll starts once the wait is cancelled');
     });
+
+    test(
+        'when its cancel signal has already completed, then no poll runs and '
+        'the wait ends', () async {
+      final (response, lookup, polled) = await rig([Poll.approved]);
+
+      await expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(milliseconds: 1),
+              logProgress: false,
+              cancelled: Future<void>.value()),
+          throwsA(isA<StoppedException>()));
+
+      expect(polled, isEmpty);
+    });
+
+    test(
+        'when it is cancelled while a poll that approves is in flight, then '
+        'the wait ends with the cancel and fetches no keys', () async {
+      final (response, lookup, _) = await rig([Poll.approved]);
+      final answering = Completer<bool>();
+      var polls = 0;
+      when(() => lookup.pkamAuthenticate()).thenAnswer((_) {
+        polls++;
+        return answering.future;
+      });
+      final cancel = Completer<void>();
+
+      final waiting = expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(milliseconds: 1),
+              logProgress: false,
+              cancelled: cancel.future),
+          throwsA(isA<StoppedException>()));
+      while (polls == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      cancel.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      answering.complete(true);
+      await waiting;
+
+      expect(response.atAuthKeys!.defaultEncryptionPrivateKey, isNull,
+          reason: 'the approval landed after the cancel, so nothing was '
+              'fetched for it');
+    });
   });
 
   group('the retry budget', () {

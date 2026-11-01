@@ -256,7 +256,17 @@ class EnrollmentHandshake {
     Future<void>? cancelled,
   }) async {
     var isCancelled = false;
-    unawaited(cancelled?.then((_) => isCancelled = true));
+    Completer<void>? sleeping;
+    unawaited(cancelled?.then((_) {
+      isCancelled = true;
+      final pause = sleeping;
+      if (pause != null && !pause.isCompleted) pause.complete();
+    }));
+    StoppedException cancelledWait() => StoppedException(
+        'the wait for enrollment $enrollmentIdFromServer was cancelled');
+    // NOTE: one microtask, so a cancel that has already completed is seen
+    // before the first poll.
+    await Future<void>.value();
     // [maxRetries] is a budget for failures to REACH the atServer, and only
     // those. An enrollment nobody has decided yet is not a failure — the
     // decision is a person's, taken on their own schedule — so a pending
@@ -269,10 +279,7 @@ class EnrollmentHandshake {
     // atServer and understanding what it said are separate questions.
     int consecutiveUnresolvableRefusals = 0;
     while (true) {
-      if (isCancelled) {
-        throw StoppedException(
-            'the wait for enrollment $enrollmentIdFromServer was cancelled');
-      }
+      if (isCancelled) throw cancelledWait();
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
@@ -347,6 +354,9 @@ class EnrollmentHandshake {
       if (reachedAtServer) {
         consecutiveUnreachable = 0;
       }
+      // NOTE: an approval that answers a poll made before the cancel ends
+      // with the cancel.
+      if (isCancelled) throw cancelledWait();
       if (pkamAuthSucceeded) {
         if (logProgress) {
           _progress.add(
@@ -366,10 +376,13 @@ class EnrollmentHandshake {
               ProgressEventType.info);
         }
         _logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
-        await Future.any([
-          Future<void>.delayed(retryInterval),
-          if (cancelled != null) cancelled
-        ]);
+        final pause = sleeping = Completer<void>();
+        final timer = Timer(retryInterval, () {
+          if (!pause.isCompleted) pause.complete();
+        });
+        await pause.future;
+        timer.cancel();
+        sleeping = null;
       }
     }
   }
