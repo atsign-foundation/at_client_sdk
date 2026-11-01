@@ -497,10 +497,9 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  /// Dequeues the request this round answers: an app's request that carries
-  /// its own callback, else the oldest.
+  /// Dequeues the request this round answers: the oldest.
   ///
-  /// Removed, whichever it is. A failed round answers only the request it
+  /// Removed, not peeked. A failed round answers only the request it
   /// dequeued, so one left in the queue would be run again on the next
   /// microtask, and again on the one after, for as long as the failure
   /// lasted.
