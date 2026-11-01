@@ -235,6 +235,39 @@ void main() {
             'policy as start-up wires it');
   });
 
+  group(
+      'Given a client that verified its own advertisement online without '
+      'reading it through currentPublic', () {
+    test(
+        'when it minted the key, then after a restart with no atServer it '
+        'writes in that namespace', () async {
+      final device = _Device('enroll-self', _AtServer());
+      await device.publishApsk();
+      final kid = (await device.start().mintAndPublish(_namespace)).nskeyKid;
+      device.server.reachable = false;
+
+      expect(
+          (await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+          kid);
+    });
+
+    test(
+        'when its start-up read the key with publishedAdvertisement, then '
+        'after a restart with no atServer it writes in that namespace',
+        () async {
+      final device = _Device('enroll-self', _AtServer());
+      await device.publishApsk();
+      final kid = (await device.start().mintAndPublish(_namespace)).nskeyKid;
+      device.local.remove(device.recordKey);
+      await device.start().publishedAdvertisement(_atSign, _namespace);
+      device.server.reachable = false;
+
+      expect(
+          (await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+          kid);
+    });
+  });
+
   test('A write the offline restart already allows does not wait', () async {
     final (:device, kid: _) = await mintedAndVerified();
     device.server.reachable = false;

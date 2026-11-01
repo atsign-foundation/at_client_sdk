@@ -900,6 +900,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       fetchedAt: DateTime.now(),
       payload: payload,
     );
+    await _verifiedRecord.remember(namespace, payload);
     for (final key in prepared.minted) {
       final generation =
           _generation(owner, namespace, nskeyKidOf(key.publicKey));
@@ -1166,6 +1167,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       fetchedAt: DateTime.now(),
       payload: value.value as String,
     );
+    if (_isOwn(owner)) {
+      await _verifiedRecord.remember(namespace, value.value as String);
+    }
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 
