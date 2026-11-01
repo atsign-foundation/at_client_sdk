@@ -246,8 +246,8 @@ under `lib/src/js/`.
 is **removed**, not deprecated in place. `AtCollection<T>`
 (`packages/at_client/lib/src/collections/collections.dart`, 5,306 lines, exported clean at
 `at_client.dart:28`) is the **sole** JS/TS data plane. The older `at_collection/` tree
-(`AtCollectionModel`, `AtJsonCollectionModel`, factories) is `@Deprecated` at
-`at_client.dart:31-38` in favour of it and is never bound — see [§9](#9-deliberately-excluded).
+(`AtCollectionModel`, `AtJsonCollectionModel`, factories) was removed in at_client 4.0
+in favour of it, and was never bound — see [§9](#9-deliberately-excluded).
 
 ### 5.0 Binding rule: every protocol operation returns a `Promise`
 
@@ -667,17 +667,17 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
 | Excluded                                                                                               | Why                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **The flat key/value plane** — `put`, `get`, `putBinary`, `getBinary`, `delete`, `exists`, `getKeys`, `getMeta`, `putMeta` | **Removed 2026-08-18 (D-10), not merely unbound.** `AtCollection<T>` is the sole JS data plane; a JS consumer cannot address a raw protocol key. |
-| File transfer — `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`, `sendStreamAck` | All take `dart:io File`, all deprecated. Blocked on [`design.md`](design.md) §2.8 regardless.                                                                                    |
-| The `@Deprecated` members of `at_client_spec.dart`                                                     | Including `notify`, `notifyChange`, `startMonitor`. `NotificationService` supersedes them.                                                                                        |
+| File transfer — `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`, `sendStreamAck` | Removed in at_client 4.0; file transfer belongs in the app. Blocked on [`design.md`](design.md) §2.8 regardless.                                                                 |
+| `AtClient.notify`, `notifyChange`, `notifyAll`, `startMonitor`                                         | Removed in at_client 4.0. `NotificationService` replaces them.                                                                                                                    |
 | `AtKey` / `AtValue` as objects                                                                         | No JSON codec; `fromString` is lossy — and moot besides, since no raw key plane is exposed. [§5.1](#51-why-no-raw-key-plane-is-exposed-at-all).                                  |
-| The entire deprecated `at_collection/` tree — `AtCollectionModel`, `AtCollectionModelFactory`, `KeyMaker`, `ObjectLifeCycleOptions`, `AtJsonCollectionModel` | `@Deprecated("Use AtClient.collection for collection-style operations")` at `at_client.dart:31-38`. Its registry keys on a lowercased class-name string (`T.toString().toLowerCase()`) — exactly the minifier-unsafe pattern the current API's mandatory `typeTag` exists to fix. |
+| The legacy `at_collection/` tree — `AtCollectionModel`, `AtCollectionModelFactory`, `KeyMaker`, `ObjectLifeCycleOptions`, `AtJsonCollectionModel` | Removed in at_client 4.0. Its registry keyed on a lowercased class-name string (`T.toString().toLowerCase()`) — exactly the minifier-unsafe pattern the current API's mandatory `typeTag` exists to fix.                                                                          |
 | `watchWithTree` / `SubSpec` | `SubSpec` has no exported opener — its only constructor path, `_openOnForTest`, is `@visibleForTesting` in `collections_test_hooks.dart` and not exported from the barrel. Blocked on an upstream export. |
-| `Query.fetch()` | `@Deprecated('use get() instead')` at `collections.dart:3566`. Bind `get()`. |
+| `Query.fetch()` | Removed in at_client 4.0. Bind `get()`. |
 | `PredicateOp.like` / `.inSet` / `.between` / `.contains` / `.startsWith` | Reserved but unimplemented — `evaluate()` throws `UnimplementedError` (`collections.dart:4305-4307`). Only the 8 working ops (`eq`, `neq`, `lt`, `lte`, `gt`, `gte`, `isNull`, `isNotNull`) appear in the `.where()` type. |
 | `LocalSecondary` / `RemoteSecondary`                                                                   | Raw protocol escape hatches; implementation detail.                                                                                                                              |
 | `CryptoProvider`                                                                                       | Requires implementing a Dart abstract class. A JS-supplied provider is possible in principle ([§1.5](#15-javascript-can-implement-a-dart-interface)) but is not in this surface. |
-| `AtPersistenceBundle`, `AtChops`, `EncryptionService` getters                                          | Dart-only handles with no meaningful JS representation.                                                                                                                          |
-| `ConnectivityListener`                                                                                 | Deprecated, and platform-probing.                                                                                                                                                |
+| The `EncryptionService` getter                                                                         | A Dart-only handle with no meaningful JS representation. The `AtPersistenceBundle` and `AtChops` getters are removed in at_client 4.0.                                           |
+| `ConnectivityListener`                                                                                 | Removed in at_client 4.0, and platform-probing.                                                                                                                                  |
 | `AtKey` leaking via `OpResult.atKey`                                                                    | The one place a raw `AtKey` survives inside upstream's collection result type. Folded away by [§6](#6-error-mapping)'s `AtError` mapping — never surfaced to JS. |
 
 ---
@@ -778,7 +778,7 @@ change; document the gap and ship read-compatibility in the meantime.**
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a
 `static final AtClientManager _singleton`, historically driven by `setCurrentAtSign(...)`
-(now deprecated). A caller can build clients that register nowhere — `buildAtClient`
+(removed in at_client 4.0). A caller can build clients that register nowhere — `buildAtClient`
 and `Atsign.open` hand back a client the caller owns — so multi-instance is expressible
 in Dart today; what remains single is the *current* atSign the manager and its
 `AtSignChangeListener`s track. A JS

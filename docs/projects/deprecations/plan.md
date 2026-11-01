@@ -272,8 +272,8 @@ secret; nothing has read it since 3.0.5 (2021-11-15).
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
 the AtLookUpFactory's to configure"*, all removed in 4.0. They arrived
 deprecated with the third leg of the platform bundle: `Atsign.open`,
-`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`, `buildAtClient`
-and `AtServiceFactory.atClient` take `lookUps:`, an at_lookup
+`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` and `buildAtClient`
+take `lookUps:` (as `AtServiceFactory.atClient` did until 4.0 removed it), an at_lookup
 `AtLookUpFactory`, and the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))`. The default factory
 reads the three fields until they go, so a 3.x app sees no change, and every
