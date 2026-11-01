@@ -1108,6 +1108,34 @@ void main() {
     });
 
     test(
+        'A notification value of exactly maxDataSize is sent, and one longer '
+        'is refused with BufferOverFlowException', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..maxDataSize = 10);
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
+            ..sharedWith('@alice'))
+          .build();
+      NotifyVerbBuilder builderCarrying(String value) => NotifyVerbBuilder()
+        ..useAtKeyToString = true
+        ..atKey = atKey
+        ..value = value;
+
+      notificationServiceImpl.notificationValueValidation(
+          NotificationParams.forUpdate(atKey, value: '0123456789'),
+          builderCarrying('0123456789'));
+      expect(
+          () => notificationServiceImpl.notificationValueValidation(
+              NotificationParams.forUpdate(atKey, value: '0123456789a'),
+              builderCarrying('0123456789a')),
+          throwsA(isA<BufferOverFlowException>()));
+    });
+
+    test(
         'A test to verify unauthorized exception is thrown when sharedBy atSign is different from currentAtSign',
         () async {
       when(() => mockSecondaryAddressFinder.findSecondary('@colin'))
