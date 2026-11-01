@@ -24,7 +24,7 @@ import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show parseCkConveyanceKey;
+    show parseCkConveyanceKey, verifiedAdvertisementRecordName;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -1723,10 +1723,13 @@ class AtClientImpl implements AtClient {
     if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
-    // NOTE: a content key's conveyance is the SDK's own record, kept from an
-    // application like the other reserved ones unless it asks for them.
+    // NOTE: a content key's conveyance and a verified-advertisement record are
+    // the SDK's own records, kept from an application like the other reserved
+    // ones unless it asks for them.
     if (!showHiddenKeys) {
-      result.removeWhere((key) => parseCkConveyanceKey(key) != null);
+      result.removeWhere((key) =>
+          parseCkConveyanceKey(key) != null ||
+          key.startsWith('local:$verifiedAdvertisementRecordName.'));
     }
     return result;
   }

@@ -511,6 +511,15 @@ pulls a change, and a re-read of bytes already verified is not verified again, s
 writes do not need the network while nothing changed; the privates her clients hold
 come from the substrate
 ([§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)).
+Across a restart the cache is gone, so each client keeps a local record of the bytes
+it verified: a `local:` key that never syncs, signed with the keys the client signs its
+envelopes with (type `at-verified-advertisement+jws`) and naming the namespace keys it
+held then. A start that cannot reach the atServer accepts its own advertisement from
+local storage only when that record vouches for exactly those bytes and the keys it
+holds now; an atServer that answers still decides. What is left is a restored older
+copy of local storage from before a rotation whose key never reached the client: it is
+accepted until sync pulls the current advertisement, as an online start already
+accepts it until then.
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
 
@@ -2393,10 +2402,12 @@ already meets the keyfile's.
 type it expects rather than reading this one — added 2026-08-15 by
 [`decisions.md` 103](detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15).
 One of `at-app+jws`, `at-chain-link+jws`, `at-key-package+jws`,
-`at-nskey-ring+jws`, `at-secret-envelope+jws`; every entry of one envelope
-carries the same value, and an envelope naming none is refused. Without it a
-signature over one document meant the same thing in every context that read
-it — five uses of this shape are signed by one key.
+`at-nskey-ring+jws`, `at-secret-envelope+jws`, and `at-verified-advertisement+jws`
+for the local record a client keeps of verifying its own advertisement
+([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)); every entry of
+one envelope carries the same value, and an envelope naming none is refused.
+Without it a signature over one document meant the same thing in every context
+that read it — six uses of this shape are signed by one key.
 
 `kid` names the signing **key**: the advertised `_apsk` entry's own kid,
 `SHA256(publicKey)` truncated. `enid` names the signing enrollment, ruled by

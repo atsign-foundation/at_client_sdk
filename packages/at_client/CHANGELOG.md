@@ -34,6 +34,9 @@
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.
+- fix: a client that holds a namespace key goes on writing in that namespace
+  after a restart with no atServer, once it has verified the key online. A
+  write that cannot go ahead offline names the namespace key it lacks.
 - fix: a read that lacks a namespace key's private goes to the atServer only
   for a key this atSign has published, with one request for it at a time,
   and not at all under `PqStartupGates.inert()` or with `askOnReadMiss` off.

@@ -958,6 +958,8 @@ void main() {
       expect(EnvelopeType.keyPackage.typ, 'at-key-package+jws');
       expect(EnvelopeType.nskeyRing.typ, 'at-nskey-ring+jws');
       expect(EnvelopeType.secretEnvelope.typ, 'at-secret-envelope+jws');
+      expect(EnvelopeType.verifiedAdvertisement.typ,
+          'at-verified-advertisement+jws');
 
       // Every value is distinct — the whole mechanism is that two uses cannot
       // be confused, and two enum entries sharing a spelling would confuse

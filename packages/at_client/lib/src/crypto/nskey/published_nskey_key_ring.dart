@@ -22,6 +22,9 @@ import 'package:at_client/src/client/server_mutex.dart'
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/verified_advertisement_record.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show classifyConnectionFailure;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -411,6 +414,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// can open.
   NskeyPrivateFiling? get privateFiling => _privateFiling;
   late final NskeyPrivateFiling? _privateFiling;
+
+  late final VerifiedAdvertisementRecord _verifiedRecord =
+      VerifiedAdvertisementRecord(_atClient, filing: _privateFiling);
 
   @override
   Stream<FiledNskeyPrivate> get privatesFiled =>
@@ -939,12 +945,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return null;
     }
 
-    // NOTE: verifying fetches the signer's _apsk from the atServer, so
-    // re-verifying unchanged bytes would stop a client writing its own data
-    // once it had been offline longer than the TTL.
+    // NOTE: verifying fetches the signer's _apsk from the atServer. Unchanged
+    // bytes are not verified again, and an own advertisement this client
+    // recorded verifying stands when the atServer is out of reach; without
+    // both, a client offline past the TTL, or started offline, cannot write
+    // its own data.
     final advertisement = isOwn && cached?.payload == payload
         ? cached!.advertisement
-        : await verifier.verify(owner, payload);
+        : isOwn
+            ? await _verifyOwn(owner, namespace, payload)
+            : await verifier.verify(owner, payload);
     _remote[scope] = (
       advertisement: advertisement,
       fetchedAt: DateTime.now(),
@@ -952,6 +962,38 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     );
     return advertisement;
   }
+
+  /// Verifies [payload], this atSign's own advertisement for [namespace], and
+  /// records that it did; with the atServer out of reach, accepts it only on
+  /// such a record.
+  ///
+  /// An atServer that answers decides: only a failure to reach it falls back,
+  /// and one with no record behind it is rethrown, naming the advertisement.
+  Future<NskeyAdvertisement> _verifyOwn(
+      String owner, String namespace, String payload) async {
+    final NskeyAdvertisement advertisement;
+    try {
+      advertisement = await verifier.verify(owner, payload);
+    } on AtException catch (e) {
+      if (classifyConnectionFailure(e)?.isOffline != true) rethrow;
+      if (await _verifiedRecord.vouchesFor(namespace, payload)) {
+        return _advertisementIn(payload);
+      }
+      e.message = 'could not verify ${nskeyAdvertisementKey(owner, namespace)}'
+          ', this client\'s namespace key for $namespace, which it has no '
+          'record of verifying, because its atServer could not be reached: '
+          '${e.message}';
+      rethrow;
+    }
+    await _verifiedRecord.remember(namespace, payload);
+    return advertisement;
+  }
+
+  /// The advertisement [payload] carries, read without checking its
+  /// signature: only for bytes this client's own record says it verified.
+  static NskeyAdvertisement _advertisementIn(String payload) =>
+      NskeyAdvertisement.fromPayload(
+          SignedEnvelope.fromJson(jsonDecode(payload) as Map).payload);
 
   /// Files an advertisement this ring just published into local storage, so a
   /// local-first re-read finds it rather than the generation local storage
