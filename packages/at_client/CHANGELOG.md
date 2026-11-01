@@ -252,6 +252,8 @@
 - fix: an enrollment granted read-only access to a namespace stores the
   records sync brings it, rather than refusing them. Its own writes there
   are still refused.
+- fix: sync acts only on the atServer's stats notification for the client's
+  own atSign.
 - fix: sync stops retrying a queued write the atServer refuses for good
   (unauthorized, an immutable record, an invalid key, an illegal argument,
   invalid syntax, or a code at_commons does not list), so the writes behind

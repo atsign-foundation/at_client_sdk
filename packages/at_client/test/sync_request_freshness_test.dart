@@ -25,10 +25,12 @@ void main() {
   late StreamController<AtNotification> stats;
   late SyncServiceImpl sync;
   late int statsFetches;
+  late int pulls;
 
+  /// The stats notification the atServer writes to its own atSign's monitor.
   AtNotification statsNotification(String commitId) => AtNotification(
-      'n-$commitId',
-      'statsNotification.monitorKey@fresh',
+      '-1',
+      'statsNotification.@fresh',
       '@fresh',
       '@fresh',
       1,
@@ -49,6 +51,7 @@ void main() {
     remote = _MockRemoteSecondary();
     stats = StreamController<AtNotification>.broadcast();
     statsFetches = 0;
+    pulls = 0;
     when(() => atClient.getCurrentAtSign()).thenReturn('@fresh');
     when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
     final notifications = _MockNotificationService();
@@ -73,7 +76,10 @@ void main() {
         statsFetches++;
         return 'data:[{"id":"3","name":"lastCommitID","value":"5"}]';
       }
-      if (builder is SyncVerbBuilder) return 'data:[]';
+      if (builder is SyncVerbBuilder) {
+        pulls++;
+        return 'data:[]';
+      }
       throw StateError(
           'no answer for ${(builder as VerbBuilder).buildCommand()}');
     });
@@ -94,6 +100,7 @@ void main() {
     while (sync.isSyncInProgress) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
+    expect(pulls, 1, reason: 'the notification drove a round');
     expect(statsFetches, 0,
         reason: 'the notification promoted the cache, so nothing fetched');
   }

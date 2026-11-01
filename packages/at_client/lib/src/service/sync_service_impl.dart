@@ -237,7 +237,12 @@ class SyncServiceImpl implements SyncService {
 
   /// Listens on stats notification sent by the cloud secondary server.
   ///
-  /// Every well-formed notification promotes the cached
+  /// Only the atServer's stats notification for this client's own atSign
+  /// counts: its sender is that atSign and its key is
+  /// `statsNotification.<atSign>`. Anything else the subscription matches is
+  /// ignored.
+  ///
+  /// Every well-formed one promotes the cached
   /// [_latestKnownServerCommitId] (monotonically — see
   /// [_promoteServerCommitId]) and unconditionally enqueues a
   /// sync request. The actual
@@ -255,6 +260,13 @@ class SyncServiceImpl implements SyncService {
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
+      // NOTE: sync acts only on the atServer's stats notification for this
+      // client's own atSign.
+      if (!_isOwnStats(notification)) {
+        _logger.finer('statsServiceListener: ignoring ${notification.key} '
+            'from ${notification.from}');
+        return;
+      }
       _logger.finer('RCVD: stats notification in sync: ${notification.value}');
       final raw = notification.value;
       if (raw == null) return;
@@ -272,6 +284,20 @@ class SyncServiceImpl implements SyncService {
         ..result = SyncResult();
       _addSyncRequestToQueue(syncRequest);
     });
+  }
+
+  /// Whether [notification] is the atServer's stats notification for this
+  /// client's own atSign, with the sender compared in canonical form.
+  bool _isOwnStats(AtNotification notification) {
+    final own = _atClient.getCurrentAtSign();
+    if (own == null) return false;
+    try {
+      return notification.from.toAtsign() == own.toAtsign() &&
+          notification.key.toLowerCase() ==
+              'statsNotification.${own.toAtsign()}'.toLowerCase();
+    } on InvalidAtSignException {
+      return false;
+    }
   }
 
   @override
