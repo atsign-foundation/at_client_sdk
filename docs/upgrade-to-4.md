@@ -43,6 +43,13 @@ API, its storage backends and mixins, the registrar and the io logging
 handlers. Install the
 tools with `dart pub global activate at_client_cli`.
 
+From at_utils it re-exports `AtSignLogger` and the three io handlers, but not
+the `LoggingHandler` interface or `AtUtils`. A program that implements a
+`LoggingHandler` or calls `AtUtils` keeps `at_utils: ^4.0.0` beside
+at_client_cli. With the `depend_on_referenced_packages` lint off, such a call
+still compiles after at_utils is dropped, through at_client_cli's own
+dependency, so list it anyway.
+
 at_onboarding_cli 2.0.0 and at_cli_commons 4.0.0 re-export at_client_cli, so
 bumping either alone compiles in the meantime for a program that uses only
 what at_client_cli keeps (`CLIBase`, `createAtClient` and the path helpers).
@@ -68,11 +75,19 @@ dependencies:
 Import `package:at_client_flutter/at_client_flutter.dart` in place of
 `at_client.dart`, `at_auth.dart` and `at_client_io.dart`.
 
+### A library that both a command-line program and a Flutter app use
+
+Such a library depends on at_client, the platform-neutral core, as the SDK's
+feature packages do, and never on a platform package: each app brings its own.
+It takes what differs by platform (the keys, the storage, the transport and the
+atDirectory) as parameters from the app that calls it, and a native-only
+library takes the native pieces from `package:at_client/at_client_io.dart`.
+
 ### "version solving failed" on at_utils
 
 A direct `at_utils: ^3.x` constraint cannot resolve beside at_client 4. Drop
-it, since your platform package re-exports `AtSignLogger`, or move it to
-`^4.0.0`.
+it when `AtSignLogger` is all a program uses from it, since your platform
+package re-exports that, or move it to `^4.0.0`.
 
 ## 2. By the error you see
 
@@ -139,7 +154,10 @@ knows no atServer for the atSign; its `state` says which. Otherwise
 `client.connection.current` says which. A command-line program usually lets
 `CLIBase` do all of this; a Flutter app lets the dialogs do it. Sections
 [3](#3-a-command-line-program-at_client_cli) and
-[4](#4-a-flutter-app-at_client_flutter) show both.
+[4](#4-a-flutter-app-at_client_flutter) show both. A Flutter app with its own
+UI calls these verbs through at_client_flutter's `AtsignFlows`, which supplies
+the store, the transport and the atDirectory, so it wires none of them by
+hand as the sample above does.
 
 ### `The named parameter 'storage' is required`
 
@@ -190,6 +208,17 @@ void logToStderr() {
 }
 ```
 
+### `The method 'write' isn't defined for the type 'StringBuffer'`
+
+at_commons defines a `StringBuffer` of its own, which your platform package
+re-exports, and it shadows dart:core's. A file that imported
+`at_client.dart hide StringBuffer` keeps the `hide` on the import that
+replaces it:
+
+```dart
+import 'package:at_client_cli/at_client_cli.dart' hide StringBuffer;
+```
+
 ### `The getter 'atChops' isn't defined`
 
 `AtClient.atChops`, `RemoteSecondary.atChops` and the `atChops:` parameters of
@@ -216,6 +245,10 @@ AtLookUpFactory debuggingTls() => secureSocketLookUps(
       ..pathToCerts = 'certs'
       ..tlsKeysSavePath = 'tls_keys.log');
 ```
+
+This is for debugging, never production: `tlsKeysSavePath` writes each
+connection's TLS keys to that file, and anyone holding the file can read the
+traffic it captured.
 
 `hiveStoragePath`, `isLocalStoreRequired` and `hashingAlgoType` remain,
 deprecated and read by nothing in at_client; they go in 5.0.
@@ -286,7 +319,12 @@ Future<String?> publicValue(String atSign, String key) async {
 
 The verb builders come from `package:at_commons/at_builders.dart`, so such a
 program lists at_commons among its dependencies. `MonitorClient` and
-`AtConnection.getSocket()` are gone.
+`AtConnection.getSocket()` are gone. `AtLookupTransport` takes a
+`transportFactory`, an `AtTransportFactory`, in place of its `socketFactory`
+and `secureSocketConfig`; a `secureSocketTransport(...)` caller changes
+nothing. An `AtLookUpFactory`, and the `secureSocketLookUps` and
+`webSocketLookUps` that build one, take no `clientConfig`: give it to at_auth's
+`authenticatorFor`, which sends it in `from:`.
 `CacheableSecondaryAddressFinder` and `SecureSocketUtil` moved to
 `package:at_lookup/at_lookup_io.dart`, and a failed write throws
 `AtIOException` rather than `SocketException`.
@@ -336,11 +374,48 @@ String unreadableKeyfile(AtKeysFormatException e) => e.position == null
         'at character ${e.position}';
 ```
 
+### `Undefined class 'AtOnboardingPreference'`, or `'AtOnboardingService'`
+
+at_client_cli opens a client with `CLIBase`, or with `Atsign.open` and
+`CliKeys`: [section 3](#3-a-command-line-program-at_client_cli) shows both.
+
+### `Target of URI doesn't exist: 'package:at_onboarding_cli/src/cli/auth_cli.dart'`
+
+at_activate is embedded through `AtActivate.main`, with no `src/` import, as
+[section 3](#3-a-command-line-program-at_client_cli) shows.
+
+### `The argument type 'AtClientStorage?' can't be assigned to the parameter type 'AtClientStorage'`
+
+`storage` is required and cannot be null. A program whose own store may be
+null passes a default in its place, such as
+`CliKeys.storageFor(atSign, program: ...)` or at_client_flutter's
+`storageOrDefault`.
+
 ### Mocks and implementations that no longer compile
 
 `AtClient` gained `atKeysIo`, `connection` and `ensureReachable`, and
 `AtLookUp` gained `authenticator` and `stop`. Regenerate generated mocks, and
 add the members to any class implementing either.
+
+### Changes the analyzer won't show
+
+These compile and then fail when the code runs, usually first in a test:
+
+- A keyfile that is not valid JSON throws `AtKeysFormatException`, as
+  [above](#a-keyfile-that-is-not-valid-json-throws-atkeysformatexception).
+- `storage` cannot be null, so a mocktail stub that matches it with `any()`
+  needs `registerFallbackValue` for `AtClientStorage` first, for instance an
+  `InMemoryAtClientStorage`.
+- A client does not publish an `_apsk` that names no active signing key: it
+  throws `AtKeyNotFoundException`. Real keyfiles always hold an APKAM keypair;
+  a test whose stand-in keys hold none gives them one.
+- At a post-quantum posture, a 4.0 client sends `enroll:link`. A test double
+  standing in for the atServer answers it, or refuses it with `AT0003` as an
+  atServer without the verb does; the client goes on without it.
+- at_lookup reads a connection through an `AtTransport` and calls `cast()` on
+  its `inbound` stream. A test double for the atServer gives at_lookup its own
+  `AtTransport`, rather than wrapping a partial fake socket in
+  `SecureSocketTransport`.
 
 ## 3. A command-line program: at_client_cli
 
@@ -383,7 +458,32 @@ Future<AtClient> openFromKeyfile() {
 ```
 
 With no `path`, `CliKeys.fileFor` is `~/.atsign/keys/<atSign>_key.atKeys` and
-`CliKeys.storageFor` is the store `CLIBase` opens for that namespace.
+`CliKeys.storageFor` is the store `CLIBase` opens for that namespace:
+`~/.atsign/storage/<atSign>/<program>/single`, not at_onboarding_cli's
+`~/.atsign/at_onboarding_cli/storage/`. A program that relied on the old
+default passes that folder as `path` to keep its store. A pending
+enrollment's client takes a store of its own, named by
+`id: pending.enrollmentId`.
+
+**`Atsign.open` stops no client already live for the atSign.**
+`AtOnboardingServiceImpl.authenticate()` stopped any such client before it
+opened; `Atsign.open` throws a `StateError` instead, so a program that opens
+an atSign again stops the client it opened before. `authenticate()` also
+returned whether it authenticated: read `client.connection.current` instead,
+and stop a client the program has no use for:
+
+```dart after-cli
+Future<AtClient?> openIfOnline(Future<AtClient> Function() open) async {
+  final client = await open();
+  if (client.connection.current.isOnline) return client;
+  await client.stop();
+  return null;
+}
+```
+
+**From a 4.0 release candidate.** at_onboarding_cli 2.0.0's release
+candidates gave `AtOnboardingPreference` a `storageFor` and a `lookUps`.
+`CliKeys.storageFor` and `lookUpsFor(preference.rootDomain)` replace them.
 
 **`CLIBase` tells a refusal from an outage.** It throws
 `AtCredentialRefusedException` when the atServer refuses the keys, saying when
@@ -432,7 +532,8 @@ Future<void> main(List<String> args) async {
 **Checklist**
 
 - [ ] `at_client_cli: ^1.0.0` replaces at_client, at_onboarding_cli,
-      at_cli_commons and at_utils in `pubspec.yaml`.
+      at_cli_commons and at_utils in `pubspec.yaml`; a program implementing
+      `LoggingHandler` or calling `AtUtils` keeps `at_utils: ^4.0.0`.
 - [ ] Every SDK import is `package:at_client_cli/at_client_cli.dart`.
 - [ ] `AtOnboardingService` calls are `CLIBase` or `Atsign.open` with
       `CliKeys`; `createAtClient` calls stay as they are.
@@ -488,6 +589,10 @@ Future<AtClient> enrollWith(String otp, AtClientPreference preference) async {
       storage: await storageOrDefault('@alice', preference));
 }
 ```
+
+After a restart, `AtsignFlows().resumeEnrollment('@alice', app:, device:,
+keys:, preference:)` hands back the request already filed in the keys and
+awaiting approval, or null when there is none, rather than filing another.
 
 When an app passes no `storage:`, the dialogs and flows use
 `hiveStoragePath` while the app still sets it, and otherwise the app support
