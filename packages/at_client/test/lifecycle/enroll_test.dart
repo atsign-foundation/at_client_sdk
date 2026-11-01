@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
+import '../test_utils/recorded_logs.dart';
 import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -70,15 +71,18 @@ void main() {
   /// and `AT0025` for denied.
   ///
   /// [onKeyFetch] runs as the handshake fetches the last secret the approval
-  /// released. A poll after [AtLookUp.stop] is refused, as a stopped
+  /// released, and the first [keyFetchesUnanswered] of those fetches get an
+  /// empty answer. A poll after [AtLookUp.stop] is refused, as a stopped
   /// connection refuses everything.
   MockAtLookupImpl atServer(
       {required Future<bool> Function(int attempt) decide,
-      void Function()? onKeyFetch}) {
+      void Function()? onKeyFetch,
+      int keyFetchesUnanswered = 0}) {
     final lookUp = MockAtLookupImpl();
     String? wrappedSymmetricKey;
     var attempts = 0;
     var stopped = false;
+    var unanswered = keyFetchesUnanswered;
 
     /// What a real approver does with the request: unwrap the symmetric key
     /// with the atSign's encryption private key, and seal a secret under it.
@@ -114,6 +118,10 @@ void main() {
       if (command
           .startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
         onKeyFetch?.call();
+        if (unanswered > 0) {
+          unanswered--;
+          return '';
+        }
         return 'data:${jsonEncode(await sealed(selfEncryptionKey))}';
       }
       throw StateError('the mocked atServer has no answer for: $command');
@@ -400,6 +408,28 @@ void main() {
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
   });
 
+  test(
+      'a failure other than a denial after the atServer approved leaves the '
+      'pending keys, and a later wait completes them', () async {
+    final store = InMemoryAtKeysIo();
+    final pending = await submit(
+        store, atServer(decide: (_) async => true, keyFetchesUnanswered: 1));
+
+    await expectLater(
+        pending.awaitApproval(retryInterval: const Duration(milliseconds: 10)),
+        throwsA(isA<AtEnrollmentException>()
+            .having((e) => e.message, 'message', isNot(contains('denied')))));
+    expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+        reason: 'only a denial removes the pending keys');
+
+    await pending.awaitApproval(
+        retryInterval: const Duration(milliseconds: 10));
+
+    final stored = await store.read(atSign);
+    expect(stored.pendingEnrollmentIds, isEmpty);
+    expect(stored.enrollmentToAuthenticateAs(), enrollmentId);
+  });
+
   /// The `enroll:request` a submission under [posture] puts on the wire, as
   /// the atServer would decode it. Only the submission runs: the request is
   /// what decides how the symmetric key travels and what the enrollment
@@ -571,7 +601,8 @@ void main() {
       final pending = await submitOwning(store, server);
       final waiting = expectLater(
           pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<AtEnrollmentCancelledException>()));
+          throwsA(allOf(isA<AtEnrollmentCancelledException>(),
+              isA<AtEnrollmentException>())));
       await until(() => polls >= 1);
 
       await pending.cancel();
@@ -757,5 +788,118 @@ void main() {
           throwsA(isA<AtEnrollmentCancelledException>()));
       expect(polls, 0);
     });
+
+    test(
+        'Given a cancel in the same turn as awaitApproval, then no poll '
+        'reaches the atServer', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await pending.cancel();
+      await waiting;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(polls, 0, reason: 'no poll runs after cancel, on any connection');
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    group('A cancel and a denial at once', () {
+      final logs = RecordedLogs();
+
+      setUp(() {
+        logs.records.clear();
+        final handler = AtSignLogger.defaultLoggingHandler;
+        final level = AtSignLogger.root_level;
+        logs.installOn();
+        addTearDown(() {
+          AtSignLogger.defaultLoggingHandler = handler;
+          AtSignLogger.root_level = level;
+        });
+      });
+
+      Never denied() => throw UnAuthenticatedException(
+          'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied');
+
+      Future<void> removedOnce(InMemoryAtKeysIo store) async {
+        expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+        expect(
+            logs
+                .at('INFO')
+                .where((m) => m.contains('pending keys are removed')),
+            hasLength(1),
+            reason: 'the pending keys are removed once');
+        expect(
+            logs.at('WARNING').where((m) => m.contains('could not be removed')),
+            isEmpty,
+            reason: 'and nothing reports that they could not be');
+      }
+
+      test(
+          'when cancel lands as the denial is answered, then the wait throws '
+          'AtEnrollmentCancelledException and the pending keys are removed '
+          'once', () async {
+        late PendingEnrollment pending;
+        final server = atServer(decide: (_) async {
+          unawaited(pending.cancel());
+          denied();
+        });
+        final store = InMemoryAtKeysIo();
+        pending = await submit(store, server);
+
+        await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+            throwsA(isA<AtEnrollmentCancelledException>()));
+        await pending.cancel();
+
+        await removedOnce(store);
+      });
+
+      test(
+          'when cancel lands while the denial removes the pending keys, then '
+          'they are removed once', () async {
+        final store = _ReadHookedStore();
+        final pending =
+            await submit(store, atServer(decide: (_) async => denied()));
+        final cancelled = Completer<void>();
+        // NOTE: the wait's own read is the first; the denial's removal makes
+        // the second.
+        store.onRead = (reads) {
+          if (reads == 2) cancelled.complete(pending.cancel());
+        };
+
+        await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+            throwsA(isA<AtEnrollmentException>()));
+        expect(cancelled.isCompleted, isTrue,
+            reason: 'the precondition: cancel landed during the wait');
+        await cancelled.future;
+
+        await removedOnce(store);
+      });
+    });
   });
+}
+
+/// An in-memory store that calls [onRead] on every read once it is set, with
+/// how many reads it has seen since.
+class _ReadHookedStore extends InMemoryAtKeysIo {
+  void Function(int reads)? _onRead;
+  int _reads = 0;
+
+  set onRead(void Function(int reads) onRead) {
+    _reads = 0;
+    _onRead = onRead;
+  }
+
+  @override
+  FutureOr<AtKeys> read(String atsign) {
+    _onRead?.call(++_reads);
+    return super.read(atsign);
+  }
 }
