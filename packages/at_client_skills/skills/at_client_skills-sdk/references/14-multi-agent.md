@@ -20,7 +20,10 @@ import 'package:at_client_cli/at_client_cli.dart';
 
 void main(List<String> args) async {
   final AtClient atClient =
-      (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
+      (await CLIBase.fromCommandLineArgs(args,
+              namespace: 'my_app',
+              preference: AtClientPreference(posture: PqPosture.pqActive)))
+          .atClient;
   // ready — collections, notifications, RPC all work from here
 }
 ```
@@ -48,7 +51,7 @@ and two processes on one location corrupt it.
 import 'package:at_client_cli/at_client_cli.dart';
 
 final dir = Directory.systemTemp.createTempSync('agent_').path;
-final prefs = AtClientPreference()..namespace = 'my_app';
+final prefs = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'my_app';
 final client = await Atsign(atSign).open(
     keys: CliKeys.fileFor(atSign, path: keysPath),
     preference: prefs,
@@ -131,7 +134,7 @@ client-wide preference.
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';  // ServiceFactoryWithNoOpSyncService is NOT in at_client
 
-final prefs = AtClientPreference()
+final prefs = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly;  // every op hits the atServer
 

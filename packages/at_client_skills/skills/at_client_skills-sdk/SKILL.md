@@ -324,7 +324,8 @@ final atSign = atKeysIo.getAtsign();                            // extensions.da
 final client = await PkamDialog.show(context,
   atSign: atSign,
   keys: atKeysIo,
-  preference: AtClientPreference()..namespace = 'my_namespace',
+  preference: AtClientPreference(posture: PqPosture.pqActive)
+    ..namespace = 'my_namespace',
   backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
 );
 if (client == null) return;
@@ -341,7 +342,8 @@ final client = await PkamDialog.show(context,
   atSign: selection.atSign,
   rootDomain: selection.rootDomain,
   keys: KeychainAtKeysIo(),
-  preference: AtClientPreference()..namespace = 'my_namespace',
+  preference: AtClientPreference(posture: PqPosture.pqActive)
+    ..namespace = 'my_namespace',
 );
 if (client == null) return;
 _adopt(client);
@@ -383,7 +385,7 @@ and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 ```dart
 import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
-final preference = AtClientPreference()
+final preference = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_namespace'
   ..syncRegex = 'my_namespace';
 final client = await Atsign('@alice').open(
@@ -424,7 +426,8 @@ takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 remov
 carries them.
 
 **Posture — how far into post-quantum the client runs**, fixed when the
-preference is built (`AtClientPreference(posture: ...)`):
+preference is built. **A new app names `PqPosture.pqActive`** and sets
+`namespace`, as every snippet here does:
 
 | Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
 | -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
@@ -432,9 +435,11 @@ preference is built (`AtClientPreference(posture: ...)`):
 | `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
 | `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
 
-- A preference that names no posture rides the SDK's default, which moves to
-  `pqReady` in a later 4.x and to `pqActive` at 5.0. Naming one pins it, so
-  name `legacy` only to stay put, and a later stage only to lead the default.
+- An app built on 3.x, whose data is legacy-encrypted, moves in two steps:
+  rebuild it with `PqPosture.pqReady` and roll that out to every client, then
+  rebuild it with `PqPosture.pqActive` and roll that out.
+- A preference that names no posture rides the SDK's default: `legacy` in
+  4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
   to write with.
@@ -632,7 +637,10 @@ at_client_cli`):
 import 'package:at_client_cli/at_client_cli.dart';
 
 final AtClient atClient =
-    (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
+    (await CLIBase.fromCommandLineArgs(args,
+            namespace: 'my_app',
+            preference: AtClientPreference(posture: PqPosture.pqActive)))
+        .atClient;
 ```
 
 - **`CLIBase` tells a refusal from an outage.** It throws

@@ -119,8 +119,10 @@ import 'package:at_client_cli/at_client_cli.dart';
 
 Future<void> main(List<String> args) async {
   final parser = CLIBase.createArgsParser(namespace: 'my_app');
-  final AtClient client =
-      (await CLIBase.fromCommandLineArgs(args, parser: parser)).atClient;
+  final AtClient client = (await CLIBase.fromCommandLineArgs(args,
+          parser: parser,
+          preference: AtClientPreference(posture: PqPosture.pqActive)))
+      .atClient;
   // ...
   await client.stop();
 }
@@ -154,7 +156,7 @@ program keeps:
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';
 
-final preference = AtClientPreference()..namespace = 'my_app';
+final preference = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'my_app';
 final keys = CliKeys.fileFor('@alice');       // ~/.atsign/keys/@alice_key.atKeys
 final storage = CliKeys.storageFor('@alice', program: 'my_app');
 final lookUps = lookUpsFor(preference.rootDomain);

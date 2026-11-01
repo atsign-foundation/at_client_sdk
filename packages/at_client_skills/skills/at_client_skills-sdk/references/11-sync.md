@@ -27,7 +27,7 @@ propagate, and any real-time features appear broken.
 **Fix:** scope sync to your app's namespace.
 
 ```dart
-final acp = AtClientPreference()
+final acp = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_namespace'
   ..syncRegex = 'my_namespace';   // scope sync to THIS app's keys
 ```

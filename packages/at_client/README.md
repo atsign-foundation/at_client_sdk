@@ -149,7 +149,7 @@ final atDirectory = CacheableSecondaryAddressFinder('root.atsign.org', 64);
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: storage(),
-    preference: AtClientPreference()..namespace = 'todos',
+    preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     lookUps: lookUps,
     secondaryAddressFinder: atDirectory);
 client.connection.current;                  // online | offline | refused
@@ -209,7 +209,7 @@ import 'package:at_client/hive.dart';
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
-    preference: AtClientPreference()..namespace = 'todos',
+    preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
         config: SecureSocketConfig()..pathToCerts = '/certs',
@@ -525,9 +525,13 @@ authenticate with a post-quantum signature. It is opt-in per client, through
 the preference's **posture**, which is fixed at construction:
 
 ```dart
-final preference = AtClientPreference(posture: PqPosture.pqReady)
+final preference = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'todos';
 ```
+
+A new app names `pqActive`. An app built on 3.x moves in two steps,
+as [the rollout ladder](#the-rollout-ladder-and-why-it-is-a-ladder)
+describes.
 
 ### The goals
 
@@ -586,8 +590,10 @@ final ready = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'todos
 final active = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos';
 ```
 
-That is the two-release model for an app that wants to lead: ship `pqReady`
-to all of its clients first, then ship `pqActive`. A posture is a floor for
+An app built on 3.x, whose data is legacy-encrypted, takes two steps:
+rebuild it with `PqPosture.pqReady` and roll that out to every client,
+then rebuild it with `PqPosture.pqActive` and roll that out. A new app
+has no legacy readers and starts at `pqActive`. A posture is a floor for
 what a client drives, never a downgrade of what its atSign already holds.
 
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |

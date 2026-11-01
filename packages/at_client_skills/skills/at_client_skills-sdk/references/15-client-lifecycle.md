@@ -15,7 +15,7 @@ opened.
 import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
-final preference = AtClientPreference()
+final preference = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_namespace'
   ..syncRegex = 'my_namespace';
 final storage = HiveAtClientStorage(

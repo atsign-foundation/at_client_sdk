@@ -2,9 +2,12 @@
 
 ## 1.4.0 — 2026-09-13
 
-- Names the post-quantum posture: what each `PqPosture` writes, reads and
-  needs, and that a preference naming one stays there while one naming none
-  rides the SDK's default (`SKILL.md` §11).
+- A new app names `PqPosture.pqActive`, as every snippet now does, and an
+  app built on 3.x moves to it through `pqReady` in two releases; a table
+  says what each posture writes, reads and needs (`SKILL.md` §11; the
+  references).
+- A registrar API key is the app's own, created via the registrar at
+  my.atsign.com (`references/05`).
 - A notification is sent with `idAndNamespace:`, and `subscribe` hands back
   values still encrypted unless `shouldDecrypt` is true (`SKILL.md` §13;
   `references/10`, `15`).

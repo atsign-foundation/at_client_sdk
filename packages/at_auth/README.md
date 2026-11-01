@@ -337,12 +337,13 @@ final response = await atAuth.authenticate(AtAuthRequest(atSign,
 final AtLookUp lookUp = response.atLookUp!;
 final AtChops chops = response.atChops!;
 
-// 4.0: the client, whose connection and keys those were
+// 4.0: the client, whose connection and keys those were. pqReady is an app
+// built on 3.x's first step to post-quantum; see the upgrade guide.
 final client = await Atsign(atSign).open(
     keys: FileAtKeysIo(filePath: (_) => keysPath),
     storage: HiveAtClientStorage(                // package:at_client/hive.dart
         atSign: atSign, storagePath: storagePath, closedByClient: true),
-    preference: AtClientPreference()..namespace = 'my_app',
+    preference: AtClientPreference(posture: PqPosture.pqReady)..namespace = 'my_app',
     lookUps: secureSocketLookUps(),
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64));
 client.connection.current;                       // did the atServer accept the keys

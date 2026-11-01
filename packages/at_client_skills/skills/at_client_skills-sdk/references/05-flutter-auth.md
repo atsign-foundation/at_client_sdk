@@ -40,7 +40,7 @@ import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign(
 
 const namespace = 'my_namespace';
 
-AtClientPreference _preference() => AtClientPreference()
+AtClientPreference _preference() => AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = namespace
   ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
 
@@ -63,12 +63,16 @@ through `package:at_client_flutter`.
 
 Use when a developer wants to activate a brand-new atsign for a user.
 Requires a `RegistrarService` (re-exported by `at_client_flutter`) configured
-with a registrar URL and API key.
+with a registrar URL and API key. The service sends the key to the registrar
+on the calls that find a free atSign and exchange the code emailed to the
+user for that atSign's CRAM secret; it names the app to the registrar and
+acts for no atSign. An app developer can create an API key via the
+registrar at my.atsign.com.
 
 ```dart
 final registrar = RegistrarService(
   registrarUrl: 'my.atsign.com',
-  apiKey: 'your-api-key',        // from the atsign.com developer portal
+  apiKey: 'your-api-key',        // created via the registrar at my.atsign.com
 );
 
 Future<void> activateNewAtSign(BuildContext context) async {

@@ -13,6 +13,8 @@ the rest is API that earlier releases had deprecated.
 3. Finish with your path's checklist:
    [a command-line program](#3-a-command-line-program-at_client_cli) or
    [a Flutter app](#4-a-flutter-app-at_client_flutter).
+4. Move to post-quantum in two releases
+   ([section 5](#5-post-quantum-in-two-steps)).
 
 Every "after" sample compiles against this release as written. The samples
 leave out the import of your platform package, which every file needs.
@@ -506,3 +508,31 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
 - [ ] Each dialog's result is read as the `AtClient` it returns.
 - [ ] Generated mocks of `AtClient` are regenerated.
 - [ ] `flutter analyze` is clean.
+
+## 5. Post-quantum in two steps
+
+An app built on 3.x writes legacy-encrypted data, and every client that
+reads it is a legacy client. at_client 4.0's default posture is still
+`PqPosture.legacy`, so an app upgraded by sections 1 to 4 reads and writes
+as it did. It moves to post-quantum in two steps, each one a release rolled
+out to every client of the app:
+
+1. Rebuild it with `PqPosture.pqReady` and roll that out. Each client then
+   authenticates with ML-DSA-65 and can read post-quantum data, and still
+   writes legacy, so the clients not yet updated read what it writes.
+2. Rebuild it with `PqPosture.pqActive` and roll that out. It now writes
+   post-quantum by default, which every client can read after step 1.
+
+```dart after
+// Step 1: every client of the app.
+final stepOne = AtClientPreference(posture: PqPosture.pqReady)
+  ..namespace = 'my_app';
+
+// Step 2: once every client runs step 1.
+final stepTwo = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app';
+```
+
+A new app has no legacy readers, so it starts at `PqPosture.pqActive`. The
+[at_client README](../packages/at_client/README.md#post-quantum-cryptography)
+says what each posture switches on.
