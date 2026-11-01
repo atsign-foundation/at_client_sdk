@@ -247,6 +247,19 @@ void main() {
         _namespace);
   });
 
+  test('A grant spelt in capitals covers its key', () async {
+    final server = _AtServer();
+    final device = _Device('enroll-self', server);
+    await device.publishApsk();
+    await device.start().mintAndPublish('Todos.Demos');
+
+    expect(
+        await writeAsStarted(device, AtKey.fromString('x.todos.demos$_atSign')),
+        'todos.demos',
+        reason: 'the private start-up filed under the grant\'s spelling is the '
+            'one the write seals its content key to');
+  });
+
   test(
       'The same holds when another enrollment of the atSign published the '
       'namespace key', () async {

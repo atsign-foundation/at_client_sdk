@@ -81,7 +81,18 @@ class NskeyPrivateFiling {
   /// across namespaces, the same reason the content-key cache is never keyed
   /// by `ckKid` alone.
   static String keyIdFor(String namespace, String nskeyKid) =>
-      nskeyKeyfileIdFor(namespace, nskeyKid);
+      nskeyKeyfileIdFor(namespace.toLowerCase(), nskeyKid);
+
+  /// What [keys] holds in [role] for `(namespace, nskeyKid)`, however the
+  /// namespace was spelt when it was filed.
+  static CryptographicMaterial? _materialFor(AtKeys keys, String namespace,
+      String nskeyKid, CryptographicMaterialRole role) {
+    final keyId = keyIdFor(namespace, nskeyKid);
+    return keys.getAtSignKey(keyId, role) ??
+        keys.atSignKeys
+            .where((m) => m.role == role && m.keyId.toLowerCase() == keyId)
+            .firstOrNull;
+  }
 
   final AtKeysIo keysIo;
   final String atSign;
@@ -332,7 +343,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('$namespace:$nskeyKid');
     if (keys == null) return null;
     try {
-      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
+      final material = _materialFor(keys, namespace, nskeyKid,
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       final keyAlgo = _keyAlgoOf(material);
@@ -367,7 +378,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('$namespace:$nskeyKid');
     if (keys == null) return null;
     try {
-      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
+      final material = _materialFor(keys, namespace, nskeyKid,
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       return NskeySeed(Uint8List.fromList(material.bytes.bytes));
@@ -398,12 +409,12 @@ class NskeyPrivateFiling {
   Future<List<FiledNskeySeed>> filedFor(String namespace) async {
     final keys = await _readSourceOrNull('every private for $namespace');
     if (keys == null) return const [];
-    final prefix = '$nskeyKeyfileIdPrefix$namespace.';
+    final prefix = '$nskeyKeyfileIdPrefix${namespace.toLowerCase()}.';
     return [
       for (final material in keys.atSignKeys)
         if (material.role == CryptographicMaterialRole.privateDecapsulation &&
             material.status == CryptographicMaterialStatus.active &&
-            material.keyId.startsWith(prefix) &&
+            material.keyId.toLowerCase().startsWith(prefix) &&
             !material.keyId.substring(prefix.length).contains('.'))
           if (_keyAlgoOf(material) case final keyAlgo?)
             (
@@ -503,13 +514,10 @@ class NskeyPrivateFiling {
     await io.update(atSign.toAtsign(), (keys) {
       var retired = false;
       for (final nskeyKid in nskeyKids) {
-        final keyId = keyIdFor(namespace, nskeyKid);
-        if (keys.getAtSignKey(
-                keyId, CryptographicMaterialRole.privateDecapsulation) ==
-            null) {
-          continue;
-        }
-        keys.retireAtSignKey(keyId);
+        final private = _materialFor(keys, namespace, nskeyKid,
+            CryptographicMaterialRole.privateDecapsulation);
+        if (private == null) continue;
+        keys.retireAtSignKey(private.keyId);
         retired = true;
       }
       return retired;
@@ -534,14 +542,15 @@ class NskeyPrivateFiling {
     await io.update(atSign.toAtsign(), (keys) {
       var added = false;
       for (final nskeyKid in nskeyKids) {
-        final keyId = keyIdFor(namespace, nskeyKid);
-        final private = keys.getAtSignKey(
-            keyId, CryptographicMaterialRole.privateDecapsulation);
+        final private = _materialFor(keys, namespace, nskeyKid,
+            CryptographicMaterialRole.privateDecapsulation);
         if (private == null) continue;
         owed = true;
-        if (keys.getAtSignKey(keyId, rotationOwedRole) != null) continue;
+        if (_materialFor(keys, namespace, nskeyKid, rotationOwedRole) != null) {
+          continue;
+        }
         keys.addKey(CryptographicMaterial(
-          keyId: keyId,
+          keyId: private.keyId,
           role: rotationOwedRole,
           algorithm: private.algorithm,
           // NOTE: never empty; a keyfile holding a material with no bytes is
@@ -563,8 +572,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('the rotations owed in $namespace');
     if (keys == null) return false;
     return nskeyKids.any((nskeyKid) =>
-        keys.getAtSignKey(keyIdFor(namespace, nskeyKid), rotationOwedRole) !=
-        null);
+        _materialFor(keys, namespace, nskeyKid, rotationOwedRole) != null);
   }
 
   /// Stores an nskey **seed** this client either minted or was conveyed.
@@ -614,8 +622,8 @@ class NskeyPrivateFiling {
     var filed = false;
     try {
       await io.update(atSign.toAtsign(), (keys) {
-        if (keys.getAtSignKey(
-                keyId, CryptographicMaterialRole.privateDecapsulation) !=
+        if (_materialFor(keys, namespace, nskeyKid,
+                CryptographicMaterialRole.privateDecapsulation) !=
             null) {
           return false;
         }

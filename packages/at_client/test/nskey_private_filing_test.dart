@@ -54,6 +54,42 @@ void main() {
     expect(material.algorithm, CryptographicMaterialAlgorithm.xWing);
   });
 
+  test('a private for a namespace spelt in capitals is filed under it folded',
+      () async {
+    final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
+
+    expect(
+        await filer.file(nskeySecret(generation, ns: 'App_1.My_Apps')), isTrue);
+
+    final keys = await io.read(atSign);
+    expect(keys.atSignKeys.map((m) => m.keyId),
+        contains('nskey.app_1.my_apps.${generation.kid}'));
+  });
+
+  test(
+      'a private an earlier release filed under its namespace in capitals is '
+      'read under the namespace folded', () async {
+    final io = InMemoryAtKeysIo();
+    final generation = await nskeyGeneration();
+    await io.write(
+        atSign,
+        AtKeys()
+          ..addKey(CryptographicMaterial(
+            keyId: 'nskey.App_1.My_Apps.${generation.kid}',
+            role: CryptographicMaterialRole.privateDecapsulation,
+            algorithm: CryptographicMaterialAlgorithm.xWing,
+            bytes: AtBytes(generation.seed),
+            createdAt: DateTime.now().toUtc(),
+          )));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+    expect(await filer.read(namespace, generation.kid), isNotNull);
+    expect(await filer.readSeed(namespace, generation.kid), isNotNull);
+    expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+        [generation.kid]);
+  });
+
   test('the same kid in two namespaces files as two keys', () async {
     final (io, filer) = await filing();
     final generation = await nskeyGeneration();
