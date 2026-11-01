@@ -175,26 +175,36 @@ class PendingEnrollment {
   ///
   /// NOTE: this and [_fileFlat] write the legacy document shape on the
   /// approval's behalf, filling only what the store does not hold yet, so
-  /// the flat fields are named directly here.
+  /// the flat fields are read directly here.
   void _completeFrom(AtKeys stored, AtKeys completed) {
-    // ignore: deprecated_member_use
-    stored.enrollmentId = enrollmentId;
-    // ignore: deprecated_member_use
-    stored.defaultEncryptionPublicKey ??= stored
-        .keysForEnrollment(enrollmentId)
-        .where((m) =>
-            m.role == CryptographicMaterialRole.publicEncryption &&
-            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
-        .firstOrNull
-        ?.bytes;
-    // ignore: deprecated_member_use
-    final encryptionPrivateKey = completed.defaultEncryptionPrivateKey;
-    // ignore: deprecated_member_use
-    stored.defaultEncryptionPrivateKey ??= encryptionPrivateKey;
-    // ignore: deprecated_member_use
-    stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
-    // ignore: deprecated_member_use
-    stored.apkamSymmetricKey ??= completed.apkamSymmetricKey;
+    stored.fileLegacyMaterial(
+      enrollmentId: enrollmentId,
+      encryptionPublicKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultEncryptionPublicKey,
+          stored
+              .keysForEnrollment(enrollmentId)
+              .where((m) =>
+                  m.role == CryptographicMaterialRole.publicEncryption &&
+                  m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+              .firstOrNull
+              ?.bytes),
+      encryptionPrivateKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultEncryptionPrivateKey,
+          // ignore: deprecated_member_use
+          completed.defaultEncryptionPrivateKey),
+      selfEncryptionKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultSelfEncryptionKey,
+          // ignore: deprecated_member_use
+          completed.defaultSelfEncryptionKey),
+      apkamSymmetricKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamSymmetricKey,
+          // ignore: deprecated_member_use
+          completed.apkamSymmetricKey),
+    );
   }
 
   /// Moves an rsa2048 keypair from the typed pending material into the flat
@@ -211,12 +221,16 @@ class PendingEnrollment {
             m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
         .firstOrNull
         ?.bytes;
-    // ignore: deprecated_member_use
-    stored.apkamPublicKey ??=
-        bytesOf(CryptographicMaterialRole.publicAuthentication);
-    // ignore: deprecated_member_use
-    stored.apkamPrivateKey ??=
-        bytesOf(CryptographicMaterialRole.privateAuthentication);
+    stored.fileLegacyMaterial(
+      apkamPublicKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamPublicKey,
+          bytesOf(CryptographicMaterialRole.publicAuthentication)),
+      apkamPrivateKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamPrivateKey,
+          bytesOf(CryptographicMaterialRole.privateAuthentication)),
+    );
     final info = stored.enrollmentInfo(enrollmentId);
     stored.discardEnrollment(enrollmentId);
     stored.recordEnrollmentSnapshot(enrollmentId,
@@ -225,20 +239,18 @@ class PendingEnrollment {
         deviceName: info?.deviceName);
   }
 
+  /// [value] as [AtKeys.fileLegacyMaterial] takes it, or null to leave the
+  /// field as it is when the store already holds [filed].
+  static String? _unlessFiled(AtBytes? filed, AtBytes? value) =>
+      filed == null ? value?.toString() : null;
+
   Future<void> _discard() async {
     try {
       await keys.update(atSign, (stored) {
         if (!stored.enrollmentIds.contains(enrollmentId)) return false;
-        stored.discardEnrollment(enrollmentId);
-        // The flat fields the submission carried for this request go with
-        // it, so the store reads as holding nothing for the atSign.
-        // ignore: deprecated_member_use
-        if (stored.enrollmentId == enrollmentId) stored.enrollmentId = null;
-        if (stored.enrollmentIds.isEmpty &&
-            !stored.holdsAuthenticationMaterial) {
-          // ignore: deprecated_member_use
-          stored.apkamSymmetricKey = null;
-        }
+        stored
+          ..discardEnrollment(enrollmentId)
+          ..unfileLegacyEnrollment(enrollmentId);
         return true;
       });
       _logger.info('enrollment $enrollmentId of $atSign was denied; its '

@@ -101,6 +101,9 @@
 - breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
   the `atChops` parameter of `AtClientImpl.create`. Hand a client its keys as
   an `AtKeysIo`.
+- fix: after a denial, a keyfile's flat APKAM symmetric key is cleared only
+  when its flat enrollment id names the denied enrollment; a keyfile whose
+  flat id names another enrollment keeps both.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
 - breaking: `Query.fetch` is removed; use `get()`.

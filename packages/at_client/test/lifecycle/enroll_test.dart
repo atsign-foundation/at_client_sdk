@@ -300,6 +300,9 @@ void main() {
     expect(stored.apkamPrivateKey, isNotNull,
         reason: 'an rsa2048 keypair is copied into the flat fields too, so the '
             'completed keyfile reads as a legacy one would');
+    // ignore: deprecated_member_use
+    expect(stored.apkamPublicKey, isNotNull,
+        reason: 'both halves of the keypair are copied');
     expect(stored.enrollmentInfo(enrollmentId)?.namespaces, {'wavi': 'rw'},
         reason: 'the snapshot filed at submission survives the completion');
 
@@ -329,6 +332,11 @@ void main() {
     expect(stored.enrollmentIds, isEmpty,
         reason: 'the slot and its snapshot are gone, not retired');
     expect(stored.holdsAuthenticationMaterial, isFalse);
+    expect(stored.storedEnrollmentId, isNull,
+        reason: 'the flat id the submission filed goes with the request');
+    expect(stored.enrollmentSymmetricKey, isNull,
+        reason: 'and so does its symmetric key, the store holding nothing '
+            'else');
 
     // The emptied store takes the next request, which mints new keys.
     final again = await submit(store, atServer(decide: (_) async => true));
