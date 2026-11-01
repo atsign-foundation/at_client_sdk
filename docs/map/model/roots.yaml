@@ -1,0 +1,18 @@
+# The code the map is checked against. sdk is this checkout. server is
+# at_server pinned by SHA; the pin moves in the at_client_sdk pull request that
+# needs newer server code. production is the release tag pinned by name and
+# SHA; whoever cuts an at_server pN.N.N release opens the pull request that
+# moves it. It feeds the lane note and nothing else.
+sdk:
+  github: atsign-foundation/at_client_sdk
+  lib: [packages/at_client/lib]
+  at_commons: packages/at_commons
+server:
+  github: atsign-foundation/at_server
+  branch: trunk
+  sha: d654f25bd4bdef2668c77556f563f9e43960b325
+  package: packages/at_secondary_server
+  lib: [packages/at_secondary_server/lib]
+production:
+  tag: p3.19.0
+  sha: 3c3bd74b659b8f81f21c340ada455f9cda536fab
