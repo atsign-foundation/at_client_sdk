@@ -11,6 +11,7 @@ import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -262,6 +263,45 @@ void main() {
       await expectLater(device.start().currentPublic(_atSign, _namespace),
           throwsA(namesTheKey));
     });
+  });
+
+  test(
+      'A local record not signed with this client\'s data signing key is '
+      'replaced at the next online start', () async {
+    final (:device, :kid) = await mintedAndVerified();
+    final genuine = jsonDecode(device.local[device.recordKey]!) as Map;
+    final other = _Device('enroll-other', device.server);
+    final signedByOther = await AtClientEnvelopeSigner(other.client)
+        .wrapAndSign(SignedEnvelope.fromJson(genuine).payload,
+            type: EnvelopeType.verifiedAdvertisement);
+    device.local[device.recordKey] = jsonEncode(signedByOther.toJson());
+
+    await device.start().currentPublic(_atSign, _namespace);
+    device.server.reachable = false;
+
+    await expectLater(
+        device.start().currentPublic(_atSign, _namespace),
+        completion(isA<NskeyAdvertisement>()
+            .having((a) => a.nskeyKid, 'nskeyKid', kid)),
+        reason: 'the online start wrote a record of its own over it');
+  });
+
+  test(
+      'The record is kept under a local key, naming the atSign, the '
+      'namespace, the bytes verified and the keys held', () async {
+    final (:device, :kid) = await mintedAndVerified();
+    final digest =
+        sha256.convert(utf8.encode(device.local[_advertisementKey]!));
+
+    // NOTE: an at-rest format that every later start reads back; the literals
+    // change only with a migration of what earlier builds wrote.
+    final stored = device
+        .local['local:__nskeyverified.notes.my_app.enroll-self.a.__e@alice'];
+    expect(stored, isNotNull, reason: 'kept local, so it never syncs');
+    expect(
+        jsonEncode(SignedEnvelope.fromJson(jsonDecode(stored!) as Map).payload),
+        '{"atSign":"@alice","namespace":"notes.my_app","sha256":"$digest",'
+        '"held":["$kid"]}');
   });
 
   test(
