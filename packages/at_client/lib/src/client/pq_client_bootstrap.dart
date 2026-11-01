@@ -343,10 +343,15 @@ class PqClientBootstrap {
     if (_seedsNamespaceKeys) {
       ckManager?.startUpSeeding = startUpSeeding;
       // NOTE: the atSign's own credential seeds exactly its own namespace,
-      // known now; an enrollment's namespaces wait for the step's grant read.
-      if (isAtSignCredential(_atClient.enrollmentId)) {
+      // known now; an enrollment's come from the grants its keyfile recorded,
+      // and the step's grant read refines them.
+      final enrollmentId = _atClient.enrollmentId;
+      if (isAtSignCredential(enrollmentId)) {
         startUpSeeding.seeding(
             authorisedNamespacesIn(null, ownNamespace: seeding.ownNamespace));
+      } else {
+        startUpSeeding.announcing();
+        await _announceRecordedGrants(enrollmentId!);
       }
     }
 
@@ -396,6 +401,24 @@ class PqClientBootstrap {
         '${seedingSkipped ? ' In particular seedNamespaceKeys did not run, so '
             'this atSign may have no published namespace key — it can still '
             'send, and no peer can seal to it.' : ''}');
+  }
+
+  /// Tells [startUpSeeding] what start-up seeds under the grants this
+  /// enrollment's keyfile recorded, before the seeding step reads them from
+  /// the atServer; nothing when the keyfile recorded none or cannot be read.
+  Future<void> _announceRecordedGrants(String enrollmentId) async {
+    Map<String, String>? recorded;
+    try {
+      final keys = await _keysIo!.read(_atSign);
+      recorded = keys.enrollmentInfo(enrollmentId)?.namespaces;
+    } catch (e) {
+      _logger.finer('Could not read the grants recorded for enrollment '
+          '$enrollmentId; start-up says what it seeds once it reads them '
+          'from the atServer: $e');
+    } finally {
+      startUpSeeding
+          .announced(recorded == null ? null : seeding.seededUnder(recorded));
+    }
   }
 
   /// The ordered startup steps, each with the name [stepNamesInOrder] reports.

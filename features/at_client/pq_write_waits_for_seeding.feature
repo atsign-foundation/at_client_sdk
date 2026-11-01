@@ -120,6 +120,21 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     When a write under todos.demos is made
     Then it does not wait
 
+  Scenario: An enrollment's write before start-up reads its grants waits for the namespace its keyfile recorded
+    Given an APKAM enrollment whose keyfile records todos.demos, before start-up reads its grants
+    When a write finds only demos
+    Then the write waits for seeding
+
+  Scenario: An enrollment whose keyfile records no grants does not wait before start-up reads them
+    Given an APKAM enrollment whose keyfile records no grants, before start-up reads its grants
+    When a write finds only demos
+    Then the write does not wait
+
+  Scenario: A namespace the grant read adds is waited for
+    Given start-up said it seeds todos.demos, from the grants its keyfile recorded
+    When its grant read adds other.app
+    Then a write in other.app waits for seeding
+
   Scenario: A write whose key is published as the wait runs out goes ahead
     Given a write waiting for start-up's seeding step
     When its key is published but the step has not finished as the wait runs out

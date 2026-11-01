@@ -18,14 +18,32 @@ class StartUpSeeding {
   @visibleForTesting
   static Duration wait = const Duration(seconds: 30);
 
-  final Completer<Set<String>> _namespaces = Completer<Set<String>>();
+  final Completer<void> _namespaces = Completer<void>();
+  Set<String> _seeded = const {};
+  Completer<Set<String>?>? _recorded;
   final Completer<void> _finished = Completer<void>();
   final Completer<void> _stopped = Completer<void>();
   final Map<String, Object> _failures = {};
 
-  /// Start-up seeds [namespaces]; reported once, as soon as it knows them.
+  /// Start-up seeds [namespaces], as soon as it knows them; a later report,
+  /// such as the grants the seeding step reads, replaces an earlier one.
   void seeding(Set<String> namespaces) {
-    if (!_namespaces.isCompleted) _namespaces.complete(namespaces);
+    _seeded = namespaces;
+    if (!_namespaces.isCompleted) _namespaces.complete();
+  }
+
+  /// Start-up will say what it seeds from the grants its keyfile recorded,
+  /// through [announced], before its seeding step reads them.
+  void announcing() => _recorded ??= Completer<Set<String>?>();
+
+  /// What start-up seeds under the grants its keyfile recorded, or null when
+  /// the keyfile recorded none.
+  void announced(Set<String>? namespaces) {
+    if (namespaces != null) seeding(namespaces);
+    final recorded = _recorded;
+    if (recorded != null && !recorded.isCompleted) {
+      recorded.complete(namespaces);
+    }
   }
 
   /// Start-up could not seed [namespace], for [reason].
@@ -34,7 +52,7 @@ class StartUpSeeding {
 
   /// Start-up's seeding step has ended, whatever it did.
   void finish() {
-    seeding(const {});
+    if (!_namespaces.isCompleted) seeding(const {});
     if (!_finished.isCompleted) _finished.complete();
   }
 
@@ -58,8 +76,8 @@ class StartUpSeeding {
   Future<String?> covering(String name) async {
     if (isFinished) return null;
     final deadline = DateTime.now().add(wait);
-    final covering =
-        _mostSpecific(await _until(_namespaces.future, deadline, null), name);
+    await _until(_namespaces.future, deadline, null);
+    final covering = _mostSpecific(_seeded, name);
     if (covering == null) return null;
     await _until(_finished.future, deadline, covering);
     return covering;
@@ -69,15 +87,23 @@ class StartUpSeeding {
   /// start-up seeds that covers [name] more specifically than [found], once
   /// the seeding step has finished.
   ///
-  /// Null at once unless start-up has already said what it seeds and that
-  /// includes such a namespace. Throws as [covering] does.
+  /// Null unless start-up has said what it seeds, or is about to from its
+  /// keyfile, and that includes such a namespace. Throws as [covering] does.
   Future<String?> coveringBeyond(String name, String found) async {
-    if (isFinished || !_namespaces.isCompleted) return null;
-    final narrower = _mostSpecific(await _namespaces.future, name);
+    if (isFinished) return null;
+    final deadline = DateTime.now().add(wait);
+    if (!_namespaces.isCompleted) {
+      final recorded = _recorded;
+      if (recorded == null ||
+          await _until(recorded.future, deadline, null) == null) {
+        return null;
+      }
+    }
+    final narrower = _mostSpecific(_seeded, name);
     if (narrower == null || !narrower.endsWith('.${found.toLowerCase()}')) {
       return null;
     }
-    await _until(_finished.future, DateTime.now().add(wait), narrower);
+    await _until(_finished.future, deadline, narrower);
     return narrower;
   }
 

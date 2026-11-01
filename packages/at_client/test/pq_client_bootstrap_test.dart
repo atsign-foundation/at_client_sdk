@@ -700,12 +700,13 @@ void main() {
     Future<PqClientBootstrap> parked(
         {PqStartupGates gates = seedingOnly,
         bool keysIo = true,
+        AtKeys? keys,
         Future<int> Function()? sweep}) async {
       when(() => client.getPreferences()).thenReturn(AtClientPreference()
         ..namespace = 'todos.demos'
         ..seedNamespaceKeys = true);
       final io = InMemoryAtKeysIo();
-      await io.write('@bootstrap🛠', AtKeys());
+      await io.write('@bootstrap🛠', keys ?? AtKeys());
       held = Completer<void>();
       final bootstrap = build(
           keysIo: keysIo ? io : null,
@@ -838,6 +839,58 @@ void main() {
       expect(await readOnly.timeout(const Duration(seconds: 5)), isNull);
       expect(await writable.timeout(const Duration(seconds: 5)), 'todos.demos');
       await bootstrap.startupComplete;
+    });
+
+    group('Given an APKAM enrollment, before start-up reads its grants', () {
+      /// An enrollment whose grant read, once start-up reaches it, answers
+      /// todos.demos writable.
+      void enrolled() {
+        when(() => client.enrollmentId).thenReturn('e-1');
+        final enrollments = MockEnrollmentService();
+        when(() => enrollments.fetchEnrollmentRequests())
+            .thenAnswer((_) async => [
+                  Enrollment()
+                    ..enrollmentId = 'e-1'
+                    ..namespace = {'todos.demos': 'rw'}
+                ]);
+        when(() => client.enrollmentService).thenReturn(enrollments);
+      }
+
+      test(
+          'when its keyfile records todos.demos and a write finds only demos, '
+          'then the write waits for seeding', () async {
+        enrolled();
+        final bootstrap = await parked(
+            keys: AtKeys()
+              ..recordEnrollmentSnapshot('e-1',
+                  namespaces: {'todos.demos': 'rw'}));
+        final waiting =
+            bootstrap.startUpSeeding.coveringBeyond('x.todos.demos', 'demos');
+        expect(await pending(waiting), isTrue,
+            reason: 'the keyfile said what start-up will seed, with no read '
+                'from the atServer');
+
+        held.complete();
+
+        expect(
+            await waiting.timeout(const Duration(seconds: 5)), 'todos.demos');
+        await bootstrap.startupComplete;
+      });
+
+      test(
+          'when its keyfile records no grants and a write finds only demos, '
+          'then the write does not wait', () async {
+        enrolled();
+        final bootstrap = await parked();
+
+        expect(
+            await bootstrap.startUpSeeding
+                .coveringBeyond('x.todos.demos', 'demos')
+                .timeout(const Duration(seconds: 1)),
+            isNull);
+        held.complete();
+        await bootstrap.startupComplete;
+      });
     });
   });
 

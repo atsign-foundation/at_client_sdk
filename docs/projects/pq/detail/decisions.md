@@ -15697,8 +15697,7 @@ found no key, and failed.
    namespace start-up has said it will seed covering the key, and then resolves again, so it
    seals at the narrower namespace rather than the broader one. This item used to wait only when
    nothing was published (gkc: "Fix now (Rec.)"). A write made before start-up has said what it
-   seeds does not wait, so an enrollment's write before its grant read can still seal at a
-   broader key (gkc: "Approve, keep A (Rec.)").
+   seeds does not wait; item 3 says when that is (gkc: "C now (Rec.)").
 2. **The bound is 30 seconds, and no preference sets it.** When it passes, the write resolves
    again and goes ahead with what it finds; an own write that still finds nothing throws
    `NamespaceKeyUnavailableException` naming the key start-up has not yet published, and a share
@@ -15707,6 +15706,12 @@ found no key, and failed.
 3. **An enrollment waits for the grant read start-up already makes**, inside the same bound and
    never for a mint, and a namespace start-up will not seed is then refused as before. The
    atSign's own credential seeds its preference namespace alone, known at once.
+   **Amended 2026-11-01**: an enrollment's start-up now says what it seeds at once, from the
+   grants its keyfile recorded at enrollment and refreshes every authenticated start, with no
+   read from the atServer; the grant read then refines that. A keyfile that records no grants,
+   such as a retrofit's, still waits for the grant read, and until then a write that finds a
+   broader key does not wait. This item used to have every enrollment wait for the grant read
+   (gkc: "C now (Rec.)").
 4. **What does not wait:** a write with no atServer, whose key read throws, and which fails at once
    as before; a write the offline restart allows; a write after the step has finished; and a
    client whose start-up seeds nothing.

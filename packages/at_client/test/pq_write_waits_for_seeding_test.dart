@@ -490,6 +490,29 @@ void main() {
   });
 
   group(
+      "Given start-up said it seeds todos.demos, from the grants its keyfile "
+      'recorded', () {
+    test(
+        'when its grant read adds other.app, then a write in other.app waits '
+        'for seeding', () async {
+      final c = _Client(_Ring())
+        ..seeding.announcing()
+        ..seeding.announced({'todos.demos'})
+        ..seeding.seeding({'todos.demos', 'other.app'});
+      wire(c);
+      final key = _built('x', 'other.app');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+
+      await c.seed('other.app');
+      c.seeding.finish();
+      await atOnce(writing);
+
+      expect(stamped(key)['ckNs'], 'other.app');
+    });
+  });
+
+  group(
       'Given start-up has not yet said what it seeds, and the search finds '
       'demos published', () {
     test('when a write under todos.demos is made, then it does not wait',

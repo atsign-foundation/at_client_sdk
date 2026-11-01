@@ -101,6 +101,14 @@ class NskeySeeding {
   /// [isSeedableNamespace].
   static bool isSeedable(String namespace) => isSeedableNamespace(namespace);
 
+  /// The namespaces [seed] seeds under [grants]: those authorised that this
+  /// enrollment may write in.
+  Set<String> seededUnder(Map<String, dynamic>? grants) => {
+        for (final ns
+            in authorisedNamespacesIn(grants, ownNamespace: _ownNamespace))
+          if (mayWriteIn(grants, ns)) ns
+      };
+
   /// Mints for every authorised namespace that has no key yet, conveying each
   /// new private before publishing it. Returns the namespaces this start
   /// published fresh material for — a cold-start mint, or a rotation a
@@ -128,10 +136,7 @@ class NskeySeeding {
     }
     final namespaces =
         authorisedNamespacesIn(grants, ownNamespace: _ownNamespace);
-    progress?.seeding({
-      for (final ns in namespaces)
-        if (mayWriteIn(grants, ns)) ns
-    });
+    progress?.seeding(seededUnder(grants));
 
     final minted = <String>{};
     final readOnly = <String>{};
