@@ -17,7 +17,9 @@ the rest is API that earlier releases had deprecated.
    ([section 5](#5-post-quantum-in-two-steps)).
 
 Every "after" sample compiles against this release as written. The samples
-leave out the import of your platform package, which every file needs.
+leave out the import of your platform package, which every file needs. They
+spell atSigns as string literals; an `Atsign` passes where they do, since it
+is a `String`.
 
 ## 1. Change your dependencies
 
@@ -40,7 +42,13 @@ Import `package:at_client_cli/at_client_cli.dart` in place of
 `at_client.dart`, `at_onboarding_cli.dart`, `at_cli_commons.dart`,
 `at_logger.dart` and `at_client_io.dart`. It re-exports at_client's native
 API, its storage backends and mixins, the registrar and the io logging
-handlers. Install the
+handlers, and with at_client all of `at_commons.dart` and the parts of
+at_lookup and at_utils a client uses (`AtLookUpFactory`,
+`SecondaryAddressFinder`, `AtSignLogger` and their kind). A file that goes on
+importing one of those packages beside it gets an `unnecessary_import` info
+for each import whose every name it now has from at_client_cli; delete those
+imports. Regenerate a committed `pubspec.lock`, or a CI step running
+`pub get --enforce-lockfile` fails. Install the
 tools with `dart pub global activate at_client_cli`. `at_register`, and
 `at_activate onboard` without `-c`, take a registrar API key from
 `AT_REGISTRAR_API_KEY`; create one via the registrar at my.atsign.com.
@@ -48,7 +56,9 @@ tools with `dart pub global activate at_client_cli`. `at_register`, and
 From at_utils it re-exports `AtSignLogger` and the three io handlers, but not
 the `LoggingHandler` interface or `AtUtils`. A program that implements a
 `LoggingHandler` or calls `AtUtils` keeps `at_utils: ^4.0.0` beside
-at_client_cli. With the `depend_on_referenced_packages` lint off, such a call
+at_client_cli, and the file that does keeps its own import:
+`package:at_utils/at_logger.dart` for `LoggingHandler`,
+`package:at_utils/at_utils.dart` for `AtUtils`. With the `depend_on_referenced_packages` lint off, such a call
 still compiles after at_utils is dropped, through at_client_cli's own
 dependency, so list it anyway.
 
@@ -84,6 +94,15 @@ feature packages do, and never on a platform package: each app brings its own.
 It takes what differs by platform (the keys, the storage, the transport and the
 atDirectory) as parameters from the app that calls it, and a native-only
 library takes the native pieces from `package:at_client/at_client_io.dart`.
+
+Where the library also holds files only a command-line program reaches, such
+as commands that call `createAtClient`, `CliKeys` or `requestEnrollmentOtp`,
+it can list at_client_cli as well and import it in those files alone: every
+platform at_client_flutter supports has `dart:io`, so a Flutter app built on
+the library still resolves. Its other files keep importing at_client. A file
+on at_client alone asks for a passcode with
+`(await client.enrollments.otp(expiry: ...)).value`, which is what
+`requestEnrollmentOtp` returns.
 
 ### "version solving failed" on at_utils
 
@@ -145,15 +164,18 @@ Future<void> openAlice(AtClientPreference preference) async {
 
 A client is its opener's to stop: stop the one you are finished with, as
 `switchTo` does, and every one still open before the program exits. Opening an
-atSign whose client is still live throws a `StateError`.
+atSign again as an enrollment whose client is still live throws a
+`StateError`; another enrollment of the atSign opens beside it.
+`AtClientImpl.liveClientsFor(atSign)` lists every live client of an atSign.
 
 On the first open of an atSign on a device, `Atsign.open` throws
 `AtEnrollmentPendingException` when the keys hold only an enrollment request
 that has not been approved, and
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
-`Atsign.open` comes back online, offline or refused, and
-`client.connection.current` says which. A command-line program usually lets
+`Atsign.open` returns once its one attempt to reach the atServer has ended,
+within `connectBudget` (5 seconds by default), and
+`client.connection.current` says whether it is online, offline or refused. A command-line program usually lets
 `CLIBase` do all of this; a Flutter app lets the dialogs do it. Sections
 [3](#3-a-command-line-program-at_client_cli) and
 [4](#4-a-flutter-app-at_client_flutter) show both. A Flutter app with its own
@@ -186,8 +208,7 @@ it asks: `secureSocketLookUps()` and
 `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
 as above. A command-line program takes its transport from at_client_cli's
 `lookUpsFor(preference.rootDomain)`, as `CLIBase` does: `proxyLookUps()` for a
-root domain of the form `proxy:host:port`, and `secureSocketLookUps()`
-otherwise.
+root domain beginning `proxy:`, and `secureSocketLookUps()` otherwise.
 
 ### `Undefined name 'FileAtKeysIo'`, `'CacheableSecondaryAddressFinder'`, `'HiveAtClientStorage'`
 
@@ -215,8 +236,9 @@ void logToStderr() {
 
 at_commons defines a `StringBuffer` of its own, which your platform package
 re-exports, and it shadows dart:core's. A file that imported
-`at_client.dart hide StringBuffer` keeps the `hide` on the import that
-replaces it:
+`at_client.dart hide StringBuffer` keeps the `hide` on every import that now
+brings it in: at_client_cli's, and at_cli_commons' or at_onboarding_cli's,
+which re-export it:
 
 ```dart
 import 'package:at_client_cli/at_client_cli.dart' hide StringBuffer;
@@ -342,10 +364,108 @@ program lists at_commons among its dependencies. `MonitorClient` and
 and `secureSocketConfig`; a `secureSocketTransport(...)` caller changes
 nothing. An `AtLookUpFactory`, and the `secureSocketLookUps` and
 `webSocketLookUps` that build one, take no `clientConfig`: give it to at_auth's
-`authenticatorFor`, which sends it in `from:`.
-`CacheableSecondaryAddressFinder` and `SecureSocketUtil` moved to
+`authenticatorFor`, which sends it in `from:`. `AtLookUp.withSecureSocket`
+and `withTransport` take no `clientConfig:` either.
+`CacheableSecondaryAddressFinder`, `SecureSocketUtil` and
+`AtLookupSecureSocketFactory` moved to
 `package:at_lookup/at_lookup_io.dart`, and a failed write throws
 `AtIOException` rather than `SocketException`.
+
+### A test double for the atServer
+
+A double that extended `AtLookupSecureSocketFactory`, or wrapped a fake
+`SecureSocket`, no longer reaches a client's connections:
+`AtLookupSecureSocketFactory` now opens only the atDirectory's socket, and
+at_lookup opens each connection to the atServer through the
+`AtTransportFactory` its `AtLookupTransport` is given. A double implements
+the two interfaces `package:at_lookup/at_lookup.dart` exports, so its test
+lists at_lookup among its `dev_dependencies`:
+
+- `AtTransportFactory.connect(host, port, {timeout})` returns an
+  `AtTransport`, and throws `SecondaryConnectException` when nothing answers.
+  Any other exception, a `SocketException` among them, escapes at_lookup
+  uncaught and loses the atSign the connection was for.
+- `AtTransport` is `inbound`, `add`, `flush`, `destroy`, `isOpen` and
+  `description`. A transport over a socket returns the socket itself as
+  `inbound`, never a `StreamController`, since pausing it is how at_lookup
+  holds the atServer back. A double that only answers what it is sent holds
+  at most one reply per command while paused, so it may feed `inbound` from
+  a controller, as this one does.
+- Each reply is one line, such as `data:ok`.
+
+```dart after
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:at_lookup/at_lookup.dart';
+
+/// A stand-in atServer: [reply] answers each command a client sends.
+class FakeAtServer implements AtTransportFactory {
+  FakeAtServer(this.reply, {this.reachable = true});
+
+  final String Function(String command) reply;
+  final bool reachable;
+
+  @override
+  Future<AtTransport> connect(String host, String port,
+      {Duration? timeout}) async {
+    if (!reachable) {
+      throw SecondaryConnectException('nothing answers at $host:$port');
+    }
+    return _FakeConnection(this);
+  }
+
+  /// What a client under test is given as `lookUps:`.
+  AtLookUpFactory get lookUps => ({
+        required String atSign,
+        required AtRootDomain rootDomain,
+        required AtAuthenticator? authenticator,
+        SecondaryAddressFinder? secondaryAddressFinder,
+      }) =>
+          AtLookUp.withTransport(
+              atSign: atSign,
+              rootDomain: rootDomain,
+              authenticator: authenticator,
+              transport: AtLookupTransport(transportFactory: this),
+              secondaryAddressFinder: secondaryAddressFinder ??
+                  FixedSecondaryAddressFinder('fake.atserver', 6464));
+}
+
+class _FakeConnection implements AtTransport {
+  _FakeConnection(this._server);
+
+  final FakeAtServer _server;
+  final _inbound = StreamController<List<int>>();
+
+  @override
+  Stream<List<int>> get inbound => _inbound.stream;
+
+  @override
+  void add(List<int> bytes) {
+    if (_inbound.isClosed) throw AtIOException('the connection is closed');
+    for (final command in const LineSplitter().convert(utf8.decode(bytes))) {
+      final answer = _server.reply(command);
+      scheduleMicrotask(() {
+        if (!_inbound.isClosed) _inbound.add(utf8.encode('$answer\n'));
+      });
+    }
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  void destroy() {
+    if (!_inbound.isClosed) _inbound.close();
+  }
+
+  @override
+  bool get isOpen => !_inbound.isClosed;
+
+  @override
+  String get description => 'fake atServer';
+}
+```
 
 ### Programs that call at_auth directly
 
@@ -363,6 +483,12 @@ enrollments moved onto the client:
 | `RegistrarService.getFreeAtSign`, `registerPerson`, `validatePerson` | `registerAtSign` |
 | `FileAtKeysIo`, `getHomeDirectory`, `getDefaultAtKeysFilePath` from `at_auth.dart` | your platform package, or `package:at_auth/at_auth_io.dart` |
 | `AtEnrollmentRequest(atSign: ..., rootDomain: ..., apkamPublicKey: ..., encryptedAPKAMSymmetricKey: ...)`, and the same on `.pq` | `session: AtAuthSession(...)`, which names the atSign, the root domain and where the new keys go; or at_client's `Atsign(atSign).enroll(...)` |
+
+`client.enrollments` is the `AtClientEnrollments` extension, so an import
+that names what it shows names `AtClientEnrollments` too. at_client's own
+`EnrollmentService`, at `client.enrollmentService`, still lists requests by an
+`EnrollmentListRequestParam` and approves, denies or revokes from an
+`EnrollmentRequestDecision`.
 
 ```dart after
 Future<void> approveWhatIsPending(AtClient client) async {
@@ -429,15 +555,19 @@ These compile and then fail when the code runs, usually first in a test:
   needs `registerFallbackValue` for `AtClientStorage` first, for instance an
   `InMemoryAtClientStorage`.
 - A client does not publish an `_apsk` that names no active signing key: it
-  throws `AtKeyNotFoundException`. Real keyfiles always hold an APKAM keypair;
-  a test whose stand-in keys hold none gives them one.
+  throws `AtKeyNotFoundException`, `an _apsk advertisement must name at least
+  one active signing key, and this one names none, so it is not published`.
+  Real keyfiles always hold an APKAM keypair; a test whose stand-in keys hold
+  none gives them one.
 - At a post-quantum posture, a 4.0 client sends `enroll:link`. A test double
-  standing in for the atServer answers it, or refuses it with `AT0003` as an
-  atServer without the verb does; the client goes on without it.
+  standing in for the atServer answers it, or replies
+  `error:AT0003-Invalid syntax` as an atServer without the verb does; the
+  client then goes on without it, and the test exercises no link.
 - at_lookup reads a connection through an `AtTransport` and calls `cast()` on
   its `inbound` stream. A test double for the atServer gives at_lookup its own
   `AtTransport`, rather than wrapping a partial fake socket in
-  `SecureSocketTransport`.
+  `SecureSocketTransport`, as
+  [above](#a-test-double-for-the-atserver).
 
 ## 3. A command-line program: at_client_cli
 
@@ -482,7 +612,9 @@ Future<AtClient> openFromKeyfile() {
 With no `path`, `CliKeys.fileFor` is `~/.atsign/keys/<atSign>_key.atKeys` and
 `CliKeys.storageFor` is the store `CLIBase` opens for that namespace:
 `~/.atsign/storage/<atSign>/<program>/single`, not at_onboarding_cli's
-`~/.atsign/at_onboarding_cli/storage/`. A program that relied on the old
+`~/.atsign/at_onboarding_cli/storage/`. `program` names the program's own
+folder there, and `CLIBase` passes its namespace; a `path` is the folder
+itself, used as given. A program that relied on the old
 default passes that folder as `path` to keep its store. A pending
 enrollment's client takes a store of its own, named by
 `id: pending.enrollmentId`.
@@ -505,7 +637,13 @@ Future<AtClient?> openIfOnline(Future<AtClient> Function() open) async {
 
 **From a 4.0 release candidate.** at_onboarding_cli 2.0.0's release
 candidates gave `AtOnboardingPreference` a `storageFor` and a `lookUps`.
-`CliKeys.storageFor` and `lookUpsFor(preference.rootDomain)` replace them.
+`CliKeys.storageFor` and `lookUpsFor(preference.rootDomain)` replace them,
+and an `AtClientPreference` replaces the preference itself. A program on a
+release candidate also meets three changes section 2 covers by error:
+`open`, `activate`, `enroll` and `resumeEnrollment` require
+`secondaryAddressFinder`, a service factory's `notificationService` and
+`syncService` take only the client, and `AtLookUp.withSecureSocket` takes no
+`clientConfig:`.
 
 **`CLIBase` tells a refusal from an outage.** It throws
 `AtCredentialRefusedException` when the atServer refuses the keys, saying when
