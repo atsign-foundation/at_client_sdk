@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRF Spike</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --ok: #0a7d32; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #eee; --muted: #999; --ok: #5bd17f; --bad: #ff8a80; } }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0 16px; max-width: 760px; }
+  button { font: inherit; padding: 6px 14px; margin: 4px 8px 4px 0; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+</style>
+<h1>OQ-P1 — WebAuthn PRF → HKDF → AES-GCM</h1>
+<p class="muted">1. Register once. 2. Seal. 3. Reload the page. 4. Unlock. Then Copy row into RESULTS.md.</p>
+<button id="register">1 · Register</button>
+<button id="seal">2 · Seal</button>
+<button id="unlock">4 · Unlock</button>
+<button id="copy">Copy row</button>
+<button id="reset">Reset</button>
+<pre id="log"></pre>
+<script type="module" src="spike.js"></script>
