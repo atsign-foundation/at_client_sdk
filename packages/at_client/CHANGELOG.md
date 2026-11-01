@@ -180,10 +180,8 @@
 - feat: `InMemoryAtClientStorage` is pure Dart and needs no native library. A
   SQLite database held in memory is still
   `SqliteAtClientStorage(..., dbPath: SqliteAtClientStorage.inMemoryPath)`.
-- chore: `AtClientPreference.hiveStoragePath` and `isLocalStoreRequired` are
-  read by nothing in at_client, and go in 5.0.0.
-- chore: `AtClientPreference.privateKey` is deprecated, and goes in 5.0.0: a
-  client authenticates from its `AtKeysIo`.
+- chore: `AtClientPreference.hiveStoragePath` is read by nothing in
+  at_client, and goes in 5.0.0.
 - build: at_client no longer depends on archive, http,
   internet_connection_checker or async.
 - fix: only a missing keyfile counts as holding no keys.
@@ -191,9 +189,13 @@
   key to sign with, and a keyfile that cannot be read throws its read's error,
   so no signing key or key package is published from it. An `_apsk` that names
   no active signing key is not published.
-- chore: `AtClientPreference.hashingAlgoType` and `RemoteSecondary`'s
-  `signingAlgoType` parameter are deprecated and have no effect, since PKAM
-  signs with SHA-256 and the algorithm the keys name. Both go in 5.0.0.
+- breaking: `AtClientPreference.isLocalStoreRequired`, `privateKey`,
+  `useAtChops`, `signingAlgoType` and `hashingAlgoType` are removed. A client
+  is given its storage, and signs with the keys in its `AtKeysIo`, which name
+  the algorithm.
+- breaking: `RemoteSecondary`'s `signingAlgoType` parameter and
+  `PutRequestOptions.storeSharedKeyEncryptedMetadata`, which had no effect,
+  are removed.
 - feat: an approval by an enrollment that holds the atSign's signing root, or
   a key anchored to it, anchors the enrollment it approves at once, and adding
   or retiring a key no longer undoes that. It needs an atServer with

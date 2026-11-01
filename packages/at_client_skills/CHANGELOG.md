@@ -24,6 +24,10 @@
   `sync(onDone:)`, `setOnDone`, `AtServiceFactory.atClient` and
   `syncStrategy` are listed as removed in 4.0 (`SKILL.md` §18;
   `references/01`, `11`, `15`).
+- `AtClientPreference`'s `isLocalStoreRequired`, `privateKey`, `useAtChops`,
+  `signingAlgoType` and `hashingAlgoType`, `RemoteSecondary`'s
+  `signingAlgoType` and `PutRequestOptions.storeSharedKeyEncryptedMetadata`
+  are listed as removed in 4.0 (`SKILL.md` §18; `references/01`).
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.

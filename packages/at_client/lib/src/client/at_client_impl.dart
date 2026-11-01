@@ -405,8 +405,8 @@ class AtClientImpl implements AtClient {
   ///
   /// Resolved from the enrollment's key material at init
   /// ([_resolveSigningAlgoFromKeyMaterial]) — the algorithm is a fact about
-  /// the key you hold, not a preference; the preference's value is the
-  /// fallback for a legacy enrollment with no typed material. Every
+  /// the key you hold, not a preference; rsa2048 is the fallback for a
+  /// legacy enrollment with no typed material. Every
   /// connection the client owns — verb, monitor, sync — must sign with this,
   /// or a reconnect re-authenticates with the wrong routine against the
   /// record-authoritative atServer.
@@ -417,9 +417,9 @@ class AtClientImpl implements AtClient {
   SigningAlgoType get signingAlgoType => resolved_algo.signingAlgoOf(this);
 
   /// The PKAM signing algorithm [atClient]'s connections authenticate with:
-  /// the key-material resolution when one was recorded at init, else the
-  /// preference. For callers holding the [AtClient] interface, which carries
-  /// no such member (see [signingAlgoType]).
+  /// the key-material resolution when one was recorded at init, else
+  /// rsa2048. For callers holding the [AtClient] interface, which carries no
+  /// such member (see [signingAlgoType]).
   static SigningAlgoType signingAlgoOf(AtClient atClient) =>
       resolved_algo.signingAlgoOf(atClient);
 
@@ -944,7 +944,7 @@ class AtClientImpl implements AtClient {
 
   Future<void> _init({AtLookUp? atLookUp}) async {
     // NOTE: resolved before anything signs, so nothing signs with the
-    // preference's rsa2048 default under an ML-DSA enrollment.
+    // rsa2048 fallback under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
     final storage = _injectedStorage;
     await storage.attach(this);
@@ -1448,8 +1448,7 @@ class AtClientImpl implements AtClient {
 
   /// Builds a [RemoteSecondary] that authenticates as **this client**: the
   /// enrollment id settled at init, and the PKAM signing algorithm resolved
-  /// from that enrollment's key material rather than the preference's
-  /// deprecated default.
+  /// from that enrollment's key material.
   ///
   /// Every site in this class that opens a connection goes through here: one
   /// that builds its own signs the challenge with the wrong routine, which
@@ -2010,8 +2009,8 @@ class AtClientImpl implements AtClient {
 
   /// Resolves this client's PKAM signing algorithm from the enrollment's key
   /// material — the authoritative source; you cannot sign ML-DSA with an RSA
-  /// key. A null resolution (a legacy flat-fields enrollment) leaves the
-  /// preference's value as the fallback.
+  /// key. A null resolution (a legacy flat-fields enrollment) leaves rsa2048
+  /// as the fallback.
   Future<void> _resolveSigningAlgoFromKeyMaterial() async {
     final id = enrollmentId;
     if (id == null || isAtSignCredential(id)) return;
@@ -2022,9 +2021,7 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       _logger.warning(
           'Could not resolve the signing algorithm for enrollment $id from '
-          'key material: $e. Connections will authenticate with the '
-          // ignore: deprecated_member_use_from_same_package
-          'preference value (${_preference?.signingAlgoType}).');
+          'key material: $e. Its signing algorithm reads as rsa2048.');
     }
   }
 

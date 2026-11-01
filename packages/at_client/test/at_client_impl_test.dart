@@ -46,9 +46,8 @@ void main() {
   /// client that superseded it.
   group('a superseded enrollment id', () {
     const atSign = '@alice';
-    AtClientPreference pref() => AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..isLocalStoreRequired = true;
+    AtClientPreference pref() =>
+        AtClientPreference()..hiveStoragePath = 'test/hive';
 
     setUp(() async {
       await _dropCachedClients(atSign);

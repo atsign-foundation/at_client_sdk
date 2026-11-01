@@ -189,6 +189,9 @@ replaces it because nothing read it.
 | `syncService.sync(onDone: ...)`, `setOnDone(...)`                                            | a `SyncProgressListener` added with `addProgressListener`                               |
 | `AtServiceFactory.atClient(...)`                                                             | `Atsign(a).open(...)` or `buildAtClient(...)`                                           |
 | `AtClientPreference.syncStrategy`, `SyncStrategy`                                            | nothing; they did nothing                                                               |
+| `AtClientPreference.isLocalStoreRequired`, `useAtChops`, `hashingAlgoType`                   | nothing; they did nothing                                                               |
+| `AtClientPreference.privateKey`, `signingAlgoType`                                           | keys in the client's `AtKeysIo`                                                         |
+| `PutRequestOptions.storeSharedKeyEncryptedMetadata`, `RemoteSecondary(signingAlgoType:)`     | nothing; they did nothing                                                               |
 | `sync:` on `executeVerb`, `executeAndParse`                                                  | Delete the argument                                                                     |
 | `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout` | Delete the assignment; nothing read them                     |
 | `AtClientPreference.enforceNamespace`                                                        | Delete the assignment; every key except a `local:` one names a namespace                |
@@ -222,13 +225,12 @@ Both packages' code lives in `at_client_cli`. A program depends on
 
 ## Deprecated, still present in at_client 4.0
 
-These still compile, with a deprecation warning. Avoid them in new code. The
-three `AtClientPreference` fields go in 5.0.
+These still compile, with a deprecation warning. Avoid them in new code.
+`AtClientPreference.hiveStoragePath` goes in 5.0.
 
 | Deprecated                                                   | Instead                                                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AtClientPreference.hiveStoragePath`                         | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage:`; at_client ignores the field, and at_client_flutter's dialogs read it only when given no storage |
-| `AtClientPreference.isLocalStoreRequired`, `hashingAlgoType` | Nothing; at_client reads neither                                                  |
 
 ---
 

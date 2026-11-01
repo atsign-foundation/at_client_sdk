@@ -238,6 +238,8 @@ These fields are gone. Delete each assignment:
 | `commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted` | nothing; they were read by nothing |
 | `outboundConnectionTimeout` | nothing |
 | `syncStrategy`, and the `SyncStrategy` enum | nothing; they were read by nothing |
+| `isLocalStoreRequired`, `useAtChops`, `hashingAlgoType` | nothing; they were read by nothing |
+| `privateKey`, `signingAlgoType` | nothing: a client signs with the keys in its `AtKeysIo`, which name the algorithm; a `RemoteSecondary` built without one takes `privateKey:` |
 | `enforceNamespace` | nothing; every key except a `local:` one names a namespace |
 | `decryptPackets`, `pathToCerts`, `tlsKeysSavePath` | a `SecureSocketConfig` given to `secureSocketLookUps`, below |
 
@@ -253,8 +255,8 @@ This is for debugging, never production: `tlsKeysSavePath` writes each
 connection's TLS keys to that file, and anyone holding the file can read the
 traffic it captured.
 
-`hiveStoragePath`, `isLocalStoreRequired` and `hashingAlgoType` remain,
-deprecated and read by nothing in at_client; they go in 5.0.
+`hiveStoragePath` remains, deprecated and read by nothing in at_client; it
+goes in 5.0.
 
 ### `No named parameter with the name 'isDedicated'`, or `'sync'`
 
@@ -289,6 +291,8 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService` |
 | `syncService.sync(onDone: ...)`, `setOnDone(...)` | a `SyncProgressListener` added with `addProgressListener` |
 | `AtServiceFactory.atClient(...)` | `Atsign(a).open(...)` or `buildAtClient(...)` |
+| `PutRequestOptions.storeSharedKeyEncryptedMetadata` | nothing; it was always true |
+| `RemoteSecondary(..., signingAlgoType: ...)` | nothing; the keys name the algorithm |
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |

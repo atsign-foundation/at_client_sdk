@@ -244,7 +244,9 @@ deletable now.
 
 `isLocalStoreRequired` (*"LocalStore is always required"*), `hiveStoragePath`
 (*"Supply an `AtClientStorage` instead"*) and `commitLogPath` (*"Nothing reads
-this; the client is commit-log-free"*), all removed in the next major. Visible
+this; the client is commit-log-free"*). 4.0 removes `isLocalStoreRequired` and
+`commitLogPath`; `hiveStoragePath` stays, deprecated, until 5.0, since
+at_client_flutter's dialogs still read it when given no storage. Visible
 to the analyzer only outside at_client: 12 in `tests/at_functional_test`, 7 in
 `tests/at_end2end_test`, 4 in at_contact's `test_util.dart` and 1 in
 at_client_flutter. Inside at_client the analyzer is silent, and 30 of its

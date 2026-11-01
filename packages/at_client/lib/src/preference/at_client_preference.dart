@@ -240,25 +240,9 @@ class AtClientPreference {
       'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
-  bool _isLocalStoreRequired = true;
-
-  /// Read by nothing: every client is given its storage.
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  bool get isLocalStoreRequired => _isLocalStoreRequired;
-
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
-
   /// The atSign's CRAM secret, read by a `RemoteSecondary` built without an
   /// `AtKeysIo`; a client authenticates from its `AtKeysIo` and ignores it.
   String? cramSecret;
-
-  /// Private key of the atSign.
-  @Deprecated('A client authenticates from its AtKeysIo; only a '
-      'RemoteSecondary built without one reads this. Removed in 5.0.0.')
-  String? privateKey;
 
   /// Specifies the namespace of an app.
   String? namespace;
@@ -346,24 +330,7 @@ class AtClientPreference {
   /// any that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
-  @Deprecated('No longer needed. at_chops will be used by default')
-  bool useAtChops = true;
-
   AtClientParticulars atClientParticulars = AtClientParticulars();
-
-  /// Signing algorithm to use for pkam authentication.
-  ///
-  /// Consulted only for a legacy enrollment whose keyfile carries no typed
-  /// signing material; where typed material exists the client resolves the
-  /// algorithm from the keyfile and this value never overrides it.
-  @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
-      'material; this value is only a fallback for legacy keyfiles with no '
-      'typed signing material')
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
-  /// Hashing algorithm once used for pkam authentication.
-  @Deprecated('Has no effect: pkam signs with SHA-256. Removed in 5.0.0.')
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
   /// Set this to [RemoteLocalPref.remoteOnly]
   /// if you require all data operations (get / put / delete) to be performed

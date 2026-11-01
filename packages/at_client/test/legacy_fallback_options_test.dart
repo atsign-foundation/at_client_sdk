@@ -19,7 +19,7 @@ void main() {
     'noCommit',
   };
   const replaced = {'cryptoProviderId'};
-  const ignored = {'storeSharedKeyEncryptedMetadata'};
+  const ignored = <String>{};
 
   final fields = <String, Object? Function(PutRequestOptions)>{
     'useRemoteAtServer': (o) => o.useRemoteAtServer,
@@ -27,8 +27,6 @@ void main() {
     'alreadyEncrypted': (o) => o.alreadyEncrypted,
     'noCommit': (o) => o.noCommit,
     'cryptoProviderId': (o) => o.cryptoProviderId,
-    // ignore: deprecated_member_use_from_same_package
-    'storeSharedKeyEncryptedMetadata': (o) => o.storeSharedKeyEncryptedMetadata,
   };
 
   /// The instance fields `class PutRequestOptions` declares, read from its

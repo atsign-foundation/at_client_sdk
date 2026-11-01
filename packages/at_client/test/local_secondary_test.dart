@@ -1064,9 +1064,8 @@ void main() {
   });
 }
 
-// The AtClient owns its commit-log-free persistence bundle (created
-// by `AtClientImpl.create`, since `isLocalStoreRequired` defaults to
-// true). Tests build their own client, so setup only needs to evict
+// The AtClient owns its commit-log-free persistence bundle, created
+// by `AtClientImpl.create`. Tests build their own client, so setup only needs to evict
 // any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
   AtClientImpl.atClientInstanceMap.remove(atSign);

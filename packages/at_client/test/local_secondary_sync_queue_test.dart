@@ -29,7 +29,6 @@ void main() {
   Future<LocalSecondary> setUpLocalSecondary({AtSyncQueue? syncQueue}) async {
     AtClientImpl.atClientInstanceMap.remove(atSign);
     final preference = AtClientPreference()
-      ..isLocalStoreRequired = true
       ..syncRegex = ''
       ..hiveStoragePath = storageDir;
     final atClient = await AtClientImpl.create(

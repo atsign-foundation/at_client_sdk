@@ -26,11 +26,6 @@ class GetRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.put`
 class PutRequestOptions extends RequestOptions {
-  /// Whether to set the `sharedKeyEnc` and `pubKeyCS` properties on the
-  /// Metadata for this put request
-  @Deprecated('Ignored. Always true.')
-  bool storeSharedKeyEncryptedMetadata = true;
-
   /// Whether to send this update request directly to the remote atServer.
   ///
   /// The default writes to local storage and the record reaches the atServer
