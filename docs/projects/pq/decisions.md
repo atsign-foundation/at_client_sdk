@@ -75,7 +75,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
 | [18]  | `pq_signing_root` is the user-owned signing root                                            | 2026-08-03 | AMENDED 2026-10-13        |
-| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
+| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-11-01        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
 | [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | PARTLY SUPERSEDED by [157] |

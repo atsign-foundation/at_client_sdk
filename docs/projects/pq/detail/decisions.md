@@ -1746,16 +1746,32 @@ level; any other failure now stops the walk instead.
 
 ### 19.5 The wire
 
-`appMetadata` gains **`ns`** on every record of the nskey path: **the record's own full
-namespace**. This is what makes a multi-segment namespace work at all — a reader can never
-recover it from the key string ([section 19.1](#191-the-finding-that-reframed-the-question)),
-so the record has to say. It is not a new disclosure: the namespace is already plaintext in
-the key name. This supersedes design.md section 1.5's "carries no `ns` field", whose reason
-was redundancy with the key name — a redundancy that never actually held.
+`appMetadata` gains **`ns`** on every record of the nskey path. This is what makes a
+multi-segment namespace work at all — a reader can never recover it from the key string
+([section 19.1](#191-the-finding-that-reframed-the-question)), so the record has to say. It
+is not a new disclosure: the namespace is already plaintext in the key name. This supersedes
+design.md section 1.5's "carries no `ns` field", whose reason was redundancy with the key
+name — a redundancy that never actually held.
+
+- On a **data value**, `ns` is **the level the write's walk started at**
+  ([159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
+  item 4): the longer of the key's own namespace and the most specific namespace the writer
+  holds a namespace private for that the key's whole name ends with, after a dot.
+- On a **conveyance** to a recipient, `ns` is the namespace the nskey was found at, which the
+  conveyance's own key name cannot carry either.
+- A **sibling copy**
+  ([142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)) names the
+  level of the sender's own key as `ns`.
+
+**Amended 2026-11-01** by 159 item 4: this section said `ns` was the record's own full
+namespace on every record. A value written before then opens as it did, since a reader opens a
+value at its recorded `ckNs`.
 
 A **data value** additionally carries **`ckNs`**: the namespace its content key and
-conveyance live at. On a conveyance record the two are always equal, so they diverge only on
-a data value, and only in two situations:
+conveyance live at. A sibling copy carries it too, naming the recipient's level, which differs
+from its `ns` when the sender's own key covering it sits at a broader level. For a data value
+whose key is built with its namespace in full, `ns` is that namespace, and the two diverge in
+two situations:
 
 | Value | nskey at | `ns` | `ckNs` | |
 |---|---|---|---|---|
@@ -1765,8 +1781,12 @@ a data value, and only in two situations:
 | `someid.__rr.item123.todos@alice` | `todos` | `__rr.item123.todos` | `todos` | **differ** |
 | `x.medical.notes@alice`, stale sender | `medical.notes` | `medical.notes` | `notes` | **differ** |
 
-So: every AtCollection sub-collection item, and the [19.4](#194-cost-and-the-three-lifetimes)
-window.
+So: a sub-collection item built with its namespace in full, and the
+[19.4](#194-cost-and-the-three-lifetimes) window. A key read from its string form names only its
+last label as its namespace, so its walk starts at the most specific namespace the writer holds
+a private for that covers its whole name: `someid.__rr.item123.todos@alice` read that way, by a
+writer holding `todos`, records `ns` `todos`, the same as its `ckNs`. AtCollection builds its
+records' keys that way.
 
 **Neither field is derivable from the other.** `ns` cannot be recovered from `ckNs` plus the
 key string — knowing the namespace ends in `todos` still leaves `todos`, `item123.todos` and
@@ -1777,10 +1797,13 @@ under `medical.notes`, the CK is under `notes`, and a perfectly intact record re
 "conveyance not yet synced" forever. Carrying `ckNs` is what degrades that case to "a broader
 key was used" instead of "undecryptable".
 
-**The AAD keeps binding the value's own namespace** (`ns`, not `ckNs`). Binding the resolved
-namespace instead would give `someid` under `__rr.item1.todos` and `someid` under
-`__rr.item999.todos` an identical AAD, reopening the record-relocation attack the AAD exists
-to close.
+**The AAD binds the value's whole name**: its key and namespace rejoined
+(`SymmetricAesGcmProvider.fullNameOf`), never the `ns` or `ckNs` field, so writer and reader
+agree whichever split each saw. Binding the resolved namespace instead would give `someid`
+under `__rr.item1.todos` and `someid` under `__rr.item999.todos` an identical AAD, reopening
+the record relocation the AAD exists to close. This paragraph said the AAD bound "the value's
+own namespace (`ns`, not `ckNs`)", which held only while `ns` was that namespace; the AAD has
+bound the whole name since the walk was built.
 
 ### 19.6 Consequences
 
