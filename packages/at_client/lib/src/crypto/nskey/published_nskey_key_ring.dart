@@ -471,12 +471,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Marks the cached advertisement [event] names as due for a re-read,
   /// keeping its bytes so an unchanged copy is not verified again.
   void _expireOwnOnChange(DataEvent event) {
-    final own = _atClient.getCurrentAtSign();
     final changed = event.key.toString().toLowerCase();
     for (final scope in _remote.keys.toList()) {
       final bar = scope.indexOf('|');
       final owner = scope.substring(0, bar);
-      if (owner != own) continue;
+      if (!_isOwn(owner)) continue;
       final name = nskeyAdvertisementKey(owner, scope.substring(bar + 1))
           .toString()
           .toLowerCase();
@@ -490,7 +489,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     }
   }
 
-  static String _scope(String owner, String namespace) => '$owner|$namespace';
+  static String _scope(String owner, String namespace) =>
+      '${owner.toAtsign()}|$namespace';
+
+  /// Whether [atSign] is this client's own, compared in canonical form.
+  bool _isOwn(String? atSign) {
+    final own = _atClient.getCurrentAtSign();
+    return own != null && atSign != null && atSign.toAtsign() == own.toAtsign();
+  }
 
   static String _generation(String owner, String namespace, String kid) =>
       '${_scope(owner, namespace)}|$kid';
@@ -545,7 +551,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// exception for it.
   Future<void> _warnIfPrivateMissing(String owner, String namespace,
       NskeyAdvertisement published, String how) async {
-    if (owner != _atClient.getCurrentAtSign()) return;
+    if (!_isOwn(owner)) return;
     if (await privateHalf(owner, namespace, published.nskeyKid) != null) return;
     _logger.warning(
         'Adopted nskey generation ${published.nskeyKid} for $owner:$namespace '
@@ -919,7 +925,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyAdvertisement?> currentPublic(
       String owner, String namespace) async {
-    final isOwn = owner == _atClient.getCurrentAtSign();
+    final isOwn = _isOwn(owner);
     if (isOwn) _listenForOwnChanges();
 
     final scope = _scope(owner, namespace);
@@ -1032,7 +1038,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// atSign's public record is never held locally, so it is read from the
   /// atServer alone, and an offline write to a peer waits for the network.
   Future<String?> _getLocalThenRemote(AtKey atKey) async {
-    if (atKey.sharedBy == _atClient.getCurrentAtSign()) {
+    if (_isOwn(atKey.sharedBy)) {
       try {
         final local = await _atClient.get(atKey);
         if (local.value != null) return local.value as String;
@@ -1073,7 +1079,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// logged and swallowed, since the read already has its answer.
   Future<void> _fileFetched(
       AtKey atKey, String value, Metadata? fetchedMetadata) async {
-    if (atKey.sharedBy != _atClient.getCurrentAtSign()) return;
+    if (!_isOwn(atKey.sharedBy)) return;
     final filed = AtKey()
       ..key = atKey.key
       ..namespace = atKey.namespace
@@ -1146,8 +1152,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     try {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
-      if (owner != _atClient.getCurrentAtSign() ||
-          !_replaceableOwnAdvertisement(e)) {
+      if (!_isOwn(owner) || !_replaceableOwnAdvertisement(e)) {
         rethrow;
       }
       _logger.warning(
@@ -1168,7 +1173,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid) async {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
-    if (held != null || owner != _atClient.getCurrentAtSign()) return held;
+    if (held != null || !_isOwn(owner)) return held;
     if (!_askOnReadMiss) return null;
 
     // NOTE: no fetch and no ask for a generation no own advertisement names.
@@ -1241,7 +1246,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<PackageKey?> heldPublic(
       String owner, String namespace, String nskeyKid) async {
-    if (owner != _atClient.getCurrentAtSign()) return null;
+    if (!_isOwn(owner)) return null;
     final minted = _mintedPublics[_generation(owner, namespace, nskeyKid)];
     if (minted != null) return minted;
     final filed = (await privateFiling?.filedFor(namespace))
@@ -1264,8 +1269,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// reads is filed through; only the current atSign's.
   @override
   Future<Set<String>> heldNamespaces(String owner) async {
-    final me = _atClient.getCurrentAtSign();
-    if (me == null || owner.toAtsign() != me.toAtsign()) return const {};
+    if (!_isOwn(owner)) return const {};
     return await privateFiling?.filedNamespaces() ?? const {};
   }
 
@@ -1276,7 +1280,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
     if (held != null) return held;
 
-    if (owner != _atClient.getCurrentAtSign()) return null;
+    if (!_isOwn(owner)) return null;
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
       _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
