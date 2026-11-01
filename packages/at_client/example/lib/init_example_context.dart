@@ -57,7 +57,12 @@ Future<ExampleContext> getExampleContext(List<String> args) async {
       }
     }
     final AtClient atClient;
-    atClient = (await CLIBase.fromCommandLineArgs(args, parser: ap)).atClient;
+    atClient =
+        (await CLIBase.fromCommandLineArgs(
+          args,
+          parser: ap,
+          preference: AtClientPreference(posture: PqPosture.pqActive),
+        )).atClient;
 
     ExampleContext c = (
       role: role,

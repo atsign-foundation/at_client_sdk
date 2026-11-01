@@ -28,7 +28,12 @@ collection-shaped pattern wired up correctly.
   — see "Collections — todos app"). Same domain shape, same wire
   format, same audience. The two apps are interop-compatible: log
   into both with two atSigns, share a todo from one, and the other
-  side picks it up live.
+  side picks it up live. Both run at `PqPosture.pqActive` in
+  namespace `todos.demos`. `test/todos_examples_pq_test.dart` shares
+  todos both ways between this app's service and the CLI example's
+  collection calls, against a virtual atServer named by
+  `TODOS_VE_ROOT` (such as `vip.ve.atsign.zone:26000`); without it,
+  the test is skipped.
 - **Flutter onboarding plumbing**:
   [`at_client_flutter`](../../README.md) (key-chain storage, OTP
   entry dialogs, atSign-selection dialogs).

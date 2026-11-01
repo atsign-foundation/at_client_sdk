@@ -43,6 +43,8 @@
   `AtsignFlows`, and a pending enrollment's client takes its store from
   `storageOrDefault` (`SKILL.md`; `references/01`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
+- The canonical todos examples, CLI and Flutter, run at `PqPosture.pqActive`
+  (`SKILL.md` §19).
 - `pending.cancel()` ends an enrollment's wait, and
   `AtEnrollmentCancelledException` is what the wait then throws
   (`references/15`).

@@ -21,6 +21,12 @@ dart run bin/collections_primitives.dart --help
 
 `--role` and `--other-at-signs` can be abbreviated as `-R` and `-O`.
 
+The collections, notifications and RPC examples run at `PqPosture.pqActive`,
+as a new app should, so both sides of an example must run it to read what
+the other shares. The at_client
+README's [Post-quantum cryptography](../README.md#post-quantum-cryptography)
+section says what that needs.
+
 ### Collections — primitives
 Share `String` and `Map` values between atSigns.
 ```bash
@@ -57,7 +63,11 @@ widget framework. There is an equivalent Flutter app at
 can A/B the same scenarios across keyboard-driven and mouse-driven
 front-ends, and their wire formats are byte-compatible so logging
 into both with two atSigns and sharing a todo from one shows it
-live in the other.
+live in the other. Both run at `PqPosture.pqActive` in namespace
+`todos.demos`, and both open their collection through
+`lib/todos_tui/todos_collection.dart`'s settings: the Flutter app's
+`test/todos_examples_pq_test.dart` imports that file to share todos both
+ways with this app's calls.
 
 The app is a split-pane TUI: filter chips / dashboard counts header,
 list of todos on the left (keyboard-navigable), live detail pane on

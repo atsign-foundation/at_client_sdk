@@ -38,6 +38,7 @@ dependency_overrides:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  at_demo_data: ^1.2.0
   flutter_lints: ^6.0.0
 
 flutter:

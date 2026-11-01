@@ -761,7 +761,9 @@ for the full migration table from old `AtCollectionModel` patterns to
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`
 - `packages/at_client/example/bin/collections_todos.dart` — terminal-UI (TUI)
-  todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
+  todos app using `AtCollection` + `query().watch()` (Dart/CLI reference); it
+  and the Flutter todos app run at `PqPosture.pqActive` and share todos with
+  each other
 - `packages/at_client/example/bin/notifications.dart` — minimal
   `NotificationService` send/subscribe
 - `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
