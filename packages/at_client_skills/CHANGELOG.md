@@ -81,6 +81,12 @@
   logout / switching and the connection state.
 - The connections an `AtLookUpFactory` builds no longer include a file
   stream's: atServers no longer support the stream verb (`references/15`).
+- Under `pqActive`, a collection's namespace ends with `.` and
+  `preference.namespace`, or its first write throws
+  `NamespaceKeyUnavailableException` (`SKILL.md` §3, §11).
+- An agent approves only the enrollment it expects and denies the rest, a
+  subscriber keeps only the sender it trusts, and the receive sample matches
+  what the send sample sends (`SKILL.md` §13; `references/05`, `10`, `14`).
 
 ## 1.3.0 — 2026-07-31
 

@@ -123,6 +123,11 @@ final todos = await atClient.collection<Todo>(
   eventSource = separate instances
 - **`namespace` must contain `.`** (e.g. `'todos.my_app'`) — throws
   `ArgumentError` otherwise
+- **At `pqActive`, `namespace` ends with `.` and the client's
+  `preference.namespace`** (or a namespace its enrollment is granted):
+  `'todos.my_app'` under `my_app`. In any other namespace the client's
+  start-up publishes no key, and the first write throws
+  `NamespaceKeyUnavailableException`
 - **`typeTag` is mandatory when `fromJson` is supplied** — always a string
   literal, never derived from `T.toString()` (minifier renames types in
   release builds)
@@ -164,6 +169,12 @@ await todos.updateSharedWith(item, {'@alice'.toAtsign(), '@carol'.toAtsign()});
 await todos.delete(item);                    // throws StateError if has sub-items
 await todos.delete(item, cascade: true);     // removes self-owned descendants first
 ```
+
+At `pqActive`, a share is sealed to each recipient's namespace key. A
+recipient that has published none makes `create`, `upsert`, `update` or
+`updateSharedWith` throw `CollectionOpException`, whose failure is a
+`NamespaceKeyUnavailableException` naming them;
+`CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first.
 
 > **Ownership model:** `AtCollection` is **owner-writes-only** — an atsign can
 > only mutate items it owns. `update` / `updateSharedWith` / `delete` throw
@@ -325,7 +336,7 @@ final client = await PkamDialog.show(context,
   atSign: atSign,
   keys: atKeysIo,
   preference: AtClientPreference(posture: PqPosture.pqActive)
-    ..namespace = 'my_namespace',
+    ..namespace = 'my_app',
   backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
 );
 if (client == null) return;
@@ -343,7 +354,7 @@ final client = await PkamDialog.show(context,
   rootDomain: selection.rootDomain,
   keys: KeychainAtKeysIo(),
   preference: AtClientPreference(posture: PqPosture.pqActive)
-    ..namespace = 'my_namespace',
+    ..namespace = 'my_app',
 );
 if (client == null) return;
 _adopt(client);
@@ -386,12 +397,12 @@ and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final preference = AtClientPreference(posture: PqPosture.pqActive)
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';
 final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
   preference: preference,
-  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true),
   lookUps: secureSocketLookUps(),   // how every connection is built
   secondaryAddressFinder: CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort),   // where the atServer is
@@ -442,7 +453,8 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
   4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
-  to write with.
+  to write with. A collection's namespace therefore ends with `.` and
+  `preference.namespace`, as §3 says.
 - Under `pqActive`, a device's first write in each namespace needs the
   atServer (see **offline** below).
 - Under `pqActive`, a write made right after the client opens, before its
@@ -563,14 +575,18 @@ await atClient.notificationService.send(
   expiration: const Duration(minutes: 5),   // short TTL for telemetry
 );
 
-// Receive — subscribe to a namespace regex; decrypt encrypted payloads
+// Receive, on @bob's client — only from the senders it accepts
 atClient.notificationService
-    .subscribe(regex: r'sample\..*\.my_app', shouldDecrypt: true)
+    .subscribeFiltered(
+        acceptedSenders: {'@alice'.toAtsign()}, namespace: 'sample.my_app')
     .listen((n) => handle(n.value));
 ```
 
-`shouldDecrypt` defaults to `false`, which hands back each value as it
-arrived, still encrypted; pass `true` to read it.
+`subscribeFiltered` matches `sample.my_app` and any id before it, decrypts
+each value, and drops a notification from any other sender. Plain
+`subscribe(regex:, shouldDecrypt:)` takes every sender, and its
+`shouldDecrypt` defaults to `false`, which hands back each value still
+encrypted.
 
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
 for the full decision guide and the dockerstats Notifications+SQLite example.
