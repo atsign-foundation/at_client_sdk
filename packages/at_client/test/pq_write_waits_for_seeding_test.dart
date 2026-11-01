@@ -416,5 +416,40 @@ void main() {
           throwsA(isA<NamespaceKeyUnavailableException>()
               .having((e) => e.atSign, 'atSign', _bob)));
     });
+
+    test(
+        "when the wait for the writer's own start-up runs out, then the share "
+        'is refused naming the recipient',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 200);
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      wire(c);
+
+      await expectLater(
+          write(c, AtKey.fromString('$_bob:x.todos.demos$_alice')),
+          throwsA(isA<NamespaceKeyUnavailableException>()
+              .having((e) => e.atSign, 'atSign', _bob)
+              .having(
+                  (e) => e.message, 'message', isNot(contains('start-up')))));
+    });
+  });
+
+  group("Given a write waiting for start-up's seeding step", () {
+    test(
+        'when its key is published but the step has not finished as the wait '
+        'runs out, then the write goes ahead under that key',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 300);
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+
+      await c.seed('todos.demos');
+      await writing;
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+    });
   });
 }

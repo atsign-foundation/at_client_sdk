@@ -153,20 +153,26 @@ class CkManager {
 
     var advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
-      final covering = await _afterStartUpSeeding(holder, valueKey, namespace);
-      if (covering != null) {
+      final waited = await _afterStartUpSeeding(holder, valueKey, namespace);
+      if (waited != null) {
         namespace = await resolver.startLevelOf(holder, valueKey);
         advertised = await resolver.resolve(owner, namespace);
-        final failure = startUpSeeding?.failureFor(covering);
-        // NOTE: start-up's failure is the reason only for this atSign's own
-        // key; a share that still finds nothing is refused naming the
-        // recipient.
-        if (advertised == null &&
-            failure != null &&
-            owner.toAtsign() == holder!.toAtsign()) {
-          throw NamespaceKeyUnavailableException(holder, covering,
-              because: 'this client\'s start-up could not publish it: '
-                  '$failure');
+        // NOTE: start-up is the reason only for this atSign's own key; a share
+        // that still finds nothing is refused naming the recipient.
+        if (advertised == null && owner.toAtsign() == holder!.toAtsign()) {
+          final failure = startUpSeeding?.failureFor(waited.covering);
+          if (failure != null) {
+            throw NamespaceKeyUnavailableException(holder, waited.covering,
+                because: 'this client\'s start-up could not publish it: '
+                    '$failure');
+          }
+          if (waited.timedOut) {
+            throw NamespaceKeyUnavailableException(holder, waited.covering,
+                because: 'this client\'s start-up has not yet published it, '
+                    '${waited.waited?.inSeconds} seconds after the write '
+                    'began waiting; a later write succeeds once it is '
+                    'published');
+          }
         }
       }
     }
@@ -552,21 +558,26 @@ class CkManager {
   }
 
   /// The namespace [startUpSeeding] seeds that covers [valueKey], once its
-  /// seeding step has finished, or null at once when it seeds none or is done.
-  ///
-  /// Throws [NamespaceKeyUnavailableException] when [StartUpSeeding.wait]
-  /// passes first, naming the key start-up has not yet published.
-  Future<String?> _afterStartUpSeeding(
-      String? holder, AtKey valueKey, String namespace) async {
+  /// seeding step has finished or [StartUpSeeding.wait] has passed, or null
+  /// at once when it seeds none or is done. `timedOut` says the wait passed
+  /// first, after `waited`.
+  Future<({String covering, bool timedOut, Duration? waited})?>
+      _afterStartUpSeeding(
+          String? holder, AtKey valueKey, String namespace) async {
     final seeding = startUpSeeding;
     if (seeding == null || holder == null) return null;
     try {
-      return await seeding.covering('${valueKey.key}.${valueKey.namespace}');
+      final covering =
+          await seeding.covering('${valueKey.key}.${valueKey.namespace}');
+      return covering == null
+          ? null
+          : (covering: covering, timedOut: false, waited: null);
     } on TimeoutException catch (e) {
-      throw NamespaceKeyUnavailableException(holder, e.message ?? namespace,
-          because: 'this client\'s start-up has not yet published it, '
-              '${e.duration?.inSeconds} seconds after the write began '
-              'waiting; a later write succeeds once it is published');
+      return (
+        covering: e.message ?? namespace,
+        timedOut: true,
+        waited: e.duration
+      );
     }
   }
 
