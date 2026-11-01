@@ -27,6 +27,9 @@
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
 - build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
+- feat: `AtKeys.unfileLegacyEnrollment` drops what `fileLegacyMaterial`
+  filed for an enrollment that is gone, and nothing another enrollment
+  filed.
 - breaking: `AtEnrollmentRequest` and `AtEnrollmentRequest.pq` require a
   `session`. Their deprecated `atSign`, `rootDomain`, `apkamPublicKey` and
   `encryptedAPKAMSymmetricKey` parameters are removed, as is the
