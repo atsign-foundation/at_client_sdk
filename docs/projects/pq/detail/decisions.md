@@ -15558,14 +15558,26 @@ and its asks were refused as coming from a package that was not the roster's.
 
 Supersedes nothing.
 
-**Known limit.** A keyfile holding an untagged key package, which only an older keyfile does,
-advertises two packages and holds one once the reconcile files a tagged key beside it, as it does
-when the preference adds an algorithm: the publish names both, and a load returns only the tagged
-set, so the client holds the new key alone. Left as it is, since only internal users run the
-post-quantum postures (gkc, 2026-10-29); every submit path files a first key package under its
-enrollment id, and
-[the upgrade guide](../../../upgrade-to-4.md#5-a-keyfile-written-by-a-release-candidate) says
-what a release-candidate keyfile sees.
+**Known limit.** A keyfile holding an untagged key package advertises two packages and holds one
+once the reconcile files a tagged key beside it, as it does when the preference adds an algorithm:
+the publish names both, and a load returns only the tagged set, so the client holds the new key
+alone. Left as it is, since only internal users run the post-quantum postures (gkc, 2026-10-29).
+No published release writes such a keyfile. at_client 3.15.0-rc1 to rc8 hand the key-package
+builder to at_auth, and at_auth 4.0.0-rc1 to rc7 file what it builds under the enrollment id on
+all three submit paths: onboarding, self-enrollment and a new device's enrollment. No 3.x release
+of either package files a key package in the keyfile. Trunk never wrote one either: the builder
+and those re-tags reached it together when
+[#2224](https://github.com/atsign-foundation/at_client_sdk/pull/2224) merged on 2026-09-10. The
+only such keyfiles came from a new device's enrollment on a build of the PQ spike branch between
+2026-08-03, when the builder landed (`a25029364`), and 2026-08-25, when that path began filing
+the builder's output under the enrollment id (`d548c71f7`). Self-enrollment (`e6674e47e`) and
+onboarding (`5d404fc22`) did so from their first commits there, and at_auth 4.0.0-rc1, the first
+at_auth to carry any of these paths, was published on 2026-09-07.
+
+⚠️ **Corrected 2026-10-31:** this said only "an older keyfile" holds an untagged key package, and
+ended by pointing to an upgrade-guide section on "what a release-candidate keyfile sees". That
+section said a keyfile an at_client release candidate wrote under `pqReady` or `pqActive` could
+hold the first key package untagged. No release candidate writes one, and the section is removed.
 
 **Built** in at_client. Proven in-process by `key_package_persistence_test.dart` and
 `pairwise_secret_sharing_test.dart`, and live by `pq_posture_grid_test.dart`'s readback, where a
