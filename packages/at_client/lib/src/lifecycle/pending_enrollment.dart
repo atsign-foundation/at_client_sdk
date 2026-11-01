@@ -200,8 +200,10 @@ class PendingEnrollment {
   ///
   /// An approval already written to [keys] stays there, and a client that
   /// [client] has opened on it by then is stopped. A connection the caller
-  /// supplied is left open. Nothing withdraws the request on the atServer.
-  /// A second call does nothing more.
+  /// supplied is left open while the wait runs; once [client] has opened a
+  /// client on it, that client owns it, as `Atsign.open` does, so stopping
+  /// the client stops the connection too. Nothing withdraws the request on
+  /// the atServer. A second call does nothing more.
   Future<void> cancel() => _cancelling ??= _cancelOnce();
 
   Future<void> _cancelOnce() async {
