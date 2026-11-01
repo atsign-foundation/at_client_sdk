@@ -185,6 +185,10 @@ replaces it because nothing read it.
 | `startCompactionJob`, `stopCompactionJob`                                                    | none; they did nothing                                                                  |
 | `NotificationParams.forText(...)`                                                            | `NotificationParams.forUpdate(...)`; atServers refuse text notifications                |
 | `notificationService.send(namespace: ...)`                                                   | `send(idAndNamespace: ...)`, the same value                                             |
+| `AtClientManager.getInstance().syncService`, `.notificationService`                          | `client.syncService`, `client.notificationService`                                      |
+| `syncService.sync(onDone: ...)`, `setOnDone(...)`                                            | a `SyncProgressListener` added with `addProgressListener`                               |
+| `AtServiceFactory.atClient(...)`                                                             | `Atsign(a).open(...)` or `buildAtClient(...)`                                           |
+| `AtClientPreference.syncStrategy`, `SyncStrategy`                                            | nothing; they did nothing                                                               |
 | `sync:` on `executeVerb`, `executeAndParse`                                                  | Delete the argument                                                                     |
 | `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout` | Delete the assignment; nothing read them                     |
 | `AtClientPreference.enforceNamespace`                                                        | Delete the assignment; every key except a `local:` one names a namespace                |
@@ -225,7 +229,6 @@ three `AtClientPreference` fields go in 5.0.
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AtClientPreference.hiveStoragePath`                         | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage:`; at_client ignores the field, and at_client_flutter's dialogs read it only when given no storage |
 | `AtClientPreference.isLocalStoreRequired`, `hashingAlgoType` | Nothing; at_client reads neither                                                  |
-| `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService`                         |
 
 ---
 

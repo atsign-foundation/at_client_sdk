@@ -55,7 +55,6 @@ class SkipDeletesUntilMatcher extends Matcher {
 
 void main() async {
   late AtClient mockAtClient;
-  late AtClientManager mockAtClientManager;
   late NotificationServiceImpl mockNotificationService;
   late RemoteSecondary mockRemoteSecondary;
   late SyncServiceImpl syncServiceImpl;
@@ -64,7 +63,6 @@ void main() async {
 
   setUp(() async {
     mockAtClient = MockAtClient();
-    mockAtClientManager = MockAtClientManager();
     mockNotificationService = MockNotificationServiceImpl();
     mockRemoteSecondary = MockRemoteSecondary();
 
@@ -72,7 +70,6 @@ void main() async {
         .thenReturn(mockNotificationService);
 
     syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
-        atClientManager: mockAtClientManager,
         remoteSecondary: mockRemoteSecondary,
         warmStartSync: false) as SyncServiceImpl;
   });

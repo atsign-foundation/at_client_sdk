@@ -21,30 +21,14 @@ abstract class SyncService {
   /// If local secondary is ahead, pushes the changes to the cloud secondary.
   /// If cloud secondary is ahead, pulls the changes to the local secondary.
   ///
-  /// Register to onDone callback. The callback accepts instance of [SyncResult].
+  /// A [SyncProgressListener] added with [addProgressListener] hears how
+  /// each round went.
   ///
   /// Usage
   /// ```dart
-  /// var syncService = AtClientManager.getInstance().syncService;
-  ///
-  /// syncService.sync(_onDoneCallback); //or
-  /// syncService.sync();
-  ///
-  /// // Called when sync process is successful.
-  /// void _onDoneCallback(syncResult){
-  ///   print(syncResult.syncStatus);
-  ///   print(syncResult.lastSyncedOn);
-  /// }
+  /// client.syncService.sync();
   /// ```
-  void sync(
-      {@Deprecated('Use SyncProgressListener') Function? onDone,
-      Function? onError});
-
-  /// Call this method to set the Global onDone callback.
-  /// This method will be called when a sync is completed.
-  /// When a specific onDone function is passed to the sync Function, Then the specific onDone is called.
-  @Deprecated('Use SyncProgressListener')
-  void setOnDone(Function onDone);
+  void sync({Function? onError});
 
   /// Whether nothing waits to push and the atServer's latest commit id for
   /// this client's sync filter is at or below the one it has pulled to.
@@ -145,11 +129,10 @@ class SyncRequest {
   late String id;
   SyncRequestSource requestSource = SyncRequestSource.app;
   late DateTime requestedOn;
-  Function? onDone;
   Function? onError;
   SyncResult? result;
 
-  SyncRequest({this.onDone, this.onError}) {
+  SyncRequest({this.onError}) {
     id = Uuid().v4();
     requestedOn = DateTime.now().toUtc();
   }
@@ -202,7 +185,7 @@ class SyncProgress {
 
 abstract class SyncProgressListener {
   /// Notifies the registered listener for the [SyncProgress]
-  /// Caller has to register the listener using  atClientManager.syncService.addProgressListener(...)
+  /// Caller has to register the listener using client.syncService.addProgressListener(...)
   /// Caller can use [SyncProgress.atSign] to know for which atSign the event was triggered.
   void onSyncProgressEvent(SyncProgress syncProgress);
 }

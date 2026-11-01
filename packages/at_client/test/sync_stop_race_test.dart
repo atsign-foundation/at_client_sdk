@@ -61,9 +61,7 @@ void main() {
         .thenAnswer((_) async => <String>[]);
 
     service = await SyncServiceImpl.create(atClient,
-        atClientManager: MockAtClientManager(),
-        remoteSecondary: remote,
-        warmStartSync: false) as SyncServiceImpl;
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
   });
 
   tearDown(() async {

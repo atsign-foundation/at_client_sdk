@@ -166,7 +166,7 @@ abstract class NotificationService {
   ///    ..key = 'phone'
   ///    ..sharedWith = '@bob';
   ///
-  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  var notificationService = client.notificationService;
   ///  await notificationService.notify(NotificationParams.forUpdate(key));
   ///```
   ///2. To notify and cache a key to @bob
@@ -179,7 +179,7 @@ abstract class NotificationService {
   ///
   ///  var value = '+1 998 999 4940'
   ///
-  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  var notificationService = client.notificationService;
   ///  await notificationService.notify(NotificationParams.forUpdate(key, value: value));
   ///```
   ///3. To notify deletion of a key to @bob.
@@ -188,7 +188,7 @@ abstract class NotificationService {
   ///     ..key = 'phone'
   ///     ..sharedWith = '@bob';
   ///
-  ///   var notificationService = AtClientManager.getInstance().notificationService;
+  ///   var notificationService = client.notificationService;
   ///   await notificationService.notify(NotificationParams.forDelete(key));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
@@ -205,7 +205,7 @@ abstract class NotificationService {
   ///
   /// To get the status of a notification
   ///```dart
-  /// var notificationService = AtClientManager.getInstance().notificationService;
+  /// var notificationService = client.notificationService;
   /// var notificationResult = await notificationService.status('abc-123');
   ///```
   ///
@@ -224,7 +224,7 @@ abstract class NotificationService {
   ///
   ///  To fetch a notification with id: abc-123
   /// ```dart
-  /// var notificationService = AtClientManager.getInstance().notificationService;
+  /// var notificationService = client.notificationService;
   /// var atNotification = await notificationService.fetch('abc-123');
   /// ```
   /// Returns [NotificationStatus.delivered] when notification exist in the key-store

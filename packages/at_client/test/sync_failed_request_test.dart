@@ -57,16 +57,13 @@ void main() {
       'a request the round fails is answered once, and the round is not run '
       'again for it', () async {
     var errors = 0;
-    var done = 0;
-    // ignore: deprecated_member_use_from_same_package
-    sync.sync(onDone: (_) => done++, onError: (_) => errors++);
+    sync.sync(onError: (_) => errors++);
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
     expect(errors, 1,
-        reason: 'a request carrying onDone used to stay queued after the '
-            'round failed, so the next microtask ran the same round for it '
-            'again and again, firing onError each time');
-    expect(done, 0);
+        reason: 'a request left queued after its round failed would run the '
+            'same round again on the next microtask, firing onError each '
+            'time');
     verify(() => remote.executeVerb(any())).called(1);
   });
 }

@@ -112,12 +112,10 @@ extension AtsignLifecycle on Atsign {
       secondaryAddressFinder: secondaryAddressFinder,
       notificationServiceBuilder: serviceFactory == null
           ? null
-          : (client) => serviceFactory.notificationService(
-              client, AtClientManager.getInstance()),
+          : (client) => serviceFactory.notificationService(client),
       syncServiceBuilder: serviceFactory == null
           ? null
-          : (client) => serviceFactory.syncService(client,
-              AtClientManager.getInstance(), client.notificationService),
+          : (client) => serviceFactory.syncService(client),
       enrollmentServiceBuilder: serviceFactory?.enrollmentService,
     ) as AtClientImpl;
 

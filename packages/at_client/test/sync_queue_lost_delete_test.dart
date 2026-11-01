@@ -90,9 +90,7 @@ void main() {
         .thenAnswer((_) async => AtValue()..value = '7');
 
     service = await SyncServiceImpl.create(atClient,
-        atClientManager: MockAtClientManager(),
-        remoteSecondary: remote,
-        warmStartSync: false) as SyncServiceImpl;
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
 
     // The stats fetch _isInSync opens every round with.
     when(() => remote.executeVerb(any()))

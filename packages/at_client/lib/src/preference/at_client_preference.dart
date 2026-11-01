@@ -8,7 +8,6 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show canSignEnvelopeWith;
 import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 
@@ -241,11 +240,6 @@ class AtClientPreference {
       'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
-  /// Syncing strategy of the client [SyncStrategy]
-  /// [Deprecated] Use [SyncService]
-  @Deprecated("Use [SyncService]")
-  SyncStrategy? syncStrategy;
-
   bool _isLocalStoreRequired = true;
 
   /// Read by nothing: every client is given its storage.
@@ -450,14 +444,4 @@ enum RemoteLocalPref {
   /// Note that if the application is syncing, then the change will be pulled
   /// to local from remote as part of the sync process.
   remoteOnly,
-}
-
-@Deprecated("Use SyncService")
-enum SyncStrategy {
-  /// Sync local keys immediately to secondary server for update and delete commands.
-  immediate,
-  onDemand,
-
-  /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
-  scheduled
 }

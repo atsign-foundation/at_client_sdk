@@ -31,6 +31,17 @@
   accept.
 - breaking: `NotificationService.send` requires `idAndNamespace`; its
   `namespace:` spelling is removed.
+- breaking: `AtClientManager.syncService` and `notificationService` are
+  removed; use the client's own, `client.syncService` and
+  `client.notificationService`.
+- breaking: `SyncService.sync` takes no `onDone`, and `setOnDone` is removed;
+  a `SyncProgressListener` hears how each sync went.
+- breaking: `AtServiceFactory.atClient` is removed, and the factory's
+  `notificationService` and `syncService` take only the client.
+  `AtClientImpl.create` and `SyncServiceImpl.create` take no
+  `atClientManager`.
+- breaking: `AtClientPreference.syncStrategy` and `SyncStrategy`, which
+  nothing read, are removed.
 - breaking: `AtClientManager.secondaryAddressFinder` and
   `setSecondaryAddressFinder` are removed; a client asks only the
   `secondaryAddressFinder` it is built with.
@@ -88,8 +99,8 @@
   a required `lookUps` and `secondaryAddressFinder`, which choose how it
   connects.
 - breaking: `AtClient.atChops` and `RemoteSecondary.atChops` are removed, with
-  the `atChops` parameters of `AtClientImpl.create` and
-  `AtServiceFactory.atClient`. Hand a client its keys as an `AtKeysIo`.
+  the `atChops` parameter of `AtClientImpl.create`. Hand a client its keys as
+  an `AtKeysIo`.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
 - breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
@@ -161,9 +172,8 @@
 - breaking: `FileAtKeysIo`, `secureSocketLookUps` and
   `CacheableSecondaryAddressFinder` come from the new `at_client_io.dart`;
   `at_client.dart` no longer exports them, and builds for the web.
-- breaking: every call that builds a client, `enroll`, `resumeEnrollment` and
-  `AtServiceFactory.atClient` take a required `lookUps` and
-  `secondaryAddressFinder`, as do `authenticatesAs` and `retrofitIdentity`,
+- breaking: every call that builds a client, `enroll` and `resumeEnrollment`
+  take a required `lookUps` and `secondaryAddressFinder`, as do `authenticatesAs` and `retrofitIdentity`,
   and `RemoteSecondary` a required `lookUps`. `secureSocketLookUps()` and
   `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`
   connect as at_client 3 did.

@@ -203,8 +203,8 @@ Set `AtClientPreference.syncRegex` to your namespace ([11-sync.md](11-sync.md)).
 Reads are local; writes apply locally at once and push in the background, and
 a write made offline pushes when the atServer is reached.
 
-`AtClientManager.getInstance().syncService` is deprecated: the service is the
-client's.
+`AtClientManager.getInstance().syncService` is gone in 4.0: the service is
+the client's.
 
 ---
 

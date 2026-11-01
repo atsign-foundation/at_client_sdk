@@ -8,7 +8,6 @@ import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -106,8 +105,6 @@ class SyncServiceImpl implements SyncService {
   @override
   bool get isSyncInProgress => _syncInProgress;
 
-  Function? onDone;
-
   late final AtSignLogger _logger;
 
   // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
@@ -167,10 +164,7 @@ class SyncServiceImpl implements SyncService {
   /// Tests pass `warmStartSync: false` to keep the request queue
   /// pristine for assertion-style scenarios.
   static Future<SyncService> create(AtClient atClient,
-      {@Deprecated('will be removed in a future version')
-      AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary,
-      bool warmStartSync = true}) async {
+      {RemoteSecondary? remoteSecondary, bool warmStartSync = true}) async {
     final ownsRemoteSecondary = remoteSecondary == null;
     remoteSecondary ??= remoteSecondaryFor(atClient);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary,
@@ -231,11 +225,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   @override
-  void sync(
-      {@Deprecated('Use SyncProgressListener') Function? onDone,
-      Function? onError}) {
+  void sync({Function? onError}) {
     final syncRequest = SyncRequest();
-    syncRequest.onDone = onDone;
     syncRequest.onError = onError;
     syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
@@ -487,16 +478,7 @@ class SyncServiceImpl implements SyncService {
   /// dequeued, so one left in the queue would be run again on the next
   /// microtask, and again on the one after, for as long as the failure
   /// lasted.
-  SyncRequest _getSyncRequest() {
-    for (final syncRequest in syncRequests) {
-      if (syncRequest.requestSource == SyncRequestSource.app &&
-          syncRequest.onDone != null) {
-        syncRequests.remove(syncRequest);
-        return syncRequest;
-      }
-    }
-    return syncRequests.removeFirst();
-  }
+  SyncRequest _getSyncRequest() => syncRequests.removeFirst();
 
   void _syncError(SyncRequest syncRequest) {
     _safeInvokeOnError(syncRequest);
@@ -544,23 +526,9 @@ class SyncServiceImpl implements SyncService {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.finer(
-        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
-    // If specific onDone callback is set, call specific onDone callback,
-    // else call the global onDone callback.
-    if (syncRequest.onDone != null &&
-        syncRequest.requestSource == SyncRequestSource.app) {
-      _logger.finer('Sending result to onDone callback');
-      syncRequest.onDone!(syncRequest.result);
-    } else if (onDone != null) {
-      onDone!(syncRequest.result);
-    }
+    _logger.finer('Inside syncComplete. syncRequest.requestSource : '
+        '${syncRequest.requestSource}');
     _clearQueue(alreadyHandled: syncRequest);
-  }
-
-  // ignore: unused_element
-  void _onDone(SyncResult syncResult) {
-    _logger.finer('system sync completed on ${syncResult.lastSyncedOn}');
   }
 
   // ignore: unused_element
@@ -649,10 +617,9 @@ class SyncServiceImpl implements SyncService {
   /// clearing of the request queue here is therefore safe — no
   /// pending-write information lives on it.
   ///
-  /// The just-processed request's `onDone` has already fired by the
-  /// time this is called from [_syncComplete]; passing it as
-  /// [alreadyHandled] keeps it from also being notified via `onError`
-  /// here. Identity comparison is exact (`identical`) so only the
+  /// The just-processed request has completed by the time this is
+  /// called from [_syncComplete]; passing it as [alreadyHandled] keeps it
+  /// from being notified via `onError` here. Identity comparison is exact (`identical`) so only the
   /// specific in-flight instance is skipped.
   void _clearQueue({SyncRequest? alreadyHandled}) {
     _logger.finer('Clearing sync queue');
@@ -1788,11 +1755,6 @@ class SyncServiceImpl implements SyncService {
       }
     }
     _syncProgressListeners.clear();
-  }
-
-  @override
-  void setOnDone(Function onDone) {
-    this.onDone = onDone;
   }
 
   @visibleForTesting

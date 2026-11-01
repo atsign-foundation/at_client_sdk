@@ -699,8 +699,6 @@ class AtClientImpl implements AtClient {
     String currentAtSign,
     String? namespace,
     AtClientPreference preferences, {
-    @Deprecated('no longer needed. will be removed in a future release')
-    AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     required AtKeysIo atKeysIo,

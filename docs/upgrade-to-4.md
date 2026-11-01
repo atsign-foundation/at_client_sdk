@@ -221,11 +221,11 @@ import 'package:at_client_cli/at_client_cli.dart' hide StringBuffer;
 
 ### `The getter 'atChops' isn't defined`
 
-`AtClient.atChops`, `RemoteSecondary.atChops` and the `atChops:` parameters of
-`AtClientImpl.create` and `AtServiceFactory.atClient` are gone. A client is
-given its keys as an `AtKeysIo`, such as `FileAtKeysIo`, and signs and
-encrypts with them itself. at_client 4.0 stays on at_chops 3.7, so a program
-calling at_chops directly changes nothing for this release.
+`AtClient.atChops`, `RemoteSecondary.atChops` and the `atChops:` parameter of
+`AtClientImpl.create` are gone. A client is given its keys as an `AtKeysIo`,
+such as `FileAtKeysIo`, and signs and encrypts with them itself. at_client 4.0
+stays on at_chops 3.7, so a program calling at_chops directly changes nothing
+for this release.
 
 ### `The setter 'commitLogPath' isn't defined`, and other `AtClientPreference` fields
 
@@ -235,6 +235,7 @@ These fields are gone. Delete each assignment:
 |---|---|
 | `commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted` | nothing; they were read by nothing |
 | `outboundConnectionTimeout` | nothing |
+| `syncStrategy`, and the `SyncStrategy` enum | nothing; they were read by nothing |
 | `enforceNamespace` | nothing; every key except a `local:` one names a namespace |
 | `decryptPackets`, `pathToCerts`, `tlsKeysSavePath` | a `SecureSocketConfig` given to `secureSocketLookUps`, below |
 
@@ -283,6 +284,9 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `startCompactionJob`, `stopCompactionJob` | none; they did nothing |
 | `NotificationParams.forText(...)` | `NotificationParams.forUpdate(...)`; atServers refuse text notifications |
 | `notificationService.send(namespace: ...)` | `send(idAndNamespace: ...)`, the same value |
+| `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService` |
+| `syncService.sync(onDone: ...)`, `setOnDone(...)` | a `SyncProgressListener` added with `addProgressListener` |
+| `AtServiceFactory.atClient(...)` | `Atsign(a).open(...)` or `buildAtClient(...)` |
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |
@@ -399,7 +403,10 @@ null passes a default in its place, such as
 
 `AtClient` gained `atKeysIo`, `connection` and `ensureReachable`, and
 `AtLookUp` gained `authenticator` and `stop`. Regenerate generated mocks, and
-add the members to any class implementing either.
+add the members to any class implementing either. A `SyncService` of your own
+drops `setOnDone` and `sync`'s `onDone`, and an `AtServiceFactory` of your own
+drops `atClient` and takes only the client in `notificationService` and
+`syncService`.
 
 ### Changes the analyzer won't show
 

@@ -28,7 +28,6 @@ void main() {
 
   Future<LocalSecondary> setUpLocalSecondary({AtSyncQueue? syncQueue}) async {
     AtClientImpl.atClientInstanceMap.remove(atSign);
-    final atClientManager = AtClientManager(atSign);
     final preference = AtClientPreference()
       ..isLocalStoreRequired = true
       ..syncRegex = ''
@@ -40,7 +39,6 @@ void main() {
       lookUps: secureSocketLookUps(),
       secondaryAddressFinder: atDirectoryOf(preference),
       atKeysIo: noKeysFor(atSign),
-      atClientManager: atClientManager,
       storage: hiveStoreFor(atSign, preference),
     );
     atClient.syncService = MockSyncService();

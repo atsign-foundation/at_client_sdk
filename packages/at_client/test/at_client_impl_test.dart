@@ -149,7 +149,6 @@ void main() {
     });
 
     test('test current atsign', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
@@ -157,7 +156,6 @@ void main() {
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(preference),
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
@@ -173,7 +171,6 @@ void main() {
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
@@ -181,7 +178,6 @@ void main() {
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(preference),
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
     });
