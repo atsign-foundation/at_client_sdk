@@ -4,6 +4,9 @@
 - fix: `AtKeysCrypto.fromHashingAlgorithm` throws an `ArgumentError` naming
   the hashing type for any type but argon2id, rather than returning an object
   whose `encrypt` and `decrypt` fail.
+- feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
+  derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
+  (`MlDsa65Sizes.seedBytes`).
 
 ## 3.7.0
 

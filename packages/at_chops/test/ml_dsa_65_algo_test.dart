@@ -248,4 +248,47 @@ void main() {
           isFalse);
     });
   });
+
+  group('ML-DSA-65 pure-Dart keyPairFromSeed', () {
+    final algo = MlDsa65PureDartAlgo();
+
+    test('MlDsa65Sizes.seedBytes is the FIPS 204 xi length', () {
+      expect(MlDsa65Sizes.seedBytes, 32);
+    });
+
+    test('the same seed derives the same keypair', () async {
+      final Uint8List seed = Uint8List.fromList(
+          List<int>.generate(MlDsa65Sizes.seedBytes, (int i) => i * 3));
+      final first = await algo.keyPairFromSeed(seed);
+      final second = await MlDsa65PureDartAlgo().keyPairFromSeed(seed);
+      expect(second.publicKey, first.publicKey);
+      expect(second.secretKey, first.secretKey);
+    });
+
+    test('different seeds derive different keypairs', () async {
+      final a = await algo.keyPairFromSeed(Uint8List(MlDsa65Sizes.seedBytes));
+      final b = await algo
+          .keyPairFromSeed(Uint8List(MlDsa65Sizes.seedBytes)..[0] = 1);
+      expect(b.publicKey, isNot(a.publicKey));
+    });
+
+    test('a seeded keypair signs and verifies', () async {
+      final kp = await algo.keyPairFromSeed(
+          Uint8List.fromList(List<int>.filled(MlDsa65Sizes.seedBytes, 7)));
+      final Uint8List message = Uint8List.fromList('seeded'.codeUnits);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+      expect(
+          await algo.verifyBytes(message,
+              signature: sig, publicKey: kp.publicKey),
+          isTrue);
+    });
+
+    for (final int length in [0, 31, 33, 64]) {
+      test('a $length-byte seed throws ArgumentError', () {
+        expect(() => algo.keyPairFromSeed(Uint8List(length)),
+            throwsA(isA<ArgumentError>()));
+      });
+    }
+  });
 }
