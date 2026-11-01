@@ -87,6 +87,28 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
+      'at_register with a registrar API key that is set but empty refuses as '
+      'with none', () async {
+    final run = await atRegister(registrarApiKey: '');
+
+    expect(run.output, contains(pointer));
+    expect(run.output, isNot(contains('registrar served')),
+        reason: 'nothing is sent to the registrar');
+    expect(run.exitCode, 8);
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('A registrar API key that is empty or blank is refused as a missing one',
+      () {
+    for (final blank in ['', ' ', '\t\n']) {
+      expect(
+          () => OnboardingUtil(blank),
+          throwsA(isA<Exception>()
+              .having((e) => '$e', 'message', contains(noRegistrarApiKey))),
+          reason: 'a key of ${jsonEncode(blank)} names no app');
+    }
+  });
+
+  test(
       'at_activate onboard without a CRAM secret and with no registrar API '
       'key refuses the same way', () async {
     const args = ['onboard', '-a', '@alice', '-y', '--debug'];
