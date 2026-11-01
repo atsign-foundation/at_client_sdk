@@ -73,9 +73,9 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
   NamespaceKeyUnavailableException(this.atSign, this.namespace,
       {String? because})
       : super('$atSign has no published nskey for "$namespace" — '
-            '${because == null ? 'that namespace has not been used or '
-                'authorised there, so there is no post-quantum key to seal a '
-                'content key to, and at pqActive no legacy fallback applies' : '$because; a later write succeeds once it is published'}.');
+            '${because ?? 'that namespace has not been used or authorised '
+                'there, so there is no post-quantum key to seal a content key '
+                'to'}.');
 }
 
 /// Layer 2 of the nskey data path: conveys a symmetric content key.

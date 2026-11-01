@@ -556,7 +556,8 @@ class CkManager {
     } on TimeoutException catch (e) {
       throw NamespaceKeyUnavailableException(holder, e.message ?? namespace,
           because: 'this client\'s start-up has not yet published it, '
-              '${e.duration?.inSeconds} seconds after the write began waiting');
+              '${e.duration?.inSeconds} seconds after the write began '
+              'waiting; a later write succeeds once it is published');
     }
   }
 

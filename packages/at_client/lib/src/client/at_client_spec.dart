@@ -205,7 +205,9 @@ abstract class AtClient {
   /// its start-up has published the namespace key the value is sealed to,
   /// waits for that key, at most 30 seconds, and then throws
   /// `NamespaceKeyUnavailableException` naming it if it is still not
-  /// published. Stopping the client ends the wait with [StoppedException].
+  /// published. Start-up publishes that key only after its earlier steps
+  /// finish, so the 30 seconds cover those too. Stopping the client ends the
+  /// wait with [StoppedException].
   Future<bool> put(AtKey key, dynamic value,
       {PutRequestOptions? putRequestOptions});
 
