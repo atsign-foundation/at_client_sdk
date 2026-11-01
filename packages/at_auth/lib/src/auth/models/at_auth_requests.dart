@@ -73,7 +73,10 @@ class AtOnboardingRequest extends AuthRequest {
   /// major, once every first-party downstream writes PQ by default.
   ///
   /// Setting it false makes a legacy peer's send to this atSign unsupported:
-  /// there is no `public:publickey` for them to encrypt to. It also leaves the
+  /// there is no `public:publickey` for them to encrypt to. It leaves
+  /// at_client's `AtClient.put` of a public value throwing
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key. It also leaves the
   /// keyfile with no `selfEncryptionKey`, which is correct — with no legacy
   /// flat fields to protect there is nothing for it to encrypt, and a
   /// passphrase envelope is what protects the typed material at rest.

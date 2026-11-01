@@ -262,9 +262,9 @@ void main() {
               'UpdateVerbBuilder, so a refused DELETE surfaced as a '
               'TypeError from inside the catch');
       expect(
-          recorded.at('FINER'),
-          contains(
-              contains('Failed to sync k1.__ssenv.wavi@abandon caused by')),
+          recorded.at('WARNING'),
+          contains(contains('Not applying the atServer\'s change to '
+              'k1.__ssenv.wavi@abandon')),
           reason: 'the refusal is logged with the key it was about');
     });
 

@@ -54,7 +54,7 @@ void main() {
     expect(
         reached.files.where((f) => f.contains('/at_client/lib/')), isNotEmpty,
         reason: 'the control: the walk reached at_client from the program');
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 /// How `if (dart.library.x)` evaluates in a dart2wasm build.

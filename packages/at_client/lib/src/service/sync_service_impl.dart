@@ -724,6 +724,39 @@ class SyncServiceImpl implements SyncService {
     return syncResult;
   }
 
+  /// The codes with which the atServer refuses a queued write for good, so
+  /// that pushing it again is refused again: unauthorized, an immutable
+  /// record, an invalid key, an illegal argument and invalid syntax.
+  static final Set<String> _refusedForGood = refusedForGoodCodes();
+
+  /// The codes at_commons' [codes] gives the exceptions [_refusedForGood] is
+  /// named by.
+  ///
+  /// Throws a [StateError] naming an exception [codes] lists no code for.
+  @visibleForTesting
+  static Set<String> refusedForGoodCodes([Map codes = error_codes]) => {
+        for (final name in const [
+          'UnAuthorizedException',
+          'IllegalStateException',
+          'InvalidAtKeyException',
+          'IllegalArgumentException',
+          'InvalidSyntaxException',
+        ])
+          codes[name] as String? ??
+              (throw StateError('at_commons lists no error code for $name')),
+      };
+
+  /// The codes at_commons lists for the atServer's exceptions.
+  static final Set<String> _listedCodes = {
+    for (final code in error_codes.values) code as String,
+  };
+
+  /// Whether the atServer's refusal [code] drops a queued write for good: one
+  /// of [_refusedForGood], or a code at_commons does not list.
+  static bool _dropsForGood(String? code) =>
+      code != null &&
+      (_refusedForGood.contains(code) || !_listedCodes.contains(code));
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -740,8 +773,11 @@ class SyncServiceImpl implements SyncService {
   ///    network round-trip per batch — keeps push throughput high
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
-  ///    queue and promote `_latestKnownServerCommitId`. On failure,
-  ///    leave in queue for retry on the next round.
+  ///    queue and promote `_latestKnownServerCommitId`. On a refusal
+  ///    for good ([_dropsForGood]), remove from the queue logged at
+  ///    severe, keeping the local copy. On any other answer without a
+  ///    commit id, leave in queue logged at warning, and on any other
+  ///    failure leave in queue, for retry.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -843,8 +879,23 @@ class SyncServiceImpl implements SyncService {
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
+          if (commitId == -1 && _dropsForGood(responseObject.errorCode)) {
+            // NOTE: a refusal for good is not retried, so it cannot hold up
+            // the entries behind it; the local copy stays as written.
+            final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+                source.atKey, source.seq);
+            if (!removed) rewrittenMidPush++;
+            _logger.severe('The atServer refused ${source.op.name} of '
+                '${source.atKey} for enrollment ${_atClient.enrollmentId} '
+                'with ${responseObject.errorCode} '
+                '(${responseObject.errorMessage}), so it is not retried and '
+                'this device keeps its local copy'
+                '${removed ? '' : '; a newer write to it pushes next round'}');
+            _bailIfStopped();
+            continue;
+          }
           if (commitId == -1) {
-            _logger.severe(
+            _logger.warning(
                 '${source.op} for key ${source.atKey} failed. Error code '
                 '${responseObject.errorCode} error message '
                 '${responseObject.errorMessage}');
@@ -909,9 +960,9 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (e.g. a
-      // server-side per-key authorization issue), the entries we
-      // tried weren't removed from the queue. Compare against the
+      // Defensive: if every entry in this batch failed with a refusal
+      // that is retried, the entries we tried weren't removed from the
+      // queue. Compare against the
       // pre-batch snapshot — if size hasn't dropped at all (after
       // accounting for any new writes that arrived during the
       // batch), bail out and let a subsequent round retry.
@@ -1622,7 +1673,9 @@ class SyncServiceImpl implements SyncService {
         DeleteVerbBuilder(:final atKey) => atKey,
         _ => builder.runtimeType,
       };
-      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
+      _logger.warning('Not applying the atServer\'s change to $atKey on this '
+          'device: the grants of enrollment ${_atClient.enrollmentId} do not '
+          'cover it locally ($e)');
     }
   }
 
