@@ -254,7 +254,10 @@ client.connection.changes.listen((s) => setState(() => _state = s));
 
 - **offline** — the client serves its local store and syncs when the atServer
   is reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
-  usually shows an indicator rather than blocking.
+  usually shows an indicator rather than blocking. Under `pqActive`, a
+  device's first write in a namespace, and a share whose recipient's key the
+  client holds no current copy of, need the atServer; once a device has
+  written in a namespace, it goes on writing there offline, across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`) — the atServer rejected the
   keys. Ask the user.

@@ -443,6 +443,8 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
   to write with.
+- Under `pqActive`, a device's first write in each namespace needs the
+  atServer (see **offline** below).
 - The at_client README's "Post-quantum cryptography" section has the full
   ladder and what each stage switches on.
 
@@ -456,7 +458,11 @@ await client.connection.attempt();                  // try again now
 ```
 
 - **offline** (`unreachable`, `noAtServer`): the client serves its local store;
-  writes queue and sync when the atServer is reached.
+  writes queue and sync when the atServer is reached. Under `pqActive`, a
+  device's first write in a namespace needs the atServer, which seeds or
+  conveys that namespace's key, and a share needs it whenever the client
+  holds no current copy of the recipient's key. Once a device has written in
+  a namespace, it goes on writing there offline, across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
   — the app decides.

@@ -662,7 +662,11 @@ namespaces and has seeded them: a destination with no published namespace
 key is refused rather than written with the legacy provider. Set
 `preference.namespace` under it: a client whose enrollment is granted `*`
 holds a namespace key only for that namespace, so with none set it has none
-to write with. The design,
+to write with. A device's first write in a namespace needs the atServer,
+which seeds or conveys that namespace's key, and a share needs it whenever
+the client holds no current copy of the recipient's key. Once a device has
+written in a namespace, it goes on writing there offline, across restarts.
+The design,
 the acceptance catalogue and the decision log are under
 [`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 

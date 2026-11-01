@@ -6,6 +6,10 @@
   app built on 3.x moves to it through `pqReady` in two releases; a table
   says what each posture writes, reads and needs (`SKILL.md` §11; the
   references).
+- Offline under `pqActive`: a device's first write in a namespace, and a
+  share with no current copy of the recipient's key, need the atServer;
+  later writes go on offline, across restarts (`SKILL.md` §11;
+  `references/05`).
 - A registrar API key is the app's own, created via the registrar at
   my.atsign.com (`references/05`).
 - A notification is sent with `idAndNamespace:`, and `subscribe` hands back
