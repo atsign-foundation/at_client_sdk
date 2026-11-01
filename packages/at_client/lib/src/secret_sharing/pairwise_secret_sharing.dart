@@ -555,8 +555,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
   }
 
-  /// A service getter throws [StateError] until the manager sets it and again
-  /// once the client is stopped; both read as absent here.
+  /// A service getter throws [StateError] until the manager sets it, which
+  /// reads as absent here.
   T? _serviceIfSet<T>(T Function() read) {
     try {
       return read();

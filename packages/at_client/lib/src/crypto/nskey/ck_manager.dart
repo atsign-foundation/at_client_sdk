@@ -375,6 +375,8 @@ class CkManager {
       sync = context.atClient.syncService;
     } on StateError {
       return;
+    } on StoppedException {
+      return;
     }
     await collectUnusedOnceCaughtUp(sync, () => this, context);
   }
