@@ -142,7 +142,7 @@ abstract class AtClient {
   /// waits until `syncService.isInSync()` answers true.
   ///
   /// After this, a read or write of local storage throws [StoppedException],
-  /// and the services are gone: reading one throws [StateError].
+  /// and the services are gone: reading one throws [StoppedException] too.
   ///
   /// A stopped client cannot be restarted, and the atSign can be opened
   /// again at once: the refusal of a second live client for the same
@@ -200,6 +200,12 @@ abstract class AtClient {
   /// Throws [AtPrivateKeyNotFoundException] if encryption private key is not found
   ///
   /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
+  ///
+  /// At `PqPosture.pqActive`, a put made right after the client opens, before
+  /// its start-up has published the namespace key the value is sealed to,
+  /// waits for that key, at most 30 seconds, and then throws
+  /// `NamespaceKeyUnavailableException` naming it if it is still not
+  /// published. Stopping the client ends the wait with [StoppedException].
   Future<bool> put(AtKey key, dynamic value,
       {PutRequestOptions? putRequestOptions});
 

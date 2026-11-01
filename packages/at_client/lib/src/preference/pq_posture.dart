@@ -199,7 +199,9 @@ class PqPosture {
   /// ⚠️ Adoptable only by a deployment that controls every client of its
   /// namespaces and has seeded them — a destination with no published namespace
   /// key, and a write whose key carries no namespace, are both refused rather
-  /// than written with the legacy provider.
+  /// than written with the legacy provider. A write made before this client's
+  /// own start-up has published its namespace key waits for it first, at most
+  /// 30 seconds.
   static const PqPosture pqActive = PqPosture._(
     authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
     dataSigningKeyAlgorithms: {SigningAlgoType.mldsa65},
