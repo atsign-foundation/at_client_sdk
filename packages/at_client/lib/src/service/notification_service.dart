@@ -89,21 +89,12 @@ abstract class NotificationService {
   ///
   /// [body] is most usually some json encoded as a String.
   ///
-  /// Exactly one of [idAndNamespace] and the deprecated [namespace] must be
-  /// given; supplying both, or neither, throws [ArgumentError].
-  ///
   /// An [ephemeral] notification is persisted by no atServer that supports it,
   /// and lives at most two minutes whatever [expiration] says; it cannot be
   /// combined with [cacheAtRecipient], which persists a copy at the recipient.
   Future<String> send({
     required Atsign to,
-    String? idAndNamespace,
-    @Deprecated('Renamed to idAndNamespace, which says what the value is. The '
-        'value never was a namespace on its own: it is an id and a namespace '
-        'joined by a dot, and reading it as a bare namespace is what left a '
-        'dot-free value with no namespace to encrypt under. Same value, same '
-        'wire format — pass it as idAndNamespace instead.')
-    String? namespace,
+    required String idAndNamespace,
     String body = '',
     bool shouldEncrypt = true,
     String? cryptoProviderId,
@@ -259,7 +250,6 @@ class NotificationParams {
   late AtKey _atKey;
   String? _value;
   late OperationEnum _operation;
-  late MessageTypeEnum _messageType;
   PriorityEnum _priority = PriorityEnum.low;
   StrategyEnum _strategy = StrategyEnum.all;
   int _latestN = 1;
@@ -275,9 +265,6 @@ class NotificationParams {
   String? get value => _value;
 
   OperationEnum get operation => _operation;
-
-  @Deprecated('Use MessageType.key')
-  MessageTypeEnum get messageType => _messageType;
 
   PriorityEnum get priority => _priority;
 
@@ -327,7 +314,6 @@ class NotificationParams {
       .._value = value
       .._operation = OperationEnum.update
       .._ephemeral = ephemeral
-      .._messageType = MessageTypeEnum.key
       .._priority = priority
       .._strategy = strategy
       .._latestN = latestN
@@ -342,24 +328,6 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key
-      .._cryptoProviderId = cryptoProviderId;
-  }
-
-  /// Returns [NotificationParams] to send a text message to another atSign,
-  /// which atServers refuse with AT0003; send a key notification instead.
-  @Deprecated('atServers refuse text notifications; use forUpdate')
-  static NotificationParams forText(String text, String whomToNotify,
-      {bool shouldEncrypt = false, String? cryptoProviderId}) {
-    var atKey = AtKey()
-      ..key = text
-      ..sharedWith = whomToNotify
-      ..metadata = (Metadata()..isEncrypted = shouldEncrypt);
-    return NotificationParams()
-      .._id = Uuid().v4()
-      .._atKey = atKey
-      .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text
       .._cryptoProviderId = cryptoProviderId;
   }
 }

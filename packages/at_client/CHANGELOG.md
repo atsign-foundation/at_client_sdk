@@ -22,8 +22,15 @@
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
   keys it is given.
-- breaking: `AtClient.notifyAll` is removed; send each recipient its own
-  notification with `notificationService.notify`.
+- breaking: `AtClient.notify`, `notifyChange`, `notifyAll` and
+  `startMonitor` are removed; send through `notificationService`, one
+  `notify` per recipient. `startCompactionJob` and `stopCompactionJob`, which
+  did nothing, are removed too.
+- breaking: `NotificationParams.forText` and `NotificationParams.messageType`
+  are removed: every notification is a key notification, the kind atServers
+  accept.
+- breaking: `NotificationService.send` requires `idAndNamespace`; its
+  `namespace:` spelling is removed.
 - breaking: `AtClientManager.secondaryAddressFinder` and
   `setSecondaryAddressFinder` are removed; a client asks only the
   `secondaryAddressFinder` it is built with.
@@ -140,8 +147,8 @@
 - fix: `AtClientImpl.create` throws a `StateError` for a client of the same
   atSign and enrollment whose `stop()` is still running, rather than
   restarting it.
-- fix: a stopped client's `collection()`, `startCompactionJob` and service
-  getters throw `StoppedException`, like its other calls.
+- fix: a stopped client's `collection()` and service getters throw
+  `StoppedException`, like its other calls.
 - breaking: `AtClientImpl.create` keeps one client per atSign and enrollment
   rather than one per atSign. A caller naming no enrollment, whose keys name
   none, gets the client for the atSign's own credential; `exactEnrollment:

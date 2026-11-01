@@ -180,7 +180,11 @@ replaces it because nothing read it.
 | The `AtCollectionModel` family (above)                                                       | `AtClient.collection<T>(...)`                                                           |
 | `AtClient.atChops`, `RemoteSecondary.atChops`, the `atChops:` parameters                     | Nothing: a client signs and encrypts with the `AtKeysIo` it was given                   |
 | `isDedicated:` on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`                  | Delete the argument                                                                     |
-| `atClient.notifyAll(...)`                                                                    | `notificationService.notify(...)`, once per recipient                                   |
+| `atClient.notify(...)`, `notifyChange(...)`, `notifyAll(...)`                                | `notificationService.notify(...)`, once per recipient                                   |
+| `atClient.startMonitor(...)`                                                                 | `notificationService.subscribe(...)`                                                    |
+| `startCompactionJob`, `stopCompactionJob`                                                    | none; they did nothing                                                                  |
+| `NotificationParams.forText(...)`                                                            | `NotificationParams.forUpdate(...)`; atServers refuse text notifications                |
+| `notificationService.send(namespace: ...)`                                                   | `send(idAndNamespace: ...)`, the same value                                             |
 | `sync:` on `executeVerb`, `executeAndParse`                                                  | Delete the argument                                                                     |
 | `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout` | Delete the assignment; nothing read them                     |
 | `AtClientPreference.enforceNamespace`                                                        | Delete the assignment; every key except a `local:` one names a namespace                |

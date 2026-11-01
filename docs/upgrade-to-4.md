@@ -278,7 +278,11 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | Before | After |
 |---|---|
 | `atClient.stream(...)`, `sendStreamAck(...)` | `put` the value, or `notify` it |
-| `atClient.notifyAll(...)` | `notificationService.notify(...)`, once per recipient |
+| `atClient.notify(...)`, `notifyChange(...)`, `notifyAll(...)` | `notificationService.notify(...)`, once per recipient |
+| `atClient.startMonitor(...)` | `notificationService.subscribe(...)` |
+| `startCompactionJob`, `stopCompactionJob` | none; they did nothing |
+| `NotificationParams.forText(...)` | `NotificationParams.forUpdate(...)`; atServers refuse text notifications |
+| `notificationService.send(namespace: ...)` | `send(idAndNamespace: ...)`, the same value |
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |

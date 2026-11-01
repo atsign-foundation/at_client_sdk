@@ -1438,27 +1438,6 @@ class AtClientImpl implements AtClient {
     return defect;
   }
 
-  @Deprecated(
-    'Commit-log compaction was removed with the commit-log-free keystore; '
-    'this is now a no-op and will be removed in a future major release',
-  )
-  @override
-  Future<void> startCompactionJob({
-    Duration? commitLogCompactionDuration,
-  }) async {
-    _refuseIfStopped('start a compaction job');
-    // No-op: the commit-log-free client has no commit log to compact.
-  }
-
-  @Deprecated(
-    'Commit-log compaction was removed with the commit-log-free keystore; '
-    'this is now a no-op and will be removed in a future major release',
-  )
-  @override
-  Future<void> stopCompactionJob() async {
-    // No-op: the commit-log-free client has no commit log compaction job.
-  }
-
   @override
   LocalSecondary? getLocalSecondary() {
     return localSecondary;
@@ -2345,57 +2324,5 @@ class AtClientImpl implements AtClient {
   @override
   AtClientPreference? getPreferences() {
     return _preference;
-  }
-
-  ///[Deprecated] Use [AtClient.notificationService]
-  @override
-  @Deprecated('Use AtClient.notificationService')
-  Future<void> startMonitor(
-    String privateKey,
-    Function? notificationCallback, {
-    String? regex,
-  }) async {
-    throw UnimplementedError('AtClient.startMonitor has been deprecated');
-  }
-
-  @override
-  @Deprecated("Use NotificationService")
-  Future<bool> notify(
-    AtKey atKey,
-    String value,
-    OperationEnum operation, {
-    MessageTypeEnum? messageType,
-    PriorityEnum? priority,
-    StrategyEnum? strategy,
-    int? latestN,
-    String? notifier = AtConstants.system,
-  }) async {
-    AtKeyValidators.get().validate(
-      atKey.toString(),
-      ValidationContext()
-        ..atSign = _atSign
-        ..validateOwnership = true,
-    );
-    final notificationParams = NotificationParams.forUpdate(
-      atKey,
-      value: value,
-    );
-    final notifyResult = await notificationService.notify(notificationParams);
-    return notifyResult.notificationStatusEnum ==
-        NotificationStatusEnum.delivered;
-  }
-
-  @override
-
-  ///[Deprecated] Use [NotificationService.notify]
-  @Deprecated("Use [NotificationService.notify]")
-  Future<String?> notifyChange(NotificationParams notificationParams) async {
-    NotificationResult result = await notificationService.notify(
-      notificationParams,
-    );
-    if (result.atClientException != null) {
-      throw result.atClientException!;
-    }
-    return result.notificationID;
   }
 }

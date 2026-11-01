@@ -54,22 +54,6 @@ void main() {
     expect(() => client.notificationService.subscribe(regex: 'wavi'), stopped);
     expect(() => client.syncService.sync(), stopped);
     await expectLater(() => client.syncService.isInSync(), stopped);
-    await expectLater(
-        client.notifyChange(NotificationParams.forUpdate(
-            (AtKey.shared('n', namespace: 'wavi', sharedBy: '@services')
-                  ..sharedWith('@bob'))
-                .build(),
-            value: 'v')),
-        stopped);
     await expectLater(() => client.enrollments.pending(), stopped);
-  });
-
-  test('startCompactionJob on a stopped client throws StoppedException',
-      () async {
-    final client = await openClient('@compaction');
-    await client.stop();
-
-    // ignore: deprecated_member_use_from_same_package
-    await expectLater(client.startCompactionJob(), stopped);
   });
 }

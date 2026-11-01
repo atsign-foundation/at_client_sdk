@@ -87,64 +87,37 @@ class NotificationRequestTransformer
     NotificationParams notificationParams,
     AtClientPreference atClientPreference,
   ) async {
-    // ignore: deprecated_member_use
-    if (notificationParams.messageType == MessageTypeEnum.text) {
-      // NB: message type 'text' is obsolete and does not work.
+    AtKey ak = notificationParams.atKey;
 
-      NotifyVerbBuilder builder = NotifyVerbBuilder()
-        ..useAtKeyToString = false
-        ..id = notificationParams.id
-        ..atKey.sharedBy = notificationParams.atKey.sharedBy
-        ..atKey.sharedWith = notificationParams.atKey.sharedWith
-        ..operation = notificationParams.operation
-        ..messageType = notificationParams.messageType
-        ..priority = notificationParams.priority
-        ..strategy = notificationParams.strategy
-        ..latestN = notificationParams.latestN
-        ..notifier = notificationParams.notifier
-        ..ttln = notificationParams.notificationExpiry.inMilliseconds;
-
-      if (notificationParams.atKey.metadata.isEncrypted) {
-        builder.atKey.key = await _encryptNotificationValue(
-            notificationParams.atKey, notificationParams.atKey.key);
-      } else {
-        builder.atKey.key = notificationParams.atKey.key;
-      }
-      return builder;
-    } else {
-      AtKey ak = notificationParams.atKey;
-
-      if (_isNamespaceAware(notificationParams)) {
-        ak = AtKey.fromString(ak.toString());
-      }
-
-      final metadata = notificationParams.atKey.metadata;
-      if (notificationParams.ephemeral &&
-          (metadata.ttr != null || metadata.ccd != null)) {
-        throw ArgumentError('An ephemeral notification cannot carry a ttr or '
-            'ccd: either would persist a cached copy at the recipient');
-      }
-      final lifetime = await notificationLifetimeFor(_atClient,
-          expiration: notificationParams.notificationExpiry,
-          ephemeral: notificationParams.ephemeral);
-      return NotifyVerbBuilder()
-        ..useAtKeyToString = true
-        ..id = notificationParams.id
-        ..atKey = ak
-        ..operation = notificationParams.operation
-        ..messageType = notificationParams.messageType
-        ..priority = notificationParams.priority
-        ..strategy = notificationParams.strategy
-        ..latestN = notificationParams.latestN
-        ..notifier = notificationParams.notifier
-        ..ttln = lifetime.ttln
-        ..notificationExpiresAt = lifetime.expiresAt
-        ..ephemeral = lifetime.ephemeral;
+    if (_isNamespaceAware(notificationParams)) {
+      ak = AtKey.fromString(ak.toString());
     }
+
+    final metadata = notificationParams.atKey.metadata;
+    if (notificationParams.ephemeral &&
+        (metadata.ttr != null || metadata.ccd != null)) {
+      throw ArgumentError('An ephemeral notification cannot carry a ttr or '
+          'ccd: either would persist a cached copy at the recipient');
+    }
+    final lifetime = await notificationLifetimeFor(_atClient,
+        expiration: notificationParams.notificationExpiry,
+        ephemeral: notificationParams.ephemeral);
+    return NotifyVerbBuilder()
+      ..useAtKeyToString = true
+      ..id = notificationParams.id
+      ..atKey = ak
+      ..operation = notificationParams.operation
+      ..messageType = MessageTypeEnum.key
+      ..priority = notificationParams.priority
+      ..strategy = notificationParams.strategy
+      ..latestN = notificationParams.latestN
+      ..notifier = notificationParams.notifier
+      ..ttln = lifetime.ttln
+      ..notificationExpiresAt = lifetime.expiresAt
+      ..ephemeral = lifetime.ephemeral;
   }
 
   bool _isNamespaceAware(NotificationParams notificationParams) =>
-      notificationParams.messageType == MessageTypeEnum.key &&
       notificationParams.atKey.metadata.namespaceAware;
 
   /// Fills in the preference's namespace, and folds a key that already carries
@@ -189,14 +162,7 @@ class NotificationRequestTransformer
     return await CryptoRuntime(_atClient).encryptForNotification(atKey, value);
   }
 
-  bool _shouldRouteThroughProvider(NotificationParams notificationParams) {
-    if (!notificationParams.atKey.metadata.isEncrypted) {
-      return false;
-    }
-    if (notificationParams.value.isNotNull) {
-      return true;
-    }
-    // ignore: deprecated_member_use
-    return notificationParams.messageType == MessageTypeEnum.text;
-  }
+  bool _shouldRouteThroughProvider(NotificationParams notificationParams) =>
+      notificationParams.atKey.metadata.isEncrypted &&
+      notificationParams.value.isNotNull;
 }
