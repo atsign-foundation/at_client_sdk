@@ -4,7 +4,7 @@ List of steps to run the examples for checking apkam enrollment
    - run: `dart example/bin/onboard.dart -a <atsign> -c <CRAM secret> -k <path_store_keys_file>`<br>
    - e.g. `dart example/bin/onboard.dart -a @alice -k /home/alice/.atsign/@alice_wavikey.atKeys -c b26455a907582760ebf35bc4847de549bc41c24b25c8b1c58d5964f7b4f8a43bc55b0e9a601c9a9657d9a8b8bbc32f88b4e38ffaca03c8710ebae1b14ca9f364`<br/>
    - If you do not already have the CRAM Secret for your atsign, run
-     `at_activate onboard -a <@atsign>` instead: the registrar emails a verification code, and at_activate fetches the secret with it
+     `at_activate onboard -a <@atsign>` instead, with `AT_REGISTRAR_API_KEY` set to an API key created via the registrar at my.atsign.com: the registrar emails a verification code, and at_activate fetches the secret with it
 2. Authenticate using the onboarded atsign:<br>
    - run: `dart example/bin/apkam_examples/apkam_authenticate.dart -a <atsign> -k <path_of_keys_file_from_#1>`<br>
    - e.g. `dart example/bin/apkam_examples/apkam_authenticate.dart -a @alice -k /home/alice/.atsign/@alice_wavikey.atKeys`

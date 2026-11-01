@@ -385,7 +385,9 @@ class AuthCliArgs {
       argNameCramSecret,
       aliases: const ['license-key'],
       abbr: 'c',
-      help: 'CRAM key',
+      help: 'CRAM secret. Without it, the registrar emails a verification '
+          'code, and the registrar API key is taken from '
+          'AT_REGISTRAR_API_KEY',
       mandatory: false,
       hide: !forOnboard,
     );

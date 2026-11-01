@@ -159,6 +159,27 @@ void main() {
       expect(server.sent, isEmpty,
           reason: 'refused before the atServer was asked anything');
     });
+
+    /// Catalogue: features/at_client_cli/registrar_api_key.feature
+    test('at_activate onboard with a CRAM secret needs no registrar API key',
+        () async {
+      final server = atServer();
+      final keysPath = '${dir.path}/${atSign}_key.atKeys';
+      final pref =
+          settingsFor((await preference())..cramSecret = cramSecret, keysPath);
+      var registrarClients = 0;
+
+      await HttpOverrides.runZoned(
+          () => activate(atSign, pref, atLookUp: server.lookUp),
+          createHttpClient: (_) {
+        registrarClients++;
+        throw StateError('an activation with a CRAM secret asked over HTTP');
+      });
+
+      expect(File(keysPath).existsSync(), isTrue,
+          reason: 'with no registrar API key given, it activates as before');
+      expect(registrarClients, 0, reason: 'it sends nothing to the registrar');
+    });
   });
 
   group('enrolDevice', () {

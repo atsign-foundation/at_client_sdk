@@ -41,7 +41,9 @@ Import `package:at_client_cli/at_client_cli.dart` in place of
 `at_logger.dart` and `at_client_io.dart`. It re-exports at_client's native
 API, its storage backends and mixins, the registrar and the io logging
 handlers. Install the
-tools with `dart pub global activate at_client_cli`.
+tools with `dart pub global activate at_client_cli`. `at_register`, and
+`at_activate onboard` without `-c`, take a registrar API key from
+`AT_REGISTRAR_API_KEY`; create one via the registrar at my.atsign.com.
 
 From at_utils it re-exports `AtSignLogger` and the three io handlers, but not
 the `LoggingHandler` interface or `AtUtils`. A program that implements a

@@ -1,6 +1,9 @@
 ## 2.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `at_register`, and `at_activate onboard` without `-c`, take the
+  registrar API key from `AT_REGISTRAR_API_KEY`; create one via the registrar
+  at my.atsign.com.
 - breaking: at_onboarding_cli is a deprecated re-export of at_client_cli,
   which now carries its code and its at_activate and at_register tools.
   Depend on at_client_cli; `dart pub global activate at_client_cli` installs

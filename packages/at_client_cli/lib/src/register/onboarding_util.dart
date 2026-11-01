@@ -9,11 +9,34 @@ import 'package:chalkdart/chalk.dart';
 import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
+/// The environment variable at_register and at_activate take the registrar
+/// API key from.
+const String registrarApiKeyVariable = 'AT_REGISTRAR_API_KEY';
+
+/// What at_register and at_activate say when they have no registrar API key.
+const String noRegistrarApiKey =
+    'No registrar API key. Create one via the registrar at my.atsign.com, '
+    'and set $registrarApiKeyVariable to it.';
+
 ///class containing utilities to perform registration of a free atsign
 class OnboardingUtil {
   static bool allowBadCertificates = false;
   final logger = AtSignLogger(' OnboardingUtil ');
+
+  // NOTE: the registrar API key is never logged, put in a URL or written to
+  // a file.
+  /// The key every request names the app to the registrar with.
+  final String registrarApiKey;
   IOClient? _ioClient;
+
+  /// A registrar client naming the app with [registrarApiKey]. Throws
+  /// [at_client.AtClientException] saying where to create a key when there
+  /// is none.
+  OnboardingUtil(String? registrarApiKey)
+      : registrarApiKey =
+            registrarApiKey == null || registrarApiKey.trim().isEmpty
+                ? throw at_client.AtClientException.message(noRegistrarApiKey)
+                : registrarApiKey;
 
   void _createClient() {
     HttpClient ioc = HttpClient();
@@ -204,7 +227,7 @@ class OnboardingUtil {
     if (_ioClient == null) _createClient();
     Uri uri = Uri.https(authority, path);
     Response response = await _ioClient!.get(uri, headers: <String, String>{
-      'Authorization': RegistrarApiConstants.authorization,
+      'Authorization': registrarApiKey,
       'Content-Type': RegistrarApiConstants.contentType,
     });
     return response;
@@ -225,7 +248,7 @@ class OnboardingUtil {
       uri,
       body: body,
       headers: <String, String>{
-        'Authorization': RegistrarApiConstants.authorization,
+        'Authorization': registrarApiKey,
         'Content-Type': RegistrarApiConstants.contentType,
       },
     );

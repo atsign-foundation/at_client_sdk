@@ -103,7 +103,9 @@ it provides:
   for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
   otherwise
 - `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
-- the `at_activate` and `at_register` executables
+- the `at_activate` and `at_register` executables; `at_register`, and
+  `at_activate onboard` without `-c`, take a registrar API key from
+  `AT_REGISTRAR_API_KEY`, created via the registrar at my.atsign.com
   (`dart pub global activate at_client_cli`)
 
 Not needed in Flutter apps. It replaces `at_cli_commons` and

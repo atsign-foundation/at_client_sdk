@@ -26,14 +26,16 @@ void main() {
         'bash',
         [
           '-c',
-          'timeout 5s bash -c "echo Y | dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath"'
+          'timeout 5s bash -c "echo Y | env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath"'
         ],
         workingDirectory: Directory.current.path,
       );
 
       // Should not exit with code 0 (which is the cancellation code)
       // It will exit with a different code due to failure
-      expect(result.exitCode, isNot(equals(0)));
+      expect(result.exitCode, isNot(equals(0)),
+          reason: 'at_activate runs without AT_REGISTRAR_API_KEY, so it '
+              'must not reach the registrar');
     }, timeout: Timeout(Duration(seconds: 10)));
 
     // Test #3: Tests that using the `--cramkey` implies `--yes` and bypasses the backup key prompt
@@ -71,12 +73,14 @@ void main() {
         'bash',
         [
           '-c',
-          'timeout 5s dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --yes'
+          'timeout 5s env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --yes'
         ],
         workingDirectory: Directory.current.path,
       );
 
-      expect(result.exitCode, isNot(equals(0)));
+      expect(result.exitCode, isNot(equals(0)),
+          reason: 'at_activate runs without AT_REGISTRAR_API_KEY, so it '
+              'must not reach the registrar');
     }, timeout: Timeout(Duration(seconds: 10)));
 
     // runs after each individual test

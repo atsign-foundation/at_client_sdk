@@ -71,7 +71,7 @@ void main() {
       AtSignLogger.defaultLoggingHandler = handler;
     });
 
-    final cram = await OnboardingUtil()
+    final cram = await OnboardingUtil('app-key')
         .getCramKey('@alice', otp, authority: '127.0.0.1:${registrar.port}');
 
     expect(cram, cramSecret,
