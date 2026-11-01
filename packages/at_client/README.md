@@ -129,7 +129,7 @@ summary is:
 ### In code: four verbs
 
 `at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
-(a `.atKeys` file, the platform keychain, or memory) and asks the atSign
+(a `.atKeys` file or the platform keychain) and asks the atSign
 for a client; every verb hands back an `AtClient` the app owns and stops.
 
 ```dart
@@ -189,8 +189,10 @@ AtClientManager.getInstance().use(client);
 
 Four things are the platform's to supply, and every verb takes them the
 same way; at_client_cli and at_client_flutter supply each for their apps.
-**`keys:`** is where the atSign's keys live (`FileAtKeysIo`, the
-Flutter keychain, memory); **`storage:`** is the client's local store, each
+**`keys:`** is where the atSign's keys live (`FileAtKeysIo` or the
+Flutter keychain), and it must outlive the process, since a client files key
+material there that exists nowhere else; **`storage:`** is the client's
+local store, each
 backend from its own import (`HiveAtClientStorage` from
 `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 `package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
@@ -271,6 +273,14 @@ await for (final e in todos.updates) {
   print('updated: ${e.id} by ${e.owner}');
 }
 ```
+
+A share reads the recipient's key from their atServer whenever this client
+has no current copy of it, so it can need the network when the self copy
+does not. With the atServer out of reach, `create(sharedWith: ...)` writes
+the self copy and then throws a `CollectionOpException` naming each
+recipient's copy it could not write. The item is listed, and nothing sends
+the share later: retry it with `updateSharedWith(item, ...)`, not `create`,
+which would write a second item.
 
 `update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
 on the writing collection's event streams as soon as the local write
@@ -643,7 +653,10 @@ doesn't check the version.
 
 `pqActive` is for a deployment that controls every client of its
 namespaces and has seeded them: a destination with no published namespace
-key is refused rather than written with the legacy provider. The design,
+key is refused rather than written with the legacy provider. Set
+`preference.namespace` under it: a client whose enrollment is granted `*`
+holds a namespace key only for that namespace, so with none set it has none
+to write with. The design,
 the acceptance catalogue and the decision log are under
 [`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 

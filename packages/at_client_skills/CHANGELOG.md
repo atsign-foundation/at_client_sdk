@@ -2,6 +2,13 @@
 
 ## 1.4.0 — 2026-09-13
 
+- Names the post-quantum posture: what each `PqPosture` writes, reads and
+  needs, and that a preference naming one stays there while one naming none
+  rides the SDK's default (`SKILL.md` §11).
+- A notification is sent with `idAndNamespace:`, and `subscribe` hands back
+  values still encrypted unless `shouldDecrypt` is true (`SKILL.md` §13;
+  `references/10`, `15`).
+- Keys live in a store that outlives the process (`SKILL.md` §11).
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.

@@ -69,7 +69,7 @@ samples.
 // Send one notification per sample — no identity, no persistence
 await atClient.notificationService.send(
   to: recipientAtsign,
-  namespace: 'sample.nginx.myhost.dockerstats.demos',
+  idAndNamespace: 'sample.nginx.myhost.dockerstats.demos',
   body: jsonEncode(sample.toJson()),
   expiration: const Duration(minutes: 5),  // short TTL — stale samples are useless
 );

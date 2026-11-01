@@ -375,8 +375,9 @@ complete code, and what a `PkamDialog` that comes back **offline** means.
 ## 11. AtClient Lifecycle: Open, Own, Stop
 
 `at_client` owns the atSign lifecycle. An app holds an `AtKeysIo` (a `.atKeys`
-file, the keychain, or memory) and asks the atSign for a client; every verb
-hands back an `AtClient` the app **owns and stops**. The Flutter dialogs (§10)
+file or the keychain, never one that dies with the process) and asks the
+atSign for a client; every verb hands back an `AtClient` the app **owns and
+stops**. The Flutter dialogs (§10)
 and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 
 ```dart
@@ -421,6 +422,24 @@ bundle from at_client_flutter's `AtsignFlows`
 takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 removed the preference's
 `decryptPackets`, `pathToCerts` and `tlsKeysSavePath`: a `SecureSocketConfig`
 carries them.
+
+**Posture — how far into post-quantum the client runs**, fixed when the
+preference is built (`AtClientPreference(posture: ...)`):
+
+| Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
+| -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `PqPosture.legacy` (4.0 default) | legacy encryption                       | no                      | nothing new                                                                 |
+| `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
+| `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
+
+- A preference that names no posture rides the SDK's default, which moves to
+  `pqReady` in a later 4.x and to `pqActive` at 5.0. Naming one pins it, so
+  name `legacy` only to stay put, and a later stage only to lead the default.
+- Under `pqActive`, a client whose enrollment is granted `*` holds a
+  namespace key only for `preference.namespace`; with none set it has nothing
+  to write with.
+- The at_client README's "Post-quantum cryptography" section has the full
+  ladder and what each stage switches on.
 
 **Connection state — the client comes back whatever the network did:**
 
@@ -525,7 +544,7 @@ These patterns are complementary and can coexist in the same app.
 // Send — returns the notification id; body is usually JSON
 await atClient.notificationService.send(
   to: '@bob'.toAtsign(),
-  namespace: 'sample.my_app',
+  idAndNamespace: 'sample.my_app',          // an id, a dot, then the namespace
   body: jsonEncode(payload),
   expiration: const Duration(minutes: 5),   // short TTL for telemetry
 );
@@ -535,6 +554,9 @@ atClient.notificationService
     .subscribe(regex: r'sample\..*\.my_app', shouldDecrypt: true)
     .listen((n) => handle(n.value));
 ```
+
+`shouldDecrypt` defaults to `false`, which hands back each value as it
+arrived, still encrypted; pass `true` to read it.
 
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
 for the full decision guide and the dockerstats Notifications+SQLite example.
