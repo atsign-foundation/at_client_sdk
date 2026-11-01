@@ -45,15 +45,9 @@ class CLIBase {
   ///
   /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
   /// ```
-  ///
-  /// If [addLegacyRootDomainArg] is true (the default) then an option called
-  /// `legacy-root-domain` is added with the `-d` abbreviation. If it is false
-  /// then the option is added but without the `-d` abbreviation so that `-d`
-  /// can be used by calling programs for different purposes.
   static ArgParser createArgsParser({
     String? namespace,
     Set<String> hide = const {},
-    bool addLegacyRootDomainArg = true,
   }) {
     int? usageLineLength = stdout.hasTerminal ? stdout.terminalColumns : null;
     ArgParser p = ArgParser(usageLineLength: usageLineLength)
@@ -105,12 +99,6 @@ class CLIBase {
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
           mandatory: false,
           hide: hide.contains('pass-phrase'));
-
-    p.addOption('legacy-root-domain',
-        abbr: addLegacyRootDomainArg ? 'd' : null,
-        mandatory: false,
-        help: 'Deprecated abbreviation option for --root-server',
-        hide: !addLegacyRootDomainArg);
     return p;
   }
 
@@ -141,23 +129,15 @@ class CLIBase {
   ///
   /// If [parser] is not supplied then we will call [createArgsParser] with
   /// the [namespace] and [hide] parameters
-  ///
-  /// See [createArgsParser] for explanation of the `addLegacyRootDomainArg`
-  /// parameter
   static Future<CLIBase> fromCommandLineArgs(
     List<String> args, {
     ArgParser? parser,
     String? namespace,
     Set<String> hide = const {},
-    bool addLegacyRootDomainArg = true,
     AtClientPreference? preference,
     AtLookUpFactory? lookUps,
   }) async {
-    parser ??= createArgsParser(
-      namespace: namespace,
-      hide: hide,
-      addLegacyRootDomainArg: addLegacyRootDomainArg,
-    );
+    parser ??= createArgsParser(namespace: namespace, hide: hide);
     ArgResults parsedArgs = parser.parse(args);
 
     if (parsedArgs['help'] == true) {
@@ -165,14 +145,7 @@ class CLIBase {
       exit(0);
     }
 
-    String rootDomainString;
-    // root-domain is now an alias of root-server, option abbreviation -r
-    // we also keep optional support for the previous abbreviation, -d
-    if (parsedArgs.wasParsed('legacy-root-domain')) {
-      rootDomainString = parsedArgs['legacy-root-domain'];
-    } else {
-      rootDomainString = parsedArgs['root-server'];
-    }
+    final String rootDomainString = parsedArgs['root-server'];
     try {
       AtRootDomain.parse(rootDomainString);
     } catch (e) {

@@ -30,6 +30,10 @@
   client with `CLIBase` or `Atsign.open`; the README's migration table names
   what replaces each.
 - breaking: `CLIBase`'s `preference` is an `AtClientPreference`.
+- breaking: the tools take no `-d`/`--legacy-root-domain`, so use
+  `-r`/`--root-server`, and no `--hashingAlgoType`, which did nothing.
+  `CLIBase.createArgsParser` and `fromCommandLineArgs` take no
+  `addLegacyRootDomainArg`.
 - breaking: `CLIBase` takes no `downloadDir`, which nothing read.
 - breaking: `CLIBase` throws `AtCredentialRefusedException` for every
   refusal and `SecondaryNotFoundException` for an atSign the atDirectory does

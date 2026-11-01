@@ -226,23 +226,6 @@ void main() {
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
-  group('the hashingAlgoType argument', () {
-    test('is accepted and hidden', () {
-      final parser = args.createOnboardCommandParser();
-      expect(parser.options[AuthCliArgs.argNameHashingAlgoType]!.hide, isTrue);
-
-      expect(
-          () => enrollerSettingsFrom(parser.parse([
-                '-a',
-                '@alice',
-                '--${AuthCliArgs.argNameHashingAlgoType}',
-                'argon2id',
-              ])),
-          returnsNormally,
-          reason: 'the argument is accepted for compatibility');
-    });
-  });
-
   group('the posture argument', () {
     test('every command parser accepts it, not activation alone', () {
       final parsers = {
