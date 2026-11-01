@@ -94,8 +94,10 @@ The launch screen offers two onboarding paths:
   this on second-and-later launches.
 - **Onboard from .atKeys file** — first-launch path. Choose the
   `.atKeys` file generated when the atSign was originally
-  onboarded (or onboard it now via the `at_onboarding_flutter`
-  flow if you haven't yet).
+  onboarded. This app activates no atSign of its own: to activate a
+  new one, run at_client_flutter's example app, whose walkthrough uses
+  `RegistrarCramDialog` and `CramDialog`, or `at_activate onboard`
+  from at_client_cli.
 
 After login the home screen is a streamed list of todos. Tap one
 to drill into the detail screen (notes, read receipts, sharing

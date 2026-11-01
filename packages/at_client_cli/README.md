@@ -41,6 +41,12 @@ Fetches a free atSign, emails you a verification code, then activates the
 atSign once you paste the code back. The generated `.atKeys` file lands in
 `~/.atsign/keys/`.
 
+`at_register` takes no `--posture`: it activates at at_client's default
+(`legacy` today). An app that runs at `pqReady` or `pqActive` upgrades those
+keys itself at its first start, which needs the atServer; until that start
+completes, a `pqActive` client writes nothing. An atSign you already hold can
+be activated at a posture of its own with `at_activate onboard --posture`.
+
 ### `at_activate` — the atSign's lifecycle from the terminal
 
 Every invocation should name a command. With none, `at_activate` still runs

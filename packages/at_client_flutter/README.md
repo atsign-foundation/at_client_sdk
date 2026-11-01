@@ -228,8 +228,11 @@ if (atKeys == null) throw Exception('No keys found for $atSign');
 final atKeysIo = FileAtKeysIo(
   filePath: (_) => '/path/to/${atSign}_key.atKeys',
 );
-atKeysIo.write(atSign, atKeys);
+await atKeysIo.write(atSign, atKeys);
 ```
+
+`write` creates the file: it throws `AtKeysFileOverwriteException` when the
+file already exists, so await it and export to a path that is free.
 
 ## Migrating from 1.x
 
