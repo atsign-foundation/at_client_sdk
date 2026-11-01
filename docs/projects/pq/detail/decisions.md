@@ -2581,7 +2581,15 @@ code. It is recorded rather than fixed, because which side is wrong is a design 
 `public:__nskey.app_1.my_apps@alice` is published immediately"*. Read plainly: a write to a
 namespace with no key mints one on the way through.
 
-**What is built.** Nothing mints on the write path. Minting happens at client construction, in
+**What is built.** Nothing on the write path mints to find a value's own key. **Amended
+2026-11-01**: this said nothing mints on the write path at all. Two write paths do, through the
+same mint lock as start-up: a share whose sender holds no key at the recipient's level mints one
+for the sender's own copy
+([142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)), and a write to
+the atSign's own key mints a new generation when the rotation policy asks for one
+([UC-A5.5](../acceptance.md#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points));
+[160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) item 1 says the same.
+Minting for a value's own key happens at client construction, in
 `AtClientImpl._init` → `_seedNamespaceKeys()` → `NskeySeeding.seed()`, and it is:
 
 - **opt-in** — gated on `AtClientPreference.seedNamespaceKeys`, which defaults to **false**; and
@@ -15649,11 +15657,19 @@ A `pqActive` client's start-up publishes its namespace keys after `open` returns
 `seedNamespaceKeys` step. The todos examples wrote the moment they opened, before that step ran,
 found no key, and failed.
 
-1. **A write waits on start-up's seeding step, and never mints.** When the atServer has answered
-   that no key is published, and start-up is still to seed a namespace covering the key,
-   `CkManager.ensureCurrent` waits for the step to finish, works out its start level again
+1. **A write waits on start-up's seeding step, and never mints to find its own value's key.**
+   When the atServer has answered that no key is published, and start-up is still to seed a
+   namespace covering the key, `CkManager.ensureCurrent` waits for the step to finish, works out
+   its start level again
    ([159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)) and
-   resolves again. Writes waiting together share that one step.
+   resolves again. Writes waiting together share that one step. Two write paths still mint by
+   design, through the same mint lock as start-up: a share whose sender holds no key at the
+   recipient's level mints one for the sender's own copy
+   ([142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)), and a write
+   to the atSign's own key mints a new generation when the rotation policy asks for one
+   ([UC-A5.5](../acceptance.md#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)).
+   **Amended 2026-11-01**: this item said a write "never mints", which those two paths
+   contradict; gkc chose "Narrow the wording (Rec.)", and the code is unchanged.
 2. **The bound is 30 seconds, and no preference sets it.** When it passes, the write throws
    `NamespaceKeyUnavailableException` naming the key start-up has not yet published.
 3. **An enrollment waits for the grant read start-up already makes**, inside the same bound and

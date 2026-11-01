@@ -7,8 +7,11 @@ import 'package:meta/meta.dart' show visibleForTesting;
 /// start-up has still to seed one: which namespaces start-up seeds, once it
 /// knows, and when its seeding step has finished.
 ///
-/// A write never mints. It only waits here, so writes waiting together share
-/// the one seeding start-up does.
+/// A write never mints to find its own value's key. It only waits here, so
+/// writes waiting together share the one seeding start-up does. A share whose
+/// sender holds no key at the recipient's level, and a write to the atSign's
+/// own key whose rotation policy asks for a new generation, still mint, under
+/// the same mint lock as start-up.
 class StartUpSeeding {
   /// The longest a write waits for start-up, in all.
   @visibleForTesting

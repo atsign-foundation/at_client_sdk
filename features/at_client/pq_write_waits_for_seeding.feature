@@ -9,8 +9,12 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   answered that no key is published and start-up will seed a namespace that
   covers the key. Reads do not seal, and are unchanged.
 
-  Races: a write never mints or asks for a mint; only start-up does, once per
-  namespace, so writes waiting together cannot mint twice. After the step a
+  Races: a write never mints to find its own value's key; only start-up
+  does, once per namespace, and the write waits for it. Two write paths
+  still mint by design, through the same mint lock as start-up: a share
+  whose sender holds no key at the recipient's level mints one for the
+  sender's own copy, and a write to the atSign's own key mints a new
+  generation when the rotation policy asks for one. After the step a
   waiting write resolves whatever start-up published or adopted, including a
   key another enrollment minted first. A write after the step has finished
   does not wait.

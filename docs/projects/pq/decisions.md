@@ -85,7 +85,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [26]  | UC-A4.4: a conveyance that loses the race to its own announcement                           | 2026-08-04 | AMENDED 2026-08-18        |
 | [27]  | The era default: read the new scheme everywhere, write it once                              | 2026-08-04 | LIVE                      |
 | [28]  | The PQ performance budget, measured                                                         | 2026-08-04 | LIVE                      |
-| [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | LIVE                      |
+| [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | AMENDED 2026-11-01        |
 | [30]  | UC-B5.1's pull backstop has no initiator                                                    | 2026-08-04 | LIVE                      |
 | [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | AMENDED 2026-10-09        |
 | [32]  | The two-enrollment fixture: what works and what does not                                    | 2026-08-04 | LIVE                      |
@@ -217,7 +217,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | AMENDED 2026-10-18 |
 | [158] | A key package reconcile advertises the package the client holds                              | 2026-10-29 | LIVE               |
 | [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | LIVE               |
-| [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | LIVE               |
+| [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-01 |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
