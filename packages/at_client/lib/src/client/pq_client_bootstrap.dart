@@ -15,6 +15,9 @@ import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show authorisedNamespacesIn;
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
     show PublishedNskeyKeyRing, requestAndFileNskeyPrivate;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
@@ -303,6 +306,10 @@ class PqClientBootstrap {
 
   bool _stopped = false;
 
+  /// What a write that finds no namespace key waits on while this startup is
+  /// still to seed one.
+  final StartUpSeeding startUpSeeding = StartUpSeeding();
+
   /// Halts the startup at the next step boundary. A step already running
   /// finishes — steps are atomic — but no further step starts, so a
   /// stopped client stops publishing. Idempotent; [startupComplete] still
@@ -312,7 +319,14 @@ class PqClientBootstrap {
     // NOTE: without this a stopped client keeps a periodic timer, a sync
     // listener, a notification subscription and every secret wait alive.
     sharing.stop();
+    startUpSeeding.stop();
   }
+
+  /// Whether the `seedNamespaceKeys` step will seed anything.
+  bool get _seedsNamespaceKeys =>
+      _gates.seedNamespaceKeys &&
+      _keysIo != null &&
+      _atClient.getPreferences()?.seedNamespaceKeys == true;
 
   /// Runs the ordered steps. Fired unawaited by the client's init;
   /// idempotent — a second call returns [startupComplete] without
@@ -323,9 +337,18 @@ class PqClientBootstrap {
 
     // NOTE: assigned here rather than in the constructor, because an
     // application names its crypto configuration after the client is built.
-    CryptoConfig.forClient(_atClient).ckManager?.rotateOwnNamespaceKeyIfAsked =
-        (namespace) => seeding.rotateIfPolicyAsks(
-            _atClient.getCurrentAtSign()!, namespace);
+    final ckManager = CryptoConfig.forClient(_atClient).ckManager;
+    ckManager?.rotateOwnNamespaceKeyIfAsked = (namespace) =>
+        seeding.rotateIfPolicyAsks(_atClient.getCurrentAtSign()!, namespace);
+    if (_seedsNamespaceKeys) {
+      ckManager?.startUpSeeding = startUpSeeding;
+      // NOTE: the atSign's own credential seeds exactly its own namespace,
+      // known now; an enrollment's namespaces wait for the step's grant read.
+      if (isAtSignCredential(_atClient.enrollmentId)) {
+        startUpSeeding.seeding(
+            authorisedNamespacesIn(null, ownNamespace: seeding.ownNamespace));
+      }
+    }
 
     final steps = _steps;
     try {
@@ -345,6 +368,7 @@ class PqClientBootstrap {
         }
       }
     } finally {
+      startUpSeeding.finish();
       _startupComplete.complete();
     }
   }
@@ -536,16 +560,18 @@ class PqClientBootstrap {
   /// would be published with its private held in memory and nowhere else:
   /// peers seal to the advertised key and every value they seal becomes
   /// unreadable the moment this process ends.
+  ///
+  /// However it ends, it releases every write waiting on [startUpSeeding].
   Future<void> _seedNamespaceKeys() async {
-    if (!_gates.seedNamespaceKeys) return;
-    if (_keysIo == null) return;
-    if (_atClient.getPreferences()?.seedNamespaceKeys != true) return;
     try {
-      await seeding.seed();
+      if (!_seedsNamespaceKeys) return;
+      await seeding.seed(progress: startUpSeeding);
     } catch (e, st) {
       if (_causedByStop(e)) rethrow;
       _logger.warning('Seeding namespace keys failed for $_atSign; the next '
           'start retries whatever is still missing: $e, $st');
+    } finally {
+      startUpSeeding.finish();
     }
   }
 

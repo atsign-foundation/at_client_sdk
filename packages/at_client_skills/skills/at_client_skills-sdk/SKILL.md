@@ -445,6 +445,9 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
   to write with.
 - Under `pqActive`, a device's first write in each namespace needs the
   atServer (see **offline** below).
+- Under `pqActive`, a write made right after the client opens, before its
+  start-up has published the namespace key, waits up to 30 seconds for it,
+  then throws `NamespaceKeyUnavailableException` naming that key.
 - The at_client README's "Post-quantum cryptography" section has the full
   ladder and what each stage switches on.
 

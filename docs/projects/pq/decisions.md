@@ -217,6 +217,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | AMENDED 2026-10-18 |
 | [158] | A key package reconcile advertises the package the client holds                              | 2026-10-29 | LIVE               |
 | [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | LIVE               |
+| [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -378,3 +379,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [157]: detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16
 [158]: detail/decisions.md#158-a-key-package-reconcile-advertises-the-package-the-client-holds-2026-10-29
 [159]: detail/decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01
+[160]: detail/decisions.md#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01

@@ -21,7 +21,8 @@ import 'package:at_client/src/response/at_notification.dart'
     show AtNotification;
 import 'package:at_client/src/service/notification_service.dart'
     show NotificationParams, NotificationResult;
-import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtKeyNotFoundException, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
@@ -675,6 +676,168 @@ void main() {
       expect(privilege.calls, 0,
           reason: 'a fully gated startup has no reason to resolve '
               'privilege at all');
+    });
+  });
+
+  group('Given a start-up that seeds namespace keys', () {
+    // NOTE: only the seeding step runs, so nothing else holds a write's wait.
+    const seedingOnly = PqStartupGates(
+      hydrateHeldSecrets: false,
+      collectConveyedKeys: false,
+      startEnvelopeListener: false,
+      mintInUseSigningKeys: false,
+      refreshOwnLinks: false,
+      reconcileKeyPackage: false,
+      requestRootPrivate: false,
+      requestMissingPrivates: false,
+      anchorOwnKeys: false,
+      sweepUnanchoredEnrollments: false,
+      reconcileEnrollmentSnapshot: false,
+    );
+    late Completer<void> held;
+
+    /// A bootstrap parked just before its seeding step until [held] completes.
+    Future<PqClientBootstrap> parked(
+        {PqStartupGates gates = seedingOnly,
+        bool keysIo = true,
+        Future<int> Function()? sweep}) async {
+      when(() => client.getPreferences()).thenReturn(AtClientPreference()
+        ..namespace = 'todos.demos'
+        ..seedNamespaceKeys = true);
+      final io = InMemoryAtKeysIo();
+      await io.write('@bootstrap🛠', AtKeys());
+      held = Completer<void>();
+      final bootstrap = build(
+          keysIo: keysIo ? io : null,
+          gates: gates,
+          privilege: _FakePrivilege(true),
+          sweep: sweep)
+        ..holdBeforeMint = () => held.future;
+      CryptoConfig.adoptEraDefault(
+          client, CryptoConfig.nskey(keyRing: bootstrap.ring));
+      unawaited(bootstrap.startup());
+      return bootstrap;
+    }
+
+    Future<bool> pending(Future<void> future) async {
+      var done = false;
+      unawaited(future.then((_) => done = true, onError: (_) => done = true));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return !done;
+    }
+
+    test(
+        'when it starts, then writes wait on its seeding, and one in a '
+        'namespace it will not seed is answered at once', () async {
+      final bootstrap = await parked();
+      final seeding = bootstrap.startUpSeeding;
+
+      expect(
+          identical(CryptoConfig.forClient(client).ckManager!.startUpSeeding,
+              seeding),
+          isTrue);
+      expect(
+          await seeding
+              .covering('x.other.app')
+              .timeout(const Duration(seconds: 1)),
+          isNull,
+          reason: 'the own credential seeds its namespace alone, known '
+              'before the step runs');
+      final waiting = seeding.covering('x.todos.demos');
+      expect(await pending(waiting), isTrue);
+
+      held.complete();
+
+      expect(await waiting.timeout(const Duration(seconds: 5)), 'todos.demos');
+      expect(seeding.failureFor('todos.demos'), isNotNull,
+          reason: 'this mock atServer lets nothing be published, and the step '
+              'keeps why for the writes it releases');
+      await bootstrap.startupComplete;
+    });
+
+    test(
+        'when its seeding step ends, then the writes waiting on it go on '
+        'while a later step still runs', () async {
+      final sweeping = Completer<int>();
+      final bootstrap = await parked(
+          gates: const PqStartupGates(
+            hydrateHeldSecrets: false,
+            collectConveyedKeys: false,
+            startEnvelopeListener: false,
+            mintInUseSigningKeys: false,
+            refreshOwnLinks: false,
+            reconcileKeyPackage: false,
+            requestRootPrivate: false,
+            requestMissingPrivates: false,
+            anchorOwnKeys: false,
+            reconcileEnrollmentSnapshot: false,
+          ),
+          sweep: () => sweeping.future);
+      final waiting = bootstrap.startUpSeeding.covering('x.todos.demos');
+
+      held.complete();
+
+      expect(await waiting.timeout(const Duration(seconds: 5)), 'todos.demos');
+      expect(sweeping.isCompleted, isFalse,
+          reason: 'the precondition: the sweep after it is still running');
+      sweeping.complete(0);
+      await bootstrap.startupComplete;
+    });
+
+    test('when seedNamespaceKeys is off, then no write waits on it', () async {
+      final bootstrap = await parked(gates: const PqStartupGates.inert());
+      held.complete();
+      await bootstrap.startupComplete;
+
+      expect(CryptoConfig.forClient(client).ckManager!.startUpSeeding, isNull);
+    });
+
+    test('when it has no key source, then no write waits on it', () async {
+      final bootstrap = await parked(keysIo: false);
+      held.complete();
+      await bootstrap.startupComplete;
+
+      expect(CryptoConfig.forClient(client).ckManager!.startUpSeeding, isNull);
+    });
+
+    test('when the client stops, then every write waiting on it ends',
+        () async {
+      final bootstrap = await parked();
+      final waiting = bootstrap.startUpSeeding.covering('x.todos.demos');
+      expect(await pending(waiting), isTrue);
+
+      bootstrap.stop();
+
+      await expectLater(waiting.timeout(const Duration(seconds: 1)),
+          throwsA(isA<StoppedException>()));
+      held.complete();
+      await bootstrap.startupComplete;
+    });
+
+    test(
+        'when an enrollment\'s start-up has read its grants, then a namespace '
+        'it may only read is not waited for', () async {
+      when(() => client.enrollmentId).thenReturn('e-1');
+      final enrollments = MockEnrollmentService();
+      when(() => enrollments.fetchEnrollmentRequests())
+          .thenAnswer((_) async => [
+                Enrollment()
+                  ..enrollmentId = 'e-1'
+                  ..namespace = {'todos.demos': 'rw', 'other': 'r'}
+              ]);
+      when(() => client.enrollmentService).thenReturn(enrollments);
+      final bootstrap = await parked();
+      final seeding = bootstrap.startUpSeeding;
+      final readOnly = seeding.covering('x.other');
+      final writable = seeding.covering('x.todos.demos');
+      expect(await pending(readOnly), isTrue,
+          reason: 'an enrollment waits for start-up to read its grants');
+
+      held.complete();
+
+      expect(await readOnly.timeout(const Duration(seconds: 5)), isNull);
+      expect(await writable.timeout(const Duration(seconds: 5)), 'todos.demos');
+      await bootstrap.startupComplete;
     });
   });
 

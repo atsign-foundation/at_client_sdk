@@ -619,6 +619,12 @@ What each posture switches on:
   A write that finds it missing first fetches what was conveyed to this
   client, and only then throws `NskeyPrivateNotHeldException`;
   `ensureReachable` reports `holdsPrivate`.
+- **A write right after opening.** A client's start-up publishes its
+  namespace keys after `open` returns. A write that finds no key while
+  start-up is still to publish one for its namespace waits for it, up to 30
+  seconds, then throws `NamespaceKeyUnavailableException` naming the key,
+  with start-up's reason when it could not publish it. A write made with no
+  atServer reachable does not wait.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
   before publishing it. A client on the atSign's own credential mints nothing,

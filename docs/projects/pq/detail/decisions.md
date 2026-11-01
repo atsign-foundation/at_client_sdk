@@ -15640,3 +15640,44 @@ ttl runs out. Asking the namespace's holders for that private on the exception i
   spelt, so `Todos.Demos` covered nothing.
 
 Supersedes nothing: it rules where the walk of [section 19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) starts.
+
+## 160. A write made before start-up has seeded waits for it (2026-11-01)
+
+**Decided by gkc on 2026-11-01.**
+
+A `pqActive` client's start-up publishes its namespace keys after `open` returns, in its
+`seedNamespaceKeys` step. The todos examples wrote the moment they opened, before that step ran,
+found no key, and failed.
+
+1. **A write waits on start-up's seeding step, and never mints.** When the atServer has answered
+   that no key is published, and start-up is still to seed a namespace covering the key,
+   `CkManager.ensureCurrent` waits for the step to finish, works out its start level again
+   ([159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)) and
+   resolves again. Writes waiting together share that one step.
+2. **The bound is 30 seconds, and no preference sets it.** When it passes, the write throws
+   `NamespaceKeyUnavailableException` naming the key start-up has not yet published.
+3. **An enrollment waits for the grant read start-up already makes**, inside the same bound and
+   never for a mint, and a namespace start-up will not seed is then refused as before. The
+   atSign's own credential seeds its preference namespace alone, known at once.
+4. **What does not wait:** a write with no atServer, whose key read throws, and which fails at once
+   as before; a write the offline restart allows; a write after the step has finished; and a
+   client whose start-up seeds nothing.
+5. **A seeding that fails ends the wait with its reason**, which the step keeps for each
+   namespace.
+6. **A share waits only for the writer's own start-up.** A recipient that has published nothing is
+   refused at once.
+
+**Built** in at_client. Proven in-process by `pq_write_waits_for_seeding_test.dart` and the
+start-up group of `pq_client_bootstrap_test.dart`, and live by
+`pq_write_waits_for_seeding_live_test.dart` in the functional pack. The scenarios are in
+`features/at_client/pq_write_waits_for_seeding.feature`.
+
+**Rejected.**
+
+- Waiting on `ensureReachable`. It mints for any namespace it may, so every first write in a new
+  namespace would become a mint and a conveyance to every enrollment.
+- A preference for the bound: a setting for a wait that only covers the seconds after opening.
+- A share that waits, bounded, for its recipient to publish. It would poll the recipient's
+  atServer for a key that may never come, so it is left as a follow-up of its own.
+
+Supersedes nothing.

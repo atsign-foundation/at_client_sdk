@@ -10,6 +10,8 @@
   share with no current copy of the recipient's key, need the atServer;
   later writes go on offline, across restarts (`SKILL.md` §11;
   `references/05`).
+- Under `pqActive`, a write right after the client opens waits up to 30
+  seconds for its start-up to publish the namespace key (`SKILL.md` §11).
 - A registrar API key is the app's own, created via the registrar at
   my.atsign.com (`references/05`); `at_register`, and `at_activate onboard`
   without `-c`, take it from `AT_REGISTRAR_API_KEY` (`references/06`).

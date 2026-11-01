@@ -11,6 +11,7 @@ import 'package:at_client/src/crypto/nskey/nskey_rotation.dart'
     show NskeyRotation;
 import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -78,6 +79,10 @@ class NskeySeeding {
     this.rotationPolicy = rotateNskeyAfterOneYear,
   }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
+  /// The namespace the atSign's own credential seeds: the client's preference
+  /// namespace when this was built.
+  String? get ownNamespace => _ownNamespace;
+
   /// The namespaces this client should hold a key for; see
   /// [authorisedNamespacesOf]. Empty when the enrollment record cannot be read.
   Future<Set<String>> authorisedNamespaces() async {
@@ -105,7 +110,10 @@ class NskeySeeding {
   /// here writes to it. One its grants let it write without naming it, such as
   /// `chat.app` under a grant on `app`, is rotated where this client holds its
   /// key and a revocation is owed there, and is otherwise left alone.
-  Future<Set<String>> seed() async {
+  ///
+  /// [progress] is told which namespaces this start seeds as soon as they are
+  /// known, and why any of them could not be seeded.
+  Future<Set<String>> seed({StartUpSeeding? progress}) async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
 
@@ -120,6 +128,10 @@ class NskeySeeding {
     }
     final namespaces =
         authorisedNamespacesIn(grants, ownNamespace: _ownNamespace);
+    progress?.seeding({
+      for (final ns in namespaces)
+        if (mayWriteIn(grants, ns)) ns
+    });
 
     final minted = <String>{};
     final readOnly = <String>{};
@@ -136,11 +148,13 @@ class NskeySeeding {
           minted.add(namespace);
           continue;
         }
-        if (await seedNamespace(owner, namespace) == NskeySeedOutcome.minted) {
-          minted.add(namespace);
-        }
+        final outcome = await seedNamespace(owner, namespace);
+        if (outcome == NskeySeedOutcome.minted) minted.add(namespace);
+        final why = _whyNotSeeded(outcome);
+        if (why != null) progress?.failed(namespace, why);
       } catch (e) {
         if (e is StoppedException) rethrow;
+        progress?.failed(namespace, e);
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
@@ -160,6 +174,16 @@ class NskeySeeding {
     }
     return minted;
   }
+
+  /// Why [outcome] left a namespace with no key this client may seal to, or
+  /// null when it has one.
+  static String? _whyNotSeeded(NskeySeedOutcome outcome) => switch (outcome) {
+        NskeySeedOutcome.minted || NskeySeedOutcome.alreadyPublished => null,
+        NskeySeedOutcome.noKeyPackage =>
+          'this enrollment carries no key package, so it mints none',
+        NskeySeedOutcome.cannotConvey => 'this client has no secret-sharing '
+            'substrate or no key source to file a namespace key in',
+      };
 
   /// The namespaces this client holds a key for and [grants] let it write,
   /// other than those in [named]: `chat.app` under a grant on `app`.

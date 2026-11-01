@@ -55,6 +55,8 @@
   it. Each refusal names both settings.
 - fix: at `pqActive`, a collection in a dotted namespace such as
   `todos.demos` writes and shares its records.
+- feat: at `pqActive`, a write made right after the client opens waits up to
+  30 seconds for the client to publish its namespace key, instead of failing.
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.

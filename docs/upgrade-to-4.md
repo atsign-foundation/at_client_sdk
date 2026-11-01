@@ -663,3 +663,7 @@ final stepTwo = AtClientPreference(posture: PqPosture.pqActive)
 A new app has no legacy readers, so it starts at `PqPosture.pqActive`. The
 [at_client README](../packages/at_client/README.md#post-quantum-cryptography)
 says what each posture switches on.
+
+At `pqActive`, a write made right after the client opens can wait, up to 30
+seconds, while the client's start-up publishes the namespace key it seals
+to. An app that writes as soon as it opens needs no change for this.

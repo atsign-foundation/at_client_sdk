@@ -9,6 +9,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         ckConveyanceMarker,
@@ -101,6 +102,10 @@ class CkManager {
   /// the caller knows to re-resolve.
   Future<bool> Function(String namespace)? rotateOwnNamespaceKeyIfAsked;
 
+  /// The client's start-up seeding, which a write that finds no namespace key
+  /// waits on while it is still to come. Null waits for nothing.
+  StartUpSeeding? startUpSeeding;
+
   CkManager(
       {required this.cache,
       required this.keyRing,
@@ -128,14 +133,31 @@ class CkManager {
   /// Cuts are serialised within this manager only: two processes of one
   /// enrollment writing at once can each cut a key, and the pointer keeps
   /// whichever was recorded last.
+  ///
+  /// When no key is published and [startUpSeeding] is still to seed a
+  /// namespace covering [valueKey], the write waits for that seeding, at most
+  /// [StartUpSeeding.wait], and resolves again.
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
     if (owner == null || owner.isEmpty || valueKey.namespace == null) return;
-    final namespace = await resolver.startLevelOf(
-        context.atClient.getCurrentAtSign(), valueKey);
+    final holder = context.atClient.getCurrentAtSign();
+    var namespace = await resolver.startLevelOf(holder, valueKey);
 
-    final advertised = await resolver.resolve(owner, namespace);
+    var advertised = await resolver.resolve(owner, namespace);
+    if (advertised == null) {
+      final covering = await _afterStartUpSeeding(holder, valueKey, namespace);
+      if (covering != null) {
+        namespace = await resolver.startLevelOf(holder, valueKey);
+        advertised = await resolver.resolve(owner, namespace);
+        final failure = startUpSeeding?.failureFor(covering);
+        if (advertised == null && failure != null) {
+          throw NamespaceKeyUnavailableException(holder!, covering,
+              because: 'this client\'s start-up could not publish it: '
+                  '$failure');
+        }
+      }
+    }
     if (advertised == null) {
       // NOTE: failing in this pre-pass is what keeps a cold start recoverable —
       // the caller can still route the write to legacy, which it could not do
@@ -513,6 +535,24 @@ class CkManager {
     final result = _turn.then((_) => work());
     _turn = result.then((_) {}, onError: (_) {});
     return result;
+  }
+
+  /// The namespace [startUpSeeding] seeds that covers [valueKey], once its
+  /// seeding step has finished, or null at once when it seeds none or is done.
+  ///
+  /// Throws [NamespaceKeyUnavailableException] when [StartUpSeeding.wait]
+  /// passes first, naming the key start-up has not yet published.
+  Future<String?> _afterStartUpSeeding(
+      String? holder, AtKey valueKey, String namespace) async {
+    final seeding = startUpSeeding;
+    if (seeding == null || holder == null) return null;
+    try {
+      return await seeding.covering('${valueKey.key}.${valueKey.namespace}');
+    } on TimeoutException catch (e) {
+      throw NamespaceKeyUnavailableException(holder, e.message ?? namespace,
+          because: 'this client\'s start-up has not yet published it, '
+              '${e.duration?.inSeconds} seconds after the write began waiting');
+    }
   }
 
   /// `sender|ckNs` → when the sender was found to hold no key covering ckNs.

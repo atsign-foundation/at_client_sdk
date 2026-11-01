@@ -454,7 +454,10 @@ with, after a dot, since a key read from its string form names only its last lab
 namespace ([ruling 159](detail/decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)).
 From there it walks **most-specific-first**
 — `d.c.b.a`, `c.b.a`, `b.a`, `a` — and seals to the first published nskey it finds; the
-namespace it lands on is `ckNs`, and cold start is the whole walk coming up empty. The
+namespace it lands on is `ckNs`, and cold start is the whole walk coming up empty. A write
+that meets cold start while its client's start-up is still to seed a namespace covering it
+waits for that seeding, at most 30 seconds
+([ruling 160](detail/decisions.md#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01)). The
 walk mirrors the atServer's own suffix authorisation, so the crypto gate never widens
 past the transport gate, and it is what makes AtCollection viable: sub-collection
 namespaces embed a per-**item** id, so an exact-match rule would need a keypair and a
