@@ -10,6 +10,9 @@ Feature: A client that holds its namespace key writes after an offline restart
   storage only if that record vouches for exactly those bytes and the
   namespace keys it holds now. Online, and when the atServer refuses, nothing
   changes.
+  A client restarted without its atServer trusts the last advertisement it
+  verified online, however long ago; the next start that reaches its atServer
+  checks it again.
 
   Races: the record is written after the verification it describes, for the
   bytes verified; a change pulled later no longer matches it and is verified

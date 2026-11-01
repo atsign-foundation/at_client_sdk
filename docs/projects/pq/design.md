@@ -527,7 +527,9 @@ local storage only when that record vouches for exactly those bytes and the keys
 holds now; an atServer that answers still decides. What is left is a restored older
 copy of local storage from before a rotation whose key never reached the client: it is
 accepted until sync pulls the current advertisement, as an online start already
-accepts it until then.
+accepts it until then. A client restarted without its atServer trusts the last
+advertisement it verified online, however long ago; the next start that reaches its
+atServer checks it again.
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
 
