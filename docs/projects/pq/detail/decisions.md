@@ -15693,8 +15693,17 @@ found no key, and failed.
    ([UC-A5.5](../acceptance.md#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)).
    **Amended 2026-11-01**: this item said a write "never mints", which those two paths
    contradict; gkc chose "Narrow the wording (Rec.)", and the code is unchanged.
-2. **The bound is 30 seconds, and no preference sets it.** When it passes, the write throws
-   `NamespaceKeyUnavailableException` naming the key start-up has not yet published.
+   **Amended 2026-11-01**: a write also waits when the key its search found is broader than a
+   namespace start-up has said it will seed covering the key, and then resolves again, so it
+   seals at the narrower namespace rather than the broader one. This item used to wait only when
+   nothing was published (gkc: "Fix now (Rec.)"). A write made before start-up has said what it
+   seeds does not wait, so an enrollment's write before its grant read can still seal at a
+   broader key (gkc: "Approve, keep A (Rec.)").
+2. **The bound is 30 seconds, and no preference sets it.** When it passes, the write resolves
+   again and goes ahead with what it finds; an own write that still finds nothing throws
+   `NamespaceKeyUnavailableException` naming the key start-up has not yet published, and a share
+   is refused naming its recipient (item 6). **Amended 2026-11-01**: this item said the write
+   throws when the bound passes, whatever start-up had published by then.
 3. **An enrollment waits for the grant read start-up already makes**, inside the same bound and
    never for a mint, and a namespace start-up will not seed is then refused as before. The
    atSign's own credential seeds its preference namespace alone, known at once.

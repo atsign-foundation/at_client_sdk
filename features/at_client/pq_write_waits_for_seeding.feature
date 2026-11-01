@@ -5,9 +5,11 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   writable grants. Start-up runs after the client opens, so a write made at
   once can find no key yet. Such a write waits for start-up's seeding step to
   finish, then works out its start level and resolves again; if there is
-  still no key it refuses as before. A write waits only when the atServer has
+  still no key it refuses as before. A write waits when the atServer has
   answered that no key is published and start-up will seed a namespace that
-  covers the key. Reads do not seal, and are unchanged.
+  covers the key, or when the key it found is broader than a namespace
+  start-up has said it will seed covering the key. Reads do not seal, and are
+  unchanged.
 
   Races: a write never mints to find its own value's key; only start-up
   does, once per namespace, and the write waits for it. Two write paths
@@ -102,6 +104,31 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     Given a write waiting for start-up, and another enrollment of alice's publishing todos.demos's key first
     When start-up adopts that key
     Then the write is sealed under the adopted key
+
+  Scenario: A write that finds only a broader key waits for the namespace start-up will seed
+    Given start-up will seed todos.demos and the search finds only demos published
+    When a write under todos.demos is made before seeding finishes
+    Then it waits for seeding and seals at todos.demos
+
+  Scenario: A wait for a narrower namespace that runs out resolves again
+    Given start-up will seed todos.demos and the search finds only demos published
+    When the wait runs out before seeding finishes
+    Then the write resolves again and seals at todos.demos once that is published
+
+  Scenario: A write before start-up has said what it seeds does not wait for a narrower namespace
+    Given start-up has not yet said what it seeds, and the search finds demos published
+    When a write under todos.demos is made
+    Then it does not wait
+
+  Scenario: A write whose key is published as the wait runs out goes ahead
+    Given a write waiting for start-up's seeding step
+    When its key is published but the step has not finished as the wait runs out
+    Then the write goes ahead under that key
+
+  Scenario: A share whose wait runs out is refused naming the recipient
+    Given a share to a recipient that has published nothing
+    When the wait for the writer's own start-up runs out
+    Then the share is refused naming the recipient
 
   Scenario: A write and a share right after opening complete once start-up has seeded
     Given bob's client, whose start-up seeded his todos.demos key beforehand, and alice's client just opened, with nothing waiting for its start-up

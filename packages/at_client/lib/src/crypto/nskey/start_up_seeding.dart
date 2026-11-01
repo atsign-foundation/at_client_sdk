@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:meta/meta.dart' show visibleForTesting;
 
-/// What a write that finds no namespace key waits on while its client's
-/// start-up has still to seed one: which namespaces start-up seeds, once it
-/// knows, and when its seeding step has finished.
+/// What a write that finds no namespace key, or only one broader than start-up
+/// will seed, waits on while its client's start-up has still to seed one:
+/// which namespaces start-up seeds, once it knows, and when its seeding step
+/// has finished.
 ///
 /// A write never mints to find its own value's key. It only waits here, so
 /// writes waiting together share the one seeding start-up does. A share whose
