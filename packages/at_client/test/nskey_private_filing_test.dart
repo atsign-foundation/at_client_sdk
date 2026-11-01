@@ -406,6 +406,63 @@ void main() {
     expect(await filer.filedFor(namespace), isEmpty);
   });
 
+  group('Given the namespaces a filing lists as held', () {
+    test(
+        'when the keyfile cannot be read, then it is read again only once the '
+        'window has passed, not at every call', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+      await filer.filedNamespaces();
+      await filer.filedNamespaces();
+
+      expect(io.reads, 1);
+    });
+
+    test(
+        'when another process files a private on the same keyfile, then it is '
+        'listed once the window has passed', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesReadEvery: Duration.zero);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+
+      expect(
+          await there.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isTrue);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+
+    test(
+        'when this filing finds a private already filed, then it is listed at '
+        'once', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+      await there.store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+
+      expect(
+          await here.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isFalse);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+  });
+
   group('a key source that cannot be read is not an empty one', () {
     test('a source holding nothing yet reads as a genuine absence', () async {
       final filing =
@@ -452,6 +509,17 @@ void main() {
       expect(await filing.readAll(), isEmpty);
     });
   });
+}
+
+/// A keyfile that cannot be read, counting how often a read is tried.
+class _CountingUnreadableKeysIo extends _UnreadableKeysIo {
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) {
+    reads++;
+    return super.read(atsign);
+  }
 }
 
 /// A key source that exists and cannot be parsed.

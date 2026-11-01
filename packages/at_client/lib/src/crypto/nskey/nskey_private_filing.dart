@@ -112,10 +112,15 @@ class NskeyPrivateFiling {
   final Future<NskeyAdvertisement?> Function(String namespace, String nskeyKid)?
       publishedGeneration;
 
+  /// How long [filedNamespaces] answers from its last read of the keyfile
+  /// before reading it again.
+  final Duration namespacesReadEvery;
+
   NskeyPrivateFiling({
     required this.keysIo,
     required String atSign,
     this.publishedGeneration,
+    this.namespacesReadEvery = const Duration(minutes: 1),
   }) : atSign = atSign.toAtsign();
 
   /// A filing that checks each arriving private against the generation
@@ -167,9 +172,10 @@ class NskeyPrivateFiling {
     _filed.add((owner: atSign, namespace: namespace, nskeyKid: nskeyKid));
   }
 
-  /// The namespaces the keyfile held privates for when [filedNamespaces] first
-  /// read it.
-  Set<String>? _namespacesOnFile;
+  /// The namespaces the keyfile held privates for when [filedNamespaces] last
+  /// read it, and when that was.
+  Set<String> _namespacesOnFile = const {};
+  DateTime? _namespacesReadAt;
 
   /// The namespaces of every private filed through this filing.
   final Set<String> _namespacesFiledSince = {};
@@ -450,23 +456,24 @@ class NskeyPrivateFiling {
 
   /// The namespaces this atSign holds a filed private for, spelt as filed.
   ///
-  /// The keyfile is read once, at the first call that can read it; every
-  /// private filed through this filing after that is added as it is filed, so
-  /// later calls read nothing.
+  /// The keyfile is read at most once every [namespacesReadEvery], a failed
+  /// read included, so another process's filings show within that window;
+  /// every private this filing files or finds already filed is added at once.
   Future<Set<String>> filedNamespaces() async {
-    var onFile = _namespacesOnFile;
-    if (onFile == null) {
-      final AtKeys? keys;
+    final readAt = _namespacesReadAt;
+    final now = DateTime.now();
+    if (readAt == null || now.difference(readAt) >= namespacesReadEvery) {
+      _namespacesReadAt = now;
       try {
-        keys = await _readSourceOrNull('the namespaces of every held private');
+        final keys =
+            await _readSourceOrNull('the namespaces of every held private');
+        _namespacesOnFile =
+            keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
       } catch (e) {
         _logger.finer('No nskey privates listed ($e)');
-        return {..._namespacesFiledSince};
       }
-      onFile = _namespacesOnFile =
-          keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
     }
-    return {...onFile, ..._namespacesFiledSince};
+    return {..._namespacesOnFile, ..._namespacesFiledSince};
   }
 
   /// Every private this client holds in a namespace [include] accepts, grouped
@@ -620,11 +627,13 @@ class NskeyPrivateFiling {
     // the signing-root filing writes first — a client's start runs both as
     // sibling unawaited tasks.
     var filed = false;
+    var alreadyFiled = false;
     try {
       await io.update(atSign.toAtsign(), (keys) {
         if (_materialFor(keys, namespace, nskeyKid,
                 CryptographicMaterialRole.privateDecapsulation) !=
             null) {
+          alreadyFiled = true;
           return false;
         }
         keys.addKey(CryptographicMaterial(
@@ -643,6 +652,7 @@ class NskeyPrivateFiling {
       return false;
     }
     if (filed) _announceFiled(namespace, nskeyKid);
+    if (alreadyFiled) _namespacesFiledSince.add(namespace);
     return filed;
   }
 }

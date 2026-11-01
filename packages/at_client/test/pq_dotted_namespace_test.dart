@@ -514,12 +514,14 @@ void main() {
         reason: "another atSign's privates are never this client's");
   });
 
-  test('A keyfile that could not be read is read again at the next write',
-      () async {
+  test(
+      'A keyfile that could not be read is read again once the window has '
+      'passed', () async {
     final io = _FailingOnceKeysIo();
     await _filing(io, ['todos.demos']);
     final resolver = NskeyResolver(PublishedNskeyKeyRing(atClient,
-        privateFiling: NskeyPrivateFiling(keysIo: io, atSign: _alice)));
+        privateFiling: NskeyPrivateFiling(
+            keysIo: io, atSign: _alice, namespacesReadEvery: Duration.zero)));
     final key = AtKey.fromString('x.todos.demos$_alice');
     io.failNext = true;
 
