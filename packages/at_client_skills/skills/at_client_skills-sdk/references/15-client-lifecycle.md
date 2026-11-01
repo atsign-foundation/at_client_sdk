@@ -42,8 +42,11 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
-// pending.cancel() ends that wait, as a Cancel button or a dispose() would;
-// the request stays on the atServer until its manager decides it.
+// pending.cancel() abandons the enrollment: it ends that wait and removes
+// the pending keys from `keys`, as a denial does, so resumeEnrollment finds
+// nothing. Call it when the user gives up on the request (a Cancel button),
+// never from a dispose() that only leaves the screen. The request stays on
+// the atServer until its manager decides it.
 final resumed = await Atsign('@alice').resumeEnrollment(
     app: 'my_app', device: 'phone', keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending

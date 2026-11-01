@@ -491,8 +491,8 @@ await client.connection.attempt();                  // try again now
 
 - `client.syncService` runs on its own: on every stats notification from the
   atServer and every `syncIntervalMins`. `sync()` expedites a round,
-  `isInSync()` asks the atServer fresh, `addProgressListener` observes. The
-  `AtClientManager` getters for these services are deprecated.
+  `isInSync()` asks the atServer fresh, `addProgressListener` observes.
+  at_client 4.0 removed the `AtClientManager` getters for these services.
 - `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor
   starts on the first `subscribe` (or 30 s after creation) when
   `monitorAutoStart` is true. **`subscribe()` returns before the monitor is

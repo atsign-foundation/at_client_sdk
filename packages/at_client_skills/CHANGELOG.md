@@ -45,8 +45,8 @@
 - A `refused` connection lists `enrollmentDenied` among its causes.
 - The canonical todos examples, CLI and Flutter, run at `PqPosture.pqActive`
   (`SKILL.md` §19).
-- `pending.cancel()` ends an enrollment's wait, and
-  `AtEnrollmentCancelledException` is what the wait then throws
+- `pending.cancel()` abandons an enrollment: it ends the wait, which throws
+  `AtEnrollmentCancelledException`, and removes the pending keys
   (`references/15`).
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).

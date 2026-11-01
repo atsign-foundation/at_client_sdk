@@ -74,7 +74,7 @@ class _SyncedListener implements SyncProgressListener {
   }
 }
 
-final sync = client.syncService;   // the client's own; the manager's getter is deprecated
+final sync = client.syncService;   // the client's own; 4.0 removed the manager's getter
 final listener = _SyncedListener(() => print('synced'));
 sync.addProgressListener(listener);
 // ... later:
