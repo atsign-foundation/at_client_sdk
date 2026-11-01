@@ -151,9 +151,17 @@ class NskeyPrivateFiling {
   /// Emitted after the material is readable, never before: a listener that
   /// re-reads on this signal must find what the signal says is there.
   void _announceFiled(String namespace, String nskeyKid) {
+    _namespacesFiledSince.add(namespace);
     if (_filed.isClosed) return;
     _filed.add((owner: atSign, namespace: namespace, nskeyKid: nskeyKid));
   }
+
+  /// The namespaces the keyfile held privates for when [filedNamespaces] first
+  /// read it.
+  Set<String>? _namespacesOnFile;
+
+  /// The namespaces of every private filed through this filing.
+  final Set<String> _namespacesFiledSince = {};
 
   /// Releases the signal. A filing whose owner is gone announces to nobody.
   Future<void> close() => _filed.close();
@@ -427,6 +435,27 @@ class NskeyPrivateFiling {
       return const {};
     }
     return keys == null ? const {} : _heldIn(keys, (_) => true);
+  }
+
+  /// The namespaces this atSign holds a filed private for, spelt as filed.
+  ///
+  /// The keyfile is read once, at the first call that can read it; every
+  /// private filed through this filing after that is added as it is filed, so
+  /// later calls read nothing.
+  Future<Set<String>> filedNamespaces() async {
+    var onFile = _namespacesOnFile;
+    if (onFile == null) {
+      final AtKeys? keys;
+      try {
+        keys = await _readSourceOrNull('the namespaces of every held private');
+      } catch (e) {
+        _logger.finer('No nskey privates listed ($e)');
+        return {..._namespacesFiledSince};
+      }
+      onFile = _namespacesOnFile =
+          keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
+    }
+    return {...onFile, ..._namespacesFiledSince};
   }
 
   /// Every private this client holds in a namespace [include] accepts, grouped

@@ -1664,6 +1664,8 @@ the SDK's flagship API from ever being post-quantum.
 tries `d.c.b.a`, then `c.b.a`, then `b.a`, then `a`, and seals to the first nskey it finds.
 If none exists that is cold start, and it fails as
 [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) requires.
+Where a write starts the walk is ruled in
+[section 159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01).
 
 The walk is safe because it mirrors the atServer's own authorisation rule — an enrollment
 approved for `a` may access `d.c.b.a` (`SecretStore.namespaceAuthorizes`, and the server
@@ -15587,3 +15589,54 @@ receiver that configures the providers and does not seed reads.
 advertise it, the cost 25.2 refused, and created an enrollment's section in a keyfile holding none
 of its material. Making the reconcile mint and leaving the client on its old key until the next
 start, which advertises an address the running client does not answer at.
+
+## 159. A write starts its walk at the namespace its key names in full (2026-11-01)
+
+**Decided by gkc on 2026-11-01**, with three amendments from an independent check of the first
+draft.
+
+A key read from its string form names only its last dot label as its namespace:
+`AtKey.fromString('x.todos.demos@alice')` is the key `x.todos` in `demos`. AtCollection builds
+every record's key that way. So at `pqActive` the todos examples, running in `todos.demos`, looked
+for a namespace key for `demos`, which nobody had published, and every write failed. Four sites
+read the key's namespace field: the readiness check, the content-key pre-pass
+(`CkManager.ensureCurrent`), content-key rotation and the data provider.
+
+1. **One start level, shared by all four sites.** `NskeyResolver.startLevelOf` answers the longer
+   of the key's own namespace and the most specific namespace the writer holds a namespace
+   private for that the key's whole name ends with, after a dot. The walk of
+   [19.3](#193-the-ruling) goes up from there. A bare namespace, which is what the readiness
+   check is given, is covered only by a held namespace equal to it, so it starts at itself.
+2. **The held namespaces are read on the device**: the namespaces of the privates this client has
+   filed, folded, leaving out `*` and any namespace whose last label starts with `__`. The keyfile
+   is read at the first write that asks, and each private filed after that is added as it is
+   filed, so the next write sees it and no write makes a round trip.
+3. **A key is covered by its name ending with `.` and the namespace, never by its letters.**
+   `x.mydemos` is not under `demos`, and a key named exactly `todos.demos` is not under
+   `todos.demos`, as the atServer's own grant check decides.
+4. **`ns` records the start level.** A reader opens a value at its recorded `ckNs`, so a value
+   written before this ruling opens as it did.
+5. **Most specific is the sealing rule, not the access rule.** The atServer still decides who may
+   read or write a key.
+
+**Known limit.** An enrollment granted a broader namespace that holds no private for a narrower
+one cannot open a value sealed under the narrower key: `get` throws
+`NskeyPrivateUnavailableException`, and a notification of it is parked, then dropped when the park
+ttl runs out. Asking the namespace's holders for that private on the exception is a follow-up.
+
+**Built** in at_client. Proven in-process by `pq_dotted_namespace_test.dart`, and live by
+`pq_dotted_namespace_live_test.dart` in the functional pack and by the todos examples'
+`todos_examples_pq_test.dart`. The scenarios are in `features/at_client/pq_dotted_namespace.feature`.
+
+**Rejected.**
+
+- Keying AtCollection on `preference.namespace`. The defect is in how the providers read a key,
+  and an enrollment granted several namespaces writes in more than one.
+- Starting at the covering held namespace even when the key's own namespace is longer. A key
+  built with its namespace in full would then seal to a broader key than the one it names, or be
+  refused where the recipient publishes only the narrower one.
+- Taking the namespaces from the enrollment's grants. Grants come from `enroll:fetch`, a round
+  trip the write path must not make; an atSign's own credential has none; and they are stored as
+  spelt, so `Todos.Demos` covered nothing.
+
+Supersedes nothing: it rules where the walk of [section 19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) starts.

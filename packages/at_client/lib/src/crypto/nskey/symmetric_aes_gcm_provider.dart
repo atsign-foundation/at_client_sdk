@@ -91,13 +91,18 @@ class SymmetricAesGcmProvider
   Future<bool> isReadyFor(
           CryptoContext context, String atSign, String namespace) async =>
       ckManager == null ||
-      await ckManager!.resolver.resolve(atSign, namespace) != null;
+      await ckManager!.resolver.resolve(
+              atSign, NskeyResolver.startLevelOfNamespace(namespace)) !=
+          null;
 
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
+    final ownNamespace = _namespaceOf(atKey);
+    final namespace = await ckManager?.resolver
+            .startLevelOf(context.atClient.getCurrentAtSign(), atKey) ??
+        ownNamespace;
     final ckNs = await _ckNamespaceOf(owner, namespace);
 
     final ck = cache.current(owner, ckNs);

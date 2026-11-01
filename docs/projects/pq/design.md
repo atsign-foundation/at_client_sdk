@@ -437,17 +437,22 @@ disclosure — the namespace is already plaintext in the key name.
   security under the CK rather than on HKDF-Extract keyed by a public salt. A value
   carrying no `salt` is read under the CK directly. `iv` is
   the base64 12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
-  the value's **own** full namespace — it is what the AAD binds, so two items under
-  different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
-  namespace the CK and its conveyance live at, which differs from `ns` whenever
-  resolution walked up: every AtCollection sub-collection item, and the stale-sender
+  the level the write's walk started at (**Namespace resolution**, below). The AAD binds the
+  value's whole name, so two items under different sub-collections cannot have their
+  ciphertexts swapped. `ckNs` is the namespace the CK and its conveyance live at, which
+  differs from `ns` whenever resolution walked up from there: a recipient publishing only a
+  broader level, and the stale-sender
   window of [`decisions.md`](decisions.md) [section 19.4](detail/decisions.md#194-cost-and-the-three-lifetimes). Neither is derivable from the other.
 
 **`ckKid`** is the content key's id — a SHA-256 prefix of the CK (deterministic;
 dedupes identical keys) or a random id. It must be unique within `(owner, ckNs)`
 and is the CK cache key alongside them.
 
-**Namespace resolution.** A sender walks the value's namespace **most-specific-first**
+**Namespace resolution.** A sender starts at the longer of the value's own namespace and the
+most specific namespace it holds a namespace private for that the value's whole name ends
+with, after a dot, since a key read from its string form names only its last label as its
+namespace ([ruling 159](detail/decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)).
+From there it walks **most-specific-first**
 — `d.c.b.a`, `c.b.a`, `b.a`, `a` — and seals to the first published nskey it finds; the
 namespace it lands on is `ckNs`, and cold start is the whole walk coming up empty. The
 walk mirrors the atServer's own suffix authorisation, so the crypto gate never widens

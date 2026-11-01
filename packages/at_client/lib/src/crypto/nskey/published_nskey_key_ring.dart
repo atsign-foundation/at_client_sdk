@@ -1260,6 +1260,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return derived.kid == nskeyKid ? derived : null;
   }
 
+  /// What its [privateFiling] lists, which every private this ring mints or
+  /// reads is filed through; only the current atSign's.
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async {
+    if (owner != _atClient.getCurrentAtSign()) return const {};
+    return await privateFiling?.filedNamespaces() ?? const {};
+  }
+
   /// What [privateHalf] answers, without asking the atSign's other enrollments
   /// for a private this client does not hold.
   Future<NskeyDecapsulationKey?> heldPrivateHalf(

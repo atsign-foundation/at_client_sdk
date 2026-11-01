@@ -131,8 +131,9 @@ class CkManager {
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
-    final namespace = valueKey.namespace;
-    if (owner == null || owner.isEmpty || namespace == null) return;
+    if (owner == null || owner.isEmpty || valueKey.namespace == null) return;
+    final namespace = await resolver.startLevelOf(
+        context.atClient.getCurrentAtSign(), valueKey);
 
     final advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
@@ -213,12 +214,13 @@ class CkManager {
     bool? useRemoteAtServer,
   }) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
-    final namespace = valueKey.namespace;
-    if (owner == null || owner.isEmpty || namespace == null) {
+    if (owner == null || owner.isEmpty || valueKey.namespace == null) {
       throw AtKeyException(
           'cannot rotate a content key for a record with no owner or '
           'namespace: $valueKey');
     }
+    final namespace = await resolver.startLevelOf(
+        context.atClient.getCurrentAtSign(), valueKey);
 
     final advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {

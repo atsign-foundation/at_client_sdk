@@ -279,6 +279,10 @@ abstract class NskeyKeyRing {
   /// has not reached this client.
   Future<PackageKey?> heldPublic(
       String owner, String namespace, String nskeyKid);
+
+  /// The namespaces of [owner]'s nskeys this client holds a private for,
+  /// spelt as they were filed, answered without a round trip to the atServer.
+  Future<Set<String>> heldNamespaces(String owner);
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
@@ -354,4 +358,12 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
   Future<PackageKey?> heldPublic(
           String owner, String namespace, String nskeyKid) async =>
       _public[_generation(owner, namespace, nskeyKid)];
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => {
+        for (final generation in _private.keys)
+          if (generation.split('|') case [final held, final namespace, _]
+              when held == owner)
+            namespace
+      };
 }

@@ -451,9 +451,9 @@ per keyfile/install):
     resolved namespace the conveyance lives at.
   - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
     data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
-    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the value's own full namespace
-    and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
-    whenever resolution walked up.
+    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the level
+    the write's walk started at, and the AAD binds the value's whole name; `ckNs` is where
+    the CK lives, and differs from `ns` whenever resolution walked up from there.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
 
 **atServer PQ capabilities** (Part A and B both assume `aS = pq` unless stated):

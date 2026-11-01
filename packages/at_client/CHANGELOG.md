@@ -53,6 +53,8 @@
   exchange before sending it, and a `PqPosture` refuses `rsa2048`
   authentication with the pq key exchange, or seeding namespace keys without
   it. Each refusal names both settings.
+- fix: at `pqActive`, a collection in a dotted namespace such as
+  `todos.demos` writes and shares its records.
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.
