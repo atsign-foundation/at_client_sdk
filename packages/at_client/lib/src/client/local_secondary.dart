@@ -864,9 +864,6 @@ class LocalSecondary implements Secondary {
     return result;
   }
 
-  @Deprecated("Use getPkamPrivateKey")
-  Future<String?> getPrivateKey() => getPkamPrivateKey();
-
   Future<AtKeys?>? _keySourceRead;
 
   /// The keys this client's [AtClient.atKeysIo] holds, or null when it has no
@@ -921,9 +918,6 @@ class LocalSecondary implements Secondary {
   Future<String?> getEncryptionPrivateKey() async =>
       (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey ??
       await _fromKeystore(AtConstants.atEncryptionPrivateKey);
-
-  @Deprecated("Use getPkamPublicKey")
-  Future<String?> getPublicKey() => getPkamPublicKey();
 
   /// The PKAM public key: the key source's for this enrollment, else the
   /// keystore's.

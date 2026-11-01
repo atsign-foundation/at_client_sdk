@@ -35,9 +35,9 @@ void main() {
         RsaEncryptionAlgo.fromKeyPair(encryptionKeyPair)
             .encrypt(utf8.encode(aesKey)));
 
-    var decryptedAesKey =
-        //ignore: deprecated_member_use_from_same_package
-        EncryptionUtil.decryptKey(encryptedAesKey, encryptionPrivateKey);
+    var decryptedAesKey = utf8.decode((RsaEncryptionAlgo()
+          ..atPrivateKey = AtPrivateKey.fromString(encryptionPrivateKey))
+        .decrypt(base64Decode(encryptedAesKey)));
     expect(decryptedAesKey, aesKey);
   });
 

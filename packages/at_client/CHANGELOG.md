@@ -103,6 +103,11 @@
   an `AtKeysIo`.
 - breaking: `ApkamSigning.publicSigningKey` and `privateSigningKey` are
   removed; sign with `signingKeys`.
+- breaking: `Query.fetch` is removed; use `get()`.
+- breaking: `LocalSecondary.getPrivateKey` and `getPublicKey` are removed;
+  use `getPkamPrivateKey` and `getPkamPublicKey`.
+- breaking: `EncryptionUtil.decryptKey` is removed; decrypt with at_chops'
+  `RsaEncryptionAlgo`.
 - breaking: `AtClient.stream` and `sendStreamAck` are removed, as are
   `EncryptionService.encryptStream`, `decryptStream` and
   `getSharedKeyForDecryption`: atServers refuse the `stream:` command from

@@ -58,12 +58,6 @@ class EncryptionUtil {
     return rsaPublicKey.encrypt(aesKey);
   }
 
-  @Deprecated('Use the at_chops algorithm classes')
-  static String decryptKey(String aesKey, String privateKey) {
-    var rsaPrivateKey = RSAPrivateKey.fromString(privateKey);
-    return rsaPrivateKey.decrypt(aesKey);
-  }
-
   static List<int> encryptBytes(List<int> value, String encryptionKey,
       {String? ivBase64}) {
     var aesEncrypter = Encrypter(AES(Key.fromBase64(encryptionKey)));

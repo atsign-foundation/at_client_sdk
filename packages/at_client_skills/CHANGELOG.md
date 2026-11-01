@@ -34,6 +34,7 @@
 - A CLI program takes its `lookUps:` from at_client_cli's
   `lookUpsFor(rootDomain)`, which routes through a proxy when the root domain
   names one (`SKILL.md`; `references/06`, `14`, `15`).
+- `Query.fetch()` is listed as removed in 4.0 (`references/03`).
 - `createAtClient` is at_client_cli's, unchanged, not a removed API
   (`SKILL.md`; `references/01`, `06`).
 - A Flutter app with its own UI calls the verbs through at_client_flutter's

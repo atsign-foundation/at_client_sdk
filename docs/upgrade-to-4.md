@@ -296,6 +296,9 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |
+| `Query.fetch()` | `get()` |
+| `LocalSecondary.getPrivateKey()`, `getPublicKey()` | `getPkamPrivateKey()`, `getPkamPublicKey()` |
+| `EncryptionUtil.decryptKey(...)` | at_chops' `RsaEncryptionAlgo`, with the private key as its `atPrivateKey` |
 | `RemoteSecondary.authenticateCram(secret)` | `Atsign.activate`, which takes the CRAM secret |
 | `AtClientUtil.findSecondary(...)` | `RemoteSecondary.findSecondaryUrl()` |
 | `ApkamSigning.publicSigningKey`, `privateSigningKey` | `signingKeys` |
