@@ -21,8 +21,10 @@ Feature: Sync pushes past a write the atServer refuses for good
   Replay: none arise; nothing sent or accepted changes.
   DoS: a write the atServer refuses for good is no longer sent again every
   round. A write refused any other way is sent again with each batch of a
-  round, so once per batch, logging at most one line each time, and the
-  rounds that send it are as frequent as sync's own.
+  round, so once per batch, logging one line at info and at most one at
+  warning or above each time, and the batch it is sent in logs at most one
+  more line, at warning. The rounds that send it are as frequent as sync's
+  own.
   Forgery and impersonation: none arise; the atServer checks every write this
   device pushes, and a drop removes only this device's own queued write.
 
