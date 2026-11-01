@@ -2,21 +2,25 @@ import 'dart:async';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart' show PairwiseSecretSharing;
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart'
+    show SecretStore;
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 
 const _alice = '@alice';
 const _bob = '@bob';
 
 /// A ring whose held namespaces are [held], set as a start-up would leave
-/// them, which counts the keys seeded into it and records each lookup.
+/// them, which records each lookup.
 class _Ring extends InMemoryNskeyKeyRing {
   final Set<String> held = {};
-  int mints = 0;
   final List<String> lookups = [];
 
   @override
@@ -38,6 +42,26 @@ class _UnreachableRing extends _Ring {
           'is unreachable');
 }
 
+/// A key ring over an atServer that has nothing published and lets nothing
+/// be minted.
+class _PublishingNothing extends PublishedNskeyKeyRing {
+  _PublishingNothing(super.atClient);
+
+  @override
+  Future<NskeyAdvertisement?> publishedAdvertisement(
+          String owner, String namespace) async =>
+      null;
+
+  @override
+  Future<NskeyAdvertisement> mintAndPublish(String namespace,
+          {Future<void> Function(List<String> nskeyKids)? conveyFirst,
+          NskeyAfterPublish? afterPublish,
+          Duration? lockTtl}) =>
+      throw StateError('nothing may be minted here');
+}
+
+class _MockSharing extends Mock implements PairwiseSecretSharing {}
+
 /// One client's providers over [ring], with [seeding] in the part its
 /// start-up plays.
 class _Client {
@@ -56,7 +80,6 @@ class _Client {
   /// What start-up does for [namespace]: mints, files and publishes its key.
   Future<String> seed(String namespace) async {
     final pair = await XWingKeyPair.generate();
-    ring.mints++;
     final kid = ring.seedKeypair(_alice, namespace,
         publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
     ring.held.add(namespace);
@@ -268,6 +291,17 @@ void main() {
         atOnce(write(c, _built('x', 'other.app'))), refusedNaming('other.app'));
   });
 
+  test(
+      'A write whose name only ends with the letters of a namespace start-up '
+      'seeds refuses without waiting', () async {
+    final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+    wire(c);
+
+    await expectLater(
+        atOnce(write(c, AtKey.fromString('x.mytodos.demos$_alice'))),
+        refusedNaming('demos'));
+  });
+
   test('A write after start-up has finished seeding refuses at once', () async {
     final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
     c.seeding.finish();
@@ -313,7 +347,7 @@ void main() {
             .having((e) => e.message, 'message', contains('unreachable'))));
   });
 
-  test('A write the offline restart already allows does not wait', () async {
+  test('A write that finds its key does not wait for start-up', () async {
     final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
     await c.seed('todos.demos');
     wire(c);
@@ -344,12 +378,18 @@ void main() {
     final writing = [for (final key in keys) write(c, key)];
     expect(await _pending(Future.wait(writing)), isTrue);
 
-    await c.seed('todos.demos');
+    final kid = await c.seed('todos.demos');
     c.seeding.finish();
     await Future.wait(writing);
 
     expect({for (final key in keys) stamped(key)['ckNs']}, {'todos.demos'});
-    expect(c.ring.mints, 1, reason: 'start-up minted it once');
+    final sealedTo = {
+      for (final MapEntry(key: name, value: conveyance) in store.entries)
+        if (name.contains('.__ck.todos.demos'))
+          conveyance.key.metadata.appMetadata!.additional!['nskeyKid']
+    };
+    expect(sealedTo, {kid},
+        reason: 'every write is sealed under the one key start-up published');
     verifyNever(
         () => atClient.ensureReachable(any(), timeout: any(named: 'timeout')));
   });
@@ -389,7 +429,8 @@ void main() {
     c.seeding.finish();
     await writing;
 
-    expect(c.ring.mints, 0);
+    verifyNever(
+        () => atClient.ensureReachable(any(), timeout: any(named: 'timeout')));
     expect(
         store[store.keys.singleWhere((k) => k.contains('.__ck.todos.demos'))]!
             .key
@@ -397,6 +438,62 @@ void main() {
             .appMetadata!
             .additional!['nskeyKid'],
         adopted);
+  });
+
+  group("Given start-up's own seeding of todos.demos", () {
+    /// The seeding the atSign's own credential runs at start-up, with a
+    /// secret-sharing substrate whose directory lists this enrollment with no
+    /// key package when [withSharing], and none otherwise.
+    Future<NskeySeeding> ownSeeding({required bool withSharing}) async {
+      atClient.getPreferences().namespace = 'todos.demos';
+      final io = InMemoryAtKeysIo();
+      await io.write(_alice, AtKeys());
+      _MockSharing? sharing;
+      if (withSharing) {
+        sharing = _MockSharing();
+        when(() => sharing!.directory).thenReturn(
+            FakeEnrollmentDirectory()..authorize('todos.demos', 'primary'));
+        when(() => sharing!.enrollmentId).thenReturn('primary');
+        when(() => sharing!.secretStore).thenReturn(SecretStore());
+      }
+      return NskeySeeding(
+          atClient: atClient,
+          ring: _PublishingNothing(atClient),
+          sharing: sharing,
+          privateFiling: NskeyPrivateFiling(keysIo: io, atSign: _alice));
+    }
+
+    for (final (:withSharing, :given, :because) in [
+      (
+        withSharing: true,
+        given: 'the enrollment carries no key package',
+        because: 'carries no key package'
+      ),
+      (
+        withSharing: false,
+        given: 'the client has no secret-sharing substrate',
+        because: 'no secret-sharing substrate'
+      ),
+    ]) {
+      test(
+          'when it mints nothing because $given, then a waiting write is '
+          'refused saying so', () async {
+        final c = _Client(_Ring());
+        wire(c);
+        final seeding = await ownSeeding(withSharing: withSharing);
+        final writing = write(c, AtKey.fromString('x.todos.demos$_alice'));
+        expect(await _pending(writing), isTrue);
+
+        await seeding.seed(progress: c.seeding);
+        c.seeding.finish();
+
+        await expectLater(
+            atOnce(writing),
+            throwsA(isA<NamespaceKeyUnavailableException>()
+                .having((e) => e.namespace, 'namespace', 'todos.demos')
+                .having((e) => e.message, 'message', contains(because))));
+      });
+    }
   });
 
   group('Given a share to a recipient that has published nothing', () {

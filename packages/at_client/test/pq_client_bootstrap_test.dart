@@ -22,7 +22,7 @@ import 'package:at_client/src/response/at_notification.dart'
 import 'package:at_client/src/service/notification_service.dart'
     show NotificationParams, NotificationResult;
 import 'package:at_commons/at_commons.dart'
-    show AtKey, AtKeyNotFoundException, StoppedException;
+    show AtException, AtKey, AtKeyNotFoundException, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
@@ -701,10 +701,11 @@ void main() {
         {PqStartupGates gates = seedingOnly,
         bool keysIo = true,
         AtKeys? keys,
+        bool seedNamespaceKeys = true,
         Future<int> Function()? sweep}) async {
       when(() => client.getPreferences()).thenReturn(AtClientPreference()
         ..namespace = 'todos.demos'
-        ..seedNamespaceKeys = true);
+        ..seedNamespaceKeys = seedNamespaceKeys);
       final io = InMemoryAtKeysIo();
       await io.write('@bootstrap🛠', keys ?? AtKeys());
       held = Completer<void>();
@@ -786,6 +787,20 @@ void main() {
     });
 
     test('when seedNamespaceKeys is off, then no write waits on it', () async {
+      final bootstrap = await parked(seedNamespaceKeys: false);
+      held.complete();
+      await bootstrap.startupComplete;
+
+      expect(CryptoConfig.forClient(client).ckManager!.startUpSeeding, isNull);
+      verifyNever(() => client.get(
+          any(
+              that: isA<AtKey>()
+                  .having((k) => k.key, 'key', startsWith('__nskey'))),
+          getRequestOptions: any(named: 'getRequestOptions')));
+    });
+
+    test('when its gates leave out the seeding step, then no write waits on it',
+        () async {
       final bootstrap = await parked(gates: const PqStartupGates.inert());
       held.complete();
       await bootstrap.startupComplete;
@@ -799,6 +814,70 @@ void main() {
       await bootstrap.startupComplete;
 
       expect(CryptoConfig.forClient(client).ckManager!.startUpSeeding, isNull);
+    });
+
+    test(
+        "when an enrollment's start-up cannot read its grants, then a write "
+        'waiting on it is answered at once', () async {
+      when(() => client.enrollmentId).thenReturn('e-1');
+      final enrollments = MockEnrollmentService();
+      when(() => enrollments.fetchEnrollmentRequests()).thenAnswer((_) async =>
+          throw AtException('the enrollment record is unreadable'));
+      when(() => client.enrollmentService).thenReturn(enrollments);
+      final bootstrap = await parked();
+      final waiting = bootstrap.startUpSeeding.covering('x.todos.demos');
+      expect(await pending(waiting), isTrue,
+          reason: 'an enrollment waits for start-up to read its grants');
+
+      held.complete();
+
+      expect(
+          await waiting.timeout(const Duration(seconds: 5),
+              onTimeout: () => fail('the write waited on after start-up had '
+                  'ended without seeding')),
+          isNull);
+      await bootstrap.startupComplete;
+    });
+
+    test(
+        'when its start-up ends before its seeding step, then a write waiting '
+        'on it is answered at once', () async {
+      when(() => client.getPreferences()).thenReturn(AtClientPreference()
+        ..namespace = 'todos.demos'
+        ..seedNamespaceKeys = true);
+      final io = InMemoryAtKeysIo();
+      await io.write('@bootstrap🛠', AtKeys());
+      final bootstrap = build(
+          keysIo: io,
+          gates: const PqStartupGates(
+            hydrateHeldSecrets: false,
+            collectConveyedKeys: false,
+            mintInUseSigningKeys: false,
+            refreshOwnLinks: false,
+            reconcileKeyPackage: false,
+            requestRootPrivate: false,
+            requestMissingPrivates: false,
+            anchorOwnKeys: false,
+            sweepUnanchoredEnrollments: false,
+            reconcileEnrollmentSnapshot: false,
+          ),
+          privilege: _FakePrivilege(true));
+      CryptoConfig.adoptEraDefault(
+          client, CryptoConfig.nskey(keyRing: bootstrap.ring));
+      // NOTE: the sharing stops on its own, so the step before the seeding
+      // step meets the stop while the bootstrap has not yet heard of it.
+      bootstrap.sharing.stop();
+      final waiting = bootstrap.startUpSeeding.covering('x.todos.demos');
+
+      await bootstrap.startup();
+
+      expect(
+          await waiting.timeout(const Duration(seconds: 5),
+              onTimeout: () => fail('the write waited on after start-up had '
+                  'ended without seeding')),
+          'todos.demos');
+      expect(bootstrap.startUpSeeding.failureFor('todos.demos'), isNull,
+          reason: 'the precondition: the seeding step never ran');
     });
 
     test('when the client stops, then every write waiting on it ends',

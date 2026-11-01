@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show FileSystemException;
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -75,6 +76,21 @@ class _CountingKeysIo extends InMemoryAtKeysIo {
   @override
   FutureOr<AtKeys> read(String atsign) {
     reads++;
+    return super.read(atsign);
+  }
+}
+
+/// Fails the next read of the keyfile it holds while [failNext] is set.
+class _FailingOnceKeysIo extends InMemoryAtKeysIo {
+  bool failNext = false;
+
+  @override
+  FutureOr<AtKeys> read(String atsign) {
+    if (failNext) {
+      failNext = false;
+      throw const FileSystemException('the keyfile is locked by another '
+          'process');
+    }
     return super.read(atsign);
   }
 }
@@ -496,6 +512,21 @@ void main() {
         getRequestOptions: any(named: 'getRequestOptions')));
     expect(await resolver.startLevelOf(_bob, key), 'demos',
         reason: "another atSign's privates are never this client's");
+  });
+
+  test('A keyfile that could not be read is read again at the next write',
+      () async {
+    final io = _FailingOnceKeysIo();
+    await _filing(io, ['todos.demos']);
+    final resolver = NskeyResolver(PublishedNskeyKeyRing(atClient,
+        privateFiling: NskeyPrivateFiling(keysIo: io, atSign: _alice)));
+    final key = AtKey.fromString('x.todos.demos$_alice');
+    io.failNext = true;
+
+    expect(await resolver.startLevelOf(_alice, key), 'demos',
+        reason: 'the precondition: the first read failed');
+    expect(await resolver.startLevelOf(_alice, key), 'todos.demos',
+        reason: 'what it has filed is read again, not taken to be nothing');
   });
 
   group('Given a client holding a filed todos.demos private', () {
