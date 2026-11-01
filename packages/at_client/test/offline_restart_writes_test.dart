@@ -354,6 +354,35 @@ void main() {
         reason: 'the online start wrote a record of its own over it');
   });
 
+  group('Given a local record that cannot be read as a record', () {
+    final unreadable = <String, String Function(Map genuine)>{
+      'an empty object': (_) => '{}',
+      'a payload that is not JSON': (genuine) => jsonEncode({
+            ...genuine,
+            'payload':
+                base64Url.encode(utf8.encode('not json')).replaceAll('=', ''),
+          }),
+      'text that is not JSON': (_) => 'not json',
+    };
+    for (final MapEntry(key: shape, value: corrupt) in unreadable.entries) {
+      test(
+          'when it holds $shape, then the next online start replaces it and a '
+          'start with no atServer accepts the key', () async {
+        final (:device, :kid) = await mintedAndVerified();
+        final genuine = jsonDecode(device.local[device.recordKey]!) as Map;
+        device.local[device.recordKey] = corrupt(genuine);
+
+        await device.start().currentPublic(_atSign, _namespace);
+        device.server.reachable = false;
+
+        await expectLater(
+            device.start().currentPublic(_atSign, _namespace),
+            completion(isA<NskeyAdvertisement>()
+                .having((a) => a.nskeyKid, 'nskeyKid', kid)));
+      });
+    }
+  });
+
   test(
       'The record is kept under a local key, naming the atSign, the '
       'namespace, the bytes verified and the keys held', () async {

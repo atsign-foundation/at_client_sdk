@@ -44,11 +44,7 @@ class VerifiedAdvertisementRecord {
     try {
       final record = await _recordFor(namespace, payload);
       if (record == null) return;
-      if (await _stored(key) case final stored?) {
-        if (_sameRecord(stored, record) && await _signedByThisClient(stored)) {
-          return;
-        }
-      }
+      if (await _alreadyRecorded(key, record)) return;
       final envelope = await _signer.wrapAndSign(record,
           type: EnvelopeType.verifiedAdvertisement);
       await local.executeVerb(UpdateVerbBuilder()
@@ -86,6 +82,23 @@ class VerifiedAdvertisementRecord {
     } on Object catch (e) {
       _logger.info('Could not read the local record for $namespace\'s '
           'advertisement, so it vouches for nothing: $e');
+      return false;
+    }
+  }
+
+  /// Whether [key] already holds [record], signed by this client; false when
+  /// what it holds cannot be read as a record, so a fresh one replaces it.
+  Future<bool> _alreadyRecorded(AtKey key, Map<String, Object?> record) async {
+    try {
+      final stored = await _stored(key);
+      return stored != null &&
+          _sameRecord(stored, record) &&
+          await _signedByThisClient(stored);
+    } on StoppedException {
+      rethrow;
+    } on Object catch (e) {
+      _logger.info('The local record at $key cannot be read as a record, so '
+          'it is replaced: $e');
       return false;
     }
   }
