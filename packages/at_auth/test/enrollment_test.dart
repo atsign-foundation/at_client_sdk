@@ -54,7 +54,10 @@ void main() {
       // enrollment is retired.
       final response = await AtEnrollmentImpl().submit(
           AtEnrollmentRequest(
-              atSign: atSign,
+              session: AtAuthSession(
+                  atSign: atSign,
+                  rootDomain: AtRootDomain.atsignDomain,
+                  atKeysIo: InMemoryAtKeysIo()),
               appName: 'wavi',
               deviceName: 'iphone',
               otp: 'ABC123',
@@ -118,7 +121,10 @@ void main() {
         })? advertised) async {
       final response = await AtEnrollmentImpl().submit(
           AtEnrollmentRequest(
-              atSign: atSign,
+              session: AtAuthSession(
+                  atSign: atSign,
+                  rootDomain: AtRootDomain.atsignDomain,
+                  atKeysIo: InMemoryAtKeysIo()),
               appName: 'wavi',
               deviceName: 'iphone',
               otp: 'ABC123',
@@ -221,7 +227,10 @@ void main() {
         .thenAnswer((_) async => ());
 
     AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        atSign: atSign,
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: InMemoryAtKeysIo()),
         appName: 'wavi',
         deviceName: 'pixel',
         otp: 'A123FE',
@@ -374,19 +383,6 @@ void main() {
       expect(request.session, same(session));
       expect(request.atSign, '@alice🛠');
       expect(request.rootDomain, same(session.rootDomain));
-    });
-
-    test('throws when neither session nor atSign is provided', () {
-      expect(
-        () => AtEnrollmentRequest(
-          appName: 'wavi',
-          deviceName: 'pixel',
-          otp: 'A123FE',
-          namespaces: {'wavi': 'rw'},
-          signingAlgo: SigningAlgoType.rsa2048,
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
     });
   });
 

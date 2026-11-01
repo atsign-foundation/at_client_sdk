@@ -27,6 +27,10 @@
 - BREAKING: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
 - build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
+- breaking: `AtEnrollmentRequest` and `AtEnrollmentRequest.pq` require a
+  `session`. Their deprecated `atSign`, `rootDomain`, `apkamPublicKey` and
+  `encryptedAPKAMSymmetricKey` parameters are removed, as is the
+  `encryptedAPKAMSymmetricKey` field, which nothing read.
 - breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
   `ArgumentError`, before anything is sent: an enrollment that takes its keys
   post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
