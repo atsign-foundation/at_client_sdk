@@ -179,7 +179,8 @@ replaces it because nothing read it.
 | `AtClientManager.getInstance().setCurrentAtSign(...)`, `AtClientManager.fromAuthSession(...)` | `Atsign(a).open(...)` (see [15-client-lifecycle.md](15-client-lifecycle.md)), then `use(client)` for code that reads the manager |
 | The `AtCollectionModel` family (above)                                                       | `AtClient.collection<T>(...)`                                                           |
 | `AtClient.atChops`, `RemoteSecondary.atChops`, the `atChops:` parameters                     | Nothing: a client signs and encrypts with the `AtKeysIo` it was given                   |
-| `isDedicated:` on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`, `notifyAll`     | Delete the argument                                                                     |
+| `isDedicated:` on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`                  | Delete the argument                                                                     |
+| `atClient.notifyAll(...)`                                                                    | `notificationService.notify(...)`, once per recipient                                   |
 | `sync:` on `executeVerb`, `executeAndParse`                                                  | Delete the argument                                                                     |
 | `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout` | Delete the assignment; nothing read them                     |
 | `AtClientPreference.enforceNamespace`                                                        | Delete the assignment; every key except a `local:` one names a namespace                |

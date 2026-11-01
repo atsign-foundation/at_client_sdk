@@ -2371,31 +2371,6 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(
-    AtKey atKey,
-    String value,
-    OperationEnum operation,
-  ) async {
-    var returnMap = {};
-    var sharedWithList = jsonDecode(atKey.sharedWith!);
-    for (var sharedWith in sharedWithList) {
-      atKey.sharedWith = sharedWith;
-      final notificationParams = NotificationParams.forUpdate(
-        atKey,
-        value: value,
-      );
-      final notifyResult = await notificationService.notify(notificationParams);
-      returnMap.putIfAbsent(
-        sharedWith,
-        () => (notifyResult.notificationStatusEnum ==
-            NotificationStatusEnum.delivered),
-      );
-    }
-    return jsonEncode(returnMap);
-  }
-
-  @override
 
   ///[Deprecated] Use [NotificationService.notify]
   @Deprecated("Use [NotificationService.notify]")

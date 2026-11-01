@@ -223,7 +223,7 @@ deprecated and read by nothing in at_client; they go in 5.0.
 ### `No named parameter with the name 'isDedicated'`, or `'sync'`
 
 Delete the argument. `isDedicated:` left `put`, `get`, `delete`, `notify`,
-`getMeta`, `notifyList` and `notifyAll`; `sync:` left `executeVerb` and
+`getMeta` and `notifyList`; `sync:` left `executeVerb` and
 `executeAndParse`.
 
 ### `Undefined class 'AtCollectionModel'`
@@ -245,6 +245,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | Before | After |
 |---|---|
 | `atClient.stream(...)`, `sendStreamAck(...)` | `put` the value, or `notify` it |
+| `atClient.notifyAll(...)` | `notificationService.notify(...)`, once per recipient |
 | `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles` | none; file transfer belongs in the app |
 | `ConnectivityListener` | a connectivity package of the app's choosing |
 | `RemoteSecondary.isAvailable()` | `checkAtSignServer(lookUp, atSign)` |

@@ -12,6 +12,9 @@
   values still encrypted unless `shouldDecrypt` is true (`SKILL.md` §13;
   `references/10`, `15`).
 - Keys live in a store that outlives the process (`SKILL.md` §11).
+- `AtClient.notifyAll` is gone in 4.0: send with
+  `notificationService.notify`, once per recipient (`SKILL.md` §18;
+  `references/01`).
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.

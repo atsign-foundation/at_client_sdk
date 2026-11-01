@@ -536,28 +536,6 @@ abstract class AtClient {
   @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams);
 
-  /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
-  /// ```
-  /// e.g alice is the current atsign
-  /// notify:all:update:@bob,@colin:phone@alice:+1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob,@colin:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// ```
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
-
   ///Returns the status of the notification
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366

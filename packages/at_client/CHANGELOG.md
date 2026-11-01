@@ -22,6 +22,8 @@
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `LocalSecondary.atChopsKeys` is removed; a client signs with the
   keys it is given.
+- breaking: `AtClient.notifyAll` is removed; send each recipient its own
+  notification with `notificationService.notify`.
 - breaking: `AtClientManager.secondaryAddressFinder` and
   `setSecondaryAddressFinder` are removed; a client asks only the
   `secondaryAddressFinder` it is built with.
@@ -90,7 +92,7 @@
   `AtJsonCollectionModel` and their factories) is removed; use
   `AtClient.collection`.
 - breaking: the `isDedicated` parameter of `put`, `get`, `delete`, `notify`,
-  `getMeta`, `notifyList` and `notifyAll` is removed; it was ignored.
+  `getMeta` and `notifyList` is removed; it was ignored.
 - breaking: the `sync` parameter of `executeVerb` and
   `RemoteSecondary.executeAndParse` is removed; it was ignored.
 - breaking: `RemoteSecondary.isAvailable` is removed; at_lookup's
