@@ -94,7 +94,7 @@ Check existence against the remote atServer (`true`) or the local keystore
 
 ```dart
 final prefs = AtClientPreference(posture: PqPosture.pqActive)
-  ..namespace = 'my_namespace'
+  ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly  // default: localOnly
   /* ...the rest of your preference setup... */;
 ```

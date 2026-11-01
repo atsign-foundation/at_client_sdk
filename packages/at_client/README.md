@@ -120,17 +120,19 @@ summary is:
    root of trust — **end users must back them up**, losing them means
    losing the atSign.
 3. **Authenticate** subsequent apps via **APKAM enrollment**: the app
-   requests only the namespaces it needs (e.g. `{'todos': 'rw'}`), the
-   master-keys holder approves, and the atServer issues a new scoped
-   AtKeys set. Scoped keys can be **revoked** at any time; a
-   compromised scoped key can only damage data in its granted
-   namespaces.
+   mints its own keypair and requests only the namespaces it needs (e.g.
+   `{'todos': 'rw'}`), and the master-keys holder approves, sealing the
+   atSign's encryption keys for it; the atServer holds no key. Scoped
+   keys can be **revoked** at any time; a compromised scoped key can
+   only damage data in its granted namespaces.
 
 ### In code: four verbs
 
 `at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
-(a `.atKeys` file or the platform keychain) and asks the atSign
-for a client; every verb hands back an `AtClient` the app owns and stops.
+(a `.atKeys` file or the platform keychain; `activate`, `enroll` and
+`resumeEnrollment` write to it, so they take a `WrittenAtKeysIo`) and asks
+the atSign for a client; every verb hands back an `AtClient` the app owns
+and stops.
 
 ```dart
 import 'package:at_client/at_client_io.dart';
@@ -314,8 +316,8 @@ final openCount = await todos.query().where((t) => !t.obj.done).count();
 final byOwner   = await todos.query().groupBy<Atsign>((t) => t.owner);
 ```
 
-Queries are immutable values — build once, store, pass, fetch or
-watch. `watch()` does incremental delta maintenance for
+Queries are immutable values — build once, store, pass, `get()` or
+`watch()`. `watch()` does incremental delta maintenance for
 non-paginated queries (single-item read on each event, not a full
 re-scan). For ad-hoc pipelines outside the builder's vocabulary,
 `getItemsAsStream().where(...)` remains supported as an escape

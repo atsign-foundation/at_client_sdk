@@ -13,7 +13,7 @@ key from `AT_REGISTRAR_API_KEY`; create one via the registrar at
 my.atsign.com.
 A program importing this package changes code if it uses
 `AtOnboardingService`, `AtOnboardingPreference`, `OnboardingUtil` or
-`AuthKeyType`, which at_client_cli does not carry:
+`AuthKeyType`, which at_client_cli does not export:
 at_client_cli's README says what replaces each, under
 [Moving from at_onboarding_cli and at_cli_commons](https://pub.dev/packages/at_client_cli#moving-from-at_onboarding_cli-and-at_cli_commons).
 Otherwise it compiles after bumping its `at_onboarding_cli` constraint. The

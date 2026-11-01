@@ -16,8 +16,8 @@ import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_f
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
 final preference = AtClientPreference(posture: PqPosture.pqActive)
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';
 final storage = HiveAtClientStorage(
     atSign: '@alice', storagePath: dir.path, closedByClient: true);
 final lookUps = secureSocketLookUps();
@@ -38,7 +38,7 @@ final owner = await Atsign('@alice').activate(
 // Enroll this app with an atSign whose keys another device holds. The
 // request is filed in `keys` as pending, so a restart resumes it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
-    device: 'phone', namespaces: {'my_namespace': 'rw'}, keys: keys,
+    device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
@@ -217,7 +217,7 @@ the client's.
 
 ```dart
 final sub = client.notificationService
-    .subscribe(regex: r'\.my_namespace@', shouldDecrypt: true)
+    .subscribe(regex: r'\.my_app@', shouldDecrypt: true)
     .listen((n) => handle(n));
 ```
 

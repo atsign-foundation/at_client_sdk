@@ -21,13 +21,13 @@ on those, rather than consuming `at_auth` directly.
 
 ## What `at_auth` does
 
-| Capability                      | Entry point                                                                                |
-| ------------------------------- | ------------------------------------------------------------------------------------------ |
-| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., atLookUp: ...)` |
-| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`                       |
-| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                |
-| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file, in-memory and keychain implementations                  |
-| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                             |
+| Capability                      | Entry point                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., atLookUp: ...)`    |
+| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`                          |
+| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                   |
+| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file and in-memory implementations (keychain: at_client_flutter) |
+| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                                |
 
 Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
 builds the client and authenticates on the client's own connection, and
@@ -57,8 +57,9 @@ you need to claim the atSign itself.
 - Free atSigns: [my.noports.com/no-ports-plans](https://my.noports.com/no-ports-plans)
 - Paid / custom atSigns: [my.atsign.com](https://my.atsign.com)
 
-Registration produces a **CRAM key** — a high-entropy secret, delivered
-to the registered email address, that proves first-time ownership.
+Registration produces a **CRAM key** — a high-entropy secret that proves
+first-time ownership. The registrar emails a one-time code to the
+registered address and returns the CRAM key once that code is confirmed.
 Programmatic registration is available via `RegistrarService` (see
 [`lib/src/registrar/`](lib/src/registrar)).
 
@@ -139,10 +140,13 @@ How APKAM works:
 2. An already-authenticated session holding the master AtKeys (or any
    session whose keys include the `__manage` namespace) **approves or
    denies** the request.
-3. On approval, the atServer issues a **new, scoped AtKeys set** — it
-   can only read/write within the granted namespaces.
-4. The enrolling app stores those scoped keys (disk or keychain) and
-   uses them for normal PKAM authentication thereafter.
+3. The enrolling app minted its own APKAM keypair for the request. On
+   approval, the approver seals the atSign's encryption private key and
+   self-encryption key for it; the atServer keeps the sealed secrets and
+   holds no key. The enrollment can only read/write within the granted
+   namespaces.
+4. The enrolling app stores its keys (disk or keychain) and uses them
+   for normal PKAM authentication thereafter.
 
 Why this matters:
 
@@ -172,7 +176,7 @@ three layers, outermost first:
 1. **Optional passphrase envelope** — when a `passPhrase` is configured,
    the whole document is AES-encrypted with a key derived from the
    passphrase (argon2id) and stored as
-   `{"content": ..., "iv": ..., "hashingAlgoType": "argon2id"}`.
+   `{"v": 1, "content": ..., "iv": ..., "hashingAlgoType": "argon2id", "salt": ..., "kdfParams": {...}}`.
    Detected by the presence of `iv`.
 2. **Self-encrypted legacy fields** — the document's four legacy RSA
    fields (`aesPkamPublicKey`, `aesPkamPrivateKey`,
@@ -251,7 +255,7 @@ Persistence has three verbs:
 - `flush(atsign, atKeys)` — persist the current in-memory state. If the
   file exists, `flush` first validates that nothing it holds would be lost
   (key material is never removed — a key's `status` may only move forward,
-  `active` → `retired` → `dead`), then rewrites it; flushing a legacy
+  `pending` → `active` → `retired` → `dead`), then rewrites it; flushing a legacy
   file upgrades it in place to a typed-keys document. `flush` refuses a
   keyfile that holds no credential and names an atSign other than
   `atsign`. If the file does not exist, `flush` creates it.
@@ -391,7 +395,7 @@ final submitted = await enrollment.submit(
         appName: 'my_app', deviceName: 'laptop',
         namespaces: {'my_app': 'rw'}, otp: otp),
     lookUp);
-final approved = await enrollment.waitForApproval(submitted);
+await enrollment.waitForApproval(submitted);
 
 // 4.0: the same handshake, filed in `keys` so a restart resumes it
 final pending = await Atsign(atSign).enroll(

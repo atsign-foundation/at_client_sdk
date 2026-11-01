@@ -28,8 +28,8 @@ propagate, and any real-time features appear broken.
 
 ```dart
 final acp = AtClientPreference(posture: PqPosture.pqActive)
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';   // scope sync to THIS app's keys
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';   // scope sync to THIS app's keys
 ```
 
 (Where the store lives is the `storage:` the client is opened on — see

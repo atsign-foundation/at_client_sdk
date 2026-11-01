@@ -67,7 +67,7 @@ deprecated `AtClientPreference.hiveStoragePath`, and at_client 4.0 removed
 `commitLogPath`.
 
 `CLIBase` handles this for typical single-instance CLIs, keeping the store
-under `~/.atsign/storage/<atSign>/<namespace>/`. When launching several
+under `~/.atsign/storage/<atSign>/<namespace>/single/`. When launching several
 instances of the same agent on one machine, generate a unique temp directory
 per instance and pass it as `-s`.
 
@@ -173,8 +173,19 @@ An always-on agent is a natural approver for new-device APKAM enrollment
 requests. `at_client` exposes this via `atClient.enrollments`:
 
 ```dart
+// Approve only what this agent expects: the app and device it is waiting for,
+// asking for no namespace beyond the app's own. Anyone holding a passcode can
+// ask for anything.
 for (final request in await atClient.enrollments.pending()) {
-  await atClient.enrollments.approve(request.enrollmentId!);   // or deny / revoke
+  final asksFor = request.namespace?.keys ?? const <String>[];
+  final expected = request.appName == 'my_app' &&
+      request.deviceName == expectedDevice &&
+      asksFor.every((namespace) => namespace == 'my_app');
+  if (expected) {
+    await atClient.enrollments.approve(request.enrollmentId!);
+  } else {
+    await atClient.enrollments.deny(request.enrollmentId!);
+  }
 }
 atClient.enrollments.requests.listen((r) => ...);   // new requests as they arrive
 final passcode = await atClient.enrollments.otp();  // what the new device quotes

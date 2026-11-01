@@ -91,6 +91,10 @@ awaits local emission so `watch()` listeners see the update before
 - If `id` omitted: retries on collision (astronomically unlikely); throws
   `StateError` after 10 attempts
 - Throws `CollectionOpException` on any key-level write failure
+- At `pqActive`, each `sharedWith` recipient must have published a key for
+  the namespace; one that has not fails the write with a
+  `NamespaceKeyUnavailableException` naming them.
+  `CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first
 
 ### `Future<CItem<T>> upsert({required String id, required T obj, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
