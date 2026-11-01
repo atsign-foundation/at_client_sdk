@@ -136,7 +136,9 @@ class CkManager {
   ///
   /// When no key is published and [startUpSeeding] is still to seed a
   /// namespace covering [valueKey], the write waits for that seeding, at most
-  /// [StartUpSeeding.wait], and resolves again.
+  /// [StartUpSeeding.wait], and resolves again. It waits the same way when the
+  /// key it found is broader than a namespace start-up has said it will seed
+  /// covering [valueKey].
   ///
   /// Returns the level this write starts at and the namespace of the content
   /// key it is to be sealed under, or null for a key with no owner or
@@ -175,6 +177,9 @@ class CkManager {
           }
         }
       }
+    } else if (await _seedingBeyond(holder, valueKey, advertised.namespace)) {
+      namespace = await resolver.startLevelOf(holder, valueKey);
+      advertised = await resolver.resolve(owner, namespace);
     }
     if (advertised == null) {
       // NOTE: failing in this pre-pass is what keeps a cold start recoverable —
@@ -578,6 +583,22 @@ class CkManager {
         timedOut: true,
         waited: e.duration
       );
+    }
+  }
+
+  /// Whether [startUpSeeding] was still to seed a namespace that covers
+  /// [valueKey] more specifically than [found], and has since finished or run
+  /// out of time, so the write resolves again.
+  Future<bool> _seedingBeyond(
+      String? holder, AtKey valueKey, String found) async {
+    final seeding = startUpSeeding;
+    if (seeding == null || holder == null) return false;
+    try {
+      return await seeding.coveringBeyond(
+              '${valueKey.key}.${valueKey.namespace}', found) !=
+          null;
+    } on TimeoutException {
+      return true;
     }
   }
 

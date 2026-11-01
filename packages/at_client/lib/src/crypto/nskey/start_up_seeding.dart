@@ -54,17 +54,41 @@ class StartUpSeeding {
   Future<String?> covering(String name) async {
     if (isFinished) return null;
     final deadline = DateTime.now().add(wait);
+    final covering =
+        _mostSpecific(await _until(_namespaces.future, deadline, null), name);
+    if (covering == null) return null;
+    await _until(_finished.future, deadline, covering);
+    return covering;
+  }
+
+  /// Like [covering], for a write that found a key at [found]: the namespace
+  /// start-up seeds that covers [name] more specifically than [found], once
+  /// the seeding step has finished.
+  ///
+  /// Null at once unless start-up has already said what it seeds and that
+  /// includes such a namespace. Throws as [covering] does.
+  Future<String?> coveringBeyond(String name, String found) async {
+    if (isFinished || !_namespaces.isCompleted) return null;
+    final narrower = _mostSpecific(await _namespaces.future, name);
+    if (narrower == null || !narrower.endsWith('.${found.toLowerCase()}')) {
+      return null;
+    }
+    await _until(_finished.future, DateTime.now().add(wait), narrower);
+    return narrower;
+  }
+
+  /// The most specific of [namespaces] that [name] ends with after a dot,
+  /// folded, or null.
+  static String? _mostSpecific(Set<String> namespaces, String name) {
     final folded = name.toLowerCase();
     String? covering;
-    for (final namespace in await _until(_namespaces.future, deadline, null)) {
+    for (final namespace in namespaces) {
       final candidate = namespace.toLowerCase();
       if (folded.endsWith('.$candidate') &&
           (covering == null || candidate.length > covering.length)) {
         covering = candidate;
       }
     }
-    if (covering == null) return null;
-    await _until(_finished.future, deadline, covering);
     return covering;
   }
 

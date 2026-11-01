@@ -434,6 +434,77 @@ void main() {
     });
   });
 
+  group(
+      'Given start-up will seed todos.demos and the search finds only demos '
+      'published', () {
+    Future<void> waitsThenSealsAtTodosDemos(_Client c) async {
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue,
+          reason: 'it waits for seeding rather than sealing at demos');
+
+      await c.seed('todos.demos');
+      c.seeding.finish();
+      await atOnce(writing);
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+    }
+
+    test(
+        'when a write under todos.demos is made before seeding finishes, then '
+        'it waits for seeding and seals at todos.demos', () async {
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      await c.seed('demos');
+
+      await waitsThenSealsAtTodosDemos(c);
+    });
+
+    test(
+        'when a write under todos.demos is made before seeding finishes, and '
+        'this enrollment holds no demos private, then it waits for seeding and '
+        'seals at todos.demos', () async {
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      await _publish(c.ring, _alice, 'demos');
+
+      await waitsThenSealsAtTodosDemos(c);
+    });
+
+    test(
+        'when the wait runs out before seeding finishes, then the write '
+        'resolves again and seals at todos.demos once that is published',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 300);
+      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+      await c.seed('demos');
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+
+      await c.seed('todos.demos');
+      await writing;
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+    });
+  });
+
+  group(
+      'Given start-up has not yet said what it seeds, and the search finds '
+      'demos published', () {
+    test('when a write under todos.demos is made, then it does not wait',
+        () async {
+      final c = _Client(_Ring());
+      await c.seed('demos');
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+
+      await atOnce(write(c, key));
+
+      expect(stamped(key)['ckNs'], 'demos');
+    });
+  });
+
   group("Given a write waiting for start-up's seeding step", () {
     test(
         'when its key is published but the step has not finished as the wait '
