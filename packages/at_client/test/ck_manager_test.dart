@@ -526,6 +526,29 @@ void main() {
       expect(coldCache.current(owner, namespace)?.ckKid, cut);
     });
 
+    test(
+        'every path through the pre-pass hands back the level and the content '
+        'key\'s namespace the write is sealed at', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      const chosen = (namespace: namespace, ckNs: namespace);
+
+      expect(
+          await c.manager.ensureCurrent(c.context, selfValue('treaty')), chosen,
+          reason: 'a key cut and conveyed');
+      expect(
+          await c.manager.ensureCurrent(c.context, selfValue('treaty')), chosen,
+          reason: 'a key already current');
+      expect(
+          await c
+              .coldManager(ContentKeyCache())
+              .ensureCurrent(c.context, selfValue('treaty')),
+          chosen,
+          reason: 'a key resumed after a restart');
+    });
+
     test('a restart after the widening resumes rather than cutting another',
         () async {
       // The durable half of the same absence: what a client remembers about a

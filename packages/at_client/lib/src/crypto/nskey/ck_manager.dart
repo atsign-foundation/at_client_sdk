@@ -137,10 +137,17 @@ class CkManager {
   /// When no key is published and [startUpSeeding] is still to seed a
   /// namespace covering [valueKey], the write waits for that seeding, at most
   /// [StartUpSeeding.wait], and resolves again.
-  Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
+  ///
+  /// Returns the level this write starts at and the namespace of the content
+  /// key it is to be sealed under, or null for a key with no owner or
+  /// namespace.
+  Future<({String namespace, String ckNs})?> ensureCurrent(
+      CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
-    if (owner == null || owner.isEmpty || valueKey.namespace == null) return;
+    if (owner == null || owner.isEmpty || valueKey.namespace == null) {
+      return null;
+    }
     final holder = context.atClient.getCurrentAtSign();
     var namespace = await resolver.startLevelOf(holder, valueKey);
 
@@ -170,6 +177,7 @@ class CkManager {
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
+    final chosen = (namespace: namespace, ckNs: ckNs);
     final ownGeneration = await _ownGenerationHeld(context, owner, ckNs);
     final current = cache.current(owner, ckNs);
     if (current != null &&
@@ -184,7 +192,7 @@ class CkManager {
         // NOTE: with no recorded cut time the policy is not asked at all,
         // rather than told the key is fresh.
         final cutAt = cache.currentCutAt(owner, ckNs);
-        if (cutAt == null) return;
+        if (cutAt == null) return chosen;
         final replace = await ckRotationPolicy(CkRotationContext(
           destination: owner,
           namespace: ckNs,
@@ -192,7 +200,7 @@ class CkManager {
           cutAt: cutAt,
           now: DateTime.now().toUtc(),
         ));
-        if (!replace) return;
+        if (!replace) return chosen;
         _logger.info('The rotation policy asked for a fresh content key for '
             '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
       }
@@ -201,7 +209,7 @@ class CkManager {
     if (current == null) {
       final resumed = await _resumeCurrent(
           context, valueKey, owner, ckNs, advertised.nskeyKid, ownGeneration);
-      if (resumed) return;
+      if (resumed) return chosen;
     }
 
     var target = advertised;
@@ -220,6 +228,7 @@ class CkManager {
         useRemoteAtServer: useRemoteAtServer,
         replacing: current?.ckKid,
         ownGeneration: ownGeneration);
+    return chosen;
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a

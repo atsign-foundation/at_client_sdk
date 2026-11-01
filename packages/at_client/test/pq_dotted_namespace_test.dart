@@ -179,7 +179,7 @@ void main() {
   /// [key] as the write pipeline seals it: the content-key pre-pass, then the
   /// data provider.
   Future<String> write(_Client c, AtKey key, String plaintext) async {
-    await c.manager.ensureCurrent(context, key);
+    await c.data.prepareForWrite(context, key);
     return c.data.encrypt(context, key, plaintext);
   }
 
@@ -607,6 +607,115 @@ void main() {
       await _publish(c.ring, _bob, 'todos.demos');
 
       expect(await c.data.isReadyFor(context, _bob, 'Todos.Demos'), isTrue);
+    });
+  });
+
+  group(
+      'Given a write whose pre-pass has run, and a todos.demos private filed '
+      'before it encrypts', () {
+    /// [key] through the pre-pass, then [filing] gains todos.demos, then the
+    /// data provider seals it.
+    Future<String> racingTheFiling(_Client c, NskeyPrivateFiling filing,
+        AtKey key, String plaintext) async {
+      await c.data.prepareForWrite(context, key);
+      await _file(filing, 'todos.demos');
+      return c.data.encrypt(context, key, plaintext);
+    }
+
+    test(
+        'when it seals its own value, then it seals at the level it held '
+        'before, which every holder of that level opens', () async {
+      final filing = await _filing(InMemoryAtKeysIo(), ['demos']);
+      final c = _Client(_FilingRing(filing));
+      await _hold(c.ring, _alice, 'demos');
+      await _hold(c.ring, _alice, 'todos.demos');
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+
+      final sealed = await racingTheFiling(c, filing, key, 'own');
+
+      expect(stamped(key)['ckNs'], 'demos');
+      expect(stamped(key)['ns'], 'demos');
+      expect(await c.data.decrypt(context, fromWire(key), sealed), 'own');
+    });
+
+    test(
+        'when the filing lands during its pre-pass, then it seals at the level '
+        'it held before', () async {
+      final filing = await _filing(InMemoryAtKeysIo(), ['demos']);
+      final c = _Client(_FilingRing(filing));
+      await _hold(c.ring, _alice, 'demos');
+      await _hold(c.ring, _alice, 'todos.demos');
+      wire(c);
+      var filedDuringPrePass = false;
+      when(() => atClient.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        final options =
+            inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+        final sealed = options?.alreadyEncrypted == true
+            ? value
+            : await c.nskey.encrypt(context, key, value);
+        store[key.toString()] = (key: key, value: sealed);
+        if (!filedDuringPrePass && key.toString().contains('.__ck.')) {
+          filedDuringPrePass = true;
+          await _file(filing, 'todos.demos');
+        }
+        return true;
+      });
+      final key = AtKey.fromString('x.todos.demos$_alice');
+
+      await c.data.prepareForWrite(context, key);
+      expect(filedDuringPrePass, isTrue,
+          reason: 'the filing landed inside the pre-pass');
+      await c.data.encrypt(context, key, 'own');
+
+      expect(stamped(key)['ckNs'], 'demos');
+    });
+
+    test('when it seals a share, then it seals at the level it held before',
+        () async {
+      final filing = await _filing(InMemoryAtKeysIo());
+      final c = _Client(_FilingRing(filing));
+      await _publish(c.ring, _bob, 'demos');
+      await _publish(c.ring, _bob, 'todos.demos');
+      wire(c);
+      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
+
+      await racingTheFiling(c, filing, key, 'shared');
+
+      expect(stamped(key)['ckNs'], 'demos');
+      expect(stamped(key)['ns'], 'demos');
+    });
+
+    test(
+        'when the narrower level holds a content key the recipient has '
+        'rotated away from, then it is not sealed under that key', () async {
+      final filing = await _filing(InMemoryAtKeysIo());
+      final c = _Client(_FilingRing(filing));
+      await _publish(c.ring, _bob, 'demos');
+      await _publish(c.ring, _bob, 'todos.demos');
+      wire(c);
+      final earlier = AtKey()
+        ..key = 'y'
+        ..namespace = 'todos.demos'
+        ..sharedBy = _alice
+        ..sharedWith = _bob;
+      await write(c, earlier, 'earlier');
+      final superseded = stamped(earlier)['ckKid'];
+      expect(stamped(earlier)['ckNs'], 'todos.demos',
+          reason: 'precondition: a content key is current at todos.demos');
+      await _publish(c.ring, _bob, 'todos.demos');
+      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
+
+      await racingTheFiling(c, filing, key, 'shared');
+
+      expect(stamped(key)['ckKid'], isNot(superseded),
+          reason: 'that key is sealed to a generation bob has rotated away '
+              'from');
+      expect(stamped(key)['ckNs'], 'demos');
     });
   });
 }

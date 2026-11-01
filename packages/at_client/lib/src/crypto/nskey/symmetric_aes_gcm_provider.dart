@@ -72,11 +72,20 @@ class SymmetricAesGcmProvider
 
   /// Runs before the write pipeline starts, which is the only place a CK can be
   /// conveyed — see [PreparesWrites].
+  ///
+  /// [encrypt] seals [atKey] at the level and under the content key this
+  /// chooses.
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-          {bool? useRemoteAtServer}) async =>
-      await ckManager?.ensureCurrent(context, atKey,
-          useRemoteAtServer: useRemoteAtServer);
+      {bool? useRemoteAtServer}) async {
+    final chosen = await ckManager?.ensureCurrent(context, atKey,
+        useRemoteAtServer: useRemoteAtServer);
+    if (chosen != null) _chosen[atKey] = chosen;
+  }
+
+  /// What each write's [prepareForWrite] chose, held on the key object the
+  /// write pipeline carries from there to [encrypt].
+  final Expando<({String namespace, String ckNs})> _chosen = Expando();
 
   /// Answers the question a write would otherwise answer by failing: has
   /// [atSign] published an nskey for [namespace]?
@@ -99,11 +108,14 @@ class SymmetricAesGcmProvider
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
-    final ownNamespace = _namespaceOf(atKey);
-    final namespace = await ckManager?.resolver
+    // NOTE: the pre-pass's choice, not a second one: what this client holds
+    // can grow in between, and only the pre-pass checked the key it chose.
+    final chosen = _chosen[atKey];
+    final namespace = chosen?.namespace ??
+        await ckManager?.resolver
             .startLevelOf(context.atClient.getCurrentAtSign(), atKey) ??
-        ownNamespace;
-    final ckNs = await _ckNamespaceOf(owner, namespace);
+        _namespaceOf(atKey);
+    final ckNs = chosen?.ckNs ?? await _ckNamespaceOf(owner, namespace);
 
     final ck = cache.current(owner, ckNs);
     if (ck == null) {
