@@ -202,7 +202,8 @@ imports at_client directly takes them from
 
 The io logging handlers moved to `package:at_utils/at_utils_io.dart`, with
 `PseudoServerSocket` and `ApplicationConfiguration`. at_client_cli re-exports
-the three handlers. `AtSignLogger.stdErrLoggingHandler` still works, deprecated.
+the three handlers. `AtSignLogger.stdErrLoggingHandler` is gone: construct
+`StdErrLoggingHandler()` from `at_utils_io.dart`.
 
 ```dart after-cli
 void logToStderr() {
