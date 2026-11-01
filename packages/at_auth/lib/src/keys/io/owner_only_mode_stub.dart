@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Mode 0600: read and write for the owner, nothing for anyone else.
 const ownerOnlyMode = 0x180;
 
@@ -30,7 +32,7 @@ KeyfileRead readNoFollow(String path) =>
 
 /// Not available on a platform without `dart:ffi`; callers check
 /// [ownerOnlyWritesAvailable] first.
-bool createNewWith(String path, List<int> bytes) =>
+OSError? createNewWith(String path, List<int> bytes) =>
     throw UnsupportedError('Creating a file through one descriptor needs '
         'dart:ffi');
 

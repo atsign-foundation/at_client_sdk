@@ -447,12 +447,60 @@ void main() {
         final path = '${dir.path}/new.lock';
         final target = _plant(existing, path, dir.path);
 
-        expect(createNewWith(path, utf8.encode('token')), isFalse,
-            reason: 'anything already at the path fails the create');
+        expect(createNewWith(path, utf8.encode('token')),
+            isA<OSError>().having((e) => e.errorCode, 'errorCode', _eexist),
+            reason: 'anything already at the path fails the create, and the '
+                'failure says why');
 
         _expectUntouched(existing, path, target);
       });
+
+      if (existing == 'a file') continue;
+
+      test('Reading without following a link refuses $existing at its path',
+          () async {
+        final path = '${dir.path}/keyfile';
+        _plant(existing, path, dir.path);
+
+        expect(
+            () => readNoFollow(path),
+            throwsA(isA<FileSystemException>().having(
+                (e) => e.osError?.errorCode, 'osError.errorCode', _eloop)),
+            reason: 'the open itself refuses a link, so one put there after '
+                'any check is not followed');
+      });
     }
+
+    group('in a directory this account cannot write to', () {
+      late String locked;
+
+      setUp(() {
+        locked = '${dir.path}/locked';
+        Directory(locked).createSync();
+        Process.runSync('chmod', ['500', locked]);
+        addTearDown(() => Process.runSync('chmod', ['700', locked]));
+      });
+
+      test('Writing a new owner-only file names the OS error', () {
+        expect(
+            () => writeNewOwnerOnly('$locked/new', utf8.encode('written')),
+            throwsA(isA<FileSystemException>().having(
+                (e) => e.osError?.errorCode, 'osError.errorCode', _eacces)));
+      }, skip: _notRoot);
+
+      test('A lock that cannot be created names the OS error at timeout',
+          () async {
+        final lock = AtKeysFileLock('$locked/protected',
+            timeout: const Duration(milliseconds: 300));
+
+        await expectLater(
+            lock.synchronized(() async {}),
+            throwsA(isA<FileSystemException>().having(
+                (e) => e.message, 'message', contains('errno = $_eacces'))),
+            reason: 'an unwritable directory is told apart from a lock '
+                'another process holds');
+      }, skip: _notRoot);
+    });
 
     test("The lock's heartbeat does not follow a link put at its path",
         () async {
@@ -474,6 +522,46 @@ void main() {
               'points to');
       expect(target.readAsStringSync(), 'theirs');
     });
+  });
+
+  test('Owner-only writes stay on when errno cannot be looked up', () {
+    expect(lookUpLibcForTesting(), (ownerOnlyWrites: true, osErrors: true),
+        reason: "this libc's own names find errno and its description");
+    expect(lookUpLibcForTesting(errnoSymbol: 'no_such_errno'),
+        (ownerOnlyWrites: true, osErrors: false),
+        reason: 'a libc without errno still writes owner-only, and its '
+            'failures carry no OS error');
+    expect(lookUpLibcForTesting(strerrorSymbol: 'no_such_strerror'),
+        (ownerOnlyWrites: true, osErrors: false),
+        reason: 'a libc without strerror still writes owner-only, and its '
+            'failures carry no OS error');
+  });
+
+  test('A call that fails is reported as failed when errno cannot be looked up',
+      () {
+    osErrorsUnavailableForTesting = true;
+    addTearDown(() => osErrorsUnavailableForTesting = false);
+    final existing = '${dir.path}/existing';
+    File(existing).writeAsStringSync('theirs');
+    final link = '${dir.path}/link';
+    Link(link).createSync(existing);
+
+    expect(createNewWith(existing, utf8.encode('token')), isA<OSError>(),
+        reason: 'a create that fails is not taken for one that succeeded, so '
+            'the lock stays with its holder');
+    expect(
+        () => writeNewOwnerOnly(existing, utf8.encode('written')),
+        throwsA(isA<FileSystemException>()
+            .having((e) => e.message, 'message', 'Cannot create the file')
+            .having((e) => e.osError, 'osError', isNull)));
+    expect(
+        () => readNoFollow(link),
+        throwsA(isA<FileSystemException>()
+            .having((e) => e.message, 'message',
+                'Cannot open the file without following a link')
+            .having((e) => e.osError, 'osError', isNull)));
+    expect(File(existing).readAsStringSync(), 'theirs',
+        reason: 'the file already at the path is unchanged');
   });
 }
 
@@ -589,6 +677,16 @@ final Object _rootOnly = _runningAsRoot
     ? false
     : 'runs only as root, the one account that can give a file to another '
         'owner';
+
+final Object _notRoot = _runningAsRoot
+    ? 'root writes to a directory whatever its mode says'
+    : false;
+
+/// EEXIST and EACCES, the same on Linux and macOS.
+const _eexist = 17, _eacces = 13;
+
+/// ELOOP, which an open that does not follow a link fails with there.
+final _eloop = Platform.isMacOS ? 62 : 40;
 
 class _RecordedLogs implements LoggingHandler {
   final List<String> messages = [];
