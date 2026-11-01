@@ -498,6 +498,23 @@ void main() {
         reason: "another atSign's privates are never this client's");
   });
 
+  group('Given a client holding a filed todos.demos private', () {
+    test(
+        'when its atSign is spelt in another case, then its start level is '
+        'still worked out from what it holds', () async {
+      final ring = PublishedNskeyKeyRing(atClient,
+          privateFiling: await _filing(InMemoryAtKeysIo(), ['todos.demos']));
+      final key = AtKey.fromString('x.todos.demos$_alice');
+
+      expect(
+          await NskeyResolver(ring).startLevelOf('@ALICE', key), 'todos.demos');
+      final inMemory = InMemoryNskeyKeyRing();
+      await _hold(inMemory, _alice, 'todos.demos');
+      expect(await NskeyResolver(inMemory).startLevelOf('@ALICE', key),
+          'todos.demos');
+    });
+  });
+
   test('A namespace private filed after start is used from the next write',
       () async {
     final filing = await _filing(InMemoryAtKeysIo(), ['demos']);

@@ -4,6 +4,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_auth/at_auth.dart' show publicKeyKid;
+import 'package:at_commons/atsign.dart' show AtsignString;
 
 /// The version stamped on the nskey advertisement payload.
 ///
@@ -363,7 +364,7 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
   Future<Set<String>> heldNamespaces(String owner) async => {
         for (final generation in _private.keys)
           if (generation.split('|') case [final held, final namespace, _]
-              when held == owner)
+              when held.toAtsign() == owner.toAtsign())
             namespace
       };
 }

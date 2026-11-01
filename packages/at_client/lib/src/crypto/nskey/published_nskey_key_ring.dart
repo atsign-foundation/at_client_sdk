@@ -1264,7 +1264,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// reads is filed through; only the current atSign's.
   @override
   Future<Set<String>> heldNamespaces(String owner) async {
-    if (owner != _atClient.getCurrentAtSign()) return const {};
+    final me = _atClient.getCurrentAtSign();
+    if (me == null || owner.toAtsign() != me.toAtsign()) return const {};
     return await privateFiling?.filedNamespaces() ?? const {};
   }
 
