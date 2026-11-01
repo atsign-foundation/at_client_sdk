@@ -584,6 +584,32 @@ void main() {
       verify(() => server.stop()).called(1);
     });
 
+    test(
+        'Given a handshake connection whose stop fails, when the wait is '
+        'cancelled, then the pending keys still leave the store', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      when(() => server.stop())
+          .thenAnswer((_) async => throw Exception('the socket is gone'));
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+      expect((await store.read(atSign)).pendingEnrollmentIds, isNotEmpty,
+          reason: 'the precondition');
+
+      await pending.cancel();
+      await waiting;
+
+      verify(() => server.stop()).called(1);
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
     test('An approval that arrives after cancel writes nothing', () async {
       var polls = 0;
       var approved = false;

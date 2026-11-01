@@ -206,8 +206,15 @@ class PendingEnrollment {
 
   Future<void> _cancelOnce() async {
     _cancel.complete();
-    await _ownHandshake?.stop();
-    await _discard('cancelled');
+    try {
+      await _ownHandshake?.stop();
+    } on Exception catch (e) {
+      _logger.warning('Could not close the handshake connection of '
+          'enrollment $enrollmentId of $atSign while cancelling its wait; its '
+          'pending keys are removed all the same: $e');
+    } finally {
+      await _discard('cancelled');
+    }
   }
 
   void _refuseIfCancelled() {
