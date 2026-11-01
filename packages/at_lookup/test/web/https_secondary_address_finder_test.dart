@@ -61,8 +61,8 @@ void main() {
   test('an answer naming a host behind an @ is refused', () async {
     await expectLater(
         finder.findSecondary('@elsewhere'),
-        throwsA(isA<AtException>().having(
-            (e) => e.message, 'message', contains('not host:port'))));
+        throwsA(isA<AtException>()
+            .having((e) => e.message, 'message', contains('not host:port'))));
   });
 
   test('An oversized atDirectory answer is refused', () async {
@@ -74,6 +74,18 @@ void main() {
             allOf(contains('longer than 512 bytes'),
                 isNot(contains('aaaaaaaa'))))),
         reason: 'refused at the bound, without echoing what was read');
+  });
+
+  test('An oversized atDirectory answer fails without reading the rest',
+      () async {
+    final sw = Stopwatch()..start();
+    await expectLater(
+        finder.findSecondary('@endless', timeout: const Duration(seconds: 15)),
+        throwsA(isA<AtException>().having(
+            (e) => e.message, 'message', contains('longer than 512 bytes'))),
+        reason: 'the body never ends, so only a reader that stops at the '
+            'bound can refuse it before the timeout');
+    expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
   });
 
   test('a close of the lookup it asks for ends the request at once', () async {

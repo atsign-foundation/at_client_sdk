@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:test/test.dart';
 
+import 'keyfile_helpers.dart';
+
 /// [lookUpsFor] decides what a connection sends first from the root domain
 /// alone, observed at a TLS server on the loopback interface.
 ///
@@ -84,15 +86,33 @@ void main() {
   test(
       'A CLIBase given no lookUps and a proxy root names its atSign first on '
       'each connection', () async {
+    final home = Directory.systemTemp.createTempSync('lookups_for_cli_');
+    addTearDown(() async {
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await client.stop();
+      }
+      AtClientImpl.atClientInstanceMap.clear();
+      home.deleteSync(recursive: true);
+    });
     final cli = CLIBase(
         atSign: '@alice',
         nameSpace: 'my_app',
         rootDomain: 'proxy:127.0.0.1:${server.port}',
-        homeDir: certs.path);
+        homeDir: home.path,
+        syncDisabled: true,
+        maxConnectAttempts: 1);
     expect(cli.lookUps, isNull, reason: 'the precondition: the default runs');
+    await FileAtKeysIo(filePath: (_) => cli.atKeysFilePathToUse)
+        .write('@alice', randomLegacyKeys());
 
-    expect(await firstLineFrom(cli.lookUpsToUse), 'from:@alice',
-        reason: 'CLIBase.init opens its client with these');
+    final line = firstLines.stream.first;
+    // NOTE: the test server hangs up after the first line, so init fails;
+    // only what it sent first matters here.
+    final opened = cli.init().then((_) {}, onError: (_) {});
+    expect(await line.timeout(const Duration(seconds: 10)), 'from:@alice',
+        reason: 'CLIBase.init opens its client with lookUpsFor the root');
+    await opened;
   });
 
   test('Straight to an atServer, the command goes first', () async {

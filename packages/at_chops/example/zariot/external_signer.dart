@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dart_periphery/dart_periphery.dart';
 
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart';
 
 class ExternalSigner {
   late Serial _serialPort;
@@ -9,13 +10,27 @@ class ExternalSigner {
   late String _applicationId;
   late String _privateKeyId;
   late AtSignLogger _logger;
+
+  /// How many times a slow command's answer is read before giving up.
+  int maxReads = 15;
+
+  /// How long to wait between reads of a slow command's answer.
+  Duration readInterval = Duration(seconds: 2);
+
   ExternalSigner();
 
   void init(
       String privateKeyId, String serialPort, String libPeripheryLocation) {
     _customLibraryLocation = libPeripheryLocation;
     setCustomLibrary(_customLibraryLocation);
-    _serialPort = Serial(serialPort, Baudrate.b115200);
+    initWithPort(privateKeyId, Serial(serialPort, Baudrate.b115200));
+  }
+
+  /// Talks to the SIM over [serialPort] as given, so a test can answer the
+  /// AT commands itself.
+  @visibleForTesting
+  void initWithPort(String privateKeyId, Serial serialPort) {
+    _serialPort = serialPort;
     _applicationId = 'A0000005590010';
     _privateKeyId = privateKeyId;
     _logger = AtSignLogger('ExternalSigner');
@@ -136,9 +151,9 @@ class ExternalSigner {
       _selectIOTSafeApplication(channelNumber!);
 
       _logger.info('selected IOTSafe application');
-      _computePRF(channelNumber, keyId, simSecret, labelId);
+      return _computePRF(channelNumber, keyId, simSecret, labelId);
     } on Exception catch (e, trace) {
-      _logger.severe('exception during generate key pair ${e.toString()}');
+      _logger.severe('exception during compute activation key ${e.toString()}');
       _logger.severe(trace);
     } finally {
       if (channelNumber != null &&
@@ -161,11 +176,19 @@ class ExternalSigner {
     bool isComputePRFSuccess =
         _parseResult(computePRFResult.toString(), ATCommand.computePRF);
     _logger.finest('isComputePRFSuccess $isComputePRFSuccess');
+    if (!isComputePRFSuccess) {
+      throw Exception('Compute PRF failure');
+    }
     _serialPort.writeString(
         "AT+CSIM=10, \"8${channelNumber.substring(1)}C0000010\"\r\n");
     var prfResult = _serialPort.read(256, 1000);
     _logger.finest('prfResult :$prfResult');
-    return prfResult.toString();
+    final key = _parseAtCsimResult(prfResult.toString()).result;
+    if (key == null || !key.endsWith('9000')) {
+      throw Exception('Compute PRF failure: no key in $prfResult');
+    }
+    // remove the success code at the end.
+    return key.substring(0, key.length - 4);
   }
 
   String _readPublicKey(
@@ -242,21 +265,29 @@ class ExternalSigner {
   bool _generateKeyPair(String privateKeyId, String channelNumber) {
     _serialPort.writeString(
         "AT+CSIM=20,\"8${channelNumber.substring(1)}B90000058403$privateKeyId\"\r\n");
-    var generateKeyPairResult = '';
-    while (true) {
-      final readEvent = _serialPort.read(512, 1000);
-      generateKeyPairResult += readEvent.toString();
-      if (!readEvent.toString().contains('OK')) {
-        _logger.finest('Got result: $generateKeyPairResult');
-        sleep(Duration(seconds: 2));
-        continue;
-      }
-      break;
-    }
+    var generateKeyPairResult = _readUntilFinalResult();
     _logger.info('generateKeyPair result :${generateKeyPairResult.toString()}');
     bool isGenerateKeyPairSuccess = _parseResult(
         generateKeyPairResult.toString(), ATCommand.generateKeyPair);
     return isGenerateKeyPairSuccess;
+  }
+
+  /// Reads a slow command's answer until the modem gives its final result:
+  /// OK, or ERROR (which also covers '+CME ERROR: n'). Throws if neither
+  /// arrives within [maxReads] reads, rather than waiting forever.
+  String _readUntilFinalResult() {
+    var answer = '';
+    for (var reads = 1;; reads++) {
+      answer += _serialPort.read(512, 1000).toString();
+      if (answer.contains('OK') || answer.contains('ERROR')) {
+        return answer;
+      }
+      if (reads >= maxReads) {
+        throw Exception('no final result after $reads reads: $answer');
+      }
+      _logger.finest('Got result: $answer');
+      sleep(readInterval);
+    }
   }
 
   void _computeSignatureInit(String channelNumber) {
@@ -289,23 +320,16 @@ class ExternalSigner {
     _logger.finest('computing signature from external hash');
     _serialPort.writeString(
         "AT+CSIM=78,\"8${channelNumber.substring(1)}2B8001229E20$dataHash\"\r\n");
-    var computeSignatureUpdateResult = '';
-    // command takes a while to execute. Read until OK is received.
-    while (true) {
-      final readEvent = _serialPort.read(512, 1000);
-      computeSignatureUpdateResult += readEvent.toString();
-      if (!readEvent.toString().contains('OK')) {
-        _logger.finest('Got result: $computeSignatureUpdateResult');
-        sleep(Duration(seconds: 2));
-        continue;
-      }
-      break;
-    }
+    // command takes a while to execute.
+    var computeSignatureUpdateResult = _readUntilFinalResult();
     _logger.finest(
         'computeSignatureUpdateResult ${computeSignatureUpdateResult.toString()}');
     bool isComputeSignatureSuccess = _parseComputeSignatureUpdateResult(
         computeSignatureUpdateResult.toString());
     _logger.finest('isComputeSignatureSuccess :$isComputeSignatureSuccess');
+    if (!isComputeSignatureSuccess) {
+      throw Exception('compute signature failure');
+    }
   }
 
   String _retrieveSignature(String channelNumber) {
@@ -315,14 +339,12 @@ class ExternalSigner {
     _logger.finest('getSignatureResult $getSignatureResult');
     final signatureData = _parseAtCsimResult(getSignatureResult.toString());
     _logger.info('signature: ${signatureData.result}');
-    var signatureStr = '';
-    if (signatureData.result != null &&
-        signatureData.result!.startsWith('330040')) {
-      // remove start tag, length and success code at the end.
-      signatureStr =
-          signatureData.result!.substring(6, signatureData.result!.length - 4);
+    final result = signatureData.result;
+    if (result == null || !result.startsWith('330040')) {
+      throw Exception('no signature in $getSignatureResult');
     }
-    return signatureStr.toLowerCase();
+    // remove start tag, length and success code at the end.
+    return result.substring(6, result.length - 4).toLowerCase();
   }
 
   OpenChannelResult _getChannelNumber(String openChannelResult) {
@@ -434,7 +456,7 @@ class OpenChannelResult {
 
 class AtCsimResult {
   String? result;
-  late int bytesToRead;
+  int bytesToRead = 0;
   bool success = false;
   static const String pattern = '+CSIM: ';
 

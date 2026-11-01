@@ -198,9 +198,19 @@ class ValidateOtp extends RegisterApiTask {
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
+        // The registrar accepted the code and only wants it confirmed. That
+        // confirmation is not another attempt at the code, so it is made now
+        // rather than spending one of the attempts [shouldRetry] counts.
+        // NOTE: the confirmation is asked for once; a second ask ends the flow.
+        if (params['confirmation'] == 'true') {
+          result.exceptionMessage =
+              'The registrar asked again to confirm a confirmed code.';
+          result.apiCallStatus = ApiCallStatus.failure;
+          return result;
+        }
         params.update('confirmation', (value) => 'true');
         result.data['otp'] = params['otp'];
-        result.apiCallStatus = ApiCallStatus.retry;
+        return await run();
       } else if (apiResponse.startsWith("@")) {
         result.data['cramkey'] = apiResponse.split(":")[1];
         stdout.writeln(
@@ -227,15 +237,13 @@ Future<void> main(List<String> args) async {
     if (e.toString().contains('Missing argument')) {
       stderr.writeln(
           '[Unable to run Register CLI] Please re-run with your email address');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(1);
     } else if (e.toString().contains('Could not find an option or flag')) {
       stderr
           .writeln('[Unable to run Register CLI] The option entered is invalid.'
               ' Please use the \'-e\' flag to input your email');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(2);
     } else {
       stderr.writeln(
