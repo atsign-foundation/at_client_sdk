@@ -326,8 +326,17 @@ class NskeySeeding {
   /// published, and the question is put again at the next start.
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
-    final generation =
-        published ?? await ring.publishedAdvertisement(owner, namespace);
+    final NskeyAdvertisement? generation;
+    try {
+      generation =
+          published ?? await ring.publishedAdvertisement(owner, namespace);
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read the published nskey for '
+          '$owner:$namespace, so the rotation policy was not asked; it is '
+          'asked at the next start that reaches the atServer: $e');
+      return false;
+    }
     if (generation == null) return false;
 
     final bool replace;

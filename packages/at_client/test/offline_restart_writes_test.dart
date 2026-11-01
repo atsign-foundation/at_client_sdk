@@ -7,6 +7,8 @@ import 'package:at_client/at_client_mixins.dart'
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show verifiedAdvertisementKey;
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
@@ -178,6 +180,44 @@ void main() {
     return (device: d, kid: kid);
   }
 
+  /// A write of [key] by a fresh start of [device], through a content-key
+  /// pre-pass wired as start-up wires it: the rotation policy is asked, and
+  /// [seeding] is what writes wait on. Returns the namespace it sealed at.
+  Future<String?> writeAsStarted(_Device device, AtKey key,
+      {StartUpSeeding? seeding}) async {
+    final client = _clientFor(device);
+    final ring = PublishedNskeyKeyRing(client, privateFiling: device.filing);
+    final cache = ContentKeyCache();
+    final rotation = NskeySeeding(
+        atClient: client, ring: ring, privateFiling: device.filing);
+    final manager = CkManager(cache: cache, keyRing: ring)
+      ..startUpSeeding = seeding
+      ..rotateOwnNamespaceKeyIfAsked =
+          ((namespace) => rotation.rotateIfPolicyAsks(_atSign, namespace));
+    final nskey = NskeyProvider(keyRing: ring, cache: cache, keyAlgo: _alg);
+    final data = SymmetricAesGcmProvider(cache: cache, ckManager: manager);
+    final context = CryptoContext(atClient: client);
+    when(() => client.put(any(), any(),
+            putRequestOptions: any(named: 'putRequestOptions')))
+        .thenAnswer((inv) async {
+      final options =
+          inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+      if (options?.shouldEncrypt != false) {
+        await nskey.encrypt(context, inv.positionalArguments[0] as AtKey,
+            inv.positionalArguments[1] as String);
+      }
+      return true;
+    });
+    await data.prepareForWrite(context, key);
+    await data.encrypt(context, key, 'memo');
+    return key.metadata.appMetadata?.additional?['ckNs'] as String?;
+  }
+
+  AtKey selfKey(String namespace) => AtKey()
+    ..key = 'x'
+    ..namespace = namespace
+    ..sharedBy = _atSign;
+
   test(
       'A client restarted with no atServer writes in a namespace it verified '
       'and holds the key for', () async {
@@ -190,6 +230,21 @@ void main() {
     expect(advertised?.nskeyKid, kid);
     expect(await restarted.privateHalf(_atSign, _namespace, kid), isNotNull,
         reason: 'the write seals to the key this client holds');
+    expect(await writeAsStarted(device, selfKey(_namespace)), _namespace,
+        reason: 'the write itself succeeds, its pre-pass asking the rotation '
+            'policy as start-up wires it');
+  });
+
+  test('A write the offline restart already allows does not wait', () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    device.server.reachable = false;
+
+    expect(
+        await writeAsStarted(device, selfKey(_namespace),
+                seeding: StartUpSeeding()..seeding({_namespace}))
+            .timeout(const Duration(seconds: 1),
+                onTimeout: () => fail('it waited for start-up')),
+        _namespace);
   });
 
   test(
