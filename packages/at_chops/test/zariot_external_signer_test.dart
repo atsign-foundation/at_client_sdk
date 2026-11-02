@@ -78,7 +78,25 @@ void main() {
             _ScriptedModem({
               ..._opened,
               '48000032': '+CSIM: 4,"6A80"\r\nOK\r\n',
-              'C0000010': '+CSIM: 12,"0011EEFF9000"\r\nOK\r\n',
+              // A well-formed key, so only the refused PRF can make it fail.
+              'C0000010':
+                  '+CSIM: 36,"00112233445566778899AABBCCDDEEFF9000"\r\nOK\r\n',
+            }));
+
+      expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
+    });
+
+    test(
+        'when the SIM answers the PRF with a status other than 9000, '
+        'then there is no activation key', () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '48000032': '+CSIM: 4,"6110"\r\nOK\r\n',
+              'C0000010':
+                  '+CSIM: 36,"00112233445566778899AABBCCDDEEFF6A82"\r\nOK\r\n',
             }));
 
       expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
@@ -168,6 +186,7 @@ void main() {
 
     for (final (name, answer) in [
       ('the tag but no signature', '+CSIM: 10,"3300409000"'),
+      ('another tag', '+CSIM: 138,"340040${'AB' * 64}9000"'),
       ('a status other than 9000', '+CSIM: 138,"330040${'AB' * 64}6110"'),
     ]) {
       test('when the signature answer carries $name, then there is none', () {
