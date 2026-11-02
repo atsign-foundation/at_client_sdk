@@ -12,6 +12,8 @@ import 'package:at_client/src/crypto/nskey/nskey_rotation.dart'
 import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show classifyConnectionFailure;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -322,9 +324,10 @@ class NskeySeeding {
   /// Puts [rotationPolicy] the question for a namespace that already has a
   /// generation, replaces it if the answer is yes, and returns whether it did.
   ///
-  /// [published] is the generation already read where the caller has it, and any
-  /// failure returns false rather than throwing — the published generation stays
-  /// published, and the question is put again at the next start.
+  /// [published] is the generation already read where the caller has it. Not
+  /// reaching the atServer returns false rather than throwing — the published
+  /// generation stays published, and the question is put again at the next
+  /// start — and any other failure to read it is thrown.
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
     final NskeyAdvertisement? generation;
@@ -332,7 +335,7 @@ class NskeySeeding {
       generation =
           published ?? await ring.publishedAdvertisement(owner, namespace);
     } catch (e) {
-      if (e is StoppedException) rethrow;
+      if (classifyConnectionFailure(e)?.isOffline != true) rethrow;
       _logger.warning('Could not read the published nskey for '
           '$owner:$namespace, so the rotation policy was not asked; it is '
           'asked at the next start that reaches the atServer: $e');

@@ -37,6 +37,9 @@ class _AtServer {
   bool reachable = true;
   final Map<String, String> records = {};
 
+  /// What the atServer answers a read of each key with instead of its value.
+  final Map<String, Exception> refusing = {};
+
   void requireReachable() {
     if (!reachable) throw SecondaryConnectException('atServer unreachable');
   }
@@ -145,6 +148,8 @@ _Client _clientFor(_Device d) {
     if (options?.useRemoteAtServer == true) {
       d.asked.add('remote $key');
       d.server.requireReachable();
+      final refusal = d.server.refusing[key];
+      if (refusal != null) throw refusal;
       final value = d.server.records[key];
       if (value == null) throw AtKeyNotFoundException(key);
       return AtValue()..value = value;
@@ -474,6 +479,20 @@ void main() {
     expect((await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
         kid,
         reason: 'the record was refreshed for the namespace keys now held');
+  });
+
+  test(
+      'A write whose rotation check the atServer answers with an error is '
+      'refused with it', () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    device.syncAdvertisement();
+    device.server.refusing[_advertisementKey] =
+        AtException('the atServer could not read the record');
+
+    await expectLater(
+        writeAsStarted(device, selfKey(_namespace)),
+        throwsA(isA<AtException>().having((e) => e.message, 'message',
+            contains('could not read the record'))));
   });
 
   test('A refusal from the atServer is not overridden by the local record',
