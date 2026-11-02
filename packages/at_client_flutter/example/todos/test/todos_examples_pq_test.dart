@@ -152,7 +152,8 @@ void main() {
       expect(
         cliPushed,
         isTrue,
-        reason: "the CLI example's writes reached the atServer before it stopped",
+        reason:
+            "the CLI example's writes reached the atServer before it stopped",
       );
       expect(
         await _titlesOnceListed(app.collection, fromCli, (t) => t.title),
