@@ -615,9 +615,10 @@ With no `path`, `CliKeys.fileFor` is `~/.atsign/keys/<atSign>_key.atKeys` and
 `~/.atsign/at_onboarding_cli/storage/`. `program` names the program's own
 folder there, and `CLIBase` passes its namespace; a `path` is the folder
 itself, used as given. A program that relied on the old
-default passes that folder as `path` to keep its store. A pending
-enrollment's client takes a store of its own, named by
-`id: pending.enrollmentId`.
+default passes that folder as `path` to keep its store. The default store
+is one per atSign and program, whichever enrollment opens it, so a program
+that holds more than one enrollment of an atSign over time gives each its
+own, for example with `id: pending.enrollmentId`.
 
 **`Atsign.open` stops no client already live for the atSign.**
 `AtOnboardingServiceImpl.authenticate()` stopped any such client before it

@@ -29,6 +29,10 @@ abstract final class CliKeys {
 
   /// A Hive store for [atSign] at `~/.atsign/storage/<atSign>/<program>/<id>`,
   /// or under [path]; the client closes it when it stops.
+  ///
+  /// The store is the same whichever enrollment of [atSign] opens it, so a
+  /// program that holds more than one enrollment over time gives each its
+  /// own [id].
   static AtClientStorage storageFor(String atSign,
       {required String program, String id = defaultStoreId, String? path}) {
     final fixed = AtUtils.fixAtSign(atSign);

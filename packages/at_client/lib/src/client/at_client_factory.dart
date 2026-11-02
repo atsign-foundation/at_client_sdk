@@ -35,7 +35,7 @@ import 'package:at_lookup/at_lookup.dart';
 /// (the enrollment the keys name, or the atSign's own credential) is already
 /// live, rather than handing back one this caller does not own; [stop]
 /// releases it. Another enrollment of the atSign is another principal and
-/// builds beside it, on a store of its own. A failure while building leaves
+/// builds beside it, given a store of its own. A failure while building leaves
 /// nothing behind — the part-built client is stopped, which unfiles it and
 /// releases its claim on [storage].
 Future<AtClient> buildAtClient({

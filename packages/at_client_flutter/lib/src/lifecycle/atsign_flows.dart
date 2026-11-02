@@ -13,6 +13,10 @@ import 'package:path_provider/path_provider.dart';
 /// the app's support directory, the one at_client_mobile's examples gave
 /// `hiveStoragePath`, so an app that followed them finds its store.
 ///
+/// The default store is the same whichever enrollment of [atSign] opens it,
+/// so an app that holds more than one enrollment over time passes each its
+/// own [storage].
+///
 /// A verb that takes `storage:` and is not on [AtsignFlows], such as
 /// `PendingEnrollment.client`, takes it from here.
 Future<AtClientStorage> storageOrDefault(
