@@ -226,11 +226,12 @@ class NskeyResolver {
   static String startLevelOfNamespace(String namespace) =>
       namespace.toLowerCase();
 
-  /// Whether [namespace] belongs to the atServer or a grant rather than to
-  /// data: `*`, or one whose last label starts with `__`.
+  /// Whether [namespace] belongs to the atServer, a grant or a library's own
+  /// records rather than to data: `*`, or one any of whose labels starts with
+  /// `__`, as AtRpc's `__rpcs` and a read receipt's `__rr` do.
   static bool _isReserved(String namespace) =>
       namespace == EnrollmentConstants.allNamespaces ||
-      namespace.substring(namespace.lastIndexOf('.') + 1).startsWith('__');
+      namespace.split('.').any((label) => label.startsWith('__'));
 
   /// Every level of [namespace], most specific first:
   /// `d.c.b.a`, `c.b.a`, `b.a`, `a`.

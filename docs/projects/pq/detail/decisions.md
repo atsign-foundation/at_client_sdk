@@ -15650,7 +15650,9 @@ read the key's namespace field: the readiness check, the content-key pre-pass
    [19.3](#193-the-ruling) goes up from there. A bare namespace, which is what the readiness
    check is given, is covered only by a held namespace equal to it, so it starts at itself.
 2. **The held namespaces are read on the device**: the namespaces of the privates this client has
-   filed, folded, leaving out `*` and any namespace whose last label starts with `__`. The keyfile
+   filed, folded, leaving out `*` and any namespace any of whose labels starts with `__`
+   (**amended 2026-11-02** with 161 item 1: it used to say "whose last label starts with `__`").
+   The keyfile
    is read at the first write that asks, and each private filed after that is added as it is
    filed, so the next write sees it and no write makes a round trip.
 3. **A key is covered by its name ending with `.` and the namespace, never by its letters.**
@@ -15766,7 +15768,11 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    atSign. Its levels are every namespace the key's full name (key and namespace, folded) ends
    with after a dot, most specific first, without the reserved ones; the full name itself is
    never one, since its first label is the record's own id
-   (`NskeyResolver.shareLevelsOf`). It is sealed to the recipient's key at the most specific
+   (`NskeyResolver.shareLevelsOf`). A level is reserved when it is `*` or any of its labels
+   starts with `__`, as AtRpc's `__rpcs` and a read receipt's `__rr` do, so an RPC's message is
+   sealed at its base namespace or broader and never asks about a level named after its own
+   request id. **Amended 2026-11-02** (gkc: "A: any __ label (Rec.)"): only a level's last label
+   used to count, which walked `<reqId>.<domain>.__rpcs.<base>` on every RPC message. It is sealed to the recipient's key at the most specific
    level the recipient advertises one at. What the writer holds does not enter into it, and a
    share does not wait for the writer's start-up. A write to the client's own atSign is
    unchanged.

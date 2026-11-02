@@ -63,6 +63,16 @@ class _Client {
       : manager = CkManager(cache: cache, keyRing: ring, resolver: resolver);
 }
 
+/// The callbacks of an RPC that answers every request with an ack.
+class _RpcCallbacks implements AtRpcCallbacks {
+  @override
+  Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign) async =>
+      AtRpcResp.ack(request: request);
+
+  @override
+  Future<void> handleResponse(AtRpcResp response) async {}
+}
+
 /// A provider registered under the legacy id, recording what it seals.
 class _Legacy extends CryptoProvider {
   final List<String> sealed = [];
@@ -244,6 +254,7 @@ void main() {
     registerFallbackValue(PutRequestOptions());
     registerFallbackValue(GetRequestOptions());
     registerFallbackValue(UpdateVerbBuilder());
+    registerFallbackValue(NotificationParams());
   });
 
   setUp(() {
@@ -1057,6 +1068,139 @@ void main() {
 
       expect(stamped(key)['ns'], 'todos.demos');
       expect(stamped(key)['ckNs'], 'todos.demos');
+    });
+  });
+
+  test('A level containing a label that starts with __ is never sealed to',
+      () async {
+    final c = _Client(_Ring());
+    await publish(c.ring, _bob, '__rpcs.app');
+    final bobs = await publish(c.ring, _bob, 'app');
+    wire(c);
+    final key = AtKey.fromString('$_bob:x.__rpcs.app$_alice');
+
+    await write(c, key);
+
+    expect(stamped(key)['ckNs'], 'app');
+    expect(sealedTo(_bob, 'app'), bobs);
+    expect(c.ring.lookedUp, isNot(contains('$_bob:__rpcs.app')));
+  });
+
+  group('Given an RPC between alice and bob, who hold the same grants', () {
+    late List<Object> failures;
+
+    /// Alice's RPC in namespace `base` over [c], whose notifications are
+    /// sealed as the notification service seals them, each failure recorded.
+    AtRpc rpcOver(_Client c) {
+      configure(c);
+      wire(c);
+      failures = [];
+      final notifications = MockNotificationService();
+      when(() => atClient.notificationService).thenReturn(notifications);
+      when(() => atClient.isStopped).thenReturn(false);
+      when(() => notifications.notify(any(),
+          checkForFinalDeliveryStatus:
+              any(named: 'checkForFinalDeliveryStatus'),
+          waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+          onSuccess: any(named: 'onSuccess'),
+          onError: any(named: 'onError'),
+          onSentToSecondary:
+              any(named: 'onSentToSecondary'))).thenAnswer((inv) async {
+        try {
+          await NotificationRequestTransformer(atClient)
+              .transform(inv.positionalArguments.first as NotificationParams);
+        } catch (e) {
+          failures.add(e);
+          rethrow;
+        }
+        return NotificationResult();
+      });
+      return AtRpc(
+          atClient: atClient,
+          baseNameSpace: 'base',
+          domainNameSpace: 'dom',
+          callbacks: _RpcCallbacks(),
+          allowList: {},
+          isClient: false,
+          isServer: true)
+        ..maxSendAttempts = 1;
+    }
+
+    Iterable<String> rpcLevelsLookedUp(_Client c) =>
+        c.ring.lookedUp.where((l) => l.contains('__rpcs'));
+
+    test(
+        "An RPC request is sealed to its responder's key at the base namespace",
+        () async {
+      final c = _Client(_Ring());
+      final bobs = await publish(c.ring, _bob, 'base');
+      final rpc = rpcOver(c);
+
+      await rpc.sendRequest(toAtSign: _bob, request: AtRpcReq.create({'q': 1}));
+
+      expect(failures, isEmpty);
+      expect(sealedTo(_bob, 'base'), bobs);
+      expect(rpcLevelsLookedUp(c), isEmpty);
+    });
+
+    test(
+        "An RPC response is sealed to its requester's key at the base namespace",
+        () async {
+      final c = _Client(_Ring());
+      final bobs = await publish(c.ring, _bob, 'base');
+      final rpc = rpcOver(c);
+      final request = AtRpcReq.create({'q': 1});
+
+      await rpc.sendResponse(
+          AtNotification.empty()
+            ..from = _bob
+            ..metadata = (Metadata()
+              ..appMetadata =
+                  AppMetadata(providerId: symmetricAesGcmCryptoProviderId)),
+          request,
+          AtRpcResp.ack(request: request));
+
+      expect(failures, isEmpty);
+      expect(sealedTo(_bob, 'base'), bobs);
+      expect(rpcLevelsLookedUp(c), isEmpty);
+    });
+
+    test(
+        'An RPC to a peer advertising nothing is refused, or goes legacy where '
+        'allowed, never under a broader key', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'dom.__rpcs.base');
+      final rpc = rpcOver(c);
+
+      await rpc.sendRequest(toAtSign: _bob, request: AtRpcReq.create({'q': 1}));
+
+      expect(failures.single, isA<NamespaceKeyUnavailableException>(),
+          reason: 'refused at pqActive');
+      expect(store.keys.where((k) => k.startsWith('$_bob:')), isEmpty,
+          reason: 'and nothing is sealed under the key at dom.__rpcs.base');
+
+      final legacy = _Legacy();
+      atClient = MockAtClient(
+          posture:
+              PqPosture.pqActive.copyWith(disallowLegacyEncryption: false));
+      when(() => atClient.getCurrentAtSign()).thenReturn(_alice);
+      context = CryptoContext(atClient: atClient);
+      final fallback = rpcOver(c);
+      atClient.getPreferences()
+        ..allowLegacyCryptoFallback = true
+        ..crypto = CryptoConfig(
+          defaultProviderId: c.data.id,
+          providers: [c.data, c.nskey, legacy],
+          keyRing: c.ring,
+        );
+
+      await fallback.sendRequest(
+          toAtSign: _bob, request: AtRpcReq.create({'q': 2}));
+
+      expect(failures, isEmpty);
+      expect(legacy.sealed, hasLength(1),
+          reason: 'sent with legacy encryption');
+      expect(store.keys.where((k) => k.startsWith('$_bob:')), isEmpty);
     });
   });
 

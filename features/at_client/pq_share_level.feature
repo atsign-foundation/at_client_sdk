@@ -4,8 +4,11 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   writer's atSign. Its levels are every namespace the key's full name (key and
   namespace, folded) ends with after a dot, most specific first, without the
   reserved ones; the full name itself is never a level, since its first label
-  is the record's own id. A share is sealed to the recipient's key at the most
-  specific level the recipient advertises, and a share that finds none is
+  is the record's own id. A level is reserved when any of its labels starts
+  with __, as AtRpc's __rpcs and a read receipt's __rr do, so an RPC message
+  is sealed at its base namespace or broader. A share is sealed to the
+  recipient's key at the most specific level the recipient advertises, and a
+  share that finds none is
   refused naming the most specific level. What the writer holds does not
   enter into it, and a share does not wait for the writer's start-up. A
   program can instead require one namespace with sealToNamespace: the share is
@@ -171,6 +174,26 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Given shares that found levels of bob's missing more than 30 seconds ago
     When alice shares again
     Then only the levels this share found missing are remembered
+
+  Scenario: A level containing a label that starts with __ is never sealed to
+    Given bob advertising keys for __rpcs.app and app
+    When alice shares x.__rpcs.app with bob
+    Then it is sealed under bob's app key, and __rpcs.app is not looked up
+
+  Scenario: An RPC request is sealed to its responder's key at the base namespace
+    Given bob, the responder, advertising a key for base
+    When alice, at pqActive, sends an RPC request in base to bob
+    Then the request is sealed under bob's base key, and no level containing __rpcs is looked up
+
+  Scenario: An RPC response is sealed to its requester's key at the base namespace
+    Given a request received under the namespace-key scheme from bob, who advertises a key for base
+    When alice answers it
+    Then the response is sealed under bob's base key, and no level containing __rpcs is looked up
+
+  Scenario: An RPC to a peer advertising nothing is refused, or goes legacy where allowed, never under a broader key
+    Given bob advertising nothing at base or broader, only a key at dom.__rpcs.base
+    When alice sends an RPC request in base to bob
+    Then it is refused at pqActive, it is sent with legacy encryption where the posture allows the fallback, and bob's dom.__rpcs.base key seals nothing
 
   Scenario: canSealTo asks afresh, whatever a share found missing
     Given a share that found bob's device1.sshnp missing, and bob since publishing device1.sshnp
