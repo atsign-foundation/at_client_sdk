@@ -23,7 +23,7 @@ void main() {
           'bash',
           [
             '-c',
-            'timeout 20s dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key $flags --root-server 127.0.0.1:${await refusedPort()} --max-retries 1'
+            'timeout 20s env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --cramkey dummy-key $flags --root-server 127.0.0.1:${await refusedPort()} --max-retries 1'
           ],
           workingDirectory: Directory.current.path,
         );
@@ -42,7 +42,7 @@ void main() {
         'bash',
         [
           '-c',
-          'echo "N" | dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath'
+          'echo "N" | env AT_REGISTRAR_API_KEY=app-key-3f9c71 dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath'
         ],
         workingDirectory: Directory.current.path,
       );

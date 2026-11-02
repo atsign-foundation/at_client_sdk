@@ -41,12 +41,17 @@ class OnboardingUtil {
   /// is none, and without quoting it when it holds a character an HTTP
   /// header cannot carry.
   OnboardingUtil(String? registrarApiKey)
-      : registrarApiKey = registrarApiKey == null ||
-                registrarApiKey.trim().isEmpty
-            ? throw at_client.AtClientException.message(noRegistrarApiKey)
-            : !_fitsAHeader(registrarApiKey)
-                ? throw at_client.AtClientException.message(badRegistrarApiKey)
-                : registrarApiKey;
+      : registrarApiKey = usableRegistrarApiKey(registrarApiKey);
+
+  /// [registrarApiKey], or an [at_client.AtClientException] saying why the
+  /// registrar cannot be asked with it: there is none, or it holds a
+  /// character an HTTP header cannot carry, which the message does not quote.
+  static String usableRegistrarApiKey(String? registrarApiKey) =>
+      registrarApiKey == null || registrarApiKey.trim().isEmpty
+          ? throw at_client.AtClientException.message(noRegistrarApiKey)
+          : !_fitsAHeader(registrarApiKey)
+              ? throw at_client.AtClientException.message(badRegistrarApiKey)
+              : registrarApiKey;
 
   /// Whether [value] holds only what an HTTP header value carries: visible
   /// ASCII, spaces and tabs.

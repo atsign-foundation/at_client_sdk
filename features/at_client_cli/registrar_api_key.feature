@@ -19,6 +19,11 @@ Feature: at_register and at_activate take the registrar API key from the environ
     When at_activate onboard runs with an atSign and no -c
     Then it exits non-zero with the same pointer, and nothing is sent to the registrar
 
+  Scenario: at_activate onboard without a CRAM secret and with no registrar API key refuses before it shows the backup prompt
+    Given AT_REGISTRAR_API_KEY is not set
+    When at_activate onboard runs with an atSign, and neither -c nor -y
+    Then it exits non-zero with the same pointer before showing the backup prompt, and nothing is sent to the registrar
+
   Scenario: A registrar API key that is set is the one sent
     Given AT_REGISTRAR_API_KEY is set
     When at_register asks the registrar for a free atSign

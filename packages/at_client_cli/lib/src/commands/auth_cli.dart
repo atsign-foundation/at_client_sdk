@@ -547,6 +547,9 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
+    if (settings.preference.cramSecret == null) {
+      OnboardingUtil.usableRegistrarApiKey(settings.registrarApiKey);
+    }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
     if (!argResults[AuthCliArgs.argNameYes] &&

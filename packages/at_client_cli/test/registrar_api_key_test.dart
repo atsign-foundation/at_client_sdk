@@ -158,6 +158,27 @@ void main() {
     expect(run.exitCode, isNot(0));
   }, timeout: const Timeout(Duration(minutes: 3)));
 
+  test(
+      'at_activate onboard without a CRAM secret and with no registrar API '
+      'key refuses before it shows the backup prompt', () async {
+    const prompt = 'IMPORTANT - READ CAREFULLY';
+    const args = ['onboard', '-a', '@alice'];
+    final control = await runFixture('at_activate_against_loopback.dart', args,
+        registrarApiKey: key, input: 'N\n');
+    expect(control.output, contains(prompt),
+        reason: 'the control: with a key set, the prompt is shown');
+    expect(control.exitCode, 0);
+
+    final run = await runFixture('at_activate_against_loopback.dart', args,
+        input: 'Y\n');
+
+    expect(run.output, contains(pointer));
+    expect(run.output, isNot(contains(prompt)));
+    expect(run.output, isNot(contains('registrar served')),
+        reason: 'nothing is sent to the registrar');
+    expect(run.exitCode, isNot(0));
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
   test('A registrar API key that is set is the one sent', () async {
     final run = await atRegister(registrarApiKey: key);
     final served = RegExp(r'registrar served .*').allMatches(run.output);
