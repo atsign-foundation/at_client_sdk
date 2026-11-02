@@ -14647,6 +14647,18 @@ Keys cut by an enrollment later revoked or removed are never collected. The
 forward-secrecy lever — `deleteSuperseded`, UC-A5.1(a) — is unchanged; this
 replaces only the default of keeping every conveyance forever.
 
+⚠️ **AMENDED 2026-11-02 by gkc** ("Fix now"; "Agree, with local deletes (Rec.)"): a
+pass asks whether sync has caught up and scans local storage without holding up
+cuts, and takes their turn only to re-check its keys against what is current — the
+cache's current keys and this enrollment's pointer for each key's scope, read from
+local storage — and to delete them, from local storage whatever the app's
+preference, sync carrying the deletes to the atServer. A key a cut conveyed while
+the pass scanned is current by the time the pass deletes, so it is kept. Passes run
+one at a time, and one asked for while another waits to start joins it. It used to
+hold the cut queue for the whole pass, so a write that needed a fresh content key
+waited behind a round trip to the atServer and a scan of local storage, and,
+offline after a rotation, behind a request that had yet to fail.
+
 ### 142.4 The recipient's content-key cache stays as it is
 
 Once 142.1 and 142.3 are built it has an eviction path. An expiry would buy

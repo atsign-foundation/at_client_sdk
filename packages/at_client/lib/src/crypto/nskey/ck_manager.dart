@@ -405,10 +405,29 @@ class CkManager {
   /// caught up, the one refusal a later pass can overcome; a pass that does not
   /// look for another reason answers 0, as [collectUnused] does.
   ///
+  /// Passes run one at a time, and one asked for while another waits to start
+  /// joins it. A pass checks sync and scans local storage without holding up
+  /// cuts, and takes their turn only to delete.
+  ///
   /// Visible so a test can tell a pass sync refused from one that answered.
   @visibleForTesting
-  Future<int?> tryCollect(CryptoContext context) =>
-      _inTurn(() => _collectUnused(context));
+  Future<int?> tryCollect(CryptoContext context) {
+    final waiting = _waitingPass;
+    if (waiting != null) return waiting;
+    final pass = _collecting.then((_) {
+      _waitingPass = null;
+      return _collectUnused(context);
+    });
+    _waitingPass = pass;
+    _collecting = pass.then((_) {}, onError: (_) {});
+    return pass;
+  }
+
+  /// The pass waiting to start, which a pass asked for meanwhile joins.
+  Future<int?>? _waitingPass;
+
+  /// Completes once every pass begun here so far has finished.
+  Future<void> _collecting = Future<void>.value();
 
   Future<int?> _collectUnused(CryptoContext context) async {
     final atClient = context.atClient;
@@ -458,19 +477,55 @@ class CkManager {
         current.contains(ckKid) ||
         cited.contains(ckKid) ||
         now.difference(supersededAt[ckKid]!) < supersededCkGrace);
+    if (cut.isEmpty) return 0;
+    return _inTurn(() => _deleteUnlessCurrent(context, cut));
+  }
+
+  /// Deletes each of [cut]'s records and evicts its key, unless the key is
+  /// current now or this enrollment's pointer for its scope names it, and
+  /// returns how many keys went.
+  ///
+  /// Runs in turn, where no cut is half done, so a key a cut conveyed while
+  /// the scan ran is current by now. Deletes from local storage, whatever the
+  /// app's preference, and sync carries them to the atServer.
+  Future<int> _deleteUnlessCurrent(CryptoContext context,
+      Map<String, List<({String key, Map<String, dynamic> about})>> cut) async {
+    final current = cache.currentKids;
+    final kept = <String>{};
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      final scope = _scopeOf(records.first.key, records.first.about);
+      if (current.contains(ckKid) ||
+          (scope != null && await _pointerNames(context, scope, ckKid))) {
+        kept.add(ckKid);
+      }
+    }
+    cut.removeWhere((ckKid, _) => kept.contains(ckKid));
 
     for (final MapEntry(key: ckKid, value: records) in cut.entries) {
       for (final record in records) {
-        await context.atClient.delete(AtKey.fromString(record.key));
+        await context.atClient.delete(AtKey.fromString(record.key),
+            deleteRequestOptions: DeleteRequestOptions()
+              ..useRemoteAtServer = false);
         final scope = _scopeOf(record.key, record.about);
         if (scope != null) cache.evict(scope.owner, scope.ckNs, ckKid);
       }
     }
     if (cut.isNotEmpty) {
-      _logger.info('Collected ${cut.length} content key(s) $enrollmentId cut '
-          'and nothing cites any more: ${cut.keys.join(', ')}');
+      _logger.info('Collected ${cut.length} content key(s) '
+          '${context.atClient.enrollmentId} cut and nothing cites any more: '
+          '${cut.keys.join(', ')}');
     }
     return cut.length;
+  }
+
+  /// Whether this enrollment's pointer for [scope], read from local storage,
+  /// names [ckKid].
+  Future<bool> _pointerNames(CryptoContext context,
+      ({String owner, String ckNs}) scope, String ckKid) async {
+    final key = pointer?.keyFor(context.atClient, scope.owner, scope.ckNs);
+    final store = context.atClient.getLocalSecondary()?.keyStore;
+    if (key == null || store == null) return false;
+    return _ckKidIn((await store.get(key.toString()))?.data) == ckKid;
   }
 
   /// Why local storage cannot answer "does any record cite this key?"
@@ -555,10 +610,14 @@ class CkManager {
 
   /// Completes once every cut and collection begun here so far has finished.
   @visibleForTesting
-  Future<void> get idle => _turn;
+  Future<void> get idle async {
+    await _collecting;
+    await _turn;
+  }
 
-  /// Runs [work] once every cut and collection already begun here has
-  /// finished, so a collection never sees a key conveyed but not yet current.
+  /// Runs [work] once every cut and collection delete already begun here has
+  /// finished, so a collection never deletes a key conveyed but not yet
+  /// current.
   Future<T> _inTurn<T>(Future<T> Function() work) {
     final result = _turn.then((_) => work());
     _turn = result.then((_) {}, onError: (_) {});

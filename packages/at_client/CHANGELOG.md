@@ -26,6 +26,9 @@
   store holds one pending enrollment. A request that expires has its pending
   keys removed, as a denied one does, and `PendingEnrollment.approved` says
   whether an approval reached the key store before a stop or cancel.
+- fix: a write that needs a fresh content key no longer waits for the
+  client's cleanup of unused ones, which held it up while the atServer was
+  slow or unreachable.
 - feat: `PqPosture.copyWith` builds a posture from a named stage, changing
   only the axes given: `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
   false)` writes post-quantum and still allows legacy encryption.
