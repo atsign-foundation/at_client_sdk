@@ -115,7 +115,9 @@ knowing before turning it on:
   an **opt-out**: leave it null and all three are still produced, because
   whether this atSign will ever need to talk to a pre-quantum peer is decided
   by the apps that adopt it rather than at activation. Set it false and a
-  pre-quantum peer cannot send to the atSign at all.
+  pre-quantum peer cannot send to the atSign at all, and at_client's
+  `AtClient.put` of a public value throws `AtPrivateKeyNotFoundException`,
+  since it signs the value with the RSA encryption private key.
 
 `activateAtSign`'s `metadataBuilder` attaches metadata to the first
 enrollment's record. It runs on the request that creates that record, whose

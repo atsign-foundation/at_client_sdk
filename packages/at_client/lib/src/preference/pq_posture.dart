@@ -54,6 +54,10 @@ class PqPosture {
   /// True in every named stage: when an atSign can stop holding legacy keys is
   /// an ecosystem-floor question no client-side stage can answer, so only a
   /// deployment that controls every client of its namespaces flips it.
+  ///
+  /// False leaves `AtClient.put` of a public value throwing
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key.
   final bool mintLegacyMaterial;
 
   /// The key-establishment algorithms this client will seal to, strongest first

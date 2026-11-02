@@ -647,6 +647,53 @@ key is refused rather than written with the legacy provider. The design,
 the acceptance catalogue and the decision log are under
 [`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 
+## Known traps in sync
+
+Each of these is about sync pushing this device's own queued writes to its
+atServer, in 4.0.x.
+
+- **A write the atServer refuses for good leaves the queue.** A refusal as
+  unauthorized, for an immutable record, an invalid key, an illegal argument
+  or invalid syntax, or with a code at_commons does not list, drops the
+  write with a severe log line, so the writes behind it still push. The
+  device keeps its local change, which the atServer does not have, until a
+  pull brings a change to that key. Nothing else tells the app: no sync
+  result or progress event names the write, and `isInSync()` can then
+  return true.
+- **The atServer, not the device's access check, has the last word.** A
+  write the device allows and the atServer refuses as unauthorized is
+  dropped as above.
+- **A write refused any other way stays queued and is sent with every
+  batch.** That is a refusal with any other code, a write the atServer
+  leaves out of its reply, or an answer sync cannot read. Held writes that
+  fill a whole batch at the head of the queue hold up every write behind
+  them, round after round.
+- **A queued write whose record this device cannot read back stops each
+  round when sync reaches it**, so no write behind it pushes.
+- **A batch that fails as a whole ends the round.** Sync tries again the
+  next time it runs (after a write, a notification, an app's `sync()` or
+  its 30-second timer), with no backoff.
+- **A held write keeps sync from catching up.** While it stays queued,
+  `SyncService.isInSync()` returns false and
+  `SyncService.waitUntilCaughtUp()` does not complete, so pass it a
+  `timeout`.
+
+### Planned for 4.1.x
+
+Planned, not promised:
+
+- A failure that may pass holds the write at the head of the queue, and
+  the next push waits 5, 8, 13, 21, 34 and 55 seconds, then 60, with up to
+  a tenth of random jitter. Pulls back off the same way, separately.
+- After a batch fails as a whole, sync sends one write per batch until one
+  is answered, so the write at fault is named.
+- A write sync cannot send, such as one whose record this device cannot
+  read back, leaves the queue with a severe log line.
+- Sync events an app can listen to, the write a failure holds, and a call
+  to discard a queued write while the device keeps its copy.
+- Push batches sized in bytes, within the atServer's inbound buffer.
+- `AtClient.put` measuring a value in UTF-8 bytes, as sync will push it.
+
 ## Further reading
 
 - [atPlatform overview](https://docs.atsign.com/)
