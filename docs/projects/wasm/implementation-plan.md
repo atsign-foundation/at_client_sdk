@@ -1029,11 +1029,11 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
 
-The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column is PR state read with `gh` on 2026-10-18; **since then PB-3 and PB-4 A have landed on trunk** (`at_lookup`, `at_utils` and `at_client` 4.0.0; the `hive.dart`, `memory.dart` and `sqlite.dart` barrels; `at_lookup_web.dart`), and `packages/at_client_wasm` and `at_chops_web.dart` are not on trunk yet; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column is PR state read with `gh` on 2026-10-18; **since then PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk, and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
 
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |
-| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **landed on trunk** (state above is 2026-10-18). [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
+| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263, closed) are on trunk as the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open (`gh`, 2026-11-02). [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
 | PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T8 | #2223 | **landed on trunk** (at_lookup 4.0.0) |
 | PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | open, draft |
 | PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
@@ -1042,7 +1042,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 | PB-5 G, K | IndexedDB store, `PasskeyKek` over a port; dev portal-cutter | W1 (keys leg) | #2271, #2272 | open, draft |
 | PB-5 H | Portal and ephemeral sessions; `HealOutcome` | W1 | #2338 | open |
 | PB-5 J | `@JSExport` dev harness + `build.sh` (js and wasm compiles required) | J1 (dev only) | #2341 | open |
-| PB-5 N | K-10 pointer + K-11 document replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-13 (K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13) |
+| PB-5 N | K-10 pointer + K-11 document replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-17 (K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13) |
 | PB-5 M | Notifications in the browser, D-24 `window(1h)` | — | not started | draft plan |
 | PB-6 | `@atsign/at-client-web` TypeScript facade | J1–J8 | not started | draft plan; gated on OQ-16 |
 | PB-7 / L | First live browser session on a real hostname; the five live paths | W3 → T4.1, T4.2 | not started | step 0a (paths 1–3) passed on Chrome headless + local atServer; step 0a′ reruns after N |
@@ -1052,7 +1052,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 
 - **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (the package is not on trunk yet; see the PB-5 rows above). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
 - **W4 is done** (D-26): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
-- **D2 (browser onboarding) is no longer deferred.** It is K-1..K-13 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
+- **D2 (browser onboarding) is no longer deferred.** It is K-1..K-17 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
 - **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.
 
 ---
@@ -1225,7 +1225,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 ## 9. Phase 7 — deferred (D)
 
 - **D1 — File-transfer web implementation** via `package:web` File/Blob.
-- **D2 — Browser onboarding and key-import UX.** *Un-deferred 2026-10: see §5b and K-1..K-13.* The `.atKeys` *file* does not exist in
+- **D2 — Browser onboarding and key-import UX.** *Un-deferred 2026-10: see §5b and K-1..K-17.* The `.atKeys` *file* does not exist in
   a browser; the flow needs paste, upload or QR feeding bytes into the existing decode
   path.
 - **D3 — Argon2id performance work,** driven by C4.

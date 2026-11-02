@@ -1,6 +1,6 @@
 # PB-3 — the storage bundle, remote-only client and io split
 
-**Status:** six stages, all PRs open and unmerged as of 2026-10-18 (checked with `gh`). Merge order and the publish ladder live in the landing plan, not here.
+**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed (stages 4 and 5 are on trunk as the `hive.dart` barrel, `at_client` 4.0.0 and the wasm gate); #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk. Merge order and the publish ladder live in the landing plan, not here.
 **Purpose:** the delivered record of PB-3 — what each stage changed in `at_client`, why, and what its tests prove. It merges the former `pb3-stage1.md` … `pb3-stage6.md`; per-PR status was dropped, so this table is the only place state is recorded.
 **Rulings it implements:** [`decisions.md`](decisions.md) D-12 (storage bundle), D-17 (V1 ships remote-only), D-18 (remote-only is an `AtClientStorage` implementation), D-13/D-14 (location per atSign). Gates: [`acceptance.md`](acceptance.md) §9a.2, X-R1/X-R2.
 **Not here:** the web crypto and web lookups (PB-4), `at_client_wasm` sessions and the JS entry (PB-5) — see [`implementation-plan.md`](implementation-plan.md).
@@ -25,11 +25,11 @@ graph LR
 
 | Stage | PR | State | Delivers | Breaking |
 |---|---|---|---|---|
-| [1](#stage-1) | [#2257](https://github.com/atsign-foundation/at_client_sdk/pull/2257) | open, ready, base `trunk` | A non-Hive bundle with `isLocalStoreRequired: false` constructs; chops setup no longer gated on local store | no |
+| [1](#stage-1) | [#2257](https://github.com/atsign-foundation/at_client_sdk/pull/2257) | closed | A non-Hive bundle with `isLocalStoreRequired: false` constructs; chops setup no longer gated on local store | no |
 | [2](#stage-2) | [#2258](https://github.com/atsign-foundation/at_client_sdk/pull/2258), [#2259](https://github.com/atsign-foundation/at_client_sdk/pull/2259), [#2260](https://github.com/atsign-foundation/at_client_sdk/pull/2260) | open, ready | `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `RemoteOnlyAtClientStorage` (`package:at_client/remote_only.dart`) | no |
 | [3](#stage-3) | [#2261](https://github.com/atsign-foundation/at_client_sdk/pull/2261) | open, ready | `AtClientStorage.holdsKeyMaterial`; remote-only client without keys fails at construction | no |
-| [4](#stage-4) | [#2262](https://github.com/atsign-foundation/at_client_sdk/pull/2262) | open, **draft** | `HiveAtClientStorage` moves to `package:at_client/hive.dart`; conditional default storage | **yes** (`at_client` 4.0.0) |
-| [5](#stage-5) | [#2263](https://github.com/atsign-foundation/at_client_sdk/pull/2263) | open, **draft** | No `dart:io` in `at_client.dart`; deprecated file/stream API deleted; wasm gate stanza | **yes** (`at_client` 4.0.0) |
+| [4](#stage-4) | [#2262](https://github.com/atsign-foundation/at_client_sdk/pull/2262) | closed; on trunk | `HiveAtClientStorage` moves to `package:at_client/hive.dart`; conditional default storage | **yes** (`at_client` 4.0.0) |
+| [5](#stage-5) | [#2263](https://github.com/atsign-foundation/at_client_sdk/pull/2263) | closed; on trunk | No `dart:io` in `at_client.dart`; deprecated file/stream API deleted; wasm gate stanza | **yes** (`at_client` 4.0.0) |
 | [6](#stage-6) | [#2273](https://github.com/atsign-foundation/at_client_sdk/pull/2273)–[#2276](https://github.com/atsign-foundation/at_client_sdk/pull/2276) | open, 6a–6d ready | `remote_only.dart` wasm gate; write-through `get` key fix; `replicatesServer` + `WriteThroughSyncService`; X-R2 interop test | no |
 | follow-up | [#2336](https://github.com/atsign-foundation/at_client_sdk/pull/2336) | open, base stage 6d | `at_client` timer-gate and rederive fixes found by the PB-5 sessions work | no |
 

@@ -11,7 +11,7 @@
 **A raw-IndexedDB `AtClientStorage` works and costs ~57× less payload than SQLite-wasm: +6.6 KB gzipped vs ≥ +376.9 KB.**
 
 - It passes the at_client storage contract and syncs both ways against a fake server. All 25 tests pass under dart2js and under dart2wasm in Chrome.
-- On payload alone this makes a case for **D4 "raw IndexedDB backend (V2)"**. Per `implementation-plan.md:1189`, D4 happens only if W4 rules `sqlite3.wasm` out. The ~348 KB gzipped binary is the thing W4 has to weigh.
+- On payload alone this makes a case for **D4 "raw IndexedDB backend (V2)"**. Per `implementation-plan.md` D4, D4 happens only if W4 rules `sqlite3.wasm` out. The ~348 KB gzipped binary is the thing W4 has to weigh.
 - Nothing here changes V1. D-17 "V1 ships remote-only" stands, and no ruling is filed.
 
 ## 2. What was built
