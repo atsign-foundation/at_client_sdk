@@ -218,7 +218,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [158] | A key package reconcile advertises the package the client holds                              | 2026-10-29 | LIVE               |
 | [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | AMENDED 2026-11-02 |
 | [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-02 |
-| [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | LIVE               |
+| [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | AMENDED 2026-11-02 |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted

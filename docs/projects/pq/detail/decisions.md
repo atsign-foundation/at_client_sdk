@@ -15805,7 +15805,11 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    for a share replaces "a remembered miss never decides a null", so a walk is one batch. A
    recipient is asked about the same levels at most once in 30 seconds, and a share that requires
    a namespace asks about that one alone. `canSealTo` asks afresh past a remembered miss, and
-   answers from a found key.
+   answers from a found key, which ends the miss. **Amended 2026-11-02** (gkc: "(a) Keep 30 s,
+   amend B4.4 (Rec.)", after the live e2e pack found the conflict): UC-B4.4 used to say "the
+   recipient's key appearing is the whole trigger" and UC-B4.1 "the *first write after bob's
+   key appears* is PQ"; both now say the trigger takes effect once the 30-second window has
+   passed, or at once for a program that asks `canSealTo`.
 7. **The writer's own copy is as [142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)
    has it**, minted at the recipient's level when the writer holds no key covering it, except at
    a level below the client's own namespace, where a level is named after a record (gkc: "keep

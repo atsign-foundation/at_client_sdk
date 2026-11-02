@@ -1969,8 +1969,10 @@ map and be refused rather than obeyed.
   (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
   into `allowLegacyCryptoFallback` — in which case it goes out **legacy** to bob's
   `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
-  model), and the *first write after bob's key appears* is PQ with no flag to
-  flip. Never a silent downgrade: the app chose the fallback or the app sees the
+  model), and the *first write after bob's key appears and the 30-second miss
+  window has passed* is PQ with no flag to flip; a program that asks
+  `canSealTo` finds the key at once, which ends the remembered miss, so its
+  next write is PQ. Never a silent downgrade: the app chose the fallback or the app sees the
   refusal. `put` writes no self-copy record; whether alice can write in her own scope
   while bob is unreachable is
   [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists)'s question, not
@@ -2028,8 +2030,11 @@ map and be refused rather than obeyed.
   and the write goes via the **nskey data path** — `at/nskey` conveys the CK
   sealed to bob's published nskey (`recipientKind: nskey`),
   `at/symmetric/AES/GCM` encrypts the data. Cold start (or the fallback, if
-  opted-in) ends for bob **without any action from alice**: the recipient's key
-  appearing is the whole trigger.
+  opted-in) ends for bob **without any action from alice** once the 30-second
+  window in which a share remembers finding nothing has passed: the
+  recipient's key appearing is the trigger. A program that asks `canSealTo`
+  finds the key at once, which ends the remembered miss, so its next share is
+  PQ.
 
 - **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
   `roadmap.md` (migration philosophy).

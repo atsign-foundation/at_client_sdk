@@ -366,8 +366,9 @@ can say which recipient has not enabled what. `CryptoRuntime.isReadyFor` answers
 same question before a user composes anything. The one escape is the legacy path, and
 it is opt-in (`AtClientPreference.allowLegacyCryptoFallback`, default off) precisely
 because a silent downgrade to RSA is what this design exists to stop; it is applied
-per write, so it is forward-only — the first write after the recipient publishes is PQ
-again. Once they mint, the sender's next re-`plookup`
+per write, so it is forward-only — once the recipient publishes, writes are PQ again:
+the first after the 30-second window in which a share remembers finding nothing, or the
+next one at once for a program that asks `canSealTo`. Once they mint, the sender's next re-`plookup`
 ([§1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)) picks the nskey up.
 
 **Naming.** The root carries no namespace suffix — `pq_signing_root`, not

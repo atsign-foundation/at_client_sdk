@@ -9407,6 +9407,9 @@ current content key toward that destination rests on no own generation. That
 answer can be stale: an own key another enrollment mints meanwhile is noticed up to
 15 minutes late. It is allowed because a null from that check never replaces a
 content key, so being late costs a delay and changes no answer a write acts on.
+**Amended 2026-11-02** (decisions 161 item 6): for a share, a level found missing is
+remembered for 30 seconds and decides without a lookup; this rule still holds for a
+write to the client's own atSign.
 
 ⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
 keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the
