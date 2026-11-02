@@ -9409,7 +9409,9 @@ answer can be stale: an own key another enrollment mints meanwhile is noticed up
 content key, so being late costs a delay and changes no answer a write acts on.
 **Amended 2026-11-02** (decisions 161 item 6): for a share, a level found missing is
 remembered for 30 seconds and decides without a lookup; this rule still holds for a
-write to the client's own atSign.
+write to the client's own atSign. And `CkManager`'s memory of a sender holding no key
+of its own is gone: the sender's own level is read from the namespaces it holds, so
+there is no lookup for it to save.
 
 ⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
 keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the

@@ -551,12 +551,14 @@ crypto:
    (Skip if the CK is already conveyed to that generation.) For shared data the
    same CK is conveyed a second time, to the sender's **own** nskey — the
    **sibling copy**, `<ckKid>.__ck.<ckNs>@<sender>`, sealed to the sender's key
-   covering `ckNs` and naming the recipient in its `appMetadata` — so the
-   sender's other enrollments, and the sender after a restart, can open it; a
-   sender holding no nskey covering `ckNs` mints one first, at the level the
-   recipient's key was found, unless the application turned
-   `seedNamespaceKeys` off
+   at its own level, the most specific namespace it holds a key for that covers
+   the value, and naming the recipient in its `appMetadata` — so the sender's
+   other enrollments, and the sender after a restart, can open it. Nothing is
+   minted for it: a sender holding no key at that level yet, or whose level does
+   not cover `ckNs`, shares without the copy, with a warning, and the first share
+   after it holds one cuts a fresh content key with its copy
    ([ruling 142.2](detail/decisions.md#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)).
+   The share's value states its own namespace as `ns`.
 3. **Write data** (`at/symmetric/AES/GCM`): AES-256-GCM under a key derived from
    the CK and a fresh per-value salt; stamp `ckKid`, `salt` and `iv` in `appMetadata`.
 

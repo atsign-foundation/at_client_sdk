@@ -923,84 +923,140 @@ void main() {
   });
 
   group("Given the writer's own copy of a share's content key", () {
-    test("The writer's copy goes to her own key covering the recipient's level",
-        () async {
+    /// What alice's copy of the content key shared with bob in [ckNs] names,
+    /// or null when she wrote none.
+    Map<String, dynamic>? copyIn(String ckNs) {
+      final copies = store.entries.where((e) =>
+          !e.key.startsWith('$_bob:') && e.key.contains('.__ck.$ckNs$_alice'));
+      return copies.isEmpty
+          ? null
+          : copies.single.value.key.metadata.appMetadata!.additional;
+    }
+
+    void neverMinted() => verifyNever(
+        () => atClient.ensureReachable(any(), timeout: any(named: 'timeout')));
+
+    test("The writer's copy is sealed to her key at her own level", () async {
       final c = _Client(_Ring());
-      await publish(c.ring, _bob, 'todos.demos');
-      final hers = await hold(c.ring, _alice, 'demos');
+      await publish(c.ring, _bob, 'notes.todos.demos');
+      await hold(c.ring, _alice, 'demos');
+      final hers = await hold(c.ring, _alice, 'todos.demos');
       configure(c);
       wire(c);
-
-      await write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
-
-      expect(
-          store.entries
-              .where((e) =>
-                  !e.key.startsWith('$_bob:') &&
-                  e.key.contains('.__ck.todos.demos$_alice'))
-              .single
-              .value
-              .key
-              .metadata
-              .appMetadata!
-              .additional!['nskeyKid'],
-          hers);
-      verifyNever(() =>
-          atClient.ensureReachable(any(), timeout: any(named: 'timeout')));
-    });
-
-    test('Holding nothing covering that level, the writer mints her key there',
-        () async {
-      final c = _Client(_Ring());
-      await publish(c.ring, _bob, 'todos.demos');
-      String? minted;
-      configure(c);
-      wire(c, mint: (namespace) async {
-        minted = await hold(c.ring, _alice, namespace);
-        return const AtReachabilityResult(AtReachability.published);
-      });
-
-      await write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
-
-      verify(() => atClient.ensureReachable('todos.demos',
-          timeout: any(named: 'timeout'))).called(1);
-      expect(
-          store.entries
-              .where((e) =>
-                  !e.key.startsWith('$_bob:') &&
-                  e.key.contains('.__ck.todos.demos$_alice'))
-              .single
-              .value
-              .key
-              .metadata
-              .appMetadata!
-              .additional!['nskeyKid'],
-          minted);
-    });
-
-    test('The writer mints nothing at a level below her own namespace',
-        () async {
-      final c = _Client(_Ring());
-      final bobs = await publish(c.ring, _bob, 't42.notes.todos.demos');
-      wire(c);
-      final key = AtKey.fromString('$_bob:note1.t42.notes.todos.demos$_alice');
+      final key = AtKey.fromString('$_bob:x.notes.todos.demos$_alice');
 
       await write(c, key);
 
-      expect(stamped(key)['ckNs'], 't42.notes.todos.demos');
-      expect(sealedTo(_bob, 't42.notes.todos.demos'), bobs);
-      verifyNever(() =>
-          atClient.ensureReachable(any(), timeout: any(named: 'timeout')));
+      expect(stamped(key)['ckNs'], 'notes.todos.demos');
       expect(
-          store.keys
-              .where((k) => !k.startsWith('$_bob:') && k.contains('.__ck.')),
-          isEmpty);
+          copyIn('notes.todos.demos'),
+          allOf(containsPair('nskeyKid', hers),
+              containsPair('ns', 'todos.demos')),
+          reason: 'named at bob\'s level, sealed at hers');
+      neverMinted();
+    });
+
+    test(
+        'Before her start-up has published her key, a share goes without her '
+        'copy, with a warning', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'todos.demos');
+      c.manager.startUpSeeding = StartUpSeeding()..seeding({'todos.demos'});
+      configure(c);
+      wire(c);
+      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
+
+      await atOnce(write(c, key));
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+      expect(copyIn('todos.demos'), isNull);
+      neverMinted();
       expect(
           logs.at('WARNING').where((m) =>
-              m.contains('t42.notes.todos.demos') &&
-              m.contains('below') &&
-              m.contains('todos.demos')),
-          isNotEmpty);
+              m.contains('has not yet published') &&
+              m.contains(stamped(key)['ckKid'] as String)),
+          hasLength(1));
+    });
+
+    test(
+        'The first share after her start-up publishes her key gets a fresh '
+        'content key with her copy', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'todos.demos');
+      final seeding = StartUpSeeding()..seeding({'todos.demos'});
+      c.manager.startUpSeeding = seeding;
+      configure(c);
+      wire(c);
+      final before = AtKey.fromString('$_bob:x.todos.demos$_alice');
+      await write(c, before);
+      final hers = await hold(c.ring, _alice, 'todos.demos');
+      seeding.finish();
+      final after = AtKey.fromString('$_bob:y.todos.demos$_alice');
+
+      await write(c, after);
+
+      expect(stamped(after)['ckKid'], isNot(stamped(before)['ckKid']));
+      expect(copyIn('todos.demos'), containsPair('nskeyKid', hers));
+      neverMinted();
+    });
+
+    test('A value no namespace she holds covers gets no copy, with a warning',
+        () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'other.app');
+      await hold(c.ring, _alice, 'todos.demos');
+      configure(c);
+      wire(c);
+      final key = AtKey.fromString('$_bob:x.other.app$_alice');
+
+      await write(c, key);
+
+      expect(copyIn('other.app'), isNull);
+      neverMinted();
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('No namespace key $_alice holds covers x.other.app')),
+          hasLength(1));
+    });
+
+    test(
+        "Bob's key at a level broader than hers leaves the share without her "
+        'copy, with a warning', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'demos');
+      await hold(c.ring, _alice, 'todos.demos');
+      configure(c);
+      wire(c);
+      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
+
+      await write(c, key);
+
+      expect(stamped(key)['ckNs'], 'demos');
+      expect(copyIn('demos'), isNull);
+      neverMinted();
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('is at demos, broader than') &&
+              m.contains('own level todos.demos')),
+          hasLength(1));
+    });
+
+    test(
+        "A share stamps the value's own namespace, not the level it walked from",
+        () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'todos.demos');
+      wire(c);
+      final key = AtKey()
+        ..key = 'memo.17936'
+        ..namespace = 'todos.demos'
+        ..sharedBy = _alice
+        ..sharedWith = _bob;
+
+      await write(c, key);
+
+      expect(stamped(key)['ns'], 'todos.demos');
+      expect(stamped(key)['ckNs'], 'todos.demos');
     });
   });
 

@@ -14554,22 +14554,27 @@ should be able to see what was written by their siblings."
   **sibling copy** — so the sender's other enrollments with that namespace, and
   the sender itself after a restart, can open it. Resuming is reading the
   pointer and opening the sibling copy.
-- A sender holding no namespace key of its own where it is sharing mints one on
-  demand, at the level where the recipient's key was found, never at the value's
-  own namespace, which for an AtCollection sub-collection carries an item id. An
-  application that turned `seedNamespaceKeys` off gets no mint: the share goes
-  without the sibling copy, and a warning names why.
+- Nothing is minted for a sibling copy. The copy is sealed to the sender's key at
+  its own level: the most specific namespace it holds a key for that covers the
+  shared value. A share whose sender holds none there yet, whose value no such
+  namespace covers, or whose recipient's level is broader than the sender's own,
+  goes without the copy, with a warning; the first share after the sender holds
+  that key cuts a fresh content key with its copy. **Amended 2026-11-02** (gkc:
+  "Agree, no on-demand mint (Rec.)"). It used to say: a sender holding no
+  namespace key of its own where it is sharing mints one on demand, at the level
+  where the recipient's key was found, never at the value's own namespace; an
+  application that turned `seedNamespaceKeys` off gets no mint, and the share goes
+  without the sibling copy, with a warning.
 - Deleting a content key deletes both of its conveyances.
 
 ⚠️ **AMENDED 2026-09-30 by gkc, while it was built:** the sibling copy is
 `<ckKid>.__ck.<ckNs>@<sender>`, a self record in the recipient's content-key
 scope, so a reader finds it from the shared value alone. It is sealed to the
-sender's key covering `ckNs`, the key the sender's own data there uses, which
-can sit above the level the recipient's key was found at; its `appMetadata`
-names the recipient as `destination` and the scope as `ckNs`, beside the level
-it was sealed at as `ns`. "Holding no namespace key where it is sharing" means
-holding none covering `ckNs`, so a sender with a key only at a higher level
-mints nothing.
+sender's key at its own level, which covers `ckNs` and can sit above the level
+the recipient's key was found at; its `appMetadata` names the recipient as
+`destination` and the scope as `ckNs`, beside the level it was sealed at as
+`ns`. (Until 2026-11-02 it was sealed to the sender's key found by walking up
+from `ckNs`, and a sender holding none covering `ckNs` minted one there.)
 
 A consequence, set out before the ruling: a forward-secrecy rotation
 (`rotateContentKey`) replaces only the calling enrollment's key for that
@@ -15810,19 +15815,28 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    recipient's key appearing is the whole trigger" and UC-B4.1 "the *first write after bob's
    key appears* is PQ"; both now say the trigger takes effect once the 30-second window has
    passed, or at once for a program that asks `canSealTo`.
-7. **The writer's own copy is as [142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)
-   has it**, minted at the recipient's level when the writer holds no key covering it, except at
-   a level below the client's own namespace, where a level is named after a record (gkc: "keep
-   142.2"). There the share goes without the writer's copy, with a warning.
-8. **`ns` on a shared value** is the most specific level of its key's name, or the required
-   namespace.
+7. **The writer's own copy is sealed to her key at her own level**, the most specific namespace
+   she holds a key for that covers the value, and its record keeps the name
+   `<ckKid>.__ck.<ckNs>@<writer>`, its `ns` naming that level. Nothing is minted for it. Before
+   her start-up has published that key the share goes out at once without her copy, with a
+   warning, and the first share after it has cuts a fresh content key with one; a value no
+   namespace she holds covers, or a recipient's level broader than hers, also leaves the share
+   without her copy, with a warning (gkc, 2026-11-02: "Agree, no on-demand mint (Rec.)"; the
+   broader-level case waits for a 4.0.x step: a value field naming the copy's level, and a
+   content key per recipient, scope and own level). It used to say: as 142.2 has it, minted
+   at the recipient's level when the writer holds no key covering it, except at a level below
+   the client's own namespace, where the share went without the writer's copy (gkc: "keep
+   142.2").
+8. **`ns` on a shared value** is its own namespace, widened by a namespace the writer holds that
+   covers it, as for a write to the writer's own atSign. **Amended 2026-11-02**, after the live
+   e2e pack found a share stamping part of a key's name: it used to say the most specific level
+   of its key's name, or the required namespace.
 
 **Known limits.** An advertisement's payload does not name its namespace, so one level's could be
 copied to another by an enrollment of the same atSign. The walk asks the recipient's atServer
 about every level of the shared name, which the share already names to that atServer. The
 writer's own atServer looks up a batch's entries one after another. "Below the client's own
-namespace" uses the preference namespace, so a record-named level under another granted
-namespace is not recognised.
+namespace", which these limits used to name, is gone with the mint it guarded.
 
 **Built** in at_client. Proven in-process by `pq_share_level_test.dart`. The scenarios are in
 `features/at_client/pq_share_level.feature`.

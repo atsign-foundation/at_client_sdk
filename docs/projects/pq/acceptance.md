@@ -1085,10 +1085,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
-     sealed to. Seal it again to **alice's own** nskey covering the namespace, as the
+     sealed to. Seal it again to **alice's own** nskey at her own level, the most
+     specific namespace she holds a key for that covers the value, as the
      **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
-     `appMetadata`; an alice holding no such key mints one there first, unless
-     `seedNamespaceKeys` is off.
+     `appMetadata`. Nothing is minted for it: an alice holding no key there yet, or
+     whose level does not cover bob's, shares without the copy, with a warning.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
   ⛔ **This `put` writes one value, and no copy of it for alice.** Alice's

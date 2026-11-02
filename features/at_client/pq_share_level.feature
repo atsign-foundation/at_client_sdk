@@ -39,7 +39,11 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   as cached and fetched then. A share that races the recipient publishing a
   narrower level seals at the broader one, which every holder of that key
   opens. A key withdrawn between canSealTo and the send is treated as never
-  advertised: legacy where the fallback is allowed, refused otherwise. The writer's own copy goes through the mint lock start-up uses.
+  advertised: legacy where the fallback is allowed, refused otherwise. The
+  writer's own copy is sealed to a key she already holds; nothing is minted
+  for it, so a share made before her start-up has published that key goes
+  without the copy, and the first share after it has cuts a fresh content key
+  with one.
   Replay: nothing new is sent beyond lookups on the writer's own authenticated
   connection; what is sealed, and the owner and key name bound into each
   envelope, are unchanged.
@@ -261,17 +265,32 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When alice notifies bob of npt_request.d1.sshnp under the namespace-key provider, requiring d1.sshnp
     Then it is sent with legacy encryption, a warning names the fallback, and bob's sshnp key seals nothing
 
-  Scenario: The writer's copy goes to her own key covering the recipient's level
-    Given bob advertising todos.demos, and alice holding a key for demos
-    When alice shares x.todos.demos with bob
-    Then the content key is also conveyed to alice's demos key, and nothing is minted
+  Scenario: The writer's copy is sealed to her key at her own level
+    Given bob advertising notes.todos.demos, and alice holding a key for todos.demos
+    When alice shares x.notes.todos.demos with bob
+    Then her copy is named at notes.todos.demos and sealed to her todos.demos key, which its ns names, and nothing is minted
 
-  Scenario: Holding nothing covering that level, the writer mints her key there
-    Given bob advertising todos.demos, and alice holding no key covering it, in namespace todos.demos
+  Scenario: Before her start-up has published her key, a share goes without her copy, with a warning
+    Given bob advertising todos.demos, and alice's start-up still to publish her todos.demos key
     When alice shares x.todos.demos with bob
-    Then alice's todos.demos key is minted and carries her copy
+    Then it is sealed under bob's key at once, she has no copy, nothing is minted, and a warning says her start-up has not yet published the key
 
-  Scenario: The writer mints nothing at a level below her own namespace
-    Given bob advertising t42.notes.todos.demos, and alice in namespace todos.demos holding no key covering it
-    When alice shares note1.t42.notes.todos.demos with bob
-    Then it is sealed under bob's t42.notes.todos.demos key, nothing is minted, the share goes without her copy, and a warning says why
+  Scenario: The first share after her start-up publishes her key gets a fresh content key with her copy
+    Given a share made before alice's start-up published her todos.demos key, and that key since published
+    When alice shares y.todos.demos with bob
+    Then a fresh content key is cut, and her copy of it is sealed to her todos.demos key
+
+  Scenario: A value no namespace she holds covers gets no copy, with a warning
+    Given bob advertising other.app, and alice holding a key for todos.demos only
+    When alice shares x.other.app with bob
+    Then she has no copy, nothing is minted, and a warning names the value
+
+  Scenario: Bob's key at a level broader than hers leaves the share without her copy, with a warning
+    Given bob advertising demos only, and alice holding a key for todos.demos
+    When alice shares x.todos.demos with bob
+    Then it is sealed under bob's demos key, she has no copy, nothing is minted, and a warning names both levels
+
+  Scenario: A share stamps the value's own namespace, not the level it walked from
+    Given bob advertising todos.demos
+    When alice shares memo.17936 in namespace todos.demos with bob
+    Then the value's ns is todos.demos
