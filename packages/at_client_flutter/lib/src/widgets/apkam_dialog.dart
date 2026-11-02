@@ -269,8 +269,12 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Enrollment ${pending.enrollmentId} abandoned. Ask the manager of '
-          '${widget.atSign} to deny it.',
+          pending.approved
+              ? 'Enrollment ${pending.enrollmentId} was approved before it '
+                    'could be abandoned, and its keys stay in the key store. '
+                    'Ask the manager of ${widget.atSign} to revoke it.'
+              : 'Enrollment ${pending.enrollmentId} abandoned. Ask the manager '
+                    'of ${widget.atSign} to deny it.',
         ),
       ),
     );

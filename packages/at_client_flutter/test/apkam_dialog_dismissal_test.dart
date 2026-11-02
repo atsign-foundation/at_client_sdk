@@ -38,6 +38,7 @@ void main() {
     pending = MockPendingEnrollment();
     when(() => pending.enrollmentId).thenReturn('enroll-1');
     when(() => pending.progress).thenAnswer((_) => const Stream.empty());
+    when(() => pending.approved).thenReturn(false);
   });
 
   /// What `pending.client()` answers with. Built inside each test body, so
@@ -235,6 +236,32 @@ void main() {
         findsNothing,
         reason: 'abandoning is not a failure',
       );
+    });
+
+    testWidgets('A confirmed Cancel after the approval was written says to '
+        'revoke it', (tester) async {
+      resumes(pending);
+      final opened = clientAnswers();
+      stopEnds(opened);
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(AtEnrollmentCancelledException('cancelled'));
+      });
+      when(() => pending.approved).thenReturn(true);
+      final results = await open(tester);
+
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      expect(
+        find.text(
+          'Enrollment enroll-1 was approved before it could be abandoned, and '
+          'its keys stay in the key store. Ask the manager of @alice to '
+          'revoke it.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('to deny it'), findsNothing);
+      expect(results, [null]);
     });
 
     testWidgets('A declined Cancel changes nothing', (tester) async {
