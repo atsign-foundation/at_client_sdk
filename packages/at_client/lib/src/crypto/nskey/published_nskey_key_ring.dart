@@ -1349,7 +1349,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     if (_remote.containsKey(_scope(owner, namespace))) return true;
     final filing = privateFiling;
     if (filing == null) return false;
-    if ((await filing.readAllWhere((ns) => ns == namespace)).isNotEmpty) {
+    final folded = namespace.toLowerCase();
+    if ((await filing.readAllWhere((ns) => ns.toLowerCase() == folded))
+        .isNotEmpty) {
       return true;
     }
     return _grantedOwn(filing.keysIo, owner, namespace);

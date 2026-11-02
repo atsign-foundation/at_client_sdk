@@ -1,5 +1,10 @@
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart'
+    show
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole;
 import 'package:at_chops/at_chops.dart' show RsaKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart'
@@ -538,6 +543,35 @@ void main() {
         writeAsStarted(device, selfKey(_namespace)),
         throwsA(isA<AtException>().having((e) => e.message, 'message',
             contains('could not read the record'))));
+  });
+
+  test(
+      'A private filed under a namespace spelt in capitals makes a miss in '
+      'that namespace ask the other enrollments', () async {
+    final server = _AtServer();
+    final sibling = _Device('enroll-sibling', server);
+    await sibling.publishApsk();
+    final kid = (await sibling.start().mintAndPublish(_namespace)).nskeyKid;
+    final self = _Device('enroll-self', server);
+    final earlier = await nskeyGeneration(_alg);
+    await self.keys.update(_atSign.toAtsign(), (keys) {
+      keys.addKey(CryptographicMaterial(
+          keyId: 'nskey.${_namespace.toUpperCase()}.${earlier.kid}',
+          role: CryptographicMaterialRole.privateDecapsulation,
+          algorithm: CryptographicMaterialAlgorithm.mlKem1024,
+          bytes: AtBytes(earlier.seed),
+          createdAt: DateTime.now().toUtc()));
+      return true;
+    });
+    final asked = <String>[];
+    final ring = PublishedNskeyKeyRing(_clientFor(self),
+        privateFiling: self.filing,
+        requestConveyance: (namespace, name) async => asked.add(namespace));
+
+    expect(await ring.privateHalf(_atSign, _namespace, kid), isNull);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(asked, [_namespace]);
   });
 
   test('A refusal from the atServer is not overridden by the local record',

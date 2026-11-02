@@ -522,6 +522,14 @@ void main() {
               'the grant\'s names up conveyed it nothing');
     });
 
+    test('a grant spelt in capitals is conveyed the namespaces it covers',
+        () async {
+      expect(
+          await conveyedFor(
+              const {'SSHNP': 'r'}, ['sshnp', 'dev1.sshnp', 'notsshnp']),
+          unorderedEquals(['sshnp', 'dev1.sshnp']));
+    });
+
     test('a grant is conveyed the namespaces below it, read access included',
         () async {
       expect(
