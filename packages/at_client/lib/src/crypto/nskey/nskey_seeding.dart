@@ -79,8 +79,8 @@ class NskeySeeding {
     this.rotationPolicy = rotateNskeyAfterOneYear,
   }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
-  /// The namespace the atSign's own credential seeds: the client's preference
-  /// namespace when this was built.
+  /// The namespace a client on the primary enrollment (`*:rw`) seeds: the
+  /// client's preference namespace when this was built.
   String? get ownNamespace => _ownNamespace;
 
   /// The namespaces this client should hold a key for; see

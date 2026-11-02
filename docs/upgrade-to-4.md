@@ -67,9 +67,10 @@ dependency, so list it anyway.
 at_onboarding_cli 2.0.0 and at_cli_commons 4.0.0 re-export at_client_cli, so
 bumping either alone compiles in the meantime for a program that uses only
 what at_client_cli keeps (`CLIBase`, `createAtClient` and the path helpers).
-The analyzer does not flag an import of either deprecated library, so change
-the import too. A program on `AtOnboardingService`, `AtOnboardingPreference`
-or `OnboardingUtil` changes code either way:
+The analyzer reports an import of either deprecated library as a
+`deprecated_member_use` info, which a build and `dart analyze --fatal-warnings`
+still pass, so change the import too. A program on `AtOnboardingService`,
+`AtOnboardingPreference` or `OnboardingUtil` changes code either way:
 [section 3](#3-a-command-line-program-at_client_cli) says to what.
 
 ### A Flutter app

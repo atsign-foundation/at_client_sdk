@@ -142,9 +142,9 @@ How APKAM works:
    denies** the request.
 3. The enrolling app minted its own APKAM keypair for the request. On
    approval, the approver seals the atSign's encryption private key and
-   self-encryption key for it; the atServer keeps the sealed secrets and
-   holds no key. The enrollment can only read/write within the granted
-   namespaces.
+   self-encryption key for it; the atServer keeps the sealed copies and the
+   enrollment's public key, and can open none of the secrets. The enrollment
+   can only read/write within the granted namespaces.
 4. The enrolling app stores its keys (disk or keychain) and uses them
    for normal PKAM authentication thereafter.
 

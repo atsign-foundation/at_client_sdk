@@ -122,7 +122,8 @@ summary is:
 3. **Authenticate** subsequent apps via **APKAM enrollment**: the app
    mints its own keypair and requests only the namespaces it needs (e.g.
    `{'todos': 'rw'}`), and the master-keys holder approves, sealing the
-   atSign's encryption keys for it; the atServer holds no key. Scoped
+   atSign's encryption keys for it; the atServer keeps the sealed copies and
+   the enrollment's public key, and can open none of the secrets. Scoped
    keys can be **revoked** at any time; a compromised scoped key can
    only damage data in its granted namespaces.
 

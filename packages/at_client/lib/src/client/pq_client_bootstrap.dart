@@ -342,9 +342,9 @@ class PqClientBootstrap {
         seeding.rotateIfPolicyAsks(_atClient.getCurrentAtSign()!, namespace);
     if (_seedsNamespaceKeys) {
       ckManager?.startUpSeeding = startUpSeeding;
-      // NOTE: the atSign's own credential seeds exactly its own namespace,
-      // known now; an enrollment's come from the grants its keyfile recorded,
-      // and the step's grant read refines them.
+      // NOTE: a client on the primary enrollment (`*:rw`) seeds exactly its
+      // own namespace, known now; another enrollment's come from the grants
+      // its keyfile recorded, and the step's grant read refines them.
       final enrollmentId = _atClient.enrollmentId;
       if (isAtSignCredential(enrollmentId)) {
         startUpSeeding.seeding(
