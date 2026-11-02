@@ -2,9 +2,11 @@ Feature: At pqActive, a record in a dotted namespace is sealed to that namespace
 
   A namespace may be dotted, such as the todos examples' todos.demos. A key
   read from its string form, as AtCollection builds every record's, names
-  only its last label as its namespace. Every write site (the readiness check,
-  the content-key pre-pass, the data provider and content-key rotation) asks
-  NskeyResolver for one start level instead: the longer of the key's own
+  only its last label as its namespace. A share is sealed to the recipient's
+  key as pq_share_level.feature has it. For a write to the client's own
+  atSign, every write site (the readiness check, the content-key pre-pass,
+  the data provider and content-key rotation) asks NskeyResolver for one
+  start level instead: the longer of the key's own
   namespace and the most specific namespace this client holds a namespace
   private for that the key's whole name ends with, after a dot. A bare
   namespace, as the readiness check is given, matches a held namespace only

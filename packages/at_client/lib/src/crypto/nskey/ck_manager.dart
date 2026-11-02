@@ -134,59 +134,40 @@ class CkManager {
   /// enrollment writing at once can each cut a key, and the pointer keeps
   /// whichever was recorded last.
   ///
-  /// When no key is published and [startUpSeeding] is still to seed a
-  /// namespace covering [valueKey], the write waits for that seeding, at most
-  /// [StartUpSeeding.wait], and resolves again. It waits the same way when the
-  /// key it found is broader than a namespace start-up has said it will seed
-  /// covering [valueKey].
+  /// A share is sealed to the recipient's key at the most specific level of
+  /// [valueKey]'s name the recipient advertises one at
+  /// ([NskeyResolver.resolveShare]), or with [sealToNamespace] at that
+  /// namespace alone; what this client holds does not enter into it, and a
+  /// share does not wait for start-up. [sealToNamespace] is refused for a
+  /// write to this client's own atSign, and for a namespace [valueKey]'s name
+  /// does not end with after a dot.
+  ///
+  /// When a write to this client's own atSign finds no key published and
+  /// [startUpSeeding] is still to seed a namespace covering [valueKey], it
+  /// waits for that seeding, at most [StartUpSeeding.wait], and resolves
+  /// again. It waits the same way when the key it found is broader than a
+  /// namespace start-up has said it will seed covering [valueKey].
   ///
   /// Returns the level this write starts at and the namespace of the content
   /// key it is to be sealed under, or null for a key with no owner or
   /// namespace.
   Future<({String namespace, String ckNs})?> ensureCurrent(
       CryptoContext context, AtKey valueKey,
-      {bool? useRemoteAtServer}) async {
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
     if (owner == null || owner.isEmpty || valueKey.namespace == null) {
       return null;
     }
     final holder = context.atClient.getCurrentAtSign();
-    // NOTE: read before the search, so a seeding that ends during it is
-    // searched for again rather than missed.
-    final seeding = startUpSeeding?.isFinished == false;
-    var namespace = await resolver.startLevelOf(holder, valueKey);
-
-    var advertised = await resolver.resolve(owner, namespace);
-    if (advertised == null) {
-      final waited = seeding
-          ? await _afterStartUpSeeding(holder, valueKey, namespace)
-          : null;
-      if (waited != null) {
-        namespace = await resolver.startLevelOf(holder, valueKey);
-        advertised = await resolver.resolve(owner, namespace);
-        // NOTE: start-up is the reason only for this atSign's own key; a share
-        // that still finds nothing is refused naming the recipient.
-        if (advertised == null && owner.toAtsign() == holder!.toAtsign()) {
-          final failure = startUpSeeding?.failureFor(waited.covering);
-          if (failure != null) {
-            throw NamespaceKeyUnavailableException(holder, waited.covering,
-                because: 'this client\'s start-up could not publish it: '
-                    '$failure');
-          }
-          if (waited.timedOut) {
-            throw NamespaceKeyUnavailableException(holder, waited.covering,
-                because: 'this client\'s start-up has not yet published it, '
-                    '${waited.waited?.inSeconds} seconds after the write '
-                    'began waiting; a later write succeeds once it is '
-                    'published');
-          }
-        }
-      }
-    } else if (seeding &&
-        await _seedingBeyond(holder, valueKey, advertised.namespace)) {
-      namespace = await resolver.startLevelOf(holder, valueKey);
-      advertised = await resolver.resolve(owner, namespace);
+    final sharing = _isShare(owner, holder);
+    if (sealToNamespace != null) {
+      _refuseUnlessSealable(valueKey, sealToNamespace, sharing: sharing);
     }
+    final found = sharing
+        ? await _shareKey(owner, valueKey, sealToNamespace)
+        : await _ownKey(holder, owner, valueKey);
+    final namespace = found.namespace;
+    final advertised = found.advertised;
     if (advertised == null) {
       // NOTE: failing in this pre-pass is what keeps a cold start recoverable —
       // the caller can still route the write to legacy, which it could not do
@@ -272,12 +253,13 @@ class CkManager {
           'cannot rotate a content key for a record with no owner or '
           'namespace: $valueKey');
     }
-    final namespace = await resolver.startLevelOf(
-        context.atClient.getCurrentAtSign(), valueKey);
-
-    final advertised = await resolver.resolve(owner, namespace);
+    final holder = context.atClient.getCurrentAtSign();
+    final found = _isShare(owner, holder)
+        ? await _shareKey(owner, valueKey, null)
+        : await _rotationOwnKey(holder, owner, valueKey);
+    final advertised = found.advertised;
     if (advertised == null) {
-      throw NamespaceKeyUnavailableException(owner, namespace);
+      throw NamespaceKeyUnavailableException(owner, found.namespace);
     }
     final ckNs = advertised.namespace;
 
@@ -570,6 +552,105 @@ class CkManager {
     return result;
   }
 
+  /// The key a rotation of [valueKey]'s content key in this client's own
+  /// atSign [owner] is sealed to, found from its start level with no wait.
+  Future<({String namespace, ResolvedNskey? advertised})> _rotationOwnKey(
+      String? holder, String owner, AtKey valueKey) async {
+    final namespace = await resolver.startLevelOf(holder, valueKey);
+    return (
+      namespace: namespace,
+      advertised: await resolver.resolve(owner, namespace)
+    );
+  }
+
+  /// Whether a write whose owner is [owner], by a client of [holder], is a
+  /// share: the owner is another atSign.
+  static bool _isShare(String owner, String? holder) =>
+      holder != null && owner.toAtsign() != holder.toAtsign();
+
+  /// Throws unless [sealToNamespace] can apply to a write of [valueKey]: a
+  /// share, whose key's name ends with it after a dot.
+  static void _refuseUnlessSealable(AtKey valueKey, String sealToNamespace,
+      {required bool sharing}) {
+    if (!sharing) {
+      throw ArgumentError.value(
+          sealToNamespace,
+          'sealToNamespace',
+          'applies only to a share, and ${valueKey.key} is written to this '
+              "client's own atSign");
+    }
+    if (!NskeyResolver.shareLevelsOf(valueKey)
+        .contains(sealToNamespace.toLowerCase())) {
+      throw ArgumentError.value(
+          sealToNamespace,
+          'sealToNamespace',
+          'is not a namespace the name ${valueKey.key}.${valueKey.namespace} '
+              'ends with');
+    }
+  }
+
+  /// The recipient's key a share of [valueKey] to [owner] is sealed to, and
+  /// the level its search started at: [sealToNamespace] alone when set, the
+  /// most specific level of the key's name otherwise.
+  Future<({String namespace, ResolvedNskey? advertised})> _shareKey(
+      String owner, AtKey valueKey, String? sealToNamespace) async {
+    if (sealToNamespace != null) {
+      final namespace = sealToNamespace.toLowerCase();
+      return (
+        namespace: namespace,
+        advertised: await resolver.resolveRequired(owner, namespace)
+      );
+    }
+    final levels = NskeyResolver.shareLevelsOf(valueKey);
+    return (
+      namespace:
+          levels.isEmpty ? valueKey.namespace!.toLowerCase() : levels.first,
+      advertised: await resolver.resolveShare(owner, valueKey)
+    );
+  }
+
+  /// The key a write of [valueKey] to this client's own atSign [owner] is
+  /// sealed to, and the level its search started at, after waiting for
+  /// [startUpSeeding] as [ensureCurrent] describes.
+  Future<({String namespace, ResolvedNskey? advertised})> _ownKey(
+      String? holder, String owner, AtKey valueKey) async {
+    // NOTE: read before the search, so a seeding that ends during it is
+    // searched for again rather than missed.
+    final seeding = startUpSeeding?.isFinished == false;
+    var namespace = await resolver.startLevelOf(holder, valueKey);
+
+    var advertised = await resolver.resolve(owner, namespace);
+    if (advertised == null) {
+      final waited = seeding
+          ? await _afterStartUpSeeding(holder, valueKey, namespace)
+          : null;
+      if (waited != null) {
+        namespace = await resolver.startLevelOf(holder, valueKey);
+        advertised = await resolver.resolve(owner, namespace);
+        if (advertised == null) {
+          final failure = startUpSeeding?.failureFor(waited.covering);
+          if (failure != null) {
+            throw NamespaceKeyUnavailableException(owner, waited.covering,
+                because: 'this client\'s start-up could not publish it: '
+                    '$failure');
+          }
+          if (waited.timedOut) {
+            throw NamespaceKeyUnavailableException(owner, waited.covering,
+                because: 'this client\'s start-up has not yet published it, '
+                    '${waited.waited?.inSeconds} seconds after the write '
+                    'began waiting; a later write succeeds once it is '
+                    'published');
+          }
+        }
+      }
+    } else if (seeding &&
+        await _seedingBeyond(holder, valueKey, advertised.namespace)) {
+      namespace = await resolver.startLevelOf(holder, valueKey);
+      advertised = await resolver.resolve(owner, namespace);
+    }
+    return (namespace: namespace, advertised: advertised);
+  }
+
   /// The namespace [startUpSeeding] seeds that covers [valueKey], once its
   /// seeding step has finished or [StartUpSeeding.wait] has passed, or null
   /// at once when it seeds none. `timedOut` says the wait passed first, after
@@ -661,8 +742,9 @@ class CkManager {
   /// Sealed here and written as it is, because the put pipeline replaces the
   /// `appMetadata` that names the recipient. An atSign holding no key covering
   /// [ckNs] mints one there first, at the recipient's level rather than the
-  /// value's own; where it makes none, the share goes without a copy and this
-  /// returns null. While the advertised generation's private has not reached
+  /// value's own, unless that level lies below this client's own namespace,
+  /// where a level is named after a record; where it makes none, the share
+  /// goes without a copy and this returns null. While the advertised generation's private has not reached
   /// this enrollment, the copy is sealed to the generation its keys in [ckNs]
   /// already rest on, or goes without one when none is recorded.
   Future<String?> _conveySiblingCopy(
@@ -672,6 +754,19 @@ class CkManager {
     if (sender == null || destination == sender) return null;
     var own = await resolver.resolve(sender, ckNs);
     if (own == null) {
+      final appNamespace =
+          context.atClient.getPreferences()?.namespace?.toLowerCase();
+      if (appNamespace != null &&
+          appNamespace.isNotEmpty &&
+          ckNs.endsWith('.$appNamespace')) {
+        _logger.warning('$sender holds no namespace key covering $ckNs and '
+            'mints none there, because it lies below this client\'s own '
+            'namespace $appNamespace, so the content key ${ck.ckKid} shared '
+            'with $destination has no sibling copy: no other enrollment of '
+            '$sender can open what it shares, and this one cuts a fresh key '
+            'after a restart');
+        return null;
+      }
       final reached = await context.atClient.ensureReachable(ckNs);
       if (reached.isReachable) own = await resolver.resolve(sender, ckNs);
       if (own == null) {

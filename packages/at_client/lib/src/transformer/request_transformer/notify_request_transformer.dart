@@ -34,6 +34,11 @@ class NotificationRequestTransformer
     // namespace has to be resolved before a provider is chosen.
     _resolveNamespace(notificationParams);
 
+    if (notificationParams.sealToNamespace != null &&
+        !_shouldRouteThroughProvider(notificationParams)) {
+      throw ArgumentError.value(notificationParams.sealToNamespace,
+          'sealToNamespace', 'applies only to a value that is encrypted');
+    }
     if (_shouldRouteThroughProvider(notificationParams)) {
       notificationParams.atKey.metadata =
           metadataForEncryptedSend(notificationParams.atKey.metadata)
@@ -47,6 +52,7 @@ class NotificationRequestTransformer
         providerId = await CryptoRuntime(_atClient).prepareWrite(
             notificationParams.atKey,
             requestedProviderId: notificationParams.cryptoProviderId,
+            sealToNamespace: notificationParams.sealToNamespace,
             useRemoteAtServer: true,
             stampProviderId: false);
       } on NamespaceKeyUnavailableException catch (e) {

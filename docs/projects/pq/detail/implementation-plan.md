@@ -889,12 +889,16 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
   `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
   `nskeyKid` names the generation, so a reader holding several after a rotation indexes straight to it.
-- **Namespace resolution:** a sender starts at the namespace the value's key names in full
+- **Namespace resolution:** a write to the sender's own atSign starts at the namespace the value's
+  key names in full
   ([decisions.md 159](decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)),
   walks up most-specific-first and seals to the first
-  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. Senders remember the
-  levels they have found **empty**, so a composed sub-collection namespace pays its probes once rather
-  than per write; remembering *hits* instead is unsafe and rejected, since it skips the deeper probes.
+  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. A share is sealed
+  at the most specific level of its key's name that the recipient advertises, all asked in one batch
+  ([decisions.md 161](decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02)). Senders remember the
+  levels they have found **empty**, for 15 minutes on their own writes and 30 seconds on a share, so a
+  composed sub-collection namespace pays its probes once rather than per write; remembering *hits*
+  instead is unsafe and rejected, since it skips the deeper probes.
   Required for AtCollection, whose sub-collection namespaces embed a per-**item** id.
 - **Get/put routing + the CK manager:** `CkManager.ensureCurrent(dest, ns)` re-`plookup`s the
   destination's advertised nskey and mints + conveys a CK when there is none for that destination or the

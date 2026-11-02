@@ -174,7 +174,11 @@ At `pqActive`, a share is sealed to each recipient's namespace key. A
 recipient that has published none makes `create`, `upsert`, `update` or
 `updateSharedWith` throw `CollectionOpException`, whose failure is a
 `NamespaceKeyUnavailableException` naming them;
-`CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first.
+`CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first. A
+share is sealed to the most specific key the recipient advertises for the
+key's whole name; `PutRequestOptions.sealToNamespace` requires one
+namespace, and `CryptoRuntime(atClient).canSealTo(recipient, namespace)`
+asks whether the recipient advertises a key there.
 
 > **Ownership model:** `AtCollection` is **owner-writes-only** — an atsign can
 > only mutate items it owns. `update` / `updateSharedWith` / `delete` throw

@@ -40,8 +40,8 @@ void main() {
       (await client.get(key)).metadata?.appMetadata?.additional?['ckNs'];
 
   test(
-      'A write and a share right after opening complete once start-up has '
-      'seeded', () async {
+      'A write right after opening completes once start-up has seeded, and a '
+      'share at once', () async {
     final String alice = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final String bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final bobClient = await open(bob);

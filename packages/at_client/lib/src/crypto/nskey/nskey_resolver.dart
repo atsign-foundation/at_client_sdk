@@ -21,9 +21,10 @@ typedef ResolvedNskey = ({
 /// case; walking up never widens access, the atServer already letting an
 /// enrollment approved for `a` reach `d.c.b.a`.
 ///
-/// Every write starts its walk at [startLevelOf]. Most specific is the sealing
-/// rule, not the access rule: which client may read or write a key is still
-/// the atServer's decision.
+/// A write to the client's own atSign starts its walk at [startLevelOf]; a
+/// share walks every level of its key's name, with [resolveShare]. Most
+/// specific is the sealing rule, not the access rule: which client may read
+/// or write a key is still the atServer's decision.
 class NskeyResolver {
   final NskeyKeyRing keyRing;
 
@@ -35,8 +36,13 @@ class NskeyResolver {
   /// to, strongest first — `AtClientPreference.sealsToKeyAlgorithms`.
   final List<String> sealsToKeyAlgorithms;
 
+  /// How long a share remembers a level its recipient advertises nothing at,
+  /// and in that time takes as decided without a lookup.
+  final Duration shareMissMemory;
+
   NskeyResolver(this.keyRing,
       {this.missMemory = const Duration(minutes: 15),
+      this.shareMissMemory = const Duration(seconds: 30),
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos});
 
   /// `owner|namespace` → when it was found to hold no key.
@@ -72,31 +78,114 @@ class NskeyResolver {
       final hit = await keyRing.currentPublic(owner, candidate);
       if (hit != null) {
         _missedAt.remove(_scope(owner, candidate));
-        final key = hit.usableFor(sealsToKeyAlgorithms);
-        if (key == null) {
-          // NOTE: refuse rather than walk on — a broader level's key silently
-          // changes the content-key scope the caller asked for — and refuse
-          // rather than report a cold start, or a narrowed algorithm list reads
-          // as the recipient having published nothing.
-          throw AtEncryptionException('$owner:$candidate advertises '
-              '${hit.keys.map((k) => k.alg).toSet().join(', ')} and this '
-              'client will seal to ${sealsToKeyAlgorithms.join(', ')} - no '
-              'algorithm in common, so nothing is sealed. Widen '
-              'AtClientPreference.sealsToKeyAlgorithms to reach this owner');
-        }
-        return (
-          hit: (
-            namespace: candidate,
-            nskeyKid: key.kid,
-            publicKey: key.pubBytes,
-            alg: key.alg,
-          ),
-          skipped: skipped,
-        );
+        return (hit: _usable(owner, candidate, hit), skipped: skipped);
       }
       _missedAt[_scope(owner, candidate)] = DateTime.now();
     }
     return (hit: null, skipped: skipped);
+  }
+
+  /// The key in [advertisement], [owner]'s at [namespace], this client seals
+  /// to.
+  ResolvedNskey _usable(
+      String owner, String namespace, NskeyAdvertisement advertisement) {
+    final key = advertisement.usableFor(sealsToKeyAlgorithms);
+    if (key == null) {
+      // NOTE: refuse rather than walk on — a broader level's key silently
+      // changes the content-key scope the caller asked for — and refuse
+      // rather than report a cold start, or a narrowed algorithm list reads
+      // as the recipient having published nothing.
+      throw AtEncryptionException('$owner:$namespace advertises '
+          '${advertisement.keys.map((k) => k.alg).toSet().join(', ')} and '
+          'this client will seal to ${sealsToKeyAlgorithms.join(', ')} - no '
+          'algorithm in common, so nothing is sealed. Widen '
+          'AtClientPreference.sealsToKeyAlgorithms to reach this owner');
+    }
+    return (
+      namespace: namespace,
+      nskeyKid: key.kid,
+      publicKey: key.pubBytes,
+      alg: key.alg,
+    );
+  }
+
+  /// `owner|namespace` → when a share found [owner] advertising no key there.
+  final Map<String, DateTime> _shareMissedAt = {};
+
+  /// The levels a share of [atKey] is sealed at: every namespace its whole
+  /// name ends with after a dot, most specific first, folded, without the
+  /// reserved ones. The whole name is never one, since its first label is the
+  /// record's own id.
+  static List<String> shareLevelsOf(AtKey atKey) {
+    final namespace = atKey.namespace;
+    if (namespace == null || namespace.isEmpty) return const [];
+    return [
+      for (final level
+          in candidates('${atKey.key}.$namespace'.toLowerCase()).skip(1))
+        if (!_isReserved(level)) level
+    ];
+  }
+
+  /// The key a share of [atKey] with [owner] is sealed to: [owner]'s key at
+  /// the most specific of [shareLevelsOf] it advertises one at, or null.
+  ///
+  /// A level found missing within [shareMissMemory] is taken as missing,
+  /// with no lookup; the others are asked about together where the key ring
+  /// can.
+  Future<ResolvedNskey?> resolveShare(String owner, AtKey atKey) =>
+      _forShare(owner, shareLevelsOf(atKey));
+
+  /// [owner]'s key at exactly [namespace], for a share required to be sealed
+  /// there, or null; a miss is remembered as [resolveShare] remembers one.
+  Future<ResolvedNskey?> resolveRequired(String owner, String namespace) =>
+      _forShare(owner, [namespace.toLowerCase()]);
+
+  /// [owner]'s key at exactly [namespace], asked whatever a share found
+  /// missing, or null.
+  Future<ResolvedNskey?> resolveAt(String owner, String namespace) async {
+    final level = namespace.toLowerCase();
+    final hit = await keyRing.currentPublic(owner, level);
+    return hit == null ? null : _usable(owner, level, hit);
+  }
+
+  Future<ResolvedNskey?> _forShare(String owner, List<String> levels) async {
+    final ask = [
+      for (final level in levels)
+        if (!_shareMissed(owner, level)) level
+    ];
+    if (ask.isEmpty) return null;
+    void missed(String level) =>
+        _shareMissedAt[_scope(owner, level)] = DateTime.now();
+    final ring = keyRing;
+    final found = ring is LooksUpLevelsTogether
+        ? await (ring as LooksUpLevelsTogether)
+            .mostSpecificPublic(owner, ask, missed: missed)
+        : await _oneByOne(owner, ask, missed);
+    if (found == null) return null;
+    _shareMissedAt.remove(_scope(owner, found.namespace));
+    return _usable(owner, found.namespace, found.advertisement);
+  }
+
+  Future<({String namespace, NskeyAdvertisement advertisement})?> _oneByOne(
+      String owner,
+      List<String> levels,
+      void Function(String level) missed) async {
+    for (final level in levels) {
+      final advertisement = await keyRing.currentPublic(owner, level);
+      if (advertisement != null) {
+        return (namespace: level, advertisement: advertisement);
+      }
+      missed(level);
+    }
+    return null;
+  }
+
+  bool _shareMissed(String owner, String level) {
+    final at = _shareMissedAt[_scope(owner, level)];
+    if (at == null) return false;
+    if (DateTime.now().difference(at) < shareMissMemory) return true;
+    _shareMissedAt.remove(_scope(owner, level));
+    return false;
   }
 
   /// The level a write of [atKey] by a client of [holder] starts its walk at:

@@ -7,7 +7,6 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart'
     show SecretStore;
-import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -15,7 +14,6 @@ import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 
 const _alice = '@alice';
-const _bob = '@bob';
 
 /// A ring whose held namespaces are [held], set as a start-up would leave
 /// them, which records each lookup.
@@ -226,74 +224,6 @@ void main() {
     await writing;
 
     expect(stamped(key)['ckNs'], 'todos.demos');
-  });
-
-  test(
-      "A share right after opening waits for the writer's own start-up before "
-      'choosing where to seal', () async {
-    final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
-    final bobs = await _publish(c.ring, _bob, 'todos.demos');
-    atClient.getPreferences().crypto = CryptoConfig.nskey(keyRing: c.ring);
-    wire(c);
-    final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
-
-    final writing = write(c, key);
-    expect(await _pending(writing), isTrue);
-    await c.seed('todos.demos');
-    c.seeding.finish();
-    await writing;
-
-    expect(stamped(key)['ckNs'], 'todos.demos');
-    expect(
-        store['$_bob:${stamped(key)['ckKid']}.__ck.todos.demos$_alice']!
-            .key
-            .metadata
-            .appMetadata!
-            .additional!['nskeyKid'],
-        bobs,
-        reason: "sealed under bob's todos.demos key");
-  });
-
-  test('A notification right after opening waits the same way', () async {
-    final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
-    await _publish(c.ring, _bob, 'todos.demos');
-    atClient.getPreferences()
-      ..namespace = 'todos.demos'
-      ..crypto = CryptoConfig(
-        defaultProviderId: c.data.id,
-        providers: [c.data, c.nskey],
-        keyRing: c.ring,
-      );
-    wire(c);
-    // NOTE: marked encrypted as notify's default encryptValue marks it before
-    // the transformer runs.
-    final key = AtKey.fromString('$_bob:x.todos.demos$_alice')
-      ..metadata.isEncrypted = true;
-
-    final notifying = NotificationRequestTransformer(atClient)
-        .transform(NotificationParams.forUpdate(key, value: 'memo'));
-    expect(await _pending(notifying), isTrue);
-    await c.seed('todos.demos');
-    c.seeding.finish();
-    final builder = await notifying;
-
-    expect(builder.value, isNotNull);
-    expect(key.metadata.appMetadata!.additional!['ckNs'], 'todos.demos');
-  });
-
-  test(
-      'A share to a recipient that has published nothing refuses without '
-      'waiting', () async {
-    final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
-    await c.seed('todos.demos');
-    c.seeding.finish();
-    wire(c);
-
-    await expectLater(
-        atOnce(write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'))),
-        throwsA(isA<NamespaceKeyUnavailableException>()
-            .having((e) => e.atSign, 'atSign', _bob)
-            .having((e) => e.namespace, 'namespace', 'todos.demos')));
   });
 
   test(
@@ -509,41 +439,6 @@ void main() {
                 .having((e) => e.message, 'message', contains(because))));
       });
     }
-  });
-
-  group('Given a share to a recipient that has published nothing', () {
-    test(
-        "when the writer's own seeding fails, then the share is refused "
-        'naming the recipient', () async {
-      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
-      wire(c);
-      final writing = write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
-      expect(await _pending(writing), isTrue);
-
-      c.seeding.failed('todos.demos', 'the mint lock is held elsewhere');
-      c.seeding.finish();
-
-      await expectLater(
-          atOnce(writing),
-          throwsA(isA<NamespaceKeyUnavailableException>()
-              .having((e) => e.atSign, 'atSign', _bob)));
-    });
-
-    test(
-        "when the wait for the writer's own start-up runs out, then the share "
-        'is refused naming the recipient',
-        timeout: const Timeout(Duration(seconds: 10)), () async {
-      StartUpSeeding.wait = const Duration(milliseconds: 200);
-      final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
-      wire(c);
-
-      await expectLater(
-          write(c, AtKey.fromString('$_bob:x.todos.demos$_alice')),
-          throwsA(isA<NamespaceKeyUnavailableException>()
-              .having((e) => e.atSign, 'atSign', _bob)
-              .having(
-                  (e) => e.message, 'message', isNot(contains('start-up')))));
-    });
   });
 
   group(

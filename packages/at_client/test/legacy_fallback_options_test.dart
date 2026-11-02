@@ -9,8 +9,10 @@ import 'test_utils/declared_fields.dart';
 /// [PutRequestOptions] with the provider pinned to legacy. Every other field is
 /// the caller's request and travels with the copy: one the copy leaves out
 /// becomes its default on exactly the writes that fell back, which is how a
-/// remote `noCommit` put came to be committed. A field this package adds turns
-/// the first test red until it is placed in one set or another.
+/// remote `noCommit` put came to be committed. The namespace key a share was
+/// to be sealed to is dropped, since legacy encryption seals to none. A field
+/// this package adds turns the first test red until it is placed in one set
+/// or another.
 void main() {
   const carried = {
     'useRemoteAtServer',
@@ -18,7 +20,7 @@ void main() {
     'alreadyEncrypted',
     'noCommit',
   };
-  const replaced = {'cryptoProviderId'};
+  const replaced = {'cryptoProviderId', 'sealToNamespace'};
   const ignored = <String>{};
 
   final fields = <String, Object? Function(PutRequestOptions)>{
@@ -27,6 +29,7 @@ void main() {
     'alreadyEncrypted': (o) => o.alreadyEncrypted,
     'noCommit': (o) => o.noCommit,
     'cryptoProviderId': (o) => o.cryptoProviderId,
+    'sealToNamespace': (o) => o.sealToNamespace,
   };
 
   /// The instance fields `class PutRequestOptions` declares, read from its
@@ -60,13 +63,14 @@ void main() {
 
   test(
       'a legacy fallback keeps the caller\'s request and changes only the '
-      'provider', () {
+      'provider and the namespace key to seal to', () {
     final given = PutRequestOptions()
       ..useRemoteAtServer = true
       ..shouldEncrypt = false
       ..alreadyEncrypted = true
       ..noCommit = true
-      ..cryptoProviderId = 'requested-provider';
+      ..cryptoProviderId = 'requested-provider'
+      ..sealToNamespace = 'todos.demos';
     final unset = PutRequestOptions();
     for (final name in carried.union(replaced)) {
       expect(fields[name]!(given), isNot(fields[name]!(unset)),
@@ -82,6 +86,8 @@ void main() {
               'scheme, not what was asked for');
     }
     expect(copy.cryptoProviderId, legacyCryptoProviderId);
+    expect(copy.sealToNamespace, isNull,
+        reason: 'legacy encryption seals to no namespace key');
     expect(given.cryptoProviderId, 'requested-provider',
         reason: 'the caller\'s object may be shared, and one write\'s '
             'fallback must not become every later write\'s default');

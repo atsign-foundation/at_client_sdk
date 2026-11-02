@@ -56,8 +56,16 @@
   it. Each refusal names both settings.
 - fix: at `pqActive`, a collection in a dotted namespace such as
   `todos.demos` writes and shares its records.
-- feat: at `pqActive`, a write made right after the client opens waits up to
-  30 seconds for the client to publish its namespace key, instead of failing.
+- feat: at `pqActive`, a write to the client's own atSign made right after it
+  opens waits up to 30 seconds for the client to publish its namespace key,
+  instead of failing.
+- feat: at `pqActive`, a share is sealed to the most specific namespace key
+  the recipient advertises for the key's whole name, and no longer waits for
+  the writer's start-up.
+- feat: `PutRequestOptions.sealToNamespace`, and `sealToNamespace` on
+  `NotificationParams.forUpdate` and `NotificationService.send`, seal a share
+  to the recipient's key in one namespace only; `CryptoRuntime.canSealTo`
+  says whether the recipient advertises one there.
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.

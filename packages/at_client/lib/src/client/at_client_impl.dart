@@ -1859,12 +1859,19 @@ class AtClientImpl implements AtClient {
     // verb builder. A `local:` record is excluded: it is never synced to the
     // atServer, and every post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
-    if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+    final encrypting =
+        !atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt;
+    if (options.sealToNamespace != null && !encrypting) {
+      throw ArgumentError.value(options.sealToNamespace, 'sealToNamespace',
+          'applies only to a put that is encrypted');
+    }
+    if (encrypting) {
       atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
           requestedProviderId: options.cryptoProviderId,
+          sealToNamespace: options.sealToNamespace,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
           useRemoteAtServer:

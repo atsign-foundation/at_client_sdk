@@ -738,21 +738,6 @@ void main() {
       expect(stamped(key)['ckNs'], 'demos');
     });
 
-    test('when it seals a share, then it seals at the level it held before',
-        () async {
-      final filing = await _filing(InMemoryAtKeysIo());
-      final c = _Client(_FilingRing(filing));
-      await _publish(c.ring, _bob, 'demos');
-      await _publish(c.ring, _bob, 'todos.demos');
-      wire(c);
-      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
-
-      await racingTheFiling(c, filing, key, 'shared');
-
-      expect(stamped(key)['ckNs'], 'demos');
-      expect(stamped(key)['ns'], 'demos');
-    });
-
     test(
         'when the narrower level holds a content key the recipient has '
         'rotated away from, then it is not sealed under that key', () async {
@@ -778,7 +763,7 @@ void main() {
       expect(stamped(key)['ckKid'], isNot(superseded),
           reason: 'that key is sealed to a generation bob has rotated away '
               'from');
-      expect(stamped(key)['ckNs'], 'demos');
+      expect(stamped(key)['ckNs'], 'todos.demos');
     });
   });
 }

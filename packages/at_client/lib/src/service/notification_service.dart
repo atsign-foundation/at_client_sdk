@@ -92,12 +92,17 @@ abstract class NotificationService {
   /// An [ephemeral] notification is persisted by no atServer that supports it,
   /// and lives at most two minutes whatever [expiration] says; it cannot be
   /// combined with [cacheAtRecipient], which persists a copy at the recipient.
+  ///
+  /// [sealToNamespace] is the namespace of [to]'s namespace key the body is
+  /// sealed to, as `PutRequestOptions.sealToNamespace` has it; it needs a body
+  /// to encrypt.
   Future<String> send({
     required Atsign to,
     required String idAndNamespace,
     String body = '',
     bool shouldEncrypt = true,
     String? cryptoProviderId,
+    String? sealToNamespace,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     DateTime? recipientCacheExpiration,
@@ -256,6 +261,7 @@ class NotificationParams {
   String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
   String? _cryptoProviderId;
+  String? _sealToNamespace;
   bool _ephemeral = false;
 
   String get id => _id;
@@ -277,6 +283,10 @@ class NotificationParams {
   Duration get notificationExpiry => _notificationExpiry;
 
   String? get cryptoProviderId => _cryptoProviderId;
+
+  /// For a notification to another atSign, the namespace of the recipient's
+  /// namespace key its value is sealed to, as `PutRequestOptions` has it.
+  String? get sealToNamespace => _sealToNamespace;
 
   /// Whether no atServer that supports it persists the notification.
   bool get ephemeral => _ephemeral;
@@ -307,12 +317,14 @@ class NotificationParams {
       String notifier = AtConstants.system,
       Duration? notificationExpiry,
       String? cryptoProviderId,
+      String? sealToNamespace,
       bool ephemeral = false}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
+      .._sealToNamespace = sealToNamespace
       .._ephemeral = ephemeral
       .._priority = priority
       .._strategy = strategy

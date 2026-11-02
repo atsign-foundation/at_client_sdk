@@ -62,6 +62,18 @@ class PutRequestOptions extends RequestOptions {
   /// Leave null to use [AtClientPreference.crypto]'s default provider.
   String? cryptoProviderId;
 
+  /// For a put shared with another atSign, the namespace of the recipient's
+  /// namespace key it is sealed to: the recipient's key at exactly this
+  /// namespace, with no other tried. The key's name must end with it after a
+  /// dot. Where the recipient advertises none there, the put is refused, or
+  /// falls back to legacy as [AtClientPreference.allowLegacyCryptoFallback]
+  /// allows.
+  ///
+  /// Null seals to the most specific namespace key the recipient advertises
+  /// for the key's name. A put that is not encrypted, or is to this client's
+  /// own atSign, is refused with it set.
+  String? sealToNamespace;
+
   /// Whether the atServer should carry out this operation **without recording
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.

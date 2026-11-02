@@ -77,9 +77,9 @@ class SymmetricAesGcmProvider
   /// chooses.
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer}) async {
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     final chosen = await ckManager?.ensureCurrent(context, atKey,
-        useRemoteAtServer: useRemoteAtServer);
+        useRemoteAtServer: useRemoteAtServer, sealToNamespace: sealToNamespace);
     if (chosen != null) _chosen[atKey] = chosen;
   }
 

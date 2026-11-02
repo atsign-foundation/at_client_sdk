@@ -622,12 +622,25 @@ What each posture switches on:
   A write that finds it missing first fetches what was conveyed to this
   client, and only then throws `NskeyPrivateNotHeldException`;
   `ensureReachable` reports `holdsPrivate`.
+- **Sharing.** A share is sealed to the most specific namespace key the
+  recipient advertises for the key's whole name: `x.notes.todos.demos` goes
+  to the recipient's `notes.todos.demos` key if it has one, else its
+  `todos.demos` key, else its `demos` key. The levels are looked up in one
+  batch. A found key is reused for 15 minutes, and a level found missing is
+  not asked about again for 30 seconds. `PutRequestOptions.sealToNamespace`,
+  or `sealToNamespace` on a notification, requires one namespace instead,
+  and `CryptoRuntime(atClient).canSealTo(recipient, namespace)` says whether
+  the recipient advertises a key there. When nothing fits, the share throws
+  `NamespaceKeyUnavailableException`, or uses legacy encryption where
+  `allowLegacyCryptoFallback` allows; it is never sealed to a broader key
+  than a required namespace.
 - **A write right after opening.** A client's start-up publishes its
-  namespace keys after `open` returns. A write that finds no key while
-  start-up is still to publish one for its namespace waits for it, up to 30
-  seconds, then throws `NamespaceKeyUnavailableException` naming the key,
-  with start-up's reason when it could not publish it. A write made with no
-  atServer reachable does not wait.
+  namespace keys after `open` returns. A write to the client's own atSign
+  that finds no key while start-up is still to publish one for its
+  namespace waits for it, up to 30 seconds, then throws
+  `NamespaceKeyUnavailableException` naming the key, with start-up's reason
+  when it could not publish it. A write made with no atServer reachable does
+  not wait, and nor does a share.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
   before publishing it. A client on the primary enrollment mints nothing,

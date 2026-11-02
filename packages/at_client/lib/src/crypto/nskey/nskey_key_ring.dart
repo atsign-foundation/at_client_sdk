@@ -286,6 +286,20 @@ abstract class NskeyKeyRing {
   Future<Set<String>> heldNamespaces(String owner);
 }
 
+/// Implemented by an [NskeyKeyRing] that can ask about several of an owner's
+/// namespaces at once, as a share asks about every level of its key's name.
+abstract interface class LooksUpLevelsTogether {
+  /// The first of [namespaces], most specific first, that [owner] advertises a
+  /// verified key in, with that advertisement, or null when none does.
+  /// [missed] is told each namespace found to have none.
+  ///
+  /// Throws, as [NskeyKeyRing.currentPublic] does, when an answer cannot be
+  /// established.
+  Future<({String namespace, NskeyAdvertisement advertisement})?>
+      mostSpecificPublic(String owner, List<String> namespaces,
+          {void Function(String namespace)? missed});
+}
+
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
 ///
 /// Test scaffolding: it exercises the data path without minting, publication

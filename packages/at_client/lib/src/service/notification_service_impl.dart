@@ -728,6 +728,7 @@ class NotificationServiceImpl extends NotificationService {
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     String? cryptoProviderId,
+    String? sealToNamespace,
     DateTime? recipientCacheExpiration,
     bool ephemeral = false,
   }) async {
@@ -755,11 +756,16 @@ class NotificationServiceImpl extends NotificationService {
       ..namespace = name.substring(dot + 1);
     final String notifPayload;
     body = body.trim();
+    if (sealToNamespace != null && (body.isEmpty || !shouldEncrypt)) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'applies only to a body that is encrypted');
+    }
     if (body.isNotEmpty && shouldEncrypt) {
       String providerId;
       try {
         providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
             requestedProviderId: cryptoProviderId,
+            sealToNamespace: sealToNamespace,
             useRemoteAtServer: true,
             stampProviderId: false);
       } on NamespaceKeyUnavailableException catch (e) {

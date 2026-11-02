@@ -2,14 +2,15 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
 
   A pqActive client's start-up mints and publishes the namespace keys for the
   namespaces it may write in: its preference namespace, or an enrollment's
-  writable grants. Start-up runs after the client opens, so a write made at
-  once can find no key yet. Such a write waits for start-up's seeding step to
-  finish, then works out its start level and resolves again; if there is
-  still no key it refuses as before. A write waits when the atServer has
-  answered that no key is published and start-up will seed a namespace that
-  covers the key, or when the key it found is broader than a namespace
-  start-up has said it will seed covering the key. Reads do not seal, and are
-  unchanged.
+  writable grants. Start-up runs after the client opens, so a write to the
+  client's own atSign made at once can find no key yet. Such a write waits
+  for start-up's seeding step to finish, then works out its start level and
+  resolves again; if there is still no key it refuses as before. A write
+  waits when the atServer has answered that no key is published and start-up
+  will seed a namespace that covers the key, or when the key it found is
+  broader than a namespace start-up has said it will seed covering the key.
+  A share does not wait: it is sealed to the recipient's key, as
+  pq_share_level.feature has it. Reads do not seal, and are unchanged.
 
   Races: a write never mints to find its own value's key; only start-up
   does, once per namespace, and the write waits for it. Two write paths
@@ -39,21 +40,6 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     Given a pqActive enrollment granted todos.demos rw whose start-up has not yet published a todos.demos key
     When it puts a value in todos.demos right after opening
     Then the put completes once start-up has published the todos.demos key, sealed under that key
-
-  Scenario: A share right after opening waits for the writer's own start-up before choosing where to seal
-    Given alice's client right after opening, before its start-up has published a todos.demos key, and bob publishing a todos.demos key
-    When it shares x.todos.demos with bob
-    Then the share completes once alice's start-up has published her todos.demos key, sealed under bob's todos.demos key
-
-  Scenario: A notification right after opening waits the same way
-    Given alice's client right after opening, before its start-up has published a todos.demos key
-    When it notifies bob of x.todos.demos
-    Then the notification is sent once alice's start-up has published her todos.demos key
-
-  Scenario: A share to a recipient that has published nothing refuses without waiting
-    Given alice's client whose start-up has published her todos.demos key, and bob publishing no key at any level of todos.demos
-    When it shares x.todos.demos with bob
-    Then the write throws NamespaceKeyUnavailableException naming bob and todos.demos at once
 
   Scenario: A write in a namespace start-up will not seed refuses without waiting for a mint
     Given a pqActive client in todos.demos whose start-up has not finished, granted nothing covering other.app
@@ -140,12 +126,7 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     When its key is published but the step has not finished as the wait runs out
     Then the write goes ahead under that key
 
-  Scenario: A share whose wait runs out is refused naming the recipient
-    Given a share to a recipient that has published nothing
-    When the wait for the writer's own start-up runs out
-    Then the share is refused naming the recipient
-
-  Scenario: A write and a share right after opening complete once start-up has seeded
-    Given bob's client, whose start-up seeded his todos.demos key beforehand, and alice's client just opened, with nothing waiting for its start-up
+  Scenario: A write right after opening completes once start-up has seeded, and a share at once
+    Given bob's client, whose start-up seeded his todos.demos key beforehand, and alice's client just opened
     When alice puts a value in todos.demos and shares one with bob at once
     Then both complete, sealed under alice's and bob's todos.demos keys

@@ -1,5 +1,5 @@
 import 'dart:async' show StreamSubscription, unawaited;
-import 'dart:convert' show jsonDecode;
+import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
@@ -249,7 +249,8 @@ typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
 /// Own privates are held in memory here; conveying them per-APKAM over the
 /// secret-sharing substrate is what supplies them to an enrollment that did
 /// not run [mintAndPublish] itself.
-class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
+class PublishedNskeyKeyRing
+    implements NskeyKeyRing, LooksUpLevelsTogether, SignalsPrivateFiling {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
@@ -968,6 +969,136 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       payload: payload,
     );
     return advertisement;
+  }
+
+  /// Asks the atServer about every one of [namespaces] it holds no fresh copy
+  /// for, more specific than one it does, in one batch of lookups, and
+  /// verifies only the advertisement it answers with.
+  ///
+  /// A found advertisement is cached as [currentPublic] caches it, and one the
+  /// atServer no longer has is dropped. When the batch cannot be answered, or
+  /// for this atSign's own namespaces, each is asked as [currentPublic] asks
+  /// it, which keeps a cached advertisement within its stale grace.
+  @override
+  Future<({String namespace, NskeyAdvertisement advertisement})?>
+      mostSpecificPublic(String owner, List<String> namespaces,
+          {void Function(String namespace)? missed}) async {
+    if (_isOwn(owner)) return _oneByOne(owner, namespaces, missed);
+    final ask = <String>[];
+    for (final namespace in namespaces) {
+      if (_fresh(owner, namespace) != null) break;
+      ask.add(namespace);
+    }
+    final published = ask.isEmpty
+        ? const <String, String?>{}
+        : await _publishedAt(owner, ask);
+    if (published == null) return _oneByOne(owner, namespaces, missed);
+
+    for (final namespace in namespaces) {
+      final fresh = _fresh(owner, namespace);
+      if (fresh != null) return (namespace: namespace, advertisement: fresh);
+      final scope = _scope(owner, namespace);
+      final payload = published[namespace];
+      if (payload == null) {
+        _remote.remove(scope);
+        missed?.call(namespace);
+        continue;
+      }
+      final cached = _remote[scope];
+      final advertisement = cached?.payload == payload
+          ? cached!.advertisement
+          : await verifier.verify(owner, payload);
+      _remote[scope] = (
+        advertisement: advertisement,
+        fetchedAt: DateTime.now(),
+        payload: payload,
+      );
+      return (namespace: namespace, advertisement: advertisement);
+    }
+    return null;
+  }
+
+  /// [mostSpecificPublic], asked one namespace at a time through
+  /// [currentPublic].
+  Future<({String namespace, NskeyAdvertisement advertisement})?> _oneByOne(
+      String owner,
+      List<String> namespaces,
+      void Function(String namespace)? missed) async {
+    for (final namespace in namespaces) {
+      final advertisement = await currentPublic(owner, namespace);
+      if (advertisement != null) {
+        return (namespace: namespace, advertisement: advertisement);
+      }
+      missed?.call(namespace);
+    }
+    return null;
+  }
+
+  /// The advertisement cached for `(owner, namespace)` within
+  /// [advertisementTtl], or null.
+  NskeyAdvertisement? _fresh(String owner, String namespace) {
+    final cached = _remote[_scope(owner, namespace)];
+    if (cached == null ||
+        DateTime.now().difference(cached.fetchedAt) >= advertisementTtl) {
+      return null;
+    }
+    return cached.advertisement;
+  }
+
+  /// What [owner] publishes at each of [namespaces], read from the atServer
+  /// in one batch: the advertisement's bytes, or null where there is none.
+  /// Null when the batch, or any entry in it, cannot be read as one or the
+  /// other.
+  Future<Map<String, String?>?> _publishedAt(
+      String owner, List<String> namespaces) async {
+    final remote = _atClient.getRemoteSecondary();
+    if (remote == null) return null;
+    final requests = [
+      for (var i = 0; i < namespaces.length; i++)
+        BatchRequest(
+            i,
+            (PLookupVerbBuilder()
+                  ..atKey = (AtKey()
+                    ..key = '$nskeyAdvertisementRecordName.${namespaces[i]}'
+                    ..sharedBy = owner)
+                  ..operation = 'all'
+                  ..bypassCache = true)
+                .buildCommand()
+                .trim())
+    ];
+    final Object? entries;
+    try {
+      final answer = await remote
+          .executeCommand('batch:${jsonEncode(requests)}\n', auth: true);
+      entries = jsonDecode((answer ?? '').replaceFirst(RegExp('^data:'), ''));
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      _logger.finer('The batch of lookups of $owner\'s namespace keys was not '
+          'answered, so each is asked on its own: $e');
+      return null;
+    }
+    if (entries is! List) return null;
+    final published = <String, String?>{};
+    for (final entry in entries) {
+      final id = entry is Map ? entry['id'] : null;
+      final response = entry is Map ? entry['response'] : null;
+      if (id is! int || id < 0 || id >= namespaces.length || response is! Map) {
+        return null;
+      }
+      final data = response['data'];
+      if (data is String) {
+        final record = jsonDecode(data);
+        final value = record is Map ? record['data'] : null;
+        if (value is! String) return null;
+        published[namespaces[id]] = value;
+      } else if (response['error_code'] == 'AT0015') {
+        published[namespaces[id]] = null;
+      } else {
+        return null;
+      }
+    }
+    return published.length == namespaces.length ? published : null;
   }
 
   /// Verifies [payload], this atSign's own advertisement for [namespace], and

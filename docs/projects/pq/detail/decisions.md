@@ -1664,8 +1664,9 @@ the SDK's flagship API from ever being post-quantum.
 tries `d.c.b.a`, then `c.b.a`, then `b.a`, then `a`, and seals to the first nskey it finds.
 If none exists that is cold start, and it fails as
 [section 18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03) requires.
-Where a write starts the walk is ruled in
-[section 159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01).
+Where a write to the client's own atSign starts the walk is ruled in
+[section 159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01),
+and which of its levels a share is sealed at in [section 161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02).
 
 The walk is safe because it mirrors the atServer's own authorisation rule — an enrollment
 approved for `a` may access `d.c.b.a` (`SecretStore.namespaceAuthorizes`, and the server
@@ -1756,7 +1757,9 @@ name — a redundancy that never actually held.
 - On a **data value**, `ns` is **the level the write's walk started at**
   ([159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
   item 4): the longer of the key's own namespace and the most specific namespace the writer
-  holds a namespace private for that the key's whole name ends with, after a dot.
+  holds a namespace private for that the key's whole name ends with, after a dot. On a share
+  it is the most specific level of the key's name, or the namespace the share was required to
+  seal to ([161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02) item 8).
 - On a **conveyance** to a recipient, `ns` is the namespace the nskey was found at, which the
   conveyance's own key name cannot carry either.
 - A **sibling copy**
@@ -15633,7 +15636,9 @@ for a namespace key for `demos`, which nobody had published, and every write fai
 read the key's namespace field: the readiness check, the content-key pre-pass
 (`CkManager.ensureCurrent`), content-key rotation and the data provider.
 
-1. **One start level, shared by all four sites.** `NskeyResolver.startLevelOf` answers the longer
+1. **One start level, shared by all four sites.** **Amended 2026-11-02** by
+   [161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02): this item now rules writes to the client's own atSign; a share's level
+   comes from its recipient. `NskeyResolver.startLevelOf` answers the longer
    of the key's own namespace and the most specific namespace the writer holds a namespace
    private for that the key's whole name ends with, after a dot. The walk of
    [19.3](#193-the-ruling) goes up from there. A bare namespace, which is what the readiness
@@ -15703,6 +15708,8 @@ found no key, and failed.
    `NamespaceKeyUnavailableException` naming the key start-up has not yet published, and a share
    is refused naming its recipient (item 6). **Amended 2026-11-01**: this item said the write
    throws when the bound passes, whatever start-up had published by then.
+   **Amended 2026-11-02** by [161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02): a share no longer waits, so no share is refused
+   at the bound.
 3. **An enrollment waits for the grant read start-up already makes**, inside the same bound and
    never for a mint, and a namespace start-up will not seed is then refused as before. The
    atSign's own credential seeds its preference namespace alone, known at once.
@@ -15718,7 +15725,8 @@ found no key, and failed.
 5. **A seeding that fails ends the wait with its reason**, which the step keeps for each
    namespace.
 6. **A share waits only for the writer's own start-up.** A recipient that has published nothing is
-   refused at once.
+   refused at once. **Amended 2026-11-02** by [161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02): a share does not wait at all; its
+   level comes from what its recipient advertises, not from what the writer's start-up seeds.
 
 **Built** in at_client. Proven in-process by `pq_write_waits_for_seeding_test.dart` and the
 start-up group of `pq_client_bootstrap_test.dart`, and live by
@@ -15734,3 +15742,79 @@ start-up group of `pq_client_bootstrap_test.dart`, and live by
   atServer for a key that may never come, so it is left as a follow-up of its own.
 
 Supersedes nothing.
+
+## 161. A share is sealed to the most specific key its recipient advertises (2026-11-02)
+
+**Decided by gkc on 2026-11-02**, from findings 12 and 14 of a review of PR #2426.
+
+Under [159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01) and
+[160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) a share started its
+walk at the writer's start level, which came from what the writer held, and waited for the
+writer's own start-up. So a writer holding nothing at `todos.demos` sealed a share of
+`x.todos.demos` to bob's `demos` key though bob advertised `todos.demos`. gkc: "What is the
+rationale for depending on what Alice has seeded?", and "Alice's concern here is to seal to
+either a specific namespace eg foo.bar.baz.my_app, or to the most specific nskey that Bob has
+advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has advertised nothing."
+
+1. **A share walks its recipient's levels.** A share is a put or notify whose owner is another
+   atSign. Its levels are every namespace the key's full name (key and namespace, folded) ends
+   with after a dot, most specific first, without the reserved ones; the full name itself is
+   never one, since its first label is the record's own id
+   (`NskeyResolver.shareLevelsOf`). It is sealed to the recipient's key at the most specific
+   level the recipient advertises one at. What the writer holds does not enter into it, and a
+   share does not wait for the writer's start-up. A write to the client's own atSign is
+   unchanged.
+2. **A program can require one namespace.** `PutRequestOptions.sealToNamespace`, and
+   `sealToNamespace` on `NotificationParams.forUpdate` and `NotificationService.send`, seal to
+   the recipient's key at exactly that namespace, with no walk. It is refused for a write to the
+   client's own atSign, for one that is not encrypted, under a provider that seals to no
+   namespace key, and for a namespace the key's name does not end with after a dot.
+3. **`CryptoRuntime.canSealTo(atSign, namespace)`** answers true only when the recipient
+   advertises a verified key at exactly that namespace, and throws when the answer cannot be
+   established, as `isReadyFor` does. gkc: "a client will want to seal to an nskey at
+   <device>.sshnp when it is talking to a daemon, and not fall back to sealing to sshnp … this
+   allows us to tolerate a mixed fleet of daemons".
+4. **Nothing advertised falls back to legacy where the posture allows it**, as before: when
+   `allowLegacyCryptoFallback` is set, and refused otherwise. A required namespace that is not
+   advertised does the same, and is never sealed to a broader key.
+5. **The levels are asked about in one batch** of `plookup` entries, over the `batch:` verb,
+   and only the advertisement sealed to is verified. A batch that cannot be answered falls back
+   to asking each level on its own, which keeps a cached key within its stale grace.
+6. **Caching**, also decided 2026-11-02 ("30 seconds (Rec.)", "Agree all three (Rec.)"). A key
+   found is used for `advertisementTtl` (15 minutes) without a lookup, and for up to
+   `advertisementStaleGrace` (15 minutes) more while its atServer cannot be reached; one its
+   atServer no longer has is dropped at once. A level found missing is remembered for
+   `NskeyResolver.shareMissMemory` (30 seconds) and decides without a lookup until then, which
+   for a share replaces "a remembered miss never decides a null". `canSealTo` asks afresh past a
+   remembered miss, and answers from a found key.
+7. **The writer's own copy is as [142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)
+   has it**, minted at the recipient's level when the writer holds no key covering it, except at
+   a level below the client's own namespace, where a level is named after a record (gkc: "keep
+   142.2"). There the share goes without the writer's copy, with a warning.
+8. **`ns` on a shared value** is the most specific level of its key's name, or the required
+   namespace.
+
+**Known limits.** An advertisement's payload does not name its namespace, so one level's could be
+copied to another by an enrollment of the same atSign. The walk asks the recipient's atServer
+about every level of the shared name, which the share already names to that atServer. The
+writer's own atServer looks up a batch's entries one after another. "Below the client's own
+namespace" uses the preference namespace, so a record-named level under another granted
+namespace is not recognised.
+
+**Built** in at_client. Proven in-process by `pq_share_level_test.dart`. The scenarios are in
+`features/at_client/pq_share_level.feature`.
+
+**Rejected.**
+
+- The writer's start level for a share, as built under 159 and 160. It made the level depend on
+  what the writer had seeded, and made a share wait for the writer's start-up for no reason of
+  the recipient's.
+- One `plookup` per level, one round trip each.
+- Re-probing a remembered miss before refusing, which costs a lookup per write to a recipient
+  that has published nothing.
+- Sealing a required namespace's share to a broader key: a NoPorts client takes a daemon's
+  missing `<device>.sshnp` key as a daemon that is not PQ-capable.
+
+Supersedes [159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
+item 1 and [160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) items 2
+and 6, for shares.
