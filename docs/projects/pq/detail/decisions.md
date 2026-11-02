@@ -1719,7 +1719,7 @@ Stating the lifetimes once, because they are easy to conflate:
 |---|------|-------|-------|
 | 1 | `advertisementTtl` — how long a fetched advertisement is reused before re-fetching | sender's memory | 15 min default |
 | 2 | `advertisementStaleGrace` — how long past (1) a *failed* re-fetch may keep serving what it has | sender's memory | 15 min default |
-| 3 | `missMemory` — how long a level found **empty** is not re-probed | sender's memory | 15 min, matching (1) |
+| 3 | `missMemory` — how long a level found **empty** is not re-probed | sender's memory | 15 min, matching (1); 30 s for a share, which then decides without a lookup ([161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02)) |
 
 There is **no TTL on the published record**: `nskeyAdvertisementKey` sets only
 `isPublic = true`, so `public:__nskey.<ns>@<owner>` lives on the atServer until overwritten.
@@ -14745,7 +14745,8 @@ issue for intent-based client operations.
 ### 143.5 Only a not-found lets the resolver walk up
 
 A not-found at a namespace level is a miss: the walk goes broader and
-`missMemory` remembers the miss for 15 minutes, which is the exposure
+`missMemory` remembers the miss for 15 minutes (30 seconds on a share,
+[161](#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02)), which is the exposure
 [ruling 19.4](#194-cost-and-the-three-lifetimes) accepted. Any other failure
 is not a miss: it stops the walk, and the write uses that level's cached
 advertisement within its grace, or fails. Before this, every network failure at
@@ -15765,7 +15766,8 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    share does not wait for the writer's start-up. A write to the client's own atSign is
    unchanged.
 2. **A program can require one namespace.** `PutRequestOptions.sealToNamespace`, and
-   `sealToNamespace` on `NotificationParams.forUpdate` and `NotificationService.send`, seal to
+   `sealToNamespace` on `NotificationParams.forUpdate`, `NotificationService.send` and
+   `AtClientBindings.notify`, seal to
    the recipient's key at exactly that namespace, with no walk. It is refused for a write to the
    client's own atSign, for one that is not encrypted, under a provider that seals to no
    namespace key, and for a namespace the key's name does not end with after a dot.
@@ -15778,15 +15780,21 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    `allowLegacyCryptoFallback` is set, and refused otherwise. A required namespace that is not
    advertised does the same, and is never sealed to a broader key.
 5. **The levels are asked about in one batch** of `plookup` entries, over the `batch:` verb,
-   and only the advertisement sealed to is verified. A batch that cannot be answered falls back
-   to asking each level on its own, which keeps a cached key within its stale grace.
+   whose answers are matched by id, and only the advertisement sealed to is verified; one that
+   does not verify is not cached. As
+   [143.5](#1435-only-a-not-found-lets-the-resolver-walk-up) has it, only a not-found at a
+   level is a miss: any other failure there, or of the batch itself, stops the walk at that
+   level, which then seals to its cached key within the stale grace, or throws the failure,
+   never falling back to legacy.
 6. **Caching**, also decided 2026-11-02 ("30 seconds (Rec.)", "Agree all three (Rec.)"). A key
    found is used for `advertisementTtl` (15 minutes) without a lookup, and for up to
-   `advertisementStaleGrace` (15 minutes) more while its atServer cannot be reached; one its
-   atServer no longer has is dropped at once. A level found missing is remembered for
+   `advertisementStaleGrace` (15 minutes) more, with a warning, while a re-fetch fails with
+   anything but a not-found; one its atServer no longer has is dropped at once. A level found missing is remembered for
    `NskeyResolver.shareMissMemory` (30 seconds) and decides without a lookup until then, which
-   for a share replaces "a remembered miss never decides a null". `canSealTo` asks afresh past a
-   remembered miss, and answers from a found key.
+   for a share replaces "a remembered miss never decides a null", so a walk is one batch. A
+   recipient is asked about the same levels at most once in 30 seconds, and a share that requires
+   a namespace asks about that one alone. `canSealTo` asks afresh past a remembered miss, and
+   answers from a found key.
 7. **The writer's own copy is as [142.2](#1422-each-enrollment-keeps-its-own-key-and-its-siblings-can-open-it)
    has it**, minted at the recipient's level when the writer holds no key covering it, except at
    a level below the client's own namespace, where a level is named after a record (gkc: "keep

@@ -943,8 +943,9 @@ class PublishedNskeyKeyRing
           await _getLocalThenRemote(nskeyAdvertisementKey(owner, namespace));
     } on StoppedException {
       rethrow;
-    } catch (_) {
-      final stale = _withinGrace(cached);
+    } catch (e) {
+      final stale =
+          _withinGrace(cached, owner: owner, namespace: namespace, failure: e);
       if (stale != null) return stale;
       rethrow;
     }
@@ -976,9 +977,11 @@ class PublishedNskeyKeyRing
   /// verifies only the advertisement it answers with.
   ///
   /// A found advertisement is cached as [currentPublic] caches it, and one the
-  /// atServer no longer has is dropped. When the batch cannot be answered, or
-  /// for this atSign's own namespaces, each is asked as [currentPublic] asks
-  /// it, which keeps a cached advertisement within its stale grace.
+  /// atServer no longer has is dropped. Only a not-found is a miss: any other
+  /// failure at a level, or the batch's own, stops the walk there, which then
+  /// seals to that level's cached advertisement within its stale grace, or
+  /// throws the failure. This atSign's own namespaces are each asked as
+  /// [currentPublic] asks them.
   @override
   Future<({String namespace, NskeyAdvertisement advertisement})?>
       mostSpecificPublic(String owner, List<String> namespaces,
@@ -990,15 +993,22 @@ class PublishedNskeyKeyRing
       ask.add(namespace);
     }
     final published = ask.isEmpty
-        ? const <String, String?>{}
+        ? const <String, ({String? payload, Object? failure})>{}
         : await _publishedAt(owner, ask);
-    if (published == null) return _oneByOne(owner, namespaces, missed);
 
     for (final namespace in namespaces) {
       final fresh = _fresh(owner, namespace);
       if (fresh != null) return (namespace: namespace, advertisement: fresh);
       final scope = _scope(owner, namespace);
-      final payload = published[namespace];
+      final answer = published[namespace]!;
+      final failure = answer.failure;
+      if (failure != null) {
+        final stale = _withinGrace(_remote[scope],
+            owner: owner, namespace: namespace, failure: failure);
+        if (stale == null) throw failure;
+        return (namespace: namespace, advertisement: stale);
+      }
+      final payload = answer.payload;
       if (payload == null) {
         _remote.remove(scope);
         missed?.call(namespace);
@@ -1046,13 +1056,20 @@ class PublishedNskeyKeyRing
   }
 
   /// What [owner] publishes at each of [namespaces], read from the atServer
-  /// in one batch: the advertisement's bytes, or null where there is none.
-  /// Null when the batch, or any entry in it, cannot be read as one or the
-  /// other.
-  Future<Map<String, String?>?> _publishedAt(
+  /// in one batch: each one's advertisement bytes, a null payload where the
+  /// atServer has none, or the failure that kept it from saying which.
+  Future<Map<String, ({String? payload, Object? failure})>> _publishedAt(
       String owner, List<String> namespaces) async {
+    Map<String, ({String? payload, Object? failure})> failingAll(
+            Object failure) =>
+        {
+          for (final namespace in namespaces)
+            namespace: (payload: null, failure: failure)
+        };
     final remote = _atClient.getRemoteSecondary();
-    if (remote == null) return null;
+    if (remote == null) {
+      return failingAll(StateError('this client has no atServer connection'));
+    }
     final requests = [
       for (var i = 0; i < namespaces.length; i++)
         BatchRequest(
@@ -1073,32 +1090,47 @@ class PublishedNskeyKeyRing
       entries = jsonDecode((answer ?? '').replaceFirst(RegExp('^data:'), ''));
     } on StoppedException {
       rethrow;
-    } catch (e) {
-      _logger.finer('The batch of lookups of $owner\'s namespace keys was not '
-          'answered, so each is asked on its own: $e');
-      return null;
+    } on Exception catch (e) {
+      return failingAll(e);
     }
-    if (entries is! List) return null;
-    final published = <String, String?>{};
+    if (entries is! List) {
+      return failingAll(AtException('the batch of lookups of $owner\'s '
+          'namespace keys was answered with something other than a list'));
+    }
+    final published = <String, ({String? payload, Object? failure})>{};
     for (final entry in entries) {
       final id = entry is Map ? entry['id'] : null;
       final response = entry is Map ? entry['response'] : null;
       if (id is! int || id < 0 || id >= namespaces.length || response is! Map) {
-        return null;
+        continue;
       }
       final data = response['data'];
-      if (data is String) {
-        final record = jsonDecode(data);
-        final value = record is Map ? record['data'] : null;
-        if (value is! String) return null;
-        published[namespaces[id]] = value;
-      } else if (response['error_code'] == 'AT0015') {
-        published[namespaces[id]] = null;
-      } else {
-        return null;
-      }
+      final code = response['error_code'];
+      final record = data is String ? jsonDecode(data) : null;
+      final value = record is Map ? record['data'] : null;
+      published[namespaces[id]] = value is String
+          ? (payload: value, failure: null)
+          : code == 'AT0015'
+              ? (payload: null, failure: null)
+              : (
+                  payload: null,
+                  failure: code is String
+                      ? AtExceptionUtils.get(
+                          code, '${response['error_message'] ?? code}')
+                      : AtException('the lookup of $owner\'s namespace key '
+                          'at ${namespaces[id]} was answered with no data')
+                );
     }
-    return published.length == namespaces.length ? published : null;
+    for (final namespace in namespaces) {
+      published.putIfAbsent(
+          namespace,
+          () => (
+                payload: null,
+                failure: AtException('the batch gave no answer for the '
+                    'lookup of $owner\'s namespace key at $namespace')
+              ));
+    }
+    return published;
   }
 
   /// Verifies [payload], this atSign's own advertisement for [namespace], and
@@ -1234,10 +1266,16 @@ class PublishedNskeyKeyRing
   /// while [advertisementTtl] plus [advertisementStaleGrace] has not passed
   /// since it was fetched; past that, null, so the failure reaches the caller
   /// rather than sealing to a generation that may have been rotated away from.
-  NskeyAdvertisement? _withinGrace(_CachedAdvertisement? cached) {
+  NskeyAdvertisement? _withinGrace(_CachedAdvertisement? cached,
+      {required String owner,
+      required String namespace,
+      required Object failure}) {
     if (cached == null) return null;
     final age = DateTime.now().difference(cached.fetchedAt);
     if (age <= advertisementTtl + advertisementStaleGrace) {
+      _logger.warning('Sealing to the advertised nskey for $owner:$namespace '
+          'fetched ${age.inMinutes}m ago, because it could not be refreshed: '
+          '$failure');
       return cached.advertisement;
     }
     _logger.warning(

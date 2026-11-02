@@ -63,9 +63,10 @@
   the recipient advertises for the key's whole name, and no longer waits for
   the writer's start-up.
 - feat: `PutRequestOptions.sealToNamespace`, and `sealToNamespace` on
-  `NotificationParams.forUpdate` and `NotificationService.send`, seal a share
-  to the recipient's key in one namespace only; `CryptoRuntime.canSealTo`
-  says whether the recipient advertises one there.
+  `NotificationParams.forUpdate`, `NotificationService.send` and
+  `AtClientBindings.notify`, seal a share to the recipient's key in one
+  namespace only; `CryptoRuntime.canSealTo` says whether the recipient
+  advertises one there.
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.

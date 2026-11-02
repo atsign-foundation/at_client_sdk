@@ -5,7 +5,8 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   namespace, folded) ends with after a dot, most specific first, without the
   reserved ones; the full name itself is never a level, since its first label
   is the record's own id. A share is sealed to the recipient's key at the most
-  specific level the recipient advertises. What the writer holds does not
+  specific level the recipient advertises, and a share that finds none is
+  refused naming the most specific level. What the writer holds does not
   enter into it, and a share does not wait for the writer's start-up. A
   program can instead require one namespace with sealToNamespace: the share is
   sealed to the recipient's key there or not at all, and canSealTo answers
@@ -15,10 +16,12 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   key. A NoPorts client, for instance, seals to a daemon's key at
   <device>.sshnp and treats its absence as a daemon that is not PQ-capable.
   A key the recipient advertises, once found, is used for 15 minutes without
-  a lookup, and for up to 15 minutes more while its atServer cannot be
-  reached; one its atServer no longer has is dropped at once. A level found
-  missing is remembered for 30 seconds, and decides without a lookup until
-  then. canSealTo asks afresh past a remembered miss, and uses a found key.
+  a lookup, and for up to 15 minutes more, with a warning, while a re-fetch
+  fails with anything but a not-found; one its atServer no longer has is
+  dropped at once. A level found missing is remembered for 30 seconds, and
+  decides without a lookup until then. Only a not-found is a miss: any other
+  failure at a level stops the walk there. canSealTo asks afresh past a
+  remembered miss, and uses a found key.
   Writes to the writer's own atSign are unchanged.
 
   Races: the level is chosen at each share from the recipient's advertisements
@@ -30,8 +33,10 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   envelope, are unchanged.
   DoS: at most one batch of lookups per share, of the levels neither found in
   the last 15 minutes nor found missing in the last 30 seconds, so a recipient
-  is asked about the same levels at most once in 30 seconds; a key name of at
-  most 248 characters has at most 123 levels; no share waits.
+  is asked about the same levels at most once in 30 seconds, and a share that
+  requires a namespace asks about that one alone; a key name of at most 248
+  characters has at most 123 levels; an advertisement that does not verify is
+  not cached, so only the writer's own next write asks again; no share waits.
   Forgery and impersonation: only the recipient's enrollments and atServer can
   publish its advertisements; every advertisement sealed to is verified as
   signed by an enrollment of the recipient whose _apsk its atServer serves; a
@@ -84,40 +89,40 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When alice shares note1.t42.notes.todos.demos with bob
     Then her client sends one batch of lookups, one for each level, and verifies only bob's todos.demos advertisement
 
-  Scenario: A recipient's key, once found, is used for 15 minutes without a lookup
-    Given a share that found bob's todos.demos key
-    When alice shares x.todos.demos with bob again within 15 minutes
-    Then it is sealed under that key, and nothing is looked up
+  Scenario: A found advertisement is served from the cache for 15 minutes
+    Given bob's todos.demos advertisement fetched and verified less than 15 minutes ago
+    When alice shares x.todos.demos with bob again
+    Then no lookup is sent for todos.demos, and it is sealed under that key
 
-  Scenario: Past 15 minutes, a key whose atServer cannot be reached is used for up to 15 minutes more
-    Given bob's todos.demos key found more than 15 minutes ago, and bob's atServer out of reach
-    When alice shares x.todos.demos with bob
-    Then it is sealed under the key found before
+  Scenario: An advertisement the re-fetch cannot refresh is served for 15 minutes more, then not at all
+    Given bob's todos.demos advertisement fetched 15 minutes ago, and alice's atServer answering the re-fetch with a failure that is not a not-found
+    When alice shares within the next 15 minutes
+    Then it is sealed under the cached key, with a warning; after those 15 minutes the share throws that failure, and does not fall back to legacy
 
-  Scenario: Past 15 minutes, a key its atServer no longer has is not used
-    Given bob's todos.demos key found more than 15 minutes ago and since removed, and his demos key still advertised
-    When alice shares x.todos.demos with bob
-    Then it is sealed under bob's demos key
+  Scenario: A not-found ends a cached advertisement at once
+    Given bob's todos.demos advertisement cached, and bob's atServer now answering not-found for it
+    When alice shares after the cache's 15 minutes
+    Then nothing is sealed under the old key; the walk goes on to demos
 
-  Scenario: A recipient advertising nothing for a name is remembered for 30 seconds
-    Given a share of x.todos.demos refused because bob advertised nothing for it, and bob since publishing todos.demos
-    When alice shares x.todos.demos with bob within 30 seconds, at pqActive
-    Then the share is refused without a lookup
+  Scenario: A full miss is remembered for 30 seconds
+    Given bob advertising nothing at any level of x.todos.demos, and alice's walk having found that less than 30 seconds ago
+    When alice shares it again
+    Then no lookup is sent, and the share is refused, or falls back, as the scenarios for a recipient advertising nothing say; the first share after 30 seconds walks again
 
-  Scenario: After 30 seconds, a recipient that advertised nothing is asked again
-    Given a share of x.todos.demos refused because bob advertised nothing for it, and bob since publishing todos.demos
-    When alice shares x.todos.demos with bob after 30 seconds
-    Then her client looks bob's levels up again, and it is sealed under bob's todos.demos key
+  Scenario: A miss at a narrower level is remembered for 30 seconds
+    Given bob advertising demos only, and alice's walk having missed todos.demos less than 30 seconds ago
+    When alice shares x.todos.demos
+    Then todos.demos is not looked up, and it is sealed under the cached demos key
 
-  Scenario: Within 30 seconds of a narrower miss, the broader key is used without a lookup
-    Given a share of x.device1.sshnp sealed under bob's sshnp key because bob advertised nothing at device1.sshnp, and bob since publishing device1.sshnp
-    When alice shares x.device1.sshnp with bob within 30 seconds
-    Then it is sealed under bob's sshnp key, and nothing is looked up
+  Scenario: A narrower key published inside the miss window is used by the first write after it
+    Given bob advertising demos only, alice's walk having missed todos.demos, and bob publishing todos.demos within the next 30 seconds
+    When alice shares before the 30 seconds are up, and once more after
+    Then the first share is sealed under demos, and the second looks todos.demos up and is sealed under it
 
-  Scenario: After 30 seconds, a newly published narrower key is used
-    Given a share of x.device1.sshnp sealed under bob's sshnp key because bob advertised nothing at device1.sshnp, and bob since publishing device1.sshnp
-    When alice shares x.device1.sshnp with bob after 30 seconds
-    Then her client looks device1.sshnp up once, and it is sealed under bob's device1.sshnp key
+  Scenario: A batch entry that fails for any reason but not-found stops the walk
+    Given bob advertising demos, and alice's atServer answering the todos.demos entry with an error that is not a not-found
+    When alice shares x.todos.demos
+    Then the share throws that failure, nothing is sealed under demos, and todos.demos is not remembered as a miss
 
   Scenario: canSealTo asks afresh, whatever a share found missing
     Given a share that found bob's device1.sshnp missing, and bob since publishing device1.sshnp
@@ -144,9 +149,14 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Then it is sealed under bob's demos key, and no other level is looked up
 
   Scenario: A required namespace the recipient has not advertised refuses at pqActive
-    Given bob advertising a key for demos only
+    Given bob advertising a key for demos only, and alice at pqActive
+    When alice shares x.todos.demos with bob, requiring the namespace todos.demos
+    Then the write throws NamespaceKeyUnavailableException naming bob and todos.demos, nothing is sealed under bob's demos key, and demos is not looked up
+
+  Scenario: A cached broader advertisement does not satisfy a required namespace
+    Given bob's demos advertisement fresh in alice's cache from an earlier share, and nothing advertised at todos.demos
     When alice shares x.todos.demos with bob at pqActive, requiring the namespace todos.demos
-    Then the write throws NamespaceKeyUnavailableException naming bob and todos.demos, and nothing is sealed under bob's demos key
+    Then only todos.demos is looked up, the write throws NamespaceKeyUnavailableException naming bob and todos.demos, and the cached demos key seals nothing
 
   Scenario: A required namespace the recipient has not advertised falls back to legacy where allowed
     Given bob advertising a key for demos only, and alice below pqActive with allowLegacyCryptoFallback

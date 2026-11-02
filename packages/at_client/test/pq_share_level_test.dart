@@ -78,6 +78,9 @@ class _Network {
   /// Whether the atServers can be reached at all.
   bool reachable = true;
 
+  /// The error code a batch entry for each key is answered with instead.
+  final Map<String, String> failing = {};
+
   void requireReachable() {
     if (!reachable) throw SecondaryConnectException('atServer unreachable');
   }
@@ -176,6 +179,10 @@ Map<String, Object?> _plookup(_Network net, String command) {
   final match = RegExp(r'^plookup:(?:bypassCache:true:)?all:(.+)@([^@]+)$')
       .firstMatch(command.trim());
   final key = 'public:${match!.group(1)}@${match.group(2)}';
+  final failure = net.failing[key];
+  if (failure != null) {
+    return {'error_code': failure, 'error_message': '$failure for $key'};
+  }
   final value = net.records[key];
   return value == null
       ? {'error_code': 'AT0015', 'error_message': 'key not found'}
@@ -468,68 +475,60 @@ void main() {
       return c;
     }
 
-    test(
-        'A recipient advertising nothing for a name is remembered for 30 '
-        'seconds', () async {
-      final c = remembering(const Duration(seconds: 30));
-      final key = AtKey.fromString('$_bob:x.todos.demos$_alice');
-      await expectLater(write(c, key), refusedNaming(_bob, 'todos.demos'));
-      await publish(c.ring, _bob, 'todos.demos');
+    test('A full miss is remembered for 30 seconds', () async {
+      final c = remembering(const Duration(milliseconds: 300));
+      await expectLater(
+          write(c, AtKey.fromString('$_bob:x.todos.demos$_alice')),
+          refusedNaming(_bob, 'todos.demos'));
+      final bobs = await publish(c.ring, _bob, 'todos.demos');
       c.ring.lookedUp.clear();
 
       await expectLater(
           write(c, AtKey.fromString('$_bob:y.todos.demos$_alice')),
           refusedNaming(_bob, 'todos.demos'));
-      expect(c.ring.lookedUp, isEmpty);
+      expect(c.ring.lookedUp, isEmpty, reason: 'decided with no lookup');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final key = AtKey.fromString('$_bob:z.todos.demos$_alice');
+      await write(c, key);
+
+      expect(stamped(key)['ckNs'], 'todos.demos',
+          reason: 'the first share after the window walks again');
+      expect(sealedTo(_bob, 'todos.demos'), bobs);
     });
 
-    test(
-        'After 30 seconds, a recipient that advertised nothing is asked '
-        'again', () async {
-      final c = remembering(const Duration(milliseconds: 200));
-      await expectLater(
-          write(c, AtKey.fromString('$_bob:x.todos.demos$_alice')),
-          refusedNaming(_bob, 'todos.demos'));
-      final bobs = await publish(c.ring, _bob, 'todos.demos');
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+    test('A miss at a narrower level is remembered for 30 seconds', () async {
+      final c = remembering(const Duration(seconds: 30));
+      await publish(c.ring, _bob, 'demos');
+      await write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      await publish(c.ring, _bob, 'todos.demos');
+      c.ring.lookedUp.clear();
       final key = AtKey.fromString('$_bob:y.todos.demos$_alice');
 
       await write(c, key);
 
-      expect(stamped(key)['ckNs'], 'todos.demos');
-      expect(sealedTo(_bob, 'todos.demos'), bobs);
+      expect(stamped(key)['ckNs'], 'demos');
+      expect(c.ring.lookedUp.where((l) => l == '$_bob:todos.demos'), isEmpty);
     });
 
     test(
-        'Within 30 seconds of a narrower miss, the broader key is used without '
-        'a lookup', () async {
-      final c = remembering(const Duration(seconds: 30));
-      await publish(c.ring, _bob, 'sshnp');
-      await write(c, AtKey.fromString('$_bob:x.device1.sshnp$_alice'));
-      await publish(c.ring, _bob, 'device1.sshnp');
+        'A narrower key published inside the miss window is used by the first '
+        'write after it', () async {
+      final c = remembering(const Duration(milliseconds: 300));
+      await publish(c.ring, _bob, 'demos');
+      await write(c, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      final bobs = await publish(c.ring, _bob, 'todos.demos');
+      final inside = AtKey.fromString('$_bob:y.todos.demos$_alice');
+      await write(c, inside);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
       c.ring.lookedUp.clear();
-      final key = AtKey.fromString('$_bob:y.device1.sshnp$_alice');
+      final after = AtKey.fromString('$_bob:z.todos.demos$_alice');
 
-      await write(c, key);
+      await write(c, after);
 
-      expect(stamped(key)['ckNs'], 'sshnp');
-      expect(c.ring.lookedUp.where((l) => l.contains('device1')), isEmpty);
-    });
-
-    test('After 30 seconds, a newly published narrower key is used', () async {
-      final c = remembering(const Duration(milliseconds: 200));
-      await publish(c.ring, _bob, 'sshnp');
-      await write(c, AtKey.fromString('$_bob:x.device1.sshnp$_alice'));
-      final bobs = await publish(c.ring, _bob, 'device1.sshnp');
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      c.ring.lookedUp.clear();
-      final key = AtKey.fromString('$_bob:y.device1.sshnp$_alice');
-
-      await write(c, key);
-
-      expect(stamped(key)['ckNs'], 'device1.sshnp');
-      expect(sealedTo(_bob, 'device1.sshnp'), bobs);
-      expect(c.ring.lookedUp, contains('$_bob:device1.sshnp'));
+      expect(stamped(inside)['ckNs'], 'demos');
+      expect(stamped(after)['ckNs'], 'todos.demos');
+      expect(sealedTo(_bob, 'todos.demos'), bobs);
+      expect(c.ring.lookedUp, contains('$_bob:todos.demos'));
     });
 
     test('canSealTo asks afresh, whatever a share found missing', () async {
@@ -589,6 +588,9 @@ void main() {
             sealTo: 'todos.demos'),
         refusedNaming(_bob, 'todos.demos'));
     expect(store.keys.where((k) => k.contains('.__ck.demos')), isEmpty);
+    expect(c.ring.lookedUp.where((l) => l.startsWith('$_bob:')),
+        ['$_bob:todos.demos'],
+        reason: 'demos is not looked up');
   });
 
   test(
@@ -813,9 +815,8 @@ void main() {
     Future<({String namespace, String ckNs})?> share(AtKey key) =>
         shareBy(aliceOver(), key);
 
-    test(
-        "A recipient's key, once found, is used for 15 minutes without a "
-        'lookup', () async {
+    test('A found advertisement is served from the cache for 15 minutes',
+        () async {
       final alice = aliceOver();
       await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
       net
@@ -831,20 +832,32 @@ void main() {
     });
 
     test(
-        'Past 15 minutes, a key whose atServer cannot be reached is used for '
-        'up to 15 minutes more', () async {
+        'An advertisement the re-fetch cannot refresh is served for 15 minutes '
+        'more, then not at all', () async {
       final alice = aliceOver(ttl: Duration.zero);
       await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
       net.reachable = false;
+      logs.records.clear();
 
       final chosen =
           await shareBy(alice, AtKey.fromString('$_bob:y.todos.demos$_alice'));
 
       expect(chosen?.ckNs, 'todos.demos');
+      expect(
+          logs.at('WARNING').where((m) => m.contains(
+              'Sealing to the advertised nskey for $_bob:todos.demos')),
+          isNotEmpty);
+      final past = aliceOver(ttl: Duration.zero, grace: Duration.zero);
+      net.reachable = true;
+      await shareBy(past, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      net.reachable = false;
+      await expectLater(
+          shareBy(past, AtKey.fromString('$_bob:y.todos.demos$_alice')),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'that failure, and not one the legacy fallback catches');
     });
 
-    test('Past 15 minutes, a key its atServer no longer has is not used',
-        () async {
+    test('A not-found ends a cached advertisement at once', () async {
       final alice = aliceOver(ttl: Duration.zero);
       await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
       net.records.remove('public:__nskey.todos.demos$_bob');
@@ -861,6 +874,43 @@ void main() {
           throwsA(isA<SecondaryConnectException>()),
           reason: 'the key its atServer no longer had is gone from the cache, '
               'so its stale grace cannot bring it back');
+    });
+
+    test('A cached broader advertisement does not satisfy a required namespace',
+        () async {
+      net.records.remove('public:__nskey.todos.demos$_bob');
+      final alice = aliceOver();
+      await shareBy(alice, AtKey.fromString('$_bob:y.demos$_alice'));
+      net.batches.clear();
+
+      await expectLater(
+          alice.manager.ensureCurrent(CryptoContext(atClient: alice.client),
+              AtKey.fromString('$_bob:x.todos.demos$_alice'),
+              sealToNamespace: 'todos.demos'),
+          throwsA(isA<NamespaceKeyUnavailableException>()
+              .having((e) => e.namespace, 'namespace', 'todos.demos')));
+      expect(net.batches, [
+        ['plookup:bypassCache:true:all:__nskey.todos.demos$_bob']
+      ]);
+    });
+
+    test('A batch entry that fails for any reason but not-found stops the walk',
+        () async {
+      net.failing['public:__nskey.todos.demos$_bob'] = 'AT0011';
+      final alice = aliceOver();
+
+      await expectLater(
+          shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice')),
+          throwsA(isA<AtException>()
+              .having((e) => e.message, 'message', contains('AT0011'))));
+      net.failing.clear();
+      net.batches.clear();
+      final chosen =
+          await shareBy(alice, AtKey.fromString('$_bob:y.todos.demos$_alice'));
+      expect(chosen?.ckNs, 'todos.demos',
+          reason: 'todos.demos was not remembered as a miss');
+      expect(net.batches.single.first,
+          'plookup:bypassCache:true:all:__nskey.todos.demos$_bob');
     });
 
     test('canSealTo answers from a key a share found', () async {
