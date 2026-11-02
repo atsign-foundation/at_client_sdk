@@ -125,12 +125,13 @@ class AtsignFlows {
     connectBudget: connectBudget,
   );
 
-  /// `Atsign.resumeEnrollment`: the request for [app] and [device] already
-  /// filed in [keys] and awaiting approval, or null when there is none.
+  /// `Atsign.resumeEnrollment`: the request already filed in [keys] and
+  /// awaiting approval, or null when there is none. Each of [app] and
+  /// [device] given narrows the search; with neither, [keys] must hold one.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
-    required String app,
-    required String device,
+    String? app,
+    String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUpFactory? lookUps,
