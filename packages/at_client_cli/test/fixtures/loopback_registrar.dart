@@ -1,8 +1,11 @@
 import 'dart:io';
 
+import 'package:at_client_cli/src/register/registrar_api_constants.dart';
+
 /// The line a loopback registrar logs to stderr for each request it serves:
 /// its method and path, and whether it carried the registrar API key this
-/// process's environment sets in `AT_REGISTRAR_API_KEY`.
+/// process's environment sets in `AT_REGISTRAR_API_KEY`, the built-in one, or
+/// another. It never quotes a key.
 String servedLine(HttpRequest request) {
   final sent = request.headers.value(HttpHeaders.authorizationHeader);
   final set = Platform.environment['AT_REGISTRAR_API_KEY'];
@@ -10,7 +13,9 @@ String servedLine(HttpRequest request) {
       ? 'no key'
       : sent == set
           ? 'the key set'
-          : 'another key';
+          : sent == RegistrarApiConstants.authorization
+              ? 'the built-in key'
+              : 'another key';
   return 'registrar served ${request.method} ${request.uri.path} with $key';
 }
 

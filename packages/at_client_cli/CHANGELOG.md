@@ -1,10 +1,11 @@
 ## 1.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
-- breaking: `at_register`, and `at_activate onboard` without `-c`, take the
-  registrar API key from `AT_REGISTRAR_API_KEY`; create one via the registrar
-  at my.atsign.com. With none set, each refuses before it asks the registrar,
-  and `at_register` exits 8.
+- feat: `at_register`, and `at_activate onboard` without `-c`, ask the
+  registrar with the API key in `AT_REGISTRAR_API_KEY` when it is set, and
+  otherwise with a built-in key, so both work without it. A key that is set
+  but holds a character an HTTP header cannot carry is refused before
+  anything is sent.
 - feat: instances of a program that share a keyfile opened through
   `CliKeys.fileFor`, as `CLIBase` opens it, retrofit it one at a time.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:

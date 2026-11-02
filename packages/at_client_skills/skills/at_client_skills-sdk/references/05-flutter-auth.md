@@ -68,8 +68,8 @@ on the calls that find a free atSign and exchange the code emailed to the
 user for that atSign's CRAM secret; it names the app to the registrar and
 acts for no atSign. An app developer can create an API key via the
 registrar at my.atsign.com. Keep it out of the source: a Flutter app takes
-it at build time with `--dart-define`, and at_client_cli's commands read
-`AT_REGISTRAR_API_KEY`.
+it at build time with `--dart-define`; at_client_cli's commands send
+`AT_REGISTRAR_API_KEY` when it is set, and otherwise a built-in key.
 
 ```dart
 // flutter run --dart-define=REGISTRAR_API_KEY=<your key>

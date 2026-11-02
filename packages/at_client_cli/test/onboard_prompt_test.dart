@@ -28,6 +28,27 @@ void main() {
           workingDirectory: Directory.current.path,
         );
 
+    /// What at_activate does with no CRAM secret and no registrar API key set,
+    /// with [answer] on its stdin and [flags], against a registrar on the
+    /// loopback interface that refuses the connection.
+    Future<ProcessResult> registrarOnboard(String answer, String flags) async =>
+        Process.run(
+          'bash',
+          [
+            '-c',
+            'echo "$answer" | timeout 20s env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath $flags --registrarUrl 127.0.0.1:${await refusedPort()}'
+          ],
+          workingDirectory: Directory.current.path,
+        );
+
+    void expectRegistrarAsked(ProcessResult result) {
+      expect(
+          '${result.stdout}${result.stderr}', contains('Requesting 127.0.0.1:'),
+          reason: 'it went on to the loopback registrar, which refuses, so '
+              'nothing leaves the machine');
+      expect(result.exitCode, 1);
+    }
+
     void expectNoPrompt(ProcessResult result) {
       expect(result.stdout, isNot(contains(backupPrompt)));
       expect('${result.stdout}${result.stderr}',
@@ -54,21 +75,11 @@ void main() {
 
     // Test #2: test for exit code not 0 upon "Y" response to backup key prompt
     test('Process-based test: CLI accepts Y response and continues', () async {
-      final result = await Process.run(
-        'bash',
-        [
-          '-c',
-          'timeout 5s bash -c "echo Y | env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath"'
-        ],
-        workingDirectory: Directory.current.path,
-      );
+      final result = await registrarOnboard('Y', '');
 
-      // Should not exit with code 0 (which is the cancellation code)
-      // It will exit with a different code due to failure
-      expect(result.exitCode, isNot(equals(0)),
-          reason: 'at_activate runs without AT_REGISTRAR_API_KEY, so it '
-              'must not reach the registrar');
-    }, timeout: Timeout(Duration(seconds: 10)));
+      expect(result.stdout, contains(backupPrompt));
+      expectRegistrarAsked(result);
+    }, timeout: Timeout(Duration(seconds: 30)));
 
     // Test #3: Tests that using the `--cramkey` implies `--yes` and bypasses the backup key prompt
     test('CLI with --cramkey bypasses prompt (implies --yes)', () async {
@@ -83,19 +94,11 @@ void main() {
 
     // Test #5: Tests that using just `--yes` bypasses the backup key prompt
     test('CLI with --yes bypasses prompt and continues', () async {
-      final result = await Process.run(
-        'bash',
-        [
-          '-c',
-          'timeout 5s env -u AT_REGISTRAR_API_KEY dart bin/at_activate.dart onboard --atsign @8incanteater --keys $testKeysPath --yes'
-        ],
-        workingDirectory: Directory.current.path,
-      );
+      final result = await registrarOnboard('', '--yes');
 
-      expect(result.exitCode, isNot(equals(0)),
-          reason: 'at_activate runs without AT_REGISTRAR_API_KEY, so it '
-              'must not reach the registrar');
-    }, timeout: Timeout(Duration(seconds: 10)));
+      expect(result.stdout, isNot(contains(backupPrompt)));
+      expectRegistrarAsked(result);
+    }, timeout: Timeout(Duration(seconds: 30)));
 
     // runs after each individual test
     tearDown(() {

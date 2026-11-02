@@ -34,7 +34,6 @@ dart pub global activate at_client_cli
 ### `at_register` — get a free atSign
 
 ```sh
-export AT_REGISTRAR_API_KEY=<your registrar API key>
 at_register -e your_email@example.com
 ```
 
@@ -42,9 +41,10 @@ Fetches a free atSign, emails you a verification code, then activates the
 atSign once you paste the code back. The generated `.atKeys` file lands in
 `~/.atsign/keys/`.
 
-The registrar API key names your app to the registrar: create one via the
-registrar at my.atsign.com. With `AT_REGISTRAR_API_KEY` unset, `at_register`
-asks the registrar nothing and exits 8.
+The registrar API key names your app to the registrar. `at_register` sends
+the one in `AT_REGISTRAR_API_KEY` when it is set, and otherwise a key built
+into at_client_cli; to name your own app, create a key via the registrar at
+my.atsign.com and set the variable to it.
 
 `at_register` takes no `--posture`: it activates at at_client's default
 (`legacy` today). An app that runs at `pqReady` or `pqActive` upgrades those
@@ -63,7 +63,8 @@ because a later major will refuse it.
 at_activate onboard -a @alice -c <cram_secret>
 
 # ...or let at_activate fetch it: the registrar emails a verification code,
-# which you paste back. This needs AT_REGISTRAR_API_KEY, as at_register does
+# which you paste back. It sends AT_REGISTRAR_API_KEY when it is set, and
+# otherwise the built-in key, as at_register does
 at_activate onboard -a @alice
 ```
 
@@ -183,8 +184,8 @@ first on every connection so the proxy can route it, and
 the same atSign is not supported: the second fails when it opens the store.
 
 Activate a new atSign with its CRAM secret (or run `at_activate onboard`
-with `AT_REGISTRAR_API_KEY` set, which fetches one from the registrar against
-an emailed verification code):
+without `-c`, which fetches one from the registrar against an emailed
+verification code):
 
 ```dart
 final owner = await Atsign('@alice').activate(
@@ -256,7 +257,7 @@ at_onboarding_cli 1.x wrote is read unchanged.
 | `AtOnboardingPreference`                                                                         | `AtClientPreference`; its `atKeysFilePath` and `passPhrase` are `CliKeys.fileFor(atSign, path: ..., passPhrase: ...)`, its `storagePath` is `CliKeys.storageFor(...)`. With no `path`, `storageFor` opens a new store at `~/.atsign/storage/<atSign>/<program>/single`, not the old `~/.atsign/at_onboarding_cli/storage/<atSign>/hive`; pass that directory as `path` to keep using the old store |
 | `AtOnboardingPreference()..signingAlgoType = ...`                                                | `AtClientPreference(posture: ..., authenticationKeyAlgorithm: ...)`, fixed at construction                                                                              |
 | `createAtClient(...)`                                                                            | `createAtClient(...)`, unchanged: the same parameters, and the client at_activate's commands open                                                                       |
-| `OnboardingUtil`                                                                                 | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign, each with the registrar API key in `AT_REGISTRAR_API_KEY`                                 |
+| `OnboardingUtil`                                                                                 | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign, each with the registrar API key in `AT_REGISTRAR_API_KEY` when it is set, or a built-in one |
 | `AuthKeyType`                                                                                    | none: read a keyfile with `CliKeys.fileFor(atSign).read(atSign)`                                                                                                        |
 | `MySyncProgressListener`                                                                         | a `SyncProgressListener` of the program's own                                                                                                                           |
 | `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                                   | `AtActivate.main(args)`, or the `at_activate` executable                                                                                                                |

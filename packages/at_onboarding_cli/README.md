@@ -8,9 +8,9 @@ Depend on `at_client_cli` and import
 This last major re-exports at_client_cli and keeps one-line `at_activate`
 and `at_register` executables that run at_client_cli's, so
 `dart pub global activate at_onboarding_cli` still installs working tools.
-`at_register`, and `at_activate onboard` without `-c`, take a registrar API
-key from `AT_REGISTRAR_API_KEY`; create one via the registrar at
-my.atsign.com.
+`at_register`, and `at_activate onboard` without `-c`, ask the registrar
+with the API key in `AT_REGISTRAR_API_KEY` when it is set, and otherwise with
+a built-in key.
 A program importing this package changes code if it uses
 `AtOnboardingService`, `AtOnboardingPreference`, `OnboardingUtil` or
 `AuthKeyType`, which at_client_cli does not export:

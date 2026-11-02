@@ -627,7 +627,7 @@ Future<void> awaitStartupTail(AtClient client) async {
 
 /// The CRAM secret for [atSign] from the registrar: it emails a verification
 /// code to the atSign's owner, who types it in here. The registrar is asked
-/// with [registrarApiKey], and with none nothing is sent.
+/// with [registrarApiKey], or with the built-in key when that is not set.
 Future<String> _cramSecretFromRegistrar(
     String atSign, String registrarUrl, String? registrarApiKey) async {
   final util = OnboardingUtil(registrarApiKey);

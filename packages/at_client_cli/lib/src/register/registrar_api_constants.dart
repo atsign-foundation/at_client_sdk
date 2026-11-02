@@ -15,4 +15,5 @@ class RegistrarApiConstants {
 
   /// API headers
   static const String contentType = 'application/json';
+  static const String authorization = '477b-876u-bcez-c42z-6a3d';
 }

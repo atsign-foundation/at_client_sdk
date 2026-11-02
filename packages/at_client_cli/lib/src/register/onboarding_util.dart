@@ -10,13 +10,8 @@ import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
 /// The environment variable at_register and at_activate take the registrar
-/// API key from.
+/// API key from, in place of the built-in one.
 const String registrarApiKeyVariable = 'AT_REGISTRAR_API_KEY';
-
-/// What at_register and at_activate say when they have no registrar API key.
-const String noRegistrarApiKey =
-    'No registrar API key. Create one via the registrar at my.atsign.com, '
-    'and set $registrarApiKeyVariable to it.';
 
 /// What at_register and at_activate say when the registrar API key holds a
 /// character an HTTP header cannot carry.
@@ -36,19 +31,20 @@ class OnboardingUtil {
   final String registrarApiKey;
   IOClient? _ioClient;
 
-  /// A registrar client naming the app with [registrarApiKey]. Throws
-  /// [at_client.AtClientException] saying where to create a key when there
-  /// is none, and without quoting it when it holds a character an HTTP
-  /// header cannot carry.
+  /// A registrar client naming the app with [registrarApiKey], or with the
+  /// built-in key when that is absent or blank. Throws
+  /// [at_client.AtClientException], without quoting the key, when it holds a
+  /// character an HTTP header cannot carry.
   OnboardingUtil(String? registrarApiKey)
       : registrarApiKey = usableRegistrarApiKey(registrarApiKey);
 
-  /// [registrarApiKey], or an [at_client.AtClientException] saying why the
-  /// registrar cannot be asked with it: there is none, or it holds a
-  /// character an HTTP header cannot carry, which the message does not quote.
+  /// The registrar API key to send: [registrarApiKey] when it is set and not
+  /// blank, otherwise [RegistrarApiConstants.authorization]. Throws
+  /// [at_client.AtClientException], without quoting it, when a key that is
+  /// set holds a character an HTTP header cannot carry.
   static String usableRegistrarApiKey(String? registrarApiKey) =>
       registrarApiKey == null || registrarApiKey.trim().isEmpty
-          ? throw at_client.AtClientException.message(noRegistrarApiKey)
+          ? RegistrarApiConstants.authorization
           : !_fitsAHeader(registrarApiKey)
               ? throw at_client.AtClientException.message(badRegistrarApiKey)
               : registrarApiKey;

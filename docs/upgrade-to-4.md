@@ -50,8 +50,10 @@ for each import whose every name it now has from at_client_cli; delete those
 imports. Regenerate a committed `pubspec.lock`, or a CI step running
 `pub get --enforce-lockfile` fails. Install the
 tools with `dart pub global activate at_client_cli`. `at_register`, and
-`at_activate onboard` without `-c`, take a registrar API key from
-`AT_REGISTRAR_API_KEY`; create one via the registrar at my.atsign.com.
+`at_activate onboard` without `-c`, ask the registrar with the API key in
+`AT_REGISTRAR_API_KEY` when it is set, and otherwise with a key built into
+at_client_cli, as at_onboarding_cli did, so they work without it. An app may
+create its own key via the registrar at my.atsign.com.
 
 From at_utils it re-exports `AtSignLogger` and the three io handlers, but not
 the `LoggingHandler` interface or `AtUtils`. A program that implements a
@@ -685,7 +687,10 @@ Future<AtClient> commandClient() => createAtClient(
     maxConnectAttempts: 3);
 ```
 
-**Embedding at_activate** no longer needs a `src/` import:
+**Embedding at_activate** no longer needs a `src/` import, and a program
+that ships it to its own users, as an installer does, keeps working without
+`AT_REGISTRAR_API_KEY`: `at_activate onboard` without `-c` asks the
+registrar with the built-in key unless the variable is set:
 
 ```dart after-cli
 import 'dart:io';
@@ -716,6 +721,9 @@ program passing `addLegacyRootDomainArg:` to `CLIBase.createArgsParser` or
 - [ ] A retry loop around `CLIBase` catches
       `SecondaryServerConnectivityException`, not every exception.
 - [ ] Scripts name `at_activate`'s command (`at_activate onboard ...`).
+- [ ] An app that names itself to the registrar sets `AT_REGISTRAR_API_KEY`;
+      without it, `at_register` and `at_activate onboard` send the built-in
+      key, as before.
 - [ ] Scripts pass a `CLIBase` program's root domain as `-r`, not `-d`;
       `at_activate`'s `-d` stays the device name, and nothing passes
       `--hashingAlgoType`.

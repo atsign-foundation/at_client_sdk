@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client_cli/src/register/onboarding_util.dart';
+import 'package:at_client_cli/src/register/registrar_api_constants.dart';
 import 'package:at_client_cli/src/register/register.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:test/test.dart';
@@ -22,7 +23,6 @@ class _RecordedLogs implements LoggingHandler {
 /// Catalogue: features/at_client_cli/registrar_api_key.feature
 void main() {
   const key = 'app-key-3f9c71';
-  const pointer = 'via the registrar at my.atsign.com';
   late Directory home;
 
   setUp(() =>
@@ -56,6 +56,16 @@ void main() {
     return (exitCode: exitCode, output: '${await stdout}${await stderr}');
   }
 
+  /// Every request the loopback registrar served in [output], as it logged it.
+  List<String> servedIn(String output) => [
+        for (final m in RegExp(r'registrar served .*').allMatches(output)) m[0]!
+      ];
+
+  /// Whether [output] carries the built-in registrar API key, asked as a
+  /// boolean so that a failure never prints it.
+  bool carriesBuiltInKey(String output) =>
+      output.contains(RegistrarApiConstants.authorization);
+
   /// at_register for an atSign whose keyfile is already there, so the
   /// activation after registration fails before it reaches an atServer.
   Future<({int exitCode, String output})> atRegister(
@@ -67,34 +77,29 @@ void main() {
         registrarApiKey: registrarApiKey, input: 'ABCD\n' * 4);
   }
 
-  test(
-      'at_register with no registrar API key refuses before it reaches the '
-      'registrar', () async {
-    final control = await atRegister(registrarApiKey: key);
-    expect(
-        control.output,
-        contains('registrar served GET /api/app/v3/get-free-atsign '
-            'with the key set'),
-        reason: 'the control: with a key set, the registrar is reached');
-
+  test('at_register with no registrar API key sends the built-in key',
+      () async {
     final run = await atRegister();
 
-    expect(run.output, contains(pointer));
-    expect(run.output, contains('AT_REGISTRAR_API_KEY'));
-    expect(run.output, isNot(contains('registrar served')),
-        reason: 'nothing is sent to the registrar');
-    expect(run.exitCode, 8);
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
+    final served = servedIn(run.output);
+    expect(served, isNotEmpty,
+        reason: 'the premise: at_register asked the registrar');
+    expect(served, everyElement(endsWith('with the built-in key')));
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
-      'at_register with a registrar API key that is set but empty refuses as '
-      'with none', () async {
+      'at_register with a registrar API key that is set but empty sends the '
+      'built-in key, as with none', () async {
     final run = await atRegister(registrarApiKey: '');
 
-    expect(run.output, contains(pointer));
-    expect(run.output, isNot(contains('registrar served')),
-        reason: 'nothing is sent to the registrar');
-    expect(run.exitCode, 8);
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
+    final served = servedIn(run.output);
+    expect(served, isNotEmpty,
+        reason: 'the premise: at_register asked the registrar');
+    expect(served, everyElement(endsWith('with the built-in key')));
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
@@ -115,6 +120,8 @@ void main() {
       'before it reaches the registrar, and never echoes the key', () async {
     final run = await atRegister(registrarApiKey: '$key\n');
 
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
     expect(run.output, contains(badRegistrarApiKey));
     expect(run.output, isNot(contains(key)));
     expect(run.output, isNot(contains('registrar served')),
@@ -122,58 +129,76 @@ void main() {
     expect(run.exitCode, isNot(0));
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('A registrar API key that is empty or blank is refused as a missing one',
-      () {
-    for (final blank in ['', ' ', '\t\n']) {
+  test(
+      'A registrar API key that is absent, empty or blank is replaced by the '
+      'built-in one', () {
+    for (final blank in [null, '', ' ', '\t\n']) {
       expect(
-          () => OnboardingUtil(blank),
-          throwsA(isA<Exception>()
-              .having((e) => '$e', 'message', contains(noRegistrarApiKey))),
+          OnboardingUtil(blank).registrarApiKey ==
+              RegistrarApiConstants.authorization,
+          isTrue,
           reason: 'a key of ${jsonEncode(blank)} names no app');
     }
+    expect(OnboardingUtil(key).registrarApiKey == key, isTrue,
+        reason: 'the control: a key that is set is the one used');
   });
 
   test(
       'at_activate onboard without a CRAM secret and with no registrar API '
-      'key refuses the same way', () async {
+      'key sends the built-in key', () async {
     const args = ['onboard', '-a', '@alice', '-y', '--debug'];
-    final control = await runFixture('at_activate_against_loopback.dart', args,
-        registrarApiKey: key);
-    expect(
-        control.output,
-        contains('registrar served POST /api/app/v3/authenticate/atsign '
-            'with the key set'),
-        reason: 'the control: with a key set, the registrar is reached');
-    expect(control.output, contains('Sending request to url'),
-        reason: 'the control: --debug logs the registrar request');
-    expect(control.output, isNot(contains(key)),
-        reason: 'no log line carries the registrar API key');
-
     final run = await runFixture('at_activate_against_loopback.dart', args);
 
-    expect(run.output, contains(pointer));
-    expect(run.output, contains('AT_REGISTRAR_API_KEY'));
-    expect(run.output, isNot(contains('registrar served')),
-        reason: 'nothing is sent to the registrar');
-    expect(run.exitCode, isNot(0));
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'no log line carries the built-in key');
+    expect(
+        run.output,
+        contains('registrar served POST /api/app/v3/authenticate/atsign '
+            'with the built-in key'));
+    expect(run.output, contains('Sending request to url'),
+        reason: 'the control: --debug logs the registrar request');
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
-      'at_activate onboard without a CRAM secret and with no registrar API '
-      'key refuses before it shows the backup prompt', () async {
+      'at_activate onboard with a registrar API key set sends that key, not '
+      'the built-in one', () async {
+    const args = ['onboard', '-a', '@alice', '-y', '--debug'];
+    final run = await runFixture('at_activate_against_loopback.dart', args,
+        registrarApiKey: key);
+
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
+    expect(
+        run.output,
+        contains('registrar served POST /api/app/v3/authenticate/atsign '
+            'with the key set'));
+    expect(run.output, contains('Sending request to url'),
+        reason: 'the control: --debug logs the registrar request');
+    expect(run.output, isNot(contains(key)),
+        reason: 'no log line carries the registrar API key');
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test(
+      'at_activate onboard without a CRAM secret and with a registrar API key '
+      'a header cannot carry refuses before it shows the backup prompt',
+      () async {
     const prompt = 'IMPORTANT - READ CAREFULLY';
     const args = ['onboard', '-a', '@alice'];
     final control = await runFixture('at_activate_against_loopback.dart', args,
         registrarApiKey: key, input: 'N\n');
+    expect(carriesBuiltInKey(control.output), isFalse);
     expect(control.output, contains(prompt),
-        reason: 'the control: with a key set, the prompt is shown');
+        reason: 'the control: with a usable key set, the prompt is shown');
     expect(control.exitCode, 0);
 
     final run = await runFixture('at_activate_against_loopback.dart', args,
-        input: 'Y\n');
+        registrarApiKey: '$key\n', input: 'Y\n');
 
-    expect(run.output, contains(pointer));
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
+    expect(run.output, contains(badRegistrarApiKey));
     expect(run.output, isNot(contains(prompt)));
+    expect(run.output, isNot(contains(key)));
     expect(run.output, isNot(contains('registrar served')),
         reason: 'nothing is sent to the registrar');
     expect(run.exitCode, isNot(0));
@@ -181,6 +206,8 @@ void main() {
 
   test('A registrar API key that is set is the one sent', () async {
     final run = await atRegister(registrarApiKey: key);
+    expect(carriesBuiltInKey(run.output), isFalse,
+        reason: 'the built-in key is never echoed');
     final served = RegExp(r'registrar served .*').allMatches(run.output);
     expect(served, isNotEmpty,
         reason: 'the premise: at_register asked the registrar');
@@ -225,7 +252,10 @@ void main() {
             .start(),
         ToLoopbackRegistrar(registrar.port));
 
-    expect(authorizations, [key, key]);
+    expect(authorizations, hasLength(2));
+    expect(authorizations.every((sent) => sent == key), isTrue,
+        reason: 'every request carries the key set, not the built-in one');
+    expect(recorded.messages.any((m) => carriesBuiltInKey(m)), isFalse);
     expect(recorded.messages, contains(contains('Current Task')),
         reason: 'the control: the flow logged its steps at finest');
     expect(recorded.messages, contains(contains('Sending request to url')),

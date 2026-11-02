@@ -33,8 +33,9 @@ class Register {
     if (argResults.wasParsed('help')) {
       stderr.writeln('[Usage] dart run register.dart -e email@email.com\n'
           '[Options]\n${argParser.usage}\n'
-          '[Environment]\n$registrarApiKeyVariable  the registrar API key, '
-          'created via the registrar at my.atsign.com');
+          '[Environment]\n$registrarApiKeyVariable  a registrar API key to '
+          'send in place of the built-in one, created via the registrar at '
+          'my.atsign.com');
       exit(0);
     }
 
