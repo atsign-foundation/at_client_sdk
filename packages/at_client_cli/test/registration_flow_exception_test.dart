@@ -46,6 +46,26 @@ class _EndlessFollowUpRegistrar extends _FollowUpRegistrar {
   }
 }
 
+/// A registrar that answers a code with 'follow-up', refuses its confirmation
+/// as expired, answers the next code typed with 'follow-up' too, and gives the
+/// CRAM key once that code is confirmed. It answers in that order whatever
+/// confirmation it is sent, so the test checks what the flow sends.
+class _ExpiredConfirmationRegistrar extends _FollowUpRegistrar {
+  static const _answers = ['follow-up', 'retry', 'follow-up'];
+
+  _ExpiredConfirmationRegistrar()
+      : super([_FollowUpRegistrar._code, _FollowUpRegistrar._code]);
+
+  @override
+  Future<String> validateOtp(String atSign, String email, String otp,
+      {String confirmation = 'true', String authority = ''}) async {
+    confirmations.add(confirmation);
+    return confirmations.length <= _answers.length
+        ? _answers[confirmations.length - 1]
+        : '@$atSign:the-cram-key';
+  }
+}
+
 void main() {
   test('A third code accepted with a follow-up gets the CRAM key', () async {
     final registrar = _FollowUpRegistrar(['WRONG1', 'WRONG2', 'RIGHT']);
@@ -76,6 +96,21 @@ void main() {
         throwsA(isA<AtClientException>().having(
             (e) => e.message, 'message', contains('asked again to confirm'))));
     expect(registrar.confirmations, ['false', 'true']);
+  });
+
+  test('A code typed after a refused confirmation is confirmed in its turn',
+      () async {
+    final registrar = _ExpiredConfirmationRegistrar();
+    final params = {
+      'authority': 'registrar.example',
+      'atsign': 'alice123',
+      'email': 'alice@example.com',
+    };
+
+    await RegistrationFlow(params, registrar).add(ValidateOtp()).start();
+
+    expect(params['cramkey'], 'the-cram-key');
+    expect(registrar.confirmations, ['false', 'true', 'false', 'true']);
   });
 
   test(

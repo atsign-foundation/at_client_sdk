@@ -195,6 +195,8 @@ class ValidateOtp extends RegisterApiTask {
             '[Unable to proceed] The verification code you entered is either invalid or expired.\n'
             ' Check your verification code and try again.');
         params.remove('otp');
+        // The next code is a fresh attempt, not a confirmation of this one.
+        params['confirmation'] = 'false';
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {

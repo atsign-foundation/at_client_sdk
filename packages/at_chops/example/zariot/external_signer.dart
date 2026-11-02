@@ -184,7 +184,8 @@ class ExternalSigner {
     var prfResult = _serialPort.read(256, 1000);
     _logger.finest('prfResult :$prfResult');
     final key = _parseAtCsimResult(prfResult.toString()).result;
-    if (key == null || !key.endsWith('9000')) {
+    // C0000010 asks for 16 bytes: 32 hex characters, then the 9000 status.
+    if (key == null || key.length != 36 || !key.endsWith('9000')) {
       throw Exception('Compute PRF failure: no key in $prfResult');
     }
     // remove the success code at the end.
@@ -340,7 +341,12 @@ class ExternalSigner {
     final signatureData = _parseAtCsimResult(getSignatureResult.toString());
     _logger.info('signature: ${signatureData.result}');
     final result = signatureData.result;
-    if (result == null || !result.startsWith('330040')) {
+    // C0000043 asks for 67 bytes: the 330040 tag and a 64-byte signature, in
+    // 134 hex characters, then the 9000 status.
+    if (result == null ||
+        result.length != 138 ||
+        !result.startsWith('330040') ||
+        !result.endsWith('9000')) {
       throw Exception('no signature in $getSignatureResult');
     }
     // remove start tag, length and success code at the end.

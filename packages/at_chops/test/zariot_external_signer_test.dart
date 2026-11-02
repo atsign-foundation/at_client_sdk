@@ -84,6 +84,19 @@ void main() {
       expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
     });
 
+    test('when the SIM answers the PRF with no key, then there is none', () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '48000032': '+CSIM: 4,"6110"\r\nOK\r\n',
+              'C0000010': '+CSIM: 4,"9000"\r\nOK\r\n',
+            }));
+
+      expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
+    });
+
     test('when the modem answers a key pair with ERROR, then it gives up', () {
       final modem =
           _ScriptedModem({..._opened, 'B9000005': 'ERROR\r\n'}, readLimit: 6);
@@ -138,5 +151,38 @@ void main() {
 
       expect(signer.sign('ab' * 32), isNull);
     });
+
+    test('when the SIM signs, then the signature is returned', () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '2B800122': '+CSIM: 4,"6143"\r\nOK\r\n',
+              'C0000043': '+CSIM: 138,"330040${'AB' * 64}9000"\r\nOK\r\n',
+            }))
+        ..readInterval = Duration.zero;
+
+      expect(signer.sign('ab' * 32), 'ab' * 64);
+    });
+
+    for (final (name, answer) in [
+      ('the tag but no signature', '+CSIM: 10,"3300409000"'),
+      ('a status other than 9000', '+CSIM: 138,"330040${'AB' * 64}6110"'),
+    ]) {
+      test('when the signature answer carries $name, then there is none', () {
+        final signer = ExternalSigner()
+          ..initWithPort(
+              '000001',
+              _ScriptedModem({
+                ..._opened,
+                '2B800122': '+CSIM: 4,"6143"\r\nOK\r\n',
+                'C0000043': '$answer\r\nOK\r\n',
+              }))
+          ..readInterval = Duration.zero;
+
+        expect(signer.sign('ab' * 32), isNull);
+      });
+    }
   });
 }
