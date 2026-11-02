@@ -32,7 +32,7 @@ import 'package:at_lookup/at_lookup.dart';
 /// logged at shout level and ignored.
 ///
 /// Throws a [StateError] when a client for [atSign] as the same principal
-/// (the enrollment the keys name, or the atSign's own credential) is already
+/// (the enrollment the keys name, or the primary enrollment) is already
 /// live, rather than handing back one this caller does not own; [stop]
 /// releases it. Another enrollment of the atSign is another principal and
 /// builds beside it, given a store of its own. A failure while building leaves

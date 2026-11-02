@@ -339,7 +339,7 @@ void main() {
   });
 
   group('AtKeys authenticationKeyPairFor', () {
-    // The fixture's flat fields are this enrollment's own credentials.
+    // The fixture's flat fields hold this enrollment's keys.
     final flatEnrollmentId = encryptedAtKeysMap['enrollmentId'] as String;
     final flatApkamPublicKey =
         encryptedAtKeysMap[auth_constants.apkamPublicKey] as String;

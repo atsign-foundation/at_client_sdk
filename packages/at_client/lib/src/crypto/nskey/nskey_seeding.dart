@@ -193,7 +193,7 @@ class NskeySeeding {
   /// The namespaces this client holds a key for and [grants] let it write,
   /// other than those in [named]: `chat.app` under a grant on `app`.
   ///
-  /// Empty for the atSign's own credential, whose start asks about no
+  /// Empty for the primary enrollment, whose start asks about no
   /// revocation, and, logged, when the keyfile cannot be read.
   Future<Set<String>> _writableHeld(Map<String, dynamic>? grants,
       {required Set<String> named}) async {
@@ -404,8 +404,8 @@ class NskeySeeding {
     final filing = privateFiling;
     if (substrate == null || filing == null) return false;
 
-    // NOTE: the atSign's own credential is not an enrollment the atServer will
-    // answer about, and the verb behind the lookup is APKAM-gated.
+    // NOTE: the primary enrollment is not one the atServer will answer about,
+    // and the verb behind the lookup is APKAM-gated.
     if (isAtSignCredential(atClient.enrollmentId)) {
       return false;
     }

@@ -570,7 +570,7 @@ class AtClientImpl implements AtClient {
       liveClientsFor(atSign).isNotEmpty;
 
   /// Whether a live client is filed for [atSign] as [enrollmentId], null
-  /// meaning the atSign's own credential; a supersession is followed to the
+  /// meaning the primary enrollment; a supersession is followed to the
   /// client that now runs under it.
   static bool holdsLiveClientAs(String atSign, String? enrollmentId) =>
       atClientInstanceMap.containsKey(_currentInstanceKey(
@@ -709,7 +709,7 @@ class AtClientImpl implements AtClient {
     required AtClientStorage storage,
 
     /// When true, the default, [enrollmentId], or what the keys name, is the
-    /// principal exactly: a null means the atSign's own credential. When
+    /// principal exactly: a null means the primary enrollment. When
     /// false, a caller naming no enrollment is handed the atSign's enrolled
     /// client if exactly one is cached.
     bool exactEnrollment = true,

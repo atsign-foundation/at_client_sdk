@@ -630,7 +630,7 @@ What each posture switches on:
   atServer reachable does not wait.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
-  before publishing it. A client on the atSign's own credential mints nothing,
+  before publishing it. A client on the primary enrollment mints nothing,
   and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Rotation.** A content key is replaced once it is a year old, and a
   namespace key once its generation is a year old; `CryptoConfig`'s

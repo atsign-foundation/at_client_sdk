@@ -1359,8 +1359,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// [namespace] in its grants: as the enrollment request named them, and
   /// as each start reconciles them with the atServer's record.
   ///
-  /// `*` and the atSign's own credential name no namespace here, since
-  /// neither bounds the namespaces a record could name.
+  /// `*` and the primary enrollment name no namespace here, since neither
+  /// bounds the namespaces a record could name.
   Future<bool> _grantedOwn(
       AtKeysIo keysIo, String owner, String namespace) async {
     final enrollmentId = _atClient.enrollmentId;

@@ -441,7 +441,7 @@ void main() {
   });
 
   group("Given start-up's own seeding of todos.demos", () {
-    /// The seeding the atSign's own credential runs at start-up, with a
+    /// The seeding the primary enrollment runs at start-up, with a
     /// secret-sharing substrate whose directory lists this enrollment with no
     /// key package when [withSharing], and none otherwise.
     Future<NskeySeeding> ownSeeding({required bool withSharing}) async {

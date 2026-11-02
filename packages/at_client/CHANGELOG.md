@@ -178,7 +178,7 @@
   `StoppedException`, like its other calls.
 - breaking: `AtClientImpl.create` keeps one client per atSign and enrollment
   rather than one per atSign. A caller naming no enrollment, whose keys name
-  none, gets the client for the atSign's own credential; `exactEnrollment:
+  none, gets the client for the primary enrollment; `exactEnrollment:
   false` hands it the one enrolled client already cached instead.
 - fix: `AtClientImpl.setPreferences` throws the `ArgumentError` for a
   preference naming different rollout axes at the call, rather than as an
