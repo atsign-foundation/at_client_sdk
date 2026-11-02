@@ -465,6 +465,14 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 - Under `pqActive`, a write made right after the client opens, before its
   start-up has published the namespace key, waits up to 30 seconds for it,
   then throws `NamespaceKeyUnavailableException` naming that key.
+- A program whose peers are a mixed fleet, some advertising a namespace key
+  and some not, builds `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
+  false)` and sets `allowLegacyCryptoFallback`: each send requires the peer's
+  namespace with `sealToNamespace`, and a peer advertising nothing there gets
+  legacy encryption. A `pqReady` client with `allowLegacyCryptoFallback` can
+  instead ask `canSealTo` before each send and request
+  `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where it answers
+  true.
 - The at_client README's "Post-quantum cryptography" section has the full
   ladder and what each stage switches on.
 

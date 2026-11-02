@@ -15,6 +15,15 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   allow, and is refused otherwise; it never falls back to a broader namespace
   key. A NoPorts client, for instance, seals to a daemon's key at
   <device>.sshnp and treats its absence as a daemon that is not PQ-capable.
+  A program serving such a mixed fleet runs one of two shapes. The main one
+  is a posture that writes post-quantum by default and allows legacy
+  encryption, PqPosture.pqActive.copyWith(disallowLegacyEncryption: false),
+  with allowLegacyCryptoFallback: every send requires its <device>.sshnp, and
+  a daemon advertising nothing there gets legacy through the fallback. The
+  other is pqReady with allowLegacyCryptoFallback, which writes legacy by
+  default: per send, the program asks canSealTo, and requests the
+  namespace-key provider with sealToNamespace when it answers true, and
+  legacy otherwise.
   A key the recipient advertises, once found, is used for 15 minutes without
   a lookup, and for up to 15 minutes more, with a warning, while a re-fetch
   fails with anything but a not-found; one its atServer no longer has is
@@ -29,7 +38,8 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   Races: the level is chosen at each share from the recipient's advertisements
   as cached and fetched then. A share that races the recipient publishing a
   narrower level seals at the broader one, which every holder of that key
-  opens. The writer's own copy goes through the mint lock start-up uses.
+  opens. A key withdrawn between canSealTo and the send is treated as never
+  advertised: legacy where the fallback is allowed, refused otherwise. The writer's own copy goes through the mint lock start-up uses.
   Replay: nothing new is sent beyond lookups on the writer's own authenticated
   connection; what is sealed, and the owner and key name bound into each
   envelope, are unchanged.
@@ -73,8 +83,8 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When alice shares x.todos.demos with bob at pqActive
     Then the write throws NamespaceKeyUnavailableException naming bob and todos.demos, at once
 
-  Scenario: Below pqActive with the fallback allowed, such a share is sealed with legacy encryption
-    Given bob advertising no key at any level of x.todos.demos, and alice below pqActive with allowLegacyCryptoFallback
+  Scenario: A share to a recipient advertising nothing is sealed with legacy encryption
+    Given bob advertising no key at any level of x.todos.demos, and alice at pqActive allowing legacy encryption, with allowLegacyCryptoFallback
     When alice shares x.todos.demos with bob
     Then it is sealed with legacy encryption, and a warning names the fallback
 
@@ -163,7 +173,7 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Then only todos.demos is looked up, the write throws NamespaceKeyUnavailableException naming bob and todos.demos, and the cached demos key seals nothing
 
   Scenario: A required namespace the recipient has not advertised falls back to legacy where allowed
-    Given bob advertising a key for demos only, and alice below pqActive with allowLegacyCryptoFallback
+    Given bob advertising a key for demos only, and alice at pqActive allowing legacy encryption, with allowLegacyCryptoFallback
     When alice shares x.todos.demos with bob, requiring the namespace todos.demos
     Then it is sealed with legacy encryption, never under bob's demos key
 
@@ -194,6 +204,27 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Given bob's record at todos.demos not signed by any enrollment of bob's
     When the program asks canSealTo for bob and todos.demos
     Then the answer is false, a warning says the advertisement does not verify, and the next canSealTo looks it up again
+
+  Scenario: A mixed fleet: each device's notification is sealed under its own namespace key, or sent with legacy encryption
+    Given bob advertising keys for d1.sshnp and sshnp but not d2.sshnp, and alice at pqActive allowing legacy encryption, with allowLegacyCryptoFallback
+    When alice notifies bob of npt_request.d1.sshnp requiring d1.sshnp, and of npt_request.d2.sshnp requiring d2.sshnp
+    Then the first is sealed under bob's d1.sshnp key, the second is sent with legacy encryption, and bob's sshnp key seals neither
+
+  Scenario: At pqReady, a share that requests no provider is sealed with legacy encryption, and no namespace key is looked up
+    Given bob advertising a key for d1.sshnp, and alice at pqReady with allowLegacyCryptoFallback
+    When alice notifies bob of npt_request.d1.sshnp, requesting no provider
+    Then it is sealed with legacy encryption, and nothing is looked up
+
+  Scenario: A mixed fleet at pqReady: canSealTo picks the namespace-key provider for one device and legacy for the other
+    Given bob advertising keys for d1.sshnp and sshnp but not d2.sshnp, and alice at pqReady with allowLegacyCryptoFallback
+    When alice asks canSealTo for each device's namespace, and notifies under the namespace-key provider requiring it where the answer is true, and under legacy otherwise
+    Then canSealTo answers true for d1.sshnp and false for d2.sshnp, npt_request.d1.sshnp is sealed under bob's d1.sshnp key, npt_request.d2.sshnp is sent with legacy encryption, and bob's sshnp key seals neither
+
+  @race
+  Scenario: At pqReady, a key withdrawn between canSealTo and the send goes with legacy encryption, with a warning
+    Given canSealTo answered true for bob and d1.sshnp, and bob since withdrawing that key while still advertising sshnp
+    When alice notifies bob of npt_request.d1.sshnp under the namespace-key provider, requiring d1.sshnp
+    Then it is sent with legacy encryption, a warning names the fallback, and bob's sshnp key seals nothing
 
   Scenario: The writer's copy goes to her own key covering the recipient's level
     Given bob advertising todos.demos, and alice holding a key for demos

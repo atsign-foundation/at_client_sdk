@@ -15780,7 +15780,16 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    allows us to tolerate a mixed fleet of daemons".
 4. **Nothing advertised falls back to legacy where the posture allows it**, as before: when
    `allowLegacyCryptoFallback` is set, and refused otherwise. A required namespace that is not
-   advertised does the same, and is never sealed to a broader key.
+   advertised does the same, and is never sealed to a broader key. A program serving a mixed
+   fleet runs one of two shapes, decided 2026-11-02 (gkc: "I actually prefer (a) as it is
+   cleanest & simplest for programs, but I can see where (b) would also be useful as it gives
+   finer-grained control to programs"). (a), the main pattern, is
+   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
+   `allowLegacyCryptoFallback`, every send requiring its `<device>.sshnp`. (b) is `pqReady` with
+   `allowLegacyCryptoFallback`, asking `canSealTo` per send and requesting the namespace-key
+   provider with `sealToNamespace` where it answers true, legacy otherwise. None of the named
+   stages fits alone: `pqReady` writes legacy by default, and `pqActive` disallows legacy
+   encryption, which turns the fallback off.
 5. **The levels are asked about in one batch** of `plookup` entries, over the `batch:` verb,
    whose answers are matched by id, and only the advertisement sealed to is verified; one that
    does not verify is not cached. As

@@ -634,7 +634,13 @@ What each posture switches on:
   it cannot tell. When nothing fits, the share throws
   `NamespaceKeyUnavailableException`, or uses legacy encryption where
   `allowLegacyCryptoFallback` allows; it is never sealed to a broader key
-  than a required namespace.
+  than a required namespace. A program serving a mixed fleet, such as
+  daemons only some of which advertise `<device>.sshnp`, runs
+  `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
+  `allowLegacyCryptoFallback` and requires each daemon's namespace. It can
+  instead run `pqReady` with `allowLegacyCryptoFallback`, ask `canSealTo`,
+  and request `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where
+  the answer is true.
 - **A write right after opening.** A client's start-up publishes its
   namespace keys after `open` returns. A write to the client's own atSign
   that finds no key while start-up is still to publish one for its

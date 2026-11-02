@@ -22,9 +22,13 @@ const _bob = '@bob';
 class _Ring extends InMemoryNskeyKeyRing {
   final List<String> lookedUp = [];
 
+  /// `owner:namespace` of each advertisement its owner has since withdrawn.
+  final Set<String> withdrawn = {};
+
   @override
   Future<NskeyAdvertisement?> currentPublic(String owner, String namespace) {
     lookedUp.add('$owner:$namespace');
+    if (withdrawn.contains('$owner:$namespace')) return Future.value(null);
     return super.currentPublic(owner, namespace);
   }
 }
@@ -370,15 +374,19 @@ void main() {
         refusedNaming(_bob, 'todos.demos'));
   });
 
-  group('Given a client below pqActive that allows the legacy fallback', () {
-    /// A notification of [key] by a client over [c] whose legacy provider is
-    /// [legacy], with [sealTo] as its required namespace.
+  group(
+      'Given a client at pqActive allowing legacy encryption, with the legacy '
+      'fallback', () {
+    /// A notification of [key] by a client in [namespace] over [c] whose
+    /// legacy provider is [legacy], with [sealTo] as its required namespace.
     Future<NotifyVerbBuilder> notify(_Client c, _Legacy legacy, AtKey key,
-        {String? sealTo}) {
-      atClient = MockAtClient(posture: PqPosture.pqReady);
+        {String? sealTo, String namespace = 'todos.demos'}) {
+      atClient = MockAtClient(
+          posture:
+              PqPosture.pqActive.copyWith(disallowLegacyEncryption: false));
       when(() => atClient.getCurrentAtSign()).thenReturn(_alice);
       atClient.getPreferences()
-        ..namespace = 'todos.demos'
+        ..namespace = namespace
         ..allowLegacyCryptoFallback = true
         ..crypto = CryptoConfig(
           defaultProviderId: c.data.id,
@@ -394,8 +402,8 @@ void main() {
     }
 
     test(
-        'Below pqActive with the fallback allowed, such a share is sealed '
-        'with legacy encryption', () async {
+        'A share to a recipient advertising nothing is sealed with legacy '
+        'encryption', () async {
       final c = _Client(_Ring());
       final legacy = _Legacy();
 
@@ -424,6 +432,132 @@ void main() {
 
       expect(builder.value, 'legacy memo');
       expect(store.keys.where((k) => k.contains('.__ck.demos')), isEmpty,
+          reason: "never sealed under bob's broader key");
+    });
+
+    test(
+        "A mixed fleet: each device's notification is sealed under its own "
+        'namespace key, or sent with legacy encryption', () async {
+      final c = _Client(_Ring());
+      final d1 = await publish(c.ring, _bob, 'd1.sshnp');
+      await publish(c.ring, _bob, 'sshnp');
+      final legacy = _Legacy();
+
+      final toD1 = await notify(
+          c, legacy, AtKey.fromString('$_bob:npt_request.d1.sshnp$_alice'),
+          sealTo: 'd1.sshnp', namespace: 'sshnp');
+      final toD2 = await notify(
+          c, legacy, AtKey.fromString('$_bob:npt_request.d2.sshnp$_alice'),
+          sealTo: 'd2.sshnp', namespace: 'sshnp');
+
+      expect(sealedTo(_bob, 'd1.sshnp'), d1);
+      expect(toD1.value, isNot('legacy memo'));
+      expect(toD2.value, 'legacy memo');
+      expect(legacy.sealed, ['memo']);
+      expect(store.keys.where((k) => k.contains('.__ck.sshnp')), isEmpty,
+          reason: "bob's sshnp key seals neither");
+    });
+  });
+
+  group(
+      'Given a client at pqReady with the legacy fallback, choosing the '
+      'provider per send', () {
+    late _Legacy legacy;
+
+    /// Alice's client over [c] at pqReady, writing legacy by default.
+    void at(_Client c) {
+      legacy = _Legacy();
+      atClient = MockAtClient(posture: PqPosture.pqReady);
+      when(() => atClient.getCurrentAtSign()).thenReturn(_alice);
+      atClient.getPreferences()
+        ..namespace = 'sshnp'
+        ..allowLegacyCryptoFallback = true
+        ..crypto = CryptoConfig(
+          defaultProviderId: legacy.id,
+          providers: [c.data, c.nskey, legacy],
+          keyRing: c.ring,
+        );
+      context = CryptoContext(atClient: atClient);
+      wire(c);
+    }
+
+    /// A notification of [key] under [providerId], requiring [sealTo].
+    Future<NotifyVerbBuilder> send(AtKey key,
+        {String? providerId, String? sealTo}) {
+      key.metadata.isEncrypted = true;
+      return NotificationRequestTransformer(atClient).transform(
+          NotificationParams.forUpdate(key,
+              value: 'memo',
+              cryptoProviderId: providerId,
+              sealToNamespace: sealTo));
+    }
+
+    test(
+        'At pqReady, a share that requests no provider is sealed with legacy '
+        'encryption, and no namespace key is looked up', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sshnp');
+      at(c);
+
+      final builder =
+          await send(AtKey.fromString('$_bob:npt_request.d1.sshnp$_alice'));
+
+      expect(builder.value, 'legacy memo');
+      expect(c.ring.lookedUp, isEmpty);
+    });
+
+    test(
+        'A mixed fleet at pqReady: canSealTo picks the namespace-key provider '
+        'for one device and legacy for the other', () async {
+      final c = _Client(_Ring());
+      final d1 = await publish(c.ring, _bob, 'd1.sshnp');
+      await publish(c.ring, _bob, 'sshnp');
+      at(c);
+      final answers = <String, bool>{};
+      final sent = <String, NotifyVerbBuilder>{};
+
+      for (final namespace in ['d1.sshnp', 'd2.sshnp']) {
+        final sealable = answers[namespace] =
+            await CryptoRuntime(atClient).canSealTo(_bob, namespace);
+        sent[namespace] = await send(
+            AtKey.fromString('$_bob:npt_request.$namespace$_alice'),
+            providerId: sealable
+                ? symmetricAesGcmCryptoProviderId
+                : legacyCryptoProviderId,
+            sealTo: sealable ? namespace : null);
+      }
+
+      expect(answers, {'d1.sshnp': true, 'd2.sshnp': false});
+      expect(sealedTo(_bob, 'd1.sshnp'), d1);
+      expect(sent['d1.sshnp']!.value, isNot('legacy memo'));
+      expect(sent['d2.sshnp']!.value, 'legacy memo');
+      expect(legacy.sealed, ['memo']);
+      expect(store.keys.where((k) => k.contains('.__ck.sshnp')), isEmpty,
+          reason: "bob's sshnp key seals neither");
+    });
+
+    test(
+        'At pqReady, a key withdrawn between canSealTo and the send goes with '
+        'legacy encryption, with a warning', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sshnp');
+      await publish(c.ring, _bob, 'sshnp');
+      at(c);
+      expect(await CryptoRuntime(atClient).canSealTo(_bob, 'd1.sshnp'), isTrue);
+      c.ring.withdrawn.add('$_bob:d1.sshnp');
+
+      final builder = await send(
+          AtKey.fromString('$_bob:npt_request.d1.sshnp$_alice'),
+          providerId: symmetricAesGcmCryptoProviderId,
+          sealTo: 'd1.sshnp');
+
+      expect(builder.value, 'legacy memo');
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('falling back to legacy encryption') &&
+              m.contains('d1.sshnp')),
+          isNotEmpty);
+      expect(store.keys.where((k) => k.contains('.__ck.sshnp')), isEmpty,
           reason: "never sealed under bob's broader key");
     });
   });
