@@ -25,7 +25,10 @@ The collections, notifications and RPC examples run at `PqPosture.pqActive`,
 as a new app should, so both sides of an example must run it to read what
 the other shares. The at_client
 README's [Post-quantum cryptography](../README.md#post-quantum-cryptography)
-section says what that needs.
+section says what that needs. A sender shares only with an atSign that has
+published a key for `examples.demos`, which an atSign does the first time it
+runs any of these examples, so start the receiver first; a sender started
+before then waits up to five minutes for it.
 
 ### Collections — primitives
 Share `String` and `Map` values between atSigns.
