@@ -7,6 +7,8 @@
 - A screen that only closes calls `pending.stop()`, which keeps the request
   for `resumeEnrollment`; `cancel()` is for a Cancel the user confirms
   (`references/15`).
+- Once `pending.stop()` or `cancel()` returns, an app whose approval landed
+  first opens the atSign at once (`references/15`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`

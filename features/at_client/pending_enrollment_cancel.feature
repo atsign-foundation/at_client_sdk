@@ -20,9 +20,9 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
   removes the keys; cancel then stop changes nothing. An approval written first
-  stands, and if cancel lands before client() returns, the client it opened
-  is stopped. A cancel and a denial at once both remove the pending keys,
-  once.
+  stands, and if a stop or a cancel lands before client() returns, the
+  client it opened is stopped before the stop or cancel returns. A cancel and
+  a denial at once both remove the pending keys, once.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -53,10 +53,11 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the app calls cancel
     Then nothing is written, the pending keys are gone, and the wait throws AtEnrollmentCancelledException
 
+  @race
   Scenario: A cancel while client() opens the approved client
     Given an approval already written to the store, and client() opening a client on it
     When the app calls cancel
-    Then the client is stopped, client() throws AtEnrollmentCancelledException saying the approval was written, approved is true, and the approved keys stay in the store
+    Then cancel returns once that client has stopped, so the atSign opens again on the approved keys at once; client() throws AtEnrollmentCancelledException saying the approval was written, approved is true, and the approved keys stay in the store
 
   Scenario: Cancel after approval does nothing
     Given a pending enrollment whose client() has returned an open client
@@ -128,10 +129,23 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the app calls stop
     Then nothing is written, the pending keys stay, and the wait throws StoppedException; a later resume finds the request approved and completes the keys
 
+  @race
   Scenario: Stop while client() opens the approved client
     Given an approval already written, and client() opening a client on it
     When the app calls stop
-    Then that client is stopped, client() throws StoppedException saying the approval was written, approved is true, and the approved keys stay
+    Then stop returns once that client has stopped, so the atSign opens again on the approved keys at once; client() throws StoppedException saying the approval was written, approved is true, and the approved keys stay
+
+  @race
+  Scenario: A second stop or cancel while the first waits for client()
+    Given a stop or cancel waiting for client() to stop the client it opened
+    When the app calls stop or cancel again
+    Then that call also returns once the client has stopped
+
+  @race
+  Scenario: A stop or cancel awaited inside client()'s own work
+    Given client() awaiting a key store or connection that awaits stop or cancel
+    When that call runs
+    Then it returns without waiting for client(), which then ends leaving no client live
 
   Scenario: An expired request's keys go, as a denial's do
     Given a pending enrollment whose request the atServer reports as expired (AT0028)

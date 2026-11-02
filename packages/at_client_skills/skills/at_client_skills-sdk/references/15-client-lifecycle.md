@@ -52,7 +52,9 @@ final enrolled = await pending.client(preference,
 // decides it, or it expires, which removes the pending keys as a denial
 // does. Tell the atSign's manager to deny a cancelled request: an approval
 // after cancel creates an enrollment nobody can use, which the manager
-// would then revoke.
+// would then revoke. Both return once any client the wait opened has
+// stopped: when pending.approved says the approval landed first, open the
+// atSign on `keys` at once.
 final resumed = await Atsign('@alice').resumeEnrollment(
     app: 'my_app', device: 'phone', keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending

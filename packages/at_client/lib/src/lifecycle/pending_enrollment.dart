@@ -15,6 +15,8 @@ import 'package:at_lookup/at_lookup.dart'
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
+final Object _clientCallKey = Object();
+
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
 ///
@@ -51,6 +53,9 @@ class PendingEnrollment {
   bool get approved => _approved;
   bool _approved = false;
   Future<void>? _cancelling;
+
+  /// The [client] calls in flight, each completing once its call has ended.
+  final Set<Future<void>> _clientCalls = {};
 
   /// The handshake connection [awaitApproval] built, while it waits; null for
   /// one the caller supplied.
@@ -197,22 +202,29 @@ class PendingEnrollment {
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
     Duration connectBudget = AtConnection.defaultBudget,
-  }) async {
-    await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
-    final client = await atSign.open(
-        keys: keys,
-        preference: preference,
-        namespace: namespace,
-        storage: storage,
-        atLookUp: _atLookUp,
-        lookUps: _lookUps,
-        secondaryAddressFinder: _secondaryAddressFinder,
-        connectBudget: connectBudget);
-    if (_ended.isCompleted) {
-      await client.stop();
-      throw _endedException();
-    }
-    return client;
+  }) {
+    final ended = Completer<void>();
+    _clientCalls.add(ended.future);
+    return runZoned(() async {
+      await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
+      final client = await atSign.open(
+          keys: keys,
+          preference: preference,
+          namespace: namespace,
+          storage: storage,
+          atLookUp: _atLookUp,
+          lookUps: _lookUps,
+          secondaryAddressFinder: _secondaryAddressFinder,
+          connectBudget: connectBudget);
+      if (_ended.isCompleted) {
+        await client.stop();
+        throw _endedException();
+      }
+      return client;
+    }, zoneValues: {_clientCallKey: ended.future}).whenComplete(() {
+      _clientCalls.remove(ended.future);
+      ended.complete();
+    });
   }
 
   /// Ends the wait [client] or [awaitApproval] is in, which then throws
@@ -220,15 +232,25 @@ class PendingEnrollment {
   /// [keys] as a denial's do. When [keys] cannot remove them, this throws what
   /// it threw, and a later call tries again.
   ///
-  /// An approval already written to [keys] stays there, and a client that
-  /// [client] has opened on it by then is stopped. A connection the caller
-  /// supplied is left open while the wait runs; once [client] has opened a
-  /// client on it, that client owns it, as `Atsign.open` does, so stopping
-  /// the client stops the connection too. Nothing withdraws the request on
-  /// the atServer. Tell the atSign's manager to deny it: an approval after
-  /// cancel creates an enrollment nobody can use, which the manager would
-  /// then revoke. A second call after one that succeeded does nothing more.
-  Future<void> cancel() => _cancelling ??= _cancelOnce();
+  /// An approval already written to [keys] stays there. A [client] call in
+  /// flight has ended before this returns, having stopped any client it
+  /// opened, so the atSign can be opened again at once; a call made inside
+  /// the work that [client] awaits, such as a key store or connection it was
+  /// given, does not wait for it. A connection the caller supplied is left
+  /// open while the wait runs; once [client] has opened a client on it, that
+  /// client owns it, as `Atsign.open` does, so stopping the client stops the
+  /// connection too. Nothing withdraws the request on the atServer. Tell the
+  /// atSign's manager to deny it: an approval after cancel creates an
+  /// enrollment nobody can use, which the manager would then revoke. A second
+  /// call after one that succeeded does nothing more, waiting as the first
+  /// did.
+  Future<void> cancel() async {
+    try {
+      await (_cancelling ??= _cancelOnce());
+    } finally {
+      await _clientCallsEnded();
+    }
+  }
 
   /// Ends the wait [client] or [awaitApproval] is in, which then throws
   /// [StoppedException], and keeps this enrollment's pending keys in [keys], so
@@ -236,19 +258,33 @@ class PendingEnrollment {
   ///
   /// The handshake connection [awaitApproval] built is closed, and one the
   /// caller supplied is left open. An approval not yet written to [keys] is not
-  /// written, and the next resume finds the request approved; a client that
-  /// [client] has opened on an approval already written is stopped. A later
-  /// [cancel] still abandons the request. Once the wait has ended, by this or
-  /// by [cancel], this does nothing.
+  /// written, and the next resume finds the request approved. A [client] call
+  /// in flight has ended before this returns, having stopped any client it
+  /// opened on an approval already written, except for a call made inside
+  /// the work that [client] awaits, as with [cancel]. A later [cancel] still
+  /// abandons the request. Once the wait has ended, by this or by [cancel],
+  /// this does nothing more, waiting as the first did.
   Future<void> stop() async {
-    if (_ended.isCompleted) return;
-    _ended.complete();
-    try {
-      await _ownHandshake?.stop();
-    } on Exception catch (e) {
-      _logger.warning('Could not close the handshake connection of '
-          'enrollment $enrollmentId of $atSign while stopping its wait: $e');
+    if (!_ended.isCompleted) {
+      _ended.complete();
+      try {
+        await _ownHandshake?.stop();
+      } on Exception catch (e) {
+        _logger.warning('Could not close the handshake connection of '
+            'enrollment $enrollmentId of $atSign while stopping its wait: $e');
+      }
     }
+    await _clientCallsEnded();
+  }
+
+  /// Waits for every [client] call in flight to end, except one this runs
+  /// inside, whose end waits on this.
+  Future<void> _clientCallsEnded() {
+    final inside = Zone.current[_clientCallKey];
+    return Future.wait([
+      for (final call in _clientCalls)
+        if (!identical(call, inside)) call
+    ]);
   }
 
   Future<void> _cancelOnce() async {

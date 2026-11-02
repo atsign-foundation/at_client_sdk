@@ -23,6 +23,21 @@ import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
+/// An in-memory key store that runs [beforeUpdate] once, ahead of its next
+/// update.
+class _StoreAwaitingOnce extends InMemoryAtKeysIo {
+  Future<void> Function()? beforeUpdate;
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final hook = beforeUpdate;
+    beforeUpdate = null;
+    if (hook != null) await hook();
+    return super.update(atsign, mutate);
+  }
+}
+
 /// `Atsign.enroll`, `PendingEnrollment` and `resumeEnrollment`: the key store
 /// named at submission is the resume record, approval completes it, and a
 /// denial empties it.
@@ -753,33 +768,154 @@ void main() {
       expect(stored.holdsAuthenticationMaterial, isFalse);
     });
 
-    test('A cancel while client() opens the approved client', () async {
-      late PendingEnrollment pending;
-      var approvedAt = 0;
-      final server = atServer(decide: (attempt) async {
-        if (approvedAt == 0) {
-          approvedAt = attempt;
-        } else {
-          // NOTE: a later PKAM is the opening client's own.
-          unawaited(pending.cancel());
-        }
-        return true;
-      });
+    /// An atServer that approves at the first PKAM and holds the next, the
+    /// opening client's own, completing [opening] and answering with [answer].
+    MockAtLookupImpl approvesThenHolds(
+            Completer<void> opening, Completer<bool> answer) =>
+        atServer(decide: (attempt) async {
+          if (attempt == 1) return true;
+          if (!opening.isCompleted) opening.complete();
+          return answer.future;
+        });
+
+    /// Opens the atSign again on [store], on a connection of its own, and
+    /// answers what the open threw rather than throwing it.
+    Future<Object> reopen(InMemoryAtKeysIo store) async => Atsign(atSign)
+        .open(
+            keys: store,
+            preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: atServer(decide: (_) async => true),
+            storage: hiveStoreFor(Atsign(atSign), await preference()))
+        .then<Object>((client) => client, onError: (Object e) => e);
+
+    /// Ends a wait with [end] while client() opens a client on the approval,
+    /// and checks [end] returns once that client has stopped.
+    Future<void> endWhileOpening(
+        String end, Future<void> Function(PendingEnrollment) call,
+        {required TypeMatcher<Exception> thrown}) async {
+      final opening = Completer<void>();
+      final answer = Completer<bool>();
       final store = InMemoryAtKeysIo();
-      pending = await submit(store, server);
-
-      await expectLater(
+      final pending = await submit(store, approvesThenHolds(opening, answer));
+      final opened = expectLater(
           clientOf(pending),
-          throwsA(isA<AtEnrollmentCancelledException>().having((e) => e.message,
-              'message', contains('after its approval was written'))));
+          throwsA(thrown.having((e) => e.toString(), 'message',
+              contains('after its approval was written'))));
+      await opening.future;
 
+      final reopened = call(pending).then((_) => reopen(store));
+      await pumpEventQueue();
+      answer.complete(true);
+      await opened;
+
+      final again = await reopened;
+      expect(again, isA<AtClient>(),
+          reason: '$end returns once the client client() opened has stopped, '
+              'so the atSign opens again on the approved keys at once');
+      await (again as AtClient).stop();
       expect(pending.approved, isTrue);
-      expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
-          reason: 'the client it opened is stopped');
       final stored = await store.read(atSign);
       expect(stored.enrollmentToAuthenticateAs(), enrollmentId,
           reason: 'the approved keys stay in the store');
       expect(stored.holdsAuthenticationMaterial, isTrue);
+    }
+
+    test('A cancel while client() opens the approved client', () async {
+      await endWhileOpening('cancel', (pending) => pending.cancel(),
+          thrown: isA<AtEnrollmentCancelledException>());
+    });
+
+    test('A second stop or cancel while the first waits for client()',
+        () async {
+      final opening = Completer<void>();
+      final answer = Completer<bool>();
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, approvesThenHolds(opening, answer));
+      final opened = expectLater(
+          clientOf(pending), throwsA(isA<AtEnrollmentCancelledException>()));
+      await opening.future;
+
+      final liveAtReturn = <String, bool>{};
+      Future<void> record(String call, Future<void> returned) =>
+          returned.then((_) => liveAtReturn[call] =
+              AtClientImpl.holdsLiveClientAs(atSign, enrollmentId));
+      final calls = [
+        record('stop', pending.stop()),
+        record('a second stop', pending.stop()),
+        record('cancel', pending.cancel()),
+        record('a second cancel', pending.cancel()),
+      ];
+      await pumpEventQueue();
+      answer.complete(true);
+      await Future.wait(calls);
+      await opened;
+
+      expect(
+          liveAtReturn,
+          {
+            'stop': false,
+            'a second stop': false,
+            'cancel': false,
+            'a second cancel': false,
+          },
+          reason: 'each call returns only once the client client() opened '
+              'has stopped');
+    });
+
+    /// Calls stop and cancel, in turn, from inside the [inside] that client()
+    /// awaits, and checks each returns without waiting for client() to end.
+    Future<void> endInsideClient(String inside) async {
+      for (final (end, thrown) in [
+        ('cancel', isA<AtEnrollmentCancelledException>()),
+        ('stop', isA<StoppedException>()),
+      ]) {
+        final arm = '$end inside a $inside';
+        late PendingEnrollment pending;
+        var clientEnded = false;
+        bool? endedWhenCallReturned;
+        Future<void> endInside() async {
+          await (end == 'cancel' ? pending.cancel() : pending.stop());
+          endedWhenCallReturned ??= clientEnded;
+        }
+
+        final store = _StoreAwaitingOnce();
+        final server = atServer(decide: (attempt) async {
+          // NOTE: the second PKAM is the opening client's own, which client()
+          // awaits.
+          if (attempt == 2 && inside == 'connection') await endInside();
+          return true;
+        });
+        pending = await submit(store, server);
+        if (inside == 'key store') store.beforeUpdate = endInside;
+
+        final outcome = await clientOf(pending)
+            .whenComplete(() => clientEnded = true)
+            .then<Object>((client) => client, onError: (Object e) => e)
+            .timeout(const Duration(seconds: 10), onTimeout: () => 'hung');
+
+        expect(outcome, isNot('hung'),
+            reason: '$arm: client() ends; it cannot while the call waits for '
+                'it');
+        expect(endedWhenCallReturned, isFalse,
+            reason: '$arm: the call returns without waiting for client() to '
+                'end, which waits on the call');
+        expect(outcome, thrown, reason: arm);
+        expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+            reason: '$arm: client() stops any client it opened before it '
+                'ends');
+      }
+    }
+
+    test("A stop or cancel awaited inside client()'s own work, in a key store",
+        () async {
+      await endInsideClient('key store');
+    });
+
+    test("A stop or cancel awaited inside client()'s own work, in a connection",
+        () async {
+      await endInsideClient('connection');
     });
 
     test('Cancel after approval does nothing', () async {
@@ -1013,32 +1149,8 @@ void main() {
     });
 
     test('Stop while client() opens the approved client', () async {
-      late PendingEnrollment pending;
-      var approvedAt = 0;
-      final server = atServer(decide: (attempt) async {
-        if (approvedAt == 0) {
-          approvedAt = attempt;
-        } else {
-          // NOTE: a later PKAM is the opening client's own.
-          unawaited(pending.stop());
-        }
-        return true;
-      });
-      final store = InMemoryAtKeysIo();
-      pending = await submit(store, server);
-
-      await expectLater(
-          clientOf(pending),
-          throwsA(isA<StoppedException>().having((e) => e.message, 'message',
-              contains('after its approval was written'))));
-
-      expect(pending.approved, isTrue);
-      expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
-          reason: 'the client it opened is stopped');
-      final stored = await store.read(atSign);
-      expect(stored.enrollmentToAuthenticateAs(), enrollmentId,
-          reason: 'the approved keys stay in the store');
-      expect(stored.holdsAuthenticationMaterial, isTrue);
+      await endWhileOpening('stop', (pending) => pending.stop(),
+          thrown: isA<StoppedException>());
     });
 
     test("An expired request's keys go, as a denial's do", () async {

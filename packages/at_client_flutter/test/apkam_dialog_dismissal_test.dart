@@ -241,13 +241,38 @@ void main() {
     testWidgets('A confirmed Cancel after the approval was written lets the '
         'approval stand', (tester) async {
       resumes(pending);
-      final opened = clientAnswers();
-      stopEnds(opened);
-      when(() => pending.cancel()).thenAnswer((_) async {
-        opened.completeError(AtEnrollmentCancelledException('cancelled'));
-      });
       when(() => pending.approved).thenReturn(true);
-      final client = MockAtClient();
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final ended = Completer<void>();
+      final waitEnded = Completer<void>();
+      final releaseFirstStop = Completer<void>();
+      final first = MockAtClient();
+      var firstLive = true;
+      when(() => first.stop()).thenAnswer((_) async {
+        await releaseFirstStop.future;
+        firstLive = false;
+      });
+      // As client() does: the client opened on the written approval is live
+      // until the ended wait stops it, and then the wait throws.
+      when(
+        () => pending.client(any(), storage: any(named: 'storage')),
+      ).thenAnswer((_) async {
+        try {
+          await ended.future;
+          await first.stop();
+          throw AtEnrollmentCancelledException('cancelled after the approval');
+        } finally {
+          waitEnded.complete();
+        }
+      });
+      // As cancel() does: it ends the wait and returns once client() has
+      // ended, having stopped the client it opened.
+      when(() => pending.cancel()).thenAnswer((_) async {
+        if (!ended.isCompleted) ended.complete();
+        await waitEnded.future;
+      });
+      final second = MockAtClient();
+      final liveAtSecondOpen = <bool>[];
       when(
         () => flows.open(
           any(),
@@ -256,11 +281,27 @@ void main() {
           storage: any(named: 'storage'),
           lookUps: any(named: 'lookUps'),
         ),
-      ).thenAnswer((_) async => client);
+      ).thenAnswer((_) async {
+        liveAtSecondOpen.add(firstLive);
+        return second;
+      });
       final results = await open(tester);
 
       await tapText(tester, 'Cancel');
       await tapText(tester, 'Abandon');
+
+      verify(() => pending.cancel()).called(1);
+      expect(
+        liveAtSecondOpen,
+        isEmpty,
+        reason:
+            'cancel() returns only once the client its wait opened has '
+            'stopped, as this double models PendingEnrollment doing, and the '
+            'dialog opens the approved keys only after cancel() returns',
+      );
+
+      releaseFirstStop.complete();
+      await frames(tester);
 
       expect(
         find.text(
@@ -271,9 +312,10 @@ void main() {
       );
       expect(find.textContaining('deny'), findsNothing);
       expect(find.textContaining('revoke'), findsNothing);
+      expect(liveAtSecondOpen, [false]);
       expect(results, [
-        client,
-      ], reason: 'the dialog returns the client the approval opens');
+        second,
+      ], reason: 'the dialog returns the client opened on the approved keys');
     });
 
     testWidgets('A declined Cancel changes nothing', (tester) async {

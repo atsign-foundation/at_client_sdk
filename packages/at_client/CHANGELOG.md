@@ -25,7 +25,9 @@
   `Atsign.resumeEnrollment` picks up again, with no app or device when the
   store holds one pending enrollment. A request that expires has its pending
   keys removed, as a denied one does, and `PendingEnrollment.approved` says
-  whether an approval reached the key store before a stop or cancel.
+  whether an approval reached the key store before a stop or cancel. Once
+  `stop()` or `cancel()` returns, the atSign can be opened again at once on
+  an approval that landed just before.
 - fix: a write that needs a fresh content key no longer waits for the
   client's cleanup of unused ones, which held it up while the atServer was
   slow or unreachable.
