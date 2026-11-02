@@ -44,7 +44,8 @@ kek      = HKDF(ikm, info = "atkeys-kek|<atSign>")
 The record is `public:_<recordId>@<atSign>`, with a **single** underscore:
 
 * at_server gives `public:_` keys no commit-log row, so they never sync to
-  other clients (`sqlite_at_commit_log.dart`, `hive_at_commit_log.dart`;
+  other clients (read from at_server's `sqlite_at_commit_log.dart` and
+  `hive_at_commit_log.dart`, not in this repo and not verified here;
   `public:__` keys *do* sync).
 * Scan hides them from everyone, including the owner.
 * `lookup:` travels over TLS (PQ-TLS when compatible), so only the atServer
@@ -115,11 +116,11 @@ Only high-entropy sources qualify. No passphrase source: a deterministic
 ## Handing the restored keys to a client
 
 Trunk requires every client to be given an `AtKeysIo`, and a client's store must
-be a durable `WrittenAtKeysIo` (`e4de03a60`, `4c07f9aff`; `design.md` section 4).
+be a durable `WrittenAtKeysIo`, where the guards check the type and durability is a stated rule (`e4de03a60`, `4c07f9aff`; `design.md` section 4).
 The restored envelope is therefore wrapped as a `WrittenAtKeysIo` whose `flush`
 and `update` re-encrypt under a fresh data key and write `public:_<recordId>`
 back, so the keys a client files later (namespace keys, signing keys, a minted
-root) survive the page. `InMemoryAtKeysIo` is for tests and one handshake, never
+root) survive the page. `InMemoryAtKeysIo` is for tests and handshakes, never
 this store: a root minted into page memory would be lost with the tab, and a
 root whose private is lost cannot be replaced.
 

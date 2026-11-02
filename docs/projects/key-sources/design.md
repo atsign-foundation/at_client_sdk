@@ -52,7 +52,7 @@ and an `update` that reads, mutates and writes as one operation.
 | ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FileAtKeysIo`     | at_auth, `lib/src/keys/io/file_io.dart`                     | an inter-process lock file around `flush` and `update`, write-to-temp then rename, a rolling `.bak`, a one-off `.pre-v1` copy, and an optional passphrase envelope                                      |
 | `KeychainAtKeysIo` | at_client_flutter, `lib/src/keychain/keychain_io_impl.dart` | built on the `biometric_storage` Flutter plugin; one entry per app package holding every atSign, split into 2,560-byte segments on Windows; no lock, and `update` is the interface's non-atomic default |
-| `InMemoryAtKeysIo` | at_auth                                                     | process-local, for tests; never the store a client runs on (see [section 4](#4-the-split-a-store-and-a-key-source)); `InMemoryAtKeysIo.holding` wraps one key set for a single handshake                                                                                                                                                                                |
+| `InMemoryAtKeysIo` | at_auth                                                     | process-local, for tests; never the store a client runs on (see [section 4](#4-the-split-a-store-and-a-key-source))                                                                                                                                                                                |
 
 Four facts shape the design.
 
@@ -243,14 +243,20 @@ Trunk fixes where this meets a client (`e4de03a60`, `4c07f9aff`):
   `AtServiceFactory.atClient` take a required `AtKeysIo`. There is no keyless
   client and no PKAM key read from the local store or the preference, so a key
   source reaches a client only through the store it is handed.
-- **The store a client runs on must be a durable `WrittenAtKeysIo`.** A client
+- **The store a client runs on should be a durable `WrittenAtKeysIo`.** A client
   files material that exists nowhere else, so a store that forgets strands it.
-  With any other `AtKeysIo` the client mints no signing root and no signing
-  keys, and refuses to file key packages (`pq_signing_root.dart`
-  `mintIfAbsent`, `signing_key_minting.dart`). A key-source-wrapped store
-  keeps that type, because the wrapping is below the interface.
-- **`InMemoryAtKeysIo.holding`** wraps a key set for one handshake or
-  authentication, as at_auth and at_client use it; never a client's store.
+  The guards check the type only: `InMemoryAtKeysIo extends WrittenAtKeysIo` and
+  passes them, and durability is a rule in `memory_io.dart`'s doc comment. On
+  any other `AtKeysIo` the client mints no signing root or signing keys
+  (`pq_signing_root.dart:242`, `signing_key_minting.dart:72`), skips the
+  enrollment snapshot (`pq_client_bootstrap.dart:689`), and files nskey privates
+  in memory only, with a severe log (`nskey_private_filing.dart:574`). A
+  key-source-wrapped store keeps the type, because the wrapping is below the
+  interface.
+- **`InMemoryAtKeysIo`** is for tests and handshakes, never a client's store.
+  The at_auth handshake builds `InMemoryAtKeysIo()` and calls `write`
+  (`enrollment_handshake.dart:83`, `at_auth_impl.dart:73`); `.holding` is used
+  only by a pending enrollment (`pending_enrollment.dart:106`).
 
 A device's secure hardware fits as one more source through a
 `SecurityPlatformKeySource`; see [`apkam-custody.md`](apkam-custody.md#6-securityplatformkeysource).
@@ -354,8 +360,9 @@ and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
 keys. So the record can't be listed, and it can only be fetched by someone who
 already knows its 256-bit name. That hides the record's existence, size and
 update times, and denies an attacker the ciphertext. A single-underscore
-`public:_` key gets no commit-log row (`sqlite_at_commit_log.dart`,
-`hive_at_commit_log.dart`), so the name never syncs to the owner's other
+`public:_` key gets no commit-log row (read from at_server's
+`sqlite_at_commit_log.dart` and `hive_at_commit_log.dart`, which are not in this
+repo and not verified here), so the name never syncs to the owner's other
 clients, and `lookup:` runs over TLS, so only the atServer sees it. It's safe
 only because the encryption key is high-entropy. The same scheme with a
 passphrase-derived key would invite offline guessing. The full profile,

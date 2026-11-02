@@ -254,15 +254,16 @@ sequenceDiagram
 | Browser               | one PRF `get()`; the derived keys are held for the session                |
 
 Trunk requires every client to be given an `AtKeysIo` at construction, and
-that store must be a durable `WrittenAtKeysIo` (see `design.md` section 4). So
-the order above is: the handshake authenticates through
-`InMemoryAtKeysIo.holding`, which at_auth already uses for one authentication,
-then the document is fetched, then a server-backed `WrittenAtKeysIo` is built
+that store should be a durable `WrittenAtKeysIo`: the guards check the type
+only, and durability is a rule in `memory_io.dart`'s doc comment (see
+`design.md` section 4). So the order above is: the handshake authenticates
+through an `InMemoryAtKeysIo()` it writes the handshake keys into, as at_auth's
+handshake does, then the document is fetched, then a server-backed `WrittenAtKeysIo` is built
 over it and handed to the client. That store writes `flush` and `update` back
 to `atkeys.<enrollmentId>.a.__e`; it is not a session-memory copy, because a
 client running on a store that forgets would mint a signing root whose private
 is lost. Trunk's guard is the store's type: a client on any other `AtKeysIo`
-skips the root, signing keys and key packages.
+mints no root or signing keys and skips the enrollment snapshot.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
