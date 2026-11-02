@@ -79,11 +79,23 @@ Future<void> _untilReady(AtClient client, String peer) async {
   }
 }
 
+/// Whether everything [client] wrote has reached the atServer, as its sync
+/// reports it, waiting up to two minutes.
+Future<bool> _untilPushed(AtClient client) async {
+  final deadline = DateTime.now().add(const Duration(minutes: 2));
+  while (!await client.syncService.isInSync()) {
+    if (DateTime.now().isAfter(deadline)) return false;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+  return true;
+}
+
 /// The CLI example's side, as its own program would run it: its own isolate,
 /// so its collection registry is its own. It shares [fromCli] with bob once
 /// bob is ready, and answers with the titles it lists once [fromApp] has
-/// arrived.
-Future<(PqPosture, List<String>)> _cliSide(
+/// arrived, and with whether its own writes reached the atServer before it
+/// stopped: its store is in memory, so a write still queued then is lost.
+Future<(PqPosture, List<String>, bool)> _cliSide(
   String root,
   String fromCli,
   String fromApp,
@@ -99,6 +111,7 @@ Future<(PqPosture, List<String>)> _cliSide(
     return (
       client.getPreferences()!.posture,
       await _titlesOnceListed(todos, fromApp, (t) => t.title),
+      await _untilPushed(client),
     );
   } finally {
     await client.stop();
@@ -135,12 +148,17 @@ void main() {
         sharedWith: {Atsign(_alice)},
       );
 
+      final (cliPosture, cliTitles, cliPushed) = await cliSide;
+      expect(
+        cliPushed,
+        isTrue,
+        reason: "the CLI example's writes reached the atServer before it stopped",
+      );
       expect(
         await _titlesOnceListed(app.collection, fromCli, (t) => t.title),
         contains(fromCli),
         reason: 'the app lists the todo the CLI example shared',
       );
-      final (cliPosture, cliTitles) = await cliSide;
       expect(cliPosture, PqPosture.pqActive);
       expect(
         cliTitles,
