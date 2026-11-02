@@ -28,5 +28,5 @@ Both modes are trunk's at_lookup, chosen once by `devTransport(options)`.
 
 ## Open
 - Browser-verified once (2026-11-03, dart2js, two production atSigns): an encrypted notify from a Chrome tab reached the Dart `at_talk` CLI. That run used the at_talk demo page. `index.html?direct=1` sends the same `direct`/`root` options to `openSession` but has not been run in a browser. dart2wasm in direct mode has not been tried.
-- Browser-tagged tests (`test/js`, `test/web`) have not run: no Chrome in the port's sandbox.
+- Browser-tagged tests (`test/js`, `test/web`): 40 passed under `-p chrome` in CI (2026-11-03, #2431's `at_client_wasm_browser`).
 - The VE root needs a trunk rebuild (at_server#2894) before `?root=` can target it.
