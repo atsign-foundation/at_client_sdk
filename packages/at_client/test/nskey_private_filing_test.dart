@@ -461,6 +461,38 @@ void main() {
 
       expect(await here.filedNamespaces(), contains('todos.demos'));
     });
+
+    test(
+        'when a second call arrives while the first read of the keyfile is in '
+        'flight, then both list what it holds, from that one read', () async {
+      final io = _HeldKeysIo();
+      await io.write(atSign, AtKeys());
+      await NskeyPrivateFiling(keysIo: io, atSign: atSign).store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      io
+        ..held = Completer<void>()
+        ..reads = 0;
+
+      final first = here.filedNamespaces();
+      final second = here.filedNamespaces();
+      io.held!.complete();
+
+      expect(await second, contains('todos.demos'));
+      expect(await first, contains('todos.demos'));
+      expect(io.reads, 1);
+    });
+
+    test('when the client stops as the keyfile is read, then it says so',
+        () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: _StoppedKeysIo(), atSign: atSign);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<StoppedException>()));
+    });
   });
 
   group('a key source that cannot be read is not an empty one', () {
@@ -512,6 +544,26 @@ void main() {
 }
 
 /// A keyfile that cannot be read, counting how often a read is tried.
+/// A key source whose reads wait for [held] to complete, counting them.
+class _HeldKeysIo extends InMemoryAtKeysIo {
+  Completer<void>? held;
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) async {
+    reads++;
+    await held?.future;
+    return super.read(atsign);
+  }
+}
+
+/// A key source whose client has stopped.
+class _StoppedKeysIo extends _UnreadableKeysIo {
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      throw StoppedException('the client for $atsign has stopped');
+}
+
 class _CountingUnreadableKeysIo extends _UnreadableKeysIo {
   int reads = 0;
 

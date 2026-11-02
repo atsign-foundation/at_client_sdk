@@ -173,7 +173,7 @@ class NskeyPrivateFiling {
   }
 
   /// The namespaces the keyfile held privates for when [filedNamespaces] last
-  /// read it, and when that was.
+  /// finished reading it, and when that was.
   Set<String> _namespacesOnFile = const {};
   DateTime? _namespacesReadAt;
 
@@ -328,6 +328,8 @@ class NskeyPrivateFiling {
       return await keysIo.read(atSign);
     } on AtKeysSourceAbsentException {
       return null;
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.severe('Cannot read this atSign\'s key source while looking up '
           '$context, so no nskey private can be found — the material may be '
@@ -457,23 +459,34 @@ class NskeyPrivateFiling {
   /// The namespaces this atSign holds a filed private for, spelt as filed.
   ///
   /// The keyfile is read at most once every [namespacesReadEvery], a failed
-  /// read included, so another process's filings show within that window;
-  /// every private this filing files or finds already filed is added at once.
+  /// read included, so another process's filings show within that window; a
+  /// call made while it is being read waits for that read. Every private this
+  /// filing files or finds already filed is added at once.
   Future<Set<String>> filedNamespaces() async {
     final readAt = _namespacesReadAt;
-    final now = DateTime.now();
-    if (readAt == null || now.difference(readAt) >= namespacesReadEvery) {
-      _namespacesReadAt = now;
-      try {
-        final keys =
-            await _readSourceOrNull('the namespaces of every held private');
-        _namespacesOnFile =
-            keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
-      } catch (e) {
-        _logger.finer('No nskey privates listed ($e)');
-      }
+    if (readAt == null ||
+        DateTime.now().difference(readAt) >= namespacesReadEvery) {
+      await (_namespacesReading ??= _readNamespaces());
     }
     return {..._namespacesOnFile, ..._namespacesFiledSince};
+  }
+
+  Future<void>? _namespacesReading;
+
+  Future<void> _readNamespaces() async {
+    try {
+      final keys =
+          await _readSourceOrNull('the namespaces of every held private');
+      _namespacesOnFile =
+          keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      _logger.finer('No nskey privates listed ($e)');
+    } finally {
+      _namespacesReadAt = DateTime.now();
+      _namespacesReading = null;
+    }
   }
 
   /// Every private this client holds in a namespace [include] accepts, grouped
