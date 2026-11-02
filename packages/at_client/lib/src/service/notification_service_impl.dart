@@ -931,7 +931,6 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   void notificationValueValidation(
       NotificationParams notificationParams, NotifyVerbBuilder builder) {
-    // ignore: deprecated_member_use_from_same_package
     if (builder.value != null &&
         builder.value.length > atClient.getPreferences()!.maxDataSize) {
       throw BufferOverFlowException(
