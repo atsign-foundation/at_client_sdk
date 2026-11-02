@@ -32,7 +32,9 @@ class _FollowUpRegistrar extends OnboardingUtil {
   }
 }
 
-/// A registrar that answers 'follow-up' to every code, confirmed or not.
+/// A registrar that answers 'follow-up' to every code, confirmed or not, for
+/// its first three answers. After that it gives the CRAM key, so a flow that
+/// keeps confirming finishes and fails the test instead of hanging it.
 class _EndlessFollowUpRegistrar extends _FollowUpRegistrar {
   _EndlessFollowUpRegistrar() : super([_FollowUpRegistrar._code]);
 
@@ -40,7 +42,7 @@ class _EndlessFollowUpRegistrar extends _FollowUpRegistrar {
   Future<String> validateOtp(String atSign, String email, String otp,
       {String confirmation = 'true', String authority = ''}) async {
     confirmations.add(confirmation);
-    return 'follow-up';
+    return confirmations.length <= 3 ? 'follow-up' : '@$atSign:the-cram-key';
   }
 }
 

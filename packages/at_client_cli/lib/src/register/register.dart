@@ -198,10 +198,8 @@ class ValidateOtp extends RegisterApiTask {
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
-        // The registrar accepted the code and only wants it confirmed. That
-        // confirmation is not another attempt at the code, so it is made now
-        // rather than spending one of the attempts [shouldRetry] counts.
-        // NOTE: the confirmation is asked for once; a second ask ends the flow.
+        // NOTE: the confirmation is not an attempt at the code, and is asked
+        // for once; a second ask ends the flow.
         if (params['confirmation'] == 'true') {
           result.exceptionMessage =
               'The registrar asked again to confirm a confirmed code.';

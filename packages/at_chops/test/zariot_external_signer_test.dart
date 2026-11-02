@@ -78,7 +78,7 @@ void main() {
             _ScriptedModem({
               ..._opened,
               '48000032': '+CSIM: 4,"6A80"\r\nOK\r\n',
-              'C0000010': '+CSIM: 36,"0011EEFF9000"\r\nOK\r\n',
+              'C0000010': '+CSIM: 12,"0011EEFF9000"\r\nOK\r\n',
             }));
 
       expect(signer.computeActivationKey('KEY', 'SECRET', 'LABEL'), isNull);
@@ -108,9 +108,32 @@ void main() {
 
     test('when the modem answers a signature with ERROR, then there is none',
         () {
+      // The retrieve still answers with a signature, so only the failed
+      // update can make sign() give up.
       final signer = ExternalSigner()
         ..initWithPort(
-            '000001', _ScriptedModem({..._opened, '2B800122': 'ERROR\r\n'}))
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '2B800122': 'ERROR\r\n',
+              'C0000043': '+CSIM: 138,"330040${'AB' * 64}9000"\r\nOK\r\n',
+            }))
+        ..readInterval = Duration.zero;
+
+      expect(signer.sign('ab' * 32), isNull);
+    });
+
+    test(
+        'when the signature is computed but the answer carries no signature, '
+        'then there is none', () {
+      final signer = ExternalSigner()
+        ..initWithPort(
+            '000001',
+            _ScriptedModem({
+              ..._opened,
+              '2B800122': '+CSIM: 4,"6143"\r\nOK\r\n',
+              'C0000043': '+CSIM: 12,"AABBCCDD9000"\r\nOK\r\n',
+            }))
         ..readInterval = Duration.zero;
 
       expect(signer.sign('ab' * 32), isNull);
