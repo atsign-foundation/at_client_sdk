@@ -5,6 +5,8 @@
   registrar API key from `AT_REGISTRAR_API_KEY`; create one via the registrar
   at my.atsign.com. With none set, each refuses before it asks the registrar,
   and `at_register` exits 8.
+- feat: instances of a program that share a keyfile opened through
+  `CliKeys.fileFor`, as `CLIBase` opens it, retrofit it one at a time.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:
   `CLIBase`, the at_activate and at_register tools, and the library behind
   them. `AtActivate.main` and `AtRegister.main` run the tools inside another

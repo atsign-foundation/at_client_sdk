@@ -71,6 +71,12 @@ under `~/.atsign/storage/<atSign>/<namespace>/single/`. When launching several
 instances of the same agent on one machine, generate a unique temp directory
 per instance and pass it as `-s`.
 
+Onboard a new agent's atSign with `at_activate onboard --posture pqActive`,
+so its keyfile already holds a post-quantum credential and no instance has to
+retrofit it. A keyfile onboarded without it is retrofitted at the first
+`pqActive` start; instances sharing a keyfile retrofit it one at a time,
+because `CliKeys.fileFor`, which `CLIBase` uses, locks the keyfile for it.
+
 > **Gotcha:** `exit()` does not flush buffered stdout — call
 > `await stdout.flush()` first or log lines vanish when output is redirected.
 

@@ -15,6 +15,8 @@
 - A registrar API key is the app's own, created via the registrar at
   my.atsign.com (`references/05`); `at_register`, and `at_activate onboard`
   without `-c`, take it from `AT_REGISTRAR_API_KEY` (`references/06`).
+- A new agent's atSign is onboarded with `--posture pqActive`, and instances
+  sharing a keyfile retrofit it one at a time (`references/14`).
 - A notification is sent with `idAndNamespace:`, and `subscribe` hands back
   values still encrypted unless `shouldDecrypt` is true (`SKILL.md` §13;
   `references/10`, `15`).
