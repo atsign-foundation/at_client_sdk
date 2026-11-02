@@ -272,8 +272,9 @@ lock is not reentrant.
 
 All three verbs write atomically (write-to-temp + rename), so a crash
 mid-write can never truncate the keyfile, and a rewrite over an existing
-file first preserves the previous state as `<file>.bak` alongside it. On
-Linux and macOS the keyfile, its `.bak` and its `.pre-v1` copy are written
+file first preserves the previous state as `<file>.bak` alongside it, less
+any pending enrollment the write removes. On Linux and macOS the keyfile, its
+`.bak` and its `.pre-v1` copy are written
 readable and writable by their owner alone (mode 0600), whatever mode the
 keyfile had before. Written as root, the keyfile and its `.bak` and `.pre-v1`
 copies take the owner and group of the keyfile as it was read; a keyfile that

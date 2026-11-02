@@ -48,6 +48,8 @@
   `.bak` and `.pre-v1` copies written beside it take the owner and group of
   the keyfile as it was read, and root does not rewrite a keyfile that is a
   symbolic link or anything other than a regular file.
+- fix: a keyfile write that removes a pending enrollment, as a cancelled or
+  denied request's does, keeps no copy of it in `.bak`.
 - fix: a keyfile at_auth 3.3.0 wrote, which carries `version`, its atSign and
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.

@@ -1579,7 +1579,8 @@ use; `AtKeys` carries a `metadata` stash.)* The provider seam is injected an
 **`AtKeysIo`** (the key source, extended with runtime persistence — one
 whole-state `flush(atsign, atKeys)`: mutate in memory, then flush; on an existing
 target the rewrite is safety-checked by `AtKeysAssurance.validateMapUpdate` and is
-atomic, write-to-temp + rename, keeping the previous state as `<file>.bak`)
+atomic, write-to-temp + rename, keeping the previous state as `<file>.bak`, less
+any pending enrollment the write removes)
 alongside the `AtClient`; `CryptoContext` carries the `AtKeysIo` —
 **additive** (`CryptoContext` is `{atClient}`). Convergence
 (newest-wins / pull recovery) stays in the secret-sharing substrate; the stores are

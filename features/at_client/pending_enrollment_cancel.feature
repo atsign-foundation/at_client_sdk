@@ -21,6 +21,11 @@ Feature: An app ends a pending enrollment's wait with cancel()
     When the app calls cancel
     Then awaitApproval throws AtEnrollmentCancelledException, the enrollment's pending keys are gone from the store, and no further poll reaches the atServer
 
+  Scenario: Cancel leaves no copy of the pending keys beside a keyfile
+    Given a pending enrollment filed in a keyfile
+    When the app calls cancel
+    Then neither the keyfile nor the copy the file store keeps beside it holds the enrollment's pending keys
+
   Scenario: An approval that arrives after cancel writes nothing
     Given a pending enrollment whose wait was cancelled
     When the atSign's manager then approves the request

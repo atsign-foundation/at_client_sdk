@@ -570,7 +570,7 @@ void main() {
     /// A submission whose handshake connection the pending enrollment builds
     /// itself through its lookUps, rather than one the app supplied.
     Future<PendingEnrollment> submitOwning(
-            InMemoryAtKeysIo store, MockAtLookupImpl server) async =>
+            WrittenAtKeysIo store, MockAtLookupImpl server) async =>
         Atsign(atSign).enroll(
             otp: 'ABC123',
             app: 'wavi',
@@ -639,6 +639,50 @@ void main() {
 
       verify(() => server.stop()).called(1);
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    test('Cancel leaves no copy of the pending keys beside a keyfile',
+        () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      final store = FileAtKeysIo(filePath: (_) => path);
+      final pending = await submitOwning(store, server);
+      final filed = await store.read(atSign);
+      final pendingKeys = [
+        for (final material in filed.keysForEnrollment(enrollmentId))
+          material.bytes.toString(),
+        filed.toJson()['apkamSymmetricKey'] as String,
+      ];
+      expect(pendingKeys, hasLength(greaterThan(2)),
+          reason: 'the precondition: the submission filed its keys');
+      expect(pendingKeys.every(File(path).readAsStringSync().contains), isTrue,
+          reason: 'the control: each pending key is found in the text of '
+              'the keyfile that holds it');
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+
+      await pending.cancel();
+      await waiting;
+
+      expect(File('$path.bak').existsSync(), isTrue,
+          reason: 'the file store keeps its copy beside the keyfile');
+      for (final copy in [path, '$path.bak']) {
+        final text = await File(copy).readAsString();
+        for (final key in pendingKeys) {
+          expect(text, isNot(contains(key)),
+              reason: '$copy holds no pending key');
+        }
+        expect(
+            (await FileAtKeysIo(filePath: (_) => copy).read(atSign))
+                .pendingEnrollmentIds,
+            isEmpty);
+      }
     });
 
     test('An approval that arrives after cancel writes nothing', () async {
