@@ -117,7 +117,7 @@ class CryptoRuntime {
     } on AtSigningVerificationException catch (e) {
       _logger.warning('canSealTo answers false for $atSign:$namespace '
           'because its advertisement there does not verify: $e');
-    } on Exception catch (e) {
+    } catch (e) {
       _logger.warning('canSealTo answers false for $atSign:$namespace '
           'because asking for its key there failed: $e');
     }

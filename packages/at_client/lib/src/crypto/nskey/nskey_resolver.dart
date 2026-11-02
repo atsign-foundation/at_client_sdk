@@ -2,6 +2,7 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart'
     show AtEncryptionException, AtKey, EnrollmentConstants;
+import 'package:meta/meta.dart';
 
 /// An nskey found for a namespace, and the namespace it was actually found at.
 ///
@@ -112,6 +113,10 @@ class NskeyResolver {
   /// `owner|namespace` → when a share found [owner] advertising no key there.
   final Map<String, DateTime> _shareMissedAt = {};
 
+  /// How many levels a share has found missing are remembered now.
+  @visibleForTesting
+  int get shareMissesHeld => _shareMissedAt.length;
+
   /// The levels a share of [atKey] is sealed at: every namespace its whole
   /// name ends with after a dot, most specific first, folded, without the
   /// reserved ones. The whole name is never one, since its first label is the
@@ -141,14 +146,19 @@ class NskeyResolver {
       _forShare(owner, [namespace.toLowerCase()]);
 
   /// [owner]'s key at exactly [namespace], asked whatever a share found
-  /// missing, or null.
+  /// missing, or null; a key found ends what a share remembers missing there.
   Future<ResolvedNskey?> resolveAt(String owner, String namespace) async {
     final level = namespace.toLowerCase();
     final hit = await keyRing.currentPublic(owner, level);
-    return hit == null ? null : _usable(owner, level, hit);
+    if (hit == null) return null;
+    _shareMissedAt.remove(_scope(owner, level));
+    return _usable(owner, level, hit);
   }
 
   Future<ResolvedNskey?> _forShare(String owner, List<String> levels) async {
+    final now = DateTime.now();
+    _shareMissedAt
+        .removeWhere((_, at) => now.difference(at) >= shareMissMemory);
     final ask = [
       for (final level in levels)
         if (!_shareMissed(owner, level)) level

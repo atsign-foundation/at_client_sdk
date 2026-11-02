@@ -988,17 +988,19 @@ class PublishedNskeyKeyRing
           {void Function(String namespace)? missed}) async {
     if (_isOwn(owner)) return _oneByOne(owner, namespaces, missed);
     final ask = <String>[];
-    for (final namespace in namespaces) {
-      if (_fresh(owner, namespace) != null) break;
-      ask.add(namespace);
-    }
-    final published = ask.isEmpty
-        ? const <String, ({String? payload, Object? failure})>{}
-        : await _publishedAt(owner, ask);
-
+    ({String namespace, NskeyAdvertisement advertisement})? cached;
     for (final namespace in namespaces) {
       final fresh = _fresh(owner, namespace);
-      if (fresh != null) return (namespace: namespace, advertisement: fresh);
+      if (fresh != null) {
+        cached = (namespace: namespace, advertisement: fresh);
+        break;
+      }
+      ask.add(namespace);
+    }
+    if (ask.isEmpty) return cached;
+    final published = await _publishedAt(owner, ask);
+
+    for (final namespace in ask) {
       final scope = _scope(owner, namespace);
       final answer = published[namespace]!;
       final failure = answer.failure;
@@ -1025,7 +1027,7 @@ class PublishedNskeyKeyRing
       );
       return (namespace: namespace, advertisement: advertisement);
     }
-    return null;
+    return cached;
   }
 
   /// [mostSpecificPublic], asked one namespace at a time through
@@ -1068,7 +1070,8 @@ class PublishedNskeyKeyRing
         };
     final remote = _atClient.getRemoteSecondary();
     if (remote == null) {
-      return failingAll(StateError('this client has no atServer connection'));
+      return failingAll(
+          SecondaryConnectException('this client has no atServer connection'));
     }
     final requests = [
       for (var i = 0; i < namespaces.length; i++)
@@ -1106,7 +1109,12 @@ class PublishedNskeyKeyRing
       }
       final data = response['data'];
       final code = response['error_code'];
-      final record = data is String ? jsonDecode(data) : null;
+      Object? record;
+      try {
+        record = data is String ? jsonDecode(data) : null;
+      } on FormatException {
+        record = null;
+      }
       final value = record is Map ? record['data'] : null;
       published[namespaces[id]] = value is String
           ? (payload: value, failure: null)

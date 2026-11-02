@@ -78,6 +78,10 @@ class SymmetricAesGcmProvider
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
       {bool? useRemoteAtServer, String? sealToNamespace}) async {
+    if (sealToNamespace != null && ckManager == null) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'needs a content-key manager to seal with, and this provider has none');
+    }
     final chosen = await ckManager?.ensureCurrent(context, atKey,
         useRemoteAtServer: useRemoteAtServer, sealToNamespace: sealToNamespace);
     if (chosen != null) _chosen[atKey] = chosen;

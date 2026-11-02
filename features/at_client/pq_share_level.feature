@@ -46,7 +46,9 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   DoS: at most one batch of lookups per share, of the levels neither found in
   the last 15 minutes nor found missing in the last 30 seconds, so a recipient
   is asked about the same levels at most once in 30 seconds, and a share that
-  requires a namespace asks about that one alone; a key name of at most 248
+  requires a namespace asks about that one alone; a miss is forgotten after
+  30 seconds, so a sender remembers only the levels it found missing in that
+  time; a key name of at most 248
   characters has at most 123 levels; an advertisement that does not verify is
   not cached, so only the writer's own next write asks again; no share waits.
   Forgery and impersonation: only the recipient's enrollments and atServer can
@@ -113,6 +115,22 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When alice shares within the next 15 minutes
     Then it is sealed under the cached key, with a warning; after those 15 minutes the share throws that failure, and does not fall back to legacy
 
+  @race
+  Scenario: A key fresh when the walk began seals the share, even if it expires during the lookup
+    Given bob advertising demos only, alice's copy of it fresh, and the batch for todos.demos answered after that copy has expired
+    When alice shares x.todos.demos with bob
+    Then only todos.demos is asked, and the share is sealed under bob's demos key
+
+  Scenario: A batch entry that is not a record fails that level, which seals to its cached key within the stale grace
+    Given alice holding bob's todos.demos advertisement past 15 minutes, and the batch answering that entry with data that is not a record
+    When alice shares x.todos.demos with bob
+    Then it is sealed under the cached key, with a warning
+
+  Scenario: A share by a client with no atServer connection throws an AtException
+    Given alice's client with no atServer connection
+    When alice shares x.todos.demos with bob
+    Then it throws an AtException rather than an Error
+
   Scenario: A not-found ends a cached advertisement at once
     Given bob's todos.demos advertisement cached, and bob's atServer now answering not-found for it
     When alice shares after the cache's 15 minutes
@@ -137,6 +155,18 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Given bob advertising demos, and alice's atServer answering the todos.demos entry with an error that is not a not-found
     When alice shares x.todos.demos
     Then the share throws that failure, nothing is sealed under demos, and todos.demos is not remembered as a miss
+
+  @race
+  Scenario: A share requiring a namespace canSealTo has since found is sealed there
+    Given a share requiring device1.sshnp refused because bob advertised nothing there, and bob since publishing it
+    When canSealTo answers true for bob and device1.sshnp, and alice shares requiring it within 30 seconds
+    Then the share is sealed under bob's device1.sshnp key
+
+  @dos
+  Scenario: Misses older than 30 seconds are forgotten
+    Given shares that found levels of bob's missing more than 30 seconds ago
+    When alice shares again
+    Then only the levels this share found missing are remembered
 
   Scenario: canSealTo asks afresh, whatever a share found missing
     Given a share that found bob's device1.sshnp missing, and bob since publishing device1.sshnp
@@ -197,6 +227,11 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
 
   Scenario: canSealTo answers false, with a warning, when the recipient's atServer cannot be reached
     Given bob's atServer cannot be reached
+    When the program asks canSealTo for bob and device1.sshnp
+    Then the answer is false, and a warning names bob, device1.sshnp and the failure
+
+  Scenario: canSealTo never throws, whatever asking fails with
+    Given a key ring whose lookup fails with an Error rather than an Exception
     When the program asks canSealTo for bob and device1.sshnp
     Then the answer is false, and a warning names bob, device1.sshnp and the failure
 

@@ -33,6 +33,17 @@ class _Ring extends InMemoryNskeyKeyRing {
   }
 }
 
+/// A ring whose every lookup fails with [failure].
+class _FailingRing extends _Ring {
+  final Object failure;
+
+  _FailingRing(this.failure);
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(String owner, String namespace) =>
+      Future.error(failure);
+}
+
 /// One client's post-quantum providers over [ring].
 class _Client {
   final _Ring ring;
@@ -84,6 +95,12 @@ class _Network {
 
   /// The error code a batch entry for each key is answered with instead.
   final Map<String, String> failing = {};
+
+  /// The keys a batch entry answers with data that is not a record.
+  final Set<String> malformed = {};
+
+  /// How long a batch takes to be answered.
+  Duration batchDelay = Duration.zero;
 
   void requireReachable() {
     if (!reachable) throw SecondaryConnectException('atServer unreachable');
@@ -142,6 +159,7 @@ _PeerClient _peer(String atSign, String enrollmentId, _Network net) {
         .substring('batch:'.length)) as List;
     net.batches.add([for (final e in entries) e['command'] as String]);
     net.requireReachable();
+    await Future<void>.delayed(net.batchDelay);
     return 'data:${jsonEncode([
           for (final e in entries)
             {'id': e['id'], 'response': _plookup(net, e['command'] as String)}
@@ -183,6 +201,7 @@ Map<String, Object?> _plookup(_Network net, String command) {
   final match = RegExp(r'^plookup:(?:bypassCache:true:)?all:(.+)@([^@]+)$')
       .firstMatch(command.trim());
   final key = 'public:${match!.group(1)}@${match.group(2)}';
+  if (net.malformed.contains(key)) return {'data': 'not a record'};
   final failure = net.failing[key];
   if (failure != null) {
     return {'error_code': failure, 'error_message': '$failure for $key'};
@@ -609,6 +628,44 @@ void main() {
       return c;
     }
 
+    test(
+        'A share requiring a namespace canSealTo has since found is sealed '
+        'there', () async {
+      final c = remembering(const Duration(seconds: 30));
+      final key = AtKey.fromString('$_bob:x.device1.sshnp$_alice');
+      await expectLater(write(c, key, sealTo: 'device1.sshnp'),
+          refusedNaming(_bob, 'device1.sshnp'));
+      final bobs = await publish(c.ring, _bob, 'device1.sshnp');
+      configure(c);
+      expect(await CryptoRuntime(atClient).canSealTo(_bob, 'device1.sshnp'),
+          isTrue);
+      final after = AtKey.fromString('$_bob:y.device1.sshnp$_alice');
+
+      await write(c, after, sealTo: 'device1.sshnp');
+
+      expect(stamped(after)['ckNs'], 'device1.sshnp');
+      expect(sealedTo(_bob, 'device1.sshnp'), bobs);
+    });
+
+    test('Misses older than 30 seconds are forgotten', () async {
+      final c = remembering(const Duration(milliseconds: 300));
+      for (var i = 0; i < 5; i++) {
+        await expectLater(
+            write(c, AtKey.fromString('$_bob:x.r$i.todos.demos$_alice')),
+            throwsA(isA<NamespaceKeyUnavailableException>()));
+      }
+      expect(c.manager.resolver.shareMissesHeld, 7,
+          reason: 'r0..r4, todos.demos and demos');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      await expectLater(
+          write(c, AtKey.fromString('$_bob:y.todos.demos$_alice')),
+          throwsA(isA<NamespaceKeyUnavailableException>()));
+
+      expect(c.manager.resolver.shareMissesHeld, 2,
+          reason: 'only the levels this share found missing');
+    });
+
     test('A full miss is remembered for 30 seconds', () async {
       final c = remembering(const Duration(milliseconds: 300));
       await expectLater(
@@ -764,6 +821,31 @@ void main() {
           throwsArgumentError);
     });
 
+    test(
+        'when the content-key provider has no manager to seal with, then the '
+        'write is refused', () async {
+      await expectLater(
+          SymmetricAesGcmProvider(cache: ContentKeyCache()).prepareForWrite(
+              context, AtKey.fromString('$_bob:x.todos.demos$_alice'),
+              sealToNamespace: 'todos.demos'),
+          throwsArgumentError);
+    });
+
+    test('when the key has no namespace, then the write is refused', () async {
+      final c = _Client(_Ring());
+      wire(c);
+
+      await expectLater(
+          c.data.prepareForWrite(
+              context,
+              AtKey()
+                ..key = 'x'
+                ..sharedBy = _alice
+                ..sharedWith = _bob,
+              sealToNamespace: 'todos.demos'),
+          throwsArgumentError);
+    });
+
     test('when a notification carries no value, then it is refused', () async {
       final key = AtKey.fromString('$_bob:x.todos.demos$_alice')
         ..metadata.isEncrypted = true;
@@ -777,6 +859,20 @@ void main() {
   });
 
   group('canSealTo', () {
+    test('canSealTo never throws, whatever asking fails with', () async {
+      final client = MockAtClient(posture: PqPosture.pqActive);
+      when(() => client.getCurrentAtSign()).thenReturn(_alice);
+      client.getPreferences().crypto =
+          CryptoConfig.nskey(keyRing: _FailingRing(StateError('broken ring')));
+
+      expect(await CryptoRuntime(client).canSealTo(_bob, 'device1.sshnp'),
+          isFalse);
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('$_bob:device1.sshnp') && m.contains('broken ring')),
+          hasLength(1));
+    });
+
     /// A client whose namespace keys come from [ring].
     MockAtClient over(NskeyKeyRing ring) {
       final client = MockAtClient(posture: PqPosture.pqActive);
@@ -923,6 +1019,7 @@ void main() {
         aliceOver({
       Duration ttl = const Duration(minutes: 15),
       Duration grace = const Duration(minutes: 15),
+      Duration shareMiss = const Duration(seconds: 30),
     }) {
       final alice = _peer(_alice, 'alice-1', net);
       final ring = PublishedNskeyKeyRing(alice,
@@ -934,6 +1031,7 @@ void main() {
           cache: ContentKeyCache(),
           keyRing: ring,
           resolver: NskeyResolver(ring,
+              shareMissMemory: shareMiss,
               sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]));
       alice.getPreferences()!.crypto = CryptoConfig(
           defaultProviderId: symmetricAesGcmCryptoProviderId,
@@ -999,6 +1097,59 @@ void main() {
           shareBy(past, AtKey.fromString('$_bob:y.todos.demos$_alice')),
           throwsA(isA<SecondaryConnectException>()),
           reason: 'that failure, and not one the legacy fallback catches');
+    });
+
+    test(
+        'A key fresh when the walk began seals the share, even if it expires '
+        'during the lookup', () async {
+      net.records.remove('public:__nskey.todos.demos$_bob');
+      final alice = aliceOver(
+          ttl: const Duration(milliseconds: 400), shareMiss: Duration.zero);
+      await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      net
+        ..batchDelay = const Duration(milliseconds: 400)
+        ..batches.clear();
+
+      final chosen =
+          await shareBy(alice, AtKey.fromString('$_bob:y.todos.demos$_alice'));
+
+      expect(
+          net.batches,
+          [
+            ['plookup:bypassCache:true:all:__nskey.todos.demos$_bob']
+          ],
+          reason: 'only the level not fresh is asked');
+      expect(chosen?.ckNs, 'demos');
+    });
+
+    test(
+        'A batch entry that is not a record fails that level, which seals to '
+        'its cached key within the stale grace', () async {
+      final alice = aliceOver(ttl: Duration.zero);
+      await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      net.malformed.add('public:__nskey.todos.demos$_bob');
+      logs.records.clear();
+
+      final chosen =
+          await shareBy(alice, AtKey.fromString('$_bob:y.todos.demos$_alice'));
+
+      expect(chosen?.ckNs, 'todos.demos');
+      expect(
+          logs.at('WARNING').where((m) => m.contains(
+              'Sealing to the advertised nskey for $_bob:todos.demos')),
+          isNotEmpty);
+    });
+
+    test(
+        'A share by a client with no atServer connection throws an AtException',
+        () async {
+      final alice = aliceOver();
+      when(() => alice.client.getRemoteSecondary()).thenReturn(null);
+
+      await expectLater(
+          shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice')),
+          throwsA(isA<AtException>()));
     });
 
     test('A not-found ends a cached advertisement at once', () async {

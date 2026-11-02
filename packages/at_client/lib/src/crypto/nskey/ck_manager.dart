@@ -156,6 +156,13 @@ class CkManager {
       {bool? useRemoteAtServer, String? sealToNamespace}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
     if (owner == null || owner.isEmpty || valueKey.namespace == null) {
+      if (sealToNamespace != null) {
+        throw ArgumentError.value(
+            sealToNamespace,
+            'sealToNamespace',
+            'applies only to a key with an owner and a namespace, and '
+                '${valueKey.key} has ${owner == null || owner.isEmpty ? 'no owner' : 'no namespace'}');
+      }
       return null;
     }
     final holder = context.atClient.getCurrentAtSign();
