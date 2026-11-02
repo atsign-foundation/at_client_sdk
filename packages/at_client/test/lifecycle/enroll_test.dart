@@ -769,8 +769,11 @@ void main() {
       pending = await submit(store, server);
 
       await expectLater(
-          clientOf(pending), throwsA(isA<AtEnrollmentCancelledException>()));
+          clientOf(pending),
+          throwsA(isA<AtEnrollmentCancelledException>().having((e) => e.message,
+              'message', contains('after its approval was written'))));
 
+      expect(pending.approved, isTrue);
       expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
           reason: 'the client it opened is stopped');
       final stored = await store.read(atSign);
@@ -1024,8 +1027,12 @@ void main() {
       final store = InMemoryAtKeysIo();
       pending = await submit(store, server);
 
-      await expectLater(clientOf(pending), throwsA(isA<StoppedException>()));
+      await expectLater(
+          clientOf(pending),
+          throwsA(isA<StoppedException>().having((e) => e.message, 'message',
+              contains('after its approval was written'))));
 
+      expect(pending.approved, isTrue);
       expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
           reason: 'the client it opened is stopped');
       final stored = await store.read(atSign);
@@ -1051,26 +1058,9 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    test('The one pending enrollment resumes with no names', () async {
-      final store = InMemoryAtKeysIo();
-      await submit(store, atServer(decide: (_) async => true));
-      final pref = await preference();
-
-      final resumed = await Atsign(atSign).resumeEnrollment(
-          keys: store,
-          preference: pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref));
-
-      expect(resumed?.enrollmentId, enrollmentId);
-      expect(resumed?.app, 'wavi');
-      expect(resumed?.device, 'phone');
-    });
-
-    test(
-        'Given a store holding two pending enrollments, when resumeEnrollment '
-        'is given no names, then it throws AtEnrollmentPendingException '
-        'naming both', () async {
+    /// A store holding two pending requests for app `wavi`, from devices named
+    /// after their enrollment ids, `e-one` and `e-two`.
+    AtKeys twoPending() {
       final keys = AtKeys(atsign: Atsign(atSign));
       final keyPair = RsaKeyPair.generate();
       for (final id in ['e-one', 'e-two']) {
@@ -1095,6 +1085,55 @@ void main() {
         }
         keys.recordEnrollmentSnapshot(id, appName: 'wavi', deviceName: id);
       }
+      return keys;
+    }
+
+    test('The one pending enrollment resumes with no names', () async {
+      final store = InMemoryAtKeysIo();
+      await submit(store, atServer(decide: (_) async => true));
+      final pref = await preference();
+
+      final resumed = await Atsign(atSign).resumeEnrollment(
+          keys: store,
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref));
+
+      expect(resumed?.enrollmentId, enrollmentId);
+      expect(resumed?.app, 'wavi');
+      expect(resumed?.device, 'phone');
+    });
+
+    test(
+        'Resuming by one name refuses a store holding several requests it '
+        'names', () async {
+      final pref = await preference();
+      Future<PendingEnrollment?> resume({String? app, String? device}) =>
+          Atsign(atSign).resumeEnrollment(
+              app: app,
+              device: device,
+              // ignore: invalid_use_of_visible_for_testing_member
+              keys: InMemoryAtKeysIo.holding(atSign, twoPending()),
+              preference: pref,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref));
+
+      await expectLater(
+          resume(app: 'wavi'),
+          throwsA(isA<AtEnrollmentPendingException>().having(
+              (e) => e.pendingEnrollmentIds,
+              'pendingEnrollmentIds',
+              unorderedEquals(['e-one', 'e-two']))));
+      expect(
+          (await resume(app: 'wavi', device: 'e-two'))?.enrollmentId, 'e-two');
+      expect((await resume(device: 'e-one'))?.enrollmentId, 'e-one');
+    });
+
+    test(
+        'Given a store holding two pending enrollments, when resumeEnrollment '
+        'is given no names, then it throws AtEnrollmentPendingException '
+        'naming both', () async {
+      final keys = twoPending();
       final pref = await preference();
 
       await expectLater(

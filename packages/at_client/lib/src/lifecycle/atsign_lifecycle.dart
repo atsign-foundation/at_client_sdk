@@ -394,9 +394,10 @@ extension AtsignLifecycle on Atsign {
   /// yet completed, or null when there is none: the way an application picks
   /// up an enrollment it submitted before a restart.
   ///
-  /// Each of [app] and [device] that is given narrows the search. With
-  /// neither, [keys] must hold one pending enrollment, which this returns;
-  /// one holding several throws [AtEnrollmentPendingException] naming them.
+  /// Each of [app] and [device] that is given narrows the search, and more
+  /// than one pending enrollment left after it throws
+  /// [AtEnrollmentPendingException] naming them; with neither, [keys] must
+  /// hold one.
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
@@ -418,15 +419,19 @@ extension AtsignLifecycle on Atsign {
     } on AtKeysSourceAbsentException {
       return null;
     }
-    final named = app != null || device != null;
-    final pending = stored.pendingEnrollmentIds.toList();
-    if (!named && pending.length > 1) {
-      throw AtEnrollmentPendingException(this, pending);
+    final matching = [
+      for (final enrollmentId in stored.pendingEnrollmentIds)
+        if ((app == null ||
+                stored.enrollmentInfo(enrollmentId)?.appName == app) &&
+            (device == null ||
+                stored.enrollmentInfo(enrollmentId)?.deviceName == device))
+          enrollmentId
+    ];
+    if (matching.length > 1) {
+      throw AtEnrollmentPendingException(this, matching);
     }
-    for (final enrollmentId in pending) {
+    for (final enrollmentId in matching) {
       final info = stored.enrollmentInfo(enrollmentId);
-      if (app != null && info?.appName != app) continue;
-      if (device != null && info?.deviceName != device) continue;
       final apkam = stored
           .keysForEnrollment(enrollmentId)
           .where((m) =>

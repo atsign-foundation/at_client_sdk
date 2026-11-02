@@ -46,6 +46,10 @@ class PendingEnrollment {
   /// Completed by [stop] or [cancel], which ends the wait.
   final Completer<void> _ended = Completer<void>();
   bool _abandoned = false;
+
+  /// Whether the approval has been written to [keys], completing them.
+  bool get approved => _approved;
+  bool _approved = false;
   Future<void>? _cancelling;
 
   /// The handshake connection [awaitApproval] built, while it waits; null for
@@ -176,6 +180,7 @@ class PendingEnrollment {
       return true;
     });
     if (!written) throw _endedException();
+    _approved = true;
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
         'keys are complete');
   }
@@ -270,12 +275,21 @@ class PendingEnrollment {
   }
 
   /// What a wait that [cancel] or [stop] ended throws.
-  Exception _endedException() => _abandoned
-      ? AtEnrollmentCancelledException(
-          'the wait for enrollment $enrollmentId of $atSign was cancelled')
-      : StoppedException('the wait for enrollment $enrollmentId of $atSign '
-          'was stopped; the request stays in its key store, for '
-          'resumeEnrollment');
+  Exception _endedException() {
+    final wait = 'the wait for enrollment $enrollmentId of $atSign';
+    if (_approved) {
+      final after = 'after its approval was written; the approved keys stay '
+          'in its key store';
+      return _abandoned
+          ? AtEnrollmentCancelledException('$wait was cancelled $after')
+          : StoppedException('$wait was stopped $after, to open the atSign '
+              'with');
+    }
+    return _abandoned
+        ? AtEnrollmentCancelledException('$wait was cancelled')
+        : StoppedException('$wait was stopped; the request stays in its key '
+            'store, for resumeEnrollment');
+  }
 
   /// Copies onto [stored] what the approval released into [completed]: the
   /// atSign's encryption private key and self-encryption key, the symmetric

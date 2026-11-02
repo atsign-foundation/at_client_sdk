@@ -56,7 +56,7 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Scenario: A cancel while client() opens the approved client
     Given an approval already written to the store, and client() opening a client on it
     When the app calls cancel
-    Then the client is stopped, client() throws AtEnrollmentCancelledException, and the approved keys stay in the store
+    Then the client is stopped, client() throws AtEnrollmentCancelledException saying the approval was written, approved is true, and the approved keys stay in the store
 
   Scenario: Cancel after approval does nothing
     Given a pending enrollment whose client() has returned an open client
@@ -131,7 +131,7 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Scenario: Stop while client() opens the approved client
     Given an approval already written, and client() opening a client on it
     When the app calls stop
-    Then that client is stopped, client() throws StoppedException, and the approved keys stay
+    Then that client is stopped, client() throws StoppedException saying the approval was written, approved is true, and the approved keys stay
 
   Scenario: An expired request's keys go, as a denial's do
     Given a pending enrollment whose request the atServer reports as expired (AT0028)
@@ -142,3 +142,8 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding one pending enrollment
     When the app calls resumeEnrollment with no app or device
     Then it gets that enrollment
+
+  Scenario: Resuming by one name refuses a store holding several requests it names
+    Given a store holding two pending requests for one app, from two devices
+    When the app calls resumeEnrollment with only the app
+    Then it throws AtEnrollmentPendingException naming both, and naming a device as well resumes that one

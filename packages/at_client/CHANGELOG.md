@@ -24,7 +24,8 @@
 - feat: `PendingEnrollment.stop()` ends the wait and keeps the request, which
   `Atsign.resumeEnrollment` picks up again, with no app or device when the
   store holds one pending enrollment. A request that expires has its pending
-  keys removed, as a denied one does.
+  keys removed, as a denied one does, and `PendingEnrollment.approved` says
+  whether an approval reached the key store before a stop or cancel.
 - feat: `PqPosture.copyWith` builds a posture from a named stage, changing
   only the axes given: `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
   false)` writes post-quantum and still allows legacy encryption.
