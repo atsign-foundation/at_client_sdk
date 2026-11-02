@@ -460,10 +460,10 @@ extension AtsignLifecycle on Atsign {
     }
   }
 
-  /// A store [enroll] may write into: absent, or emptied by a denial. Live
-  /// keys are refused, since enrolling again would overwrite the credential
-  /// this device already has, and so is a pending enrollment for the same
-  /// app and device, which is resumed rather than repeated.
+  /// A store [enroll] may write into: one holding nothing live for this
+  /// atSign. Live keys are refused, since enrolling again would overwrite the
+  /// credential this device already has, and so is a pending enrollment for
+  /// the same app and device, which is resumed rather than repeated.
   Future<void> _refuseUnlessEnrollable(
       WrittenAtKeysIo keys, String app, String device) async {
     final AtKeys existing;
