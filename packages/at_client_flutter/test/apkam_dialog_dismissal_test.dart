@@ -238,8 +238,8 @@ void main() {
       );
     });
 
-    testWidgets('A confirmed Cancel after the approval was written says to '
-        'revoke it', (tester) async {
+    testWidgets('A confirmed Cancel after the approval was written lets the '
+        'approval stand', (tester) async {
       resumes(pending);
       final opened = clientAnswers();
       stopEnds(opened);
@@ -247,6 +247,16 @@ void main() {
         opened.completeError(AtEnrollmentCancelledException('cancelled'));
       });
       when(() => pending.approved).thenReturn(true);
+      final client = MockAtClient();
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) async => client);
       final results = await open(tester);
 
       await tapText(tester, 'Cancel');
@@ -254,14 +264,16 @@ void main() {
 
       expect(
         find.text(
-          'Enrollment enroll-1 was approved before it could be abandoned, and '
-          'its keys stay in the key store. Ask the manager of @alice to '
-          'revoke it.',
+          'The approval of enrollment enroll-1 landed before the Cancel took '
+          'effect, so it stands.',
         ),
         findsOneWidget,
       );
-      expect(find.textContaining('to deny it'), findsNothing);
-      expect(results, [null]);
+      expect(find.textContaining('deny'), findsNothing);
+      expect(find.textContaining('revoke'), findsNothing);
+      expect(results, [
+        client,
+      ], reason: 'the dialog returns the client the approval opens');
     });
 
     testWidgets('A declined Cancel changes nothing', (tester) async {

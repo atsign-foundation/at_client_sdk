@@ -38,10 +38,10 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Then cancel runs and the pending keys go, the user is told to ask the atSign's manager to deny that enrollment id, and the dialog closes with no client
 
   @race
-  Scenario: A confirmed Cancel after the approval was written says to revoke it
+  Scenario: A confirmed Cancel after the approval was written lets the approval stand
     Given that confirmation, and the approval written to the store just before cancel runs
     When the user confirms
-    Then the user is told the enrollment was approved before it could be abandoned, that its keys stay in the key store, and to ask the atSign's manager to revoke it, and the dialog closes with no client
+    Then the user is told the approval landed before the Cancel took effect, so it stands, and the dialog returns the client opened on the approved keys
 
   Scenario: A declined Cancel changes nothing
     Given that confirmation

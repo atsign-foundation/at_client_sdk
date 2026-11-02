@@ -266,19 +266,56 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       return;
     }
     if (!mounted) return;
+    if (pending.approved) {
+      await _openApproved(pending);
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          pending.approved
-              ? 'Enrollment ${pending.enrollmentId} was approved before it '
-                    'could be abandoned, and its keys stay in the key store. '
-                    'Ask the manager of ${widget.atSign} to revoke it.'
-              : 'Enrollment ${pending.enrollmentId} abandoned. Ask the manager '
-                    'of ${widget.atSign} to deny it.',
+          'Enrollment ${pending.enrollmentId} abandoned. Ask the manager of '
+          '${widget.atSign} to deny it.',
         ),
       ),
     );
     Navigator.of(context).pop();
+  }
+
+  /// Hands back a client on the keys whose approval was written before the
+  /// Cancel took effect, which lets the approval stand.
+  Future<void> _openApproved(PendingEnrollment pending) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'The approval of enrollment ${pending.enrollmentId} landed before '
+          'the Cancel took effect, so it stands.',
+        ),
+      ),
+    );
+    final AtClient client;
+    try {
+      client = await widget.flows.open(
+        widget.atSign,
+        keys: _keys,
+        preference: under(widget.preference, widget.rootDomain),
+        storage: widget.storage,
+        lookUps: widget.lookUps,
+      );
+    } catch (e) {
+      _logger.warning(
+        'Could not open ${widget.atSign} on the approved keys of enrollment '
+        '${pending.enrollmentId}: $e',
+      );
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    if (!mounted) {
+      // NOTE: nothing receives a client opened after the dismissal, and
+      // while it is live the atSign cannot be opened again.
+      await client.stop();
+      return;
+    }
+    Navigator.of(context).pop(client);
   }
 
   /// Whether the user confirms abandoning enrollment [enrollmentId].
