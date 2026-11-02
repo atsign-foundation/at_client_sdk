@@ -254,7 +254,7 @@ Future<void> exportKeys(BuildContext context) async {
     }
 
     _logger.info('Writing keys to file');
-    atKeysIo.write(atsign, atKeys);
+    await atKeysIo.write(atsign, atKeys);
     _logger.info('Keys exported successfully');
 
     if (context.mounted) {
