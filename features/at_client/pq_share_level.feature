@@ -21,7 +21,9 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   dropped at once. A level found missing is remembered for 30 seconds, and
   decides without a lookup until then. Only a not-found is a miss: any other
   failure at a level stops the walk there. canSealTo asks afresh past a
-  remembered miss, and uses a found key.
+  remembered miss, and uses a found key. It never throws: it answers false,
+  with a warning naming the cause, when the recipient's atServer cannot be
+  reached or the advertisement there does not verify.
   Writes to the writer's own atSign are unchanged.
 
   Races: the level is chosen at each share from the recipient's advertisements
@@ -42,7 +44,9 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   signed by an enrollment of the recipient whose _apsk its atServer serves; a
   more specific advertisement that does not verify refuses the share rather
   than leaving it to seal to a broader one; a required namespace must be one
-  the key's name ends with.
+  the key's name ends with. canSealTo answers false for an advertisement that
+  does not verify, so a program that sends legacy on false does so for a
+  record only the recipient's atServer can serve, with a warning naming it.
 
   Scenario: The most specific key the recipient advertises seals the share
     Given bob advertising keys for demos and todos.demos, and alice holding no namespace private
@@ -181,10 +185,15 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When the program asks canSealTo for bob and device1.sshnp
     Then the answer is false
 
-  Scenario: canSealTo throws when the answer cannot be established
+  Scenario: canSealTo answers false, with a warning, when the recipient's atServer cannot be reached
     Given bob's atServer cannot be reached
     When the program asks canSealTo for bob and device1.sshnp
-    Then it throws rather than answering false
+    Then the answer is false, and a warning names bob, device1.sshnp and the failure
+
+  Scenario: canSealTo answers false, with a warning, when the advertisement does not verify
+    Given bob's record at todos.demos not signed by any enrollment of bob's
+    When the program asks canSealTo for bob and todos.demos
+    Then the answer is false, a warning says the advertisement does not verify, and the next canSealTo looks it up again
 
   Scenario: The writer's copy goes to her own key covering the recipient's level
     Given bob advertising todos.demos, and alice holding a key for demos

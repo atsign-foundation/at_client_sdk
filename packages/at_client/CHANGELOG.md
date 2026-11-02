@@ -73,7 +73,8 @@
   `NotificationParams.forUpdate`, `NotificationService.send` and
   `AtClientBindings.notify`, seal a share to the recipient's key in one
   namespace only; `CryptoRuntime.canSealTo` says whether the recipient
-  advertises one there.
+  advertises one there, and answers false, with a warning, when it cannot
+  tell.
 - fix: a write or read no longer fails while the namespace private conveyed
   to the client is already waiting on the atServer. When none has been
   conveyed yet, the error says so.

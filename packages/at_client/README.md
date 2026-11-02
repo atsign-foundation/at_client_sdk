@@ -630,7 +630,8 @@ What each posture switches on:
   not asked about again for 30 seconds. `PutRequestOptions.sealToNamespace`,
   or `sealToNamespace` on a notification, requires one namespace instead,
   and `CryptoRuntime(atClient).canSealTo(recipient, namespace)` says whether
-  the recipient advertises a key there. When nothing fits, the share throws
+  the recipient advertises a key there, answering false with a warning when
+  it cannot tell. When nothing fits, the share throws
   `NamespaceKeyUnavailableException`, or uses legacy encryption where
   `allowLegacyCryptoFallback` allows; it is never sealed to a broader key
   than a required namespace.

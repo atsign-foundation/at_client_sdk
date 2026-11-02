@@ -178,7 +178,8 @@ recipient that has published none makes `create`, `upsert`, `update` or
 share is sealed to the most specific key the recipient advertises for the
 key's whole name; `PutRequestOptions.sealToNamespace` requires one
 namespace, and `CryptoRuntime(atClient).canSealTo(recipient, namespace)`
-asks whether the recipient advertises a key there.
+asks whether the recipient advertises a key there; it never throws, and
+answers false, with a warning, when it cannot tell.
 
 > **Ownership model:** `AtCollection` is **owner-writes-only** — an atsign can
 > only mutate items it owns. `update` / `updateSharedWith` / `delete` throw

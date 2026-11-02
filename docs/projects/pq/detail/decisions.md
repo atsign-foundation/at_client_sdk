@@ -15772,8 +15772,10 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    client's own atSign, for one that is not encrypted, under a provider that seals to no
    namespace key, and for a namespace the key's name does not end with after a dot.
 3. **`CryptoRuntime.canSealTo(atSign, namespace)`** answers true only when the recipient
-   advertises a verified key at exactly that namespace, and throws when the answer cannot be
-   established, as `isReadyFor` does. gkc: "a client will want to seal to an nskey at
+   advertises a verified key at exactly that namespace. It never throws: it answers false, with a
+   warning naming the cause, when the recipient's atServer cannot be reached or the advertisement
+   there does not verify (gkc, 2026-11-02: "canSealTo should return boolean rather than
+   throwing"). gkc: "a client will want to seal to an nskey at
    <device>.sshnp when it is talking to a daemon, and not fall back to sealing to sshnp … this
    allows us to tolerate a mixed fleet of daemons".
 4. **Nothing advertised falls back to legacy where the posture allows it**, as before: when

@@ -668,7 +668,9 @@ void main() {
       expect(ring.lookedUp, ['$_bob:device1.sshnp']);
     });
 
-    test('canSealTo throws when the answer cannot be established', () async {
+    test(
+        "canSealTo answers false, with a warning, when the recipient's "
+        'atServer cannot be reached', () async {
       final client = MockAtClient(posture: PqPosture.pqActive);
       when(() => client.getCurrentAtSign()).thenReturn(_alice);
       when(() => client.get(any(),
@@ -677,8 +679,16 @@ void main() {
       client.getPreferences().crypto =
           CryptoConfig.nskey(keyRing: PublishedNskeyKeyRing(client));
 
-      await expectLater(CryptoRuntime(client).canSealTo(_bob, 'device1.sshnp'),
-          throwsA(isA<SecondaryConnectException>()));
+      expect(await CryptoRuntime(client).canSealTo(_bob, 'device1.sshnp'),
+          isFalse);
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('$_bob:device1.sshnp') &&
+              m.contains('asking for its key there failed') &&
+              m.contains('atServer unreachable')),
+          hasLength(1),
+          reason: 'the cause is named, so an outage is told from a recipient '
+              'that advertises nothing');
     });
   });
 
@@ -964,6 +974,33 @@ void main() {
 
       await expectLater(share(AtKey.fromString('$_bob:x.todos.demos$_alice')),
           throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test(
+        'canSealTo answers false, with a warning, when the advertisement does '
+        'not verify', () async {
+      final key = 'public:__nskey.todos.demos$_bob';
+      final envelope = jsonDecode(net.records[key]!) as Map<String, dynamic>;
+      final payload = utf8.decode(
+          base64Url.decode(base64Url.normalize(envelope['payload'] as String)));
+      envelope['payload'] =
+          base64Url.encode(utf8.encode('$payload ')).replaceAll('=', '');
+      net.records[key] = jsonEncode(envelope);
+      final alice = aliceOver();
+      logs.records.clear();
+
+      expect(await CryptoRuntime(alice.client).canSealTo(_bob, 'todos.demos'),
+          isFalse);
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('$_bob:todos.demos') &&
+              m.contains('because its advertisement there does not verify')),
+          hasLength(1));
+      net.reads.clear();
+      expect(await CryptoRuntime(alice.client).canSealTo(_bob, 'todos.demos'),
+          isFalse);
+      expect(net.reads, contains(key),
+          reason: 'nothing was cached, so it is asked again');
     });
   });
 }
