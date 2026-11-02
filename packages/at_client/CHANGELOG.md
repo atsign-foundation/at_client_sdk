@@ -25,6 +25,9 @@
   `Atsign.resumeEnrollment` picks up again, with no app or device when the
   store holds one pending enrollment. A request that expires has its pending
   keys removed, as a denied one does.
+- feat: `PqPosture.copyWith` builds a posture from a named stage, changing
+  only the axes given: `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
+  false)` writes post-quantum and still allows legacy encryption.
 - feat: `AtKeysFormatException` comes through at_client, so an app tells a
   keyfile that is not a JSON object by its `reason` and `position` without
   importing at_auth.

@@ -142,6 +142,38 @@ class PqPosture {
     );
   }
 
+  /// This posture with each axis given replaced, refused as [PqPosture.new]
+  /// refuses a combination.
+  PqPosture copyWith({
+    SigningAlgoType? authenticationKeyAlgorithm,
+    Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+    bool? seedNamespaceKeys,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
+    bool? writesPqByDefault,
+    bool? configuresPqProviders,
+    bool? disallowLegacyEncryption,
+    bool? mintLegacyMaterial,
+    List<String>? sealsToKeyAlgorithms,
+    List<String>? keyEstablishmentAlgorithms,
+  }) =>
+      PqPosture(
+        authenticationKeyAlgorithm:
+            authenticationKeyAlgorithm ?? this.authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms:
+            dataSigningKeyAlgorithms ?? this.dataSigningKeyAlgorithms,
+        seedNamespaceKeys: seedNamespaceKeys ?? this.seedNamespaceKeys,
+        keyExchangeMode: keyExchangeMode ?? this.keyExchangeMode,
+        writesPqByDefault: writesPqByDefault ?? this.writesPqByDefault,
+        configuresPqProviders:
+            configuresPqProviders ?? this.configuresPqProviders,
+        disallowLegacyEncryption:
+            disallowLegacyEncryption ?? this.disallowLegacyEncryption,
+        mintLegacyMaterial: mintLegacyMaterial ?? this.mintLegacyMaterial,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms ?? this.sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms:
+            keyEstablishmentAlgorithms ?? this.keyEstablishmentAlgorithms,
+      );
+
   const PqPosture._({
     required this.authenticationKeyAlgorithm,
     required this.dataSigningKeyAlgorithms,
