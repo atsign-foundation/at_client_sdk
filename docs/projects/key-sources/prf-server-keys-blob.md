@@ -112,6 +112,17 @@ sequenceDiagram
 Only high-entropy sources qualify. No passphrase source: a deterministic
 `recordId` would become an offline guessing target.
 
+## Handing the restored keys to a client
+
+Trunk requires every client to be given an `AtKeysIo`, and a client's store must
+be a durable `WrittenAtKeysIo` (`e4de03a60`, `4c07f9aff`; `design.md` section 4).
+The restored envelope is therefore wrapped as a `WrittenAtKeysIo` whose `flush`
+and `update` re-encrypt under a fresh data key and write `public:_<recordId>`
+back, so the keys a client files later (namespace keys, signing keys, a minted
+root) survive the page. `InMemoryAtKeysIo` is for tests and one handshake, never
+this store: a root minted into page memory would be lost with the tab, and a
+root whose private is lost cannot be replaced.
+
 ## Decisions
 
 1. Replace local `.atKeys` files with an envelope v2 on the atServer.

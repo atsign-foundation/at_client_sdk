@@ -52,7 +52,7 @@ and an `update` that reads, mutates and writes as one operation.
 | ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FileAtKeysIo`     | at_auth, `lib/src/keys/io/file_io.dart`                     | an inter-process lock file around `flush` and `update`, write-to-temp then rename, a rolling `.bak`, a one-off `.pre-v1` copy, and an optional passphrase envelope                                      |
 | `KeychainAtKeysIo` | at_client_flutter, `lib/src/keychain/keychain_io_impl.dart` | built on the `biometric_storage` Flutter plugin; one entry per app package holding every atSign, split into 2,560-byte segments on Windows; no lock, and `update` is the interface's non-atomic default |
-| `InMemoryAtKeysIo` | at_auth                                                     | process-local, for tests                                                                                                                                                                                |
+| `InMemoryAtKeysIo` | at_auth                                                     | process-local, for tests; never the store a client runs on (see [section 4](#4-the-split-a-store-and-a-key-source)); `InMemoryAtKeysIo.holding` wraps one key set for a single handshake                                                                                                                                                                                |
 
 Four facts shape the design.
 
@@ -236,6 +236,21 @@ The interface is wrap and unwrap rather than "return the key", so a source
 whose key can't be exported still fits: a TPM, a cloud KMS, or a
 non-extractable WebCrypto key. `FileAtKeysIo(passPhrase: …)` keeps working as
 shorthand for a passphrase source, since apps outside this repository call it.
+
+Trunk fixes where this meets a client (`e4de03a60`, `4c07f9aff`):
+
+- **Every client is given its keys.** `AtClientImpl.create`, `buildAtClient` and
+  `AtServiceFactory.atClient` take a required `AtKeysIo`. There is no keyless
+  client and no PKAM key read from the local store or the preference, so a key
+  source reaches a client only through the store it is handed.
+- **The store a client runs on must be a durable `WrittenAtKeysIo`.** A client
+  files material that exists nowhere else, so a store that forgets strands it.
+  With any other `AtKeysIo` the client mints no signing root and no signing
+  keys, and refuses to file key packages (`pq_signing_root.dart`
+  `mintIfAbsent`, `signing_key_minting.dart`). A key-source-wrapped store
+  keeps that type, because the wrapping is below the interface.
+- **`InMemoryAtKeysIo.holding`** wraps a key set for one handshake or
+  authentication, as at_auth and at_client use it; never a client's store.
 
 A device's secure hardware fits as one more source through a
 `SecurityPlatformKeySource`; see [`apkam-custody.md`](apkam-custody.md#6-securityplatformkeysource).

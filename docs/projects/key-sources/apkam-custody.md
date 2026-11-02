@@ -12,7 +12,9 @@ version 2 envelope that only that hardware can open. The hardware plugs into
 Draft, 2026-10-01. Nothing here is built. The hardware capabilities in
 [section 2](#2-what-the-hardware-offers) are taken from vendor documentation
 and haven't been probed; [section 10](#10-open-questions) lists what would
-settle them. The at_server claims were read from trunk.
+settle them. The at_server claims were read from trunk. Updated 2026-11-02 to match
+trunk's key-source rework (`e4de03a60` every client is given its keys,
+`4c07f9aff` the mint guard); where this design and trunk differ, trunk wins.
 
 ## Table of contents
 
@@ -240,7 +242,7 @@ sequenceDiagram
   App->>S: pkam:signingAlgo:<algo>:enrollmentId:<id>:<signature>
   App->>S: llookup:atkeys.<enrollmentId>.a.__e@alice
   App->>C: SecurityPlatformKeySource.unwrap (decapsulate or prf)
-  App-->>App: document opened in memory for the session
+  App-->>App: document opened; a server-backed WrittenAtKeysIo is handed to the client
   Note over App,C: a reconnect signs through the same session, with no prompt
 ```
 
@@ -250,6 +252,17 @@ sequenceDiagram
 | Android               | `setUserAuthenticationParameters` with a timeout                          |
 | TPM and Windows Hello | the prompt gates the PRF or encapsulation key; the PKAM key has no prompt |
 | Browser               | one PRF `get()`; the derived keys are held for the session                |
+
+Trunk requires every client to be given an `AtKeysIo` at construction, and
+that store must be a durable `WrittenAtKeysIo` (see `design.md` section 4). So
+the order above is: the handshake authenticates through
+`InMemoryAtKeysIo.holding`, which at_auth already uses for one authentication,
+then the document is fetched, then a server-backed `WrittenAtKeysIo` is built
+over it and handed to the client. That store writes `flush` and `update` back
+to `atkeys.<enrollmentId>.a.__e`; it is not a session-memory copy, because a
+client running on a store that forgets would mint a signing root whose private
+is lost. Trunk's guard is the store's type: a client on any other `AtKeysIo`
+skips the root, signing keys and key packages.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
@@ -310,7 +323,7 @@ and that is accepted here as the recovery route.
 | --- | --- |
 | at_chops | ML-DSA-65 `keyPairFromSeed` (pure Dart and FFI); `pqOpen` with an external decapsulator; ECDSA DER and raw conversion; one HKDF helper for the custody labels |
 | at_auth | `SecurityPlatform`, `CustodySession`, `CustodyKey`, `SoftwareSecurityPlatform`, `SecurityPlatformKeySource`; a tier selector; a `custody` field in keyfile material; the four raw-key signing paths routed through custody; the `_pkam` injected-signer path stops assuming RSA-2048 |
-| at_client | ES256 in `envelope_signature.dart`; key packages advertise the custody encapsulation key; a server-backed store at `atkeys.<enrollmentId>.a.__e`; `open`, `activate` and `enroll` go through the session; `PqPosture.custody` |
+| at_client | no keyless path: custody keys reach the client only through the `AtKeysIo` it is given, which must be a `WrittenAtKeysIo`; ES256 in `envelope_signature.dart`; key packages advertise the custody encapsulation key; a server-backed store at `atkeys.<enrollmentId>.a.__e`; `open`, `activate` and `enroll` go through the session; `PqPosture.custody` |
 | at_client_flutter | A federated `at_security_platform` plugin for Darwin (CryptoKit), Android (Keystore) and Windows (NCrypt); `KeychainAtKeysIo` keeps only references and public halves |
 | at_client_wasm | `WebAuthnSecurityPlatform` on the existing passkey port, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_onboarding_cli | `--security tpm2\|software`, with a tpm2-tss FFI platform in its own package |
