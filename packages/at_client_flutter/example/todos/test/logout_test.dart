@@ -3,6 +3,16 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:todos/onboarding.dart';
 
+/// A signed-in client whose stop fails.
+class _StopFails extends Fake implements AtClient {
+  @override
+  String? getCurrentAtSign() => '@todos';
+
+  @override
+  Future<void> stop() async =>
+      throw Exception('the atServer connection would not close');
+}
+
 /// Catalogue: features/at_client_flutter/todos_logout.feature
 void main() {
   const atSign = '@todos';
@@ -52,4 +62,12 @@ void main() {
       expect(again.isStopped, isFalse);
     },
   );
+
+  test('Logging out clears the client even when stopping it fails', () async {
+    AtClientManager.getInstance().use(_StopFails());
+
+    await expectLater(logout(), throwsException);
+
+    expect(() => AtClientManager.getInstance().atClient, throwsStateError);
+  });
 }

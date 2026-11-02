@@ -81,11 +81,15 @@ Future<bool> loginWithApkam(BuildContext context) async {
 }
 
 /// Stops the current client, which this app owns, then clears it, so a
-/// sign-in that follows meets no client still live for the old atSign.
+/// sign-in that follows meets no client still live for the old atSign. The
+/// client is cleared even when stopping it throws.
 Future<void> logout() async {
   final manager = AtClientManager.getInstance();
-  await manager.atClient.stop();
-  manager.reset();
+  try {
+    await manager.atClient.stop();
+  } finally {
+    manager.reset();
+  }
 }
 
 /// The preference this app's client runs under: post-quantum, in the

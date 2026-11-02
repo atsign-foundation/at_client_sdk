@@ -10,3 +10,8 @@ Feature: Logging out of the todos example stops its client
     Given the todos app signed in as an atSign
     When the user logs out
     Then that client is stopped, no client is current, and opening the same atSign again succeeds
+
+  Scenario: Logging out clears the client even when stopping it fails
+    Given the todos app signed in, with a client whose stop throws
+    When the user logs out
+    Then logout throws that failure, and no client is current
