@@ -18,8 +18,9 @@
   it, then asks the others.
 - feat: `PendingEnrollment.cancel()` ends the wait `client` or
   `awaitApproval` is in, which throws `AtEnrollmentCancelledException`, and
-  removes the enrollment's pending keys. The request stays on the atServer
-  until the atSign's manager decides it.
+  removes the enrollment's pending keys; it throws when the key store cannot,
+  and a later call tries again. The request stays on the atServer until the
+  atSign's manager decides it.
 - feat: `AtKeysFormatException` comes through at_client, so an app tells a
   keyfile that is not a JSON object by its `reason` and `position` without
   importing at_auth.

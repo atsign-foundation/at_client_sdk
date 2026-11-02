@@ -44,7 +44,7 @@ final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
 // pending.cancel() abandons the enrollment: it ends that wait and removes
 // the pending keys from `keys`, as a denial does, so resumeEnrollment finds
-// nothing. Call it when the user gives up on the request (a Cancel button),
+// nothing. It throws when `keys` cannot remove them; call it again. Call it when the user gives up on the request (a Cancel button),
 // never from a dispose() that only leaves the screen. The request stays on
 // the atServer until its manager decides it. Tell the atSign's manager to
 // deny it: an approval after cancel creates an enrollment nobody can use,

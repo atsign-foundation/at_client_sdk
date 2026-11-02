@@ -2,7 +2,8 @@ Feature: An app ends a pending enrollment's wait with cancel()
 
   PendingEnrollment.cancel() ends the wait awaitApproval or client() is in.
   The wait throws AtEnrollmentCancelledException, an AtEnrollmentException,
-  and this enrollment's pending keys leave the store, as a denial's do.
+  and this enrollment's pending keys leave the store, as a denial's do. A
+  cancel that cannot remove them throws, and a later cancel tries again.
   Nothing withdraws the request on the atServer: the atSign's manager can
   still approve it, and that approval names keys nobody holds.
 
@@ -50,6 +51,16 @@ Feature: An app ends a pending enrollment's wait with cancel()
     Given a pending enrollment whose wait was cancelled
     When the app calls cancel again
     Then it completes without error and nothing more changes
+
+  Scenario: A cancel that cannot remove the pending keys throws
+    Given a pending enrollment waiting in awaitApproval, in a store that cannot be updated
+    When the app calls cancel
+    Then the wait throws AtEnrollmentCancelledException, and cancel throws the store's failure
+
+  Scenario: A cancel after one that failed removes the pending keys
+    Given a pending enrollment whose cancel threw because the store could not be updated
+    When the app calls cancel again once the store can be updated
+    Then the enrollment's pending keys are gone from the store
 
   Scenario: A connection the app supplied is left open
     Given a pending enrollment built with a connection the app supplied, waiting in awaitApproval

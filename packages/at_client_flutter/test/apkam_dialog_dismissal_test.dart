@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileSystemException;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
@@ -135,6 +136,24 @@ void main() {
         isNull,
         reason: 'the cancelled wait ends quietly',
       );
+    });
+
+    testWidgets('when the user dismisses it and the pending keys cannot be '
+        'removed, then the dialog still closes quietly', (tester) async {
+      resumes(pending);
+      final opened = clientAnswers();
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(AtEnrollmentCancelledException('cancelled'));
+        throw const FileSystemException('the keyfile lock is held');
+      });
+      final results = await open(tester);
+
+      await dismiss(tester);
+      await tester.pump();
+
+      verify(() => pending.cancel()).called(1);
+      expect(results, [null]);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('when the user dismisses it while its request is still being '

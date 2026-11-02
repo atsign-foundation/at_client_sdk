@@ -137,7 +137,12 @@ class PendingEnrollment {
     } on Exception catch (e) {
       if (_cancel.isCompleted) throw _cancelled();
       if (e is AtEnrollmentException && e.message.contains('denied')) {
-        await _discard('denied');
+        try {
+          await _discard('denied');
+        } catch (failure) {
+          _logger.warning('enrollment $enrollmentId of $atSign was denied, '
+              'and its pending keys could not be removed: $failure');
+        }
       }
       rethrow;
     } finally {
@@ -196,7 +201,8 @@ class PendingEnrollment {
 
   /// Ends the wait [client] or [awaitApproval] is in, which then throws
   /// [AtEnrollmentCancelledException]; this enrollment's pending keys leave
-  /// [keys] as a denial's do.
+  /// [keys] as a denial's do. When [keys] cannot remove them, this throws what
+  /// it threw, and a later call tries again.
   ///
   /// An approval already written to [keys] stays there, and a client that
   /// [client] has opened on it by then is stopped. A connection the caller
@@ -205,11 +211,11 @@ class PendingEnrollment {
   /// the client stops the connection too. Nothing withdraws the request on
   /// the atServer. Tell the atSign's manager to deny it: an approval after
   /// cancel creates an enrollment nobody can use, which the manager would
-  /// then revoke. A second call does nothing more.
+  /// then revoke. A second call after one that succeeded does nothing more.
   Future<void> cancel() => _cancelling ??= _cancelOnce();
 
   Future<void> _cancelOnce() async {
-    _cancel.complete();
+    if (!_cancel.isCompleted) _cancel.complete();
     try {
       await _ownHandshake?.stop();
     } on Exception catch (e) {
@@ -217,7 +223,12 @@ class PendingEnrollment {
           'enrollment $enrollmentId of $atSign while cancelling its wait; its '
           'pending keys are removed all the same: $e');
     } finally {
-      await _discard('cancelled');
+      try {
+        await _discard('cancelled');
+      } catch (_) {
+        _cancelling = null;
+        rethrow;
+      }
     }
   }
 
@@ -305,25 +316,20 @@ class PendingEnrollment {
       filed == null ? value?.toString() : null;
 
   /// Removes this enrollment's pending keys from [keys], after the request
-  /// was [why]: denied or cancelled.
+  /// was [why]: denied or cancelled. Throws what [keys] throws.
   Future<void> _discard(String why) async {
     var removed = false;
-    try {
-      await keys.update(atSign, (stored) {
-        if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
-        stored
-          ..discardEnrollment(enrollmentId)
-          ..unfileLegacyEnrollment(enrollmentId);
-        removed = true;
-        return true;
-      });
-      if (removed) {
-        _logger.info('enrollment $enrollmentId of $atSign was $why; its '
-            'pending keys are removed');
-      }
-    } catch (e) {
-      _logger.warning('enrollment $enrollmentId of $atSign was $why, and '
-          'its pending keys could not be removed: $e');
+    await keys.update(atSign, (stored) {
+      if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
+      stored
+        ..discardEnrollment(enrollmentId)
+        ..unfileLegacyEnrollment(enrollmentId);
+      removed = true;
+      return true;
+    });
+    if (removed) {
+      _logger.info('enrollment $enrollmentId of $atSign was $why; its '
+          'pending keys are removed');
     }
   }
 }

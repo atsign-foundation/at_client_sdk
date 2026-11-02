@@ -364,6 +364,25 @@ void main() {
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
   });
 
+  test(
+      'a denial whose pending keys the store cannot remove still throws the '
+      'denial', () async {
+    final store = _UpdateFailingStore();
+    final pending = await submit(
+        store,
+        atServer(
+            decide: (_) async => throw UnAuthenticatedException(
+                'Failed connecting to $atSign. error:AT0025:Apkam Auth '
+                'Denied')));
+    store.failing = true;
+
+    await expectLater(
+        () => pending.awaitApproval(
+            retryInterval: const Duration(milliseconds: 10)),
+        throwsA(isA<AtEnrollmentException>()
+            .having((e) => e.message, 'message', contains('denied'))));
+  });
+
   test('a denial empties a file store too, which then takes the next request',
       () async {
     // The file store validates every rewrite against what it held; the
@@ -793,6 +812,47 @@ void main() {
       verify(() => server.stop()).called(1);
     });
 
+    /// A pending enrollment waiting in awaitApproval, in [store], with the
+    /// wait's expected end.
+    Future<({PendingEnrollment pending, Future<void> waiting})> waitingIn(
+        WrittenAtKeysIo store) async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+      await until(() => polls >= 1);
+      return (pending: pending, waiting: waiting);
+    }
+
+    test('A cancel that cannot remove the pending keys throws', () async {
+      final store = _UpdateFailingStore();
+      final (:pending, :waiting) = await waitingIn(store);
+      store.failing = true;
+
+      await expectLater(pending.cancel(), throwsA(isA<FileSystemException>()));
+      await waiting;
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: 'the keys cancel could not remove are still there');
+    });
+
+    test('A cancel after one that failed removes the pending keys', () async {
+      final store = _UpdateFailingStore();
+      final (:pending, :waiting) = await waitingIn(store);
+      store.failing = true;
+      await expectLater(pending.cancel(), throwsA(isA<FileSystemException>()));
+      await waiting;
+
+      store.failing = false;
+      await pending.cancel();
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
     test('A connection the app supplied is left open', () async {
       var polls = 0;
       final server = atServer(decide: (_) async {
@@ -928,6 +988,23 @@ void main() {
       });
     });
   });
+}
+
+/// An in-memory store whose updates fail as a keyfile's do when its lock is
+/// held elsewhere, while [failing].
+class _UpdateFailingStore extends InMemoryAtKeysIo {
+  bool failing = false;
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    if (failing) {
+      throw FileSystemException(
+          'Could not acquire the keyfile lock within 0:00:10.000000. Nothing '
+          'was written.');
+    }
+    return super.update(atsign, mutate);
+  }
 }
 
 /// An in-memory store that calls [onRead] on every read once it is set, with

@@ -112,6 +112,7 @@ class ApkamActivationDialog extends StatefulWidget {
 }
 
 class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
+  final AtSignLogger _logger = AtSignLogger('ApkamActivationDialog');
   final TextEditingController _otpController = TextEditingController();
   final FocusNode _otpFocusNode = FocusNode();
   final ScrollController _pinScrollController = ScrollController();
@@ -168,7 +169,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
   Future<void> _awaitAndOpen(PendingEnrollment pending) async {
     if (!mounted) {
-      await pending.cancel();
+      await _cancel(pending);
       return;
     }
     _waitingOn = pending;
@@ -219,10 +220,23 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     }
   }
 
+  /// Cancels [pending]'s wait. A failure to remove its pending keys is
+  /// logged, since the dialog is gone and there is nobody to tell.
+  Future<void> _cancel(PendingEnrollment pending) async {
+    try {
+      await pending.cancel();
+    } catch (e) {
+      _logger.warning(
+        'Could not remove the pending keys of enrollment '
+        '${pending.enrollmentId} of ${widget.atSign}: $e',
+      );
+    }
+  }
+
   @override
   void dispose() {
     final waitingOn = _waitingOn;
-    if (waitingOn != null) unawaited(waitingOn.cancel());
+    if (waitingOn != null) unawaited(_cancel(waitingOn));
     _progress?.cancel();
     _otpController.dispose();
     _otpFocusNode.dispose();
