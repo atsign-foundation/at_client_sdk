@@ -130,6 +130,7 @@ class NskeySeeding {
       grants = await ownGrantsOf(atClient);
     } catch (e) {
       if (e is StoppedException) rethrow;
+      progress?.failedAll(e);
       _logger.info('Could not read this enrollment to find its namespaces, so '
           'nothing is seeded this start: $e');
       return const {};

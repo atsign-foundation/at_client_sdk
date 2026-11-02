@@ -50,6 +50,13 @@ class StartUpSeeding {
   void failed(String namespace, Object reason) =>
       _failures[namespace.toLowerCase()] = reason;
 
+  /// Start-up could not seed any namespace it said it seeds, for [reason].
+  void failedAll(Object reason) {
+    for (final namespace in _seeded) {
+      failed(namespace, reason);
+    }
+  }
+
   /// Start-up's seeding step has ended, whatever it did.
   void finish() {
     if (!_namespaces.isCompleted) seeding(const {});

@@ -957,6 +957,31 @@ void main() {
       });
 
       test(
+          'when its keyfile records todos.demos and start-up cannot read its '
+          'grants, then a write waiting for todos.demos is told why', () async {
+        when(() => client.enrollmentId).thenReturn('e-1');
+        final enrollments = MockEnrollmentService();
+        when(() => enrollments.fetchEnrollmentRequests()).thenAnswer(
+            (_) async =>
+                throw AtException('the enrollment record is unreadable'));
+        when(() => client.enrollmentService).thenReturn(enrollments);
+        final bootstrap = await parked(
+            keys: AtKeys()
+              ..recordEnrollmentSnapshot('e-1',
+                  namespaces: {'todos.demos': 'rw'}));
+        final waiting = bootstrap.startUpSeeding.covering('x.todos.demos');
+        expect(await pending(waiting), isTrue);
+
+        held.complete();
+
+        expect(
+            await waiting.timeout(const Duration(seconds: 5)), 'todos.demos');
+        expect(bootstrap.startUpSeeding.failureFor('todos.demos')?.toString(),
+            contains('the enrollment record is unreadable'));
+        await bootstrap.startupComplete;
+      });
+
+      test(
           'when its keyfile records no grants and a write finds only demos, '
           'then the write does not wait', () async {
         enrolled();
