@@ -116,11 +116,16 @@ class NskeyPrivateFiling {
   /// before reading it again.
   final Duration namespacesReadEvery;
 
+  /// How long [filedNamespaces] answers with a failed read's error before
+  /// reading the keyfile again.
+  final Duration namespacesRetryEvery;
+
   NskeyPrivateFiling({
     required this.keysIo,
     required String atSign,
     this.publishedGeneration,
     this.namespacesReadEvery = const Duration(minutes: 1),
+    this.namespacesRetryEvery = const Duration(seconds: 10),
   }) : atSign = atSign.toAtsign();
 
   /// A filing that checks each arriving private against the generation
@@ -172,8 +177,8 @@ class NskeyPrivateFiling {
     _filed.add((owner: atSign, namespace: namespace, nskeyKid: nskeyKid));
   }
 
-  /// The namespaces the keyfile held privates for when [filedNamespaces] last
-  /// finished reading it, and when that was.
+  /// The namespaces the keyfile held privates for at [filedNamespaces]'s last
+  /// read that succeeded, and when its last read, failed or not, ended.
   Set<String> _namespacesOnFile = const {};
   DateTime? _namespacesReadAt;
 
@@ -458,20 +463,28 @@ class NskeyPrivateFiling {
 
   /// The namespaces this atSign holds a filed private for, spelt as filed.
   ///
-  /// The keyfile is read at most once every [namespacesReadEvery], a failed
-  /// read included, so another process's filings show within that window; a
-  /// call made while it is being read waits for that read. Every private this
-  /// filing files or finds already filed is added at once.
+  /// The keyfile is read at most once every [namespacesReadEvery], so another
+  /// process's filings show within that window; a call made while it is being
+  /// read waits for that read. A read that fails is thrown to every call for
+  /// [namespacesRetryEvery] after it, rather than answered as holding nothing,
+  /// and then tried again; a keyfile that does not exist holds nothing. Every
+  /// private this filing files or finds already filed is added at once.
   Future<Set<String>> filedNamespaces() async {
     final readAt = _namespacesReadAt;
-    if (readAt == null ||
-        DateTime.now().difference(readAt) >= namespacesReadEvery) {
+    final failed = _namespacesReadFailure;
+    final every = failed == null ? namespacesReadEvery : namespacesRetryEvery;
+    if (readAt == null || DateTime.now().difference(readAt) >= every) {
       await (_namespacesReading ??= _readNamespaces());
+    } else if (failed != null) {
+      Error.throwWithStackTrace(failed.error, failed.stackTrace);
     }
     return {..._namespacesOnFile, ..._namespacesFiledSince};
   }
 
   Future<void>? _namespacesReading;
+
+  /// How the last read failed, or null when it succeeded.
+  ({Object error, StackTrace stackTrace})? _namespacesReadFailure;
 
   Future<void> _readNamespaces() async {
     try {
@@ -479,12 +492,15 @@ class NskeyPrivateFiling {
           await _readSourceOrNull('the namespaces of every held private');
       _namespacesOnFile =
           keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
+      _namespacesReadFailure = null;
+      _namespacesReadAt = DateTime.now();
     } on StoppedException {
       rethrow;
-    } catch (e) {
-      _logger.finer('No nskey privates listed ($e)');
-    } finally {
+    } catch (e, stackTrace) {
+      _namespacesReadFailure = (error: e, stackTrace: stackTrace);
       _namespacesReadAt = DateTime.now();
+      rethrow;
+    } finally {
       _namespacesReading = null;
     }
   }

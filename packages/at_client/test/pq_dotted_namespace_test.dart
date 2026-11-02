@@ -514,21 +514,51 @@ void main() {
         reason: "another atSign's privates are never this client's");
   });
 
-  test(
-      'A keyfile that could not be read is read again once the window has '
-      'passed', () async {
-    final io = _FailingOnceKeysIo();
-    await _filing(io, ['todos.demos']);
-    final resolver = NskeyResolver(PublishedNskeyKeyRing(atClient,
-        privateFiling: NskeyPrivateFiling(
-            keysIo: io, atSign: _alice, namespacesReadEvery: Duration.zero)));
-    final key = AtKey.fromString('x.todos.demos$_alice');
-    io.failNext = true;
+  group('Given a keyfile holding a todos.demos private that could not be read',
+      () {
+    /// A client whose held namespaces are what a filing over [io] lists, a
+    /// filing that filed nothing itself, and whose next read of [io] fails.
+    Future<_Client> failingOnce(_FailingOnceKeysIo io,
+        {Duration? retryEvery}) async {
+      await _filing(io, ['todos.demos']);
+      final c = _Client(_FilingRing(retryEvery == null
+          ? NskeyPrivateFiling(keysIo: io, atSign: _alice)
+          : NskeyPrivateFiling(
+              keysIo: io, atSign: _alice, namespacesRetryEvery: retryEvery)));
+      await _hold(c.ring, _alice, 'demos');
+      await _hold(c.ring, _alice, 'todos.demos');
+      wire(c);
+      io.failNext = true;
+      return c;
+    }
 
-    expect(await resolver.startLevelOf(_alice, key), 'demos',
-        reason: 'the precondition: the first read failed');
-    expect(await resolver.startLevelOf(_alice, key), 'todos.demos',
-        reason: 'what it has filed is read again, not taken to be nothing');
+    test(
+        'when writes follow within 10 seconds, then each is refused with the '
+        'read\'s error', () async {
+      final c = await failingOnce(_FailingOnceKeysIo());
+
+      await expectLater(write(c, AtKey.fromString('x.todos.demos$_alice'), 'a'),
+          throwsA(isA<FileSystemException>()));
+      await expectLater(write(c, AtKey.fromString('y.todos.demos$_alice'), 'b'),
+          throwsA(isA<FileSystemException>()),
+          reason: 'the keyfile would read now, and the failure is still the '
+              'answer inside its window');
+    });
+
+    test(
+        'when the window has passed, then the next write reads it again and '
+        'seals at todos.demos', () async {
+      final c = await failingOnce(_FailingOnceKeysIo(),
+          retryEvery: const Duration(milliseconds: 200));
+      await expectLater(write(c, AtKey.fromString('x.todos.demos$_alice'), 'a'),
+          throwsA(isA<FileSystemException>()));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      final key = AtKey.fromString('y.todos.demos$_alice');
+      await write(c, key, 'b');
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+    });
   });
 
   group('Given a client holding a filed todos.demos private', () {

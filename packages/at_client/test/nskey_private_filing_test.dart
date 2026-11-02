@@ -408,15 +408,47 @@ void main() {
 
   group('Given the namespaces a filing lists as held', () {
     test(
-        'when the keyfile cannot be read, then it is read again only once the '
-        'window has passed, not at every call', () async {
+        'when the keyfile cannot be read, then each call in the next 10 '
+        'seconds throws the read\'s error, from that one read', () async {
       final io = _CountingUnreadableKeysIo();
       final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
 
-      await filer.filedNamespaces();
-      await filer.filedNamespaces();
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
 
       expect(io.reads, 1);
+    });
+
+    test('a read is kept for a minute, and a failed one for 10 seconds', () {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(filer.namespacesReadEvery, const Duration(minutes: 1));
+      expect(filer.namespacesRetryEvery, const Duration(seconds: 10));
+    });
+
+    test(
+        'when a failed read\'s window has passed, then the next call reads the '
+        'keyfile again', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesRetryEvery: Duration.zero);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+
+      expect(io.reads, 2);
+    });
+
+    test('when there is no keyfile, then it lists nothing', () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(await filer.filedNamespaces(), isEmpty);
     });
 
     test(
