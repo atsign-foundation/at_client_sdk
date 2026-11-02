@@ -9,6 +9,7 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show verifiedAdvertisementKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
+import 'package:at_client/src/crypto/nskey/verified_advertisement_record.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
@@ -62,10 +63,17 @@ class _Device {
   late final NskeyPrivateFiling filing =
       NskeyPrivateFiling(keysIo: keys, atSign: _atSign);
 
-  _Device(this.enrollmentId, this.server)
+  /// Whether this is the primary enrollment on the atSign's root keys, whose
+  /// client names no enrollment id.
+  final bool onRootKeys;
+
+  /// Whether the client has stopped, so its local reads say so.
+  bool stopped = false;
+
+  _Device(this.enrollmentId, this.server, {this.onRootKeys = false})
       : apkam = pkamKeyPairFor(_atSign, enrollmentId),
-        keys = keysHoldingApkam(
-            _atSign, enrollmentId, pkamKeyPairFor(_atSign, enrollmentId));
+        keys = keysHoldingApkam(_atSign, onRootKeys ? null : enrollmentId,
+            pkamKeyPairFor(_atSign, enrollmentId));
 
   /// A fresh start: a new client, so nothing it cached survives, and a new
   /// ring, over this device's keys and local storage.
@@ -98,7 +106,7 @@ _Client _clientFor(_Device d) {
   final lookUp = MockAtLookUp();
   final local = MockLocalSecondary();
   when(() => c.getCurrentAtSign()).thenReturn(_atSign);
-  when(() => c.enrollmentId).thenReturn(d.enrollmentId);
+  when(() => c.enrollmentId).thenReturn(d.onRootKeys ? null : d.enrollmentId);
   when(() => c.atKeysIo).thenReturn(d.keys);
   when(() => c.getPreferences())
       .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [_alg]));
@@ -118,6 +126,7 @@ _Client _clientFor(_Device d) {
       return 'data:1';
     }
     if (builder is LLookupVerbBuilder) {
+      if (d.stopped) throw StoppedException('the client has stopped');
       final value = d.local[builder.atKey.toString()];
       if (value == null) throw KeyNotFoundException('${builder.atKey}');
       return 'data:$value';
@@ -238,6 +247,42 @@ void main() {
     expect(await writeAsStarted(device, selfKey(_namespace)), _namespace,
         reason: 'the write itself succeeds, its pre-pass asking the rotation '
             'policy as start-up wires it');
+  });
+
+  test(
+      'The primary enrollment, restarted with no atServer, writes in a '
+      'namespace it verified and holds the key for', () async {
+    final device = _Device('primary', _AtServer(), onRootKeys: true);
+    await device.publishApsk();
+    final kid = (await device.start().mintAndPublish(_namespace)).nskeyKid;
+    await device.start().currentPublic(_atSign, _namespace);
+    device.server.reachable = false;
+
+    expect((await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+        kid);
+  });
+
+  test(
+      'An advertisement verified under one spelling of its namespace is '
+      'vouched for under another', () async {
+    final device = _Device('enroll-self', _AtServer());
+    await device.publishApsk();
+    await device.start().mintAndPublish(_namespace);
+    final record =
+        VerifiedAdvertisementRecord(device.client, filing: device.filing);
+    final payload = device.server.records[_advertisementKey]!;
+    await record.remember(_namespace.toUpperCase(), payload);
+
+    expect(await record.vouchesFor(_namespace, payload), isTrue);
+  });
+
+  test('A client stopped as it reads its local record says so', () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    device.server.reachable = false;
+    device.stopped = true;
+
+    await expectLater(device.start().currentPublic(_atSign, _namespace),
+        throwsA(isA<StoppedException>()));
   });
 
   group(

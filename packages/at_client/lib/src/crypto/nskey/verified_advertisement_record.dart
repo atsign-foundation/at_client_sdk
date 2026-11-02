@@ -103,12 +103,14 @@ class VerifiedAdvertisementRecord {
     }
   }
 
+  /// The record's key, under the enrollment id this client signs as.
   AtKey? _keyFor(String namespace) {
-    final enrollmentId = _atClient.enrollmentId;
     final atSign = _atClient.getCurrentAtSign();
-    if (enrollmentId == null || atSign == null) return null;
+    if (atSign == null) return null;
     return verifiedAdvertisementKey(
-        sharedBy: atSign, enrollmentId: enrollmentId, namespace: namespace);
+        sharedBy: atSign,
+        enrollmentId: _signer.enrollmentId,
+        namespace: namespace.toLowerCase());
   }
 
   /// What a record of [payload] for [namespace] says, as this client would
@@ -121,7 +123,7 @@ class VerifiedAdvertisementRecord {
       ..sort();
     return {
       'atSign': _atClient.getCurrentAtSign(),
-      'namespace': namespace,
+      'namespace': namespace.toLowerCase(),
       'sha256': sha256.convert(utf8.encode(payload)).toString(),
       'held': held,
     };
@@ -133,6 +135,8 @@ class VerifiedAdvertisementRecord {
       value = await _atClient
           .getLocalSecondary()!
           .executeVerb(LLookupVerbBuilder()..atKey = key);
+    } on StoppedException {
+      rethrow;
     } on Exception {
       return null;
     }
