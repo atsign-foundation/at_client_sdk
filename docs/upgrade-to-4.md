@@ -568,6 +568,11 @@ These compile and then fail when the code runs, usually first in a test:
   `AtTransport`, rather than wrapping a partial fake socket in
   `SecureSocketTransport`, as
   [above](#a-test-double-for-the-atserver).
+- A program built on `CLIBase.createArgsParser` or `fromCommandLineArgs` that
+  never passed `addLegacyRootDomainArg:` had `-d`/`--legacy-root-domain` by
+  default, and loses it with no compile error: its users who type it get
+  `Could not find an option or flag "-d"`, and pass the root domain as `-r`
+  instead, as [section 3](#3-a-command-line-program-at_client_cli) says.
 
 ## 3. A command-line program: at_client_cli
 
@@ -690,12 +695,14 @@ Future<void> main(List<String> args) async {
 }
 ```
 
-**Two command-line options are gone.** The tools and `CLIBase` take the
-root domain only as `-r`/`--root-server`: a script passing
-`-d`/`--legacy-root-domain` stops with `Could not find an option or flag
-"-d"`. `at_activate` and `at_register` no longer take `--hashingAlgoType`,
-which did nothing. A program passing `addLegacyRootDomainArg:` to
-`CLIBase.createArgsParser` or `fromCommandLineArgs` deletes it.
+**Two command-line options are gone.** `CLIBase` takes the root domain
+only as `-r`/`--root-server`: a program built on it, run with
+`-d`/`--legacy-root-domain`, stops with `Could not find an option or flag
+"-d"`. `at_activate` never took that option, and its `-d` is still the
+device name, so `at_activate enroll -d <device>` is unchanged. `at_activate`
+and `at_register` no longer take `--hashingAlgoType`, which did nothing. A
+program passing `addLegacyRootDomainArg:` to `CLIBase.createArgsParser` or
+`fromCommandLineArgs` deletes it.
 
 **Checklist**
 
@@ -709,7 +716,9 @@ which did nothing. A program passing `addLegacyRootDomainArg:` to
 - [ ] A retry loop around `CLIBase` catches
       `SecondaryServerConnectivityException`, not every exception.
 - [ ] Scripts name `at_activate`'s command (`at_activate onboard ...`).
-- [ ] Scripts pass the root domain as `-r`, and no `--hashingAlgoType`.
+- [ ] Scripts pass a `CLIBase` program's root domain as `-r`, not `-d`;
+      `at_activate`'s `-d` stays the device name, and nothing passes
+      `--hashingAlgoType`.
 - [ ] `dart analyze` is clean.
 
 ## 4. A Flutter app: at_client_flutter
