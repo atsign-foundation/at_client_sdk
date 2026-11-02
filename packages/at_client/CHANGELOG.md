@@ -21,6 +21,10 @@
   removes the enrollment's pending keys; it throws when the key store cannot,
   and a later call tries again. The request stays on the atServer until the
   atSign's manager decides it.
+- feat: `PendingEnrollment.stop()` ends the wait and keeps the request, which
+  `Atsign.resumeEnrollment` picks up again, with no app or device when the
+  store holds one pending enrollment. A request that expires has its pending
+  keys removed, as a denied one does.
 - feat: `AtKeysFormatException` comes through at_client, so an app tells a
   keyfile that is not a JSON object by its `reason` and `position` without
   importing at_auth.

@@ -3,6 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_auth/at_auth.dart'
+    show
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole,
+        CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
@@ -569,7 +575,7 @@ void main() {
   });
 
   /// Catalogue: features/at_client/pending_enrollment_cancel.feature
-  group('PendingEnrollment.cancel()', () {
+  group("PendingEnrollment's stop() and cancel()", () {
     /// Lets the event loop run until [done] holds, for at most five seconds.
     Future<void> until(bool Function() done) async {
       final deadline = DateTime.now().add(const Duration(seconds: 5));
@@ -851,6 +857,257 @@ void main() {
       await pending.cancel();
 
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    /// Resumes the request in [store] for wavi on phone, over [server].
+    Future<PendingEnrollment?> resume(
+        InMemoryAtKeysIo store, MockAtLookupImpl server) async {
+      final pref = await preference();
+      return Atsign(atSign).resumeEnrollment(
+          app: 'wavi',
+          device: 'phone',
+          keys: store,
+          preference: pref,
+          atLookUp: server,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref));
+    }
+
+    test('Stop ends a wait and keeps the request', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      await until(() => polls >= 1);
+
+      await pending.stop();
+      await waiting;
+
+      final atStop = polls;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(polls, atStop, reason: 'no further poll reaches the atServer');
+      verify(() => server.stop()).called(1);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
+    });
+
+    test('A stopped request resumes', () async {
+      var polls = 0;
+      var approved = false;
+      final server = atServer(decide: (_) async {
+        polls++;
+        return approved ? true : notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      await until(() => polls >= 1);
+      await pending.stop();
+      await waiting;
+
+      final resumed = await resume(store, server);
+      approved = true;
+      await resumed!.awaitApproval(retryInterval: pollEvery);
+
+      expect(resumed.enrollmentId, enrollmentId);
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.holdsAuthenticationMaterial, isTrue);
+    });
+
+    test('Stop leaves a connection the app supplied open', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      await until(() => polls >= 1);
+
+      await pending.stop();
+      await waiting;
+
+      verifyNever(() => server.stop());
+      verifyNever(() => server.close());
+    });
+
+    test('A repeat stop does nothing', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final pending = await submitOwning(store, server);
+      final waiting = expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      await until(() => polls >= 1);
+      await pending.stop();
+      await waiting;
+      final before = (await store.read(atSign)).toJson();
+
+      await pending.stop();
+
+      expect((await store.read(atSign)).toJson(), before);
+      verify(() => server.stop()).called(1);
+    });
+
+    test('Stop before anyone waits', () async {
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(store, atServer(decide: (_) async => true));
+
+      await pending.stop();
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
+    });
+
+    test('Cancel after stop abandons', () async {
+      final store = InMemoryAtKeysIo();
+      final pending =
+          await submit(store, atServer(decide: (_) async => notYetDecided()));
+      await pending.stop();
+
+      await pending.cancel();
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    test(
+        'An approval landing as stop does is not written, and the next resume '
+        'completes it', () async {
+      late PendingEnrollment pending;
+      final server = atServer(
+          decide: (_) async => true,
+          onKeyFetch: () => unawaited(pending.stop()));
+      final store = InMemoryAtKeysIo();
+      pending = await submit(store, server);
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<StoppedException>()));
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: 'nothing is written, and the request is kept');
+
+      await (await resume(store, server))!
+          .awaitApproval(retryInterval: pollEvery);
+
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.holdsAuthenticationMaterial, isTrue);
+    });
+
+    test('Stop while client() opens the approved client', () async {
+      late PendingEnrollment pending;
+      var approvedAt = 0;
+      final server = atServer(decide: (attempt) async {
+        if (approvedAt == 0) {
+          approvedAt = attempt;
+        } else {
+          // NOTE: a later PKAM is the opening client's own.
+          unawaited(pending.stop());
+        }
+        return true;
+      });
+      final store = InMemoryAtKeysIo();
+      pending = await submit(store, server);
+
+      await expectLater(clientOf(pending), throwsA(isA<StoppedException>()));
+
+      expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+          reason: 'the client it opened is stopped');
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentToAuthenticateAs(), enrollmentId,
+          reason: 'the approved keys stay in the store');
+      expect(stored.holdsAuthenticationMaterial, isTrue);
+    });
+
+    test("An expired request's keys go, as a denial's do", () async {
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw UnAuthenticatedException(
+                  'Failed connecting to $atSign. error:AT0028:enrollment_id: '
+                  '$enrollmentId is expired or invalid')));
+
+      await expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('expired'))));
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    test('The one pending enrollment resumes with no names', () async {
+      final store = InMemoryAtKeysIo();
+      await submit(store, atServer(decide: (_) async => true));
+      final pref = await preference();
+
+      final resumed = await Atsign(atSign).resumeEnrollment(
+          keys: store,
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref));
+
+      expect(resumed?.enrollmentId, enrollmentId);
+      expect(resumed?.app, 'wavi');
+      expect(resumed?.device, 'phone');
+    });
+
+    test(
+        'Given a store holding two pending enrollments, when resumeEnrollment '
+        'is given no names, then it throws AtEnrollmentPendingException '
+        'naming both', () async {
+      final keys = AtKeys(atsign: Atsign(atSign));
+      final keyPair = RsaKeyPair.generate();
+      for (final id in ['e-one', 'e-two']) {
+        for (final (role, key) in [
+          (
+            CryptographicMaterialRole.privateAuthentication,
+            keyPair.atPrivateKey.privateKey
+          ),
+          (
+            CryptographicMaterialRole.publicAuthentication,
+            keyPair.atPublicKey.publicKey
+          ),
+        ]) {
+          keys.addKey(CryptographicMaterial(
+              keyId: 'auth:rsa2048:1',
+              enrollmentId: id,
+              role: role,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              bytes: AtBytes.fromString(key),
+              createdAt: DateTime.now().toUtc(),
+              status: CryptographicMaterialStatus.pending));
+        }
+        keys.recordEnrollmentSnapshot(id, appName: 'wavi', deviceName: id);
+      }
+      final pref = await preference();
+
+      await expectLater(
+          Atsign(atSign).resumeEnrollment(
+              // ignore: invalid_use_of_visible_for_testing_member
+              keys: InMemoryAtKeysIo.holding(atSign, keys),
+              preference: pref,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref)),
+          throwsA(isA<AtEnrollmentPendingException>().having(
+              (e) => e.pendingEnrollmentIds,
+              'pendingEnrollmentIds',
+              unorderedEquals(['e-one', 'e-two']))));
     });
 
     test('A connection the app supplied is left open', () async {

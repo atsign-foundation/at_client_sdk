@@ -23,8 +23,8 @@ import 'package:at_utils/at_progress.dart';
 /// namespaces asked for, so a restart finds them with
 /// `Atsign.resumeEnrollment` and picks up here. [client] waits for the
 /// decision: approval completes the keys in the store, moves them to
-/// active, and opens a client the caller owns; denial removes them and
-/// throws.
+/// active, and opens a client the caller owns; denial, or the request's
+/// expiry, removes them and throws.
 class PendingEnrollment {
   final Atsign atSign;
   final String enrollmentId;
@@ -43,7 +43,9 @@ class PendingEnrollment {
   final AtEnrollment _enrollment = AtEnrollment.create();
   final AtSignLogger _logger;
 
-  final Completer<void> _cancel = Completer<void>();
+  /// Completed by [stop] or [cancel], which ends the wait.
+  final Completer<void> _ended = Completer<void>();
+  bool _abandoned = false;
   Future<void>? _cancelling;
 
   /// The handshake connection [awaitApproval] built, while it waits; null for
@@ -81,13 +83,14 @@ class PendingEnrollment {
   ///
   /// The wait for a decision has no bound: somebody decides on their own
   /// schedule. [maxRetries] budgets consecutive failures to reach the
-  /// atServer, and [retryInterval] is the pause between polls. A denial
-  /// removes this enrollment from [keys] and throws [AtEnrollmentException].
+  /// atServer, and [retryInterval] is the pause between polls. A denial, or
+  /// the request's expiry, removes this enrollment from [keys] and throws
+  /// [AtEnrollmentException].
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
   }) async {
-    _refuseIfCancelled();
+    _refuseIfEnded();
     final stored = await keys.read(atSign);
     if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
       throw AtEnrollmentException(
@@ -128,19 +131,26 @@ class PendingEnrollment {
             secondaryAddressFinder: _secondaryAddressFinder);
     if (_atLookUp == null) _ownHandshake = handshake;
     try {
-      _refuseIfCancelled();
+      _refuseIfEnded();
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,
           maxRetries: maxRetries,
           atLookup: handshake,
-          cancelled: _cancel.future);
+          cancelled: _ended.future);
     } on Exception catch (e) {
-      if (_cancel.isCompleted) throw _cancelled();
-      if (e is AtEnrollmentException && e.message.contains('denied')) {
+      if (_ended.isCompleted) throw _endedException();
+      final decided = e is! AtEnrollmentException
+          ? null
+          : e.message.contains('denied')
+              ? 'denied'
+              : e.message.contains('error:AT0028')
+                  ? 'expired'
+                  : null;
+      if (decided != null) {
         try {
-          await _discard('denied');
+          await _discard(decided);
         } catch (failure) {
-          _logger.warning('enrollment $enrollmentId of $atSign was denied, '
+          _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
               'and its pending keys could not be removed: $failure');
         }
       }
@@ -150,11 +160,12 @@ class PendingEnrollment {
       if (_atLookUp == null) await handshake.close();
     }
 
-    // NOTE: the cancel check and the write are one update, so a cancel lands
-    // either before the approval is written or after it.
+    // NOTE: the check that the wait has not ended and the write are one
+    // update, so a stop or cancel lands either before the approval is written
+    // or after it.
     var written = false;
     await keys.update(atSign, (stored) {
-      if (_cancel.isCompleted) return false;
+      if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
         _fileFlat(stored);
@@ -164,7 +175,7 @@ class PendingEnrollment {
       written = true;
       return true;
     });
-    if (!written) throw _cancelled();
+    if (!written) throw _endedException();
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
         'keys are complete');
   }
@@ -192,9 +203,9 @@ class PendingEnrollment {
         lookUps: _lookUps,
         secondaryAddressFinder: _secondaryAddressFinder,
         connectBudget: connectBudget);
-    if (_cancel.isCompleted) {
+    if (_ended.isCompleted) {
       await client.stop();
-      throw _cancelled();
+      throw _endedException();
     }
     return client;
   }
@@ -214,8 +225,30 @@ class PendingEnrollment {
   /// then revoke. A second call after one that succeeded does nothing more.
   Future<void> cancel() => _cancelling ??= _cancelOnce();
 
+  /// Ends the wait [client] or [awaitApproval] is in, which then throws
+  /// [StoppedException], and keeps this enrollment's pending keys in [keys], so
+  /// `Atsign.resumeEnrollment` picks the request up again. Sends nothing.
+  ///
+  /// The handshake connection [awaitApproval] built is closed, and one the
+  /// caller supplied is left open. An approval not yet written to [keys] is not
+  /// written, and the next resume finds the request approved; a client that
+  /// [client] has opened on an approval already written is stopped. A later
+  /// [cancel] still abandons the request. Once the wait has ended, by this or
+  /// by [cancel], this does nothing.
+  Future<void> stop() async {
+    if (_ended.isCompleted) return;
+    _ended.complete();
+    try {
+      await _ownHandshake?.stop();
+    } on Exception catch (e) {
+      _logger.warning('Could not close the handshake connection of '
+          'enrollment $enrollmentId of $atSign while stopping its wait: $e');
+    }
+  }
+
   Future<void> _cancelOnce() async {
-    if (!_cancel.isCompleted) _cancel.complete();
+    _abandoned = true;
+    if (!_ended.isCompleted) _ended.complete();
     try {
       await _ownHandshake?.stop();
     } on Exception catch (e) {
@@ -232,12 +265,17 @@ class PendingEnrollment {
     }
   }
 
-  void _refuseIfCancelled() {
-    if (_cancel.isCompleted) throw _cancelled();
+  void _refuseIfEnded() {
+    if (_ended.isCompleted) throw _endedException();
   }
 
-  AtEnrollmentCancelledException _cancelled() => AtEnrollmentCancelledException(
-      'the wait for enrollment $enrollmentId of $atSign was cancelled');
+  /// What a wait that [cancel] or [stop] ended throws.
+  Exception _endedException() => _abandoned
+      ? AtEnrollmentCancelledException(
+          'the wait for enrollment $enrollmentId of $atSign was cancelled')
+      : StoppedException('the wait for enrollment $enrollmentId of $atSign '
+          'was stopped; the request stays in its key store, for '
+          'resumeEnrollment');
 
   /// Copies onto [stored] what the approval released into [completed]: the
   /// atSign's encryption private key and self-encryption key, the symmetric

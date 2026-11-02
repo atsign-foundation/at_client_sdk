@@ -394,14 +394,18 @@ extension AtsignLifecycle on Atsign {
   /// yet completed, or null when there is none: the way an application picks
   /// up an enrollment it submitted before a restart.
   ///
+  /// Each of [app] and [device] that is given narrows the search. With
+  /// neither, [keys] must hold one pending enrollment, which this returns;
+  /// one holding several throws [AtEnrollmentPendingException] naming them.
+  ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
   /// and [atLookUp] is one for the approval handshake,
   /// for a caller that already holds one, which the client the enrollment
   /// opens takes over as [open] does.
   Future<PendingEnrollment?> resumeEnrollment({
-    required String app,
-    required String device,
+    String? app,
+    String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookupMuxable? atLookUp,
@@ -414,9 +418,15 @@ extension AtsignLifecycle on Atsign {
     } on AtKeysSourceAbsentException {
       return null;
     }
-    for (final enrollmentId in stored.pendingEnrollmentIds) {
+    final named = app != null || device != null;
+    final pending = stored.pendingEnrollmentIds.toList();
+    if (!named && pending.length > 1) {
+      throw AtEnrollmentPendingException(this, pending);
+    }
+    for (final enrollmentId in pending) {
       final info = stored.enrollmentInfo(enrollmentId);
-      if (info?.appName != app || info?.deviceName != device) continue;
+      if (app != null && info?.appName != app) continue;
+      if (device != null && info?.deviceName != device) continue;
       final apkam = stored
           .keysForEnrollment(enrollmentId)
           .where((m) =>
@@ -426,8 +436,8 @@ extension AtsignLifecycle on Atsign {
       return PendingEnrollment(
           atSign: this,
           enrollmentId: enrollmentId,
-          app: app,
-          device: device,
+          app: app ?? info?.appName ?? '',
+          device: device ?? info?.deviceName ?? '',
           namespaces: info?.namespaces ?? const {},
           keys: keys,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
