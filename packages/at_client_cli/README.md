@@ -142,12 +142,17 @@ online. Otherwise it stops the client and throws:
 
 - `AtCredentialRefusedException` when the atServer refuses the keys, naming
   the cause, and saying when the enrollment awaits approval or was denied;
-- `AtEnrollmentPendingException` when the keyfile still holds only its
-  enrollment request;
+- `AtEnrollmentException` when the enrollment request the keyfile holds is
+  denied or expires;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   atSign;
 - `SecondaryServerConnectivityException` when the atServer is not reached in
   time, the one a retry loop should catch.
+
+A keyfile still holding only its enrollment request is resumed: the program
+says it is waiting for approval of that enrollment, waits as at_activate
+does, and runs once it is approved. Ctrl-C while it waits keeps the request
+for the next run.
 
 Pass `preference:` an `AtClientPreference` to set anything the flags do not.
 

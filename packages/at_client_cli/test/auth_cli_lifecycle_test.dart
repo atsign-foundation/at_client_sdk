@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_client_cli/at_client_cli.dart';
@@ -185,73 +183,12 @@ void main() {
   group('enrolDevice', () {
     const atSign = '@alice🛠';
     const enrollmentId = 'e-1';
-    final encryptionPublicKey = demo.encryptionPublicKeyMap[atSign]!;
-    final encryptionPrivateKey = demo.encryptionPrivateKeyMap[atSign]!;
     final selfEncryptionKey = demo.aesKeyMap[atSign]!;
 
-    /// The atServer and the approving client in one double. [decide] answers
-    /// each PKAM attempt after submission: `true` approves, and an exception
-    /// is the atServer's refusal. [wrapped] holds the symmetric key the
-    /// request RSA-wrapped, shared between doubles so a wait resumed against
-    /// a second one can be answered with secrets sealed under the same key.
     ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
-        {required Future<bool> Function(int attempt) decide,
-        required List<String> wrapped}) {
-      final lookUp = MockAtLookupImpl();
-      final sent = <String>[];
-      var attempts = 0;
-
-      Future<Map<String, String>> sealed(String secret) async {
-        final symmetricKey = utf8.decode((RsaEncryptionAlgo()
-              ..atPrivateKey = AtPrivateKey.fromString(encryptionPrivateKey))
-            .decrypt(base64Decode(wrapped.single)));
-        final iv = InitialisationVector.random(16);
-        final bytes = await AESEncryptionAlgo(AESKey(symmetricKey))
-            .encrypt(Uint8List.fromList(utf8.encode(secret)), iv: iv);
-        return {'value': base64Encode(bytes), 'iv': base64Encode(iv.ivBytes)};
-      }
-
-      when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
-          .thenAnswer((i) async {
-        final command = i.positionalArguments.first as String;
-        sent.add(command);
-        if (command.startsWith('enroll:')) {
-          final json = jsonDecode(command.substring(
-              command.indexOf('{'), command.lastIndexOf('}') + 1));
-          wrapped
-            ..clear()
-            ..add(json['encryptedAPKAMSymmetricKey'] as String);
-          return 'data:${jsonEncode({
-                'enrollmentId': enrollmentId,
-                'status': 'pending'
-              })}';
-        }
-        if (command.startsWith(
-            'keys:get:keyName:$enrollmentId.default_enc_private_key')) {
-          return 'data:${jsonEncode(await sealed(encryptionPrivateKey))}';
-        }
-        if (command.startsWith(
-            'keys:get:keyName:$enrollmentId.default_self_enc_key')) {
-          return 'data:${jsonEncode(await sealed(selfEncryptionKey))}';
-        }
-        throw StateError('the mocked atServer has no answer for: $command');
-      });
-      when(() => lookUp.executeVerb(any())).thenAnswer((i) async {
-        final builder = i.positionalArguments.first;
-        if (builder is LookupVerbBuilder && builder.atKey.key == 'publicKey') {
-          return 'data:$encryptionPublicKey';
-        }
-        throw StateError('the mocked atServer has no answer for: '
-            '${(builder as VerbBuilder).buildCommand()}');
-      });
-      when(() => lookUp.pkamAuthenticate())
-          .thenAnswer((_) => decide(++attempts));
-      when(() => lookUp.close()).thenAnswer((_) async {});
-      when(lookUp.stop).thenAnswer((_) async {});
-      when(() => lookUp.dropConnection()).thenAnswer((_) async {});
-      when(() => lookUp.isConnectionAvailable()).thenReturn(false);
-      return (lookUp: lookUp, sent: sent);
-    }
+            {required Future<bool> Function(int attempt) decide,
+            required List<String> wrapped}) =>
+        approvingAtServer(decide: decide, wrapped: wrapped);
 
     Future<AtClient> enrol(AtClientPreference pref, String keysPath,
             MockAtLookupImpl lookUp) =>

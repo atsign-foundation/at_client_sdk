@@ -6,6 +6,9 @@
   otherwise with a built-in key, so both work without it. A key that is set
   but holds a character an HTTP header cannot carry is refused before
   anything is sent.
+- feat: a program built on `CLIBase` whose keyfile still holds only its
+  enrollment request waits for the approval, as at_activate does, and then
+  runs, rather than throwing.
 - feat: instances of a program that share a keyfile opened through
   `CliKeys.fileFor`, as `CLIBase` opens it, retrofit it one at a time.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:

@@ -2,6 +2,8 @@
 
 ## 1.4.0 — 2026-09-13
 
+- A `CLIBase` program whose keyfile holds only an enrollment request waits
+  for its approval rather than throwing (`SKILL.md`; `references/14`).
 - A screen that only closes calls `pending.stop()`, which keeps the request
   for `resumeEnrollment`; `cancel()` is for a Cancel the user confirms
   (`references/15`).
