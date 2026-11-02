@@ -34,6 +34,21 @@ class _Ring extends InMemoryNskeyKeyRing {
   }
 }
 
+/// A ring whose next lookup answers what it read, once [hold] completes.
+class _HeldRing extends _Ring {
+  Completer<void>? hold;
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+      String owner, String namespace) async {
+    final answer = await super.currentPublic(owner, namespace);
+    final held = hold;
+    hold = null;
+    await held?.future;
+    return answer;
+  }
+}
+
 /// A ring whose atServer cannot be reached.
 class _UnreachableRing extends _Ring {
   @override
@@ -622,6 +637,48 @@ void main() {
       await atOnce(write(c, key));
 
       expect(stamped(key)['ckNs'], 'demos');
+    });
+  });
+
+  group("Given a write whose search is in flight as start-up's seeding ends",
+      () {
+    test(
+        'when start-up publishes its key as the search finds nothing, then the '
+        'write searches again and seals under that key', () async {
+      final hold = Completer<void>();
+      final c = _Client(_HeldRing()..hold = hold)
+        ..seeding.seeding({'todos.demos'});
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+
+      await c.seed('todos.demos');
+      c.seeding.finish();
+      hold.complete();
+      await atOnce(writing);
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
+    });
+
+    test(
+        'when start-up publishes its key as the search finds only demos, then '
+        'the write searches again and seals at todos.demos', () async {
+      final hold = Completer<void>();
+      final c = _Client(_HeldRing())..seeding.seeding({'todos.demos'});
+      await c.seed('demos');
+      (c.ring as _HeldRing).hold = hold;
+      wire(c);
+      final key = AtKey.fromString('x.todos.demos$_alice');
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+
+      await c.seed('todos.demos');
+      c.seeding.finish();
+      hold.complete();
+      await atOnce(writing);
+
+      expect(stamped(key)['ckNs'], 'todos.demos');
     });
   });
 

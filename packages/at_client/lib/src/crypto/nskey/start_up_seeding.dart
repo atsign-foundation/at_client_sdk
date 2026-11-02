@@ -69,12 +69,12 @@ class StartUpSeeding {
   /// The most specific namespace start-up seeds that [name], a key's whole
   /// name, ends with after a dot, once start-up's seeding step has finished.
   ///
-  /// Null at once when the step has finished, and null as soon as start-up
-  /// knows it seeds no namespace covering [name]. Throws [StoppedException]
-  /// when the client stops first, and [TimeoutException], whose message is the
+  /// At once when the step has finished, and null as soon as start-up knows it
+  /// seeds no namespace covering [name]. Throws [StoppedException] when the
+  /// client stops first, and [TimeoutException], whose message is the
   /// namespace waited for when start-up knew it, when [wait] passes.
   Future<String?> covering(String name) async {
-    if (isFinished) return null;
+    if (isFinished) return _mostSpecific(_seeded, name);
     final deadline = DateTime.now().add(wait);
     await _until(_namespaces.future, deadline, null);
     final covering = _mostSpecific(_seeded, name);
@@ -90,7 +90,7 @@ class StartUpSeeding {
   /// Null unless start-up has said what it seeds, or is about to from its
   /// keyfile, and that includes such a namespace. Throws as [covering] does.
   Future<String?> coveringBeyond(String name, String found) async {
-    if (isFinished) return null;
+    if (isFinished) return _beyond(name, found);
     final deadline = DateTime.now().add(wait);
     if (!_namespaces.isCompleted) {
       final recorded = _recorded;
@@ -99,12 +99,19 @@ class StartUpSeeding {
         return null;
       }
     }
-    final narrower = _mostSpecific(_seeded, name);
-    if (narrower == null || !narrower.endsWith('.${found.toLowerCase()}')) {
-      return null;
-    }
+    final narrower = _beyond(name, found);
+    if (narrower == null) return null;
     await _until(_finished.future, deadline, narrower);
     return narrower;
+  }
+
+  /// The most specific namespace start-up seeds that covers [name] more
+  /// specifically than [found], or null.
+  String? _beyond(String name, String found) {
+    final narrower = _mostSpecific(_seeded, name);
+    return narrower != null && narrower.endsWith('.${found.toLowerCase()}')
+        ? narrower
+        : null;
   }
 
   /// The most specific of [namespaces] that [name] ends with after a dot,

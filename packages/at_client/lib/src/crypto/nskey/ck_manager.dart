@@ -151,11 +151,16 @@ class CkManager {
       return null;
     }
     final holder = context.atClient.getCurrentAtSign();
+    // NOTE: read before the search, so a seeding that ends during it is
+    // searched for again rather than missed.
+    final seeding = startUpSeeding?.isFinished == false;
     var namespace = await resolver.startLevelOf(holder, valueKey);
 
     var advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
-      final waited = await _afterStartUpSeeding(holder, valueKey, namespace);
+      final waited = seeding
+          ? await _afterStartUpSeeding(holder, valueKey, namespace)
+          : null;
       if (waited != null) {
         namespace = await resolver.startLevelOf(holder, valueKey);
         advertised = await resolver.resolve(owner, namespace);
@@ -177,7 +182,8 @@ class CkManager {
           }
         }
       }
-    } else if (await _seedingBeyond(holder, valueKey, advertised.namespace)) {
+    } else if (seeding &&
+        await _seedingBeyond(holder, valueKey, advertised.namespace)) {
       namespace = await resolver.startLevelOf(holder, valueKey);
       advertised = await resolver.resolve(owner, namespace);
     }
@@ -566,8 +572,8 @@ class CkManager {
 
   /// The namespace [startUpSeeding] seeds that covers [valueKey], once its
   /// seeding step has finished or [StartUpSeeding.wait] has passed, or null
-  /// at once when it seeds none or is done. `timedOut` says the wait passed
-  /// first, after `waited`.
+  /// at once when it seeds none. `timedOut` says the wait passed first, after
+  /// `waited`.
   Future<({String covering, bool timedOut, Duration? waited})?>
       _afterStartUpSeeding(
           String? holder, AtKey valueKey, String namespace) async {
