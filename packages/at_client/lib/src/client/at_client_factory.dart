@@ -55,7 +55,7 @@ Future<AtClient> buildAtClient({
   final principal = await _principalOf(atSign, atKeysIo, enrollmentId);
   if (AtClientImpl.holdsLiveClientAs(atSign, principal)) {
     throw StateError(
-        'A client for $atSign as ${principal == null ? "its own credential" : "enrollment $principal"} '
+        'A client for $atSign as ${principal == null ? "the primary enrollment" : "enrollment $principal"} '
         'is already live. buildAtClient builds a client the caller owns, so '
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
@@ -65,7 +65,7 @@ Future<AtClient> buildAtClient({
   if (holder != null) {
     throw StateError('The storage at $location is held by the live client for '
         '${holder.getCurrentAtSign()} as '
-        '${holder.enrollmentId == null ? "its own credential" : "enrollment ${holder.enrollmentId}"}. '
+        '${holder.enrollmentId == null ? "the primary enrollment" : "enrollment ${holder.enrollmentId}"}. '
         'Two clients cannot share one store; stop() that client first, or '
         'open this one on a store of its own.');
   }

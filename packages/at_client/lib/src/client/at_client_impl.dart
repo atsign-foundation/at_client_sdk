@@ -723,12 +723,12 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       logger.warning('Could not read the keys for $currentAtSign, so which '
           'enrollment they authenticate as is unknown; running as '
-          '${enrollmentId ?? "the atSign's own credential"}: $e');
+          '${enrollmentId ?? "the primary enrollment"}: $e');
     }
     if (keys != null && !keys.holdsAuthenticationMaterial) {
       logger.finer('The keys for $currentAtSign hold no authentication '
           'material, so they name no enrollment; running as '
-          '${enrollmentId ?? "the atSign's own credential"}');
+          '${enrollmentId ?? "the primary enrollment"}');
     } else if (keys != null) {
       final derived = keys.enrollmentToAuthenticateAs();
       if (enrollmentId != null && enrollmentId != derived) {
@@ -749,7 +749,7 @@ class AtClientImpl implements AtClient {
       // teardown has already detached from.
       if (atClientImpl!._stopping != null) {
         throw StateError('A client for $currentAtSign as '
-            '${atClientImpl.enrollmentId == null ? "its own credential" : "enrollment ${atClientImpl.enrollmentId}"} '
+            '${atClientImpl.enrollmentId == null ? "the primary enrollment" : "enrollment ${atClientImpl.enrollmentId}"} '
             'is stopping. create() does not restart a client part way through '
             'stop(); await that stop() first.');
       }
