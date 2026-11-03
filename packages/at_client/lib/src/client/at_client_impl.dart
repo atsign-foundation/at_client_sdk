@@ -1508,9 +1508,21 @@ class AtClientImpl implements AtClient {
   ///
   /// Everything else is replaced, `crypto` included. The axes are compared
   /// with the preference this client was given, and the client goes on running
-  /// at the floor its start found.
+  /// at the floor its start found. A preference whose axes are the raised ones
+  /// it runs under — [getPreferences]' copy, handed back — is accepted too,
+  /// and filed under the axes this client was configured with.
   @override
   void setPreferences(AtClientPreference preference) {
+    final running = _preference;
+    final configured = _configuredPreference;
+    if (running != null &&
+        configured != null &&
+        !identical(running, configured) &&
+        running.rolloutDifferencesFrom(preference).isEmpty) {
+      _configuredPreference = preference.withRolloutAxesOf(configured);
+      _preference = preference;
+      return;
+    }
     refuseChangedRolloutAxes(
         running: _configuredPreference,
         asked: preference,

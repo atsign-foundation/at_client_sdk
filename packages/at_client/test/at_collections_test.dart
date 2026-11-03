@@ -592,6 +592,48 @@ void main() {
           reason: "the retry writes @bob's copy of that same item");
     });
 
+    test(
+        "A share that fails after the self copy leaves the caller's own set "
+        'as it was, so a retry with it shares', () async {
+      final written = <String, String>{};
+      var bobPublished = false;
+      when(() => atClient.get(any())).thenAnswer((i) async {
+        final json = written['${i.positionalArguments[0]}'];
+        if (json == null) throw Exception('no such key');
+        return AtValue()
+          ..value = json
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        final key = i.positionalArguments[0] as AtKey;
+        if (key.sharedWith == bobStr && !bobPublished) {
+          throw Exception('$bobStr has no published nskey for $namespace');
+        }
+        written['$key'] = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
+          (_) async => [for (final k in written.keys) AtKey.fromString(k)]);
+      final c = buildCollection<String>();
+      final recipients = {bob};
+
+      final thrown =
+          await thrownBy(c.create(obj: 't', id: 'c13', sharedWith: recipients));
+
+      expect(recipients, {bob}, reason: 'the set the caller passed is theirs');
+      expect(thrown.item!.sharedWith, isEmpty,
+          reason: 'the item handed back names only the shares written');
+
+      bobPublished = true;
+      await c.updateSharedWith(thrown.item! as CItem<String>, recipients);
+      expect(
+          written.keys.where((k) => k.startsWith('$bobStr:c13.')), hasLength(1),
+          reason: "the documented retry writes @bob's copy");
+      expect(recipients, {bob});
+    });
+
     test('an update whose self copy fails writes and removes no share',
         () async {
       when(

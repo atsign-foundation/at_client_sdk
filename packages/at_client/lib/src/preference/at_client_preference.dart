@@ -148,11 +148,44 @@ class AtClientPreference {
         identical(dataSigning, dataSigningKeyAlgorithms)) {
       return this;
     }
-    return AtClientPreference(
+    return _copyUnder(
         posture: raisedPosture,
         pqStartupGates: pqStartupGates,
         authenticationKeyAlgorithm: authentication,
         dataSigningKeyAlgorithms: dataSigning,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms);
+  }
+
+  /// A copy of this preference under [axes]' rollout axes — the ones
+  /// [rolloutDifferencesFrom] compares — and every other field as it is.
+  ///
+  /// How a client files the raised copy `getPreferences` handed out when it
+  /// is handed back: the client keeps the axes it was configured with.
+  @internal
+  AtClientPreference withRolloutAxesOf(AtClientPreference axes) => _copyUnder(
+      posture: axes.posture,
+      pqStartupGates: axes.pqStartupGates,
+      authenticationKeyAlgorithm: axes.authenticationKeyAlgorithm,
+      dataSigningKeyAlgorithms: axes.dataSigningKeyAlgorithms,
+      sealsToKeyAlgorithms: axes.sealsToKeyAlgorithms,
+      keyEstablishmentAlgorithms: axes.keyEstablishmentAlgorithms);
+
+  /// A copy of this preference under the rollout axes given, and every other
+  /// field as it is.
+  AtClientPreference _copyUnder({
+    required PqPosture posture,
+    required PqStartupGates? pqStartupGates,
+    required SigningAlgoType authenticationKeyAlgorithm,
+    required Set<SigningAlgoType> dataSigningKeyAlgorithms,
+    required List<String> sealsToKeyAlgorithms,
+    required List<String> keyEstablishmentAlgorithms,
+  }) {
+    return AtClientPreference(
+        posture: posture,
+        pqStartupGates: pqStartupGates,
+        authenticationKeyAlgorithm: authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
         sealsToKeyAlgorithms: sealsToKeyAlgorithms,
         keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
       // ignore: deprecated_member_use_from_same_package

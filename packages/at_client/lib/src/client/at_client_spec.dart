@@ -120,7 +120,8 @@ abstract class AtClient {
 
   /// Sets the preferences this client reads, such as its namespace and its
   /// post-quantum posture. A client below its posture floor is raised to it
-  /// again, on its own copy of [preference].
+  /// again, on its own copy of [preference]. The copy [getPreferences] returns
+  /// is taken back as well.
   void setPreferences(AtClientPreference preference);
 
   /// The preferences this client runs on. A client raised to its posture

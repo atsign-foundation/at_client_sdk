@@ -302,6 +302,10 @@ class CkManager {
   /// sealed to [nskeyKid] whose sibling copy rests on [ownGeneration] where
   /// the caller holds one, returns that key instead of cutting a second one,
   /// unless [force] asks for a fresh one regardless.
+  ///
+  /// A cut for this client's own atSign whose private it does not yet hold
+  /// waits for start-up's ask for it first, outside the turn every cut shares,
+  /// so the wait holds up no other cut.
   Future<ContentKey> _cutAndConvey(
     CryptoContext context,
     AtKey valueKey,
@@ -313,20 +317,24 @@ class CkManager {
     String? replacing,
     String? ownGeneration,
     bool force = false,
-  }) =>
-      _inTurn(() async {
-        final current = cache.current(owner, ckNs);
-        if (!force &&
-            current != null &&
-            current.ckKid != replacing &&
-            cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
-            (ownGeneration == null ||
-                cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
-          return current;
-        }
-        return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
-            keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
-      });
+  }) async {
+    if (owner == context.atClient.getCurrentAtSign()) {
+      await awaitOwnNskeyPrivate(keyRing, owner, ckNs, keyAlgo);
+    }
+    return _inTurn(() async {
+      final current = cache.current(owner, ckNs);
+      if (!force &&
+          current != null &&
+          current.ckKid != replacing &&
+          cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
+          (ownGeneration == null ||
+              cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
+        return current;
+      }
+      return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
+          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
+    });
+  }
 
   Future<ContentKey> _cutAndConveyInTurn(
     CryptoContext context,

@@ -29,6 +29,9 @@ void main() {
   final recorded = _RecordedLogs();
 
   setUpAll(() {
+    // NOTE: info, not the warning default: 'heartbeat ends quietly' asserts
+    // an info line is absent, which it always would be at warning.
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = recorded;
   });
 

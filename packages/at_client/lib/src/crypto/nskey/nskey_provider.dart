@@ -15,6 +15,7 @@ import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart' show internal;
 
 /// The provider id that conveys a content key sealed to a [keyAlgo] nskey, or
 /// null for an algorithm this build cannot seal to.
@@ -23,6 +24,54 @@ String? nskeyProviderIdFor(String keyAlgo) => switch (keyAlgo) {
       SecretSharingAlgos.mlKem1024 => mlKemNskeyCryptoProviderId,
       _ => null,
     };
+
+/// The public half of [owner]'s generation [nskeyKid] in [namespace] that the
+/// private [keyRing] holds derives, or null when it holds none.
+@internal
+Future<PackageKey?> heldOwnNskeyPublic(NskeyKeyRing keyRing, String owner,
+        String namespace, String nskeyKid) async =>
+    await keyRing.privateHalf(owner, namespace, nskeyKid) == null
+        ? null
+        : await keyRing.heldPublic(owner, namespace, nskeyKid);
+
+/// Waits for this client's own private of [owner]'s current generation in
+/// [namespace], the [keyAlgo] entry [NskeyProvider.encrypt] seals to, while
+/// its start-up is still to ask for it or is awaiting the answer — at most
+/// [StartUpSeeding.wait] in all.
+///
+/// Throws [NskeyPrivateNotHeldException] when the private is still not held
+/// and that wait was all start-up had to offer. Returns at once when it is
+/// held, or when nothing is advertised under [keyAlgo], which
+/// [NskeyProvider.encrypt] then refuses itself.
+///
+/// For a caller to run before a conveyance is put, and outside anything other
+/// writes queue behind: a write held here holds up no other.
+@internal
+Future<void> awaitOwnNskeyPrivate(NskeyKeyRing keyRing, String owner,
+    String namespace, String keyAlgo) async {
+  final usable =
+      (await keyRing.currentPublic(owner, namespace))?.usableFor([keyAlgo]);
+  if (usable == null) return;
+  final startUp =
+      keyRing is AwaitsStartUpAsk ? keyRing as AwaitsStartUpAsk : null;
+  // NOTE: read before the miss, so only start-up's ask holds a write.
+  var askedAtStartUp = startUp?.startUpAskFor(namespace, usable.kid);
+  final asksPending = startUp?.startUpAsksPending;
+  var held = await heldOwnNskeyPublic(keyRing, owner, namespace, usable.kid);
+  final until = StartUpSeeding.boundFromNow();
+  if (held == null && askedAtStartUp == null && asksPending != null) {
+    await StartUpSeeding.waitOn(asksPending, until: until);
+    askedAtStartUp = startUp!.startUpAskFor(namespace, usable.kid);
+    held = await heldOwnNskeyPublic(keyRing, owner, namespace, usable.kid);
+  }
+  if (held == null && askedAtStartUp != null) {
+    await StartUpSeeding.waitOn(askedAtStartUp, until: until);
+    held = await heldOwnNskeyPublic(keyRing, owner, namespace, usable.kid);
+  }
+  if (held == null) {
+    throw NskeyPrivateNotHeldException(owner, namespace, usable.kid);
+  }
+}
 
 /// Which key class a CK was sealed to.
 ///
@@ -201,24 +250,13 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // NOTE: own-atSign keys only, sealed to the public half the held private
       // derives. A peer's private is never held, so a share can rest only on
       // the advertisement's signature.
+      //
+      // No wait here: a conveyance is put inside CkManager's turn, which every
+      // cut shares, so the manager waits for start-up's ask before taking it
+      // (awaitOwnNskeyPrivate).
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
-        final ring = keyRing;
-        final startUp =
-            ring is AwaitsStartUpAsk ? ring as AwaitsStartUpAsk : null;
-        // NOTE: read before the miss, so only start-up's ask holds a write.
-        var askedAtStartUp = startUp?.startUpAskFor(namespace, usable.kid);
-        final asksPending = startUp?.startUpAsksPending;
-        var held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        final until = StartUpSeeding.boundFromNow();
-        if (held == null && askedAtStartUp == null && asksPending != null) {
-          await StartUpSeeding.waitOn(asksPending, until: until);
-          askedAtStartUp = startUp!.startUpAskFor(namespace, usable.kid);
-          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        }
-        if (held == null && askedAtStartUp != null) {
-          await StartUpSeeding.waitOn(askedAtStartUp, until: until);
-          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        }
+        final held = await heldOwnNskeyPublic(
+            keyRing, nskeyOwner, namespace, usable.kid);
         if (held == null) {
           throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
         }
@@ -281,14 +319,6 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     return envelope;
   }
-
-  /// The public half of [owner]'s generation [nskeyKid] in [namespace] that
-  /// the private this client holds derives, or null when it holds none.
-  Future<PackageKey?> _heldOwnPublic(
-          String owner, String namespace, String nskeyKid) async =>
-      await keyRing.privateHalf(owner, namespace, nskeyKid) == null
-          ? null
-          : await keyRing.heldPublic(owner, namespace, nskeyKid);
 
   @override
   Future<String> decrypt(

@@ -860,7 +860,9 @@ interface class AtCollection<T> {
       id: id,
       type: _resolveType(obj),
       obj: obj,
-      sharedWith: sharedWith ?? {},
+      // NOTE: a copy. The item's set is its own to change — create narrows it
+      // to the shares written — and the caller's may be shared by others.
+      sharedWith: {...?sharedWith},
       createdAt: now,
       expiresAt: expiresAt ?? now.add(defaultExpiration),
       availableAt: availableAt,
@@ -1125,10 +1127,13 @@ interface class AtCollection<T> {
     final toShare = sharedWith.difference(item.sharedWith);
     if (toUnshare.isEmpty && toShare.isEmpty) {
       // No recipient-set delta. Still align the item's own Set with
-      // the caller's argument in case they passed a fresh instance.
-      item.sharedWith
-        ..clear()
-        ..addAll(sharedWith);
+      // the caller's argument in case they passed a fresh instance. Not
+      // when they passed the item's own, which clearing would empty.
+      if (!identical(item.sharedWith, sharedWith)) {
+        item.sharedWith
+          ..clear()
+          ..addAll(sharedWith);
+      }
       return;
     }
     final now = DateTime.now();

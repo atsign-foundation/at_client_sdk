@@ -353,6 +353,34 @@ void main() {
     expect(client.getPreferences()!.posture.configuresPqProviders, isTrue,
         reason: 'a preference set later is raised to the same floor');
   });
+
+  test(
+      'a client raised to its floor takes back the preference it hands out, '
+      'and still takes its own', () async {
+    final io = await keyfile();
+    await holdNamespaceKey(io, 'k1.sensor');
+    final preference = configured(PqPosture.legacy);
+    final client = await start(preference, io, atServer().remote);
+    final raised = client.getPreferences()!;
+    expect(raised, isNot(same(preference)), reason: 'the floor raised it');
+
+    client.setPreferences(raised..syncBatchSize = 10);
+    expect(client.getPreferences(), same(raised));
+    expect(client.getPreferences()!.syncBatchSize, 10);
+    expect(client.configuredPreference!.rolloutDifferencesFrom(preference),
+        isEmpty,
+        reason: 'it is filed under the axes it was configured with');
+    expect(client.configuredPreference!.syncBatchSize, 10);
+
+    client.setPreferences(configured(PqPosture.legacy)..namespace = 'other');
+    expect(client.getPreferences()!.namespace, 'other');
+    expect(client.getPreferences()!.posture.configuresPqProviders, isTrue);
+
+    expect(
+        () => client.setPreferences(configured(PqPosture.pqActive)),
+        throwsArgumentError,
+        reason: 'axes that are neither configured nor running are refused');
+  });
 }
 
 /// How a test names [posture].

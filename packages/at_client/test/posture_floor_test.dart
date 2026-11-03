@@ -140,11 +140,28 @@ void main() {
       expect(raised.posture.writesPqByDefault, isTrue);
     });
 
+    test('keeps an app\'s seeding and key establishment off its posture\'s',
+        () {
+      final seedingOff = AtClientPreference(posture: PqPosture.pqReady)
+        ..seedNamespaceKeys = false;
+      expect(seedingOff.raisedTo(PqPosture.pqActive).seedNamespaceKeys, isFalse,
+          reason: 'pqActive seeds, but this app turned seeding off');
+
+      final mlKem = AtClientPreference(
+          posture: PqPosture.pqReady,
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      expect(mlKem.raisedTo(PqPosture.pqActive).keyEstablishmentAlgorithms,
+          [SecretSharingAlgos.mlKem1024]);
+    });
+
     test('carries every field the floor does not raise', () {
+      // NOTE: every field is set off the value the raised posture would
+      // default it to, so a field that is not carried shows as changed.
       final original = AtClientPreference(
           pqStartupGates: const PqStartupGates.inert(),
           sealsToKeyAlgorithms: const [SecretSharingAlgos.xWing],
-          keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing])
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024])
+        ..seedNamespaceKeys = true
         // ignore: deprecated_member_use_from_same_package
         ..hiveStoragePath = 'h'
         ..cramSecret = 'c'

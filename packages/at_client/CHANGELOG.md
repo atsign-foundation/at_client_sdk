@@ -25,7 +25,8 @@
 - feat: when `create`'s own copy is written and a recipient's is not, its
   `CollectionOpException<T>` carries the item written as `item`, so the
   share is retried with `updateSharedWith(e.item!, ...)` rather than a
-  second `create`.
+  second `create`. An item holds its own copy of the `sharedWith` set it
+  was drafted with, so the set the caller passed is left as it was.
 - feat: `Atsign.open` refuses keys a denial, a cancel or an expiry left
   with no credential at once, with `AtNoCredentialException` saying to
   enroll again, rather than failing a minute later as unreachable.

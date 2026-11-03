@@ -299,6 +299,10 @@ void main() {
           reason: 'and what the device does at each posture');
       expect(warned, contains('at_activate enroll --posture pqReady'),
           reason: 'and how to convey them now');
+      expect(warned, contains('revoke it with `at_activate revoke -a '),
+          reason: 'by revoking the approval it is about to make: a deny, '
+              'which acts on pending requests only, would find nothing');
+      expect(warned, isNot(contains('deny')));
       expect(approvals, [b], reason: 'and approves the request as asked');
     });
 

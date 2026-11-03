@@ -783,6 +783,39 @@ void main() {
               'ask left of the bound, not a bound of its own');
     });
 
+    test(
+        'A write waiting for the answer holds up no write in a namespace whose '
+        'private is held', () async {
+      ring.asks['todos.demos|$kid'] = answer.future;
+      await c.seed('notes.demos');
+
+      final waiting = write(c, key);
+      expect(await _pending(waiting), isTrue,
+          reason: "the premise: it waits for the answer to start-up's ask");
+      final other = _built('y', 'notes.demos');
+      await atOnce(write(c, other));
+      expect(stamped(other)['ckNs'], 'notes.demos');
+
+      answer.complete();
+      await expectLater(atOnce(waiting), notYetConveyed());
+    });
+
+    test('writes waiting together for the answer each wait one bound at once',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 600);
+      ring.asks['todos.demos|$kid'] = answer.future;
+      final started = DateTime.now();
+
+      await Future.wait([
+        for (var i = 0; i < 3; i++)
+          expectLater(write(c, _built('x$i', 'todos.demos')), notYetConveyed())
+      ]);
+
+      expect(DateTime.now().difference(started),
+          lessThan(const Duration(milliseconds: 1100)),
+          reason: 'their waits run side by side, not one after another');
+    });
+
     test('when start-up has no ask outstanding, then the write throws at once',
         () async {
       await expectLater(atOnce(write(c, key)), notYetConveyed(),
