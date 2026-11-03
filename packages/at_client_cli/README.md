@@ -96,6 +96,13 @@ chooses how the enrollment's symmetric key travels, for the approver that
 will pick the request up; `pq` needs `--posture pqReady` or `pqActive`, since
 an rsa2048 enrollment with the pq key exchange is refused.
 
+On an atSign that has published any namespace key, enroll a device with
+`--posture pqReady` or above, so its approval conveys the namespace keys. A
+device enrolled at the legacy key exchange re-enrolls itself at its first
+start and asks the atSign's other enrollments for those keys, which only an
+enrollment online at the time can answer. `approve` warns when it approves
+such a request, and approves it as asked.
+
 ## APKAM enrollment
 
 A new device / app authenticating as an existing atSign should go
