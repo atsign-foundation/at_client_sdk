@@ -206,12 +206,22 @@ class ValidateOtp extends RegisterApiTask {
             '[Unable to proceed] The verification code you entered is either invalid or expired.\n'
             ' Check your verification code and try again.');
         params.remove('otp');
+        // The next code is a fresh attempt, not a confirmation of this one.
+        params['confirmation'] = 'false';
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
+        // NOTE: the confirmation is not an attempt at the code, and is asked
+        // for once; a second ask ends the flow.
+        if (params['confirmation'] == 'true') {
+          result.exceptionMessage =
+              'The registrar asked again to confirm a confirmed code.';
+          result.apiCallStatus = ApiCallStatus.failure;
+          return result;
+        }
         params.update('confirmation', (value) => 'true');
         result.data['otp'] = params['otp'];
-        result.apiCallStatus = ApiCallStatus.retry;
+        return await run();
       } else if (apiResponse.startsWith("@")) {
         result.data['cramkey'] = apiResponse.split(":")[1];
         stdout.writeln(
@@ -238,15 +248,13 @@ Future<void> main(List<String> args) async {
     if (e.toString().contains('Missing argument')) {
       stderr.writeln(
           '[Unable to run Register CLI] Please re-run with your email address');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(1);
     } else if (e.toString().contains('Could not find an option or flag')) {
       stderr
           .writeln('[Unable to run Register CLI] The option entered is invalid.'
               ' Please use the \'-e\' flag to input your email');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(2);
     } else {
       stderr.writeln(

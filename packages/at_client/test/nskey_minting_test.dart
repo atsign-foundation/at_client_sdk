@@ -40,10 +40,13 @@ class _ShortLeaseLock extends MintLock {
 
   final Duration length;
 
+  /// The lease most recently handed out.
+  ServerMutexLease? lease;
+
   @override
   Future<T?> withLock<T>(
           AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
-      mint(ServerMutexLease(lockKey, DateTime.now().add(length)));
+      mint(lease = ServerMutexLease(lockKey, DateTime.now().add(length)));
 }
 
 /// Minting a namespace key: the interlock between an atSign's own
@@ -637,6 +640,31 @@ void main() {
         throwsA(isA<StateError>().having((e) => e.message, 'message',
             contains('a revocation touched the namespace'))));
     expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  test('a conveyance that outlasts the lease publishes nothing', () async {
+    final c = client();
+    final lock = _ShortLeaseLock(c.client, const Duration(seconds: 2));
+    final ring = PublishedNskeyKeyRing(c.client,
+        mintLock: lock, privateFiling: await filing());
+    var leaseLiveWhenConveying = false;
+
+    await expectLater(
+        ring.mintAndPublish(namespace, conveyFirst: (_) async {
+          leaseLiveWhenConveying = !lock.lease!.isSpent;
+          while (!lock.lease!.isSpent) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+        }),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('expired while this client was minting'))));
+    expect(leaseLiveWhenConveying, isTrue,
+        reason: 'the precondition: the lease ran out during the conveyance, '
+            'not before it');
+    expect(c.verbs.where((k) => k.key == '__nskey'), isEmpty,
+        reason: 'the lease is checked after the conveyance, so a mint whose '
+            'conveyance ran past it does not publish over the enrollment that '
+            'has since won the next election');
   });
 
   group('Given a mint whose afterPublish rotates', () {
