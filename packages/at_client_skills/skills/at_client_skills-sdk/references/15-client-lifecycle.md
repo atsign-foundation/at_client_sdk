@@ -42,10 +42,11 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
-// pending.cancel() abandons the enrollment: it ends that wait and removes
-// the pending keys from `keys`, as a denial does, so resumeEnrollment finds
-// nothing. It throws when `keys` cannot remove them; call it again. Call it
-// when the user confirms they give up on the request (a Cancel button).
+// pending.cancel() abandons the enrollment: that wait throws once the
+// pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
+// finds nothing. It throws when `keys` cannot remove them; call it again.
+// Call it when the user confirms they give up on the request (a Cancel
+// button).
 // pending.stop() ends the wait and keeps the request: call it from a
 // dispose() that only leaves the screen, and resumeEnrollment picks the
 // request up later. The request stays on the atServer until its manager

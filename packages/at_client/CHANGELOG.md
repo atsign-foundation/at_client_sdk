@@ -17,9 +17,9 @@
   enrollment the conveyance misses first looks for an envelope addressed to
   it, then asks the others.
 - feat: `PendingEnrollment.cancel()` ends the wait `client` or
-  `awaitApproval` is in, which throws `AtEnrollmentCancelledException`, and
-  removes the enrollment's pending keys; it throws when the key store cannot,
-  and a later call tries again. The request stays on the atServer until the
+  `awaitApproval` is in, which throws `AtEnrollmentCancelledException` once
+  the enrollment's pending keys are removed; `cancel()` throws when the key
+  store cannot remove them, and a later call tries again. The request stays on the atServer until the
   atSign's manager decides it. A cancelled request cannot be resumed, even
   from the copy a file store keeps beside its keyfile; enroll again.
 - feat: `PendingEnrollment.stop()` ends the wait and keeps the request, which

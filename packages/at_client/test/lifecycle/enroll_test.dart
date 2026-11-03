@@ -725,6 +725,132 @@ void main() {
       }
     });
 
+    test('The cancelled wait throws only after the pending keys are gone',
+        () async {
+      var polls = 0;
+      var approved = false;
+      final server = atServer(decide: (_) async {
+        polls++;
+        return approved ? true : notYetDecided();
+      });
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      final store = FileAtKeysIo(filePath: (_) => path);
+      final pending = await submitOwning(store, server);
+      final filed = await store.read(atSign);
+      final pendingKeys = [
+        for (final material in filed.keysForEnrollment(enrollmentId))
+          material.bytes.toString(),
+        filed.toJson()['apkamSymmetricKey'] as String,
+      ];
+      String onDisk() => [
+            for (final copy in [path, '$path.bak'])
+              if (File(copy).existsSync()) File(copy).readAsStringSync()
+          ].join();
+      expect(pendingKeys.every(onDisk().contains), isTrue,
+          reason: 'the control: each pending key is found on disk');
+
+      // NOTE: read synchronously as client() throws, as a program that exits
+      // on the exception sees the keyfile.
+      List<String>? heldAsItThrew;
+      final opened =
+          clientOf(pending).then<Object>((c) => c, onError: (Object e) {
+        final disk = onDisk();
+        heldAsItThrew = [
+          for (final key in pendingKeys)
+            if (disk.contains(key)) key
+        ];
+        return e;
+      });
+      await until(() => polls >= 1);
+
+      final cancelling = pending.cancel();
+
+      expect(await opened, isA<AtEnrollmentCancelledException>());
+      expect(heldAsItThrew, isEmpty,
+          reason: 'when client() throws, neither the keyfile nor its copy '
+              'holds a pending key');
+      await cancelling;
+      approved = true;
+      final pref = await preference();
+      expect(
+          await Atsign(atSign).resumeEnrollment(
+              keys: store,
+              preference: pref,
+              atLookUp: server,
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref)),
+          isNull,
+          reason: 'an approval afterwards leaves nothing to resume');
+    });
+
+    /// The pending enrollment ids [store] holds now, read synchronously.
+    List<String> pendingIn(InMemoryAtKeysIo store) =>
+        (store.read(atSign) as AtKeys).pendingEnrollmentIds.toList();
+
+    test(
+        'Given cancel() called and not awaited, when the program then waits '
+        'for approval, then the wait throws only after the pending keys are '
+        'gone', () async {
+      final store = InMemoryAtKeysIo();
+      final pending =
+          await submit(store, atServer(decide: (_) async => notYetDecided()));
+      expect(pendingIn(store), [enrollmentId], reason: 'the premise');
+
+      final cancelling = pending.cancel();
+      List<String>? heldAsItThrew;
+      final outcome = await pending
+          .awaitApproval(retryInterval: pollEvery)
+          .then<Object>((_) => 'approved', onError: (Object e) {
+        heldAsItThrew = pendingIn(store);
+        return e;
+      });
+
+      expect(outcome, isA<AtEnrollmentCancelledException>());
+      expect(heldAsItThrew, isEmpty);
+      await cancelling;
+    });
+
+    test(
+        'Given a cancel landing as the approval is written, when the wait '
+        'throws, then the pending keys are already gone', () async {
+      late PendingEnrollment pending;
+      final store = _DiskPacedStore();
+      pending = await submit(store, atServer(decide: (_) async => true));
+      store.beforeUpdate = () async => unawaited(pending.cancel());
+      List<String>? heldAsItThrew;
+      final outcome = await pending
+          .awaitApproval(retryInterval: pollEvery)
+          .then<Object>((_) => 'approved', onError: (Object e) {
+        heldAsItThrew = pendingIn(store);
+        return e;
+      });
+
+      expect(outcome, isA<AtEnrollmentCancelledException>());
+      expect(heldAsItThrew, isEmpty);
+    });
+
+    test(
+        'Given client() waiting for approval, when cancel() is awaited, then '
+        'cancel() returns and client() throws', () async {
+      var polls = 0;
+      final server = atServer(decide: (_) async {
+        polls++;
+        notYetDecided();
+      });
+      final pending = await submit(InMemoryAtKeysIo(), server);
+      final opened =
+          clientOf(pending).then<Object>((c) => c, onError: (Object e) => e);
+      await until(() => polls >= 1);
+
+      await pending.cancel().timeout(const Duration(seconds: 10),
+          onTimeout: () => fail('cancel() waited on client(), which waited '
+              'on cancel()'));
+      expect(
+          await opened.timeout(const Duration(seconds: 10),
+              onTimeout: () => fail('client() never threw')),
+          isA<AtEnrollmentCancelledException>());
+    });
+
     test('An approval that arrives after cancel writes nothing', () async {
       var polls = 0;
       var approved = false;
@@ -1401,6 +1527,28 @@ void main() {
       });
     });
   });
+}
+
+/// An in-memory store whose updates take turns, each taking a moment to land,
+/// as a keyfile's do under its lock, and which runs [beforeUpdate] once,
+/// inside the next update's turn.
+class _DiskPacedStore extends InMemoryAtKeysIo {
+  Future<void> Function()? beforeUpdate;
+  Future<void> _turns = Future.value();
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) {
+    final turn = _turns.then((_) async {
+      final hook = beforeUpdate;
+      beforeUpdate = null;
+      if (hook != null) await hook();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await super.update(atsign, mutate);
+    });
+    _turns = turn.then((_) {}, onError: (Object _) {});
+    return turn;
+  }
 }
 
 /// An in-memory store whose updates fail as a keyfile's do when its lock is

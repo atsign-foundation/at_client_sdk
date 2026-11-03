@@ -13,6 +13,7 @@
   (`references/15`).
 - `resumeEnrollment` refusing several matching requests is in the error
   table, with what picks one (`references/15`).
+- A cancelled wait throws once the pending keys are gone (`references/15`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`
