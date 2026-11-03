@@ -9,7 +9,9 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   waits when the atServer has answered that no key is published and start-up
   will seed a namespace that covers the key, or when the key it found is
   broader than a namespace start-up has said it will seed covering the key.
-  A share does not wait: it is sealed to the recipient's key, as
+  A write that holds no private for its namespace's current generation
+  waits, within the same bound, while start-up's ask to the atSign's other
+  enrollments for that generation is outstanding. A share does not wait: it is sealed to the recipient's key, as
   pq_share_level.feature has it. Reads do not seal, and are unchanged.
 
   Races: a write never mints to find its own value's key; only start-up
@@ -135,3 +137,8 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     Given bob's client, whose start-up seeded his todos.demos key beforehand, and alice's client just opened
     When alice puts a value in todos.demos and shares one with bob at once
     Then both complete, sealed under alice's and bob's todos.demos keys
+
+  Scenario: A write that misses while its start-up ask is outstanding waits for the answer
+    Given an enrollment of @alice that holds no private for the current generation of todos, whose start-up has asked the other enrollments for it
+    When it writes in todos before an answer is filed
+    Then the write waits, at most 30 seconds, and succeeds once a holder's answer is filed; with no answer by then it throws naming the generation as not yet conveyed
