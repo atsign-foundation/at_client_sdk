@@ -2359,8 +2359,9 @@ them.
 The value is composed client-side and travels on `EnrollParams.apsk`. The
 atServer stores it verbatim on the enrollment record, writes its JSON encoding
 unaltered at approval, and rewrites it when `enroll:update` carries a new one.
-Absent means no `_apsk` is published at all. Capped by the atServer at 20KB
-encoded; a longer value is refused rather than truncated.
+Absent means no `_apsk` is published at all. The atServer limits the whole
+enrollment record, `_apsk` included, to 500 KB, and refuses a record that
+would exceed it rather than truncating it.
 
 **No mint ever withdraws a key, and that is what makes the advertisement safe to
 read at any moment.** A mint adds the algorithms the in-use set names and the
