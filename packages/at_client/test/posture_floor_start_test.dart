@@ -353,6 +353,54 @@ void main() {
     expect(client.getPreferences()!.posture.configuresPqProviders, isTrue,
         reason: 'a preference set later is raised to the same floor');
   });
+
+  test('a raised client takes back the preference getPreferences returns',
+      () async {
+    final io = await keyfile();
+    await holdNamespaceKey(io, 'k1.sensor');
+    final client =
+        await start(configured(PqPosture.legacy), io, atServer().remote);
+
+    client.setPreferences(client.getPreferences()!..syncBatchSize = 10);
+    expect(client.getPreferences()!.syncBatchSize, 10);
+    expect(client.getPreferences()!.posture.configuresPqProviders, isTrue,
+        reason: 'it still runs at its floor');
+
+    final again = await AtClientImpl.create(
+        atSign, 'buzz', client.getPreferences()!,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atKeysIo: io,
+        enrollmentId: enrollmentId,
+        storage: client.storage!);
+    expect(again, same(client),
+        reason: 'create reuses it given the preference it runs on');
+
+    client.setPreferences(configured(PqPosture.legacy));
+    expect(client.getPreferences()!.posture.configuresPqProviders, isTrue,
+        reason: 'the preference it was configured with is still taken, and '
+            'raised');
+  });
+
+  test(
+      'a raised client refuses a preference naming a stage it neither was '
+      'configured at nor runs at', () async {
+    final io = await keyfile();
+    await holdNamespaceKey(io, 'k1.sensor');
+    final client =
+        await start(configured(PqPosture.legacy), io, atServer().remote);
+
+    expect(() => client.setPreferences(configured(PqPosture.pqActive)),
+        throwsArgumentError);
+    await expectLater(
+        AtClientImpl.create(atSign, 'buzz', configured(PqPosture.pqActive),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atKeysIo: io,
+            enrollmentId: enrollmentId,
+            storage: client.storage!),
+        throwsArgumentError);
+  });
 }
 
 /// How a test names [posture].

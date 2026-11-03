@@ -775,10 +775,7 @@ class AtClientImpl implements AtClient {
                 'storage, and a built client never changes storage. Pass the '
                 'storage it holds');
       }
-      refuseChangedRolloutAxes(
-          running: atClientImpl.configuredPreference,
-          asked: preferences,
-          cacheKey: cacheKey);
+      atClientImpl._refuseChangedRolloutAxes(preferences, cacheKey: cacheKey);
       await atClientImpl.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added
@@ -1507,17 +1504,31 @@ class AtClientImpl implements AtClient {
   /// stage it never applied.
   ///
   /// Everything else is replaced, `crypto` included. The axes are compared
-  /// with the preference this client was given, and the client goes on running
-  /// at the floor its start found.
+  /// with the preference this client was given and with the one it runs on,
+  /// which [getPreferences] returns, and the client goes on running at the
+  /// floor its start found.
   @override
   void setPreferences(AtClientPreference preference) {
-    refuseChangedRolloutAxes(
-        running: _configuredPreference,
-        asked: preference,
+    _refuseChangedRolloutAxes(preference,
         cacheKey: instanceKey('$_atSign', enrollmentId));
-    _configuredPreference = preference;
+    if (_configuredPreference?.rolloutDifferencesFrom(preference).isEmpty ??
+        true) {
+      _configuredPreference = preference;
+    }
     final floor = _postureFloor;
     _preference = floor == null ? preference : preference.raisedTo(floor);
+  }
+
+  /// Refuses [asked] unless its rollout axes match the preference this client
+  /// was given or, once its posture floor raised it, the one it runs on.
+  void _refuseChangedRolloutAxes(AtClientPreference asked,
+      {required String cacheKey}) {
+    if (_postureFloor != null &&
+        (_preference?.rolloutDifferencesFrom(asked).isEmpty ?? false)) {
+      return;
+    }
+    refuseChangedRolloutAxes(
+        running: _configuredPreference, asked: asked, cacheKey: cacheKey);
   }
 
   Future<bool> persistPrivateKey(String privateKey) async {
