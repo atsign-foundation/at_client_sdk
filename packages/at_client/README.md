@@ -615,8 +615,9 @@ A client also has a floor of its own, and runs at the higher of the two: a
 keyfile holding a namespace key's private sets `pqReady`, and an active
 ML-DSA-65 data signing key sets `pqActive`. A client configured below its
 floor logs a warning and is raised to it on authentication, the data signing
-key, and reading and writing post-quantum; seeding namespace keys and its
-other settings, `disallowLegacyEncryption` among them, stay as configured.
+key, and reading and writing post-quantum. It seeds no namespace keys and
+mints no signing root that its configured posture would not, and its other
+settings, `disallowLegacyEncryption` among them, stay as configured.
 
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
 | ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |

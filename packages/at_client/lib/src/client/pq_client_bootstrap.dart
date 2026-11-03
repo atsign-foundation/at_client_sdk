@@ -198,6 +198,7 @@ class PqClientBootstrap {
     required EnrollmentPrivilegeResolver privilege,
     required Future<int> Function() sweepUnanchoredEnrollments,
     PqStartupGates gates = const PqStartupGates(),
+    this.createsSigningRoot = true,
   })  : _keysIo = keysIo,
         _privilege = privilege,
         _sweepUnanchored = sweepUnanchoredEnrollments,
@@ -259,6 +260,12 @@ class PqClientBootstrap {
 
   @visibleForTesting
   PqStartupGates get gates => _gates;
+
+  /// Whether the startup may mint or publish the atSign's signing root: false
+  /// for a client the posture floor raised from a posture that configures no
+  /// post-quantum providers, which never creates a root it was not configured
+  /// to.
+  final bool createsSigningRoot;
   late final AtSignLogger _logger;
 
   /// The one key ring this client's crypto config and startup steps share.
@@ -614,8 +621,10 @@ class PqClientBootstrap {
     try {
       // NOTE: first, because a root this client filed and never published is
       // one it holds and nobody else does; asking for it would wait for ever.
-      await root.resumeUnpublished(
-          isFullyPrivileged: _privilege.isFullyPrivileged);
+      if (createsSigningRoot) {
+        await root.resumeUnpublished(
+            isFullyPrivileged: _privilege.isFullyPrivileged);
+      }
       // NOTE: the request rides the client's own namespace, because that is
       // where its key package is registered and so where holders can be
       // enumerated. A client with no namespace has nowhere to ask.
@@ -668,8 +677,8 @@ class PqClientBootstrap {
   /// Links this enrollment's keys through `enroll:link`.
   ///
   /// A fully privileged enrollment whose atSign publishes no signing root
-  /// mints one first, on a key source that can keep it, and root-links its
-  /// own keys as it does. Otherwise a holder of the root's private key
+  /// mints one first, on a key source that can keep it and when
+  /// [createsSigningRoot] allows, and root-links its own keys as it does. Otherwise a holder of the root's private key
   /// root-links any of its keys that lacks a sound root link, and any other
   /// enrollment links a key it lacks a link for with one of its keys that
   /// walks to the root.
@@ -680,7 +689,8 @@ class PqClientBootstrap {
   Future<void> _anchorOwnKeys() async {
     if (!_gates.anchorOwnKeys) return;
     try {
-      if (await _privilege.isFullyPrivileged() &&
+      if (createsSigningRoot &&
+          await _privilege.isFullyPrivileged() &&
           await root.mintIfAbsent(isFullyPrivileged: true) != null) {
         final askIn = _atClient.getPreferences()?.namespace;
         if (_gates.hydrateHeldSecrets && askIn != null && askIn.isNotEmpty) {

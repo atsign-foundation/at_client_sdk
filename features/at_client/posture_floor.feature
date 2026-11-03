@@ -7,9 +7,10 @@ Feature: A client never runs below its floor
   postures and what was raised, and is raised on each setting the floor
   raises: the authentication key algorithm, the strongest data signing
   algorithm, configuring and writing post-quantum, and the pq key exchange.
-  Seeding namespace keys, and every other setting, stays as configured. The
-  floor is read from the keyfile at every start, so a start with no atServer
-  applies it too.
+  A raised client seeds no namespace keys and mints no signing root that its
+  configured posture would not, and every other setting stays as configured.
+  The floor is read from the keyfile at every start, so a start with no
+  atServer applies it too.
 
   Races: the floor is read from the keyfile before the enrollment settles,
   and nothing is written for it.
@@ -17,7 +18,9 @@ Feature: A client never runs below its floor
   DoS: none new; the floor reads only the keyfile, and a client it lifts
   re-enrolls itself once under the existing bounds.
   Forgery and impersonation: the floor only raises what a client does, never
-  lowers it, and counts only key material in the client's own keyfile.
+  lowers it, and counts only key material in the client's own keyfile. A
+  raised client never creates the atSign's signing root, so only a client
+  configured for post-quantum does.
 
   Scenario: A client whose keyfile holds a namespace-key private runs at pqReady at least
     Given @kilo's keyfile holds the namespace-key private for k1.sensor
@@ -53,3 +56,8 @@ Feature: A client never runs below its floor
     Given a keyfile holding a namespace-key private
     When a client of it starts configured with a posture that seeds no namespace keys
     Then it runs at its pqReady floor and seeds none
+
+  Scenario: A floor does not mint a signing root
+    Given a fully privileged keyfile holding a namespace-key private, on an atSign that publishes no signing root
+    When a client of it starts configured PqPosture.legacy
+    Then it runs at its pqReady floor and publishes no signing root

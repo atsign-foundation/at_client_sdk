@@ -103,6 +103,54 @@ void main() {
   Iterable<String> floorWarnings() =>
       logs.at('WARNING').where((m) => m.contains('floor'));
 
+  /// An atServer on which `@alice` publishes no signing root and [enrollmentId]
+  /// holds `*:rw` and `__manage:rw`, recording the key of every record
+  /// written to it.
+  ({MockRemoteSecondary remote, List<String> written}) rootlessAtServer() {
+    final remote = atServer().remote;
+    final written = <String>[];
+    when(() => remote.executeVerb(any())).thenAnswer((invocation) async {
+      final builder = invocation.positionalArguments.first;
+      if (builder is ScanVerbBuilder) return 'data:[]';
+      if (builder is UpdateVerbBuilder) {
+        written.add(builder.atKey.key);
+        return 'data:1';
+      }
+      throw AtKeyNotFoundException('not held');
+    });
+    when(() =>
+        remote.executeCommand(any(that: startsWith('enroll:list')),
+            auth: any(named: 'auth'))).thenAnswer((_) async => 'data:'
+        '${jsonEncode({
+              '$enrollmentId.new.enrollments.__manage$atSign': {
+                'appName': 'buzz',
+                'deviceName': 'test',
+                'namespace': {'*': 'rw', '__manage': 'rw'},
+                'status': 'approved',
+              }
+            })}');
+    return (remote: remote, written: written);
+  }
+
+  /// [posture] with every startup step off but the one that mints the
+  /// signing root.
+  AtClientPreference rootStepOnly(PqPosture posture) => AtClientPreference(
+      posture: posture,
+      pqStartupGates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        startEnvelopeListener: false,
+        mintInUseSigningKeys: false,
+        refreshOwnLinks: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+        askOnReadMiss: false,
+      ));
+
   test(
       'A client whose keyfile holds a namespace-key private runs at pqReady '
       'at least', () async {
@@ -198,6 +246,38 @@ void main() {
         reason: 'it runs at its pqReady floor');
     expect(preference.seedNamespaceKeys, isFalse, reason: 'and seeds none');
     expect(preference.posture.seedNamespaceKeys, isFalse);
+  });
+
+  test('A floor does not mint a signing root', () async {
+    final io = await keyfile();
+    await holdNamespaceKey(io, 'k1.sensor');
+    final server = rootlessAtServer();
+
+    final client =
+        await start(rootStepOnly(PqPosture.legacy), io, server.remote);
+    await client.pqBootstrap!.startupComplete;
+
+    expect(client.getPreferences()!.posture.configuresPqProviders, isTrue,
+        reason: 'it runs at its pqReady floor');
+    expect(server.written, isNot(contains(PqSigningRoot.recordName)),
+        reason: 'and publishes no signing root');
+    expect(await client.pqBootstrap!.root.privateHalf(atSign), isNull);
+  });
+
+  test(
+      'a client configured pqReady on the same keyfile mints the signing root '
+      'its atSign lacks', () async {
+    final io = await keyfile();
+    await holdNamespaceKey(io, 'k1.sensor');
+    final server = rootlessAtServer();
+
+    final client =
+        await start(rootStepOnly(PqPosture.pqReady), io, server.remote);
+    await client.pqBootstrap!.startupComplete;
+
+    expect(server.written, contains(PqSigningRoot.recordName),
+        reason: 'the control: a start configured for post-quantum creates the '
+            'root this harness offers, so its absence above is the floor');
   });
 
   test(

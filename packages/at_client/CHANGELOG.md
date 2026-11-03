@@ -11,7 +11,8 @@
   namespace key's private sets `pqReady`, and an ML-DSA-65 data signing key
   sets `pqActive`; a client configured lower logs a warning and is raised to
   the floor, on its own copy of the preference, which `getPreferences()` and
-  `setPreferences()` reach.
+  `setPreferences()` reach. A raised client seeds no namespace keys and mints
+  no signing root that its configured posture would not.
 - feat: `NotificationService.droppedEvents` reports each notification a
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says

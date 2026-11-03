@@ -1031,6 +1031,8 @@ class AtClientImpl implements AtClient {
       this,
       keysIo: _atKeysIo,
       gates: _preference?.resolvedPqStartupGates ?? const PqStartupGates(),
+      createsSigningRoot:
+          _configuredPreference?.posture.configuresPqProviders ?? true,
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),

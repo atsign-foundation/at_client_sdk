@@ -2879,9 +2879,13 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
   and the `allowLegacyCryptoFallback` preference stay as configured. The floor
   is derived from the keyfile at every start and never stored, so a start with
   no atServer applies it too.
-  - Seeding is never raised: it is the one setting that would publish a
-    permanent record for the atSign, and a client that does not seed still
-    reaches its atSign's keys by conveyance or by asking.
+  - Seeding and the signing root are never raised: each publishes a permanent
+    record for the atSign that the client's configuration did not ask for. A
+    raised client seeds no namespace keys and mints no signing root that its
+    configured posture would not, and still reaches its atSign's keys and the
+    root's private by conveyance or by asking. Built first without the root
+    half, a raised fully privileged client minted the atSign's root at start,
+    leaving its private in the keyfile of an app configured legacy.
   - Built and withdrawn for 4.0: a second input from what the atSign
     advertises, `pqReady` for any `public:__nskey.*` it publishes itself, read
     by one authenticated scan at start and recorded in the keyfile so a start

@@ -475,6 +475,49 @@ void main() {
     });
 
     test(
+        'a privileged start that may not create the signing root publishes '
+        'none a stop kept from publishing', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      await PqSigningRoot(client, keysIo: keysIo)
+          .store('@bootstrap🛠', pair.secretKey, public: pair.publicKey);
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      final written = <String>[];
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0];
+        if (builder is UpdateVerbBuilder) written.add(builder.atKey.key);
+        return 'data:1';
+      });
+
+      await PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        createsSigningRoot: false,
+        gates: const PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestMissingPrivates: false,
+          anchorOwnKeys: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      ).startup();
+
+      expect(written, isNot(contains(PqSigningRoot.recordName)));
+    });
+
+    test(
         'Given a rootless atSign, when a fully privileged start mints the '
         'root, then it can answer other enrollments\' pulls for it', () async {
       final keysIo = InMemoryAtKeysIo();

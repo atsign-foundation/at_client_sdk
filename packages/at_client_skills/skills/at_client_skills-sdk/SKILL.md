@@ -459,8 +459,9 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 - A client never runs below its floor. A keyfile holding a namespace key's
   private sets `pqReady`; an ML-DSA-65 data signing key sets `pqActive`.
   Configured lower, the client logs a warning and is raised on
-  authentication, data signing, and reading and writing post-quantum;
-  seeding and `disallowLegacyEncryption` stay as configured.
+  authentication, data signing, and reading and writing post-quantum. It
+  seeds no namespace keys and mints no signing root that its configured
+  posture would not, and `disallowLegacyEncryption` stays as configured.
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
   to write with. A collection's namespace therefore ends with `.` and
