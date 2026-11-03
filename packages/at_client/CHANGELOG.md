@@ -89,6 +89,9 @@
 - feat: at `pqActive`, a write to the client's own atSign made right after it
   opens waits up to 30 seconds for the client to publish its namespace key,
   instead of failing.
+- feat: a write made while the client's start-up is still asking the atSign's
+  other enrollments for its namespace key's private waits up to 30 seconds
+  for the answer, instead of failing at once.
 - feat: at `pqActive`, a share is sealed to the most specific namespace key
   the recipient advertises for the key's whole name, and no longer waits for
   the writer's start-up.

@@ -17,6 +17,11 @@ class StartUpSeeding {
   @visibleForTesting
   static Duration wait = const Duration(seconds: 30);
 
+  /// Waits for [future] to end, however it ends, at most [wait].
+  static Future<void> waitOn(Future<void> future) => future
+      .then((_) {}, onError: (Object _) {})
+      .timeout(wait, onTimeout: () {});
+
   final Completer<void> _namespaces = Completer<void>();
   Set<String> _seeded = const {};
   Completer<Set<String>?>? _recorded;

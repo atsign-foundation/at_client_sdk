@@ -250,7 +250,11 @@ typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
 /// secret-sharing substrate is what supplies them to an enrollment that did
 /// not run [mintAndPublish] itself.
 class PublishedNskeyKeyRing
-    implements NskeyKeyRing, LooksUpLevelsTogether, SignalsPrivateFiling {
+    implements
+        NskeyKeyRing,
+        LooksUpLevelsTogether,
+        SignalsPrivateFiling,
+        AwaitsStartUpAsk {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
@@ -367,6 +371,10 @@ class PublishedNskeyKeyRing
 
   /// The asks whose answer is still awaited, by whichever route they went out.
   final Map<_OwnGeneration, Future<void>> _outstanding = {};
+
+  /// Those of [_outstanding] the client's start-up made, keyed with the
+  /// namespace folded.
+  final Map<_OwnGeneration, Future<void>> _startUpAsks = {};
 
   /// How many namespaces this ring asked about within the last [askCooldown].
   @visibleForTesting
@@ -1702,16 +1710,28 @@ class PublishedNskeyKeyRing
 
   /// Records an ask for `(namespace, nskeyKid)` whose answer is awaited until
   /// [outstanding] completes, so a read miss meanwhile asks nothing more.
+  /// [atStartUp] marks the client's start-up as the asker, the one ask a
+  /// write that misses waits for.
   @internal
   void noteOutstandingAsk(
-      String namespace, String nskeyKid, Future<void> outstanding) {
+      String namespace, String nskeyKid, Future<void> outstanding,
+      {bool atStartUp = false}) {
     final generation = (namespace: namespace, nskeyKid: nskeyKid);
+    final folded = (namespace: namespace.toLowerCase(), nskeyKid: nskeyKid);
     _askedAt[generation] = DateTime.now();
     _outstanding[generation] = outstanding;
+    if (atStartUp) _startUpAsks[folded] = outstanding;
     unawaited(outstanding.then((_) {}, onError: (Object _) {}).whenComplete(() {
       if (identical(_outstanding[generation], outstanding)) {
         _outstanding.remove(generation);
       }
+      if (identical(_startUpAsks[folded], outstanding)) {
+        _startUpAsks.remove(folded);
+      }
     }));
   }
+
+  @override
+  Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
+      _startUpAsks[(namespace: namespace.toLowerCase(), nskeyKid: nskeyKid)];
 }

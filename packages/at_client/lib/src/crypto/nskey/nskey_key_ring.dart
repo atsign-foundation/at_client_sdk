@@ -306,6 +306,15 @@ abstract interface class LooksUpLevelsTogether {
           {void Function(String namespace)? missed});
 }
 
+/// Implemented by an [NskeyKeyRing] whose client's start-up asks the atSign's
+/// other enrollments for the own privates it lacks.
+abstract interface class AwaitsStartUpAsk {
+  /// Start-up's ask for [namespace]'s generation [nskeyKid] while its answer is
+  /// awaited, or null; it completes once the answer is filed or the wait for
+  /// one ends.
+  Future<void>? startUpAskFor(String namespace, String nskeyKid);
+}
+
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
 ///
 /// Test scaffolding: it exercises the data path without minting, publication

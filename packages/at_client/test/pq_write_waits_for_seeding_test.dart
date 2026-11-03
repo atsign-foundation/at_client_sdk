@@ -73,6 +73,16 @@ class _PublishingNothing extends PublishedNskeyKeyRing {
       throw StateError('nothing may be minted here');
 }
 
+/// A ring whose client's start-up has asked for the privates in [asks], keyed
+/// `namespace|nskeyKid`.
+class _AskingRing extends _Ring implements AwaitsStartUpAsk {
+  final Map<String, Future<void>> asks = {};
+
+  @override
+  Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
+      asks['$namespace|$nskeyKid'];
+}
+
 class _MockSharing extends Mock implements PairwiseSecretSharing {}
 
 /// One client's providers over [ring], with [seeding] in the part its
@@ -627,6 +637,86 @@ void main() {
       await writing;
 
       expect(stamped(key)['ckNs'], 'todos.demos');
+    });
+  });
+
+  group(
+      "Given todos.demos's current generation published, its private not "
+      'held, and start-up seeding finished', () {
+    late _AskingRing ring;
+    late _Client c;
+    late XWingKeyPair pair;
+    late String kid;
+    late Completer<void> answer;
+    late AtKey key;
+
+    setUp(() async {
+      key = _built('x', 'todos.demos');
+      ring = _AskingRing();
+      c = _Client(ring)..seeding.seeding({'todos.demos'});
+      c.seeding.finish();
+      pair = await XWingKeyPair.generate();
+      kid = ring.seedPublicOnly(_alice, 'todos.demos',
+          publicKey: pair.publicKeyBytes);
+      answer = Completer<void>();
+      wire(c);
+    });
+
+    Matcher notYetConveyed() => throwsA(isA<NskeyPrivateNotHeldException>()
+        .having((e) => e.nskeyKid, 'nskeyKid', kid)
+        .having((e) => e.message, 'message',
+            contains('has not yet been conveyed')));
+
+    test(
+        'A write that misses while its start-up ask is outstanding waits for '
+        'the answer', () async {
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue,
+          reason: "it waits for the answer to start-up's ask");
+      ring.seedKeypair(_alice, 'todos.demos',
+          publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
+      answer.complete();
+      await writing;
+
+      expect(
+          store[store.keys.singleWhere((k) => k.contains('.__ck.todos.demos'))]!
+              .key
+              .metadata
+              .appMetadata!
+              .additional!['nskeyKid'],
+          kid,
+          reason: 'the write succeeds once the answer is filed');
+    });
+
+    test(
+        'when no answer comes within the bound, then the write throws naming '
+        'the generation as not yet conveyed',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 200);
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      await expectLater(write(c, key), notYetConveyed());
+    });
+
+    test(
+        'when the ask ends with no answer filed, as when the client stops, '
+        'then the write throws at once', () async {
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+      answer.complete();
+
+      await expectLater(atOnce(writing), notYetConveyed());
+    });
+
+    test('when start-up has no ask outstanding, then the write throws at once',
+        () async {
+      await expectLater(atOnce(write(c, key)), notYetConveyed(),
+          reason: 'the control: an ask a read miss made, or none, does not '
+              'hold a write up');
     });
   });
 }

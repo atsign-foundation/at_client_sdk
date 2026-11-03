@@ -983,7 +983,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
   for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
   read fails with `NskeyPrivateUnavailableException`, the type a parked notification is
-  re-driven on.
+  re-driven on. A put made while the client's start-up is still waiting for the answer to
+  its own ask for G1 first waits for that answer, at most `StartUpSeeding.wait` (30 s),
+  and goes on once it is filed; an ask a miss made does not hold a put up.
 - **Then:** concurrent misses share one fetch, whichever generations they name.
 - **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
   whichever generation it names, and the startup collection does not start that

@@ -649,7 +649,10 @@ What each posture switches on:
   namespace waits for it, up to 30 seconds, then throws
   `NamespaceKeyUnavailableException` naming the key, with start-up's reason
   when it could not publish it. A write made with no atServer reachable does
-  not wait, and nor does a share.
+  not wait, and nor does a share. A write that finds the key published but
+  holds no private for it, while start-up is still asking the atSign's other
+  enrollments for that private, waits up to 30 seconds for the answer, then
+  throws `NskeyPrivateNotHeldException`.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
   before publishing it. A client on the primary enrollment mints nothing,

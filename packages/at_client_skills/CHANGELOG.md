@@ -16,6 +16,8 @@
 - A cancelled wait throws once the pending keys are gone (`references/15`).
 - A collection write whose own copy fails writes no recipient's copy
   (`references/02`).
+- A write waits up to 30 seconds for the answer to start-up's ask for its
+  namespace key's private (`SKILL.md`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`

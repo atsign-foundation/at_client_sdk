@@ -7,6 +7,8 @@ import 'package:at_client/src/crypto/backends/crypto_backends.dart'
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -200,10 +202,16 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // derives. A peer's private is never held, so a share can rest only on
       // the advertisement's signature.
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
-        final held =
-            await keyRing.privateHalf(nskeyOwner, namespace, usable.kid) == null
-                ? null
-                : await keyRing.heldPublic(nskeyOwner, namespace, usable.kid);
+        final ring = keyRing;
+        // NOTE: read before the miss, so only start-up's ask holds a write.
+        final askedAtStartUp = ring is AwaitsStartUpAsk
+            ? (ring as AwaitsStartUpAsk).startUpAskFor(namespace, usable.kid)
+            : null;
+        var held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
+        if (held == null && askedAtStartUp != null) {
+          await StartUpSeeding.waitOn(askedAtStartUp);
+          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
+        }
         if (held == null) {
           throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
         }
@@ -266,6 +274,14 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     return envelope;
   }
+
+  /// The public half of [owner]'s generation [nskeyKid] in [namespace] that
+  /// the private this client holds derives, or null when it holds none.
+  Future<PackageKey?> _heldOwnPublic(
+          String owner, String namespace, String nskeyKid) async =>
+      await keyRing.privateHalf(owner, namespace, nskeyKid) == null
+          ? null
+          : await keyRing.heldPublic(owner, namespace, nskeyKid);
 
   @override
   Future<String> decrypt(
