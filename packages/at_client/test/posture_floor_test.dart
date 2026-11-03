@@ -144,7 +144,7 @@ void main() {
       final original = AtClientPreference(
           pqStartupGates: const PqStartupGates.inert(),
           sealsToKeyAlgorithms: const [SecretSharingAlgos.xWing],
-          keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing])
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024])
         // ignore: deprecated_member_use_from_same_package
         ..hiveStoragePath = 'h'
         ..cramSecret = 'c'
@@ -166,7 +166,8 @@ void main() {
         ..atClientParticulars = (AtClientParticulars()..appName = 'app')
         ..remoteLocalPref = RemoteLocalPref.remoteOnly
         ..crypto = const CryptoConfig.legacy()
-        ..allowLegacyCryptoFallback = true;
+        ..allowLegacyCryptoFallback = true
+        ..seedNamespaceKeys = true;
       final raised = original.raisedTo(PqPosture.pqReady);
       expect(raised, isNot(same(original)));
 
