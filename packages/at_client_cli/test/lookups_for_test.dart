@@ -42,6 +42,8 @@ void main() {
           ..useCertificateChain('${certs.path}/cert.pem')
           ..usePrivateKey('${certs.path}/key.pem'));
     firstLines = StreamController.broadcast();
+    // NOTE: a client that hangs up mid-handshake surfaces here, not on a
+    // socket; it is noise, and unhandled it fails setUpAll after the tests.
     server.listen((socket) {
       var received = '';
       socket.cast<List<int>>().transform(utf8.decoder).listen((text) {
@@ -52,7 +54,7 @@ void main() {
           socket.destroy();
         }
       }, onError: (_) {});
-    });
+    }, onError: (_) {});
   });
 
   tearDownAll(() async {
