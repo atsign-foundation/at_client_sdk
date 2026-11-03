@@ -1342,6 +1342,25 @@ void main() {
     });
 
     test(
+        'Given a lookup that fails with no cached advertisement to stand in, '
+        'when a share asks, then the failure keeps the stack it was raised '
+        'with', () async {
+      net.reachable = false;
+      Object? thrown;
+      StackTrace? stack;
+      try {
+        await share(AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      } catch (e, s) {
+        thrown = e;
+        stack = s;
+      }
+
+      expect(thrown, isA<SecondaryConnectException>());
+      expect('$stack', contains('requireReachable'),
+          reason: 'the stack names where the lookup failed');
+    });
+
+    test(
         'A key fresh when the walk began seals the share, even if it expires '
         'during the lookup', () async {
       net.records.remove('public:__nskey.todos.demos$_bob');
