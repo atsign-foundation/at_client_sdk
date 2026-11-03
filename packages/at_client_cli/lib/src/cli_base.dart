@@ -226,7 +226,8 @@ class CLIBase {
   ///
   /// <br/>
   /// Also configures the default AtSignLogger log level to be either INFO
-  /// if verbose is true, or SHOUT if verbose is false (the default). If the
+  /// if verbose is true, or WARNING if verbose is false (the default), so the
+  /// SDK's warnings, such as a notification it dropped, reach stderr. If the
   /// application wishes to use a different default log level then it can do
   /// something like this:
   /// ```
@@ -290,8 +291,8 @@ class CLIBase {
       AtSignLogger.root_level = 'INFO';
       logger.logger.level = Level.INFO;
     } else {
-      AtSignLogger.root_level = 'SHOUT';
-      logger.logger.level = Level.SHOUT;
+      AtSignLogger.root_level = 'WARNING';
+      logger.logger.level = Level.WARNING;
     }
   }
 

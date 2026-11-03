@@ -605,7 +605,11 @@ atClient.notificationService
 ```
 
 `subscribeFiltered` matches `sample.my_app` and any id before it, decrypts
-each value, and drops a notification from any other sender. Plain
+each value, and drops a notification from any other sender, and one it
+cannot decrypt. Each drop is logged at warning and emitted on
+`notificationService.droppedEvents`. A `legacy` client cannot decrypt
+anything sealed to a namespace key, and reads it from its next start once
+its atSign publishes one. Plain
 `subscribe(regex:, shouldDecrypt:)` takes every sender, and its
 `shouldDecrypt` defaults to `false`, which hands back each value still
 encrypted.

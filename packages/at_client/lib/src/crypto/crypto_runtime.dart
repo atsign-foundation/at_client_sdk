@@ -2,6 +2,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/posture_floor.dart' show postureName;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -285,6 +286,17 @@ class CryptoRuntime {
     String lookupReason,
   ) {
     final ids = [legacyProviderId, ...config.providers.map((p) => p.id)];
+    final posture = _atClient.getPreferences()?.posture;
+    if (posture != null &&
+        !posture.configuresPqProviders &&
+        (id == nskeyCryptoProviderId ||
+            id == symmetricAesGcmCryptoProviderId)) {
+      return 'Crypto provider "$id" is not registered: this client runs at '
+          '${postureName(posture)}, which reads no post-quantum data. Lookup '
+          'reason: $lookupReason. Registered providers: ${ids.join(', ')}. A '
+          'client of an atSign that publishes a namespace key runs at its '
+          'pqReady floor from its next start: restart it to read this.';
+    }
     return 'Crypto provider "$id" is not registered. '
         'Lookup reason: $lookupReason. '
         'Registered providers: ${ids.join(', ')}. '

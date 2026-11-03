@@ -4,6 +4,11 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
+/// A notification [NotificationService.droppedEvents] reports as given up on:
+/// its key, empty when the frame could not be parsed into one, and the reason
+/// logged for it.
+typedef DroppedNotification = ({String key, String reason});
+
 abstract class NotificationService {
   /// Our atSign
   Atsign get atSign;
@@ -24,6 +29,13 @@ abstract class NotificationService {
   /// will not be started until explicitly requested to do so by the
   /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
+
+  /// Every notification this service gives up on without delivering it, such
+  /// as one this client cannot decrypt, with the reason it logs at `warning`.
+  ///
+  /// A dropped notification is otherwise indistinguishable to a subscriber
+  /// from one that was never sent. Broadcast, and it does not replay.
+  Stream<DroppedNotification> get droppedEvents;
 
   /// Stops all subscriptions on the current instance. By default
   /// will also stop listening for notifications from the atServer. If you

@@ -14,6 +14,10 @@
   post-quantum data at its first start.
 - note: a client configured below `pqReady` reads, as it starts, whether its
   atSign publishes a namespace key, unless its keyfile already says so.
+- feat: `NotificationService.droppedEvents` reports each notification a
+  client gives up on, such as one it cannot decrypt, with the reason it
+  logs at warning. A client whose posture reads no post-quantum data says
+  so when it drops one sealed post-quantum, and to restart it.
 - note: an envelope's signature is verified with the strongest algorithm the
   envelope and its signer's `_apsk` both carry, against the key the signature
   names, and a key the `_apsk` lists as `retired` still verifies, so what an
