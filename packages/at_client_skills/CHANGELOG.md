@@ -22,6 +22,8 @@
   its atSign's namespace keys (`SKILL.md`).
 - A notification a subscription drops, one it cannot decrypt included, is
   logged at warning and emitted on `droppedEvents` (`SKILL.md` §13).
+- An item a collection cannot read yet is a `CItemReadException`, which
+  `.handleError` can test for (`references/02`, `references/07`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`

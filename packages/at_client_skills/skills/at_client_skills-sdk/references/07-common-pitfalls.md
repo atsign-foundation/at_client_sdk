@@ -58,18 +58,20 @@ To read a leaf item after a `CSubItemUpdated` event, use `getDescendant()`.
 
 ## 4. Unhandled Decode Errors in `getItemsAsStream()`
 
-**Problem:** A single corrupt or schema-mismatched item in the keystore causes
-an unhandled stream error that terminates the stream and may crash the widget.
+**Problem:** A single item this device cannot read, corrupt or sealed to a
+namespace key it does not hold yet, causes an unhandled stream error that
+terminates the stream and may crash the widget.
 
-**Fix:** Chain `.handleError()` to log-and-skip corrupt items, or use
+**Fix:** Chain `.handleError()` to log-and-skip such items, or use
 `getItems()` if you want the entire list or nothing:
 
 ```dart
-// Silent-skip pattern — omit `test:` to catch all stream errors,
-// since the SDK yields decode failures as plain string errors, not a named type
+// Silent-skip pattern: each unreadable item is a CItemReadException
+// carrying its key and the error its read failed with
 collection
     .getItemsAsStream()
-    .handleError((e) => logger.warning('decode error: $e'))
+    .handleError((e) => logger.warning('unreadable: $e'),
+        test: (e) => e is CItemReadException)
     .listen((item) { ... });
 
 // All-or-nothing (a single decode failure aborts the entire list)

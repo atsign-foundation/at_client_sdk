@@ -300,12 +300,13 @@ enum EventSource { data, notifs, both }
 ///
 /// ---
 ///
-/// Per-key decode failures on the read path are yielded into the
-/// stream as errors — not logged and swallowed. Every higher-level
-/// read method is a thin wrapper over [getItemsAsStream], so
-/// `await collection.getItems()` will throw on the first bad key;
+/// A record the read path cannot read, such as one sealed to a key this
+/// device does not hold yet, is yielded into the stream as a
+/// [CItemReadException] error — not logged and swallowed. Every
+/// higher-level read method is a thin wrapper over [getItemsAsStream], so
+/// `await collection.getItems()` will throw on the first such record;
 /// `await for` without an `onError` handler will throw on the first
-/// bad key. Apps that want the old silent-skip posture should chain
+/// such record. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
 /// Leading anchor shared by every AtKey scan AtCollection emits.
 ///
@@ -1348,10 +1349,10 @@ interface class AtCollection<T> {
   /// Fetches every item in the collection as a `List<CItem<T>>`,
   /// optionally filtered by [id] / [owner].
   ///
-  /// **Decode-error policy:** the first per-key decode failure aborts
-  /// the list with that error. If you need to continue past decode
-  /// failures, use [getItemsAsStream] directly and chain
-  /// `.handleError(...)` or collect errors yourself.
+  /// **Decode-error policy:** one record this device cannot read, such as
+  /// one sealed to a key it does not hold yet, fails the list with a
+  /// [CItemReadException] naming it. To list the rest, use
+  /// [getItemsAsStream] with an `onError` handler.
   ///
   /// Items with the same `owner+id` across self and shared copies are
   /// deduplicated and their `sharedWith` sets are unioned.
@@ -1365,10 +1366,10 @@ interface class AtCollection<T> {
   ///         .where((item) => item.obj.done)
   ///         .toList();
   ///
-  /// Per-key decode failures are yielded into the stream as **errors**
-  /// (via `yield* Stream<CItem<T>>.error(...)`), not swallowed. Good
-  /// data items keep flowing before and after each error. Callers
-  /// choose the policy:
+  /// A record this device cannot read, such as one sealed to a key it does
+  /// not hold yet, is yielded into the stream as a [CItemReadException]
+  /// error naming it and its cause, not swallowed. Good data items keep
+  /// flowing before and after each error. Callers choose the policy:
   ///
   ///   - `.toList()` / `await for` without `onError` → first error
   ///     aborts with the error thrown.
@@ -1546,9 +1547,7 @@ interface class AtCollection<T> {
         //     (see [CItem.readBy] for an example — it does this to
         //     tolerate legacy `__rr` items written in the pre-
         //     refactor wire format).
-        yield* Stream<CItem<T>>.error(
-          'getItemsAsStream decode failure on ${k.key}: $e\n$st',
-        );
+        yield* Stream<CItem<T>>.error(CItemReadException(k, e), st);
       }
     }
     if (pending != null) yield pending;
@@ -5179,6 +5178,22 @@ final class CollectionOpException implements Exception {
   String toString() =>
       'CollectionOpException with ${failures.length} failure(s):\n'
       '  ${failures.join('\n  ')}';
+}
+
+/// A record a collection could not read, such as one sealed to a key this
+/// device does not hold yet: yielded as an error by
+/// [AtCollection.getItemsAsStream], with the stack its read failed on.
+final class CItemReadException implements Exception {
+  /// The record that could not be read.
+  final AtKey key;
+
+  /// What reading it failed with.
+  final Object cause;
+
+  CItemReadException(this.key, this.cause);
+
+  @override
+  String toString() => 'CItemReadException: could not read $key: $cause';
 }
 
 /// Multi-line human-readable dump of a [CItem] — useful for

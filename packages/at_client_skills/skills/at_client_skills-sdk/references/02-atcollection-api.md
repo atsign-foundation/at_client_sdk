@@ -153,13 +153,16 @@ failures.
 
 ### `Future<List<CItem<T>>> getItems({String? id, Atsign? owner})`
 
-Returns all matching items as a list. A per-key decode failure aborts the list.
+Returns all matching items as a list. One item this device cannot read, such
+as one sealed to a namespace key it does not hold yet, fails the list with a
+`CItemReadException` naming it.
 
 ### `Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner})`
 
-Yields each item as it is fetched. **Per-key decode failures are yielded as
-stream errors** (not swallowed). Chain `.handleError(...)` to restore
-silent-skip behaviour.
+Yields each item as it is fetched. **An item this device cannot read is
+yielded as a `CItemReadException` stream error** (not swallowed), and the
+stream goes on. Listen with `onError`, or chain `.handleError(...)`, to list
+the rest.
 
 ### `Future<bool> exists(String id, Atsign owner)`
 

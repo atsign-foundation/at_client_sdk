@@ -301,6 +301,11 @@ sync with the atServer. Value-level filtering is always on-device
 — records are end-to-end encrypted between atSigns, so the server
 never sees plaintext to filter on.
 
+A record this device cannot read yet, such as one sealed to a namespace key
+it does not hold, fails `getItems()` with a `CItemReadException` naming the
+record and why. `getItemsAsStream()` yields the same exception as an error
+and goes on, so a listener with an `onError` handler lists the rest.
+
 A composable `Query<T>` builder covers the common filter / sort /
 paginate / aggregate patterns:
 

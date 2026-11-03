@@ -73,9 +73,8 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    // Per-key decode failures are now logged-and-skipped inside
-    // `getItemsAsStream` (the underlying building block), so a
-    // single malformed record no longer poisons the read.
+    // NOTE: one record this device cannot read fails getItems with a
+    // CItemReadException; getItemsAsStream with onError lists the rest.
     final items = await binaries.getItems();
     for (final item in items) {
       String msg = '==> Fetched ${item.prettyString}';

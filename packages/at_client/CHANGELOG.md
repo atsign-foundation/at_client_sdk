@@ -18,6 +18,10 @@
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says
   so when it drops one sealed post-quantum, and to restart it.
+- fix: a collection record this device cannot read yet fails `getItems()`
+  with a `CItemReadException` naming the record and the error its read
+  failed with, rather than a string; `getItemsAsStream()` with an `onError`
+  handler lists the rest.
 - note: an envelope's signature is verified with the strongest algorithm the
   envelope and its signer's `_apsk` both carry, against the key the signature
   names, and a key the `_apsk` lists as `retired` still verifies, so what an

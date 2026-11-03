@@ -1063,6 +1063,47 @@ void main() {
       await expectLater(c.getItems(), throwsA(anything));
     });
 
+    test(
+        'a record this device cannot read fails getItems with a '
+        'CItemReadException naming it and what its read failed with', () async {
+      final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
+      final sealedKey = AtKey.fromString('sealed.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [goodKey, sealedKey]);
+      final refusal = CryptoProviderNotRegistered(
+          'Crypto provider "at/symmetric/AES/GCM" is not registered');
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().startsWith('sealed.')) throw refusal;
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hello'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      final c = buildCollection<String>();
+
+      await expectLater(
+          c.getItems(),
+          throwsA(isA<CItemReadException>()
+              .having((e) => '${e.key}', 'key', '$sealedKey')
+              .having((e) => e.cause, 'cause', same(refusal))));
+
+      final listed = <CItem<String>>[];
+      StackTrace? stack;
+      final done = Completer<void>();
+      c.getItemsAsStream().listen(listed.add,
+          onError: (Object _, StackTrace s) => stack = s,
+          onDone: done.complete);
+      await done.future;
+      expect(listed.map((item) => item.id), ['ok'],
+          reason: 'with an onError handler, the rest are listed');
+      expect('$stack', contains('at_collections_test.dart'),
+          reason: 'the error carries the stack its read failed on');
+    });
+
     test('stream consumers can restore silent-skip with .handleError',
         () async {
       final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
