@@ -209,6 +209,30 @@ void main() {
           reason: 'no poll starts once the wait is cancelled');
     });
 
+    test('A cancel signal that fails ends the wait', () async {
+      final (response, lookup, polled) =
+          await rig(List.filled(1000, Poll.pending));
+      final cancel = Completer<void>();
+
+      final waiting = expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(seconds: 30),
+              logProgress: false,
+              cancelled: cancel.future),
+          throwsA(isA<StoppedException>()));
+      while (polled.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      cancel.completeError(StateError('the signal failed'));
+      await waiting.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the wait went on after its cancel signal '
+              'failed'));
+
+      expect(polled.length, 1,
+          reason: 'no poll starts once the signal has failed');
+    });
+
     test(
         'when its cancel signal has already completed, then no poll runs and '
         'the wait ends', () async {

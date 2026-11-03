@@ -178,8 +178,9 @@ abstract class AtEnrollment {
   /// retries and the post-approval key fetches — and it is left open for the
   /// caller to close.
   ///
-  /// Once [cancelled] completes, no further poll starts and the wait throws
-  /// [StoppedException]; a connection that is stopped ends it the same way.
+  /// Once [cancelled] completes, with a value or an error, no further poll
+  /// starts and the wait throws [StoppedException]; a connection that is
+  /// stopped ends it the same way.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,

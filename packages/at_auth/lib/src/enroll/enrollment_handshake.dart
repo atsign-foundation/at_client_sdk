@@ -35,8 +35,8 @@ class EnrollmentHandshake {
   /// approved, then collects what the approval released into its keys.
   ///
   /// [atLookup] is left open for the caller to close. Once [cancelled]
-  /// completes, no further poll starts and the wait throws
-  /// [StoppedException].
+  /// completes, with a value or an error, no further poll starts and the wait
+  /// throws [StoppedException].
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     required Duration retryInterval,
@@ -257,11 +257,14 @@ class EnrollmentHandshake {
   }) async {
     var isCancelled = false;
     Completer<void>? sleeping;
-    unawaited(cancelled?.then((_) {
+    void cancel() {
       isCancelled = true;
       final pause = sleeping;
       if (pause != null && !pause.isCompleted) pause.complete();
-    }));
+    }
+
+    unawaited(
+        cancelled?.then((_) => cancel(), onError: (Object _) => cancel()));
     StoppedException cancelledWait() => StoppedException(
         'the wait for enrollment $enrollmentIdFromServer was cancelled');
     // NOTE: one microtask, so a cancel that has already completed is seen

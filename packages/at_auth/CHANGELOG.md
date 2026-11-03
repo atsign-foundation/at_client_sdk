@@ -26,8 +26,8 @@
   hold, under the algorithm they name.
 - breaking: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
-- feat: `waitForApproval` takes `cancelled`: once it completes, no further
-  poll starts and the wait throws `StoppedException`. A stopped connection
+- feat: `waitForApproval` takes `cancelled`: once it completes, with a value
+  or an error, no further poll starts and the wait throws `StoppedException`. A stopped connection
   ends the wait at once, rather than spending the retry budget.
 - build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
 - feat: `AtKeys.unfileLegacyEnrollment` drops what `fileLegacyMaterial`

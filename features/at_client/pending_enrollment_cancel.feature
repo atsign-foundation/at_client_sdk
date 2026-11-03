@@ -94,6 +94,11 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the connection is stopped
     Then the wait throws StoppedException at the next poll, without spending its retry budget
 
+  Scenario: A cancel signal that fails ends the wait
+    Given at_auth waiting for approval with a cancel signal
+    When the signal completes with an error
+    Then the wait throws StoppedException at once, and no error escapes it
+
   Scenario: Stop ends a wait and keeps the request
     Given a pending enrollment waiting in awaitApproval, on a connection it built
     When the app calls stop
