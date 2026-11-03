@@ -23,7 +23,8 @@ export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    hide heldOwnAfterStartUpAsk;
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 export 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show

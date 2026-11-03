@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/backends/crypto_backends.dart'
     show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'

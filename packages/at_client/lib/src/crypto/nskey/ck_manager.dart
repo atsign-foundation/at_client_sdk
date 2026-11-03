@@ -8,6 +8,8 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
 import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
