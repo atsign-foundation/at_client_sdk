@@ -2308,6 +2308,12 @@ readers in the field may expect it wherever there is a `version`
 it would discard the material and authenticate from the flat block as the wrong
 enrollment.
 
+Any of the three may carry a top-level `atsignFloor`, the posture floor the
+atSign sets, `pqReady` once a client has found it publishing a namespace key.
+`AtKeys.raiseAtSignFloor` is its only writer, and the update assurance refuses a
+write that lowers or removes it. at_auth 3.3.0 and 4.0.0-rc7 keep it through a
+read and a write as a field they do not know.
+
 ### 9.3 `_apsk`
 
 ```json
