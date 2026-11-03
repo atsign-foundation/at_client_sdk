@@ -3,8 +3,8 @@
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - feat: `at_activate approve` warns when it approves a request made at the
   legacy key exchange on an atSign that publishes a namespace key: the
-  approval conveys none of the atSign's namespace keys, and requesting again
-  at `--posture pqReady` conveys them.
+  approval conveys none of the atSign's namespace keys, and revoking it and
+  requesting again at `--posture pqReady` conveys them.
 - feat: a `CLIBase` program that cannot reach the atServer names the
   atDirectory address and what failed.
 - feat: a `CLIBase` program whose keyfile holds no credential, as a denial,

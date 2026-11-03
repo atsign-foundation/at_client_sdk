@@ -298,7 +298,11 @@ void main() {
           contains('run at pqReady or above, it re-enrolls at its first start'),
           reason: 'and what the device does at each posture');
       expect(warned, contains('at_activate enroll --posture pqReady'),
-          reason: 'and how to convey them now');
+          reason: 'and how to convey them');
+      expect(warned, contains('revoke it with `at_activate revoke -i $b`'),
+          reason: 'naming the step that still applies once it is approved');
+      expect(warned, isNot(contains('deny it')),
+          reason: 'a deny finds nothing pending once approve has run');
       expect(approvals, [b], reason: 'and approves the request as asked');
     });
 
