@@ -18,6 +18,8 @@
   (`references/02`).
 - A write waits up to 30 seconds for the answer to start-up's ask for its
   namespace key's private (`SKILL.md`).
+- A client never runs below its posture floor, set by its keyfile's keys and
+  its atSign's namespace keys (`SKILL.md`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`

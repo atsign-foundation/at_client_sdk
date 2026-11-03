@@ -2875,6 +2875,30 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
   posture names. An enrollment holding no stronger client data signing key
   mints rsa2048 and keeps `_apsk` bare; one holding an ML-DSA-65 key keeps it
   active and mints nothing, because key material wins.
+- **A client never runs below its floor.** The floor is the higher of what its
+  enrollment's key material sets, `pqActive` for an active ML-DSA-65 client
+  data signing key and `pqReady` for any namespace-key private, and what its
+  atSign advertises, `pqReady` for any `public:__nskey.*` the atSign publishes
+  itself. A start configured below it warns and is raised per setting:
+  `authenticationKeyAlgorithm`, the strongest of `dataSigningKeyAlgorithms`,
+  `configuresPqProviders`, `writesPqByDefault`, and `seedNamespaceKeys` with
+  `keyExchangeMode`. `disallowLegacyEncryption`, `mintLegacyMaterial`,
+  `sealsToKeyAlgorithms`, `keyEstablishmentAlgorithms` and the
+  `allowLegacyCryptoFallback` preference stay as configured.
+  - What the atSign advertises is read by one authenticated scan before the
+    enrollment settles, since the retrofit decision reads the raised posture.
+    The scan runs only when it could raise the client, is bounded by
+    `AtConnection.defaultBudget`, and never counts a cached copy of another
+    atSign's key. The floor it finds is recorded in the keyfile's
+    `atsignFloor`, so a start with no atServer keeps it and it never comes
+    down; the enrollment's own floor is derived from key material at every
+    start and never stored.
+  - Rejected: a `local:` record for the atSign floor, which is lost with the
+    store, when a new device's first start with no atServer is exactly the
+    case that needs it. Raising a named stage to the whole higher stage,
+    which would make a `pqReady` client at a `pqActive` floor refuse writes to
+    a destination with no namespace key. Lifting a running client when its
+    atSign publishes its first namespace key: it is lifted at its next start.
 
 #### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
 

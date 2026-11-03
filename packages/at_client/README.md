@@ -601,6 +601,16 @@ then rebuild it with `PqPosture.pqActive` and roll that out. A new app
 has no legacy readers and starts at `pqActive`. A posture is a floor for
 what a client drives, never a downgrade of what its atSign already holds.
 
+A client also has a floor of its own, and runs at the higher of the two. A
+keyfile holding a namespace key's private, or an atSign that publishes any
+namespace key, sets `pqReady`; an active ML-DSA-65 data signing key sets
+`pqActive`. A client configured below its floor logs a warning and is raised
+to it on the settings the floor raises: authentication, the data signing
+key, reading and writing post-quantum, and seeding namespace keys. Its other
+settings, `disallowLegacyEncryption` among them, stay as configured. The
+keyfile records an atSign's floor, so a start with no atServer keeps it, and
+it never comes down.
+
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
 | ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
 | `PqPosture.legacy` (default) | RSA-2048 APKAM                                                       | legacy encryption                               | no: a record sealed to a namespace key is refused         |

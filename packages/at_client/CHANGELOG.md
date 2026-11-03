@@ -6,6 +6,14 @@
   per-namespace keys, a signing root, secret conveyance between an atSign's
   enrollments, and key rotation. The default posture is still
   `PqPosture.legacy`, which runs none of it.
+- feat: a client never runs below its posture floor. A keyfile holding a
+  namespace key's private, or an atSign that publishes any namespace key,
+  sets `pqReady`, and an ML-DSA-65 data signing key sets `pqActive`; a
+  client configured lower logs a warning and is raised to the floor. A
+  legacy client of such an atSign therefore re-enrolls itself and reads
+  post-quantum data at its first start.
+- note: a client configured below `pqReady` reads, as it starts, whether its
+  atSign publishes a namespace key, unless its keyfile already says so.
 - note: an envelope's signature is verified with the strongest algorithm the
   envelope and its signer's `_apsk` both carry, against the key the signature
   names, and a key the `_apsk` lists as `retired` still verifies, so what an

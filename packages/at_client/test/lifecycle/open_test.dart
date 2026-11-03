@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -61,14 +63,24 @@ void main() {
   }
 
   test('a client built and not yet asked says so', () async {
+    // NOTE: a client whose build reads nothing remote. At pqReady no atSign
+    // floor can raise it, its keyfile already authenticates with ML-DSA-65,
+    // so nothing retrofits, and its start-up is off.
+    final quiet = AtClientPreference(
+        posture: PqPosture.pqReady,
+        pqStartupGates: const PqStartupGates.inert())
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = await refusedPort()
+      ..hiveStoragePath = dir.path
+      ..namespace = 'lifecycle';
     final client = await buildAtClient(
         atSign: '@unattempted',
         namespace: 'lifecycle',
-        preference: await preference(),
+        preference: quiet,
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'),
-        storage: hiveStoreFor('@unattempted', await preference()));
+        storage: hiveStoreFor('@unattempted', quiet));
     final state = client.connection.current;
     expect(state.outcome, AtConnectionOutcome.offline);
     expect(state.cause, AtConnectionCause.unattempted,

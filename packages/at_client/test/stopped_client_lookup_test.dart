@@ -61,6 +61,8 @@ void main() {
             storage:
                 InMemoryAtClientStorage(atSign: '@plain', closedByClient: true))
         as AtClientImpl;
+    // NOTE: what building the client sent is not this test's subject.
+    clearInteractions(plain);
     final remote = client.getRemoteSecondary()!;
     expect(await remote.executeCommand('scan\n'), 'data:ok',
         reason: 'the premise: the client reached its atServer');

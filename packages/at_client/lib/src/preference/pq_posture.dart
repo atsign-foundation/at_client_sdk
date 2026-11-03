@@ -1,6 +1,9 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:meta/meta.dart' show internal;
 
 /// How far into the post-quantum rollout a client runs — every rollout axis set
 /// as one value, applied at construction through `AtClientPreference.posture`.
@@ -139,6 +142,45 @@ class PqPosture {
       mintLegacyMaterial: mintLegacyMaterial,
       sealsToKeyAlgorithms: sealsToKeyAlgorithms,
       keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
+    );
+  }
+
+  /// This posture with each setting that [floor] sets more strongly raised to
+  /// the floor's: the authentication key algorithm, the data signing set when
+  /// its strongest algorithm is weaker than the floor's, configuring and
+  /// writing post-quantum, and seeding namespace keys with the pq key
+  /// exchange. Every other axis stays as it is, and a posture at or above
+  /// [floor] on all of these is returned unchanged.
+  @internal
+  PqPosture raisedTo(PqPosture floor) {
+    final seeds = seedNamespaceKeys || floor.seedNamespaceKeys;
+    final raised = (
+      authentication: strongerOf(
+          authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm),
+      dataSigning: raisedDataSigning(
+          dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms),
+      configures: configuresPqProviders || floor.configuresPqProviders,
+      writes: writesPqByDefault || floor.writesPqByDefault,
+      seeds: seeds,
+      exchange: seeds || floor.keyExchangeMode == EnrollmentKeyExchangeMode.pq
+          ? EnrollmentKeyExchangeMode.pq
+          : keyExchangeMode,
+    );
+    if (raised.authentication == authenticationKeyAlgorithm &&
+        identical(raised.dataSigning, dataSigningKeyAlgorithms) &&
+        raised.configures == configuresPqProviders &&
+        raised.writes == writesPqByDefault &&
+        raised.seeds == seedNamespaceKeys &&
+        raised.exchange == keyExchangeMode) {
+      return this;
+    }
+    return copyWith(
+      authenticationKeyAlgorithm: raised.authentication,
+      dataSigningKeyAlgorithms: raised.dataSigning,
+      configuresPqProviders: raised.configures,
+      writesPqByDefault: raised.writes,
+      seedNamespaceKeys: raised.seeds,
+      keyExchangeMode: raised.exchange,
     );
   }
 

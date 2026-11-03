@@ -3,6 +3,8 @@ import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -124,6 +126,58 @@ class AtClientPreference {
               'this posture names. A posture is a floor: name a posture that '
               'wants ${asked.name}, or PqPosture.legacy to stay where you are');
     }
+  }
+
+  /// A copy of this preference raised to [floor]: [posture] as
+  /// [PqPosture.raisedTo] raises it, [authenticationKeyAlgorithm] and
+  /// [dataSigningKeyAlgorithms] the same way, [seedNamespaceKeys] where the
+  /// floor seeds, and every other field as it is. This preference itself when
+  /// nothing is raised.
+  @internal
+  AtClientPreference raisedTo(PqPosture floor) {
+    final raisedPosture = posture.raisedTo(floor);
+    final authentication = strongerOf(
+        authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm);
+    final dataSigning = raisedDataSigning(
+        dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms);
+    final seeds = seedNamespaceKeys || floor.seedNamespaceKeys;
+    if (identical(raisedPosture, posture) &&
+        authentication == authenticationKeyAlgorithm &&
+        identical(dataSigning, dataSigningKeyAlgorithms) &&
+        seeds == seedNamespaceKeys) {
+      return this;
+    }
+    return AtClientPreference(
+        posture: raisedPosture,
+        pqStartupGates: pqStartupGates,
+        authenticationKeyAlgorithm: authentication,
+        dataSigningKeyAlgorithms: dataSigning,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
+      // ignore: deprecated_member_use_from_same_package
+      ..hiveStoragePath = hiveStoragePath
+      ..cramSecret = cramSecret
+      ..namespace = namespace
+      ..rootDomain = rootDomain
+      ..rootPort = rootPort
+      ..syncIntervalMins = syncIntervalMins
+      ..networkTimeout = networkTimeout
+      ..maxDataSize = maxDataSize
+      ..syncRegex = syncRegex
+      ..syncBatchSize = syncBatchSize
+      ..syncPageLimit = syncPageLimit
+      ..fileEncryptionChunkSize = fileEncryptionChunkSize
+      ..monitorHeartbeatInterval = monitorHeartbeatInterval
+      ..monitorHeartbeatResponseTimeout = monitorHeartbeatResponseTimeout
+      ..monitorSilenceTimeout = monitorSilenceTimeout
+      ..monitorAutoStart = monitorAutoStart
+      ..expiryCheckTimeInterval = expiryCheckTimeInterval
+      ..fetchOfflineNotifications = fetchOfflineNotifications
+      ..atClientParticulars = atClientParticulars
+      ..remoteLocalPref = remoteLocalPref
+      ..crypto = crypto
+      ..allowLegacyCryptoFallback = allowLegacyCryptoFallback
+      ..seedNamespaceKeys = seeds;
   }
 
   /// Where [other] would change what a **running** client does — one line per

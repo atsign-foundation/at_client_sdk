@@ -5,18 +5,23 @@ Feature: A client never runs below its floor
   active ML-DSA-65 client data signing key sets pqActive and any
   namespace-key private sets pqReady, and what its atSign advertises, where
   any namespace key the atSign publishes sets pqReady. A start configured
-  below its floor logs a warning naming both postures, and runs at the
-  floor. What the atSign advertises is read at each start that reaches the
-  atServer and kept in the keyfile, so a start with no atServer keeps the
-  floor, and the floor never comes down.
+  below its floor logs a warning naming both postures and what was raised,
+  and is raised to the floor on each setting the floor raises: the
+  authentication key algorithm, the strongest data signing algorithm,
+  configuring and writing post-quantum, and seeding namespace keys with the
+  pq key exchange. Every other setting stays as configured. What the atSign
+  advertises is read at a start that reaches the atServer, when it could
+  raise the client, and kept in the keyfile, so a start with no atServer
+  keeps the floor, and the floor never comes down.
 
   Races: the floor is the higher of what the keyfile holds and what the
-  atServer answers at that start; two processes that raise it in one
-  keyfile each write the higher value, so neither lowers the other's.
+  atServer answers at that start; it is recorded in the keyfile through
+  one atomic update, only when it rises, before the enrollment settles.
   Replay: none arises; nothing new is sent, and the floor only rises.
-  DoS: one scan of the atSign's namespace-key records at each start that
-  reaches the atServer, none offline; a client the floor lifts re-enrolls
-  itself once and asks for its keys under the existing bounds.
+  DoS: at most one scan of the atSign's namespace-key records per start,
+  bounded in time, and none when the keyfile or the key material already
+  sets the floor; a client the floor lifts re-enrolls itself once and asks
+  for its keys under the existing bounds.
   Forgery and impersonation: the floor only raises what a client does,
   never lowers it; it counts only records the atSign's own atServer holds
   under the atSign's own name, which only the atSign's enrollments can
@@ -30,7 +35,7 @@ Feature: A client never runs below its floor
   Scenario: A client whose keyfile holds an ML-DSA-65 client data signing key runs at pqActive
     Given an enrollment whose keyfile holds an active ML-DSA-65 client data signing key
     When a client of it is configured PqPosture.pqReady and starts
-    Then it warns that it runs at pqActive, writes post-quantum by default, and mints no RSA-2048 client data signing key
+    Then it warns that it is raised to its pqActive floor, writes post-quantum by default, and mints no RSA-2048 client data signing key
 
   Scenario: A legacy client of an atSign that publishes a namespace key runs at pqReady
     Given @alice publishes a namespace key, and an enrollment of @alice at the legacy key exchange that holds no namespace key
